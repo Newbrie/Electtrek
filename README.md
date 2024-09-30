@@ -1,0 +1,2 @@
+# Electricks
+Support for democracy
