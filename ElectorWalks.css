@@ -27,11 +27,3 @@ body {font-family: Arial, Helvetica, sans-serif;}
       --guil-g-color-border-base-4: #747474;
    }
 
-  /*! normalize.css v3.0.2 | MIT License | git.io/normalize */
-
-  html {
-      font-family: sans-serif;
-      -ms-text-size-adjust: 100%;
-      -webkit-text-size-adjust:100%
-  }
-
