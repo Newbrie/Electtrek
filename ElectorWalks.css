@@ -2,10 +2,10 @@
 body {font-family: Arial, Helvetica, sans-serif;}
 
 dash {
-    position: absolute;
+    position: fixed;
     display: inline-block;
     top: 20px;
-    left: 20px;
+    right 50px
     z-index: 10;
 }
 
