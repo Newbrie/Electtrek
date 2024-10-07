@@ -4,9 +4,10 @@ body {font-family: Arial, Helvetica, sans-serif;}
 dash {
     position: fixed;
     display: inline-block;
+    color: indigo;
     top: 30px;
-    right 50px
-    z-index: 10;
+    left 50px
+    z-index: 15;
     font-size: 2em;
 
 }
@@ -293,6 +294,7 @@ table {
 }
 
 td, th {
+    color: indigo;
     padding:0
 }
 
