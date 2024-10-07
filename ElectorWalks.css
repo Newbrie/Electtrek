@@ -7,7 +7,8 @@ dash {
     color: indigo;
     top: 30px;
     left 50px
-    z-index: 15;
+    padding : 30 30;
+    z-index: 8;
     font-size: 2em;
 
 }
