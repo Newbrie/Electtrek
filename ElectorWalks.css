@@ -5,11 +5,15 @@ dash {
     position: fixed;
     display: inline-block;
     color: indigo;
+    font-weight: bold;
     top: 30px;
     left 50px
-    padding : 30 30;
+    padding : 30 30 ;
     z-index: 8;
-    font-size: 2em;
+    font-size: 1.5em;
+    background-color: white;
+    border-radius: 3px;
+    border-color: indigo;
 
 }
 
