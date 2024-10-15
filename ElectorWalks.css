@@ -166,8 +166,8 @@ dfn {
 }
 
 h1 {
-    font-size: 2em;
-    margin:.67em 0
+    font-size: 3em;
+    margin: .67em 0
 }
 
 mark {
@@ -383,7 +383,7 @@ hr {
 
 h1, h2, h3, h4, h5, h6 {
     font-weight: inherit;
-    font-size:1em
+    font-size: 2em
 }
 
 ol, ul {
