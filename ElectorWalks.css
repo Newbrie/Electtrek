@@ -1,5 +1,68 @@
 
-body {font-family: Arial, Helvetica, sans-serif;}
+
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			height: 100%;
+			max-height: 100%;
+			font-family:Arial, Helvetica, sans-serif;
+			line-height: 1.5em;
+		}
+
+		main {
+			position: fixed;
+			top: 0;
+			bottom: 100px; /* Set this to the height of the footer */
+			right: 230px; /* Set this to the width of the nav bar */
+			overflow: auto;
+			background: #fff;
+		}
+
+		#footer {
+			position: absolute;
+			bottom: 0;
+			right: 230px; /* Set this to the width of the nav bar */
+			left: 0;
+			height: 100px;
+			overflow: hidden; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
+			background: #BCCE98;
+		}
+
+		#nav {
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			width: 230px;
+			overflow: auto; /* Scrollbars will appear on this frame only when there's enough content to require scrolling. To disable scrollbars, change to "hidden", or use "scroll" to enable permanent scrollbars */
+			background: #DAE9BC;
+		}
+
+		.innertube {
+			margin: 15px; /* Provides padding for the content */
+		}
+
+		p {
+			color: #555;
+		}
+
+		nav ul {
+			list-style-type: none;
+			margin: 0;
+			padding: 0;
+		}
+
+		nav ul a {
+			color: darkgreen;
+			text-decoration: none;
+		}
+
+		/*IE6 fix*/
+		* html body{
+			padding: 0 230px 100px 0; /* Set the second value to the width of the right column and the third value to the height of the footer */
+		}
+
 
 dash {
     position: fixed;
