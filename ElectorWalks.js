@@ -128,7 +128,7 @@ function email_html_to_base(html, email) {
   // Download CSV
   email_csv(csv.join("\n"), email);
 };
-var coll = document.getElementsByClassName("collapsible");
+var coll = document.getElementsByClassName("dash");
 var i;
 
 for (i = 0; i < coll.length; i++) {
