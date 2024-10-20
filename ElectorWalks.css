@@ -34,10 +34,9 @@
 			right: 0;
 			bottom: 0;
 			width: 300px;
-			overflow: auto; /* Scrollbars will appear on this frame only when there's enough content to require scrolling. To disable scrollbars, change to "hidden", or use "scroll" to enable permanent scrollbars */
 			background: #DAE9BC;
-		    background-color: white;
-		    display: inline-block;
+		    background-color: black;
+		    display: block;
 		    color: white;
 		    font-weight: bold;
 		    padding : 16px 20px ;
@@ -48,6 +47,11 @@
 		    cursor: pointer;
 		    opacity: 0.8;
 		}
+    #myform {
+      position: relative;
+			bottom: 0;
+			width: 300px;
+    }
 
 		.innertube {
 			margin: 15px; /* Provides padding for the content */
@@ -123,7 +127,7 @@
 
 /* The popup form - hidden by default */
 .form-popup {
-  display: none;
+  display: block;
   background-color : white;
   position: relative;
   right: 30px;
