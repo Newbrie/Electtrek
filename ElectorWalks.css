@@ -47,9 +47,8 @@
 		    cursor: pointer;
 		    opacity: 0.8;
 		}
-    #myform {
+    #myForm {
       position: relative;
-			bottom: 0;
 			width: 300px;
     }
 
@@ -127,7 +126,7 @@
 
 /* The popup form - hidden by default */
 .form-popup {
-  display: block;
+  display: none;
   background-color : white;
   position: relative;
   right: 30px;
