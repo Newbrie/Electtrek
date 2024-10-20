@@ -2,7 +2,7 @@
 		body {
 			margin: 0;
 			padding: 0;
-			overflow: auto;
+			overflow: hidden;
 			height: 100%;
 			max-height: 100%;
 			font-family:Arial, Helvetica, sans-serif;
@@ -24,12 +24,12 @@
 			right: 230px; /* Set this to the width of the nav bar */
 			left: 0;
 			height: 100px;
-			overflow: auto; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
+			overflow: hidden; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
 			background: #BCCE98;
 		}
 
 		#nav {
-			position: absolute;
+			position: relative;
 			top: 0;
 			right: 0;
 			bottom: 0;
