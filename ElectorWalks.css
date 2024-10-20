@@ -89,7 +89,7 @@
   padding: 0 30px;
   position: absolute;
   max-height: 0;
-  overflow: hidden;
+  overflow: auto;
   transition: max-height 0.2s ease-out;
   background-color: #f1f1f1;
 }
