@@ -2,7 +2,6 @@
 		body {
 			margin: 0;
 			padding: 0;
-			overflow: hidden;
 			height: 100%;
 			max-height: 100%;
 			font-family:Arial, Helvetica, sans-serif;
@@ -47,10 +46,6 @@
 		    cursor: pointer;
 		    opacity: 0.8;
 		}
-    #myForm {
-      position: relative;
-			width: 300px;
-    }
 
 		.innertube {
 			margin: 15px; /* Provides padding for the content */
