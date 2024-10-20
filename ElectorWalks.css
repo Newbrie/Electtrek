@@ -23,7 +23,7 @@
 			right: 230px; /* Set this to the width of the nav bar */
 			left: 0;
 			height: 100px;
-			overflow: hidden; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
+			overflow: auto; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
 			background: #BCCE98;
 		}
 
