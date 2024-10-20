@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+{% include 'ElectorWalks.css' %}
+</style>
+
+{% block body %}
+<head>
+      <b><iframe src= {{ mapfull }}  height= "800" width = "1200" title="Walk Map"></iframe> </b>
+      <dash>
+
+      <table position:relative;top 20;>
+      <thead>
+      <b>ACTIVIST DASHBOARD</b>
+      <br></br>
+      <th class="c3">Walk Information</th>
+      <th class="c3">Value</th>
+      </thead>
+      <tr>
+      <td class="c3">Name</td>
+      <td class="c3">{{ dashboard['walk_name'].values[0] }} </td>
+      </tr>
+      <tr>
+      <td class="c3">Electors</td>
+      <td class="c3">{{ dashboard['clusterelectors'].values[0] }} </td>
+      </tr>
+      <tr>
+      <td class="c3">Houses</td>
+      <td class="c3">{{ dashboard['houses'].values[0] }} </td>
+      </tr>
+      <tr>
+      <td class="c3">Streets</td>
+      <td class="c3">{{ dashboard['streets'].values[0] }} </td>
+      </tr>
+      <tr>
+          <td class="c3">Area(sqm)</td>
+      <td class="c3">{{ dashboard['areamsq'].values[0]|round|int }} </td>
+      </tr>
+      <tr>
+          <td class="c3">Climb(m)</td>
+      <td class="c3">{{ dashboard['climb'].values[0] }} </td>
+      </tr>
+      <tr>
+          <td class="c3">Housing Density (UK Av = 1.97)</td>
+      <td class="c3">{{ dashboard['housedensity'].values[0] }} </td>
+      </tr>
+      <tr>
+          <td class="c3">Leafleting Time</td>
+      <td class="c3">{{ dashboard['leafhrs'].values[0]|round|int }}hrs {{ (dashboard['leafhrs'].values[0]%1*60)|round|int }}mins</td>
+      </tr>
+      <tr>
+          <td class="c3">Canvassing Time</td>
+      <td class="c3">{{ dashboard['canvasshrs'].values[0]|round|int }}hrs {{ (dashboard['canvasshrs'].values[0]%1*60)|round|int }}mins</td>
+      </tr>
+        <tr>
+        <p>Please collect the data below and press save for an uploadable file of voter data</p>
+        </tr>
+        <tr>
+        </tr>
+
+      <tr>
+        <button class="WALKMAP">
+          <label class="guil-radio_button__label" for="Save_the_data"  >
+            <a href= {{ mapfull }} >WALK MAP</a>
+          </label>
+        </button>
+      </tr>
+      <tr>
+        <button class="SAVE">
+          <label class="guil-radio_button__label" for="Show_the_Walk_Map" >
+            <div class="guil-radio_faux">SAVE DATA</div>
+          </label>
+        </button>
+      </tr>
+
+    </table>
+    </dash>
+</head>
+{% endblock %}
+<body>
+    <table>
+      <thead>
+      <tr>
+      <th class="c1">Ward</th>
+      <th class="c2">PD</th>
+      <th class="c3">Elector Number</th>
+      <th class="c4">No.</th>
+      <th class="c5"><SPAN>Street</SPAN></th>
+      <th class="c6"><SPAN>Postcode</SPAN></th>
+      <th class="c7"><SPAN>TEAM</SPAN></th>
+      <th class="c8"><SPAN>M1</SPAN></th>
+      <th class="c8"><SPAN>M2</SPAN></th>
+      <th class="c8"><SPAN>M3</SPAN></th>
+      <th class="c8"><SPAN>M4</SPAN></th>
+      <th class="c8"><SPAN>M5</SPAN></th>
+      <th class="c8"><SPAN>M6</SPAN></th>
+      <th class="c8"><SPAN>M7</SPAN></th>
+      <th class="c9"><SPAN>House Board</SPAN></th>
+      <th class="c10"><SPAN>PLEDGE</SPAN></th>
+      <th class="c11"><SPAN>Notes</SPAN></th>
+    </tr>
+
+      </thead>
+      {% for index,row in group.iterrows() %}
+      <tr>
+        <td class="c1">{{ row['NewWard'] }}</td>
+        <td class="c2">{{ row['PD'] }}</td>
+        <td class="c3">{{ '{:.0f}'.format(row["ENO"]) }}</td>
+        {% if not row['AddressPrefix']  %}
+          <td class="c4">{{ row['AddressNumber'] }}</td>
+        {% else %}
+          {% if not row['AddressNumber'] %}
+            <td class="c4">{{ row['AddressPrefix'] }}</td>
+          {% else %}
+            <td class="c4">{{ row['AddressPrefix'] }}, {{row['AddressNumber'] }}</td>
+          {% endif %}
+        {% endif %}
+        <td class="c5"><SPAN>{{ row['StreetName'] }}</SPAN></td>
+        <td class="c6"><SPAN>{{ row['Postcode'] }}</SPAN></td>
+        <td class="c7"><SPAN>{{ row['TEAM'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M1'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M2'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M3'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M4'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M5'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M6'] }}</SPAN></td>
+        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M7'] }}</SPAN></td>
+        <td class="c9"><SPAN><input type="radio" value"Y" />{{ row['HB'] }}</SPAN></td>
+              <td class="guil-radio_button-group">
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-A" ~ row['ENO']}} value="LAB" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-A" ~ row['ENO']}}>
+                    <div class="guil-radio_faux">LAB</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-B" ~ row['ENO']}}  value="LIB" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-B" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">LIB</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-C" ~ row['ENO']}}  value="REF" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-C" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">REF</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-D" ~ row['ENO']}}  value="CON" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-D" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">CON</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-E" ~ row['ENO']}}   value="OTH" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-E" ~ row['ENO']}}  >
+                    <div class="guil-radio_faux">OTH</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-F" ~ row['ENO']}}   value="UNK" checked/>
+                  <label class="guil-radio_button__label" for={{"example-unique-id-F" ~ row['ENO']}}  >
+                    <div class="guil-radio_faux">UNK</div>
+                  </label>
+                </span>
+              </td>
+        <td class="guil-button guil-radio_button"><SPAN>
+          {% if not row['Notes'] %}
+          <td class="c8"></td>
+          {% else %}
+          <td class="c8">{{ row['Notes'] }}</td>
+          {% endif %}
+          </SPAN>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  <button class="open-button" onclick="openForm()">Open Form</button>
+
+  <div class="form-popup" id="myForm">
+<!--    <form action="/action_page.php" class="form-container">-->
+
+      <form action="mailto:surrey@reformuk.com?subject={{walk_name}}" method="GET" enctype="text/plain">
+    Subject:<br>
+      <input type="text" name="subject" placeholder="{{walk_name}}"><br>
+      Email:<br>
+      <input type="email" name="sender" placeholder="surrey@reformuk.com"><br>
+      Message:<br>
+      <textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
+      <input type="submit" value="Send">
+    <button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+    </form>
+<!--    </form>-->
+</div>
+<script>
+  {% include 'ElectorWalks.js' %}
+</script>
+</body>
+
+</html>
