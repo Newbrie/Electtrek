@@ -35,7 +35,7 @@
 			width: 300px;
 			background: #DAE9BC;
 		    background-color: black;
-		    display: block;
+		    display: inline-block;
 		    color: white;
 		    font-weight: bold;
 		    padding : 16px 20px ;
