@@ -33,10 +33,10 @@
 			top: 0;
 			right: 0;
 			bottom: 0;
-			width: 230px;
+			width: 300px;
 			overflow: auto; /* Scrollbars will appear on this frame only when there's enough content to require scrolling. To disable scrollbars, change to "hidden", or use "scroll" to enable permanent scrollbars */
 			background: #DAE9BC;
-		    background-color: #555;
+		    background-color: white;
 		    display: inline-block;
 		    color: white;
 		    font-weight: bold;
@@ -68,10 +68,6 @@
 			text-decoration: none;
 		}
 
-		/*IE6 fix*/
-		* html body{
-			padding: 0 230px 100px 0; /* Set the second value to the width of the right column and the third value to the height of the footer */
-		}
 
 .collapsible:after {
   content: '\002B';
@@ -127,14 +123,13 @@
 
 /* The popup form - hidden by default */
 .form-popup {
-  display: block;
+  display: none;
   background-color : white;
-  position: fixed;
-  bottom: 100px;
+  position: relative;
   right: 30px;
   border: 3px solid #f1f1f1;
   z-index: 9;
-  width: 280px;
+  width: 300px;
 }
 
 /* Add styles to the form container */
