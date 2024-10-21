@@ -80,6 +80,7 @@ function closeForm() {
 function export_table_to_csv(html, filename) {
   var csv = [];
   var rows = document.querySelectorAll("table tr");
+  alert("Hello:"+ rows);
   var row = [], cols = rows[0].querySelectorAll("td, th");
   for (var j = 0; j < cols.length; j++) {
     row.push(cols[j].innerText);
