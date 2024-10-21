@@ -80,7 +80,6 @@ function closeForm() {
 function export_table_to_csv(html, filename) {
   var csv = [];
   var rows = document.querySelectorAll("table tr");
-  alert("Hello:"+ rows);
   var row = [], cols = rows[0].querySelectorAll("td, th");
   for (var j = 0; j < cols.length; j++) {
     row.push(cols[j].innerText);
@@ -92,7 +91,9 @@ function export_table_to_csv(html, filename) {
           row.push(cols[j].innerText);
           };
       var selected = cols[6];
+      alert("Hello2:"+ selected);
       var  slots = selected.querySelectorAll("span input");
+        alert("Hello3:"+ slots);
         for (var k = 0; k < slots.length; k++) {
             if (slots[k].checked) {
               row.push(slots[k].value)
