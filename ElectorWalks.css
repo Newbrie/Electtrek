@@ -35,13 +35,11 @@
 			right: 0;
 			width: 300px;
 			background: #DAE9BC;
-		    background-color: black;
 		    display: inline-block;
-		    color: white;
-		    font-weight: bold;
+		    color: black;
+		    font-weight: normal;
 		    padding : 16px 20px ;
-		    z-index: 8;
-		    font-size: 1.5em;
+		    font-size: 1em;
 		    border-radius: 3px;
 		    border-color: indigo;
 		    cursor: pointer;
@@ -62,7 +60,7 @@
 		}
 
 		nav ul {
-			list-style-type: none;
+			list-style-type: square;
 			margin: 0;
 			padding: 0;
 		}
@@ -597,7 +595,7 @@ caption, td, th {
     border-radius:.25rem
 }
 .SAVE {
-width: 4rem;
+width: 8rem;
 height: 2rem;
 display: inline-block;
 }
@@ -610,6 +608,7 @@ display: inline-block;
     border-radius: 0;
     background-clip:padding-box
 }
+
 
 .guil-radio--button .guil-radio_faux, .guil-radio_button .guil-radio--faux, .guil-radio_button .guil-radio_faux {
     padding-left: 1rem;
