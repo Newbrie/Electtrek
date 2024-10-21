@@ -2,6 +2,7 @@
 		body {
 			margin: 0;
 			padding: 0;
+			overflow: auto;
 			height: 100%;
 			max-height: 100%;
 			font-family:Arial, Helvetica, sans-serif;
@@ -23,7 +24,7 @@
 			right: 230px; /* Set this to the width of the nav bar */
 			left: 0;
 			height: 100px;
-			overflow: auto; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
+			overflow: hidden; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
 			background: #BCCE98;
 		}
 
@@ -31,7 +32,6 @@
 			position: absolute;
 			top: 0;
 			right: 0;
-			bottom: 0;
 			width: 300px;
 			background: #DAE9BC;
 		    background-color: black;
@@ -46,6 +46,10 @@
 		    cursor: pointer;
 		    opacity: 0.8;
 		}
+    #myForm {
+      position: relative;
+			width: 300px;
+    }
 
 		.innertube {
 			margin: 15px; /* Provides padding for the content */
