@@ -596,11 +596,12 @@ caption, td, th {
     border: 1px solid var(--guil-g-color-border-base-4, #e5e5e5);
     border-radius:.25rem
 }
-.save_file {
+.SAVE {
 width: 4rem;
 height: 2rem;
 display: inline-block;
 }
+
 .guil-radio_button {
     display: -webkit-box;
     display: -ms-flexbox;
