@@ -32,7 +32,7 @@
 			position: absolute;
 			top: 0;
 			right: 0;
-			width: 300px;
+			width: 310px;
 			background: #DAE9BC;
 		    display: inline-block;
 		    color: black;
@@ -47,7 +47,7 @@
     #myForm {
       position: absolute;
       top: 700px;
-			width: 280px;
+			width: 280px;empty-cells:
     }
 
 		.innertube {
@@ -595,7 +595,13 @@ caption, td, th {
     border-radius:.25rem
 }
 .SAVE {
-width: 6rem;
+width: 6.5rem;
+height: 1.5rem;
+display: inline-block;
+}
+
+.SEND {
+width: 6.5rem;
 height: 1.5rem;
 display: inline-block;
 }
