@@ -119,9 +119,9 @@
   border: none;
   cursor: pointer;
   opacity: 0.8;
-  position: absolute;
+  position: relative;
   bottom: 0;
-  right: 28px;
+  right: 18px;
   width: 280px;
 }
 
