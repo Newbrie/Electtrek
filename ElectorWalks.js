@@ -128,22 +128,9 @@ function email_html_to_base(html, email) {
   // Download CSV
   email_csv(csv.join("\n"), email);
 };
-var coll = document.getElementsByClassName("dash");
-var i;
 
-for (i = 0; i < coll.length; i++) {
-  coll[i].addEventListener("click", function() {
-    this.classList.toggle("active");
-    var content = this.nextElementSibling;
-    if (content.style.display === "block") {
-      content.style.display = "none";
-    } else {
-      content.style.display = "block";
-    }
-  });
-}
 document.querySelector("button.SAVE").addEventListener("click", function () {
-  var html = document.querySelector("table").outerHTML;
+  var html = document.querySelector("table tr").outerHTML;
   var filename = "{{ walk_name }}-data.csv";
   export_table_to_csv(html, filename);
   });
