@@ -47,7 +47,8 @@
 		    opacity: 0.8;
 		}
     #myForm {
-      position: relative;
+      position: absolute;
+      top: 600px;
 			width: 300px;
     }
 
