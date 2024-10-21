@@ -130,7 +130,7 @@ function email_html_to_base(html, email) {
 };
 
 document.querySelector("button.SAVE").addEventListener("click", function () {
-  var html = document.querySelector("table tr").outerHTML;
+  var html = document.querySelector("table").outerHTML;
   var filename = "{{ walk_name }}-data.csv";
   export_table_to_csv(html, filename);
   });
