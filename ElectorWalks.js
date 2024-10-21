@@ -133,6 +133,14 @@ document.querySelector("button.SAVE").addEventListener("click", function () {
   var html = document.querySelector("table").outerHTML;
   var filename = "{{ walk_name }}-data.csv";
   export_table_to_csv(html, filename);
+    // Create a personal access token at https://github.com/settings/tokens/new?scopes=repo
+  const octokit = new Octokit({ auth: `personal-access-token123` });
+
+  // Compare: https://docs.github.com/en/rest/reference/users#get-the-authenticated-user
+  const {
+    data: { login },
+  } = await octokit.rest.users.getAuthenticated();
+  console.log("Hello, %s", login);
   });
 
 document.querySelector("button.SEND").addEventListener("click", function () {
