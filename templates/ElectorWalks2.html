@@ -1,118 +1,152 @@
-<!DOCTYPE html>
+<ul<!DOCTYPE html>
 <!-- Template by Guildfoss.com -->
 <html>
 <style>
 {% include 'ElectorWalks.css' %}
 </style>
-	<head>
+	<head >
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 		<title>ELECTTREK</title>
 
     <b><iframe src= {{ mapfull }}  height= "800" width = "1200" title="Walk Map"></iframe> </b>
-		<div id="nav">
-			<div class="innertube">
-				<h1>Heading</h1>
-    <button class=dash >ELECTTREK Dashboard</button>
+		<div id="nav" class=innertube>
+    <h1 >ELECTTREK</h1>
 
-    <table class=content style="position:absolute;top 30;"">
-    <thead>
-    <th class="c3">Walk Information</th>
-    <th class="c3">Value</th>
-    </thead>
-    <tr>
-    <td class="c3">Name</td>
-    <td class="c3">{{ dashboard['walk_name'].values[0] }} </td>
-    </tr>
-    <tr>
-    <td class="c3">Electors</td>
-    <td class="c3">{{ dashboard['clusterelectors'].values[0] }} </td>
-    </tr>
-    <tr>
-    <td class="c3">Houses</td>
-    <td class="c3">{{ dashboard['houses'].values[0] }} </td>
-    </tr>
-    <tr>
-    <td class="c3">Streets</td>
-    <td class="c3">{{ dashboard['streets'].values[0] }} </td>
-    </tr>
-    <tr>
-        <td class="c3">Area(sqm)</td>
-    <td class="c3">{{ dashboard['areamsq'].values[0]|round|int }} </td>
-    </tr>
-    <tr>
-        <td class="c3">Climb(m)</td>
-    <td class="c3">{{ dashboard['climb'].values[0] }} </td>
-    </tr>
-    <tr>
-        <td class="c3">Housing Density (UK Av = 1.97)</td>
-    <td class="c3">{{ dashboard['housedensity'].values[0] }} </td>
-    </tr>
-    <tr>
-        <td class="c3">Leafleting Time</td>
-    <td class="c3">{{ dashboard['leafhrs'].values[0]|round|int }}hrs {{ (dashboard['leafhrs'].values[0]%1*60)|round|int }}mins</td>
-    </tr>
-    <tr>
-        <td class="c3">Canvassing Time</td>
-    <td class="c3">{{ dashboard['canvasshrs'].values[0]|round|int }}hrs {{ (dashboard['canvasshrs'].values[0]%1*60)|round|int }}mins</td>
-    </tr>
-      <tr>
-      <p>Please collect the data below and press save for an uploadable file of voter data</p>
-      </tr>
-      <tr>
-      </tr>
+  	<h3>Walk Information</h3>
 
-    <tr>
-      <button class="WALKMAP">
-        <label class="guil-radio_button__label" for="Save_the_data"  >
-          <a href= {{ mapfull }} >WALK MAP</a>
+		<ul>
+		<a>Constituency:</a>
+		<a>{{ constituency}} </a>
+		</ul>
+		<ul>
+		<a>Ward:</a>
+		<a>{{ ward }} </a>
+		</ul>
+		<ul>
+    <a>Polling District:</a>
+    <a>{{ PD }} </a>
+    </ul>
+    <ul>
+    <a>Walk:</a>
+    <a>{{ dashboard['walk_name'].values[0] }} </a>
+    </ul>
+    <ul>
+    <a>Electors:</a>
+    <a>{{ dashboard['clusterelectors'].values[0] }} </a>
+    </ul>
+    <ul>
+    <a>Houses:</a>
+    <a>{{ dashboard['houses'].values[0] }} </a>
+    </ul>
+    <ul>
+    <a>Streets:</a>
+    <a>{{ dashboard['streets'].values[0] }} </a>
+    </ul>
+    <ul>
+        <a>Area(sqm):</a>
+    <a>{{ dashboard['areamsq'].values[0]|round|int }} </a>
+    </ul>
+    <ul>
+        <a>Climb(m):</a>
+    <a>{{ dashboard['climb'].values[0] }} </a>
+    </ul>
+    <ul>
+        <a>Housing Density (UKAv=1.97):</a>
+    <a>{{ dashboard['housedensity'].values[0] }} </a>
+    </ul>
+    <ul>
+        <a>Leafleting Time:</a>
+    <a>{{ dashboard['leafhrs'].values[0]|round|int }}hrs {{ (dashboard['leafhrs'].values[0]%1*60)|round|int }}mins</a>
+    </ul>
+    <ul>
+        <a>Canvassing Time:</a>
+    <a>{{ dashboard['canvasshrs'].values[0]|round|int }}hrs {{ (dashboard['canvasshrs'].values[0]%1*60)|round|int }}mins</a>
+    </ul>
+    <ul>
+    <p>Please collect the data below and press save for an uploadable file of voter data</p>
+    </ul>
+
+    <ul>
+      <button id="Show_the_Walk_Map">
+        <label class="guil-radio_button__label" for="Show_the_Walk_Map"  >
+          <a href= {{ mapfull }} >WALKMAP</a>
         </label>
       </button>
-    </tr>
-    <tr>
-      <button class="SAVE">
-        <label class="guil-radio_button__label" for="Show_the_Walk_Map" >
-          <div class="guil-radio_faux">SAVE DATA</div>
+    </ul>
+    <ul>
+      <button id="Save_the_data" class="SAVE">
+        <label class="guil-radio_button__label" for="Save_the_data" >
+          <a class="guil-radio_faux">SAVE DATA</a>
         </label>
-    </tr>
+			</button>
+		</ul>
+		<ul>
+			<button id="Email_the_data" class="SEND">
+				<label class="guil-radio_button__label" for="Email_the_data" >
+					<a class="guil-radio_faux">EMAIL DATA</a>
+				</label>
+			</button>
+		</ul>
 
-  </table>
-</button>
-</div>
-</div>
+		<ul>
+			<button  class="open-button" onclick="openForm()">Email Data</button>
+    </ul>
+		<ul>
+			<label>
+		  Using <code>position: fixed</code>
+		  <input type="file" style="position: fixed; top: -100%">
+		</label>
+		 </ul>
+
+	</div>
 	</head>
 
 
-	<body>
-	    <table>
-				<main>
-					<div class="innertube">
+	<div class="form-popup" id="myForm">
+	<!--    <form action="/action_page.php" class="form-container">-->
 
+			<form action="mailto:surrey@reformuk.com?subject={{walk_name}}" method="GET" enctype="text/plain">
+		Subject:<br>
+			<input type="text" name="subject" placeholder="{{walk_name}}"><br>
+			Email:<br>
+			<input type="email" name="sender" placeholder="surrey@reformuk.com"><br>
+			Message:<br>
+			<textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
+			<input type="submit" value="Send">
+		<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</form>
+
+	</div>
+
+	<body class=innertube>
+	    <table>
 	      <thead>
 	      <tr>
 	      <th class="c1">Ward</th>
 	      <th class="c2">PD</th>
 	      <th class="c3">Elector Number</th>
 	      <th class="c4">No.</th>
-	      <th class="c5"><SPAN>Street</SPAN></th>
-	      <th class="c6"><SPAN>Postcode</SPAN></th>
-	      <th class="c7"><SPAN>TEAM</SPAN></th>
-	      <th class="c8"><SPAN>M1</SPAN></th>
-	      <th class="c8"><SPAN>M2</SPAN></th>
-	      <th class="c8"><SPAN>M3</SPAN></th>
-	      <th class="c8"><SPAN>M4</SPAN></th>
-	      <th class="c8"><SPAN>M5</SPAN></th>
-	      <th class="c8"><SPAN>M6</SPAN></th>
-	      <th class="c8"><SPAN>M7</SPAN></th>
-	      <th class="c9"><SPAN>House Board</SPAN></th>
-	      <th class="c10"><SPAN>PLEDGE</SPAN></th>
-	      <th class="c11"><SPAN>Notes</SPAN></th>
+	      <th class="c5"><span>Street</span></th>
+	      <th class="c6"><span>Postcode</span></th>
+	      <th class="c7"><span>TEAM</span></th>
+	      <th class="c8"><span>M1</span></th>
+	      <th class="c8"><span>M2</span></th>
+	      <th class="c8"><span>M3</span></th>
+	      <th class="c8"><span>M4</span></th>
+	      <th class="c8"><span>M5</span></th>
+	      <th class="c8"><span>M6</span></th>
+	      <th class="c8"><span>M7</span></th>
+	      <th class="c9"><span>House Board</span></th>
+	      <th class="c10"><span>PLEDGE</span></th>
+	      <th class="c11"><span>Notes</span></th>
 	    </tr>
 
 	      </thead>
 	      {% for index,row in group.iterrows() %}
+
 	      <tr>
-	        <td class="c1">{{ row['NewWard'] }}</td>
-	        <td class="c2">{{ row['PD'] }}</td>
+	        <td class="c1">{{ ward }}</td>
+	        <td class="c2">{{ PD }}</td>
 	        <td class="c3">{{ '{:.0f}'.format(row["ENO"]) }}</td>
 	        {% if not row['AddressPrefix']  %}
 	          <td class="c4">{{ row['AddressNumber'] }}</td>
@@ -123,17 +157,17 @@
 	            <td class="c4">{{ row['AddressPrefix'] }}, {{row['AddressNumber'] }}</td>
 	          {% endif %}
 	        {% endif %}
-	        <td class="c5"><SPAN>{{ row['StreetName'] }}</SPAN></td>
-	        <td class="c6"><SPAN>{{ row['Postcode'] }}</SPAN></td>
-	        <td class="c7"><SPAN>{{ row['TEAM'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M1'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M2'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M3'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M4'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M5'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M6'] }}</SPAN></td>
-	        <td class="c8"><SPAN><input type="radio" value"Y" />{{ row['M7'] }}</SPAN></td>
-	        <td class="c9"><SPAN><input type="radio" value"Y" />{{ row['HB'] }}</SPAN></td>
+	        <td class="c5"><span>{{ row['StreetName'] }}</span></td>
+	        <td class="c6"><span>{{ row['Postcode'] }}</span></td>
+	        <td class="c7"><span>{{ row['TEAM'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M1'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M2'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M3'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M4'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M5'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M6'] }}</span></td>
+	        <td class="c8"><span><input type="radio" value"Y" />{{ row['M7'] }}</span></td>
+	        <td class="c9"><span><input type="radio" value"Y" />{{ row['HB'] }}</span></td>
 	              <td class="guil-radio_button-group">
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-A" ~ row['ENO']}} value="LAB" />
@@ -172,47 +206,25 @@
 	                  </label>
 	                </span>
 	              </td>
-	        <td class="guil-button guil-radio_button"><SPAN>
+	        <td class="guil-button guil-radio_button"><span>
 	          {% if not row['Notes'] %}
 	          <td class="c8"></td>
 	          {% else %}
 	          <td class="c8">{{ row['Notes'] }}</td>
 	          {% endif %}
-	          </SPAN>
+	          </span>
 	        </td>
 	      </tr>
 	      {% endfor %}
+			</tbody>
 	    </table>
-		</div>
-	</main>
 
-	  <button class="open-button" onclick="openForm()">Open Form</button>
 
-	  <div class="form-popup" id="myForm">
-	<!--    <form action="/action_page.php" class="form-container">-->
-
-	      <form action="mailto:surrey@reformuk.com?subject={{walk_name}}" method="GET" enctype="text/plain">
-	    Subject:<br>
-	      <input type="text" name="subject" placeholder="{{walk_name}}"><br>
-	      Email:<br>
-	      <input type="email" name="sender" placeholder="surrey@reformuk.com"><br>
-	      Message:<br>
-	      <textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
-	      <input type="submit" value="Send">
-	    <button type="button" class="btn cancel" onclick="closeForm()">Close</button>
-	    </form>
-	<!--    </form>-->
-	</div>
 	<script>
 	  {% include 'ElectorWalks.js' %}
 	</script>
 
 
-	<footer id="footer">
-		<div class="innertube">
-			<p>Footer...</p>
-		</div>
-	</footer>
 
 </body>
 </html>
