@@ -2,7 +2,7 @@
 <!-- Template by Guildfoss.com -->
 <html>
 <style>
-{% include 'ElectorWalks.css' %}
+{% include electorwalkscss %}
 </style>
 	<head >
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -80,23 +80,7 @@
         </label>
 			</button>
 		</ul>
-		<ul>
-			<button id="Email_the_data" class="SEND">
-				<label class="guil-radio_button__label" for="Email_the_data" >
-					<a class="guil-radio_faux">EMAIL DATA</a>
-				</label>
-			</button>
-		</ul>
 
-		<ul>
-			<button  class="open-button" onclick="openForm()">Email Data</button>
-    </ul>
-		<ul>
-			<label>
-		  Using <code>position: fixed</code>
-		  <input type="file" style="position: fixed; top: -100%">
-		</label>
-		 </ul>
 
 	</div>
 	</head>
@@ -126,6 +110,7 @@
 	      <th class="c2">PD</th>
 	      <th class="c3">Elector Number</th>
 	      <th class="c4">No.</th>
+				<th class="c5"><span>Name</span></th>
 	      <th class="c5"><span>Street</span></th>
 	      <th class="c6"><span>Postcode</span></th>
 	      <th class="c7"><span>TEAM</span></th>
@@ -148,6 +133,7 @@
 	        <td class="c1">{{ ward }}</td>
 	        <td class="c2">{{ PD }}</td>
 	        <td class="c3">{{ '{:.0f}'.format(row["ENO"]) }}</td>
+					<td class="c2">{{ ElectorName }}</td>
 	        {% if not row['AddressPrefix']  %}
 	          <td class="c4">{{ row['AddressNumber'] }}</td>
 	        {% else %}
@@ -221,7 +207,7 @@
 
 
 	<script>
-	  {% include 'ElectorWalks.js' %}
+	  {% include  electorwalksjs  %}
 	</script>
 
 
