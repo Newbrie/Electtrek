@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block body%}
+
+<div class="login-container">
+    <h1 style="font-size: 3em;font-weight:bold;text-align: center;" >elecTrek</h1>
+
+    <form id="auth-form" action="{{ url_for('login') }}" method="post">
+        <ul></ul>
+          <ul class= "logentry"><input
+          type="text"
+          name="username"
+          placeholder="username"
+          class="input-field"
+        /></ul>
+        <ul class="logentry"><input type="password" name="password" placeholder="password" /></ul>
+        <ul class="logentry"><input type="submit" value="Login" class="button guil-action_button" onclick="setActionForm('login')"/></ul>
+        <ul class="logentry"><input type="submit" value="Register" class="button guil-action_button" onclick="setActionForm('register')"/></ul>
+      </form>
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class = "flashes">
+          {% for message in messages %}
+          <li>{{ message }}</li>
+          {% endfor %}
+          </ul>
+          {% endif %}
+          {% endwith %}
+  </div>
+<script>
+    function setActionForm(action){
+      let form = document.getElementById("auth-form")
+      if (action === 'login') {
+        form.action = "{{url_for('login')}}";
+        form.method = 'POST';
+        form.submit();
+      } else if (action === 'register') {
+          form.action = "{{url_for('register')}}";
+          form.method = 'POST';
+          form.submit();
+      }
+    }
+
+</script>
+
+
+<h1 Hello Everyone</h1>
+{% endblock %}

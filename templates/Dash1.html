@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block body%}
+
+    <div id="mapwin" class="innertube">
+			<h1>elecTrek - The Canvassing App</h1>
+      <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+    <embed src="{{ context.mapfile }}" width="1200" height="800"> </embed>
+	</div>
+
+			<div id="nav" class="innertube">
+<h1>Map Data </h1>
+{% for x,y in context.formdata.items() %}
+		<ul> {{ x }} : {{ y }} </ul>
+{% endfor %}
+			<h2>Generate Walks</h2>
+
+				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
+					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
+					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
+					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
+						<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+			      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+			      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+						<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
+						<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
+						<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
+						<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
+			  </form>
+
+			</div>
+			<div id="datawin" class="innertube">
+				<h1>elecTrek - flash messages</h1>
+				{% with messages = get_flashed_messages() %}
+				{% if messages %}
+					<ul class="flashes" >
+					{% for message in messages %}
+						<li>{{ session['username'] }} , {{ message }}</li>
+					{% endfor %}
+					</ul>
+				{% endif %}
+				{% endwith %}
+				{% for x in context.layernodelist %}
+						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
+				{% endfor %}
+		</div>
+				<script>
+			    function setActionForm(action){
+			      let form = document.getElementById("normal-file")
+			      if (action === 'normalise') {
+			          form.action = "{{url_for('normalise')}}";
+			          form.method = 'POST';
+			          document.body.style.cursor = 'wait'
+			          form.submit();
+			      } else if (action === 'produce') {
+			          form.action = "{{url_for('walks')}}";
+			          form.method = 'POST';
+			          document.body.style.cursor = 'wait'
+			          form.submit();
+						} else if (action === 'canvass') {
+								form.action = "{{url_for('cards')}}";
+								form.method = 'POST';
+								document.body.style.cursor = 'wait'
+								form.submit();
+						} else if (action === 'layeritems') {
+								form.action = "{{url_for('layeritems')}}";
+								form.method = 'GET';
+								document.body.style.cursor = 'wait'
+								form.submit();
+						} else if (action === 'postcode') {
+									form.action = "{{url_for('postcode')}}";
+									form.method = 'POST';
+									document.body.style.cursor = 'wait'
+									form.submit();
+								  }
+			    }
+
+			</script>
+{% endblock %}

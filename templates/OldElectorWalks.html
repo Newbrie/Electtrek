@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<style>
+
+  body {font-family: Arial, Helvetica, sans-serif;}
+  * {box-sizing: border-box;}
+
+  /* Button used to open the contact form - fixed at the bottom of the page */
+  .mapwardnames {
+    color: yellow;
+    font-size: 1em
+    font-weight: bold;
+    font-size: 100%;
+    line-height: 2;
+    position: center;
+  }
+
+
+  .open-button {
+    background-color: #555;
+    color: white;
+    padding: 16px 20px;
+    border: none;
+    cursor: pointer;
+    opacity: 0.8;
+    position: fixed;
+    bottom: 23px;
+    right: 28px;
+    width: 280px;
+  }
+
+  /* The popup form - hidden by default */
+  .form-popup {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    right: 30px;
+    border: 3px solid #f1f1f1;
+    z-index: 9;
+  }
+
+  /* Add styles to the form container */
+  .form-container {
+    max-width: 300px;
+    padding: 10px;
+    background-color: white;
+  }
+
+  /* Full-width input fields */
+  .form-container input[type=text], .form-container input[type=password] {
+    width: 100%;
+    padding: 15px;
+    margin: 5px 0 22px 0;
+    border: none;
+    background: #f1f1f1;
+  }
+
+  /* When the inputs get focus, do something */
+  .form-container input[type=text]:focus, .form-container input[type=password]:focus {
+    background-color: #ddd;
+    outline: none;
+  }
+
+  /* Set a style for the submit/login button */
+  .form-container .btn {
+    background-color: #04AA6D;
+    color: white;
+    padding: 16px 20px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    margin-bottom:10px;
+    opacity: 0.8;
+  }
+
+  /* Add a red background color to the cancel button */
+  .form-container .cancel {
+    background-color: red;
+  }
+
+  /* Add some hover effects to buttons */
+  .form-container .btn:hover, .open-button:hover {
+    opacity: 1;
+  }
+
+
+  table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+
+  }
+  thead {
+     display:table-header-group;
+     font-weight: bold;
+
+  }
+
+  tr:nth-child(even) {
+    background-color: #dddddd;
+
+  }
+
+  /*! Lightning Design System 2.24.2 */
+  :root {
+      --guil-g-color-border-base-1: #c9c9c9;
+      --guil-g-color-border-base-2: #aeaeae;
+      --guil-g-color-border-base-3: #939393;
+      --guil-g-color-border-base-4: #747474;
+   }
+
+  /*! normalize.css v3.0.2 | MIT License | git.io/normalize */
+
+  html {
+      font-family: sans-serif;
+      -ms-text-size-adjust: 100%;
+      -webkit-text-size-adjust:100%
+  }
+
+  body {
+       margin-left: 30px;
+  }
+
+  article, aside, details, figcaption, figure, footer, header, hgroup, main, menu, nav, section, summary {
+      display:block
+  }
+
+
+  a {
+      background-color:transparent
+  }
+
+  a:active, a:hover {
+      outline:0
+  }
+
+  abbr[title] {
+      border-bottom:1px dotted
+  }
+
+  b, strong {
+      font-weight:700;
+      color: gray
+  }
+
+  dfn {
+      font-style:italic
+  }
+
+  h1 {
+      font-size: 2em;
+      margin:.67em 0
+  }
+
+  mark {
+      background: #ff0;
+      color:#000
+  }
+
+  small {
+      font-size:80%
+  }
+
+  sub, sup {
+      font-size: 75%;
+      line-height: 0;
+      position: relative;
+      vertical-align:baseline
+  }
+
+  sup {
+      top:-.5em
+  }
+
+  sub {
+      bottom:-.25em
+  }
+
+  img {
+      border:0
+  }
+
+  svg:not(:root) {
+      overflow:hidden
+  }
+
+  figure {
+      margin:1em 40px
+  }
+
+  hr {
+      -webkit-box-sizing: content-box;
+      box-sizing: content-box;
+      height:0
+  }
+
+  pre {
+      overflow:auto
+  }
+
+  code, kbd, pre, samp {
+      font-family: monospace, monospace;
+      font-size:1em
+  }
+
+  button, input, optgroup, select, textarea {
+      color: inherit;
+      font: inherit;
+      margin:0
+  }
+
+  button {
+      overflow:visible
+  }
+
+  button, select {
+      text-transform:none
+  }
+
+  button, html input[type=button], input[type=reset], input[type=submit] {
+      -webkit-appearance: button;
+      cursor:pointer
+  }
+
+  button[disabled], html input[disabled] {
+      cursor:default
+  }
+
+  button::-moz-focus-inner, input::-moz-focus-inner {
+      border: 0;
+      padding:0
+  }
+
+  input {
+      line-height:normal
+  }
+
+  input[type=checkbox], input[type=radio] {
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      padding:0
+  }
+
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button {
+      height:auto
+  }
+
+  input[type=search] {
+      -webkit-appearance: textfield;
+      -webkit-box-sizing: content-box;
+      box-sizing:content-box
+  }
+
+  input[type=search]::-webkit-search-cancel-button, input[type=search]::-webkit-search-decoration {
+      -webkit-appearance:none
+  }
+
+  fieldset {
+      border: 1px solid silver;
+      margin: 0 2px;
+      padding:.35em .625em .75em
+  }
+
+  legend {
+      border: 0;
+      padding:0
+  }
+
+  textarea {
+      overflow:auto
+  }
+
+  optgroup {
+      font-weight:700
+  }
+
+  table {
+      border-collapse: collapse;
+      border-spacing:0
+      margin-left: 30px;
+  }
+
+  td, th {
+      padding:0
+  }
+
+  *, :after, :before {
+      -webkit-box-sizing: border-box;
+      box-sizing:border-box
+  }
+
+  ::-webkit-input-placeholder {
+      color: var(--slds-g-color-neutral-base-50, #747474);
+      font-weight: 400;
+      opacity:1
+  }
+
+  ::-moz-placeholder {
+      color: var(--slds-g-color-neutral-base-50, #747474);
+      font-weight: 400;
+      opacity:1
+  }
+
+  :-ms-input-placeholder {
+      color: var(--slds-g-color-neutral-base-50, #747474);
+      font-weight: 400;
+      opacity:1
+  }
+
+  ::-ms-input-placeholder {
+      color: var(--slds-g-color-neutral-base-50, #747474);
+      font-weight: 400;
+      opacity:1
+  }
+
+  ::placeholder {
+      color: var(--slds-g-color-neutral-base-50, #747474);
+      font-weight: 400;
+      opacity:1
+  }
+
+  ::-moz-selection {
+      background: var(--slds-g-color-brand-base-90, #d8e6fe);
+      text-shadow: none;
+      color:var(--slds-g-color-neutral-base-10, #181818)
+  }
+
+  ::selection {
+      background: var(--slds-g-color-brand-base-90, #d8e6fe);
+      text-shadow: none;
+      color:var(--slds-g-color-neutral-base-10, #181818)
+  }
+
+  html {
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+      font-size: 100%;
+      line-height: 1.5;
+      background: #eef4ff;
+      color: var(--slds-g-color-neutral-base-10, #181818);
+      -webkit-tap-highlight-color:rgba(0, 0, 0, 0)
+  }
+
+
+  dl, fieldset, h1, h2, h3, h4, h5, h6, ol, p, ul {
+      margin: 0;
+      padding:20 20;
+  }
+
+  dd, figure {
+      margin:0
+  }
+
+  abbr[title] {
+      text-decoration:none
+  }
+
+  abbr[title], fieldset, hr {
+      border:0
+  }
+
+  hr {
+      padding:0
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+      font-weight: inherit;
+      font-size:1em
+  }
+
+  ol, ul {
+      list-style:none
+  }
+
+  a {
+      color: #0176d3;
+      text-decoration: none;
+      -webkit-transition: color .1s linear;
+      transition:color .1s linear
+  }
+
+  a:focus, a:hover {
+      text-decoration: underline;
+      color:#014486
+  }
+
+  a:active {
+      color:#014486
+  }
+
+  a:focus-visible {
+      outline-color:var(--slds-g-color-palette-blue-50, #0176d3)
+  }
+
+  a, button {
+      cursor:pointer
+  }
+
+  dfn, strong {
+      font-weight:700
+  }
+
+  mark {
+      background-color: var(--slds-g-color-palette-yellow-90, #fff03f);
+      color:var(--slds-g-color-neutral-base-10, #181818)
+  }
+
+  abbr[title] {
+      cursor:help
+  }
+
+  input[type=search] {
+      -webkit-box-sizing: border-box;
+      box-sizing:border-box
+  }
+
+  table {
+      width:100%
+  }
+
+  caption, td, th {
+      text-align:left
+  }
+
+  .guil-button--small, .guil-button_small {
+      line-height: 1.75rem;
+      min-height:2rem
+  }
+
+  .guil-button {
+      position: relative;
+      display: -webkit-inline-box;
+      display: -ms-inline-flexbox;
+      display: inline-flex;
+      -webkit-box-align: center;
+      -ms-flex-align: center;
+      align-items: center;
+      padding: var(--slds-c-button-spacing-block-start, var(--sds-c-button-spacing-block-start, 0)) var(--slds-c-button-spacing-inline-end, var(--sds-c-button-spacing-inline-end, 0)) var(--slds-c-button-spacing-block-end, var(--sds-c-button-spacing-block-end, 0)) var(--slds-c-button-spacing-inline-start, var(--sds-c-button-spacing-inline-start, 0));
+      background: none;
+      background-color: var(--slds-c-button-color-background, var(--sds-c-button-color-background, transparent));
+      background-clip: border-box;
+      border: var(--slds-c-button-sizing-border, var(--sds-c-button-sizing-border, 1px)) solid var(--slds-c-button-color-border, var(--sds-c-button-color-border, transparent));
+      border-radius: var(--slds-c-button-radius-border, var(--sds-c-button-radius-border, .25rem));
+      -webkit-box-shadow: var(--slds-c-button-shadow, var(--sds-c-button-shadow));
+      box-shadow: var(--slds-c-button-shadow, var(--sds-c-button-shadow));
+      line-height: var(--slds-c-button-line-height, var(--sds-c-button-line-height, 1.875rem));
+      text-decoration: none;
+      color: var(--slds-c-button-text-color, var(--sds-c-button-text-color, #0176d3));
+      -webkit-appearance: none;
+      white-space: normal;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select:none
+  }
+
+
+
+  .slds-radio .slds-radio--faux, .slds-radio .guil-radio_faux {
+      width: 1rem;
+      height: 1rem;
+      display: inline-block;
+      position: relative;
+      -ms-flex-negative: 0;
+      flex-shrink: 0;
+      vertical-align: middle;
+      border: 1px solid var(--slds-c-radio-color-border, var(--sds-c-radio-color-border, var(--guil-g-color-border-base-4, #c9c9c9)));
+      border-radius: 50%;
+      background: none;
+      background-color: var(--slds-c-radio-color-background, var(--sds-c-radio-color-background, var(--slds-g-color-neutral-base-100, #fff)));
+      -webkit-box-shadow: var(--slds-c-radio-shadow, var(--sds-c-radio-shadow));
+      box-shadow: var(--slds-c-radio-shadow, var(--sds-c-radio-shadow));
+      -webkit-transition: border .1s linear, background-color .1s linear;
+      transition:border .1s linear, background-color .1s linear
+  }
+
+  .slds-radio [type=radio]:checked + .slds-radio__label .guil-radio_faux, .slds-radio [type=radio]:checked + .guil-radio_faux, .slds-radio [type=radio]:checked ~ .slds-radio--faux, .slds-radio [type=radio]:checked ~ .guil-radio_faux {
+      border-color: var(--slds-c-radio-color-border-checked, var(--sds-c-radio-color-border-checked, var(--sds-c-radio-color-border, var(--guil-g-color-border-base-4, #c9c9c9))));
+      background: none;
+      background-color:var(--slds-c-radio-color-background-checked, var(--sds-c-radio-color-background-checked, var(--sds-c-radio-color-background, var(--slds-g-color-neutral-base-100, #fff))))
+  }
+
+  .slds-radio [type=radio]:checked + .slds-radio__label .guil-radio_faux:after, .slds-radio [type=radio]:checked + .guil-radio_faux:after, .slds-radio [type=radio]:checked ~ .slds-radio--faux:after, .slds-radio [type=radio]:checked ~ .guil-radio_faux:after {
+      width: .5rem;
+      height: .5rem;
+      content: "";
+      position: absolute;
+      top: 50%;
+      /*! @noflip */
+      left: 50%;
+      -webkit-transform: translate3d(-50%, -50%, 0);
+      transform: translate3d(-50%, -50%, 0);
+      border-radius: 50%;
+      background: none;
+      background-color:var(--slds-c-radio-mark-color-foreground, var(--sds-c-radio-mark-color-foreground, #0176d3))
+  }
+
+   .slds-radio [type=radio]:focus ~ .guil-radio_faux {
+      border-color: var(--slds-c-radio-color-border-focus, var(--slds-c-radio-color-border-focus, var(--guil-g-color-border-base-4, #c9c9c9)));
+      -webkit-box-shadow: var(--slds-c-radio-shadow-focus, var(--sds-c-radio-shadow-focus, var(--_slds-g-shadow-outset-focus, 0 0 3px #0176d3)));
+      box-shadow: var(--slds-c-radio-shadow-focus, var(--sds-c-radio-shadow-focus, var(--_slds-g-shadow-outset-focus, 0 0 3px #0176d3)));
+      outline:0
+  }
+
+
+  .guil-radio_button-group {
+      display: -webkit-inline-box;
+      display: -ms-inline-flexbox;
+      display: inline-flex;
+      border: 1px solid var(--guil-g-color-border-base-4, #e5e5e5);
+      border-radius:.25rem
+  }
+.save_file {
+  width: 4rem;
+  height: 2rem;
+  display: inline-block;
+}
+  .guil-radio_button {
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+      border: 0;
+      border-radius: 0;
+      background-clip:padding-box
+  }
+
+  .slds-radio--button .guil-radio_faux, .guil-radio_button .slds-radio--faux, .guil-radio_button .guil-radio_faux {
+      padding-left: 1rem;
+      padding-right: 1rem;
+      text-align: center;
+      vertical-align:middle
+  }
+
+  .slds-radio--button + .guil-radio_button, .guil-radio_button + .slds-radio--button, .guil-radio_button + .guil-radio_button {
+      border-left: 1px solid var(--guil-g-color-border-base-4, #e5e5e5);
+      margin:0
+  }
+
+  .guil-radio_button [type=radio] {
+      width: 1px;
+      height: 1px;
+      border: 0;
+      clip: rect(0 0 0 0);
+      margin: -1px;
+      overflow: hidden;
+      padding: 0;
+      position:absolute
+  }
+
+  .slds-radio--button [type=radio]:checked + .guil-radio_faux, .slds-radio--button [type=radio]:checked ~ .slds-radio--faux, .slds-radio--button [type=radio]:checked ~ .guil-radio_faux, .guil-radio_button [type=radio]:checked + .slds-radio--button__label, .guil-radio_button [type=radio]:checked + .slds-radio--faux, .guil-radio_button [type=radio]:checked + .guil-radio_button__label, .guil-radio_button [type=radio]:checked + .guil-radio_faux, .guil-radio_button [type=radio]:checked ~ .slds-radio--faux, .guil-radio_button [type=radio]:checked ~ .guil-radio_faux {
+      background-color: #0176d3;
+      color:var(--slds-g-color-neutral-base-100, #fff)
+  }
+
+  .guil-radio_button__label {
+      background-color:var(--slds-g-color-neutral-base-100, #fff)
+  }
+
+  .guil-radio_button__label:focus, .guil-radio_button__label:hover {
+      cursor:pointer
+  }
+
+
+
+  html {
+      font-size:14px
+  }
+
+
+
+  .border-width, .shadow {
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+      gap:1rem
+  }
+
+  .border-radius {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: 1fr var(--sds-g-sizing-9);
+      gap:1rem
+  }
+
+  .border-radius [data-value], .border-width [data-value], .shadow [data-value] {
+      background: var(--sds-g-color-surface-container-1);
+      border-radius: 8px;
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -ms-flex-direction: column;
+      flex-direction: column;
+      gap: .125rem;
+      -webkit-box-align: center;
+      -ms-flex-align: center;
+      align-items: center;
+      -webkit-box-pack: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      text-align: center;
+      -webkit-box-flex: 1;
+      -ms-flex: 1;
+      flex: 1;
+      font-size: var(--sds-g-font-scale-neg-3);
+      font-family: var(--sds-g-font-family-monospace);
+      aspect-ratio:var(--sds-g-ratio-square)
+  }
+
+
+  </style>
+
+
+<head>
+  {% block head %}
+<th>
+    <h1>  <iframe src= {{ mapfull }}  height= "800" width = "1200" title="Walk Map"></iframe> </h1>
+</th>
+<th>
+  <button class="WALKMAP">
+    <label class="guil-radio_button__label" for="Save_the_data"  >
+      <a href= ./ {{ mapfull }} >WALK MAP</a>
+    </label>
+  </button>
+</th>
+<th>
+  <button class="SAVE">
+    <label class="guil-radio_button__label" for="Show_the_Walk_Map" >
+      <div class="guil-radio_faux">SAVE DATA</div>
+    </label>
+  </button>
+</th>
+<th>
+  <button class="SEND">
+    <label class="guil-radio_button__label" for="Email_the_Details" >
+      <div class="guil-radio_faux">EMAIL DATA</div>
+    </label>
+  </button>
+</th>
+  {% endblock %}
+</head>
+
+<body>
+
+
+
+    <table>
+      <thead>
+      <tr>
+      <th class="c1">Ward</th>
+      <th class="c2">PD</th>
+      <th class="c3">Elector Number</th>
+      <th class="c4">No.</th>
+      <th class="c5"><SPAN>Street</SPAN></th>
+      <th class="c6"><SPAN>Postcode</SPAN></th>
+      <th class="c7"><SPAN>PLEDGE</SPAN></th>
+    </tr>
+
+      </thead>
+        {% for row in group.iterrows() %}
+      <tr>
+        <td class="c1">{{ row['NewWard'] }}</td>
+        <td class="c2">{{ row['PD'] }}</td>
+        <td class="c3">{{ trunc(row['ENO']) }}</td>
+        {% if not row['AddressPrefix']  %}
+          <td class="c4">{{ row['AddressNumber'] }}</td>
+        {% else %}
+          {% if not row['AddressNumber'] %}
+            <td class="c4">{{ row['AddressPrefix'] }}</td>
+          {% else %}
+            <td class="c4">{{ row['AddressPrefix'] }}, {{row['AddressNumber'] }}</td>
+          {% endif %}
+        {% endif %}
+        <td class="c5"><SPAN>{{ row['StreetName'] }}</SPAN></td>
+        <td class="c6"><SPAN>{{ row['Postcode'] }}</SPAN></td>
+              <td class="guil-radio_button-group">
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-A" ~ row['ENO']}} value="LAB" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-A" ~ row['ENO']}}>
+                    <div class="guil-radio_faux">LAB</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-B" ~ row['ENO']}}  value="LIB" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-B" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">LIB</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-C" ~ row['ENO']}}  value="REF" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-C" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">REF</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-D" ~ row['ENO']}}  value="CON" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-D" ~ row['ENO']}} >
+                    <div class="guil-radio_faux">CON</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-E" ~ row['ENO']}}   value="OTH" />
+                  <label class="guil-radio_button__label" for={{"example-unique-id-E" ~ row['ENO']}}  >
+                    <div class="guil-radio_faux">OTH</div>
+                  </label>
+                </span>
+                <span class="guil-button guil-radio_button">
+                  <input type="radio" name={{"example-unique-id-A" ~ row['ENO']}} id={{"example-unique-id-F" ~ row['ENO']}}   value="UNK" checked/>
+                  <label class="guil-radio_button__label" for={{"example-unique-id-F" ~ row['ENO']}}  >
+                    <div class="guil-radio_faux">UNK</div>
+                  </label>
+                </span>
+              </td>
+
+      </tr>
+      {% endfor %}
+    </table>
+  <button class="open-button" onclick="openForm()">Open Form</button>
+
+  <div class="form-popup" id="myForm">
+<!--    <form action="/action_page.php" class="form-container">-->
+
+      <form action="mailto:surrey@reformuk.com?subject={{walk_name}}" method="GET" enctype="text/plain">
+    Subject:<br>
+      <input type="text" name="subject" placeholder="{{walk_name}}"><br>
+      Email:<br>
+      <input type="email" name="sender" placeholder="example@gmail.com"><br>
+      Message:<br>
+      <textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
+      <input type="submit" value="Send">
+    <button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+    </form>
+<!--    </form>-->
+  </div>
+    <script>
+
+    function download_csv(csv, filename) {
+      var csvFile;
+      var downloadLink;
+
+      // CSV FILE
+      csvFile = new Blob([csv], {type: "text/csv"});
+
+      // Download link
+      downloadLink = document.createElement("a");
+
+      // File name
+      downloadLink.download = filename;
+
+      // We have to create a link to the file
+      downloadLink.href = window.URL.createObjectURL(csvFile);
+
+
+      // Make sure that the link is not displayed
+      downloadLink.style.display = "none";
+
+      // Add the link to your DOM
+      document.body.appendChild(downloadLink);
+
+      // Lanzamos
+      downloadLink.click();
+    };
+
+    function email_csv(csv, filename) {
+      var csvFile;
+      var downloadLink;
+      csvFile = new Blob([csv], {type: "text/csv"});
+      FileLink = document.createElement("a");
+      FileLink.download = filename;
+      FileLink.href = window.URL.createObjectURL(csvFile);
+      document.body.appendChild(FileLink);
+
+
+    };
+
+
+function openForm() {
+  document.getElementById("myForm").style.display = "block";
+}
+
+function closeForm() {
+  document.getElementById("myForm").style.display = "none";
+}
+
+
+    function export_table_to_csv(html, filename) {
+    var csv = [];
+
+    var rows = document.querySelectorAll("table tr");
+    var row = [], cols = rows[0].querySelectorAll("td, th");
+    for (var j = 0; j < cols.length; j++) {
+      row.push(cols[j].innerText);
+    };
+    csv.push(row.join(","));
+    for (var i = 1; i < rows.length; i++) {
+        var row = [], cols = rows[i].querySelectorAll("td, th");
+        for (var j = 0; j < cols.length-1; j++) {
+            row.push(cols[j].innerText);
+            };
+        var selected = cols[6];
+        var  slots = selected.querySelectorAll("span input");
+          for (var k = 0; k < slots.length; k++) {
+              if (slots[k].checked) {
+                row.push(slots[k].value)
+              };
+            }
+    csv.push(row.join(","));
+    }
+
+      // Download CSV
+      download_csv(csv.join("\n"), filename);
+    };
+
+    function email_html_to_base(html, email) {
+    var csv = [];
+
+    var rows = document.querySelectorAll("table tr");
+    var row = [], cols = rows[0].querySelectorAll("td, th");
+    for (var j = 0; j < cols.length; j++) {
+      row.push(cols[j].innerText);
+    };
+    csv.push(row.join(","));
+    for (var i = 1; i < rows.length; i++) {
+        var row = [], cols = rows[i].querySelectorAll("td, th");
+        for (var j = 0; j < cols.length-1; j++) {
+            row.push(cols[j].innerText);
+            };
+        var selected = cols[6];
+        var  slots = selected.querySelectorAll("span input");
+          for (var k = 0; k < slots.length; k++) {
+              if (slots[k].checked) {
+                row.push(slots[k].value)
+              };
+            }
+    csv.push(row.join(","));
+    }
+
+      // Download CSV
+      email_csv(csv.join("\n"), email);
+    };
+    document.querySelector("button.SAVE").addEventListener("click", function () {
+    var html = document.querySelector("table").outerHTML;
+    var filename = "{{ walk_name }}-data.csv";
+
+    export_table_to_csv(html, filename);
+  });
+    document.querySelector("button.SEND").addEventListener("click", function () {
+    var html = document.querySelector("table").outerHTML;
+    var filename = "{{ walk_name }}-data.csv";
+    var base_email = "surrey@reformuk.com"
+    email_html_to_base(html, base_email);
+  });
+
+
+  </script>
+</body>
+
+</html>

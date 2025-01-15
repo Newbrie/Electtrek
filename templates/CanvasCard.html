@@ -1,16 +1,11 @@
-<!DOCTYPE html>
-<!-- Template by Guildfoss.com -->
-<html>
-<style>
-{% include electorwalkscss %}
-</style>
-	<head >
-		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+{% extends "base.html" %}
+{% block body%}
 		<title>ELECTTREK</title>
 
     <b><iframe src= {{ mapfull }}  height= "800" width = "1200" title="Walk Map"></iframe> </b>
+
 		<div id="nav" class=innertube>
-    <h1 >ELECTTREK</h1>
+    <h1 >elecTrek</h1>
 		<ul>Walk Information</ul>
 		<ul>
 		<b>Constituency:</b>
@@ -81,8 +76,6 @@
 
 
 	</div>
-	</head>
-
 
 	<div class="form-popup" id="myForm">
 	<!--    <form action="/action_page.php" class="form-container">-->
@@ -100,7 +93,6 @@
 
 	</div>
 
-	<body class=innertube>
 	    <table>
 	      <thead>
 	      <tr>
@@ -111,16 +103,8 @@
 				<th class="c5">No.</th>
 	      <th class="c5">Street</th>
 	      <th class="c6">Postcode</th>
-	      <th class="c8"><span>M1</span></th>
-	      <th class="c8"><span>M2</span></th>
-	      <th class="c8"><span>M3</span></th>
-	      <th class="c8"><span>M4</span></th>
-	      <th class="c8"><span>M5</span></th>
-	      <th class="c8"><span>M6</span></th>
-	      <th class="c8"><span>M7</span></th>
-	      <th class="c9"><span>House Board</span></th>
-	      <th class="c10"><span>PLEDGE</span></th>
-	      <th class="c11"><span>Notes</span></th>
+	       <th class="c10">V.I.</th>
+	      <th class="c11">Notes</th>
 	    </tr>
 
 	      </thead>
@@ -142,51 +126,67 @@
 	        {% endif %}
 	        <td class="c5">{{ row['StreetName'] }}</td>
 	        <td class="c6">{{ row['Postcode'] }}</td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M1'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M2'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M3'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M4'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M5'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M6'] }}</span></td>
-	        <td class="c8"><span><input type="checkbox" value"Y" />{{ row['M7'] }}</span></td>
-	        <td class="c9"><span><input type="checkbox" value"Y" />{{ row['HB'] }}</span></td>
-	              <td class="guil-radio_button-group">
+	             <td class="guil-radio_button-group">
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-A" ~ row['ENOP']}} value="LAB" />
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-A" ~ row['ENOP']}}>
-	                    <div class="guil-radio_faux">LAB</div>
+	                    <div class="guil-radio_faux">L</div>
 	                  </label>
 	                </span>
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-B" ~ row['ENOP']}}  value="LIB" />
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-B" ~ row['ENOP']}} >
-	                    <div class="guil-radio_faux">LIB</div>
+	                    <div class="guil-radio_faux">LD</div>
 	                  </label>
 	                </span>
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-C" ~ row['ENOP']}}  value="REF" />
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-C" ~ row['ENOP']}} >
-	                    <div class="guil-radio_faux">REF</div>
+	                    <div class="guil-radio_faux">R</div>
 	                  </label>
 	                </span>
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-D" ~ row['ENOP']}}  value="CON" />
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-D" ~ row['ENOP']}} >
-	                    <div class="guil-radio_faux">CON</div>
+	                    <div class="guil-radio_faux">C</div>
 	                  </label>
 	                </span>
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}}   value="OTH" />
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-E" ~ row['ENOP']}}  >
-	                    <div class="guil-radio_faux">OTH</div>
+	                    <div class="guil-radio_faux">G</div>
 	                  </label>
 	                </span>
 	                <span class="guil-button guil-radio_button">
 	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}}   value="UNK" checked/>
 	                  <label class="guil-radio_button__label" for={{"example-unique-id-F" ~ row['ENOP']}}  >
-	                    <div class="guil-radio_faux">UNK</div>
+	                    <div class="guil-radio_faux">I</div>
 	                  </label>
 	                </span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-G" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-G" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">RP</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-H" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-H" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">A</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-I" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-I" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">W</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-J" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-J" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">X</div>
+										</label>
+									</span>
 	              </td>
 	        <td class="c8"><span>
 						<input type="text" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}} />
@@ -198,12 +198,4 @@
 			</tbody>
 	    </table>
 
-
-	<script>
-	  {% include  electorwalksjs  %}
-	</script>
-
-
-
-</body>
-</html>
+{% endblock %}

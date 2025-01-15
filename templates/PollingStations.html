@@ -1,0 +1,53 @@
+{# templates/results.html #}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Polling Station Details</title>
+  <style>
+  table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  td, th {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+  }
+
+  tr:nth-child(even) {
+    background-color: #dddddd;
+  }
+  </style>
+</head>
+
+<body>
+  <h1>{{ test_name }} details</h1>
+
+  <ul>
+
+    <table>
+      <tr>
+      <td class="c1">Ward</td>
+      <td class="c2">Name</td>
+      <td class="c3">House Name/Number</td>
+      <td class="c5"><SPAN>Street</SPAN></td>
+      <td class="c6"><SPAN>Postcode</SPAN></td>
+      </tr>
+
+        {% for elector in electors %}
+      <tr>
+        <td class="c1">>{{ elector["NewWard"]}}</td>
+        <td class="c2">{{ elector["Polling_District_Name"] }}</td>
+        <td class="c3">{{ elector["Polling_Place"] }}</td>
+        <td class="c4"><SPAN>{{ elector["Pollstationcode"] }}</SPAN></td>
+      </tr>
+      {% endfor %}
+    </table>
+
+  </ul>
+</body>
+</html>

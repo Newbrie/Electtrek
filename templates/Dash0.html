@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block body%}
+		<title>elecTrek</title>
+
+    <div id="mapwin" class="innertube"><object data="{{ url_for('map',path=context.mapfile) }}" width="1200" height="800" title="Walk Map">
+    <embed src="{{ url_for('map',path=context.mapfile) }}" width="1200" height="800"> </embed> </object></div>
+<div id="nav" class="innertube">
+    <h1 >elecTrek</h1>
+		<ul>The Canvassing App</ul>
+{% for x,y in context.formdata.items() %}
+		<ul> {{ x }} : {{ y }} </ul>
+{% endfor %}
+    <ul>
+			<div class="container">
+			  <h2>Generate Walks</h2>
+				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
+					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
+					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
+					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
+						<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+			      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+			      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+						<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
+			  </form>
+			</div>
+			</div>
+			<div id="datawin" class="innertube">
+			<object data="/Users/newbrie/Sites/United_Kingdom/CHESHIRE_WEST_AND_CHESTER/RUNCORN_AND_HELSBY/BEECHWOOD_AND_HEATH/BH3/C13/STREETS/BH3-C13-PRINT.html" width="1200" height="200" title="Walk Map">
+	    <embed src="/Users/newbrie/Sites/United_Kingdom/CHESHIRE_WEST_AND_CHESTER/RUNCORN_AND_HELSBY/BEECHWOOD_AND_HEATH/BH3/C13/STREETS/BH3-C13-PRINT.html" width="1200" height="200"> </embed> </object>
+		  </div>
+				<script>
+			    function setActionForm(action){
+			      let form = document.getElementById("normal-file")
+			      if (action === 'normalise') {
+			          form.action = "{{url_for('normalise')}}";
+			          form.method = 'POST';
+			          document.body.style.cursor = 'wait'
+			          form.submit();
+			      } else if (action === 'produce') {
+			          form.action = "{{url_for('walks')}}";
+			          form.method = 'POST';
+			          document.body.style.cursor = 'wait'
+			          form.submit();
+			      } else if (action === 'canvass') {
+								form.action = "{{url_for('cards')}}";
+								form.method = 'POST';
+								document.body.style.cursor = 'wait'
+								form.submit();
+								      }
+			    }
+
+			</script>
+{% endblock %}

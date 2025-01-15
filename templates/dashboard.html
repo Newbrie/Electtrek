@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="container">
+   <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+  <ul>DATA PREPARATION STATUS</ul>
+{% if normstats != {}  %}
+  <ul>Environment: {{ context.normstats['env'] }}</ul>
+  <ul>Data Source: {{ context.normstats['source'] }}</ul>
+  <ul>Columns: {{ context.normstats['columns'] }}</ul>
+  <ul>Council: {{ context.normstats['council'] }}</ul>
+  <ul>Record Count: {{ context.normstats['count'] }}</ul>
+  <ul>Status: {{ context.normstats['status'] }}</ul>
+  <ul>  </ul>
+  <h1>  </h1>
+  <ul>WALK PRODUCTION STATUS</ul>
+  <ul>Country: {{ context.normstats['country'] }}</ul>
+  <ul>Centroid: {{ context.normstats['location'] }}</ul>
+  <ul>County: {{ context.normstats['county'] }}</ul>
+  <ul>Constituency: {{ context.normstats['constituency'] }}</ul>
+  <ul>No. of Wards: {{ context.normstats['wards'] }}</ul>
+  <ul>No. of PDs: {{ context.normstats['PDs'] }}</ul>
+  <ul>No. of Walks {{ context.normstats['walks'] }}</ul>
+  <ul>Status: {{ context.normstats['status'] }}</ul>
+{% endif %}
+  <a href="{{ context.mapfile }}" class="btn btn-logout"/>Maps<a>
+
+  <a href="{{url_for('logout')}}" class="btn btn-logout"/>Logout<a>
+</div>
+<script>
+  document.body.style.cursor = 'default'
+</script>
+{% endblock %}

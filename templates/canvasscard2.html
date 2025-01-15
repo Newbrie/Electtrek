@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block body %}
+		<title>ELECTTREK</title>
+
+	    <table>
+				<tbody>
+
+					<thead>
+					<tr><td colspan='10' style="text-align: center;text-weight: bold;"> Runcorn_and_Helsby All Voter Canvass Cards </td></tr>
+					<tr><td colspan='10' style="text-align: center;text-weight: bold;"> I am calling on behalf of James Crawford, your Reform candidate in the </td></tr>
+					<tr><td colspan='10' style="text-align: center;text-weight: bold;"> Runcorn_and_Helsby by-election on Thursday 7th Dec </td></tr>
+					<tr><td colspan='10' style="text-align: center;text-weight: bold;"> Did you support Reform in the General Election, and will you support James?</td></tr>
+					<tr>
+					<th class="c1">PD</th>
+					<th class="c2">Elector Number</th>
+					<th class="c3">Elector Name</th>
+					<th class="righted">House Name/No.</th>
+					<th class="c5">Street</th>
+					<th class="c6">Postcode</th>
+					<th class="c7">Ward</th>
+					<th class="c8">AV</th>
+					<th class="coded">V.I.</th>
+					<th class="c10">Notes</th>
+					</tr>
+					</thead>
+
+	      {% for index,row in group.iterrows() %}
+
+	      <tr>
+	        <td class="c1">{{ row['PD'] }}</td>
+	        <td class="c2">{{ '{:.1f}'.format(row['ENOP']) }}</td>
+					<td class="c3">{{ row['ElectorName'] }}</td>
+					{% if row['AddressPrefix'] |string != "nan" and row['AddressNumber'] |string|length %}
+	           <td class="righted">{{ row['AddressPrefix'] | replace('nan', '') }}, {{row['AddressNumber'] | int }}</td>
+	        {% else %}
+	          {% if row['AddressNumber'] |string|length %}
+	            <td class="righted">{{ row['AddressNumber'] |string }}</td>
+	          {% else %}
+	            <td class="righted">{{ row['AddressPrefix'] }}</td>
+	          {% endif %}
+	        {% endif %}
+	        <td class="righted">{{ row['StreetName'] }}</td>
+	        <td class="righted">{{ row['Postcode'] }}</td>
+					<td class="righted">{{ row['Ward'] }}</td>
+					<td class="coded"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
+	       	<td class="coded" ><span> <input type="text" maclength="2" size="2" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}} />
+				    </span></td>
+	        <td class="c11" ><span>
+						<input type="text" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}} />
+	        {{ row['Notes'] }}
+	          </span>
+	        </td>
+
+	      </tr>
+					{% if index % 17 == 16 %}
+					<tr> <td colspan='10' style="text-align: center">C=Conservative | LD=LibDems | G=Green | I=Independent | R=Reform | RP=ReformPoster S = Labour (Socialists) | A = Against | W = Won’t vote | X = Won’t say </td></tr>
+					<tr> <td colspan='10' style="text-align: center">Promoted by ReformUK, 124 City Road, London, EC1V 2NX | For ReformUK authorised users only | Personal Data - Destroy after use</td></tr>
+					{% endif %}
+
+	      {% endfor %}
+			</tbody>
+	    </table>
+
+{% endblock %}

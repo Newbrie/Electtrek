@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="container">
+  <h1>Select the file to Upload</h1>
+  <form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
+      <input type="file" name="importfile" placeholder="filename" />
+      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+  </form>
+</div>
+<script>
+    function setActionForm(action){
+      let form = document.getElementById("normal-file")
+      if (action === 'normalise') {
+          form.action = "{{url_for('normalise')}}";
+          form.method = 'POST';
+          document.body.style.cursor = 'wait'
+          form.submit();
+      } else if (action === 'produce') {
+          form.action = "{{url_for('produce')}}";
+          form.method = 'POST';
+          document.body.style.cursor = 'wait'
+          form.submit();
+      }
+    }
+
+</script>
+{% endblock %}

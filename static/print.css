@@ -1,0 +1,90 @@
+@media print {
+
+    header  {
+    font-weight: bold;
+    text-align: center;
+    position: sticky;
+    page-break-before: always; }
+
+    footer  {
+    font-weight: bold;
+    position: sticky;
+    page-break-after: always; }
+
+    h1 {break-before: always;}
+
+  table {
+  	break-inside: auto;
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 90%;
+    border-spacing:10;
+    margin-left: 10px;
+  }
+
+  tbody {;
+    break-inside: auto;
+  }
+
+  thead { display:table-header-group ;font-weight: bold;font-size: 9pt}
+  tfoot { display:table-footer-group ;font-weight: bold;font-size: 9pt}
+
+  tr:nth-child(even) {
+    background-color: #dddddd;
+  }
+
+  table tr td {
+  	font-size: 12pt;
+    font-family:'Arial',Times,serif;
+  	border:1px solid navy;
+    word-wrap:normal;
+  }
+#main {
+  break-before: always;
+}
+
+@page {
+	size: A4;
+  /* header box at top centre showing page number */
+  @top-center {
+    content: "THIS IS A HEADER SECTION " counter(pageNumber);
+  }
+}
+@page :right {
+  margin-right: 1cm;
+  bleed: 1.5cm;
+}
+
+@page :left {
+  margin-left: 1cm;
+      bleed: 1.5cm;
+}
+
+@page:right{
+  @top-center {
+    margin: 0pt 0pt 0pt 0pt;
+    border-top: .25pt solid #666;
+    content: "TOP OF THE PAGE";
+    font-size: 9pt;
+    color: #333;
+  }
+}
+
+@page:right{
+  @bottom-center {
+    margin: 0pt 0pt 0pt 0pt;
+    border-top: .25pt solid #666;
+    content: "BOTTOM";
+    font-size: 9pt;
+    color: #333;
+  }
+}
+
+@page:left{
+  @bottom-left {
+    margin-right: 1cm;
+    bleed: 1.5cm;
+    content: "Page " counter(page) " of " counter(pages);
+  }
+}
+}
