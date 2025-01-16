@@ -10,9 +10,9 @@ function myFunction() {
   for(var i = 0; i < options.length; i++) {
       var opt = options[i];
       select.innerHTML += "<option value=\"" + opt + "\">" + opt + "</option>";
-  }
+  };
 
-}
+};
 
 // Close the dropdown if the user clicks outside of it
 window.onclick = function(event) {
@@ -23,10 +23,10 @@ if (!event.target.matches('.dropbtn')) {
     var openDropdown = dropdowns[i];
     if (openDropdown.classList.contains('show')) {
       openDropdown.classList.remove('show');
-    }
-  }
-}
-}
+    };
+  };
+};
+};
 
 
 
@@ -44,11 +44,11 @@ function email_csv(csv, filename) {
 
 function openForm() {
     document.getElementById("myForm").style.display = "block";
-  }
+  };
 
 function closeForm() {
     document.getElementById("myForm").style.display = "none";
-  }
+  };
 
 function email_html_to_base(html, email) {
   var csv = [];
@@ -69,7 +69,7 @@ function email_html_to_base(html, email) {
             if (slots[k].checked) {
               row.push(slots[k].value)
             };
-          }
+          };
   csv.push(row.join(","));
   }
   // Download CSV
@@ -100,7 +100,7 @@ function download_csv(csv, filename) {
 
     // Lanzamos
     downloadLink.click();
-}
+};
 
 function export_table_to_csv(html, filename) {
 	var csv = [];
@@ -113,11 +113,11 @@ function export_table_to_csv(html, filename) {
             row.push(cols[j].innerText);
 
 		csv.push(row.join(","));
-	}
+	};
 
     // Download CSV
     download_csv(csv.join("\n"), filename);
-}
+};
 
 document.querySelector("button.SAVE").addEventListener("click", function () {
   var filename = "{{ walk_name }}-data.csv";
