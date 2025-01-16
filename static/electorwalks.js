@@ -1,8 +1,3 @@
-
-import 'table2excel';
-const Table2Excel = window.Table2Excel;
-
-const table2excel = new Table2Excel(options);
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 function myFunction() {
