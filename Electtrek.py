@@ -766,7 +766,6 @@ def downPDbut(selnode):
         mapfile = current_node.dir+"/"+current_node.file
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
-            raise Exception ('XYZ')
             flash("Can't find any elector data for this PD.")
             print("Can't find any elector data for this PD.")
             allelectors = []
@@ -833,7 +832,6 @@ def downSTbut(selnode):
         mapfile = current_node.dir+"/"+current_node.file
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
-            raise Exception ('XYZ')
             flash("Can't find any elector data for this PD.")
             print("Can't find any elector data for this PD.",len(allelectors),len(Featurelayers[current_node.level+1].children))
         else:
