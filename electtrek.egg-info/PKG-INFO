@@ -1,0 +1,15 @@
+Metadata-Version: 2.1
+Name: electtrek
+Version: 0.3
+Summary: Canvassing Package
+Author: Malcolm Newbury
+Author-email: <malcolm.newbury@guildfoss.com>
+License: Apache 2
+Keywords: python,canvassing
+Classifier: Development Status :: 3 - Beta
+Classifier: Intended Audience :: Democracy
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: MacOS :: MacOS X
+License-File: LICENSE
+
+Application that enables the Enables the collection , normalisation,  rendering and colelction of electoral data

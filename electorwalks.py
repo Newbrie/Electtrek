@@ -19,82 +19,88 @@ from pyproj import Proj
 from flask import Flask,render_template, url_for
 
 
-def goup (startpoint, name, text, size):
-  returnfile = ""
-  name = name.replace(r'[^A-Za-z0-9\&\ ]+', '').replace(" & "," AND ").replace(",","").replace(" ","_").upper()
-  if startpoint == "COUNTY" :
-    returnfile =  "../"+name+"-MAP.html"
-  if startpoint == "CON":
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "WARD":
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "DIV":
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "DIVPD":
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "PD" :
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "WALK" :
-    returnfile = "../"+name+"-MAP.html"
-  elif startpoint == "STREET" :
-    returnfile = "../"+name+"-MAP.html"
-
-  print("ReturnfileUp:", startpoint, returnfile)
-  return "<form action= '{0}' ><button type='submit' style='font-size: {2}pt;'>{1}</button></form>".format(returnfile,text, size)
-
-
-def godown (startpoint,name,text,size):
-  returnfile = ""
-  name = name.replace(r'[^A-Za-z0-9\&\ ]+', '').replace(" & "," AND ").replace(",","").replace(" ","_").upper()
-  if startpoint == "COUNTRY" :
-    returnfile =  name+"/"+name+"-MAP.html"
-  if startpoint == "COUNTY" :
-    returnfile =  name+"/"+name+"-MAP.html"
-  if startpoint == "CON" :
-    returnfile =  name+"/"+name+"-MAP.html"
-  elif startpoint == "WARD":
-    returnfile =  name+"/"+name+"-MAP.html"
-  elif startpoint == "DIV":
-    returnfile =  name+"/"+name+"-MAP.html"
-  elif startpoint ==  "PD":
-    returnfile =   name.split("-")[1]+"/"+name.split("-")[0]+"-"+name.split("-")[1]+"-MAP.html"
-  elif startpoint == "WALK" :
-    returnfile =   name.split("-")[0]+"-"+name.split("-")[1]+"-TEXT.html"
-  elif startpoint ==  "STREET":
-    returnfile =  name.split("-")[0]+"-"+name.split("-")[1]+"-TEXT.html"
-  print("ReturnfileDown:", startpoint, returnfile)
-  return "<form action= '{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(returnfile,text,size)
-
-def add_to_top_layer(layerlist, boundary,uptag,layer):
-    def lookupcol(dict, item):
-        if item in dict:
-            return dict[item]
-        else:
-            return 'gray'
-    print("FG0 Poly details:",boundary)
-    flag = { "England":'white', "Wales":'red', "Scotland":'darkblue',  "Northern Ireland": 'green' }
-    if boundary.iloc[0]['FID'] not in layerlist:
-        layerlist.append(boundary.iloc[0]['FID'])
-        folium.GeoJson(boundary,highlight_function=lambda feature: {"fillColor": ("yellow"),},
-            popup=folium.GeoJsonPopup(fields=[uptag,],aliases=["Move5:",]),popup_keep_highlighted=True,
-            style_function=lambda feature: {"fillColor": lookupcol(flag,boundary.iloc[0]['NAME']),"color": "indigo","weight": 2,"fillOpacity": 0.5,},
-            ).add_to(layer)
-    return
-
-
-def find_boundary(polyfile,here):
-    for index, ppath in polyfile.iterrows():
-        path = ppath['geometry']
-        if here.within(path):
-            if 'FID' in polyfile.columns:
-                return polyfile[polyfile['FID']==index+1]
-    return
-
 def prodwalks(current_node, filename, normstats):
-    country = 'United_Kingdom'
-    Countrydir = electtrek.locmappath(workdir+"/"+str(country),"")
-    normstats['Mean_Lat'] = 51
-    normstats['Mean_Long'] = 0
+    global workdirectories
+    global Directories
+    global MapRoot
+    global allelectors
+    global TreeNode
+
+    def goup (startpoint, name, text, size):
+      returnfile = ""
+      name = name.replace(r'[^A-Za-z0-9\&\ ]+', '').replace(" & "," AND ").replace(",","").replace(" ","_").upper()
+      if startpoint == "COUNTY" :
+        returnfile =  "../"+name+"-MAP.html"
+      if startpoint == "CON":
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "WARD":
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "DIV":
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "DIVPD":
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "PD" :
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "WALK" :
+        returnfile = "../"+name+"-MAP.html"
+      elif startpoint == "STREET" :
+        returnfile = "../"+name+"-MAP.html"
+
+      print("ReturnfileUp:", startpoint, returnfile)
+      return "<form action= '{0}' ><button type='submit' style='font-size: {2}pt;'>{1}</button></form>".format(returnfile,text, size)
+
+
+    def godown (startpoint,name,text,size):
+      returnfile = ""
+      name = name.replace(r'[^A-Za-z0-9\&\ ]+', '').replace(" & "," AND ").replace(",","").replace(" ","_").upper()
+      if startpoint == "COUNTRY" :
+        returnfile =  name+"/"+name+"-MAP.html"
+      if startpoint == "COUNTY" :
+        returnfile =  name+"/"+name+"-MAP.html"
+      if startpoint == "CON" :
+        returnfile =  name+"/"+name+"-MAP.html"
+      elif startpoint == "WARD":
+        returnfile =  name+"/"+name+"-MAP.html"
+      elif startpoint == "DIV":
+        returnfile =  name+"/"+name+"-MAP.html"
+      elif startpoint ==  "PD":
+        returnfile =   name.split("-")[1]+"/"+name.split("-")[0]+"-"+name.split("-")[1]+"-MAP.html"
+      elif startpoint == "WALK" :
+        returnfile =   name.split("-")[0]+"-"+name.split("-")[1]+"-TEXT.html"
+      elif startpoint ==  "STREET":
+        returnfile =  name.split("-")[0]+"-"+name.split("-")[1]+"-TEXT.html"
+      print("ReturnfileDown:", startpoint, returnfile)
+      return "<form action= '{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(returnfile,text,size)
+
+    def add_to_top_layer(layerlist, boundary,uptag,layer):
+        def lookupcol(dict, item):
+            if item in dict:
+                return dict[item]
+            else:
+                return 'gray'
+        print("FG0 Poly details:",boundary)
+        flag = { "England":'white', "Wales":'red', "Scotland":'darkblue',  "Northern Ireland": 'green' }
+        if boundary.iloc[0]['FID'] not in layerlist:
+            layerlist.append(boundary.iloc[0]['FID'])
+            folium.GeoJson(boundary,highlight_function=lambda feature: {"fillColor": ("yellow"),},
+                popup=folium.GeoJsonPopup(fields=[uptag,],aliases=["Move5:",]),popup_keep_highlighted=True,
+                style_function=lambda feature: {"fillColor": lookupcol(flag,boundary.iloc[0]['NAME']),"color": "indigo","weight": 2,"fillOpacity": 0.5,},
+                ).add_to(layer)
+        return
+
+
+    def find_boundary(polyfile,here):
+        for index, ppath in polyfile.iterrows():
+            path = ppath['geometry']
+            if here.within(path):
+                if 'FID' in polyfile.columns:
+                    return polyfile[polyfile['FID']==index+1]
+        return
+
+        country = 'United_Kingdom'
+        Countrydir = current_node.locmappath("")
+        normstats['Mean_Lat'] = 51
+        normstats['Mean_Long'] = 0
 
     # fg1/2/3 list maintains a cumulative list of ward and div boundaries to be added as the constituency poly layer in f4 anf f5
     # fg2w/p/c fg3w/p/c are overwritten single value poly + div polygons added to each Ward , PDmap and Walk maps - no lists needed
@@ -237,7 +243,7 @@ def prodwalks(current_node, filename, normstats):
     CountyMapfile = county+"-MAP.html"
     Countyboundary["DOWN"] = "<br>"+county+"</br>"+godown("COUNTY",county,"DOWN",18)
     add_to_top_layer(fg0list, Countyboundary,"DOWN",fg0)
-    Countydir = electtrek.locmappath(Countrydir+"/"+str(county),"")
+    Countydir = current_node.locmappath("")
 
     here = Point(Decimal(Countyboundary["LONG"].values[0]),Decimal(Countyboundary["LAT"].values[0]))
     sw = [Countyboundary.geometry.bounds.miny.to_list()[0],Countyboundary.geometry.bounds.minx.to_list()[0]]
@@ -247,7 +253,7 @@ def prodwalks(current_node, filename, normstats):
     Countymap.add_child(fg0)
 
 
-    Countydir = electtrek.locmappath(Countrydir+"/"+str(county),"")
+    Countydir = current_node.locmappath("")
     os.chdir(Countydir)
     listofcons = next(os.walk('.'))[1]
     print("westminster con file:",listofcons,Con_Bound_layer.info())
@@ -275,7 +281,7 @@ def prodwalks(current_node, filename, normstats):
     Ward_Bound_layer = gpd.read_file(bounddir+"/"+'Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson')
     Ward_Bound_layer = Ward_Bound_layer.rename(columns = {'WD24NM': 'NAME'})
 
-    Codir = electtrek.locmappath(Countydir+"/"+str(constituency),"")
+    Codir = current_node.locmappath("")
     os.chdir(Codir)
 
     here = Point(Decimal(Conboundary["LONG"].values[0]),Decimal(Conboundary["LAT"].values[0]))
@@ -432,7 +438,7 @@ def prodwalks(current_node, filename, normstats):
       wardcoordinates = [maplaty, maplongx]
       here = Point(Decimal(maplongx),Decimal(maplaty))
 
-      Wadir = electtrek.locmappath(Codir+"/"+ Ward,"")
+      Wadir = current_node.locmappath("")
       sw = wardelectors[['Lat', 'Long']].min().values.tolist()
       ne = wardelectors[['Lat', 'Long']].max().values.tolist()
       swne = [sw,ne]
@@ -493,8 +499,8 @@ def prodwalks(current_node, filename, normstats):
           Divboundary["Downdiv"] =  "<br>"+Divname+"</br>"+godown("DIV", PD,"DOWN",15)
           Divboundary["UPdiv"] =  "<br>"+Divname+"</br>"+goup("DIV", constituency,"UP",10)
           Divboundary["UPpd"] =  "<br>"+Divname+"</br>"+goup("DIVPD", Divname,"UP",10)
-          Divdir = electtrek.locmappath(Codir+"/"+Divname,"")
-          PDDivdir = electtrek.locmappath(Divdir+"/"+str(PD),Wadir+"/"+str(PD))
+          Divdir = current_node.locmappath("")
+          PDDivdir = current_node.locmappath(Wadir+"/"+str(PD))
 
           Divmap = add_to_divs_layer (fg5list, Divboundary, fg5, "UPdiv",Divname)
 
@@ -518,7 +524,7 @@ def prodwalks(current_node, filename, normstats):
 
         PDelectors.insert(0, "Clabel", klabels)
 
-        PDdir = electtrek.locmappath( Wadir+"/"+str(PD),"")
+        PDdir = current_node.locmappath("")
         here = Point(Decimal(x[0]),Decimal(y[0]))
         sw = PDelectors[['Lat', 'Long']].min().values.tolist()
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
@@ -572,7 +578,7 @@ def prodwalks(current_node, filename, normstats):
           maplaty = statistics.mean(electorwalks.Lat.values)
           walkcoordinates = [maplaty, maplongx]
 
-          Cldir = electtrek.locmappath(PDdir+"/"+str(cluster),"")
+          Cldir = current_node.locmappath("")
           here = Point(Decimal(maplongx),Decimal(maplaty))
 
           sw = electorwalks[['Lat', 'Long']].min().values.tolist()

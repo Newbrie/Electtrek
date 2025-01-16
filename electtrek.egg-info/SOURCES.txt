@@ -1,0 +1,7 @@
+LICENSE
+README.md
+setup.py
+electtrek.egg-info/PKG-INFO
+electtrek.egg-info/SOURCES.txt
+electtrek.egg-info/dependency_links.txt
+electtrek.egg-info/top_level.txt

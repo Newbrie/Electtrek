@@ -499,7 +499,7 @@ MapRoot.create_map_branch('nation',allelectors)
 current_node = MapRoot
 
 Featurelayers[current_node.level].children = []
-Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 mapfile = Featurelayers[0].add_linesandmarkers(current_node, 'country')
 
 map = current_node.create_area_map(Featurelayers,allelectors)
