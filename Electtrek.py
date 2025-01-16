@@ -133,8 +133,8 @@ class TreeNode:
 #      self.map.fit_bounds(self.get_bounding_box(block), padding = (20, 20))
 # the folium save file reference must be a url
       nodemapfile = self.dir+"/"+self.file
-      self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/style.css")
-      self.map.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/electorwalks.js")
+      self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
+      self.map.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/static/electorwalks.js")
 
 
       target = self.locmappath("")
@@ -947,12 +947,14 @@ def downSTbut(selnode):
               electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
               target = street_node.locmappath("")
               results_filename = walk_name+"-PRINT.html"
+              data_filename = walk_name+"-DATA.html"
               map_filename = street_node.parent.file
 
               context = {
                 "group": electorwalks,
                 "prodstats": prodstats,
-                "mapfile": "../"+map_filename,
+                "mapfile": "../STREETS"+map_filename,
+                "datafile": data_filename,
                 }
               results_template = environment.get_template('canvasscard1.html')
 
