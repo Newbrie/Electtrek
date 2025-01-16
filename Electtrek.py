@@ -464,10 +464,10 @@ login_manager.needs_refresh_message = "<h1>You really need to re-login to access
 
 workdirectories = {}
 workdirectories['testdir'] = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
-workdirectories['staticdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek"
+workdirectories['staticdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek"
 workdirectories['workdir'] = "/Users/newbrie/Sites"
-workdirectories['templdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/templates"
-workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/Boundaries/"
+workdirectories['templdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates"
+workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/ElecttrekReference/Boundaries/"
 
 Featurelayers = []
 
