@@ -951,7 +951,7 @@ def downSTbut(selnode):
               context = {
                 "group": electorwalks,
                 "prodstats": prodstats,
-                "mapfile": "../STREETS"+map_filename,
+                "mapfile": "../STREETS/"+map_filename,
                 "datafile": data_filename,
                 }
               results_template = environment.get_template('canvasscard1.html')
