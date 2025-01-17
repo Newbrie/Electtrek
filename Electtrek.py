@@ -441,16 +441,16 @@ def selected_childnode(cnode,val):
 
 
 # create and configure the app
-app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/electtrek/static')
+app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
 
-sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/electtrek')
+sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
 # Configure Alchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/newbrie/Documents/ReformUK/GitHub/electtrek/trekusers.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/newbrie/Documents/ReformUK/GitHub/Electtrek/trekusers.db'
 app.config['SECRET_KEY'] = 'rosebutt'
 #app.config['USE_SESSION_FOR_NEXT'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = '/Users/newbrie/Sites'
-app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/electtrek'
+app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/Electtrek'
 #app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
 
 db = SQLAlchemy(app)
