@@ -116,7 +116,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
     Countyboundary["UPDOWN"] = "<br>COUNTY</br>"+ uptag +"<br>"+ downtag
     add_to_top_layer(flayers[2].children, Conboundary,"UPDOWN",flayers[2].fg)
 
-    CountyMapfile = county+"-MAP.html"
+    County = county+"-MAP.html"
     add_to_top_layer(flayers[2].children, Countyboundary,"UPDOWN",flayers[2].fg)
 
     gapnode.parent.locmappath("")
@@ -282,7 +282,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
       if boundary.iloc[0]['FID'] not in fglist:
         fglist.append(boundary.iloc[0]['FID'])
         Dmap = create_div_map(layertag,boundary['geometry'],12)
-        DivMapfilelist.append([boundary.iloc[0]['FID'],Dmap,Divdir,DivMapfile])
+        Divlist.append([boundary.iloc[0]['FID'],Dmap,Divdir,Div])
         folium.GeoJson(boundary,highlight_function=lambda feature: {"fillColor": ("yellow"),},
           popup=folium.GeoJsonPopup(fields=[downtag,],aliases=["Move3:",]),popup_keep_highlighted=True,
           style_function=lambda feature: {"fillColor": "red","color": "red","weight": 3,"fillOpacity": 0.1,},
@@ -299,7 +299,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
             icon_anchor=(5,30)),
           ).add_to(layer)
       else:
-        Dmap = [x[1] for x in DivMapfilelist if x[0] == boundary.iloc[0]['FID']][0]
+        Dmap = [x[1] for x in Divlist if x[0] == boundary.iloc[0]['FID']][0]
       return Dmap
 
     def add_to_div_layer(boundary, layer, uptag, layertag):
@@ -383,7 +383,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 
       Wardmap = ward_node.create_area_map (flayers,wardelectors)
 
-      WardMapfile = Ward+"-MAP.html"
+      Ward = Ward+"-MAP.html"
       ward_node.locmappath("")
 
       allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
@@ -454,7 +454,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 #          upfrompdtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"UP",10)
 #          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"DOWN",10)
 #          downpdtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(PD_node.dir+"/"+PD_node.file,"DOWN",10)
-#          DivMapfile = Divname+"-MAP.html"
+#          Div = Divname+"-MAP.html"
 #          Divboundary["Downcon"] =  "<br>"+Divname+"</br>"+downtag
 #          Divboundary["Downdiv"] =  "<br>"+Divname+"</br>"+downpdtag
 #          Divboundary["UPdiv"] =  "<br>"+Divname+"</br>"+upfromdivtag
