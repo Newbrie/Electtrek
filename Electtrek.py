@@ -945,14 +945,14 @@ def downSTbut(selnode):
               electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
               target = street_node.locmappath("")
               results_filename = walk_name+"-PRINT.html"
-              data_filename = walk_name+"-DATA.html"
-              map_filename = street_node.parent.file
+              data_filename = street_node.dir+"/"+walk_name+"-DATA.html"
+              map_filename = street_node.parent.dir+"/"+street_node.parent.file
 
               context = {
                 "group": electorwalks,
                 "prodstats": prodstats,
-                "mapfile": "../STREETS/"+map_filename,
-                "datafile": data_filename,
+                "mapfile": url_for('map',path=map_filename),
+                "datafile": url_for('map',path=data_filename),
                 }
               results_template = environment.get_template('canvasscard1.html')
 
