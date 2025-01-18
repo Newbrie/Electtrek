@@ -119,7 +119,7 @@ function export_table_to_csv(html, filename) {
     download_csv(csv.join("\n"), filename);
 };
 
-document.querySelector("Save_the_data.SAVE").addEventListener("click", function () {
+document.querySelector("#Save_the_data").addEventListener("click", function () {
   var filename = "{{ walk_name }}-data.csv";
   var html = document.querySelector("canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
