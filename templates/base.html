@@ -7,7 +7,7 @@
   <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
   <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
   <script type="module">
-  import export_table_to_csv,download_csv from "https://newbrie.github.io/Electtrek/electorwalks.js";
+  import export_table_to_csv,download_csv from "https://newbrie.github.io/Electtrek/static/electorwalks.js";
 
   document.getElementById('save-btn').addEventListener('click', function() {
     var filename = "{{ walk_name }}-data.csv";
