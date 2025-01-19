@@ -530,9 +530,8 @@ def prodwalks(current_node, filename, normstats):
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
         PDmap = current_node.create_area_map (swne)
-        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/print.css")
-        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/style.css")
-        PDmap.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/electorwalks.js")
+        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
+        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
 
         PDMapfile = PD+"-MAP.html"
     # in the wards map add PD polling districts to the ward map with controls to go back up to the constituency map or down to the PD map

@@ -135,7 +135,6 @@ class TreeNode:
       nodemapfile = self.dir+"/"+self.file
       self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
       self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
-      self.map.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/static/electorwalks.js")
 
 
       target = self.locmappath("")
