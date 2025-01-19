@@ -489,8 +489,8 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
         PDmap = PD_node.create_area_map (flayers,PDelectors)
+        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/print.css")
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/style.css")
-
         PDmap.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/electorwalks.js")
 
         PDMapfile = PD_node.file

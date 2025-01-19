@@ -530,8 +530,8 @@ def prodwalks(current_node, filename, normstats):
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
         PDmap = current_node.create_area_map (swne)
+        PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/print.css")
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/style.css")
-
         PDmap.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/electorwalks.js")
 
         PDMapfile = PD+"-MAP.html"

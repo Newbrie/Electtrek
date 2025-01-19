@@ -133,6 +133,7 @@ class TreeNode:
 #      self.map.fit_bounds(self.get_bounding_box(block), padding = (20, 20))
 # the folium save file reference must be a url
       nodemapfile = self.dir+"/"+self.file
+      self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
       self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
       self.map.add_js_link("electtrekjs","https://newbrie.github.io/Electtrek/static/electorwalks.js")
 
