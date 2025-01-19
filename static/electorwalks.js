@@ -121,7 +121,7 @@ function export_table_to_csv(html, filename) {
 
 
 document.getElementById('save-btn').addEventListener('click', function() {
-  var filename = "{{ walk_name }}-data.csv";
+  var filename = {{ walk_name }}+"-DATA.csv";
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log('Data saved!');
@@ -135,13 +135,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 document.querySelector("button.SEND").addEventListener("click", function () {
   var html = document.querySelector("#canvass-table").outerHTML;
-  var filename = "{{ walk_name }}-data.csv";
+  var filename = {{ walk_name }}+"-DATA.csv";
   var base_email = "surrey@reformuk.com"
   email_html_to_base(html, base_email);
-  });
-
-document.querySelector("button.QUERY").addEventListener("click", function () {
-  var markerid = document.querySelector("table").outerHTML;
-  var filename = "{{ walk_name }}-TEXT.csv";
-  fill_data_window(filename);
   });
