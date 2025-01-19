@@ -125,6 +125,12 @@ document.querySelector("#Save_the_data").addEventListener("click", function () {
 	export_table_to_csv(html, filename);
 });
 
+const saveBtn = document.getElementById('save-btn');
+
+saveBtn.addEventListener('click', function() {
+  // Code to save data goes here
+  console.log('Data saved!');
+});
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
