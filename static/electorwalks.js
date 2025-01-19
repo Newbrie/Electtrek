@@ -107,7 +107,7 @@ function export_table_to_csv(html, filename) {
 	var rows = document.querySelectorAll("table tr");
 
     for (var i = 0; i < rows.length; i++) {
-		var row = [], cols = rows[i].querySelectorAll("span,input,td,th");
+		var row = [], cols = rows[i].querySelectorAll("div,span,input,td,th");
 
         for (var j = 0; j < cols.length; j++)
             row.push(cols[j].innerText);
@@ -121,7 +121,7 @@ function export_table_to_csv(html, filename) {
 
 
 document.getElementById('save-btn').addEventListener('click', function() {
-  var filename = document.getElementById("save-btn").getAttribute("data1");
+  var filename =document.getElementById("demo").innerHTML document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
