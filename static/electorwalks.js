@@ -124,7 +124,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
   var filename = document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
-  console.log('Data saved!');
+  console.log(filename);
 });
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
