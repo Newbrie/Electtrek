@@ -129,13 +129,13 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
-//  var filename = "{{ walk_name }}-data.csv";
+//  var filename = "{{ walkname }}-data.csv";
 //  export_table_to_csv(html, filename);
 //  });
 
 document.querySelector("button.SEND").addEventListener("click", function () {
   var html = document.querySelector("#canvass-table").outerHTML;
-  var filename = {{ walk_name }}+"-DATA.csv";
+  var filename = {{ walkname }}+"-DATA.csv";
   var base_email = "surrey@reformuk.com"
   email_html_to_base(html, base_email);
   });
