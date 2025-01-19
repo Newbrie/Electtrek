@@ -107,7 +107,7 @@ function export_table_to_csv(html, filename) {
 	var rows = document.querySelectorAll("table tr");
 
     for (var i = 0; i < rows.length; i++) {
-		var row = [], cols = rows[i].querySelectorAll("td, th, input");
+		var row = [], cols = rows[i].querySelectorAll("span,input,td,th");
 
         for (var j = 0; j < cols.length; j++)
             row.push(cols[j].innerText);
