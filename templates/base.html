@@ -6,15 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
   <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
-  <script type="module">
-  import export_table_to_csv from "https://newbrie.github.io/Electtrek/static/electorwalks.js";
-
-  document.getElementById('save-btn').addEventListener('click', function() {
-    var filename = "{{ walk_name }}-data.csv";
-    var html = document.querySelector("canvass-table").outerHTML;
-  	export_table_to_csv(html, filename);
-    console.log('Data saved!');
-  });
+  <script type="text/javascript" src="https://newbrie.github.io/Electtrek/static/electorwalks.js">
   </script>
   <title>elecTrek</title>
 </head>
