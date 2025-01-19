@@ -121,7 +121,7 @@ function export_table_to_csv(html, filename) {
 
 
 document.getElementById('save-btn').addEventListener('click', function() {
-  var filename =document.getElementById("demo").innerHTML document.getElementById("save-btn").getAttribute("data1");
+  var filename = document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
