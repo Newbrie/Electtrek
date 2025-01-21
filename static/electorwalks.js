@@ -110,7 +110,7 @@ function export_table_to_csv(html, filename) {
 		var row = [], cols = rows[i].querySelectorAll("td,th");
 
         for (var j = 0; j < cols.length; j++)
-            row.push(cols[j].innerText);
+            row.push(cols[j].value);
 
 		csv.push(row.join(","));
 	};
@@ -126,6 +126,11 @@ document.getElementById('save-btn').addEventListener('click', function() {
 	export_table_to_csv(html, filename);
   console.log(filename);
 });
+
+function copyinput() {
+  var x = document.getElementById("fname");
+  x.value = x.value.toUpperCase();
+  });
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
