@@ -128,7 +128,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 
-document.getElementById('input.coded').addEventListener('onchange', function() {
+document.querySelectorAll('input.coded').addEventListener('onchange', function() {
   const element = document.activeElement.value.toUpperCase();
   document.activeElement.innerHTML = element;
 });
