@@ -127,6 +127,12 @@ document.getElementById('save-btn').addEventListener('click', function() {
   console.log(filename);
 });
 
+
+document.getElementById('input.coded').addEventListener('onchange', function() {
+  const element = document.activeElement.value.toUpperCase();
+  document.activeElement.innerHTML = element;
+});
+
 function copyinput() {
   const element = document.activeElement.value.toUpperCase();
   document.activeElement.innerHTML = element;
