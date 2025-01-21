@@ -128,7 +128,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 
-document.querySelectorAll("td.VI td.Ns").forEach(el => {
+document.querySelectorAll("td.VI,td.Ns").forEach(el => {
         el.addEventListener('change',function (el) {
           const element = el.value.toUpperCase();
           el.value = element;
