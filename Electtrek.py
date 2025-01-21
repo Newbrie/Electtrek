@@ -729,7 +729,7 @@ def downPDbut(selnode):
     PDPts =[]
     PDWardlist =[]
     if request.method == 'GET':
-        if current_node.source == "" or allelectors == []:
+        if current_node.source == "" or len(allelectors) == 0:
             print ("_________Requestformfile",request.values['importfile'])
             flash ("_________Requestformfile"+request.values['importfile'])
             filename = request.values['importfile']
@@ -797,7 +797,7 @@ def downSTbut(selnode):
     PDPts =[]
     PDWardlist =[]
     if request.method == 'GET':
-        if current_node.source == "" or allelectors == []:
+        if current_node.source == "" or len(allelectors) == 0:
             print ("_________Requestformfile",request.values['importfile'])
             flash ("_________Requestformfile"+request.values['importfile'])
             filename = request.values['importfile']
