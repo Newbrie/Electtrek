@@ -128,7 +128,9 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 function copyinput(selement) {
-  selement.parentElement.parentElement.value = selement.value;
+  let x = selement.value.toUpperCase()
+  selement.value = x
+  selement.parentElement.parentElement.value = x;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
