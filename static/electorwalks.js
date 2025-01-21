@@ -128,22 +128,13 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 
-document.querySelectorAll("td.coded").forEach(el => {
+document.querySelectorAll("td.VI td.Ns").forEach(el => {
         el.addEventListener('change',function (el) {
           const element = el.value.toUpperCase();
-          el.innerHTML = element;
+          el.value = element;
 });
 });
 
-document.querySelectorAll("a[href='example.com']").forEach(el => {
-        el.addEventListener('click',function (e) {
-            newrelic.addPageAction('Doc');
-        });
-    });
-function copyinput() {
-  const element = document.activeElement.value.toUpperCase();
-  document.activeElement.innerHTML = element;
-  };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
