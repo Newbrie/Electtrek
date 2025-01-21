@@ -128,8 +128,8 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 function copyinput() {
-  let element = document.activeElement.value;
-  document.activeElement.parentElement.parentElement.innerHTML = element;
+  let element = document.activeElement;
+  element.parentElement.parentElement.innerHTML = element.value;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
