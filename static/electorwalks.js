@@ -129,7 +129,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 
 document.querySelectorAll("td.coded").forEach(el => {
-        el.addEventListener('change',function () {
+        el.addEventListener('change',function (el) {
           const element = el.value.toUpperCase();
           el.innerHTML = element;
 });
