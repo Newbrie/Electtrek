@@ -110,7 +110,7 @@ function export_table_to_csv(html, filename) {
 		var row = [], cols = rows[i].querySelectorAll("td,th");
 
         for (var j = 0; j < cols.length; j++)
-            row.push(cols[j].innerText);
+            row.push(cols[j].innerHTML);
 
 		csv.push(row.join(","));
 	};
@@ -129,8 +129,8 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 function copyinput(selement) {
   let x = selement.value.toUpperCase()
-  selement.innerText = x
-  selement.parentElement.parentElement.innerText = x;
+  selement.innerHTML = x
+  selement.parentElement.parentElement.innerHTML = x;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
