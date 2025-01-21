@@ -130,7 +130,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 function copyinput() {
   var x = document.activeElement;
   x.value = x.value.toUpperCase();
-  document.activeElement.value = x.value
+  document.activeElement.value = x.value;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
