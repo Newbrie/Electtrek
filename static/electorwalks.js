@@ -127,14 +127,10 @@ document.getElementById('save-btn').addEventListener('click', function() {
   console.log(filename);
 });
 
-
-document.querySelectorAll("td.VI,td.Ns").forEach(el => {
-        el.addEventListener('change',function (el) {
-          const element = el.innerText.toUpperCase();
-          el.outerText = element;
-});
-});
-
+function copyinput() {
+  const element = document.activeElement.value.toUpperCase();
+  document.activeElement.parentElement.parentElement.innerHTML = element;
+  };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
