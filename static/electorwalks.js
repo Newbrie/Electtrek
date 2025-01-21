@@ -128,9 +128,10 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 function copyinput() {
-  var x = document.getElementById("fname");
+  var x = document.activeElement;
   x.value = x.value.toUpperCase();
-  });
+  document.activeElement.value = x.value
+  };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
