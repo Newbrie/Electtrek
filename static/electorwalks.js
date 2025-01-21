@@ -128,11 +128,18 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 
-document.querySelectorAll("td.coded").addEventListener('change', function() {
-  const element = document.activeElement.value.toUpperCase();
-  document.activeElement.innerHTML = element;
+document.querySelectorAll("td.coded").forEach(el => {
+        el.addEventListener('change',function () {
+          const element = el.value.toUpperCase();
+          el.innerHTML = element;
+});
 });
 
+document.querySelectorAll("a[href='example.com']").forEach(el => {
+        el.addEventListener('click',function (e) {
+            newrelic.addPageAction('Doc');
+        });
+    });
 function copyinput() {
   const element = document.activeElement.value.toUpperCase();
   document.activeElement.innerHTML = element;
