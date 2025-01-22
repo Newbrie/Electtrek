@@ -141,10 +141,9 @@ class TreeNode:
       self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
       self.map.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
 
-
       target = self.locmappath("")
       self.map.save(target)
-      print("_____saved map file:",target)
+      print("_____saved map file:",target, self.level)
       return self.map
 
     def set_bounding_box(self,block):
