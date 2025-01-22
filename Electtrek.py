@@ -273,44 +273,38 @@ def add_boundaries(shelf,node):
         UK_Bound_layer = World_Bound_layer[World_Bound_layer['FID'] == 238]
         UK_Bound_layer['LAT'] = 54.4361
         UK_Bound_layer['LONG'] = -4.5481
-        Treepolys.append(UK_Bound_layer)
+        Treepolys[0] = UK_Bound_layer
         return UK_Bound_layer
     elif shelf == 'nation':
         print("__________reading Countries_December_2021_UK_BGC_2022_-7786782236458806674= [1]")
         Nation_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson')
         Nation_Bound_layer = Nation_Bound_layer.rename(columns = {'OBJECTID': 'FID'})
         Nation_Bound_layer = Nation_Bound_layer.rename(columns = {'CTRY21NM': 'NAME'})
-        Treepolys.append(Nation_Bound_layer)
+        Treepolys[1] = Nation_Bound_layer
         return Nation_Bound_layer
     elif shelf == 'county':
         print("__________reading Counties_and_Unitary_Authorities_May_2023_UK_BGC_ = [2]")
         County_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson')
         County_Bound_layer = County_Bound_layer.rename(columns = {'CTYUA23NM': 'NAME'})
-        Treepolys.append(County_Bound_layer)
+        Treepolys[2] = County_Bound_layer
         return County_Bound_layer
     elif shelf == 'constituency':
         print("__________reading Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK= [3]")
         Con_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson')
         Con_Bound_layer = Con_Bound_layer.rename(columns = {'PCON24NM': 'NAME'})
-        Treepolys.append(Con_Bound_layer)
+        Treepolys[3] = Con_Bound_layer
         return Con_Bound_layer
     elif shelf == 'ward':
         print("__________reading Wards_May_2024_Boundaries = [4]")
         Ward_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson')
         Ward_Bound_layer = Ward_Bound_layer.rename(columns = {'WD24NM': 'NAME'})
-        if len(Treepolys) < 5:
-            Treepolys.append(Ward_Bound_layer)
-        else:
-            Treepolys[4] = Ward_Bound_layer
+        Treepolys[4] = Ward_Bound_layer
         return Ward_Bound_layer
     elif shelf == 'division':
         print("__________reading County_Electoral_Division_May_2023_Boundaries = [4]")
         Division_Bound_layer = gpd.read_file( workdirectories['bounddir']+"/"+'County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson')
         Division_Bound_layer = Division_Bound_layer.rename(columns = {'CED23NM': 'NAME'})
-        if len(Treepolys) < 5:
-            Treepolys.append(Division_Bound_layer)
-        else:
-            Treepolys[5] = Division_Bound_layer
+        Treepolys[4] = Division_Bound_layer
         return Division_Bound_layer
 
 
@@ -491,7 +485,7 @@ roid = Point(longmean,latmean)
 MapRoot = TreeNode("UNITED_KINGDOM",238, roid)
 MapRoot.dir = "UNITED_KINGDOM"
 MapRoot.file = "UNITED_KINGDOM-MAP.html"
-Treepolys = []
+Treepolys = [[],[],[],[],[],[]]
 add_boundaries('country',MapRoot)
 add_boundaries('nation',MapRoot)
 MapRoot.create_map_branch('nation',allelectors)
@@ -1037,14 +1031,17 @@ def downdivbut(selnode):
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
-    add_boundaries('division',current_node)
-    current_node.create_map_branch('division',allelectors)
-    Featurelayers[current_node.level+1].children = []
-    Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-    Featurelayers[current_node.level+1].add_linesandmarkers(current_node,'division')
-    map = current_node.create_area_map(Featurelayers,allelectors)
-    mapfile = current_node.dir+"/"+current_node.file
-    print ("________Heading for division : ",current_node)
+    if current_node.level == 3 :
+
+        if len(current_node.children) == 0:
+            add_boundaries('division',current_node)
+            current_node.create_map_branch('division',allelectors)
+            Featurelayers[current_node.level+1].children = []
+            Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+            Featurelayers[current_node.level+1].add_linesandmarkers(current_node,'division')
+            map = current_node.create_area_map(Featurelayers,allelectors)
+        mapfile = current_node.dir+"/"+current_node.file
+        print ("________Heading for division : ",current_node)
     if len(Featurelayers[current_node.level+1].children) == 0:
         flash("Can't find any county divisions for this Constituency.")
     else:
