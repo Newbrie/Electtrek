@@ -325,11 +325,12 @@ class FGlayer:
         global levelcolours
         global allelectors
         if herenode.level <= 5:
+            typechildren = [x for x in self.children if x.type == type]
             displayed = [y for y in herenode.children if y.type == type and y.value != "UNITED_KINGDOM"]
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
             print('_______MAPLinesandMarkers')
-            for c in herenode.children:
-                layerfids = [x.fid for x in self.children if x.value != "UNITED_KINGDOM"]
+            for c in typechildren:
+                layerfids = [x.fid for x in typechildren if x.value != "UNITED_KINGDOM"]
                 if c.fid not in layerfids:
                     if c.level < 5:
                         pfile = Treepolys[c.level]
