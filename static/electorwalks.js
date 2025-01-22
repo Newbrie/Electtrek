@@ -106,10 +106,10 @@ function export_table_to_csv(html, filename) {
 	var csv = [];
 	var rows = document.querySelectorAll("table tr");
   var headcols = ["PD","ENOP","ElectorName","AddressNumber","StreetName","Postcode","AV","VI","Notes"];
-  var row = []
+  var head = []
   for (var j = 0; j < headcols.length; j++){
-      row.push(headcols[j]) };
-  csv.push(row.join(","));
+      head.push(headcols[j]) };
+  csv.push(head.join(","));
   for (var i = 0; i < rows.length; i++) {
 	var cols = rows[i].querySelectorAll("td");
 
