@@ -130,7 +130,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 function inputVI(VI) {
   let x = VI.value.toUpperCase();
-  const codes = ["C","S","LD","I","M","X","W"];
+  const codes = ["C","R","S","LD","G","I","M","X","W"];
   if (codes.includes(x)) {
 //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
     VI.style.color = 'lightgray';
