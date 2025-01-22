@@ -107,7 +107,7 @@ function export_table_to_csv(html, filename) {
 	var rows = document.querySelectorAll("table tr");
   var headcols = ["PD","ENOP","ElectorName","AddressNumber","StreetName","Postcode","AV","VI","Notes"];
     for (var j = 0; j < headcols.length; j++){
-      csv.push(headcols[j].join(",")) };
+      row.push(headcols[j]) };
     for (var i = 0; i < rows.length; i++) {
 		var row = [], cols = rows[i].querySelectorAll("td");
 
