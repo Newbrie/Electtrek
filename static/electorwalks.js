@@ -139,13 +139,13 @@ function inputVI(VI) {
     };
   };
 
-  function inputNS(NS) {
-    let x = NS.value;
-    NS.style.color = 'lightgray';
-    NS.innerHTML = x;
-    NS.parentElement.parentElement.innerText = x;
+function inputNS(NS) {
+  let x = NS.value;
+  NS.style.color = 'lightgray';
+  NS.innerHTML = x;
+  NS.parentElement.parentElement.innerText = x;
 
-    };
+  };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
