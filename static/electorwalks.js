@@ -111,7 +111,7 @@ function export_table_to_csv(html, filename) {
       head.push(headcols[j]) };
   csv.push(head.join(","));
   for (var i = 0; i < rows.length; i++) {
-	var cols = rows[i].querySelectorAll("td");
+	var row = [], cols = rows[i].querySelectorAll("td");
 
       for (var j = 0; j < cols.length; j++)
           row.push(cols[j].innerText);
