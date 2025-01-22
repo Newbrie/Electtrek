@@ -337,7 +337,6 @@ class FGlayer:
                     else:
                         PDelectors = getblock(allelectors,'PD',c.value)
                         convex = MultiPoint(gpd.points_from_xy(PDelectors.Long.values,PDelectors.Lat.values)).convex_hull
-
         #                circle = c.centroid.buffer(0.005)
                         df = {'NAME': [c.value],'FID': [c.fid],'LAT': [c.centroid.y],'LONG': [c.centroid.x]}
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
@@ -391,7 +390,7 @@ class FGlayer:
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
-                        
+
                     numtag = str(c.tagno)+" "+str(c.value)
                     here = [ Decimal(c.centroid.y),Decimal(c.centroid.x)]
                     fill = levelcolours["C"+str(random.randint(4,15))]
@@ -506,7 +505,7 @@ current_node = MapRoot
 
 Featurelayers[current_node.level+1].children = []
 Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-mapfile = Featurelayers[0].add_linesandmarkers(current_node, 'country')
+mapfile = Featurelayers[0].add_linesandmarkers(current_node, 'nation')
 
 map = current_node.create_area_map(Featurelayers,allelectors)
 mapfile = current_node.dir+"/"+current_node.dir
