@@ -60,7 +60,7 @@ class TreeNode:
         self.centroid = roid
         self.source = ""
 
-    def childrenoftype (self,electtype):
+    def childrenoftype(self,electtype):
         typechildren = [x for x in self.children if x.type == electtype and x.value != "UNITED_KINGDOM"]
         return typechildren
 
@@ -110,18 +110,18 @@ class TreeNode:
         if len(self.childrenoftype(electtype)) == 0:
             for index, limb in ChildPolylayer.iterrows():
                 newname = limb.NAME.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
-                if  newname != "UNITED_KINGDOM":
-                    print ("________child of",self.value,self.level)
-                    here = limb.geometry.centroid
-                    childnode = TreeNode(limb.NAME,limb.FID, here)
-            #        here = Point(Decimal(limb.LONG),Decimal(limb.LAT))
-            # make sure that the child centroid is within the node boundary
-                    pfile = Treepolys[self.level]
-                    poly = pfile[pfile['FID']==self.fid]
-                    print ("_________child :", limb.NAME )
-                    if poly.contains(here).item():
-                        print("_________TESTED AS INSIDE ",self.level,limb.NAME, self.value)
-                        self.add_Tchild(childnode,electtype)
+    #            if  newname != "UNITED_KINGDOM":
+                print ("________child of",self.value,self.level)
+                here = limb.geometry.centroid
+                childnode = TreeNode(limb.NAME,limb.FID, here)
+        #        here = Point(Decimal(limb.LONG),Decimal(limb.LAT))
+        # make sure that the child centroid is within the node boundary
+                pfile = Treepolys[self.level]
+                poly = pfile[pfile['FID']==self.fid]
+                print ("_________child :", limb.NAME )
+                if poly.contains(here).item():
+                    print("_________TESTED AS INSIDE ",self.level,limb.NAME, self.value)
+                    self.add_Tchild(childnode,electtype)
 
         return index
 
@@ -325,7 +325,7 @@ class FGlayer:
         global levelcolours
         global allelectors
         if herenode.level <= 5:
-            displayed = self.childrenoftype(type)
+            displayed = herenode.childrenoftype(type)
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
             print('_______MAPLinesandMarkers')
             for c in displayed:
