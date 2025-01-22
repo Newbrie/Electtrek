@@ -610,10 +610,6 @@ def login():
         formdata = {}
         current_node = MapRoot
 
-        for i in range(len(Featurelayers)):
-            print("______deleting prior data layer:",i)
-            Featurelayers[i].children = []
-
         formdata['country'] = 'UNITED_KINGDOM'
         formdata['candfirst'] = "Firstname"
         formdata['candsurn'] = "Surname"
@@ -622,6 +618,7 @@ def login():
         for england in MapRoot.children:
             if england.value == 'ENGLAND':
                 break
+
         add_boundaries('county',england)
         england.create_map_branch('county',allelectors)
         mapfile = current_node.dir + "/" + current_node.file
