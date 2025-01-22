@@ -505,9 +505,9 @@ current_node = MapRoot
 
 Featurelayers[current_node.level+1].children = []
 Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-mapfile = Featurelayers[0].add_linesandmarkers(current_node, 'nation')
+Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'nation')
 
-map = current_node.create_area_map(Featurelayers,allelectors)
+map = MapRoot.create_area_map(Featurelayers,allelectors)
 mapfile = current_node.dir+"/"+current_node.dir
 
 from jinja2 import Environment, FileSystemLoader
