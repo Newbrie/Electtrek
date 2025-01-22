@@ -106,8 +106,8 @@ function export_table_to_csv(html, filename) {
 	var csv = [];
 	var rows = document.querySelectorAll("table tr");
   const headcols = ["PD","ENOP","ElectorName","AddressNumber","StreetName","Postcode","AV","VI","Notes"];
-    for (var j = 0; j < headcols.length; j++)
-      csv.push(headcols[j].join(","))
+    for (var j = 0; j < headcols.length; j++){
+      csv.push(headcols[j].join(",")) };
     for (var i = 0; i < rows.length; i++) {
 		var row = [], cols = rows[i].querySelectorAll("td");
 
@@ -131,12 +131,12 @@ document.getElementById('save-btn').addEventListener('click', function() {
 function inputVI(VI) {
   let x = VI.value.toUpperCase();
   const codes = ["C","S","LD","I","M","X","W"];
-  if codes.includes(x) :
+  if (codes.includes(x)) {
 //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
     VI.style.color = 'lightgray';
     VI.innerHTML = x;
     VI.parentElement.parentElement.innerText = x;
-
+    };
   };
 
   function inputNS(NS) {
