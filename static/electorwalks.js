@@ -110,7 +110,7 @@ function export_table_to_csv(html, filename) {
 		var row = [], cols = rows[i].querySelectorAll("td,th");
 
         for (var j = 0; j < cols.length; j++)
-            row.push(cols[j].value);
+            row.push(cols[j].innerText);
 
 		csv.push(row.join(","));
 	};
@@ -128,9 +128,10 @@ document.getElementById('save-btn').addEventListener('click', function() {
 });
 
 function copyinput(selement) {
-  let x = selement.value.toUpperCase()
-  selement.innerHTML = x
-  selement.parentElement.parentElement.innerHTML = x;
+  let x = selement.value.toUpperCase();
+  y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"+x+\"></span>";
+  selement.innerHTML = y;
+  selement.parentElement.parentElement.innerHTML = y;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
