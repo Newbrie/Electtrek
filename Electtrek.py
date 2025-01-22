@@ -323,6 +323,7 @@ class FGlayer:
         global Treepolys
         global levelcolours
         global allelectors
+        print('_______HereNode', herenode.value, herenode.level, herenode.fid)
         if herenode.level <= 5:
             displayed = herenode.childrenoftype(type)
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
