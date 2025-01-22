@@ -325,7 +325,7 @@ class FGlayer:
         global levelcolours
         global allelectors
         if herenode.level <= 5:
-            displayed = childrenoftype(type)
+            displayed = self.childrenoftype(type)
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
             print('_______MAPLinesandMarkers')
             for c in displayed:
