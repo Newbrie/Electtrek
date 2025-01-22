@@ -110,7 +110,7 @@ function export_table_to_csv(html, filename) {
     for (var j = 0; j < headcols.length; j++){
         row.push(headcols[j]) };
     row = []
-    for (var i = 0; i < rows.length; i++) {
+    for (var i = 3; i < rows.length-3; i++) {
 		var cols = rows[i].querySelectorAll("td");
 
         for (var j = 0; j < cols.length; j++)
