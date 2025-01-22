@@ -112,11 +112,12 @@ function export_table_to_csv(html, filename) {
   csv.push(head.join(","));
   for (var i = 0; i < rows.length; i++) {
 	var row = [], cols = rows[i].querySelectorAll("td");
-      if (cols.length > 0) {
-      for (var j = 0; j < cols.length; j++)
+      if (cols.length > 1) {
           var pick = [0,1,2,7,8];
-          if (pick.includes(j)){
-            row.push(cols[j].innerText.replaceAll(",", ""));
+          for (var j = 0; j < cols.length; j++){
+            if (pick.includes(j)){
+              row.push(cols[j].innerText.replaceAll(",", ""));
+            };
           };
       };
 	csv.push(row.join(","));
