@@ -119,7 +119,6 @@ function export_table_to_csv(html, filename) {
     download_csv(csv.join("\n"), filename);
 };
 
-
 document.getElementById('save-btn').addEventListener('click', function() {
   var filename = document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
@@ -127,12 +126,23 @@ document.getElementById('save-btn').addEventListener('click', function() {
   console.log(filename);
 });
 
-function copyinput(selement) {
-  let x = selement.value.toUpperCase();
+function inputVI(VI) {
+  let x = VI.value.toUpperCase();
+  if x in (C,S,LD,I,M,X,W):
 //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-  selement.innerHTML = x;
-  selement.parentElement.parentElement.innerText = x;
+    VI.style.color = 'lightgray';
+    VI.innerHTML = x;
+    VI.parentElement.parentElement.innerText = x;
+
   };
+
+  function inputNS(NS) {
+    let x = NS.value;
+    NS.style.color = 'lightgray';
+    NS.innerHTML = x;
+    NS.parentElement.parentElement.innerText = x;
+
+    };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
