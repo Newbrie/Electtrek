@@ -107,7 +107,7 @@ class TreeNode:
     # there are 2-0 (3) relative levels - absolute level are UK(0),nations(1), constituency(2), ward(3)
         index = 0
 
-        if childrenoftype(self,electtype) == 0:
+        if self.childrenoftype(electtype) == 0:
             for index, limb in ChildPolylayer.iterrows():
                 newname = limb.NAME.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
                 if  newname != "UNITED_KINGDOM":
