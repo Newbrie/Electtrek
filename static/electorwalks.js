@@ -105,7 +105,7 @@ function download_csv(csv, filename) {
 function export_table_to_csv(html, filename) {
 	var csv = [];
 	var rows = document.querySelectorAll("table tr");
-  var headcols = ["PD","ENOP","ElectorName","AddressNumber","StreetName","Postcode","AV","VI","Notes"];
+  var headcols = ["PD","ENOP","VI","Notes"];
   var head = []
   for (var j = 0; j < headcols.length; j++){
       head.push(headcols[j]) };
@@ -114,7 +114,10 @@ function export_table_to_csv(html, filename) {
 	var row = [], cols = rows[i].querySelectorAll("td");
       if (cols.length > 0) {
       for (var j = 0; j < cols.length; j++)
-          row.push(cols[j].innerText);
+          pick = [0,1,2,7,8]
+          if (pick.includes(j)){
+            row.push(cols[j].innerText.replaceAll(",", ""));
+          };
       };
 	csv.push(row.join(","));
 	};
