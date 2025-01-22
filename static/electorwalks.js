@@ -107,22 +107,26 @@ function export_table_to_csv(html, filename) {
 	var rows = document.querySelectorAll("table tr");
   var headcols = ["PD","ENOP","ElectorName","VI","Notes"];
   var head = []
-  for (var j = 0; j < headcols.length; j++){
-      head.push(headcols[j]) };
-  csv.push(head.join(","));
-  for (var i = 0; i < rows.length; i++) {
-	var row = [], cols = rows[i].querySelectorAll("td");
-      if (cols.length > 6) {
-          var pick = [0,1,2,7,8];
-          for (var j = 0; j < cols.length; j++){
-            if (pick.includes(j)){
-              row.push(cols[j].innerText.replaceAll(",", ""));
-            };
-          };
-      };
-	csv.push(row.join(","));
-	};
 
+  for (var i = 0; i < rows.length; i++) {
+  if (i==0){
+    for (var j = 0; j < headcols.length; j++){
+        head.push(headcols[j]) };
+    csv.push(head.join(","));
+    }
+  else {
+    var row = [], cols = rows[i].querySelectorAll("td");
+        if (cols.length > 6) {
+            var pick = [0,1,2,7,8];
+            for (var j = 0; j < cols.length; j++){
+              if (pick.includes(j)){
+                row.push(cols[j].innerText.replaceAll(",", ""));
+              };
+            };
+        };
+    csv.push(row.join(","));
+    };
+  };
     // Download CSV
     download_csv(csv.join("\n"), filename);
 };
