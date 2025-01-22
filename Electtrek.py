@@ -61,7 +61,7 @@ class TreeNode:
         self.source = ""
 
     def childrenoftype (self,electtype):
-        typechildren = [x.fid for x in self.children if x.type == electtype]
+        typechildren = [x for x in self.children if x.type == electtype]
         return len(typechildren)
 
 
@@ -325,7 +325,7 @@ class FGlayer:
         global levelcolours
         global allelectors
         if herenode.level <= 5:
-            typechildren = [x for x in self.children if x.type == type]
+            typechildren = [x for x in self.children if x.type == electtype]
             displayed = [y for y in herenode.children if y.type == type and y.value != "UNITED_KINGDOM"]
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
             print('_______MAPLinesandMarkers')
