@@ -60,6 +60,11 @@ class TreeNode:
         self.centroid = roid
         self.source = ""
 
+    def childrenoftype (self,electtype):
+        typechildren = [x.fid for x in self.children if x.type == electtype]
+        return len(typechildren)
+
+
     def locmappath(self,real):
         global Treepolys
         global levelcolours
@@ -102,7 +107,7 @@ class TreeNode:
     # there are 2-0 (3) relative levels - absolute level are UK(0),nations(1), constituency(2), ward(3)
         index = 0
 
-        if len(self.children) == 0:
+        if childrenoftype(self,electtype) == 0:
             for index, limb in ChildPolylayer.iterrows():
                 newname = limb.NAME.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
                 if  newname != "UNITED_KINGDOM":
@@ -1004,13 +1009,12 @@ def downwardbut(selnode):
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     if current_node.level == 3 :
-        if len(current_node.children) == 0:
-            add_boundaries('ward',current_node)
-            current_node.create_map_branch('ward',allelectors)
-            Featurelayers[current_node.level+1].children = []
-            Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-            Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'ward')
-            map = current_node.create_area_map(Featurelayers,allelectors)
+        add_boundaries('ward',current_node)
+        current_node.create_map_branch('ward',allelectors)
+        Featurelayers[current_node.level+1].children = []
+        Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+        Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'ward')
+        map = current_node.create_area_map(Featurelayers,allelectors)
         mapfile = current_node.dir+"/"+current_node.file
         print ("________Heading for wards of :  ",current_node)
     if len(Featurelayers[current_node.level].children) == 0:
@@ -1032,17 +1036,15 @@ def downdivbut(selnode):
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     if current_node.level == 3 :
-
-        if len(current_node.children) == 0:
-            add_boundaries('division',current_node)
-            current_node.create_map_branch('division',allelectors)
-            Featurelayers[current_node.level+1].children = []
-            Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-            Featurelayers[current_node.level+1].add_linesandmarkers(current_node,'division')
-            map = current_node.create_area_map(Featurelayers,allelectors)
+        add_boundaries('division',current_node)
+        current_node.create_map_branch('division',allelectors)
+        Featurelayers[current_node.level+1].children = []
+        Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+        Featurelayers[current_node.level+1].add_linesandmarkers(current_node,'division')
+        map = current_node.create_area_map(Featurelayers,allelectors)
         mapfile = current_node.dir+"/"+current_node.file
         print ("________Heading for division : ",current_node)
-    if len(Featurelayers[current_node.level+1].children) == 0:
+    if len(Featurelayers[current_node.level].children) == 0:
         flash("Can't find any county divisions for this Constituency.")
     else:
         flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
