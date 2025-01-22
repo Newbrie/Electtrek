@@ -61,7 +61,7 @@ class TreeNode:
         self.source = ""
 
     def childrenoftype(self,electtype):
-        typechildren = [x for x in self.children if x.type == electtype and x.value != "UNITED_KINGDOM"]
+        typechildren = [x for x in self.children if x.type == electtype]
         return typechildren
 
 
@@ -348,13 +348,16 @@ class FGlayer:
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
+                        self.children.append(c)
                     elif herenode.level == 1:
-                        downconstag = "<form action= '/downconbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
-                        uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
-                        c.tagno = len(self.children)+1
-                        print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
-                        mapfile = "/map/"+c.dir+"/"+c.file
+                        if c.value != "UNITED_KINGDOM":
+                            downconstag = "<form action= '/downconbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
+                            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
+                            limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
+                            c.tagno = len(self.children)+1
+                            print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
+                            mapfile = "/map/"+c.dir+"/"+c.file
+                            self.children.append(c)
                     elif herenode.level == 2:
                         downwardstag = "<form action= '/downwardbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"WARDS",12)
                         downdivstag = "<form action= '/downdivbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"DIVS",12)
@@ -363,6 +366,7 @@ class FGlayer:
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
+                        self.children.append(c)
                     elif herenode.level == 3:
                         upload = "<form id='upload' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input><input type='submit' value='Polling Districts' class='btn btn-norm' onclick='''setActionForm('downPDbut')'''/></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -370,6 +374,7 @@ class FGlayer:
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
+                        self.children.append(c)
                     elif herenode.level == 4:
                         upload = "<form id='upload' action= '/downSTbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input><input type='submit' value='Streets' class='btn btn-norm' onclick='''setActionForm('downSTbut')'''/></form>".format(c.dir+"/"+c.file,12,c.parent.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -377,6 +382,7 @@ class FGlayer:
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
+                        self.children.append(c)
                     else :
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"DOWN",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -384,7 +390,8 @@ class FGlayer:
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
-                    self.children.append(c)
+                        self.children.append(c)
+                        
                     numtag = str(c.tagno)+" "+str(c.value)
                     here = [ Decimal(c.centroid.y),Decimal(c.centroid.x)]
                     fill = levelcolours["C"+str(random.randint(4,15))]
