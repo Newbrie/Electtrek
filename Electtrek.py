@@ -410,7 +410,7 @@ class FGlayer:
             print("______Flash:",flash("No Further Data!"))
             herenode = herenode.parent
 
-        print("________fg",herenode.level,Featurelayers[herenode.level].children)
+        print("________2fgs",herenode.level,Featurelayers[herenode.level].children, Featurelayers[herenode.level+1].children)
 
         return herenode
 
