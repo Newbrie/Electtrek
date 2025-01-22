@@ -61,8 +61,8 @@ class TreeNode:
         self.source = ""
 
     def childrenoftype (self,electtype):
-        typechildren = [x for x in self.children if x.type == electtype]
-        return len(typechildren)
+        typechildren = [x for x in self.children if x.type == electtype and x.value != "UNITED_KINGDOM"]
+        return typechildren
 
 
     def locmappath(self,real):
@@ -107,7 +107,7 @@ class TreeNode:
     # there are 2-0 (3) relative levels - absolute level are UK(0),nations(1), constituency(2), ward(3)
         index = 0
 
-        if self.childrenoftype(electtype) == 0:
+        if len(self.childrenoftype(electtype)) == 0:
             for index, limb in ChildPolylayer.iterrows():
                 newname = limb.NAME.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
                 if  newname != "UNITED_KINGDOM":
@@ -325,12 +325,11 @@ class FGlayer:
         global levelcolours
         global allelectors
         if herenode.level <= 5:
-            typechildren = [x for x in self.children if x.type == electtype]
-            displayed = [y for y in herenode.children if y.type == type and y.value != "UNITED_KINGDOM"]
+            displayed = childrenoftype(type)
             print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
             print('_______MAPLinesandMarkers')
-            for c in typechildren:
-                layerfids = [x.fid for x in typechildren if x.value != "UNITED_KINGDOM"]
+            for c in displayed:
+                layerfids = [x.fid for x in displayed]
                 if c.fid not in layerfids:
                     if c.level < 5:
                         pfile = Treepolys[c.level]
