@@ -129,9 +129,9 @@ document.getElementById('save-btn').addEventListener('click', function() {
 
 function copyinput(selement) {
   let x = selement.value.toUpperCase();
-  y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"+x+\"></span>";
-  selement.innerHTML = y;
-  selement.parentElement.parentElement.innerHTML = y;
+//  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
+  selement.innerHTML = x;
+  selement.parentElement.parentElement.innerText = x;
   };
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
