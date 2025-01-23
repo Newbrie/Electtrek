@@ -159,6 +159,9 @@ function inputNS(NS) {
 
   };
 
+
+
+
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
 //  var filename = "{{ walkname }}-data.csv";
