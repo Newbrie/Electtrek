@@ -1050,7 +1050,7 @@ def downdivbut(selnode):
     else:
         flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
         print ("________divisions added  :  ",len(Featurelayers[current_node.level+1].children))
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return render_template("dash1.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 
 @app.route('/layeritems/',methods=['GET'])
