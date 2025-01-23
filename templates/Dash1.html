@@ -71,10 +71,16 @@
 									form.method = 'POST';
 									document.body.style.cursor = 'wait'
 									form.submit();
-								  }
-			    }
+                };
+			    };
+
+          
+          document.getElementById(
+              'down-button').addEventListener('click', (e) => {
+                  window.parent.location.reload();
+                  console.log("down-button has been clicked");
+              });
 
 			</script>
-      <script type="text/javascript" src="https://newbrie.github.io/Electtrek/static/electorwalks.js">
-      </script>
+
 {% endblock %}
