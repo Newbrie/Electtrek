@@ -159,12 +159,6 @@ function inputNS(NS) {
 
   };
 
-document.getElementById(
-    'down-button').addEventListener('click', (e) => {
-        window.parent.location.reload();
-        console.log("down-button has been clicked");
-    });
-
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
