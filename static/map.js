@@ -2,6 +2,6 @@
 toggle between hiding and showing the dropdown content */
 
 function reftag() {
-        window.parent.location.reload();
+        window.location.reload();
         console.log("down-button has been clicked");
     };
