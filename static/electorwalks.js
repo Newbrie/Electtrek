@@ -114,6 +114,8 @@ function export_table_to_csv(html, filename) {
         head.push(headcols[j]) };
     csv.push(head.join(","));
     }
+  else if (i==1){
+    }
   else {
     var row = [], cols = rows[i].querySelectorAll("td");
         if (cols.length > 6) {

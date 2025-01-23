@@ -776,7 +776,8 @@ def downPDbut(selnode):
 
         mapfile = current_node.dir+"/"+current_node.file
         print ("________Heading for Polling District :  ",current_node.value)
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return redirect(url_for('map',path=mapfile))
+
 
 @app.route('/downSTbut/<path:selnode>', methods=['GET'])
 def downSTbut(selnode):
@@ -967,7 +968,8 @@ def downSTbut(selnode):
         else:
             flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].children)))
             print ("________Streets added  :  ",len(Featurelayers[current_node.level].children))
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return redirect(url_for('map',path=mapfile))
+
 
 @app.route('/downconbut/<path:selnode>', methods=['GET'])
 def downconbut(selnode):
@@ -995,7 +997,8 @@ def downconbut(selnode):
     else:
         flash("________constituencies added  :  "+str(len(Featurelayers[current_node.level+1].children)))
         print ("________constituencies added  :  ",len(Featurelayers[current_node.level+1].children))
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return redirect(url_for('map',path=mapfile))
+
 
 @app.route('/downwardbut/<path:selnode>', methods=['GET'])
 def downwardbut(selnode):
@@ -1023,7 +1026,8 @@ def downwardbut(selnode):
     else:
         flash("________wards added  :  "+str(len(Featurelayers[current_node.level].children)))
         print ("________wards added  :  ",len(Featurelayers[current_node.level].children))
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return redirect(url_for('map',path=mapfile))
+
 
 @app.route('/downdivbut/<path:selnode>', methods=['GET'])
 def downdivbut(selnode):
@@ -1050,7 +1054,7 @@ def downdivbut(selnode):
     else:
         flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
         print ("________divisions added  :  ",len(Featurelayers[current_node.level+1].children))
-    return render_template("dash1.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    return redirect(url_for('map',path=mapfile))
 
 
 @app.route('/layeritems/',methods=['GET'])

@@ -70,7 +70,7 @@
 			Email:<br>
 			<input type="email" name="sender" placeholder="surrey@reformuk.com"><br>
 			Message:<br>
-			<textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
+			<input name="body" rows="3" cols="30" placeholder="Your Message"></input><br>
 			<input type="submit" value="Send">
 		<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
 		</form>
@@ -79,10 +79,10 @@
 	<div id="main" style="page-break-before: always;">
 	    <table id="canvass-table">
 				<thead>
-					<textarea><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
+					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
  			 		constituency by-election on {{ prodstats['electiondate'] }}. Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
  			 		PLEASE DO NOT SAY “I’m sorry to bother you”.</th>
-				 </textarea>
+				 </tr>
 	      <tr>
 	      <th class="c1" colspan='3' >Elector</th>
 				<th class="centred" colspan='3'>Address</th>
@@ -121,10 +121,11 @@
 	      {% endfor %}
 			</tbody>
 			<tfoot>
-						<tr>  <tf colspan='10'style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
+						<tr>  <td colspan='10' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
 							VI Box:  R=Reform   |   M=Maybe   I   C=Conservative  |  S=Labour (Socialists)  |  W=Won’t vote  |  X=Won’t say <br>
 							Notes Box:  How did they vote in the last election?   (cont.  LD=Lib Dems   |   G=Green   |   I=Independent) <br>
-							Promoted by ReformUK, 124 City Road, London, EC1V 2NX | For ReformUK authorised users only | Personal Data - Destroy after use</tf></tr>
+							Promoted by ReformUK, 124 City Road, London, EC1V 2NX | For ReformUK authorised users only | Personal Data - Destroy after use</td>
+						</tr>
 			</tfoot>
 	    </table>
 </div>
