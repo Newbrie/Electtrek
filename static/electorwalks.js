@@ -162,7 +162,7 @@ function inputNS(NS) {
 document.getElementById(
     'down-button').addEventListener('click', (e) => {
         window.parent.location.reload();
-        console.log(filename);
+        console.log("down-button has been clicked");
     });
 
 
