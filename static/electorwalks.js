@@ -161,7 +161,8 @@ function inputNS(NS) {
 
 document.getElementById(
     'down-button').addEventListener('click', (e) => {
-        window.location.reload();
+        window.parent.location.reload();
+        console.log(filename);
     });
 
 
