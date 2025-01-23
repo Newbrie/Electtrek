@@ -684,12 +684,12 @@ def downcountbut(selnode):
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
-    mapfile = current_node.dir + "/" + current_node.file
 
 # the map under the selected node map needs to be configured
     print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
-
+    add_boundaries('county',current_node)
+    current_node.create_map_branch('county',allelectors)
     Featurelayers[current_node.level+1].children = []
     Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
     Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'county')
