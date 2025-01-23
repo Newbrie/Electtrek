@@ -685,32 +685,30 @@ def downcountbut(selnode):
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     mapfile = current_node.dir + "/" + current_node.file
-    if current_node.davail == True:
+
 # the map under the selected node map needs to be configured
-        print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
+    print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
 
-        Featurelayers[current_node.level+1].children = []
-        Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-        Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'county')
-        map = current_node.create_area_map(Featurelayers,allelectors)
-        mapfile = current_node.dir+"/"+current_node.file
-        print("________child nodes created",current_node.children)
+    Featurelayers[current_node.level+1].children = []
+    Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+    Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'county')
+    map = current_node.create_area_map(Featurelayers,allelectors)
+    mapfile = current_node.dir+"/"+current_node.file
+    print("________child nodes created",current_node.children)
 
-    # the selected node boundary options need to be added to the layer
-        allelectors = []
-        #formdata['username'] = session["username"]
-        formdata['country'] = "UNITED_KINGDOM"
-        formdata['candfirst'] = "Firstname"
-        formdata['candsurn'] = "Surname"
-        formdata['electiondate'] = "DD-MMM-YY"
-        formdata['filename'] = "NONE"
-    #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-        flash ("Data is available for this constituency. Please explore!")
-        print ("Data is available for this constituency. Please explore!")
-    else:
-        flash ("Navigate to lower levels to find your constituents.")
-        print ("Navigate to lower levels to find your constituents.")
+# the selected node boundary options need to be added to the layer
+    allelectors = []
+    #formdata['username'] = session["username"]
+    formdata['country'] = "UNITED_KINGDOM"
+    formdata['candfirst'] = "Firstname"
+    formdata['candsurn'] = "Surname"
+    formdata['electiondate'] = "DD-MMM-YY"
+    formdata['filename'] = "NONE"
+#    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    flash ("Data is available for this constituency. Please explore!")
+    print ("Data is available for this constituency. Please explore!")
+
 
     return redirect(url_for('map',path=mapfile))
 
