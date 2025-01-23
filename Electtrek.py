@@ -979,7 +979,6 @@ def downconbut(selnode):
     global allelectors
     print('_______ROUTE/downconbut',selnode)
 
-
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
@@ -990,7 +989,7 @@ def downconbut(selnode):
     Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'constituency')
     map = current_node.create_area_map(Featurelayers,allelectors)
     mapfile = current_node.dir+"/"+current_node.file
-    redirect(url_for('map',path=mapfile))
+
 
     print ("________Heading for Constituency :  ",current_node)
     if len(Featurelayers[current_node.level+1].children) == 0:
@@ -998,7 +997,7 @@ def downconbut(selnode):
     else:
         flash("________constituencies added  :  "+str(len(Featurelayers[current_node.level+1].children)))
         print ("________constituencies added  :  ",len(Featurelayers[current_node.level+1].children))
-    return parent.location.reload()
+    return redirect(url_for('map',path=mapfile))
 
 
 @app.route('/downwardbut/<path:selnode>', methods=['GET'])
