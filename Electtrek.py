@@ -326,7 +326,7 @@ class FGlayer:
         print('_______HereNode', herenode.value, herenode.level, herenode.fid)
         if herenode.level <= 5:
             displayed = herenode.childrenoftype(type)
-            print("______Display children:",herenode.value, herenode.level,type, len(herenode.children), displayed)
+            print("______Display children:",herenode.value, herenode.level,type, len(displayed), displayed)
             print('_______MAPLinesandMarkers')
             for c in displayed:
                 layerfids = [x.fid for x in displayed]
@@ -393,6 +393,7 @@ class FGlayer:
                     numtag = str(c.tagno)+" "+str(c.value)
                     here = [ Decimal(c.centroid.y),Decimal(c.centroid.x)]
                     fill = levelcolours["C"+str(random.randint(4,15))]
+                    print("______addingMarker:",c.value, limb.NAME)
 
                     folium.GeoJson(limb,highlight_function=lambda feature: {"fillColor": ("green"),},
                       popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=True,
@@ -410,7 +411,7 @@ class FGlayer:
             print("______Flash:",flash("No Further Data!"))
             herenode = herenode.parent
 
-        print("________2fgs",herenode.value,herenode.level,Featurelayers[herenode.level].children, Featurelayers[herenode.level+1].children)
+        print("________2fgs",herenode.value,herenode.level,self.children, Featurelayers[herenode.level+1].children)
 
         return herenode
 
