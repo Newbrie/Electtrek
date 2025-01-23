@@ -706,8 +706,8 @@ def downcountbut(selnode):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-    flash ("Data is available for this constituency. Please explore!")
-    print ("Data is available for this constituency. Please explore!")
+    flash ("Data is available for counties. Please explore!")
+    print ("Data is available for counties. Please explore!")
 
 
     return redirect(url_for('map',path=mapfile))
@@ -766,8 +766,8 @@ def downPDbut(selnode):
         mapfile = current_node.dir+"/"+current_node.file
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
-            flash("Can't find any elector data for this PD.")
-            print("Can't find any elector data for this PD.")
+            flash("Can't find any elector data for this Ward.")
+            print("Can't find any elector data for this Ward.")
             allelectors = []
         else:
             flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
@@ -832,8 +832,8 @@ def downSTbut(selnode):
         mapfile = current_node.dir+"/"+current_node.file
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
-            flash("Can't find any elector data for this PD.")
-            print("Can't find any elector data for this PD.",len(allelectors),len(Featurelayers[current_node.level+1].children))
+            flash("Can't find any elector data for this Polling District.")
+            print("Can't find any elector data for this Polling District.",len(allelectors),len(Featurelayers[current_node.level+1].children))
         else:
             flash("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
             print ("________streets added  :  ",len(Featurelayers[current_node.level+1].children))
