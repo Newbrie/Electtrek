@@ -329,7 +329,7 @@ class FGlayer:
             print("______Display children:",herenode.value, herenode.level,type, len(displayed), displayed)
             print('_______MAPLinesandMarkers')
             for c in displayed:
-                layerfids = [x.fid for x in displayed]
+                layerfids = [x.fid for x in self.children]
                 if c.fid not in layerfids:
                     if c.level < 5:
                         pfile = Treepolys[c.level]
