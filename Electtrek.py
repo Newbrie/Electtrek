@@ -342,23 +342,23 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id="down-button" style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
+                        downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ downtag
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
-                        downconstag = "<form action= '/downconbut/{0}' ><button type='submit' id="down-button" style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
-                        uptag = "<form action= '/upbut/{0}' ><button type='submit' id="down-button" style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
+                        downconstag = "<form action= '/downconbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
+                        uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downwardstag = "<form action= '/downwardbut/{0}' ><button type='submit' id="down-button" style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"WARDS",12)
-                        downdivstag = "<form action= '/downdivbut/{0}' ><button type='submit' id="down-button" style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"DIVS",12)
+                        downwardstag = "<form action= '/downwardbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"WARDS",12)
+                        downdivstag = "<form action= '/downdivbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"DIVS",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downwardstag + " " + downdivstag
                         c.tagno = len(self.children)+1
