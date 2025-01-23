@@ -159,7 +159,10 @@ function inputNS(NS) {
 
   };
 
-
+document.getElementById(
+    'leaflet-popup-close-button').addEventListener('click', (e) => {
+        window.location.reload();
+    });
 
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
