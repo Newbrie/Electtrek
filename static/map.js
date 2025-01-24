@@ -2,6 +2,6 @@
 toggle between hiding and showing the dropdown content */
 
 function reftag() {
-  window.opener.location.reload(true);
+  window.parent.location.href = "http://127.0.0.1:5000/index";
   console.log("down-button has been clicked");
     };
