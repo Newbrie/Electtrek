@@ -583,7 +583,7 @@ def index():
     return render_template("index.html")
 
 #login
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST', 'GET'])
 def login():
     global workdirectories
     global Directories
@@ -641,7 +641,7 @@ def login():
 
 #dashboard
 
-@app.route('/dashboard', methods=['GET'])
+@app.route('/dashboard', methods=['GET','POST'])
 def dashboard ():
     #formdata['username'] = session["username"]
     global workdirectories
@@ -666,7 +666,7 @@ def dashboard ():
     return redirect(url_for('index'))
 
 
-@app.route('/downcountbut/<path:selnode>', methods=['GET'])
+@app.route('/downcountbut/<path:selnode>', methods=['GET','POST'])
 def downcountbut(selnode):
     global workdirectories
     global Directories
@@ -717,7 +717,7 @@ def downcountbut(selnode):
 
     return redirect(url_for('map',path=mapfile))
 
-@app.route('/downPDbut/<path:selnode>', methods=['GET'])
+@app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
 def downPDbut(selnode):
     global Treepolys
     global current_node
@@ -785,7 +785,7 @@ def downPDbut(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/downSTbut/<path:selnode>', methods=['GET'])
+@app.route('/downSTbut/<path:selnode>', methods=['GET','POST'])
 def downSTbut(selnode):
     global Treepolys
     global current_node
@@ -979,7 +979,7 @@ def downSTbut(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/downconbut/<path:selnode>', methods=['GET'])
+@app.route('/downconbut/<path:selnode>', methods=['GET','POST'])
 def downconbut(selnode):
     global Treepolys
     global current_node
@@ -1009,7 +1009,7 @@ def downconbut(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/downwardbut/<path:selnode>', methods=['GET'])
+@app.route('/downwardbut/<path:selnode>', methods=['GET','POST'])
 def downwardbut(selnode):
     global Treepolys
     global current_node
@@ -1039,7 +1039,7 @@ def downwardbut(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/downdivbut/<path:selnode>', methods=['GET'])
+@app.route('/downdivbut/<path:selnode>', methods=['GET','POST'])
 def downdivbut(selnode):
     global Treepolys
     global current_node
@@ -1068,7 +1068,7 @@ def downdivbut(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/layeritems/',methods=['GET'])
+@app.route('/layeritems/',methods=['GET','POST'])
 def layeritems():
     global current_node
 
@@ -1081,7 +1081,7 @@ def layeritems():
     print("________laynodelist", current_node.level, current_node.value, Featurelayers[current_node.level+1].children)
     return render_template("dash1.html", context = { "layernodelist" :layernodelist, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.route('/upbut/<path:selnode>', methods=['GET'])
+@app.route('/upbut/<path:selnode>', methods=['GET','POST'])
 def upbut(selnode):
     global current_node
     global allelectors
@@ -1209,7 +1209,7 @@ def register():
         next = request.args.get('next')
         return redirect(url_for('dashboard'))
 
-@app.route('/map/<path:path>', methods=['GET'])
+@app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
     print('_______ROUTE/map')
     flash ("_________Nextmap"+path)
