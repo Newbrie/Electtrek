@@ -343,7 +343,7 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        url="/map/"+c.dir+"/"+c.file                        
+                        url="/map/"+c.dir+"/"+c.file
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
                         reftag = "<button onclick='reftag({0})' style='font-size: {2}pt;color: gray'>{1}</button>".format(url,"REFRESH",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ reftag + downtag
@@ -570,9 +570,10 @@ def index():
     global current_node
 
     print('_______ROUTE/index')
+    session['_flashes'].clear()
 
     current_node = MapRoot
-
+    
     if 'username' in session:
         flash("__________Session contents"+ session['username'])
         print("__________session", session['username'])
@@ -594,7 +595,7 @@ def login():
     global environment
 
     print('_______ROUTE/login')
-
+    session['_flashes'].clear()
     #collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
@@ -655,7 +656,7 @@ def dashboard ():
     global Featurelayers
 
     print('_______ROUTE/dashboard')
-
+    session['_flashes'].clear()
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         flash(session['username'] + ' is logged in at '+ mapfile)
@@ -678,6 +679,7 @@ def downcountbut(selnode):
 
     flash('_______ROUTE/downcountbut')
     print('_______ROUTE/downcountbut')
+    session['_flashes'].clear()
 
     formdata = {}
 #    dat = request.base_url
@@ -723,6 +725,7 @@ def downPDbut(selnode):
     global workdirectories
     global allelectors
     print('_______ROUTE/downPDbut',selnode)
+    session['_flashes'].clear()
 
     steps = selnode.split("/")
     steps.pop()
@@ -790,8 +793,10 @@ def downSTbut(selnode):
     global workdirectories
     global allelectors
     global environment
+    session['_flashes'].clear()
 
     print('_______ROUTE/downSTbut',selnode)
+    session['_flashes'].clear()
 
     steps = selnode.split("/")
     steps.pop()
@@ -981,6 +986,7 @@ def downconbut(selnode):
     global Featurelayers
     global allelectors
     print('_______ROUTE/downconbut',selnode)
+    session['_flashes'].clear()
 
     steps = selnode.split("/")
     steps.pop()
@@ -1010,6 +1016,7 @@ def downwardbut(selnode):
     global Featurelayers
     print('_______ROUTE/downwardbut')
     global allelectors
+    session['_flashes'].clear()
 
 
     steps = selnode.split("/")
@@ -1039,6 +1046,7 @@ def downdivbut(selnode):
     global Featurelayers
     print('_______ROUTE/downdivbut')
     global allelectors
+    session['_flashes'].clear()
 
     steps = selnode.split("/")
     steps.pop()
@@ -1065,6 +1073,7 @@ def layeritems():
     global current_node
 
     print('_______ROUTE/layeritems')
+    session['_flashes'].clear()
 
     layernodelist = Featurelayers[current_node.level+1].children
     current_node = current_node.parent
@@ -1080,6 +1089,7 @@ def upbut(selnode):
     global Featurelayers
     global environment
     print('_______ROUTE/upbut',selnode)
+    session['_flashes'].clear()
 
     formdata = {}
 # a up button on a node has been selected on the map, so the parent map must be displayed with new up/down options
@@ -1164,6 +1174,7 @@ def resetdashboard():
 @login_required
 def logout():
     print('_______ROUTE/logout')
+    session['_flashes'].clear()
 
     print("Logout", session)
     if "username" in session:
@@ -1176,6 +1187,7 @@ def logout():
 @app.route('/register', methods=['POST'])
 def register():
     print('_______ROUTE/register')
+    session['_flashes'].clear()
 
     username = request.form['username']
     password = request.form['password']
@@ -1202,12 +1214,15 @@ def map(path):
     print('_______ROUTE/map')
     flash ("_________Nextmap"+path)
     print ("_________Nextmap",path)
+    session['_flashes'].clear()
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
 
 @app.route('/upload', methods=['POST','GET'])
 def upload():
     print('_______ROUTE/upload')
+    session['_flashes'].clear()
     print("Upload", username)
     ImportFilename = ""
     if Env1.find("Orange")<=0:
@@ -1228,6 +1243,8 @@ def normalise():
     global environment
 
     print('_______ROUTE/normalise',session)
+    session['_flashes'].clear()
+
     formdata = {}
     formdata['importfile'] = request.files['importfile']
     formdata['candfirst'] =  request.form["candfirst"]
@@ -1252,6 +1269,7 @@ def walks():
     global Featurelayers
     global environment
     print('_______ROUTE/walks',session)
+    session['_flashes'].clear()
 
     if len(request.form) > 0:
         formdata = {}
@@ -1276,6 +1294,7 @@ def postcode():
     global Directories
     global workdirectories
     print('_______ROUTE/postcode')
+    session['_flashes'].clear()
 
     layernodelist = Featurelayers[current_node.level+1].children
 
@@ -1322,6 +1341,7 @@ def cards():
     global Featurelayers
     global environment
     print('_______ROUTE/canvasscards',session, request.form, current_node.level)
+    session['_flashes'].clear()
 
     if len(request.form) > 0:
         formdata = {}
