@@ -343,9 +343,8 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        url="'/dashboard'"
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
-                        reftag = "<button onclick='reftag({0})' style='font-size: {2}pt;color: gray'>{1}</button>".format(url,"REFRESH",12)
+                        reftag = "<button onclick='reftag()' style='font-size: {1}pt;color: gray'>{0}</button>".format("REFRESH",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ reftag + downtag
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)

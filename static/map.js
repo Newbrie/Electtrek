@@ -1,7 +1,7 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-function reftag(url) {
-  window.parent.location.href = "http://127.0.0.1:5000"+url;
+function reftag() {
+  window.parent.location.href = "http://127.0.0.1:5000/dashboard";
   console.log("down-button has been clicked");
     };
