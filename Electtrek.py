@@ -343,7 +343,7 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        url="/map/"+c.dir+"/"+c.file
+                        url="/dashboard"
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
                         reftag = "<button onclick='reftag({0})' style='font-size: {2}pt;color: gray'>{1}</button>".format(url,"REFRESH",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ reftag + downtag
