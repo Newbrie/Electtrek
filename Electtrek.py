@@ -140,7 +140,7 @@ class TreeNode:
       nodemapfile = self.dir+"/"+self.file
       self.map.add_css_link("electtrekprint","https://newbrie.github.io/Electtrek/static/print.css")
       self.map.add_css_link("electtrekstyle","https://newbrie.github.io/Electtrek/static/style.css")
-      self.map.add_js_link("electtrekmap","https://newbrie.github.io/Electtrek/static/map.js")
+      self.map.add_js_link("electtrekmap","https://newbrie.github.io/Electtrek/static/electorwalks.js")
 
       target = self.locmappath("")
       self.map.save(target)
@@ -345,7 +345,6 @@ class FGlayer:
                     if herenode.level == 0:
                         url=str("http://127.0.0.1:5000/map/"+c.dir+"/"+c.file)
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
-                        reftag = "<button onclick='reftag({0})' style='font-size: {2}pt;color: gray;'>{1}</button>".format(url,"REFRESH",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ reftag + downtag
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
