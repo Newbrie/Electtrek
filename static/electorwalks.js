@@ -161,9 +161,10 @@ function inputNS(NS) {
 
   // Listen to message from child window
 
- bindEvent(window, 'message', function (e) {
-      document.getElementById("results").innerHTML = e.data;
- });
+  window.onmessage = function(event) {
+     document.getElementById("results").innerHTML += event.data + "<br>";
+   };
+
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
