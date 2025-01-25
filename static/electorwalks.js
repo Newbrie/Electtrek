@@ -161,7 +161,7 @@ function inputNS(NS) {
 
   // Listen to message from child window
 
-  window.onmessage = function(event) {
+  iframe1.onmessage = function(event) {
      document.getElementById("results").innerHTML += event.data + "<br>";
    };
 
