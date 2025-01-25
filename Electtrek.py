@@ -27,8 +27,9 @@ from markupsafe import escape
 from urllib.parse import urlparse, urljoin
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required, request
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
+from flask import request
 from werkzeug.exceptions import HTTPException
 
 
