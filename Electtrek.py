@@ -345,7 +345,7 @@ class FGlayer:
 
                     if herenode.level == 0:
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
-                        messtag = "<button type='button' id='message_button' onclick='sendMessage({0});' style='font-size: {2}pt;color: gray'>{1}</button>".format(c.file,"MESSAGE",12)
+                        messtag = "<button type='button' id='message_button' onclick='sendMessage({0});' style='font-size: {2}pt;color: gray'>{1}</button>".format([c.file],"MESSAGE",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>" +  messtag+ downtag
                         c.tagno = len(self.children)+1
