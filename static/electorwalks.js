@@ -168,7 +168,8 @@ function bindEvent(element, eventName, eventHandler) {
 };
 // Listen to message from child window
 var results = document.getElementById('results');
-bindEvent(window, 'message', function (e) {
+var iframeEl = document.getElementsByName('iframe1');
+bindEvent(iframeEl, 'message', function (e) {
     results.innerHTML = e.data;
 });
 
