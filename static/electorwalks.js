@@ -162,6 +162,7 @@ function inputNS(NS) {
   // Listen to message from child window
 var source = new EventSource(iframe1);
   source.onmessage = function(event) {
+    alert("received:"+event.data)
      document.getElementById("results").innerHTML += event.data + "<br>";
    };
 
