@@ -169,8 +169,11 @@ function bindEvent(element, eventName, eventHandler) {
 // Listen to message from child window
 var results = document.getElementById('results');
 var iframeEl = document.getElementsByName('iframe1');
-bindEvent(iframeEl, 'message', function (e) {
+alert(results.id);
+alert(iframeEl.name);
+  bindEvent(window, 'message', function (e) {
     results.innerHTML = e.data;
+    alert(e.data);
 });
 
 
