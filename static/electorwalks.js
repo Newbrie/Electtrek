@@ -158,13 +158,19 @@ function inputNS(NS) {
   NS.parentElement.parentElement.innerText = x;
 
   };
-
-  // Listen to message from child window
-var source = new EventSource(iframe1);
-  source.onmessage = function(event) {
-    alert("received:"+event.data)
-     document.getElementById("results").innerHTML += event.data + "<br>";
+// addEventListener support for IE8
+function bindEvent(element, eventName, eventHandler) {
+   if (element.addEventListener){
+       element.addEventListener(eventName, eventHandler, false);
+   } else if (element.attachEvent) {
+       element.attachEvent('on' + eventName, eventHandler);
    };
+};
+// Listen to message from child window
+var results = document.getElementById('results');
+bindEvent(window, 'message', function (e) {
+    results.innerHTML = e.data;
+});
 
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
