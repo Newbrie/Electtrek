@@ -18,7 +18,7 @@ function bindEvent(element, eventName, eventHandler) {
 // Send a message to the parent
 var sendMessage = function (msg) {
    // Make sure you are sending a string, and to stringify JSON
-   window.parent.postMessage(msg, '*');
+   window.parent.postMessage("testingmessage", '*');
 };
 
 var results = document.getElementById('results'),
