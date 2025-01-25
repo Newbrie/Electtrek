@@ -29,9 +29,6 @@
 
 			</div>
 			<div id="datawin" class="innertube">
-        <button id="message_button" > </button>
-        <p id="results">  </p>
-
 				<h1>elecTrek - flash messages</h1>
 				{% with messages = get_flashed_messages() %}
 				{% if messages %}
@@ -45,6 +42,7 @@
 				{% for x in context.layernodelist %}
 						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
 				{% endfor %}
+        <p id="results"> results </p>
 		</div>
 				<script>
 			    function setActionForm(action){
