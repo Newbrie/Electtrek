@@ -345,7 +345,7 @@ class FGlayer:
                     if herenode.level == 0:
                         url=str("http://127.0.0.1:5000/map/"+c.dir+"/"+c.file)
                         downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ reftag + downtag
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
