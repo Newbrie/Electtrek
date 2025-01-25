@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block body%}
-<base target="_parent">
   <div id="mapwin" class="innertube">
 			<h1>elecTrek - The Canvassing App</h1>
       <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe referrerpolicy="same-origin" src="{{ context.mapfile }}" width="1200" height="800" name="_top"> </iframe>
+    <object  src="{{ context.mapfile }}" width="1200" height="800" > </object>
 	</div>
 
 			<div id="nav" class="innertube">
