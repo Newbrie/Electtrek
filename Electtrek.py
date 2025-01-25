@@ -582,6 +582,11 @@ def index():
 
     return render_template("index.html")
 
+@app.route('/flash')
+def flash():
+  message = request.args.get("msg")
+  return render_template("flash.html", ,msg=message)
+
 #login
 @app.route('/login', methods=['POST', 'GET'])
 def login():
