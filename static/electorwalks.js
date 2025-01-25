@@ -160,8 +160,8 @@ function inputNS(NS) {
   };
 
   // Listen to message from child window
-
-  iframe1.onmessage = function(event) {
+var source = new EventSource(iframe1);
+  source.onmessage = function(event) {
      document.getElementById("results").innerHTML += event.data + "<br>";
    };
 
