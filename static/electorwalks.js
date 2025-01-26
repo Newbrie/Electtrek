@@ -12,13 +12,13 @@ function bindEvent(element, eventName, eventHandler) {
 var results = document.getElementById('results');
 var iframeEl = document.getElementsByName('iframe1');
 
-bindEvent(window, 'message', function (e) {
+const blink1 = bindEvent(window, 'message', function (e) {
     results.innerHTML = e.data;
-    var blink1 = setInterval(function () {
+    var blink = setInterval(function () {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
     }, 2000);
-    return blink1;
+    return blink;
 });
 iframeEl.onload =
    clearInterval(blink1);
