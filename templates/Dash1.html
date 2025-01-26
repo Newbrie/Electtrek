@@ -8,23 +8,20 @@
 	</div>
 
 			<div id="nav" class="innertube">
-<h1>Map Data </h1>
-{% for x,y in context.formdata.items() %}
-		<ul> {{ x }} : {{ y }} </ul>
-{% endfor %}
+
 			<h2>Generate Walks</h2>
 
 				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
 					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
 					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
 					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
-						<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
-			      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
-			      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
-						<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
-						<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
-						<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
-						<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
+					<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
+					<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
+					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
+					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
 			  </form>
 
 			</div>
@@ -42,7 +39,6 @@
 				{% for x in context.layernodelist %}
 						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
 				{% endfor %}
-        <p id="results"> results </p>
 		</div>
 				<script>
 			    function setActionForm(action){

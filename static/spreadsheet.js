@@ -28,8 +28,6 @@ if (!event.target.matches('.dropbtn')) {
 };
 };
 
-
-
 function email_csv(csv, filename) {
   var csvFile;
   var downloadLink;

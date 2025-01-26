@@ -344,9 +344,9 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        testmessage = "moveDown(&#39;"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
     #                    downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
-                        downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(testmessage,"DOWN",12)
+                        downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
                         c.tagno = len(self.children)+1
@@ -354,6 +354,7 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
+                        downmessage = "moveDown(&#39;"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
                         downconstag = "<form action= '/downconbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
@@ -584,10 +585,10 @@ def index():
 
     return render_template("index.html")
 
-#@app.route('/flash/<message>')
-#def flash(msg):
-#  message = request.args.get("msg")
-#  return render_template("flash.html",msg=message)
+@app.route('/flash/<message>')
+def flash(msg):
+  message = request.args.get("msg")
+  return render_template("flash.html",msg=message)
 
 #login
 @app.route('/login', methods=['POST', 'GET'])
