@@ -1,7 +1,13 @@
 
 // addEventListener support for IE8
 // Listen to message from child window
-var pessages = document.getElementsByName('messages');
+const pessages = [];
+const pack = document.getElementsByName('messages');
+
+for (let x in pack) {
+  pessages.push(pack[x]);
+}
+
 var iframeEl = document.getElementsByName('iframe1');
 
 function bindEvent( element, eventName, eventHandler) {
@@ -16,7 +22,6 @@ bindEvent( window, 'message', function (e) {
     pessages.push(e.data);
     alert("_____blink:"+e.data);
 });
-
 
 
 
