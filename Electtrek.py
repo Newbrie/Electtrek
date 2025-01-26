@@ -354,8 +354,8 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
-                        downmessage = "moveDown(&#39;"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
-                        downconstag = "<form action= '/downconbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"CONSTITUENCIES",12)
+                        downmessage = "moveDown(&#39;/downconbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+                        downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
                         c.tagno = len(self.children)+1
@@ -363,8 +363,10 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downwardstag = "<form action= '/downwardbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"WARDS",12)
-                        downdivstag = "<form action= '/downdivbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"DIVS",12)
+                        downmessage = "moveDown(&#39;/downwardbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+                        downmessage1 = "moveDown(&#39;/downdivbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+                        downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"WARDS",12)
+                        downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage1,"DIVS",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downwardstag + " " + downdivstag
                         c.tagno = len(self.children)+1
