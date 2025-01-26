@@ -5,5 +5,5 @@ var moveDown = function (msg) {
   // Send a message to the parent
       window.parent.postMessage("Fetching data about "+ msg, '*');
       alert("sent:"+msg);
-      window.location.assign(msg);
+      window.location.assign("/downcountbut/"+msg);
       };

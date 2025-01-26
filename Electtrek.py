@@ -1221,7 +1221,6 @@ def map(path):
     print('_______ROUTE/map')
     flash ("_________Nextmap"+path)
     print ("_________Nextmap",path)
-    session.pop('_flashes', None)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
