@@ -17,6 +17,10 @@ alert(iframeEl.name);
     alert(results.innerHTML);
 });
 
+setInterval(function () {
+   results.style.opacity =
+       (blink.style.opacity == 0 ? 1 : 0);
+}, 1000);
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
