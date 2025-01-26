@@ -14,15 +14,14 @@ alert(results.id);
 alert(iframeEl.name);
   bindEvent(window, 'message', function (e) {
     results.innerHTML = e.data;
-  setInterval(function () {
+  const blink1 = setInterval(function () {
      results.style.opacity =
          (results.style.opacity == 0 ? 1 : 0);
-  }, 1000);
+  }, 2000);
 });
 
-iframeEl.onload = setInterval(function () {
-   results.style.opacity = 1;
-}, 0);
+iframeEl.onload =
+   clearInterval(blink1);
 
 
 
