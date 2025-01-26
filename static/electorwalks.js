@@ -21,8 +21,7 @@ alert(iframeEl.name);
 });
 
 iframeEl.onload = setInterval(function () {
-   results.style.opacity =
-       (results.style.opacity == 0 ? 1 : 0);
+   results.style.opacity = 1;
 }, 0);
 
 
