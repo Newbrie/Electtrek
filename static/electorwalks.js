@@ -14,13 +14,13 @@ alert(results.id);
 alert(iframeEl.name);
   bindEvent(window, 'message', function (e) {
     results.innerHTML = e.data;
-    alert(results.innerHTML);
+  setInterval(function () {
+     results.style.opacity =
+         (results.style.opacity == 0 ? 1 : 0);
+  }, 1000);  
 });
 
-setInterval(function () {
-   results.style.opacity =
-       (results.style.opacity == 0 ? 1 : 0);
-}, 1000);
+
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
 //  var html = document.querySelector("table").outerHTML;
