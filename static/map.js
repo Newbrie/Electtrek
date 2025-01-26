@@ -1,9 +1,9 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-var moveDown = function (msg) {
+var moveDown = function (msg,area) {
   // Send a message to the parent
-      window.parent.postMessage("Fetching data about "+ msg, '*');
+      window.parent.postMessage("<blink>Fetching data about "+ area+"</blink>", '*');
       alert("sent:"+msg);
       window.location.assign("/downcountbut/"+msg);
       };
