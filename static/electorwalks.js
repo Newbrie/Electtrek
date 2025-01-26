@@ -1,16 +1,17 @@
 
 // addEventListener support for IE8
-function bindEvent(blink, element, eventName, eventHandler) {
+// Listen to message from child window
+var results = document.getElementById('results');
+var iframeEl = document.getElementsByName('iframe1');
+var blink1 = 0;
+function bindEvent(blink1, element, eventName, eventHandler) {
    if (element.addEventListener){
        element.addEventListener(eventName, eventHandler, false);
    } else if (element.attachEvent) {
        element.attachEvent('on' + eventName, eventHandler);
    };
 };
-// Listen to message from child window
-var results = document.getElementById('results');
-var iframeEl = document.getElementsByName('iframe1');
-var blink1 = 0;
+
 
 bindEvent(blink1, window, 'message', function (e) {
     results.innerHTML = e.data;
