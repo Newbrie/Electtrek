@@ -19,8 +19,8 @@ bindEvent( window, 'message', function (e) {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
     }, 1000);
-    iframeEl.onload =
-       clearInterval(blink1);
+//    iframeEl.onload =
+//       clearInterval(blink1);
     alert("_____blink:"+blink1);
 });
 
