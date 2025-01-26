@@ -20,7 +20,7 @@ function bindEvent( element, eventName, eventHandler) {
 
 bindEvent( window, 'message', function (e) {
     pessages.push(e.data);
-    alert("_____blink:"+e.data);
+    alert("_____blink:"+pessages);
 });
 
 
