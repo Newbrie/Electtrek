@@ -6,18 +6,17 @@ function bindEvent(element, eventName, eventHandler) {
    } else if (element.attachEvent) {
        element.attachEvent('on' + eventName, eventHandler);
    };
-   return eventHandler;
 };
 // Listen to message from child window
 var results = document.getElementById('results');
 var iframeEl = document.getElementsByName('iframe1');
 
-const blink1 = bindEvent(window, 'message', function (e) {
+var blink1 = bindEvent(window, 'message', function (e) {
     results.innerHTML = e.data;
     var blink = setInterval(function () {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
-    }, 2000);
+    }, 1000);
     return blink;
 });
 iframeEl.onload =
