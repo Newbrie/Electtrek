@@ -6,22 +6,23 @@ function bindEvent(element, eventName, eventHandler) {
    } else if (element.attachEvent) {
        element.attachEvent('on' + eventName, eventHandler);
    };
+   return eventHandler;
 };
 // Listen to message from child window
 var results = document.getElementById('results');
 var iframeEl = document.getElementsByName('iframe1');
-alert(results.id);
-alert(iframeEl.name);
-  bindEvent(window, 'message', function (e) {
-    results.innerHTML = e.data;
-  const blink1 = setInterval(function () {
-     results.style.opacity =
-         (results.style.opacity == 0 ? 1 : 0);
-  }, 2000);
-});
 
+bindEvent(window, 'message', function (e) {
+    results.innerHTML = e.data;
+    var blink1 = setInterval(function () {
+       results.style.opacity =
+           (results.style.opacity == 0 ? 1 : 0);
+    }, 2000);
+    return blink1;
+});
 iframeEl.onload =
    clearInterval(blink1);
+
 
 
 
