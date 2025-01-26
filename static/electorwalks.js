@@ -12,15 +12,15 @@ function bindEvent( element, eventName, eventHandler) {
    };
 };
 
-
 bindEvent( window, 'message', function (e) {
     results.innerHTML = e.data;
-    blink1 = setInterval(function () {
+    const blink1 = setInterval(function () {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
     }, 1000);
-//    iframeEl.onload =
-//       clearInterval(blink1);
+    results.id = blink1;
+    iframeEl.onload =
+       clearInterval(blink1);
     alert("_____blink:"+blink1);
 });
 
