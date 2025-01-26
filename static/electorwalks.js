@@ -13,13 +13,13 @@ var iframeEl = document.getElementsByName('iframe1');
 alert(results.id);
 alert(iframeEl.name);
   bindEvent(window, 'message', function (e) {
-    results.innerHTML = "<blink>"+e.data+"</blink>";
+    results.innerHTML = e.data;
     alert(results.innerHTML);
 });
 
 setInterval(function () {
    results.style.opacity =
-       (blink.style.opacity == 0 ? 1 : 0);
+       (results.style.opacity == 0 ? 1 : 0);
 }, 1000);
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
