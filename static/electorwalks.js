@@ -18,11 +18,14 @@ bindEvent( window, 'message', function (e) {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
     }, 1000);
-    results.id = blink1;
-    alert("_____blink:"+results.id);
+    function stopBlink() {
+      clearInterval(blink1);
+    };
+    alert("_____blink:"+blink1);
+    iframeEl.onload = stopBlink();
 });
 
-iframeEl.onload = clearInterval(results.id);
+
 
 
 //document.querySelector("button.SAVE").addEventListener("click", function () {
