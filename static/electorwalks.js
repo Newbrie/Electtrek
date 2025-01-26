@@ -13,8 +13,8 @@ var iframeEl = document.getElementsByName('iframe1');
 alert(results.id);
 alert(iframeEl.name);
   bindEvent(window, 'message', function (e) {
-    results.innerHTML = <blink>+e.data+</blink>;
-    alert(<blink>+e.data+</blink>);
+    results.innerHTML = "<blink>"+e.data+"</blink>";
+    alert(results.innerHTML);
 });
 
 
