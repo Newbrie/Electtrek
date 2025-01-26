@@ -18,6 +18,7 @@ bindEvent(blink1, window, 'message', function (e) {
        results.style.opacity =
            (results.style.opacity == 0 ? 1 : 0);
     }, 1000);
+    alert("_____blink:"+blink1)
 });
 iframeEl.onload =
    clearInterval(blink1);
