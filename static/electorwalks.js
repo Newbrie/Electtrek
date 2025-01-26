@@ -17,8 +17,14 @@ alert(iframeEl.name);
   setInterval(function () {
      results.style.opacity =
          (results.style.opacity == 0 ? 1 : 0);
-  }, 1000);  
+  }, 1000);
 });
+
+window.onload = setInterval(function () {
+   results.style.opacity =
+       (results.style.opacity == 0 ? 1 : 0);
+}, 0);
+
 
 
 
