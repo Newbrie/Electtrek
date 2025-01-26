@@ -11,7 +11,7 @@ function bindEvent(element, eventName, eventHandler) {
 var results = document.getElementById('results');
 var iframeEl = document.getElementsByName('iframe1');
 
-var blink1 = bindEvent(window, 'message', function (e) {
+bindEvent(window, 'message', var blink1 = function (e) {
     results.innerHTML = e.data;
     var blink = setInterval(function () {
        results.style.opacity =
