@@ -20,7 +20,7 @@ alert(iframeEl.name);
   }, 1000);
 });
 
-window.onload = setInterval(function () {
+iframeEl.onload = setInterval(function () {
    results.style.opacity =
        (results.style.opacity == 0 ? 1 : 0);
 }, 0);
