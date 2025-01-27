@@ -417,7 +417,8 @@ class FGlayer:
                        )
                      )
         else:
-            print("______Flash:",flash("No Further Data!"))
+            flash("No Further Data!")
+            print(get_flashed_messages())
             herenode = herenode.parent
 
         print("________2fgs",herenode.value,herenode.level,self.children, Featurelayers[herenode.level+1].children)
@@ -582,6 +583,7 @@ def index():
 
     if 'username' in session:
         flash("__________Session contents"+ session['username'])
+        print(get_flashed_messages())
         print("__________session", session['username'])
         print("__________Logged in ", os.getcwd())
         return redirect (url_for('dashboard'))
@@ -615,6 +617,7 @@ def login():
     if not user:
         print("User not found", username)
         flash('Username does not exist.')
+        print(get_flashed_messages())
     elif user and user.check_password(password):
 
         session["username"] = username
@@ -671,6 +674,7 @@ def dashboard ():
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         flash(session['username'] + ' is logged in at '+ mapfile)
+        print(get_flashed_messages())
         mapfile = url_for('map',path=mapfile)
         print("___________node map file dir",current_node.dir)
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
@@ -689,8 +693,7 @@ def downcountbut(selnode):
     global environment
 
     flash('_______ROUTE/downcountbut')
-    print('_______ROUTE/downcountbut')
-    session.pop('_flashes', None)
+    print(get_flashed_messages())
 
     formdata = {}
 #    dat = request.base_url
@@ -784,11 +787,12 @@ def downPDbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Ward.")
-            print("Can't find any elector data for this Ward.")
+            print(get_flashed_messages())
             allelectors = []
         else:
             flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-            print ("________PDs added  :  ",len(Featurelayers[current_node.level+1].children))
+            print(get_flashed_messages())
+
 
 
         mapfile = current_node.dir+"/"+current_node.file
@@ -853,10 +857,12 @@ def downSTbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Polling District.")
-            print("Can't find any elector data for this Polling District.",len(allelectors),len(Featurelayers[current_node.level+1].children))
+            print(get_flashed_messages())
+
         else:
             flash("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-            print ("________streets added  :  ",len(Featurelayers[current_node.level+1].children))
+            print(get_flashed_messages())
+
 
         for street_node in current_node.children:
               street = street_node.value
@@ -986,7 +992,8 @@ def downSTbut(selnode):
             flash("Can't find any Streets for this PD.")
         else:
             flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].children)))
-            print ("________Streets added  :  ",len(Featurelayers[current_node.level].children))
+            print(get_flashed_messages())
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1016,7 +1023,7 @@ def downconbut(selnode):
         flash("Can't find any constituencies for this county.")
     else:
         flash("________constituencies added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-        print ("________constituencies added  :  ",len(Featurelayers[current_node.level+1].children))
+        print(get_flashed_messages())
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1046,7 +1053,7 @@ def downwardbut(selnode):
         flash("Can't find any wards for this Constituency.")
     else:
         flash("________wards added  :  "+str(len(Featurelayers[current_node.level].children)))
-        print ("________wards added  :  ",len(Featurelayers[current_node.level].children))
+        print(get_flashed_messages())
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1075,7 +1082,7 @@ def downdivbut(selnode):
         flash("Can't find any county divisions for this Constituency.")
     else:
         flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-        print ("________divisions added  :  ",len(Featurelayers[current_node.level+1].children))
+        print(get_flashed_messages())
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1217,6 +1224,7 @@ def register():
         print("new user", new_user, username)
         login_user(new_user)
         flash('Logged in successfully.')
+        print(get_flashed_messages())
         next = request.args.get('next')
         return redirect(url_for('dashboard'))
 

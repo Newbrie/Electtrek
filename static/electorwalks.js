@@ -24,9 +24,7 @@
               alert("_____blink:"+pessages);
           });
 
-          function get_childframe_messages() {
-            return JSON.stringify(pessages);
-          };
+
 
 
 
