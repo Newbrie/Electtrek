@@ -32,7 +32,7 @@
 			</div>
 			<div id="datawin" class="innertube">
 				<h1>elecTrek - flash messages</h1>
-				{% with messages = get_flashed_messages() %}
+				{% with messages = get_childframe_messages() %}
 				{% if messages %}
 					<ul class="flashes" >
           {% for message in messages %}
@@ -99,6 +99,10 @@
               pessages.push(e.data);
               alert("_____blink:"+pessages);
           });
+
+          function get_childframe_messages() {
+            return JSON.stringify(pessages)
+          }
 
 			</script>
 
