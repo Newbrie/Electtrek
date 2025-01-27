@@ -8,7 +8,7 @@
 	</div>
 
 			<div id="nav" class="innertube">
-    
+
         <h1>Map Data </h1>
         {% for x,y in context.formdata.items() %}
         		<ul> {{ x }} : {{ y }} </ul>
@@ -32,7 +32,7 @@
 			</div>
 			<div id="datawin" class="innertube">
 				<h1>elecTrek - flash messages</h1>
-				{% with messages = get_flashed_messages() %}
+				{% with messages = json.dumps(get_flashed_messages()) %}
 				{% if messages %}
 					<ul class="flashes" >
 					{% for message in messages %}

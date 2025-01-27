@@ -2,7 +2,7 @@
 // addEventListener support for IE8
 // Listen to message from child window
 const pessages = [];
-const pack = document.getElementsByName('messages');
+var pack = JSON.parse("{{ messages }}");
 
 for (let x in pack) {
   pessages.push(pack[x]);
@@ -20,7 +20,7 @@ function bindEvent( element, eventName, eventHandler) {
 
 bindEvent( window, 'message', function (e) {
     pessages.push(e.data);
-    alert("_____blink:"+pessages);
+    alert("_____blink:"+pessage);
 });
 
 
