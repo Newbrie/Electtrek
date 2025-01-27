@@ -5,7 +5,7 @@
   <div id="mapwin" class="innertube">
 			<h1>elecTrek - The Canvassing App</h1>
       <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe name="iframe1" src="{{ context.mapfile }}" width="1200" height="800"> </iframe>
+    <iframe name="iframe1" src="{{ context.mapfile }}" width="1200" height="800"> onload=updateMessages() </iframe>
 	</div>
 
 			<div id="nav" class="innertube">
@@ -110,10 +110,15 @@
         bindEvent( window, 'message', function (e) {
             pessages.push(e.data);
             alert("_____blink:"+pessages);
-            messages = pessages;
+
         });
 
-
+        function updateMessages(){
+          var ul = document.getElementById("datawin");
+          var li = document.createElement("li");
+          li.appendChild(document.createTextNode(pessages));
+          ul.appendChild(li);
+        };
 
 	</script>
 
