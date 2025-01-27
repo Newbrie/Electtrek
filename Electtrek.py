@@ -576,7 +576,8 @@ def index():
     global MapRoot
     global current_node
 
-    print('_______ROUTE/index')
+    flash('_______ROUTE/index')
+    print("____FLASH",get_flashed_messages())
 
     current_node = MapRoot
 
@@ -606,7 +607,8 @@ def login():
     global Featurelayers
     global environment
 
-    print('_______ROUTE/login')
+    flash('_______ROUTE/login')
+    print("____FLASH",get_flashed_messages())
     #collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
@@ -667,7 +669,8 @@ def dashboard ():
     global Treepolys
     global Featurelayers
 
-    print('_______ROUTE/dashboard')
+    flash('_______ROUTE/dashboard')
+    print("____FLASH",get_flashed_messages())
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         flash(session['username'] + ' is logged in at '+ mapfile)
@@ -735,7 +738,8 @@ def downPDbut(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
-    print('_______ROUTE/downPDbut',selnode)
+    flash('_______ROUTE/downPDbut',selnode)
+    print("____FLASH",get_flashed_messages())
 
     steps = selnode.split("/")
     steps.pop()
@@ -805,7 +809,8 @@ def downSTbut(selnode):
     global allelectors
     global environment
 
-    print('_______ROUTE/downSTbut',selnode)
+    flash('_______ROUTE/downSTbut',selnode)
+    print("____FLASH",get_flashed_messages())
 
     steps = selnode.split("/")
     steps.pop()
@@ -997,7 +1002,8 @@ def downconbut(selnode):
     global current_node
     global Featurelayers
     global allelectors
-    print('_______ROUTE/downconbut',selnode)
+    flash('_______ROUTE/downconbut',selnode)
+    print("____FLASH",get_flashed_messages())
 
     steps = selnode.split("/")
     steps.pop()
@@ -1025,7 +1031,8 @@ def downwardbut(selnode):
     global Treepolys
     global current_node
     global Featurelayers
-    print('_______ROUTE/downwardbut')
+    flash('_______ROUTE/downwardbut')
+    print("____FLASH",get_flashed_messages())
     global allelectors
 
 
@@ -1054,7 +1061,8 @@ def downdivbut(selnode):
     global Treepolys
     global current_node
     global Featurelayers
-    print('_______ROUTE/downdivbut')
+    flash('_______ROUTE/downdivbut')
+    print("____FLASH",get_flashed_messages())
     global allelectors
 
     steps = selnode.split("/")
@@ -1081,7 +1089,8 @@ def downdivbut(selnode):
 def layeritems():
     global current_node
 
-    print('_______ROUTE/layeritems')
+    flash('_______ROUTE/layeritems')
+    print("____FLASH",get_flashed_messages())
 
     layernodelist = Featurelayers[current_node.level+1].children
     current_node = current_node.parent
@@ -1096,8 +1105,8 @@ def upbut(selnode):
     global Treepolys
     global Featurelayers
     global environment
-    print('_______ROUTE/upbut',selnode)
-
+    flash('_______ROUTE/upbut',selnode)
+    print("____FLASH",get_flashed_messages())
     formdata = {}
 # a up button on a node has been selected on the map, so the parent map must be displayed with new up/down options
     print("_________current+parent_node",current_node.value, current_node.parent.value)
@@ -1180,7 +1189,8 @@ def resetdashboard():
 @app.route('/logout', methods=['POST', 'GET'])
 @login_required
 def logout():
-    print('_______ROUTE/logout')
+    flash('_______ROUTE/logout')
+    print("____FLASH",get_flashed_messages())
 
     print("Logout", session)
     if "username" in session:
@@ -1192,7 +1202,8 @@ def logout():
 #Register user
 @app.route('/register', methods=['POST'])
 def register():
-    print('_______ROUTE/register')
+    flash('_______ROUTE/register')
+    print("____FLASH",get_flashed_messages())
 
     username = request.form['username']
     password = request.form['password']
@@ -1217,7 +1228,8 @@ def register():
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
-    print('_______ROUTE/map')
+    flash('_______ROUTE/map')
+    print("____FLASH",get_flashed_messages())
     flash ("_________Nextmap"+path)
     print ("_________Nextmap",path)
 
@@ -1226,7 +1238,8 @@ def map(path):
 
 @app.route('/upload', methods=['POST','GET'])
 def upload():
-    print('_______ROUTE/upload')
+    flash('_______ROUTE/upload')
+    print("____FLASH",get_flashed_messages())
 
     print("Upload", username)
     ImportFilename = ""
@@ -1247,7 +1260,8 @@ def normalise():
     global Featurelayers
     global environment
 
-    print('_______ROUTE/normalise',session)
+    flash('_______ROUTE/normalise',session)
+    print("____FLASH",get_flashed_messages())
 
     formdata = {}
     formdata['importfile'] = request.files['importfile']
@@ -1272,7 +1286,8 @@ def walks():
     global Treepolys
     global Featurelayers
     global environment
-    print('_______ROUTE/walks',session)
+    flash('_______ROUTE/walks',session)
+    print("____FLASH",get_flashed_messages())
 
     if len(request.form) > 0:
         formdata = {}
@@ -1296,7 +1311,8 @@ def postcode():
     global Featurelayers
     global Directories
     global workdirectories
-    print('_______ROUTE/postcode')
+    flash('_______ROUTE/postcode')
+    print("____FLASH",get_flashed_messages())
 
     layernodelist = Featurelayers[current_node.level+1].children
 
@@ -1342,7 +1358,8 @@ def cards():
     global Treepolys
     global Featurelayers
     global environment
-    print('_______ROUTE/canvasscards',session, request.form, current_node.level)
+    flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
+    print("____FLASH",get_flashed_messages())
 
     if len(request.form) > 0:
         formdata = {}
