@@ -1,27 +1,33 @@
 
 // addEventListener support for IE8
 // Listen to message from child window
-const pessages = [];
-var pack = JSON.parse('{{ messages|tojson|safe }}');
 
-for (let x in pack) {
-  pessages.push(pack[x]);
-}
+          const pessages = [];
+          var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
 
-var iframeEl = document.getElementsByName('iframe1');
+          for (let x in pack) {
+            pessages.push(pack[x]);
+          }
 
-function bindEvent( element, eventName, eventHandler) {
-   if (element.addEventListener){
-       element.addEventListener(eventName, eventHandler, false);
-   } else if (element.attachEvent) {
-       element.attachEvent('on' + eventName, eventHandler);
-   };
-};
+          var iframeEl = document.getElementsByName('iframe1');
 
-bindEvent( window, 'message', function (e) {
-    pessages.push(e.data);
-    alert("_____blink:"+pessages);
-});
+          function bindEvent( element, eventName, eventHandler) {
+             if (element.addEventListener){
+                 element.addEventListener(eventName, eventHandler, false);
+             } else if (element.attachEvent) {
+                 element.attachEvent('on' + eventName, eventHandler);
+             };
+          };
+
+          bindEvent( window, 'message', function (e) {
+              pessages.push(e.data);
+              alert("_____blink:"+pessages);
+          });
+
+          function get_childframe_messages() {
+            return JSON.stringify(pessages)
+          }
+
 
 
 
