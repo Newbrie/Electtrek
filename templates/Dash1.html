@@ -32,7 +32,7 @@
 			</div>
 			<div id="datawin" class="innertube">
 				<h1>elecTrek - flash messages</h1>
-				{% with messages = get_flashed_messages()|json|safe %}
+				{% with messages = get_flashed_messages()|tojson|safe %}
 				{% if messages %}
 					<ul class="flashes" >
 					{% for message in messages %}
