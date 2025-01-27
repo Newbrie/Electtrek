@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block body%}
-<script  type="text/javascript" src="https://newbrie.github.io/Electtrek/static/electorwalks.js">
-</script>
+
 <base target="_self">
   <div id="mapwin" class="innertube">
 			<h1>elecTrek - The Canvassing App</h1>
@@ -47,7 +46,7 @@
 						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
 				{% endfor %}
 		</div>
-				<script>
+	<script>
 			    function setActionForm(action){
 			      let form = document.getElementById("normal-file")
 			      if (action === 'normalise') {
@@ -81,6 +80,7 @@
           // addEventListener support for IE8
           // Listen to message from child window
 
-			</script>
-
+	</script>
+  <script  type="text/javascript" src="https://newbrie.github.io/Electtrek/static/electorwalks.js">
+  </script>
 {% endblock %}
