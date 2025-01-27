@@ -12,10 +12,10 @@ normstats = {}
 
 def normz(LocalFile, normstats):
     print ("____________inside normz_________")
-    templdir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/templates/"
+    templdir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates/"
     workdir = "/Users/newbrie/Sites"
     testdir = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
-    bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/Boundaries/"
+    bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/ElecttrekReference/Boundaries/"
     os.chdir(workdir)
     Env1 = sys.base_prefix
     Mean_Lat = 51.240299

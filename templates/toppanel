@@ -1,0 +1,7 @@
+{% extends Dash2.html %}
+{% block body %}
+    <h1>elecTrek - The Canvassing App</h1>
+    <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+  <iframe name="iframe1" src="{{ context.mapfile }}" width="1200" height="800"> </iframe>
+
+{% endblock %}

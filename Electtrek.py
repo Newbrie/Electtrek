@@ -417,8 +417,7 @@ class FGlayer:
                        )
                      )
         else:
-            flash("No Further Data!")
-            print("____FLASH",get_flashed_messages())
+            print("No Further Data!")
             herenode = herenode.parent
 
         print("________2fgs",herenode.value,herenode.level,self.children, Featurelayers[herenode.level+1].children)
@@ -577,14 +576,11 @@ def index():
     global MapRoot
     global current_node
 
-
     current_node = MapRoot
 
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
         print("____FLASH",get_flashed_messages())
-        print("__________session", session['username'])
-        print("__________Logged in ", os.getcwd())
         return redirect (url_for('dashboard'))
 
     return render_template("index.html")
@@ -611,11 +607,9 @@ def login():
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
 #check if it exists
-    flash('_______ROUTE/login')
-    print("____FLASH",get_flashed_messages())
+
     if not user:
-        print("User not found", username)
-        flash('Username does not exist.')
+        flash("_______ROUTE/login User not found", username)
         print("____FLASH",get_flashed_messages())
         return render_template("index.html")
     elif user and user.check_password(password):
@@ -644,15 +638,15 @@ def login():
         mapfile = url_for('map',path=mapfile)
         flash(session['username'] + ' is logged in at '+ mapfile)
         print("____FLASH",get_flashed_messages())
-        flash("Drill down to the constituency of your interest ")
-
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     else:
         flash (' Not logged in ! ')
+        print("____FLASH",get_flashed_messages())
         return render_template("index.html")
 
     session['next'] = request.args.get('next')
-
+    flash ('_____FLASH Found existing session ! ')
+    print("____FLASH",get_flashed_messages())
     return render_template ('index.html')
 
 #dashboard
@@ -664,22 +658,19 @@ def dashboard ():
     global Directories
     global MapRoot
     global current_node
-
     global allelectors
-
-
     global Treepolys
     global Featurelayers
 
-    flash('_______ROUTE/dashboard')
-    print("____FLASH",get_flashed_messages())
+
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
-        flash(session['username'] + ' is logged in at '+ mapfile)
+        flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
         print("____FLASH",get_flashed_messages())
         mapfile = url_for('map',path=mapfile)
-        print("___________node map file dir",current_node.dir)
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    flash('_______ROUTE/dashboard no login session ')
+    print("____FLASH",get_flashed_messages())
     return redirect(url_for('index'))
 
 
@@ -694,8 +685,6 @@ def downcountbut(selnode):
     global Featurelayers
     global environment
 
-    flash('_______ROUTE/downcountbut')
-    print("____FLASH",get_flashed_messages())
 
     formdata = {}
 #    dat = request.base_url
@@ -727,10 +716,8 @@ def downcountbut(selnode):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-    flash ("Data is available for counties. Please explore!")
-    print ("Data is available for counties. Please explore!")
-
-
+    flash('_______ROUTE/downcountbut')
+    print("____FLASH",get_flashed_messages())
     return redirect(url_for('map',path=mapfile))
 
 @app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
@@ -740,8 +727,6 @@ def downPDbut(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
-    flash('_______ROUTE/downPDbut',selnode)
-    print("____FLASH",get_flashed_messages())
 
     steps = selnode.split("/")
     steps.pop()
@@ -798,7 +783,7 @@ def downPDbut(selnode):
 
 
         mapfile = current_node.dir+"/"+current_node.file
-        print ("________Heading for Polling District :  ",current_node.value)
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -811,8 +796,6 @@ def downSTbut(selnode):
     global allelectors
     global environment
 
-    flash('_______ROUTE/downSTbut',selnode)
-    print("____FLASH",get_flashed_messages())
 
     steps = selnode.split("/")
     steps.pop()
@@ -1272,6 +1255,7 @@ def normalise():
     formdata['electiondate'] = request.form["electiondate"]
     results = normalised.normz(formdata['importfile'], formdata)
     formdata = results[1]
+    mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
     return render_template('dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
