@@ -49,7 +49,7 @@
             <li> {{ pessage  }}</li>
           {% endfor %}
           </ul>
-              
+
 				{% for x in context.layernodelist %}
 						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
 				{% endfor %}
@@ -110,6 +110,7 @@
         bindEvent( window, 'message', function (e) {
             pessages.push(e.data);
             alert("_____blink:"+pessages);
+            messages = pessages;
         });
 
 
