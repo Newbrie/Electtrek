@@ -464,6 +464,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/newbrie/Documents/Refo
 app.config['SECRET_KEY'] = 'rosebutt'
 #app.config['USE_SESSION_FOR_NEXT'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['UPLOAD_FOLDER'] = '/Users/newbrie/Sites'
 app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/Electtrek'
 #app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
@@ -576,13 +577,11 @@ def index():
     global MapRoot
     global current_node
 
-    flash('_______ROUTE/index')
-    print("____FLASH",get_flashed_messages())
 
     current_node = MapRoot
 
     if 'username' in session:
-        flash("__________Session contents"+ session['username'])
+        flash("__________Session Alive:"+ session['username'])
         print("____FLASH",get_flashed_messages())
         print("__________session", session['username'])
         print("__________Logged in ", os.getcwd())
@@ -607,17 +606,18 @@ def login():
     global Featurelayers
     global environment
 
-    flash('_______ROUTE/login')
-    print("____FLASH",get_flashed_messages())
     #collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
 #check if it exists
+    flash('_______ROUTE/login')
+    print("____FLASH",get_flashed_messages())
     if not user:
         print("User not found", username)
         flash('Username does not exist.')
         print("____FLASH",get_flashed_messages())
+        return render_template("index.html")
     elif user and user.check_password(password):
 
         session["username"] = username
@@ -642,11 +642,13 @@ def login():
         england.create_map_branch('county',allelectors)
         mapfile = current_node.dir + "/" + current_node.file
         mapfile = url_for('map',path=mapfile)
-        flash (session['username'] + ' is logged in at '+ mapfile)
-        flash ("Drill down to the constituency of your interest ")
+        flash(session['username'] + ' is logged in at '+ mapfile)
+        print("____FLASH",get_flashed_messages())
+        flash("Drill down to the constituency of your interest ")
 
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     else:
+        flash (' Not logged in ! ')
         return render_template("index.html")
 
     session['next'] = request.args.get('next')
