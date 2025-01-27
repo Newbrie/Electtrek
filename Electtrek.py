@@ -29,6 +29,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
+from flask import json
 #from flask import request
 from werkzeug.exceptions import HTTPException
 
@@ -587,10 +588,10 @@ def index():
 
     return render_template("index.html")
 
-@app.route('/flash/<message>')
-def flash(msg):
-  message = request.args.get("msg")
-  return render_template("flash.html",msg=message)
+#@app.route('/flash/<message>')
+#def flash(msg):
+#  message = request.args.get("msg")
+#  return render_template("flash.html",msg=message)
 
 #login
 @app.route('/login', methods=['POST', 'GET'])
