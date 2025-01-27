@@ -29,7 +29,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
-from flask import json
+from flask import json, get_flashed_messages
 #from flask import request
 from werkzeug.exceptions import HTTPException
 
