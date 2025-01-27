@@ -7,7 +7,7 @@
 
           for (let x in pack) {
             pessages.push(pack[x]);
-          }
+          };
 
           var iframeEl = document.getElementsByName('iframe1');
 
@@ -25,8 +25,8 @@
           });
 
           function get_childframe_messages() {
-            return JSON.stringify(pessages)
-          }
+            return JSON.stringify(pessages);
+          };
 
 
 
