@@ -2,7 +2,7 @@
 // addEventListener support for IE8
 // Listen to message from child window
 const pessages = [];
-var pack = JSON.parse("{{ messages }}");
+var pack = JSON.parse('{{ messages|tojson|safe }}');
 
 for (let x in pack) {
   pessages.push(pack[x]);
