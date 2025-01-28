@@ -580,7 +580,7 @@ def index():
 
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
-        print("____FLASH",get_flashed_messages())
+
         return redirect (url_for('dashboard'))
 
     return render_template("index.html")
@@ -610,7 +610,7 @@ def login():
 
     if not user:
         flash("_______ROUTE/login User not found", username)
-        print("____FLASH",get_flashed_messages())
+
         return render_template("index.html")
     elif user and user.check_password(password):
 
@@ -637,16 +637,16 @@ def login():
         mapfile = current_node.dir + "/" + current_node.file
         mapfile = url_for('map',path=mapfile)
         flash(session['username'] + ' is logged in at '+ mapfile)
-        print("____FLASH",get_flashed_messages())
+
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     else:
         flash (' Not logged in ! ')
-        print("____FLASH",get_flashed_messages())
+
         return render_template("index.html")
 
     session['next'] = request.args.get('next')
     flash ('_____FLASH Found existing session ! ')
-    print("____FLASH",get_flashed_messages())
+
     return render_template ('index.html')
 
 #dashboard
@@ -666,11 +666,11 @@ def dashboard ():
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
-        print("____FLASH",get_flashed_messages())
+
         mapfile = url_for('map',path=mapfile)
         return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     flash('_______ROUTE/dashboard no login session ')
-    print("____FLASH",get_flashed_messages())
+
     return redirect(url_for('index'))
 
 
@@ -717,7 +717,7 @@ def downcountbut(selnode):
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     flash('_______ROUTE/downcountbut')
-    print("____FLASH",get_flashed_messages())
+
     return redirect(url_for('map',path=mapfile))
 
 @app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
@@ -774,11 +774,11 @@ def downPDbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Ward.")
-            print("____FLASH",get_flashed_messages())
+
             allelectors = []
         else:
             flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-            print("____FLASH",get_flashed_messages())
+
 
 
 
@@ -841,11 +841,11 @@ def downSTbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Polling District.")
-            print("____FLASH",get_flashed_messages())
+
 
         else:
             flash("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-            print("____FLASH",get_flashed_messages())
+
 
 
         for street_node in current_node.children:
@@ -976,7 +976,7 @@ def downSTbut(selnode):
             flash("Can't find any Streets for this PD.")
         else:
             flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].children)))
-            print("____FLASH",get_flashed_messages())
+
 
     return redirect(url_for('map',path=mapfile))
 
@@ -988,7 +988,7 @@ def downconbut(selnode):
     global Featurelayers
     global allelectors
     flash('_______ROUTE/downconbut',selnode)
-    print("____FLASH",get_flashed_messages())
+
 
     steps = selnode.split("/")
     steps.pop()
@@ -1007,7 +1007,7 @@ def downconbut(selnode):
         flash("Can't find any constituencies for this county.")
     else:
         flash("________constituencies added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-        print("____FLASH",get_flashed_messages())
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1017,7 +1017,7 @@ def downwardbut(selnode):
     global current_node
     global Featurelayers
     flash('_______ROUTE/downwardbut')
-    print("____FLASH",get_flashed_messages())
+
     global allelectors
 
 
@@ -1037,7 +1037,7 @@ def downwardbut(selnode):
         flash("Can't find any wards for this Constituency.")
     else:
         flash("________wards added  :  "+str(len(Featurelayers[current_node.level].children)))
-        print("____FLASH",get_flashed_messages())
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1047,7 +1047,7 @@ def downdivbut(selnode):
     global current_node
     global Featurelayers
     flash('_______ROUTE/downdivbut')
-    print("____FLASH",get_flashed_messages())
+
     global allelectors
 
     steps = selnode.split("/")
@@ -1066,7 +1066,7 @@ def downdivbut(selnode):
         flash("Can't find any county divisions for this Constituency.")
     else:
         flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-        print("____FLASH",get_flashed_messages())
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1075,7 +1075,7 @@ def layeritems():
     global current_node
 
     flash('_______ROUTE/layeritems')
-    print("____FLASH",get_flashed_messages())
+
 
     layernodelist = Featurelayers[current_node.level+1].children
     current_node = current_node.parent
@@ -1091,7 +1091,7 @@ def upbut(selnode):
     global Featurelayers
     global environment
     flash('_______ROUTE/upbut',selnode)
-    print("____FLASH",get_flashed_messages())
+
     formdata = {}
 # a up button on a node has been selected on the map, so the parent map must be displayed with new up/down options
     print("_________current+parent_node",current_node.value, current_node.parent.value)
@@ -1175,7 +1175,7 @@ def resetdashboard():
 @login_required
 def logout():
     flash('_______ROUTE/logout')
-    print("____FLASH",get_flashed_messages())
+
 
     print("Logout", session)
     if "username" in session:
@@ -1188,7 +1188,7 @@ def logout():
 @app.route('/register', methods=['POST'])
 def register():
     flash('_______ROUTE/register')
-    print("____FLASH",get_flashed_messages())
+
 
     username = request.form['username']
     password = request.form['password']
@@ -1207,14 +1207,14 @@ def register():
         print("new user", new_user, username)
         login_user(new_user)
         flash('Logged in successfully.')
-        print("____FLASH",get_flashed_messages())
+
         next = request.args.get('next')
         return redirect(url_for('dashboard'))
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
     flash('_______ROUTE/map')
-    print("____FLASH",get_flashed_messages())
+
     flash ("_________Nextmap"+path)
     print ("_________Nextmap",path)
 
@@ -1224,7 +1224,7 @@ def map(path):
 @app.route('/upload', methods=['POST','GET'])
 def upload():
     flash('_______ROUTE/upload')
-    print("____FLASH",get_flashed_messages())
+
 
     print("Upload", username)
     ImportFilename = ""
@@ -1246,7 +1246,7 @@ def normalise():
     global environment
 
     flash('_______ROUTE/normalise',session)
-    print("____FLASH",get_flashed_messages())
+
 
     formdata = {}
     formdata['importfile'] = request.files['importfile']
@@ -1273,7 +1273,7 @@ def walks():
     global Featurelayers
     global environment
     flash('_______ROUTE/walks',session)
-    print("____FLASH",get_flashed_messages())
+
 
     if len(request.form) > 0:
         formdata = {}
@@ -1298,7 +1298,7 @@ def postcode():
     global Directories
     global workdirectories
     flash('_______ROUTE/postcode')
-    print("____FLASH",get_flashed_messages())
+
 
     layernodelist = Featurelayers[current_node.level+1].children
 
@@ -1345,7 +1345,7 @@ def cards():
     global Featurelayers
     global environment
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
-    print("____FLASH",get_flashed_messages())
+
 
     if len(request.form) > 0:
         formdata = {}

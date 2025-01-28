@@ -114,10 +114,12 @@
         });
 
         function updateMessages(){
+          location.reload();
           var ul = document.getElementById("datawin");
           var li = document.createElement("li");
           li.appendChild(document.createTextNode(pessages));
           ul.appendChild(li);
+          alert(ul,li);
         };
 
 	</script>
