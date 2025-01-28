@@ -716,7 +716,7 @@ def downcountbut(selnode):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-    flash('_______ROUTE/downcountbut')
+#    flash('_______ROUTE/downcountbut')
 
     return redirect(url_for('map',path=mapfile))
 
@@ -1213,9 +1213,8 @@ def register():
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
-    flash('_______ROUTE/map')
 
-    flash ("_________Nextmap"+path)
+    flash ("_________ROUTE/map"+path)
     print ("_________Nextmap",path)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
