@@ -79,13 +79,14 @@ body {
 	    opacity: 0.8;
 		}
     #logwin {
-			z-index: 12;
-			ddisplay: inline-block;
+			z-index: 11;
+			display: inline-block;
 			position: absolute;
 			bottom: 0;
 			right: 0;
 			width: 290px;
 			font-weight: normal;
+			background: white;
 		 padding : 16px 20px ;
 		 font-size: 1em;
 		 border-radius: 3px;
