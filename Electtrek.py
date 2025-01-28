@@ -494,7 +494,7 @@ Featurelayers.append(FGlayer(id=7,name='Street Markers'))
 Featurelayers.append(FGlayer(id=8,name='Special Markers'))
 
 formdata = {}
-allelectors = []
+allelectors = pd.DataFrame()
 mapfile = ""
 Directories = {}
 
@@ -1099,7 +1099,6 @@ def upbut(selnode):
 # the selected  boundary options need to be added to the layer
     nodemapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
-
 
     #formdata['username'] = session["username"]
     formdata['country'] = 'UNITED_KINGDOM'
