@@ -51,7 +51,7 @@ body {
 	width: 1200px;
 }
 #datawin {
-	z-index: 8;
+	z-index: 12;
 	position: absolute;
 	bottom: 0;
 	left: 0;
@@ -62,25 +62,26 @@ body {
 }
 
 		#nav {
-      z-index: 8;
+      z-index: 12;
 			position: absolute;
 			top: 0;
 			right: 0;
 			width: 290px;
 			background: #DAE9BC;
-		    display: inline-block;
-		    color: black;
-		    font-weight: normal;
-		    padding : 16px 20px ;
-		    font-size: 1em;
-		    border-radius: 3px;
-		    border-color: indigo;
-		    cursor: pointer;
-		    opacity: 0.8;
+	    display: inline-block;
+	    color: black;
+	    font-weight: normal;
+	    padding : 16px 20px ;
+	    font-size: 1em;
+	    border-radius: 3px;
+	    border-color: indigo;
+	    cursor: pointer;
+	    opacity: 0.8;
 		}
-    #myForm {
-      position: absolute;
-      top: 700px;
+    #logwin {
+			z-index: 12;
+			display:block;
+      position: relative;
 			width: 280px;empty-cells:
     }
 

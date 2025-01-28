@@ -31,7 +31,7 @@
 			  </form>
 
 			</div>
-			<div id="datawin" class="innertube">
+			<div id="logwin" class="innertube">
 				<h1>elecTrek Status Reports: </h1>
           <ul class="flashes" >
           {% for pessage in pessages %}
@@ -101,18 +101,21 @@
             pessages.push(e.data);
             var ul = document.getElementById("datawin");
             var li = document.createElement("li");
-            li.appendChild(document.createTextNode(pessages));
+            li.appendChild(document.createTextNode(e.data));
             ul.appendChild(li);
             alert("_____onmessage: "+e.data);
 
         });
 
         function updateMessages(){
+          old = pessages.pop();
+
           var ul = document.getElementById("datawin");
           var li = document.createElement("li");
-          li.appendChild(document.createTextNode(pessages));
+          li.appendChild(document.createTextNode(old+":completed"));
           ul.appendChild(li);
-          alert("_____onframeload:"+ul+li);
+      
+
         };
 
 	</script>
