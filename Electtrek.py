@@ -691,7 +691,7 @@ def downcountbut(selnode):
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
-    flash('_______ROUTE/downcountbut')
+
 # the map under the selected node map needs to be configured
     print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
@@ -713,6 +713,7 @@ def downcountbut(selnode):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    flash('_______ROUTE/downcountbut')
 
     return redirect(url_for('map',path=mapfile))
 
