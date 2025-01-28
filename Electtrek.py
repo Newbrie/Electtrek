@@ -344,7 +344,9 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+
+                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+get_flashed_messages()+"&#39;)"
+    #                    downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
     #                    downtag = "<form action= '/downcountbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.dir+"/"+c.file,"COUNTIES",12)
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
@@ -689,7 +691,7 @@ def downcountbut(selnode):
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
-
+    flash('_______ROUTE/downcountbut')
 # the map under the selected node map needs to be configured
     print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
@@ -711,7 +713,6 @@ def downcountbut(selnode):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
 #    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-#    flash('_______ROUTE/downcountbut')
 
     return redirect(url_for('map',path=mapfile))
 
