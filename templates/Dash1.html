@@ -32,18 +32,7 @@
 
 			</div>
 			<div id="datawin" class="innertube">
-				<h1>elecTrek - flash messages</h1>
-				{% with messages = get_flashed_messages() %}
-				{% if messages %}
-					<ul class="flashes" >
-          {% for message in messages %}
-						<li> {{ message  }}</li>
-					{% endfor %}
-					</ul>
-				{% endif %}
-				{% endwith %}
-
-        <h1>elecTrek - flash pessages</h1>
+				<h1>elecTrek Status Reports: </h1>
           <ul class="flashes" >
           {% for pessage in pessages %}
             <li> {{ pessage  }}</li>
@@ -108,8 +97,13 @@
         };
 
         bindEvent( window, 'message', function (e) {
+            pessages.pop();
             pessages.push(e.data);
-            alert("_____blink:"+pessages);
+            var ul = document.getElementById("datawin");
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode(pessages));
+            ul.appendChild(li);
+            alert("_____onmessage:"+pessages);
 
         });
 
@@ -118,8 +112,7 @@
           var li = document.createElement("li");
           li.appendChild(document.createTextNode(pessages));
           ul.appendChild(li);
-          alert(ul,li);
-          document.reload();
+          alert("_____onframeload:"+ul+li);
         };
 
 	</script>
