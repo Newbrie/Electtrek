@@ -99,7 +99,7 @@
         bindEvent( window, 'message', function (e) {
             pessages.pop();
             pessages.push(e.data);
-            var ul = document.getElementById("datawin");
+            var ul = document.getElementById("logwin");
             var li = document.createElement("li");
             li.appendChild(document.createTextNode(e.data));
             ul.appendChild(li);
@@ -110,11 +110,11 @@
         function updateMessages(){
           old = pessages.pop();
 
-          var ul = document.getElementById("datawin");
+          var ul = document.getElementById("logwin");
           var li = document.createElement("li");
           li.appendChild(document.createTextNode(old+":completed"));
           ul.appendChild(li);
-      
+
 
         };
 

@@ -80,9 +80,18 @@ body {
 		}
     #logwin {
 			z-index: 12;
-			display:block;
-      position: relative;
-			width: 280px;empty-cells:
+			ddisplay: inline-block;
+			position: absolute;
+			bottom: 0;
+			right: 0;
+			width: 290px;
+			font-weight: normal;
+		 padding : 16px 20px ;
+		 font-size: 1em;
+		 border-radius: 3px;
+		 border-color: indigo;
+		 cursor: pointer;
+		 opacity: 0.8;
     }
 
 		.innertube {
