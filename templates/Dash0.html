@@ -4,7 +4,7 @@
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
     <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()" >  </iframe>
-    <script> src="https://newbrie.github.io/Electtrek/static/logwin.js">
+    <script src="https://newbrie.github.io/Electtrek/static/logwin.js">
     </script>
   </div>
 {% endblock map %}
