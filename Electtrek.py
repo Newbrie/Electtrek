@@ -582,8 +582,9 @@ def index():
 
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
+        print("__________Session Alive:"+ session['username'])
 
-        return redirect (url_for('captains'))
+        return redirect (url_for('dashboard'))
 
     return render_template("index.html")
 
@@ -614,6 +615,7 @@ def login():
 
         session["username"] = username
 
+        flash("_______ROUTE/login User found", session['username'])
         print("__________Username", session['username'])
 
         login_user(user)
@@ -633,9 +635,7 @@ def login():
         add_boundaries('county',england)
         england.create_map_branch('county',allelectors)
         mapfile = current_node.dir+"/"+current_node.file
-        flash(session['username'] + ' is logged in at '+ mapfile)
-
-        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        return redirect(url_for('captains'))
     else:
         flash (' Not logged in ! ')
 
@@ -665,7 +665,9 @@ def dashboard ():
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
 
         mapfile = current_node.dir+"/"+current_node.file
+        redirect(url_for('captains'))
         return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+
     flash('_______ROUTE/dashboard no login session ')
 
     return redirect(url_for('index'))
@@ -1313,13 +1315,13 @@ def captains():
     formdata = {}
     formdata['country'] = "UNITED_KINGDOM"
     flash('_______ROUTE/captains')
+    print('_______ROUTE/captains')
+    formdata['importfile'] = "Captains.xlsx"
     if len(request.form) > 0:
         formdata['importfile'] = request.files['importfile'].filename
-        group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
-        mapfile = current_node.dir+"/"+current_node.file
-    else:
-        formdata['importfile'] = workdirectories['workdir']+"/Captains.xlsx"
-    return render_template('captains.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+    group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    mapfile = current_node.dir+"/"+current_node.file
+    return render_template("captains.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 
 @app.route('/cards', methods=['POST','GET'])

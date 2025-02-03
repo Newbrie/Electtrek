@@ -1,5 +1,4 @@
-{% extends "Dash0.html" %}
-
+// Listen to message from child window
 
 const pessages = [];
 var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');

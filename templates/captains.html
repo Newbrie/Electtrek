@@ -1,9 +1,8 @@
 {% extends "Dash0.html" %}
-<title>V3.3 elecTrek Captains Table</title>
 
 {% block data %}
+<div id="datawin" class="innertube">
 
-	<div id="datawin" >
 	    <table id="captains-table">
 				<thead>
 					<tr><th class="c1"> Captains Table</th>
@@ -16,7 +15,7 @@
 	      <th class="c1">Mobile</th>
 	    </tr>
 	      </thead>
-				<tbody>
+				<tbody style="height: 100px;">
 					{% for index,row in context.group.iterrows() %}
 	      <tr>
 	        <td class="c1">{{ row['CC'] }}</td>
@@ -31,10 +30,7 @@
 	      </tr>
 	      {% endfor %}
 			</tbody>
-			<tfoot>
-
-			</tfoot>
 	    </table>
-</div>
 
-{% endblock %}
+</div>
+{% endblock data %}

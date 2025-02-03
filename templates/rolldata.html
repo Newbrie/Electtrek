@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block data %}
+      <table id="data-table">
+        <thead>
+        <tr data-href="PAGE_URL"><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'>
+          ELECTORAL DATA TABLE</th>
+         </tr>
+        <tr>
+        <th class="centred" colspan='4' >Elector</th>
+        <th class="centred" colspan='4'>Address</th>
+        <th class="AV">A.V.</th>
+        <th class="VI">V.I.</th>
+        <th class="NS">Notes</th>
+      </tr>
+
+        </thead>
+        <tbody>
+          {% if context.allelectors | length > 0 %}
+          {% for index,row in context.allelectors.iterrows() %}
+        <tr>
+          <td class="c1">{{ row['PD'] }}</td>
+          <td class="c2">{{ row['ENO'] }}</td>
+          <td class="c3">{{ row['Suffix'] }}</td>
+          <td class="c4">{{ row['ElectorName'] }}</td>
+          <td class="C5">{{ row['AddressNumber'] }}</td>
+          <td class="C6">{{ row['AddressPrefix'] }}</td>
+          <td class="C7">{{ row['StreetName'] }}</td>
+          <td class="C8">{{ row['Postcode'] }}</td>
+          <td class="AV">{{ row['AV'] }} </td>
+          <td class="VI">{{ row['AV'] }} </td>
+          <td class="NS">{{ row['AV'] }} </td>
+        </tr>
+          {% endfor %}
+          {%endif%}
+      </tbody>
+
+      </table>
+
+{% endblock data %}

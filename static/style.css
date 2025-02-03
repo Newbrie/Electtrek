@@ -277,6 +277,11 @@ table {
   margin-left: 10px;
 }
 
+tbody {     
+    overflow-y: auto;    /* Trigger vertical scroll    */
+    overflow-x: hidden;  /* Hide the horizontal scroll */
+}
+
 table thead {
    	display:table-header-group;
    	font-weight: bold;
