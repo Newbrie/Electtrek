@@ -583,7 +583,7 @@ def index():
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
 
-        return redirect (url_for('dashboard'))
+        return redirect (url_for('captains'))
 
     return render_template("index.html")
 
@@ -1310,15 +1310,15 @@ def captains():
     global Featurelayers
     global environment
 
+    formdata = {}
+    formdata['country'] = "UNITED_KINGDOM"
     flash('_______ROUTE/captains')
     if len(request.form) > 0:
-        formdata = {}
-        formdata['country'] = "UNITED_KINGDOM"
         formdata['importfile'] = request.files['importfile'].filename
-
         group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
         mapfile = current_node.dir+"/"+current_node.file
-
+    else:
+        formdata['importfile'] = workdirectories['workdir']+"/Captains.xlsx"
     return render_template('captains.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 

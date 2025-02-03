@@ -8,7 +8,6 @@
   <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
   <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
   <div id="mapwin" class="innertube">
-			<h1>elecTrek - The Canvassing App</h1>
       {% block map %}
 
       {% endblock %}
@@ -17,6 +16,10 @@
 
 </head>
 <body>
+
+  {% block body %}
+
+  {% endblock %}
 
   {% block log %}
 
