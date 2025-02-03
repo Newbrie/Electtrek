@@ -556,7 +556,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 #    response.status_code = error.status_code
 #    formdata['status'] = response.status_code
 #    flash("Not found: "+formdata['status'])
-#    return render_template("Dash1.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+#    return render_template("Dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.errorhandler(HTTPException)
 def handle_exception(e):
@@ -635,7 +635,7 @@ def login():
         mapfile = current_node.dir+"/"+current_node.file
         flash(session['username'] + ' is logged in at '+ mapfile)
 
-        return render_template("Dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     else:
         flash (' Not logged in ! ')
 
@@ -665,7 +665,7 @@ def dashboard ():
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
 
         mapfile = current_node.dir+"/"+current_node.file
-        return render_template("Dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     flash('_______ROUTE/dashboard no login session ')
 
     return redirect(url_for('index'))
@@ -1121,7 +1121,7 @@ def resetdashboard():
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
-    return render_template("Dash1.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    return render_template("Dash0.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 #    else:
 #        print("__________no",  "in session", session)
 #        return render_template("index.html")
@@ -1224,7 +1224,7 @@ def normalise():
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    return render_template('Dash1.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
 
 @app.route('/walks', methods=['POST','GET'])
 def walks():
@@ -1253,7 +1253,7 @@ def walks():
         mapfile = prodwalks[2]
         group = prodwalks[0]
 #    formdata['username'] = session['username']
-        return render_template('Dash1.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+        return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -1357,7 +1357,7 @@ def cards():
                 flash ( "Electoral data for" + formdata['constituency'] + " can now be explored.")
                 mapfile =  prodcards[2]
                 group = prodcards[0]
-                return render_template('Dash1.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+                return render_template('Dash0.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

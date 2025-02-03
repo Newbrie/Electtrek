@@ -1,3 +1,4 @@
+{% extends "Dash0.html" %}
 // Listen to message from child window
 
 const pessages = [];

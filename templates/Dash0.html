@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block mapwin %}
+{% block map %}
   <div id="mapwin" class="innertube">
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
@@ -7,9 +7,9 @@
     <script src="https://newbrie.github.io/Electtrek/static/logwin.js">
     </script>
   </div>
-{% endblock mapwin %}
+{% endblock map %}
 
-{% block logwin %}
+{% block log %}
 <div id="logwin" class="innertube">
 		<h1>elecTrek Status Reports: </h1>
       <ul class="flashes" >
@@ -22,9 +22,9 @@
 				<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
 		{% endfor %}
 </div>
-{% endblock logwin %}
+{% endblock log %}
 
-{% block navwin %}
+{% block nav %}
 			<div id="nav" class="innertube">
 
         <h1>Map Data </h1>
@@ -87,9 +87,9 @@
 </script>
 
 
-{% endblock navwin %}
+{% endblock nav %}
 
-{% block datawin %}
+{% block data %}
     <div id="datawin" class="innertube">
       <table id="data-table">
         <thead>
@@ -124,9 +124,7 @@
           {% endfor %}
           {%endif%}
       </tbody>
-      <tfoot>
 
-      </tfoot>
       </table>
     </div>
-{% endblock datawin%}
+{% endblock data %}

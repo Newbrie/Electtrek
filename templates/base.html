@@ -7,24 +7,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
   <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
+  <div id="mapwin" class="innertube">
+			<h1>elecTrek - The Canvassing App</h1>
+      {% block map %}
+
+      {% endblock %}
+  </div>
+
+
 </head>
 <body>
-  {% block mapwin %}
-  {{ mapwin }}
+
+  {% block log %}
+
   {% endblock %}
 
-  {% block navwin %}
-    {{ navwin }}
+  {% block nav %}
+
   {% endblock %}
 
-  {% block logwin %}
-    {{ logwin }}
-  {% endblock %}
+  {% block data %}
 
-  {% block datawin %}
-    {{ datawin }}
   {% endblock %}
-
 </body>
 
 
