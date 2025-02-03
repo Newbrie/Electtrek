@@ -94,6 +94,7 @@ class TreeNode:
     def create_data_branch(self, electtype, namepoints):
       for (name,pt)  in namepoints:
         newnode = TreeNode(name,str(hash(name)), pt)
+        newnode.source = self.source
         print('______Data nodes',newnode.value,newnode.fid, newnode.centroid)
         self.davail = True
         self.add_Tchild(newnode, electtype)
@@ -375,7 +376,7 @@ class FGlayer:
                         self.children.append(c)
                     elif herenode.level == 3:
                         upload = "<form id='upload' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input><input type='submit' value='Polling Districts' class='btn btn-norm' onclick='''setActionForm('downPDbut')'''/></form>".format(c.dir+"/"+c.file,12,c.source)
-                        uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
+                        uptag = "<form action= '/upbut/{0}'><button type='submit' style='font-size: {2}pt;color: gray;'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
@@ -494,7 +495,10 @@ Featurelayers.append(FGlayer(id=7,name='Street Markers'))
 Featurelayers.append(FGlayer(id=8,name='Special Markers'))
 
 formdata = {}
+filename = "Surrey_HeathRegister.csv"
 allelectors = pd.DataFrame()
+#allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+
 mapfile = ""
 Directories = {}
 
@@ -552,7 +556,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 #    response.status_code = error.status_code
 #    formdata['status'] = response.status_code
 #    flash("Not found: "+formdata['status'])
-#    return render_template("dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+#    return render_template("Dash1.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.errorhandler(HTTPException)
 def handle_exception(e):
@@ -629,10 +633,9 @@ def login():
         add_boundaries('county',england)
         england.create_map_branch('county',allelectors)
         mapfile = current_node.dir+"/"+current_node.file
-        mapfile = url_for('map',path=mapfile)
         flash(session['username'] + ' is logged in at '+ mapfile)
 
-        return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     else:
         flash (' Not logged in ! ')
 
@@ -661,8 +664,8 @@ def dashboard ():
     if 'username' in session:
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
 
-        mapfile = url_for('map',path=mapfile)
-        return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        mapfile = current_node.dir+"/"+current_node.file
+        return render_template("Dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
     flash('_______ROUTE/dashboard no login session ')
 
     return redirect(url_for('index'))
@@ -721,6 +724,7 @@ def downPDbut(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
+    global filename
 
     steps = selnode.split("/")
     steps.pop()
@@ -758,8 +762,8 @@ def downPDbut(selnode):
         PDs = wardelectors.PD.unique()
         print("PDsinward", PDPts)
 
-        current_node.create_data_branch('PD',PDPts)
         current_node.source = filename
+        current_node.create_data_branch('PD',PDPts)
         Featurelayers[current_node.level+1].children = []
         Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
         Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'PD')
@@ -774,12 +778,9 @@ def downPDbut(selnode):
             flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
 
 
-
-
         mapfile = current_node.dir+"/"+current_node.file
-
     return redirect(url_for('map',path=mapfile))
-
+#    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/downSTbut/<path:selnode>', methods=['GET','POST'])
 def downSTbut(selnode):
@@ -789,6 +790,7 @@ def downSTbut(selnode):
     global workdirectories
     global allelectors
     global environment
+    global filename
 
 
     steps = selnode.split("/")
@@ -799,28 +801,6 @@ def downSTbut(selnode):
     PDPts =[]
     PDWardlist =[]
     if request.method == 'GET':
-        if current_node.source == "" or len(allelectors) == 0:
-            print ("_________Requestformfile",request.values['importfile'])
-            flash ("_________Requestformfile"+request.values['importfile'])
-            filename = request.values['importfile']
-            allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-            pfile = Treepolys[current_node.parent.level]
-            Wardboundary = pfile[pfile['FID']==current_node.parent.fid]
-            PDs = set(allelectors.PD.values)
-            print("PDsfull", PDs)
-            for PD in PDs:
-              PDelectors = getblock(allelectors,'PD',PD)
-              maplongx = statistics.mean(PDelectors.Long.values)
-              maplaty = statistics.mean(PDelectors.Lat.values)
-              PDcoordinates = Point(Decimal(maplongx),Decimal(maplaty))
-            # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-              if Wardboundary.geometry.contains(Point(Decimal(maplongx),Decimal(maplaty))).item():
-                  Ward = list(Wardboundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
-                  PDelectors['Ward'] = Ward
-                  PDWardlist.append((PD,Ward, Wardboundary))
-                  PDPts.append((PD,PDcoordinates))
-                  frames.append(PDelectors)
-            allelectors = pd.concat(frames)
 # if there is a selected file , then allelectors will be full of records
         PDelectors = getblock(allelectors, 'PD',current_node.value)
 
@@ -835,11 +815,8 @@ def downSTbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Polling District.")
-
-
         else:
             flash("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-
 
 
         for street_node in current_node.children:
@@ -973,7 +950,6 @@ def downSTbut(selnode):
 
 
     return redirect(url_for('map',path=mapfile))
-
 
 @app.route('/downconbut/<path:selnode>', methods=['GET','POST'])
 def downconbut(selnode):
@@ -1145,7 +1121,7 @@ def resetdashboard():
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
-    return render_template("dash0.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    return render_template("Dash1.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 #    else:
 #        print("__________no",  "in session", session)
 #        return render_template("index.html")
@@ -1231,8 +1207,6 @@ def normalise():
     global MapRoot
     global current_node
     global allelectors
-
-
     global Treepolys
     global Featurelayers
     global environment
@@ -1250,7 +1224,7 @@ def normalise():
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    return render_template('dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+    return render_template('Dash1.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
 
 @app.route('/walks', methods=['POST','GET'])
 def walks():
@@ -1279,7 +1253,7 @@ def walks():
         mapfile = prodwalks[2]
         group = prodwalks[0]
 #    formdata['username'] = session['username']
-        return render_template('dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+        return render_template('Dash1.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -1325,6 +1299,28 @@ def postcode():
     current_node.map.save(target)
     return redirect(url_for('dashboard'))
 
+@app.route('/captains', methods=['POST','GET'])
+def captains():
+    global workdirectories
+    global Directories
+    global MapRoot
+    global current_node
+    global allelectors
+    global Treepolys
+    global Featurelayers
+    global environment
+
+    flash('_______ROUTE/captains')
+    if len(request.form) > 0:
+        formdata = {}
+        formdata['country'] = "UNITED_KINGDOM"
+        formdata['importfile'] = request.files['importfile'].filename
+
+        group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+        mapfile = current_node.dir+"/"+current_node.file
+
+    return render_template('captains.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+
 
 @app.route('/cards', methods=['POST','GET'])
 def cards():
@@ -1359,9 +1355,9 @@ def cards():
             if formdata['streets'] > 0 :
                 print("_________formdata",formdata)
                 flash ( "Electoral data for" + formdata['constituency'] + " can now be explored.")
-                mapfile =  url_for('map',path=prodcards[2])
+                mapfile =  prodcards[2]
                 group = prodcards[0]
-                return render_template('dash1.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+                return render_template('Dash1.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

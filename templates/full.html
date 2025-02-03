@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!-- Template by Guildfoss.com -->
+<html lang="en">
+<head>
+  <base target="_parent">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
+  <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
+
+  <title>elecTrek Full</title>
+</head>
+<body>
+
+
+    <div id="mapwin" class="innertube">
+  			<h1>elecTrek - The Canvassing App</h1>
+        <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+      <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()" >  </iframe>
+  	</div>
+
+  			<div id="nav" class="innertube">
+
+          <h1>Map Data </h1>
+
+  			<h2>Generate Walks</h2>
+
+  				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
+  					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
+  					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
+  					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
+  					<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+  		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+  		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+  					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
+  					<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
+  					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
+  					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
+  			  </form>
+
+  			</div>
+  			<div id="logwin" class="innertube">
+  				<h1>elecTrek Status Reports: </h1>
+            <ul class="flashes" >
+  		</div>
+      <div id="datawin" class="innertube">
+        <table id="data-table">
+          <thead>
+          <tr data-href="PAGE_URL"><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'>
+            ELECTORAL DATA TABLE</th>
+           </tr>
+          <tr>
+          <th class="centred" colspan='4' >Elector</th>
+          <th class="centred" colspan='4'>Address</th>
+          <th class="AV">A.V.</th>
+          <th class="VI">V.I.</th>
+          <th class="NS">Notes</th>
+        </tr>
+
+          </thead>
+          <tbody>
+      </tbody>
+        <tfoot>
+
+        </tfoot>
+        </table>
+      </div>
+  	<script>
+  			    function setActionForm(action){
+  			      let form = document.getElementById("normal-file")
+  			      if (action === 'normalise') {
+  			          form.action = "{{url_for('normalise')}}";
+  			          form.method = 'POST';
+  			          document.body.style.cursor = 'wait'
+  			          form.submit();
+  			      } else if (action === 'produce') {
+  			          form.action = "{{url_for('walks')}}";
+  			          form.method = 'POST';
+  			          document.body.style.cursor = 'wait'
+  			          form.submit();
+  						} else if (action === 'canvass') {
+  								form.action = "{{url_for('cards')}}";
+  								form.method = 'POST';
+  								document.body.style.cursor = 'wait'
+  								form.submit();
+  						} else if (action === 'layeritems') {
+  								form.action = "{{url_for('layeritems')}}";
+  								form.method = 'GET';
+  								document.body.style.cursor = 'wait'
+  								form.submit();
+  						} else if (action === 'postcode') {
+  									form.action = "{{url_for('postcode')}}";
+  									form.method = 'POST';
+  									document.body.style.cursor = 'wait'
+  									form.submit();
+                  };
+  			    };
+
+              // addEventListener support for IE8
+            // Listen to message from child window
+
+          const pessages = [];
+          var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
+
+          for (let x in pack) {
+            pessages.push(pack[x]);
+          };
+
+          var iframeEl = document.getElementsByName('iframe1');
+
+          function bindEvent( element, eventName, eventHandler) {
+             if (element.addEventListener){
+                 element.addEventListener(eventName, eventHandler, false);
+             } else if (element.attachEvent) {
+                 element.attachEvent('on' + eventName, eventHandler);
+             };
+          };
+
+          bindEvent( window, 'message', function (e) {
+              pessages.pop();
+              pessages.push(e.data);
+              var ul = document.getElementById("logwin");
+              var li = document.createElement("li");
+              li.appendChild(document.createTextNode(e.data));
+              ul.appendChild(li);
+              alert("_____onmessage: "+e.data);
+          });
+
+          function updateMessages(){
+            old = pessages.pop();
+            var ul = parent.document.getElementById("logwin");
+            var li = parent.document.createElement("li");
+            li.appendChild(parent.document.createTextNode(old+":completed"));
+            ul.appendChild(li);
+            var tab = parent.document.getElementById("data-table");
+            tab.focus();
+            alert(tab.id);
+
+          };
+
+  	</script>
+
+
+
+</body>
+
+
+</html>

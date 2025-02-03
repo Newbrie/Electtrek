@@ -1,0 +1,39 @@
+{% extends "dash1.html" %}
+{% block datawin %}
+	<title>V3.3 elecTrek Captains Table</title>
+
+	<div id="datawin" >
+	    <table id="captains-table">
+				<thead>
+					<tr><th class="c1"> Captains Table</th>
+				 </tr>
+	      <tr>
+	      <th class="c1" >CC</th>
+				<th class="c1" >Firstname</th>
+				<th class="c1">Surname</th>
+	      <th class="c1">email</th>
+	      <th class="c1">Mobile</th>
+	    </tr>
+	      </thead>
+				<tbody>
+					{% for index,row in context.group.iterrows() %}
+	      <tr>
+	        <td class="c1">{{ row['CC'] }}</td>
+					<td class="c1">{{ row['Firstname'] }}</td>
+					<td class="c1">{{ row['Surname'] }}</td>
+					<td class="c1">{{ row['email'] }}</td>
+					<td class="c1"> +44
+(0
+{{ (row['mobile']|string)[0:4]}}
+){{(row['mobile']|string)[4:]}}
+  </td>
+	      </tr>
+	      {% endfor %}
+			</tbody>
+			<tfoot>
+
+			</tfoot>
+	    </table>
+</div>
+
+{% endblock %}

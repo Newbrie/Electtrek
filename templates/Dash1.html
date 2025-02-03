@@ -1,13 +1,32 @@
 {% extends "base.html" %}
-{% block body %}
+{% block mapwin %}
+<div id="mapwin" class="innertube">
+    <h1>elecTrek - The Canvassing App</h1>
 
-<base target="_self">
-  <div id="mapwin" class="innertube">
-			<h1>elecTrek - The Canvassing App</h1>
-      <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe name="iframe1" src="{{ context.mapfile }}" width="1200" height="800" onload="updateMessages()">  </iframe>
-	</div>
 
+<h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+<iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()" >  </iframe>
+<script src="https://newbrie.github.io/Electtrek/static/logwin.js">
+</script>
+
+</div>
+{% endblock %}
+{% block logwin %}
+<div id="logwin" class="innertube">
+		<h1>elecTrek Status Reports: </h1>
+      <ul class="flashes" >
+      {% for pessage in pessages %}
+        <li> {{ pessage  }}</li>
+      {% endfor %}
+      </ul>
+
+		{% for x in context.layernodelist %}
+				<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
+		{% endfor %}
+</div>
+{% endblock %}
+
+{% block navwin %}
 			<div id="nav" class="innertube">
 
         <h1>Map Data </h1>
@@ -28,60 +47,11 @@
 					<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
 					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
 					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
-			  </form>
+          <input type="submit" value="UploadCaptainsTable" class="btn btn-norm" onclick="setActionForm('captains')"/>
+		  </form>
 
 			</div>
-			<div id="logwin" class="innertube">
-				<h1>elecTrek Status Reports: </h1>
-          <ul class="flashes" >
-          {% for pessage in pessages %}
-            <li> {{ pessage  }}</li>
-          {% endfor %}
-          </ul>
-
-				{% for x in context.layernodelist %}
-						<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
-				{% endfor %}
-		</div>
-    <div id-"datawin" class="innertube">
-      <table id="data-table">
-        <thead>
-        <tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'>
-          ELECTORAL DATA TABLE</th>
-         </tr>
-        <tr>
-        <th class="centred" colspan='4' >Elector</th>
-        <th class="centred" colspan='4'>Address</th>
-        <th class="AV">A.V.</th>
-        <th class="VI">V.I.</th>
-        <th class="NS">Notes</th>
-      </tr>
-
-        </thead>
-        <tbody>
-          {% for index,row in context.allelectors.iterrows() %}
-        <tr>
-          <td class="c1">{{ row['PD'] }}</td>
-          <td class="c2">{{ row['ENO'] }}</td>
-          <td class="c3">{{ row['Suffix'] }}</td>
-          <td class="c4">{{ row['ElectorName'] }}</td>
-          <td class="C5">{{ row['AddressNumber'] }}</td>
-          <td class="C6">{{ row['AddressPrefix'] }}</td>
-          <td class="C7">{{ row['StreetName'] }}</td>
-          <td class="C8">{{ row['Postcode'] }}</td>
-          <td class="AV">{{ row['AV'] }} </td>
-          <td class="VI">{{ row['AV'] }} </td>
-          <td class="NS">{{ row['AV'] }} </td>
-
-        </tr>
-          {% endfor %}
-      </tbody>
-      <tfoot>
-
-      </tfoot>
-      </table>
-    </div>
-	<script>
+  <script>
 			    function setActionForm(action){
 			      let form = document.getElementById("normal-file")
 			      if (action === 'normalise') {
@@ -109,51 +79,56 @@
 									form.method = 'POST';
 									document.body.style.cursor = 'wait'
 									form.submit();
-                };
+              } else if (action === 'captains') {
+                    form.action = "{{url_for('captains')}}";
+                    form.method = 'POST';
+                    document.body.style.cursor = 'wait'
+                    form.submit();
+                  };
 			    };
+</script>
 
-            // addEventListener support for IE8
-          // Listen to message from child window
-
-        const pessages = [];
-        var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
-
-        for (let x in pack) {
-          pessages.push(pack[x]);
-        };
-
-        var iframeEl = document.getElementsByName('iframe1');
-
-        function bindEvent( element, eventName, eventHandler) {
-           if (element.addEventListener){
-               element.addEventListener(eventName, eventHandler, false);
-           } else if (element.attachEvent) {
-               element.attachEvent('on' + eventName, eventHandler);
-           };
-        };
-
-        bindEvent( window, 'message', function (e) {
-            pessages.pop();
-            pessages.push(e.data);
-            var ul = document.getElementById("logwin");
-            var li = document.createElement("li");
-            li.appendChild(document.createTextNode(e.data));
-            ul.appendChild(li);
-            alert("_____onmessage: "+e.data);
-
-        });
-
-        function updateMessages(){
-          old = pessages.pop();
-
-          var ul = document.getElementById("logwin");
-          var li = document.createElement("li");
-          li.appendChild(document.createTextNode(old+":completed"));
-          ul.appendChild(li);
-
-
-        };
-
-	</script>
 
 {% endblock %}
+
+{% block datawin %}
+    <div id="datawin" class="innertube">
+      <table id="data-table">
+        <thead>
+        <tr data-href="PAGE_URL"><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'>
+          ELECTORAL DATA TABLE</th>
+         </tr>
+        <tr>
+        <th class="centred" colspan='4' >Elector</th>
+        <th class="centred" colspan='4'>Address</th>
+        <th class="AV">A.V.</th>
+        <th class="VI">V.I.</th>
+        <th class="NS">Notes</th>
+      </tr>
+
+        </thead>
+        <tbody>
+          {% if context.allelectors | length > 0 %}
+          {% for index,row in context.allelectors.iterrows() %}
+        <tr>
+          <td class="c1">{{ row['PD'] }}</td>
+          <td class="c2">{{ row['ENO'] }}</td>
+          <td class="c3">{{ row['Suffix'] }}</td>
+          <td class="c4">{{ row['ElectorName'] }}</td>
+          <td class="C5">{{ row['AddressNumber'] }}</td>
+          <td class="C6">{{ row['AddressPrefix'] }}</td>
+          <td class="C7">{{ row['StreetName'] }}</td>
+          <td class="C8">{{ row['Postcode'] }}</td>
+          <td class="AV">{{ row['AV'] }} </td>
+          <td class="VI">{{ row['AV'] }} </td>
+          <td class="NS">{{ row['AV'] }} </td>
+        </tr>
+          {% endfor %}
+          {%endif%}
+      </tbody>
+      <tfoot>
+
+      </tfoot>
+      </table>
+    </div>
+  {% endblock %}

@@ -1,34 +1,55 @@
 {% extends "base.html" %}
-{% block body%}
-		<title>elecTrek</title>
+{% block mapwin %}
+  <div id="mapwin" class="innertube">
+    <h1>elecTrek - The Canvassing App</h1>
+    <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
+    <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()" >  </iframe>
+    <script src="https://newbrie.github.io/Electtrek/static/logwin.js">
+    </script>
+  </div>
+{% endblock mapwin %}
 
-    <div id="mapwin" class="innertube"><object data="{{ url_for('map',path=context.mapfile) }}" width="1200" height="800" title="Walk Map">
-    <embed src="{{ url_for('map',path=context.mapfile) }}" width="1200" height="800"> </embed> </object></div>
-<div id="nav" class="innertube">
-    <h1 >elecTrek</h1>
-		<ul>The Canvassing App</ul>
-{% for x,y in context.formdata.items() %}
-		<ul> {{ x }} : {{ y }} </ul>
-{% endfor %}
-    <ul>
-			<div class="container">
-			  <h2>Generate Walks</h2>
+{% block logwin %}
+<div id="logwin" class="innertube">
+		<h1>elecTrek Status Reports: </h1>
+      <ul class="flashes" >
+      {% for pessage in pessages %}
+        <li> {{ pessage  }}</li>
+      {% endfor %}
+      </ul>
+
+		{% for x in context.layernodelist %}
+				<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
+		{% endfor %}
+</div>
+{% endblock logwin %}
+
+{% block navwin %}
+			<div id="nav" class="innertube">
+
+        <h1>Map Data </h1>
+        {% for x,y in context.formdata.items() %}
+        		<ul> {{ x }} : {{ y }} </ul>
+        {% endfor %}
+
+			<h2>Generate Walks</h2>
+
 				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
 					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
 					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
 					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
-						<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
-			      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
-			      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
-						<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
-			  </form>
+					<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
+		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
+					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
+					<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
+					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
+					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
+          <input type="submit" value="UploadCaptainsTable" class="btn btn-norm" onclick="setActionForm('captains')"/>
+		  </form>
+
 			</div>
-			</div>
-			<div id="datawin" class="innertube">
-			<object data="/Users/newbrie/Sites/United_Kingdom/CHESHIRE_WEST_AND_CHESTER/RUNCORN_AND_HELSBY/BEECHWOOD_AND_HEATH/BH3/C13/STREETS/BH3-C13-PRINT.html" width="1200" height="200" title="Walk Map">
-	    <embed src="/Users/newbrie/Sites/United_Kingdom/CHESHIRE_WEST_AND_CHESTER/RUNCORN_AND_HELSBY/BEECHWOOD_AND_HEATH/BH3/C13/STREETS/BH3-C13-PRINT.html" width="1200" height="200"> </embed> </object>
-		  </div>
-				<script>
+  <script>
 			    function setActionForm(action){
 			      let form = document.getElementById("normal-file")
 			      if (action === 'normalise') {
@@ -41,15 +62,71 @@
 			          form.method = 'POST';
 			          document.body.style.cursor = 'wait'
 			          form.submit();
-			      } else if (action === 'canvass') {
+						} else if (action === 'canvass') {
 								form.action = "{{url_for('cards')}}";
 								form.method = 'POST';
 								document.body.style.cursor = 'wait'
 								form.submit();
-								      }
-			    }
+						} else if (action === 'layeritems') {
+								form.action = "{{url_for('layeritems')}}";
+								form.method = 'GET';
+								document.body.style.cursor = 'wait'
+								form.submit();
+						} else if (action === 'postcode') {
+									form.action = "{{url_for('postcode')}}";
+									form.method = 'POST';
+									document.body.style.cursor = 'wait'
+									form.submit();
+              } else if (action === 'captains') {
+                    form.action = "{{url_for('captains')}}";
+                    form.method = 'POST';
+                    document.body.style.cursor = 'wait'
+                    form.submit();
+                  };
+			    };
+</script>
 
-			</script>
-			<script type="text/javascript" src="https://newbrie.github.io/Electtrek/static/electorwalks.js">
-			</script>
-{% endblock %}
+
+{% endblock navwin %}
+
+{% block datawin %}
+    <div id="datawin" class="innertube">
+      <table id="data-table">
+        <thead>
+        <tr data-href="PAGE_URL"><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'>
+          ELECTORAL DATA TABLE</th>
+         </tr>
+        <tr>
+        <th class="centred" colspan='4' >Elector</th>
+        <th class="centred" colspan='4'>Address</th>
+        <th class="AV">A.V.</th>
+        <th class="VI">V.I.</th>
+        <th class="NS">Notes</th>
+      </tr>
+
+        </thead>
+        <tbody>
+          {% if context.allelectors | length > 0 %}
+          {% for index,row in context.allelectors.iterrows() %}
+        <tr>
+          <td class="c1">{{ row['PD'] }}</td>
+          <td class="c2">{{ row['ENO'] }}</td>
+          <td class="c3">{{ row['Suffix'] }}</td>
+          <td class="c4">{{ row['ElectorName'] }}</td>
+          <td class="C5">{{ row['AddressNumber'] }}</td>
+          <td class="C6">{{ row['AddressPrefix'] }}</td>
+          <td class="C7">{{ row['StreetName'] }}</td>
+          <td class="C8">{{ row['Postcode'] }}</td>
+          <td class="AV">{{ row['AV'] }} </td>
+          <td class="VI">{{ row['AV'] }} </td>
+          <td class="NS">{{ row['AV'] }} </td>
+        </tr>
+          {% endfor %}
+          {%endif%}
+      </tbody>
+      <tfoot>
+
+      </tfoot>
+      </table>
+    </div>
+{% endblock datawin%}
