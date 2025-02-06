@@ -5,4 +5,5 @@ var moveDown = function (msg,area) {
   // Send a message to the parent
       window.parent.postMessage("Fetching data about "+ area, '*');
       window.location.assign(msg);
+      alert(msg);
       };

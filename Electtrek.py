@@ -1,6 +1,6 @@
 from canvasscards import prodcards, getblock, find_boundary
-import electorwalks
-#import prodwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
+from walks import prodwalks
+#import electwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import normalised
 #import normz
 import folium
@@ -218,9 +218,12 @@ class TreeNode:
         child_node.level = self.level + 1
         child_node.dir = self.dir+"/"+child_node.value
         child_node.file = child_node.value+"-MAP.html"
-        if child_node.level == 6:
+        if child_node.level == 6 and type == 'street':
             child_node.dir = self.dir+"/STREETS"
             child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
+        if child_node.level == 6 and type == 'walk':
+            child_node.dir = self.dir+"/WALKS/"+child_node.value
+            child_node.file = self.value+"-"+child_node.value+"-MAP.html"
         child_node.davail = False
         child_node.type = type
         print("_________new child node dir:  ",child_node.dir)
@@ -383,7 +386,9 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 4:
-                        upload = "<form id='upload' action= '/downSTbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input><input type='submit' value='Streets' class='btn btn-norm' onclick='''setActionForm('downSTbut')'''/></form>".format(c.dir+"/"+c.file,12,c.parent.source)
+                        streetsbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
+                        walksbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
+                        upload = "<form id='upload' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload
                         c.tagno = len(self.children)+1
@@ -817,8 +822,10 @@ def downSTbut(selnode):
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Polling District.")
+            print("Can't find any elector data for this Polling District.")
         else:
             flash("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
+            print("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
 
 
         for street_node in current_node.children:
@@ -1249,11 +1256,11 @@ def walks():
         formdata['candfirst'] =  request.form["candfirst"]
         formdata['candsurn'] = request.form["candsurn"]
         formdata['electiondate'] = request.form["electiondate"]
-        prodwalks = electorwalks.prodwalks(current_node,formdata['importfile'], formdata)
-        formdata = prodwalks[1]
-        print("_________Mapfile",prodwalks[2])
-        mapfile = prodwalks[2]
-        group = prodwalks[0]
+        electwalks = prodwalks(current_node,formdata['importfile'], formdata,Treepolys, environment, Featurelayers)
+        formdata = electwalks[1]
+        print("_________Mapfile",electwalks[2])
+        mapfile = electwalks[2]
+        group = electwalks[0]
 #    formdata['username'] = session['username']
         return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
     return redirect(url_for('dashboard'))

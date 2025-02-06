@@ -1,14 +1,14 @@
+import folium
+from json import JSONEncoder
 from folium.features import DivIcon
 from folium.utilities import JsCode
 from folium.plugins import MarkerCluster
-import folium
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
 import numpy as np
 import os, sys, math, stat, json , jinja2
 from os import listdir, system
-import subprocess
 import statistics
 from sklearn.cluster import KMeans
 import io
@@ -16,8 +16,7 @@ import io
 import re
 from decimal import Decimal
 from pyproj import Proj
-from flask import Flask,render_template, url_for, flash
-#from electtrek import locmappath, TreeNode, workdirectories, flayers
+from flask import Flask,render_template, url_for
 
 def getblock(source,joincol, colvalue):
   colvalfilter = pd.DataFrame([[colvalue]], columns=[joincol])
@@ -32,8 +31,7 @@ def find_boundary(polyfile,here):
             return polyfile[polyfile['FID']==index+1]
     return
 
-
-def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
+def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
     global workdirectories
     global Directories
     global MapRoot
@@ -70,7 +68,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 
     # fg1/2/3 list maintains a cumulative list of ward and div boundaries to be added as the constituency poly layer in f4 anf f5
     # fg2w/p/c flayers[4]w/p/c are overwritten single value poly + div polygons added to each Ward , PDmap and Walk maps - no lists needed
-    # for each group of electorwalks create a MAP and TEXT file.
+    # for each group of walk create a MAP and TEXT file.
 
     if Env1.find("Orange")>0:
         from Orange.data import ContinuousVariable, StringVariable, DiscreteVariable, Domain
@@ -415,7 +413,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
         PD = PD_node.value
         flayers[5].children = []
         flayers[5].fg = folium.FeatureGroup(id='6', name='PD Markers', overlay=True, control=True, show=True)
-#        flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
+    #        flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
 
         PDelectors = getblock(allelectors,'PD',PD)
         maplongx = statistics.mean(PDelectors.Long.values)
@@ -437,38 +435,38 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           add_to_ward_layer (Wardboundary, flayers[4].fg, "UP", Ward)
           add_to_ward_layer (Wardboundary, flayers[4].fg, "UPpd", Ward)
 
-#        Divboundary = find_boundary(TreeBounds[4],Point(Decimal(maplongx),Decimal(maplaty)))
+    #        Divboundary = find_boundary(TreeBounds[4],Point(Decimal(maplongx),Decimal(maplaty)))
 
-#        if Divboundary is None:
-#          print("Cant find Divboundary - Lat Long:",maplaty,maplongx)
-#        else:
-#          Divname = str(Divboundary['NAME'].values[0]).replace(r'[^A-Za-z0-9\& ]+', '').replace(",","").replace(" & "," AND ").upper().replace(" ","_")
-#          Divfid = Divboundary['FID'].values[0]
-#          gapnode.create_data_branch(Divname)
-#          div_node = gapnode.child
-#          div_node.type = "div"
-#          pfile = TreeBounds[4]
-#          Divboundary = pfile[pfile['FID']==Divfid]
+    #        if Divboundary is None:
+    #          print("Cant find Divboundary - Lat Long:",maplaty,maplongx)
+    #        else:
+    #          Divname = str(Divboundary['NAME'].values[0]).replace(r'[^A-Za-z0-9\& ]+', '').replace(",","").replace(" & "," AND ").upper().replace(" ","_")
+    #          Divfid = Divboundary['FID'].values[0]
+    #          gapnode.create_data_branch(Divname)
+    #          div_node = gapnode.child
+    #          div_node.type = "div"
+    #          pfile = TreeBounds[4]
+    #          Divboundary = pfile[pfile['FID']==Divfid]
 
-#          upfromdivtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.parent.dir+"/"+div_node.parent.file,"UP",10)
-#          upfrompdtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"UP",10)
-#          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"DOWN",10)
-#          downpdtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(PD_node.dir+"/"+PD_node.file,"DOWN",10)
-#          Div = Divname+"-MAP.html"
-#          Divboundary["Downcon"] =  "<br>"+Divname+"</br>"+downtag
-#          Divboundary["Downdiv"] =  "<br>"+Divname+"</br>"+downpdtag
-#          Divboundary["UPdiv"] =  "<br>"+Divname+"</br>"+upfromdivtag
-#          Divboundary["UPpd"] =  "<br>"+Divname+"</br>"+upfrompdtag
-#          Divdir = locmappath(Codir+"/"+Divname,"")
-#          PDDivdir = locmappath(Divdir+"/"+str(PD),Wadir+"/"+str(PD))
-#
-#          Divmap = add_to_divs_layer (flayers[4].children, Divboundary, flayers[4].fg, "UPdiv",Divname)
+    #          upfromdivtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.parent.dir+"/"+div_node.parent.file,"UP",10)
+    #          upfrompdtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"UP",10)
+    #          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(div_node.dir+"/"+div_node.file,"DOWN",10)
+    #          downpdtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(PD_node.dir+"/"+PD_node.file,"DOWN",10)
+    #          Div = Divname+"-MAP.html"
+    #          Divboundary["Downcon"] =  "<br>"+Divname+"</br>"+downtag
+    #          Divboundary["Downdiv"] =  "<br>"+Divname+"</br>"+downpdtag
+    #          Divboundary["UPdiv"] =  "<br>"+Divname+"</br>"+upfromdivtag
+    #          Divboundary["UPpd"] =  "<br>"+Divname+"</br>"+upfrompdtag
+    #          Divdir = locmappath(Codir+"/"+Divname,"")
+    #          PDDivdir = locmappath(Divdir+"/"+str(PD),Wadir+"/"+str(PD))
+    #
+    #          Divmap = add_to_divs_layer (flayers[4].children, Divboundary, flayers[4].fg, "UPdiv",Divname)
 
 
-#          add_to_div_layer (Divboundary, flayers[4].fg,"UPdiv", Divname)
-#          add_to_div_layer (Divboundary, flayers[4].fg,"UPpd", Divname)
+    #          add_to_div_layer (Divboundary, flayers[4].fg,"UPdiv", Divname)
+    #          add_to_div_layer (Divboundary, flayers[4].fg,"UPpd", Divname)
 
-# calc number of clusters in PDelectors and use kmeans to label them in a new column 'Clabel'
+    # calc number of clusters in PDelectors and use kmeans to label them in a new column 'Clabel'
         x = PDelectors.Long.values
         y = PDelectors.Lat.values
         kmeans_dist_data = list(zip(x, y))
@@ -510,67 +508,62 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
            )
           )
 
-#        if Divboundary is not None:
-#          Divmap.add_child(
-#            folium.Marker(
-#              location=PDcoordinates,
-#              icon = folium.DivIcon(html= downpdtag,
-#              class_name = "leaflet-div-icon",
-#              icon_size=(5,30),
-#              icon_anchor=(5,30)),
-#              ))
+    #        if Divboundary is not None:
+    #          Divmap.add_child(
+    #            folium.Marker(
+    #              location=PDcoordinates,
+    #              icon = folium.DivIcon(html= downpdtag,
+    #              class_name = "leaflet-div-icon",
+    #              icon_size=(5,30),
+    #              icon_anchor=(5,30)),
+    #              ))
 
         clusters = PDelectors.Clabel.unique()
         print ("____________clusters",clusters)
         c = 0
+        prodstats['clusters'] = int(prodstats['clusters']) + clusters
 
-        CCstreets = PDelectors.StreetName.unique()
-        prodstats['streets'] = int(prodstats['streets']) + len(CCstreets)
+        walksdir = PD_node.dir+"/WALKS/"
 
-        streetsdir = PD_node.dir+"/STREETS/"
+        PD_node.create_data_branch('walk',clusters)
 
-        PD_node.create_data_branch('street',CCstreets)
+#code from here
+        for walk_node in PD_node.children:
 
-        for street_node in PD_node.children:
-          street = street_node.value
-          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",10)
-          flayers[6].children = []
-          flayers[6].fg = folium.FeatureGroup(id=7, name='Street Markers', overlay=True, control=True, show=True)
-#          flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
-          Wardboundary["UPstreet"] = "<br>"+Ward+"</br>"+ uptag
-          add_to_ward_layer (Wardboundary, flayers[6].fg,"UPstreet", Ward)
+          flayers[6].fg = folium.FeatureGroup(name='Ward Boundary', overlay=True, control=True, show=True)
+          Wardboundary["UPcluster"] = "<br>"+Ward+"</br>"+ goup("WALK",PD,"UP",12)
+          add_to_ward_layer (Wardboundary, flayers[6].fg,"UPcluster", walk_node.parent.parent.value)
 
-#          if Divboundary is not None:
-#            Divboundary["UPstreet"] =  "<br>"+Divname+"</br>"+uptag
-#            add_to_div_layer (Divboundary, flayers[4].fg, "UPstreet", Divname)
-
-          electorwalks = getblock(PDelectors, 'StreetName',street)
-          maplongx = statistics.mean(electorwalks.Long.values)
-          maplaty = statistics.mean(electorwalks.Lat.values)
+          walk = getblock(PDelectors, 'Clabel',walk_node.value)
+          maplongx = statistics.mean(walk.Long.values)
+          maplaty = statistics.mean(walk.Lat.values)
           walkcoordinates = [maplaty, maplongx]
-          STREET_ = street.replace(r'[^A-Za-z0-9\& ]+', '').replace(",","").replace(" & "," AND ").upper().replace(" ","_")
 
-
+          walk_node.dir = walk_node.locmappath("")
           here = Point(Decimal(maplongx),Decimal(maplaty))
 
-          Postcode = electorwalks.loc[0].Postcode
+          sw = walk[['Lat', 'Long']].min().values.tolist()
+          ne = walk[['Lat', 'Long']].max().values.tolist()
+          swne = [sw,ne]
+          Walkmap = walk_node.create_area_map (flayers, walk)
 
-          walk_name = PD+"-"+STREET_
-          street_node.dir =  streetsdir
-          street_node.file =  STREET_+"-PRINT.html"
-          type_colour = "indigo"
+          Postcode = walk.loc[0].Postcode
+          type_colour = allowed[walk_node.value]
+
     #      BMapImg = walk_name+"-MAP.png"
 
         # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
-          geometry = gpd.points_from_xy(electorwalks.Long.values,electorwalks.Lat.values, crs="EPSG:4326")
+          geometry = gpd.points_from_xy(walk.Long.values,walk.Lat.values, crs="EPSG:4326")
         # create a geo dataframe for the Walk Map
           geo_df1 = gpd.GeoDataFrame(
-            electorwalks, geometry=geometry
+            walk, geometry=geometry
             )
 
         # Create a geometry list from the GeoDataFrame
           geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
           CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+
+          type_colour = allowed[walk_node.value]
 
 
     #      marker_cluster = MarkerCluster().add_to(Walkmap)
@@ -578,50 +571,63 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 
 
           for streetcoordinates in CL_unique_list:
-            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",12)
-            downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.dir+"/"+street_node.file,street_node.value,12)
 
             # in the Walk map add Street-postcode groups to the walk map with controls to go back up to the PD map or down to the Walk addresses
-            popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(Ward,STREET_, Postcode, uptag, downtag,12)
+            print("________WardMarker",walk_node.parent.parent.value, "|",walk_node.value)
+            downtag = "<form action= '/downwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(walk_node.dir+"/"+walk_node.file,"WALK",12)
+            uptag = "<form action= '/upwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(PD_node.parent.dir+"/"+PD_node.parent.file,"WARD",12)
+#            Wardboundary['UPDOWN'] = "<br>"+walk_node.value+"<br>"+ uptag +"<br>"+ downtag
+            c.tagno = len(self.children)+1
+
+            popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walk_node.parent.parent.value,walk_node.parent.value, Postcode, uptag, downtag,12)
 
             # in the PD map add PD-cluster walks to the PD map with controls to go back up to the Ward map or down to the Walk map
-            flayers[6].fg.add_child(
+            walk_node.parent.map.add_child(
               folium.Marker(
                  location=streetcoordinates,
                  popup = popuptext,
                  icon=folium.Icon(color = type_colour,  icon='search'),
                  )
                  )
+            popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walk_Node.parent.parent.value,walk_node.value, Postcode, uptag, downtag,12)
 
+            walk_node.map.add_child(
+                folium.Marker(
+                    location=streetcoordinates,
+                    popup= popuptext,
+                    icon=folium.Icon(color = type_colour),
+                )
+                )
 
-        #      img_data = Walkmap._to_png(1)
+          os.chdir(walkdir)
+
+          walk_node.map.add_child(flayers[6])
+          walk_node.map.save(walk_node.file)
+    #      img_data = Walkmap._to_png(1)
     #      img = Image.open(io.BytesIO(img_data))
     #      img.save(BMapImg)
     #      mapfull = BMapImg
 
-          electorwalks['Team'] = ""
-          electorwalks['M1'] = ""
-          electorwalks['M2'] = ""
-          electorwalks['M3'] = ""
-          electorwalks['M4'] = ""
-          electorwalks['M5'] = ""
-          electorwalks['M6'] = ""
-          electorwalks['M7'] = ""
-          electorwalks['Notes'] = ""
+          walk['Team'] = ""
+          walk['M1'] = ""
+          walk['M2'] = ""
+          walk['M3'] = ""
+          walk['M4'] = ""
+          walk['M5'] = ""
+          walk['M6'] = ""
+          walk['M7'] = ""
+          walk['Notes'] = ""
+          walk['HB'] = ""
 
-          groupelectors = electorwalks.shape[0]
-          if math.isnan(Decimal(electorwalks.Elevation.max())):
-              climb = 0
-          else:
-              climb = int(Decimal(electorwalks.Elevation.max()) - Decimal(electorwalks.Elevation.min()))
-
-          x = electorwalks.AddressNumber.values
-          y = electorwalks.StreetName
-          z = electorwalks.AddressPrefix.values
+          clusterelectors = walk.shape[0]
+          climb = walk.Elevation.max() - walk.Elevation.min()
+          x = walk.AddressNumber.values
+          y = walk.StreetName
+          z = walk.AddressPrefix.values
           houses = len(list(set(zip(x,y,z))))
-          streets = len(electorwalks.StreetName.unique())
-    #      longs = [electorwalks.Long.min(), electorwalks.Long.max()]
-    #      lats = [electorwalks.Lat.min(),electorwalks.Lat.max()]
+          streets = len(walk.StreetName.unique())
+    #      longs = [walk.Long.min(), walk.Long.max()]
+    #      lats = [walk.Lat.min(),walk.Lat.max()]
 
     # areamsq comes from zoom level 18 of leaflet tiles
           areamsq = 34*21.2*20*21.2
@@ -645,9 +651,10 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           canvasssample = .5
           leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
           canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
+          prodstats['constituency'] = constituency
           prodstats['ward'] = Ward
           prodstats['PD'] = PD
-          prodstats['groupelectors'] = groupelectors
+          prodstats['groupelectors'] = clusterelectors
           prodstats['climb'] = climb
           prodstats['houses'] = houses
           prodstats['streets'] = streets
@@ -655,56 +662,42 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           prodstats['leafhrs'] = round(leafhrs,2)
           prodstats['canvasshrs'] = round(canvasshrs,2)
 
-          electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
+          walk['ENOP'] =  walk['ENO']+ walk['Suffix']/10
 
-          results_filename = walk_name+"-PRINT.html"
+          mapfull = walk_node.file
 
-
+          results_filename = walk_node.parent.value+"-"+walk_node.value+"-TEXT.html"
           context = {
-            "group": electorwalks,
-            "prodstats": prodstats,
-            "mapfile": "../STREETS/"+PDMapfile,
-            }
-          results_template = enviro.get_template('canvasscard1.html')
+              "group": walk,
+              "prodstats": prodstats,
+              "mapfile": walk_node.parent.file,
+              }
+
+          results_template = enviro.get_template("canvasscard1.html")
 
           with open(results_filename, mode="w", encoding="utf-8") as results:
             results.write(results_template.render(context, url_for=url_for))
-
-
           c = c + 1
-        target = PD_node.locmappath("")
-        for r in range(5,7):
-          PDmap.add_child(flayers[r].fg)
-#        PDmap.add_child(folium.LayerControl())
-        PDmap.save(target)
+        os.chdir(PD_node.dir)
+        PD_node.map.save(PD_node.file)
         p = p + 1
-      target =  ward_node.locmappath("")
-      for r in range(4,6):
-         Wardmap.add_child(flayers[r].fg)
-#      Wardmap.add_child(folium.LayerControl())
-      Wardmap.save(target)
+      os.chdir(ward_node.dir)
+      ward_node.map.save(ward_node.file)
       w = w + 1
-#      if w == 3:
-#          raise Exception('XYZ')
+
 #    for fid,fmap,fdir,fpath in DivMapfilelist:
      # print ("fmaplist:",fid,fmap,fdir,fpath)
-#      fmap.add_child(flayers[0].fg)
-#      fmap.add_child(flayers[1].fg)
-#      fmap.add_child(flayers[2].fg)
-#      fmap.add_child(flayers[3].fg)
-#      fmap.add_child(flayers[4].fg)
+#      fmap.add_child(fg1)
+#      fmap.add_child(fg5)
 #      fmap.add_child(folium.LayerControl())
-#      target = div_node.locmappath("")
-#      fmap.save(target)
+#      os.chdir(fdir)
+#      fmap.save(fpath)
 
     target = gapnode.locmappath("")
-    for r in range(1,4):
-        Conmap.add_child(flayers[r].fg)
-#    Conmap.add_child(folium.LayerControl())
     gapnode.map.save(target)
-    prodstats['status'] = "Street Cards generated"
-    return [allelectors, prodstats,gapnode.dir+"/"+gapnode.file]
+    prodstats['status'] = "Walk generation complete"
+    return [allelectors, prodstats, gapnode.dir+"/"+gapnode.file]
 
 if __name__ == "__main__":
     # this won't be run when imported
-    prodcards()
+    produce()
