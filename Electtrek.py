@@ -378,21 +378,23 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 3:
-                        upload = "<form id='upload' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input><input type='submit' value='Polling Districts' class='btn btn-norm' onclick='''setActionForm('downPDbut')'''/></form>".format(c.dir+"/"+c.file,12,c.source)
+                        PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downPDbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
+                        upload = "<form id='uploadPD' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}'><button type='submit' style='font-size: {2}pt;color: gray;'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+PDbtn
                         c.tagno = len(self.children)+1
-                        print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
+                        print("_________new Ward value and tagno:  ",c.value, c.tagno, PDbtn)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 4:
-                        streetsbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
-                        walksbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
+                        STbtn = "moveDown(&#39;"+url_for('downSTbut',selnode=c.dir+'/'+c.file)+"&#39;,&#39;"+c.value+"&#39;)"
+                        streetsbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format(STbtn)
+                        walksbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='{0}'/>".format(STbtn)
                         upload = "<form id='upload' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload
                         c.tagno = len(self.children)+1
-                        print("_________new split child boundary value and tagno:  ",c.value, c.tagno)
+                        print("_________new PD value and tagno:  ",c.value, c.tagno, STbtn)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     else :
@@ -741,6 +743,7 @@ def downPDbut(selnode):
     PDPts =[]
     PDWardlist =[]
     if request.method == 'GET':
+        print ("_________ROUTE/downPDbut", current_node.source, len(allelectors))
         if current_node.source == "" or len(allelectors) == 0:
             print ("_________Requestformfile",request.values['importfile'])
             flash ("_________Requestformfile"+request.values['importfile'])
@@ -777,12 +780,14 @@ def downPDbut(selnode):
         map = current_node.create_area_map(Featurelayers,wardelectors)
         mapfile = current_node.dir+"/"+current_node.file
 
+
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
             flash("Can't find any elector data for this Ward.")
 
             allelectors = []
         else:
             flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
+            print("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
 
 
         mapfile = current_node.dir+"/"+current_node.file
@@ -807,6 +812,7 @@ def downSTbut(selnode):
     frames = []
     PDPts =[]
     PDWardlist =[]
+    raise Exception('XYZ')
     if request.method == 'GET':
 # if there is a selected file , then allelectors will be full of records
         PDelectors = getblock(allelectors, 'PD',current_node.value)
