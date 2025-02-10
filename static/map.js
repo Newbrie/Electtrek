@@ -9,5 +9,6 @@ var moveDown = function (msg,area) {
       };
 
 function chgAction( action_name ) {
-        document.search-theme-form.action = action_name;
+        element = document.getElementsByName('search-theme-form');
+        element.action = action_name;
     };
