@@ -35,13 +35,21 @@ from werkzeug.exceptions import HTTPException
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
+def getchildtype(parent):
+    levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector']
+    if parent == 'ward' or parent == 'division':
+        parent = 'ward/division'
+    elif parent == 'walk' or parent == 'street' :
+        parent = 'walk/division'
+    elif parent == 'elector':
+        return 'elector'
+    return levels[levels.index(parent)+1]
 
 def is_safe_url(target):
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url,target))
     return test_url.scheme in ('http', 'https') and \
             ref_url.netloc == test_url.netloc
-
 
 class TreeNode:
     def __init__(self, value, fid, roid):
@@ -348,7 +356,7 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)"
+                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
@@ -357,7 +365,7 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
-                        downmessage = "moveDown(&#39;/downconbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)"
+                        downmessage = "moveDown(&#39;/downconbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
                         downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
@@ -366,8 +374,8 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downmessage = "moveDown(&#39;/downwardbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)"
-                        downmessage1 = "moveDown(&#39;/downdivbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)"
+                        downmessage = "moveDown(&#39;/downwardbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
+                        downmessage1 = "moveDown(&#39;/downdivbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
                         downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"WARDS",12)
                         downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage1,"DIVS",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -377,7 +385,7 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 3:
-                        PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downPDbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)")
+                        PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downPDbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)")
                         upload = "<form id='uploadPD' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}'><button type='submit' style='font-size: {2}pt;color: gray;'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+PDbtn
@@ -390,8 +398,8 @@ class FGlayer:
 #                        streetsbtn = "<input type='submit' form='uploadST' value='Streets' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        walksbtn = "<input type='submit' form='uploadST' value='Walks' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        upload = "<form id='uploadST' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
-                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+c.type+"&#39;)")
-                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='chgAction(/downWKbut/{0}'/>".format(c.dir+'/'+c.file)
+                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)")
+                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='chgAction(/downWKbut/{0},&#39;{1}&#39;,&#39;{2}&#39;'/>".format(c.dir+'/'+c.file, c.value, getchildtype(c.type))
                         upload = "<form id='upload' action= '/downSTbut/{0}' name='search-theme-form' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+"<br>"+STbtn+WKbtn
@@ -775,10 +783,10 @@ def downPDbut(selnode):
         print("PDsinward", PDPts)
 
         current_node.source = filename
-        current_node.create_data_branch('PD',PDPts)
+        current_node.create_data_branch('polling district',PDPts)
         Featurelayers[current_node.level+1].children = []
         Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-        Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'PD')
+        Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'polling district')
         map = current_node.create_area_map(Featurelayers,wardelectors)
         mapfile = current_node.dir+"/"+current_node.file
 
@@ -930,7 +938,7 @@ def downSTbut(selnode):
               canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
               prodstats = {}
               prodstats['ward'] = current_node.parent.parent.value
-              prodstats['PD'] = current_node.parent.value
+              prodstats['polling district'] = current_node.parent.value
               prodstats['groupelectors'] = groupelectors
               prodstats['climb'] = climb
               prodstats['houses'] = houses
@@ -1126,7 +1134,7 @@ def downWKbut(selnode):
               canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
               prodstats = {}
               prodstats['ward'] = current_node.parent.parent.value
-              prodstats['PD'] = current_node.parent.value
+              prodstats['polling district'] = current_node.parent.value
               prodstats['groupelectors'] = groupelectors
               prodstats['climb'] = climb
               prodstats['houses'] = houses

@@ -8,7 +8,10 @@ var moveDown = function (msg,area, type) {
       alert(msg+"::"+type+" "+area);
       };
 
-function chgAction( action_name ) {
+function chgAction( action_name , area, type) {
         element = document.getElementsByName('search-theme-form');
         element.action = action_name;
+        window.parent.postMessage("Fetching the "+type+ " set within "+ area, '*');
+        window.location.assign(action_name);
+        alert(msg+"::"+type+" "+area);
     };
