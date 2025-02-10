@@ -356,7 +356,7 @@ class FGlayer:
                         limb = gpd.GeoDataFrame(df, geometry= [convex], crs="EPSG:4326")
 
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downcountbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
+                        downmessage = "moveDown(&#39;/downcountbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
@@ -365,7 +365,7 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
-                        downmessage = "moveDown(&#39;/downconbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
+                        downmessage = "moveDown(&#39;/downconbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
@@ -374,8 +374,8 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downmessage = "moveDown(&#39;/downwardbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
-                        downmessage1 = "moveDown(&#39;/downdivbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)"
+                        downmessage = "moveDown(&#39;/downwardbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        downmessage1 = "moveDown(&#39;/downdivbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"WARDS",12)
                         downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage1,"DIVS",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -385,7 +385,8 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 3:
-                        PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downPDbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)")
+                        downPDmessage = "moveDown(&#39;/downPDbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format(downPDmessage)
                         upload = "<form id='uploadPD' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}'><button type='submit' style='font-size: {2}pt;color: gray;'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+PDbtn
@@ -398,8 +399,10 @@ class FGlayer:
 #                        streetsbtn = "<input type='submit' form='uploadST' value='Streets' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        walksbtn = "<input type='submit' form='uploadST' value='Walks' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        upload = "<form id='uploadST' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
-                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='moveDown(&#39;/downSTbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;'/>".format(c.dir+"/"+c.file, c.value, getchildtype(c.type))
-                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='chgAction(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;'/>".format(c.dir+'/'+c.file, c.value, getchildtype(c.type))
+                        downSTmessage = "moveDown(&#39;/downSTbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;".format(c.dir+"/"+c.file, c.value, getchildtype(c.type))
+                        downWKmessage = "moveDown(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;".format(c.dir+"/"+c.file, c.value, getchildtype(c.type))
+                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format(downSTmessage)
+                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='{0}'/>".format(downWKmessage)
                         upload = "<form id='upload' action= '/downSTbut/{0}' name='search-theme-form' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+"<br>"+STbtn+WKbtn
