@@ -7,3 +7,7 @@ var moveDown = function (msg,area) {
       window.location.assign(msg);
       alert(msg+"::"+area);
       };
+
+function chgAction( action_name ) {
+        document.search-theme-form.action = action_name;
+    };

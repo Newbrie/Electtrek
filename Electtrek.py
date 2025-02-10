@@ -387,12 +387,15 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 4:
-                        STbtn = "moveDown(&#39;"+url_for('downSTbut',selnode=c.dir+'/'+c.file)+"&#39;,&#39;"+c.value+"&#39;)"
-                        streetsbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format(STbtn)
-                        walksbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='{0}'/>".format(STbtn)
-                        upload = "<form id='upload' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
+#                        STbtn = "moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)"
+#                        streetsbtn = "<input type='submit' form='uploadST' value='Streets' class='btn btn-norm' onclick={0}/>".format(STbtn)
+#                        walksbtn = "<input type='submit' form='uploadST' value='Walks' class='btn btn-norm' onclick={0}/>".format(STbtn)
+#                        upload = "<form id='uploadST' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
+                        STbtn = "<input type='submit' form='uploadST' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;)")
+                        WKbtn = "<input type='submit' form='uploadST' value='Walks' class='btn btn-norm' onclick='{0}'/>".format("chgAction('/downWKbut/{0}')")
+                        upload = "<form id='uploadST' action= '/downSTbut/{0}' name='search-theme-form' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+"<br>"+STbtn+WKbtn
                         c.tagno = len(self.children)+1
                         print("_________new PD value and tagno:  ",c.value, c.tagno, STbtn)
                         mapfile = "/map/"+c.dir+"/"+c.file
@@ -812,7 +815,6 @@ def downSTbut(selnode):
     frames = []
     PDPts =[]
     PDWardlist =[]
-    raise Exception('XYZ')
     if request.method == 'GET':
 # if there is a selected file , then allelectors will be full of records
         PDelectors = getblock(allelectors, 'PD',current_node.value)
@@ -947,6 +949,191 @@ def downSTbut(selnode):
 
               context = {
                 "group": electorwalks,
+                "prodstats": prodstats,
+                "mapfile": url_for('map',path=map_filename),
+                "datafile": url_for('map',path=data_filename),
+                "walkname": walk_name,
+                }
+              results_template = environment.get_template('canvasscard1.html')
+
+              with open(results_filename, mode="w", encoding="utf-8") as results:
+                results.write(results_template.render(context, url_for=url_for))
+
+        print ("________Heading for the Streets in PD :  ",current_node.value)
+        if len(Featurelayers[current_node.level].children) == 0:
+            flash("Can't find any Streets for this PD.")
+        else:
+            flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].children)))
+
+
+    return redirect(url_for('map',path=mapfile))
+
+@app.route('/downWKbut/<path:selnode>', methods=['GET','POST'])
+def downWKbut(selnode):
+    global Treepolys
+    global current_node
+    global Featurelayers
+    global workdirectories
+    global allelectors
+    global environment
+    global filename
+
+
+    steps = selnode.split("/")
+    steps.pop()
+    current_node = selected_childnode(current_node,steps[-1])
+    mapfile = current_node.dir+"/"+current_node.file
+    frames = []
+    PDPts =[]
+    PDWardlist =[]
+    if request.method == 'GET':
+# if there is a selected file , then allelectors will be full of records
+        PDelectors = getblock(allelectors, 'PD',current_node.value)
+
+        x = PDelectors.Long.values
+        y = PDelectors.Lat.values
+        kmeans_dist_data = list(zip(x, y))
+
+        walkset = min(math.ceil(PDelectors.shape[0]/100),35)
+
+        kmeans = KMeans(n_clusters=walkset)
+        kmeans.fit(kmeans_dist_data)
+
+        klabels1 = np.char.mod('C%d', kmeans.labels_)
+        klabels = klabels1.tolist()
+
+        PDelectors.insert(0, "WalkName", klabels)
+
+        CCstreets = PDelectors.StreetName.unique()
+        StreetPts = [(x[0],Point(x[1],x[2])) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
+        current_node.create_data_branch('walk',klabels)
+        Featurelayers[current_node.level+1].children = []
+        Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
+        Featurelayers[current_node.level+1].add_linesandmarkers(current_node, 'walk')
+        map = current_node.create_area_map(Featurelayers,PDelectors)
+        mapfile = current_node.dir+"/"+current_node.file
+
+        if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
+            flash("Can't find any elector data for this Polling District.")
+            print("Can't find any elector data for this Polling District.")
+        else:
+            flash("________walks added  :  "+str(len(Featurelayers[current_node.level+1].children)))
+            print("________walks added  :  "+str(len(Featurelayers[current_node.level+1].children)))
+
+
+        for walk_node in current_node.children:
+              walk = walk_node.value
+    #          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",10)
+    #          flayers[6].children = []
+    #          flayers[6].fg = folium.FeatureGroup(id=7, name='Street Markers', overlay=True, control=True, show=True)
+    #          flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
+    #          Wardboundary["UPstreet"] = "<br>"+Ward+"</br>"+ uptag
+    #          add_to_ward_layer (Wardboundary, flayers[6].fg,"UPstreet", Ward)
+
+    #          if Divboundary is not None:
+    #            Divboundary["UPstreet"] =  "<br>"+Divname+"</br>"+uptag
+    #            add_to_div_layer (Divboundary, flayers[4].fg, "UPstreet", Divname)
+
+              walkelectors = getblock(PDelectors, 'WalkName',walk_node.value)
+    #          maplongx = statistics.mean(walkelectors.Long.values)
+    #          maplaty = statistics.mean(walkelectors.Lat.values)
+    #          walkcoordinates = [maplaty, maplongx]
+              WALK_ = walk_node.value
+
+#              here = Point(Decimal(maplongx),Decimal(maplaty))
+
+    #          Postcode = walkelectors.loc[0].Postcode
+
+              walk_name = current_node.value+"-"+WALK_
+              type_colour = "indigo"
+        #      BMapImg = walk_name+"-MAP.png"
+
+            # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
+              geometry = gpd.points_from_xy(walkelectors.Long.values,walkelectors.Lat.values, crs="EPSG:4326")
+            # create a geo dataframe for the Walk Map
+              geo_df1 = gpd.GeoDataFrame(
+                walkelectors, geometry=geometry
+                )
+
+            # Create a geometry list from the GeoDataFrame
+              geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
+              CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+
+    #          for streetcoordinates in CL_unique_list:
+    #            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",12)
+    #            downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.dir+"/"+street_node.file,street_node.value,12)
+
+                # in the Walk map add Street-postcode groups to the walk map with controls to go back up to the PD map or down to the Walk addresses
+    #            popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(Ward,STREET_, Postcode, uptag, downtag,12)
+
+                # in the PD map add PD-cluster walks to the PD map with controls to go back up to the Ward map or down to the Walk map
+    #            flayers[6].fg.add_child(
+    #              folium.Marker(
+    #                 location=streetcoordinates,
+    #                 popup = popuptext,
+    #                 icon=folium.Icon(color = type_colour,  icon='search'),
+    #                 )
+    #                 )
+
+
+            #      img_data = Walkmap._to_png(1)
+        #      img = Image.open(io.BytesIO(img_data))
+        #      img.save(BMapImg)
+        #      mapfull = BMapImg
+
+              walkelectors['Team'] = ""
+              walkelectors['M1'] = ""
+              walkelectors['M2'] = ""
+              walkelectors['M3'] = ""
+              walkelectors['M4'] = ""
+              walkelectors['M5'] = ""
+              walkelectors['M6'] = ""
+              walkelectors['M7'] = ""
+              walkelectors['Notes'] = ""
+
+              groupelectors = walkelectors.shape[0]
+              if math.isnan(Decimal(walkelectors.Elevation.max())):
+                  climb = 0
+              else:
+                  climb = int(Decimal(walkelectors.Elevation.max()) - Decimal(walkelectors.Elevation.min()))
+
+              x = walkelectors.AddressNumber.values
+              y = walkelectors.StreetName
+              z = walkelectors.AddressPrefix.values
+              houses = len(list(set(zip(x,y,z))))+1
+              streets = len(walkelectors.StreetName.unique())
+              areamsq = 34*21.2*20*21.2
+              avstrlen = 200
+              housedensity = round(houses/(areamsq/10000),3)
+              avhousem = 100*round(math.sqrt(1/housedensity),2)
+              streetdash = avstrlen*streets/houses
+              speed = 5*1000
+              climbspeed = 5*1000 - climb*50/7
+              leafmins = 0.5
+              canvassmins = 5
+              canvasssample = .5
+              leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
+              canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
+              prodstats = {}
+              prodstats['ward'] = current_node.parent.parent.value
+              prodstats['PD'] = current_node.parent.value
+              prodstats['groupelectors'] = groupelectors
+              prodstats['climb'] = climb
+              prodstats['houses'] = houses
+              prodstats['streets'] = streets
+              prodstats['housedensity'] = housedensity
+              prodstats['leafhrs'] = round(leafhrs,2)
+              prodstats['canvasshrs'] = round(canvasshrs,2)
+
+              walkelectors['ENOP'] =  walkelectors['ENO']+ walkelectors['Suffix']*0.1
+              target = street_node.locmappath("")
+              results_filename = walk_name+"-PRINT.html"
+
+              data_filename = street_node.dir+"/"+walk_name+"-DATA.html"
+              map_filename = street_node.parent.dir+"/"+street_node.parent.file
+
+              context = {
+                "group": walkelectors,
                 "prodstats": prodstats,
                 "mapfile": url_for('map',path=map_filename),
                 "datafile": url_for('map',path=data_filename),
