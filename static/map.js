@@ -7,7 +7,7 @@ var moveDown = function (msg,area, type) {
       window.location.assign(msg);
       };
 
-function chgAction( action_name , area, type) {
+var chgAction = function ( action_name , area, type) {
         alert("chgAction called");
         element = document.getElementsByName('search-theme-form');
         element.action = action_name;
