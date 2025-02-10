@@ -9,6 +9,7 @@ var moveDown = function (msg,area, type) {
       };
 
 function chgAction( action_name , area, type) {
+        alert("chgAction called");
         element = document.getElementsByName('search-theme-form');
         element.action = action_name;
         window.parent.postMessage("Fetching the "+type+ " set within "+ area, '*');
