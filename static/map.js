@@ -13,5 +13,5 @@ function chgAction( action_name , area, type) {
         element.action = action_name;
         window.parent.postMessage("Fetching the "+type+ " set within "+ area, '*');
         window.location.assign(action_name);
-        alert(msg+"::"+type+" "+area);
+        alert(action_name+"::"+type+" "+area);
     };
