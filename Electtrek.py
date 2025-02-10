@@ -398,8 +398,8 @@ class FGlayer:
 #                        streetsbtn = "<input type='submit' form='uploadST' value='Streets' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        walksbtn = "<input type='submit' form='uploadST' value='Walks' class='btn btn-norm' onclick={0}/>".format(STbtn)
 #                        upload = "<form id='uploadST' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'>{3}{4}</input></form>".format(c.dir+"/"+c.file,12,c.parent.source, streetsbtn, walksbtn)
-                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='{0}'/>".format("moveDown(&#39;/downSTbut/"+c.dir+"/"+c.file+"&#39;,&#39;"+c.value+"&#39;,&#39;"+getchildtype(c.type)+"&#39;)")
-                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='chgAction(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;'/>".format(c.dir+'/'+c.file, c.value, getchildtype(c.type))
+                        STbtn = "<input type='submit' form='upload' value='Streets' class='btn btn-norm' onclick='moveDown(&#39;/downSTbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}'/>".format(c.dir+"/"+c.file, c.value, getchildtype(c.type))
+                        WKbtn = "<input type='submit' form='upload' value='Walks' class='btn btn-norm' onclick='chgAction(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}'/>".format(c.dir+'/'+c.file, c.value, getchildtype(c.type))
                         upload = "<form id='upload' action= '/downSTbut/{0}' name='search-theme-form' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ upload+"<br>"+STbtn+WKbtn
