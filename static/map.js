@@ -6,12 +6,3 @@ var moveDown = function (msg,area, type) {
       window.parent.postMessage("Fetching the "+type+ " set within "+ area, '*');
       window.location.assign(msg);
       };
-
-var chgAction = function ( action_name , area, type) {
-        alert("chgAction called");
-        element = document.getElementsByName('search-theme-form');
-        element.action = action_name;
-        window.parent.postMessage("Fetching the "+type+ " set within "+ area, '*');
-        window.location.assign(action_name);
-        alert(action_name+"::"+type+" "+area);
-    };
