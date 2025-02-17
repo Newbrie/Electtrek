@@ -12,7 +12,7 @@ from folium.plugins import MarkerCluster
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, MultiPoint
-from shapely import crosses, contains, union, envelope
+from shapely import crosses, contains, union, envelope, intersection
 import numpy as np
 import statistics
 from sklearn.cluster import KMeans
@@ -36,13 +36,16 @@ from werkzeug.exceptions import HTTPException
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
 def getchildtype(parent):
-    levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector']
+    levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
     if parent == 'ward' or parent == 'division':
         parent = 'ward/division'
     elif parent == 'walk' or parent == 'street' :
-        parent = 'walk/division'
-    elif parent == 'elector':
-        return 'elector'
+        parent = 'walk/street'
+    elif parent == 'walkleg':
+        parent = 'elector/walkleg'
+    elif parent == 'walkelector':
+        parent = 'elector/walkleg'
+
     return levels[levels.index(parent)+1]
 
 def is_safe_url(target):
@@ -54,7 +57,7 @@ def is_safe_url(target):
 class TreeNode:
     def __init__(self, value, fid, roid):
         global levelcolours
-        self.value = value.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper() # name
+        self.value = str(value).replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper() # name
         self.children = []
         self.type = 'UK'
         self.parent = None
@@ -100,8 +103,9 @@ class TreeNode:
         return target
 
     def create_data_branch(self, electtype, namepoints):
-      for (name,pt)  in namepoints:
-        newnode = TreeNode(name,str(hash(name)), pt)
+      newnode = self
+      for index, limb  in namepoints.iterrows():
+        newnode = TreeNode(index,str(hash(index)), Point(limb.Long,limb.Lat))
         newnode.source = self.source
         print('______Data nodes',newnode.value,newnode.fid, newnode.centroid)
         self.davail = True
@@ -129,7 +133,7 @@ class TreeNode:
                 pfile = Treepolys[self.level]
                 poly = pfile[pfile['FID']==self.fid]
                 print ("_________child :", limb.NAME )
-                if poly.contains(here).item():
+                if intersection(poly.geometry,limb.geometry).item().area > 0.0001:
                     print("_________TESTED AS INSIDE ",self.level,limb.NAME, self.value)
                     self.add_Tchild(childnode,electtype)
 
@@ -137,12 +141,16 @@ class TreeNode:
 
     def create_area_map (self,flayers,block):
       roid = self.get_centroid(block)
+      if self.level > 0:
+          title = self.parent.value+"-"+self.value+" "+ getchildtype(self.type)+ " set at level "+str(self.level)
+      else:
+          title = self.value+" Level "+str(self.level)
       self.map = folium.Map(location=[roid.y, roid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(self.level+0.75)*2)))
-      title_html = '''<h1 style="z-index:1100;color: black;position: fixed;right:100px;">{0}</h1>'''.format(self.value+" Level "+str(self.level))
+      title_html = '''<h1 style="z-index:1100;color: black;position: fixed;right:100px;">{0}</h1>'''.format(title)
       self.map.get_root().html.add_child(folium.Element(title_html))
 # just save the r-1,r,
       self.map.add_child(flayers[self.level].fg)
-      if self.level < 8:
+      if self.level < 9:
           self.map.add_child(flayers[self.level+1].fg)
       self.map.add_child(folium.LayerControl())
 #      self.map.fit_bounds(self.get_bounding_box(block), padding = (20, 20))
@@ -216,7 +224,7 @@ class TreeNode:
         d = ''.join(d.insert(0,url_for('map',path="UNITED_KINGDOM")))
         return d
 
-    def add_Tchild(self, child_node, type):
+    def add_Tchild(self, child_node, etype):
         # creates parent-child relationship
         self.child = child_node
         self.davail = True
@@ -225,16 +233,20 @@ class TreeNode:
         child_node.level = self.level + 1
         child_node.dir = self.dir+"/"+child_node.value
         child_node.file = child_node.value+"-MAP.html"
-        if child_node.level == 6 and type == 'street':
+        if etype == 'street':
             child_node.dir = self.dir+"/STREETS"
             child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
-        if child_node.level == 6 and type == 'walk':
-            child_node.dir = self.dir+"/WALKS/"+child_node.value
-            child_node.file = self.value+"-"+child_node.value+"-MAP.html"
-        if child_node.level == 7 and type == 'wkpostie':
-            child_node.dir = self.dir+"/"+child_node.value
+        if etype == 'walk':
+            child_node.dir = self.dir+"/WALKS/"+self.value
+            child_node.file = self.value+"-MAP.html"
+        if etype == 'walkleg':
+            child_node.dir = self.dir+"/WALKS"+self.value
+            child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
+        if etype == 'walkelector':
+            child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
+
         child_node.davail = False
-        child_node.type = type
+        child_node.type = etype
         print("_________new child node dir:  ",child_node.dir)
 
     def add_parent(self, parent_node):
@@ -346,37 +358,29 @@ class FGlayer:
 
 
         if type == 'polling district':
-#            downSTmessage = "moveDown(&#39;/downSTbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;".format(herenode.dir+"/"+herenode.file, herenode.value, getchildtype(herenode.type))
-#            downWKmessage = "moveDown(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;".format(herenode.dir+"/"+herenode.file, herenode.value, getchildtype(herenode.type))
-            upload = "<form action= '/downSTbut/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>Streets</button><button type='submit' formaction='/downWKbut/{2}'>Walks</button></form>".format(12,herenode.source, herenode.dir+"/"+herenode.file)
+            upload = "<form action= '/downSTbut/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/downWKbut/{2}'>WALKS</button></form>".format(12,herenode.source, herenode.dir+"/"+herenode.file)
             uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(herenode.parent.dir+"/"+herenode.parent.file,"UP",12)
-            limb['UPDOWN'] = "<br>"+herenode.value+"<br>"+ uptag +"<br>"+ upload+"<br>"
+            limb['UPDOWN'] = uptag +"<br>"+ upload+"<br>"
             herenode.tagno = len(self.children)+1
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
             self.children.append(herenode)
-
         elif type == 'walk':
-            downSTmessage = "moveDown(&#39;/downSTbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;".format(herenode.dir+"/"+herenode.file, herenode.value, getchildtype(herenode.type))
-            upload = "<form action= '{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>Streets</button>Walks</button></form>".format(12,herenode.source, "/downSTbut/"+herenode.dir+"/"+herenode.file)
+            downmessage = "showMore(&#39;/showmore/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/WALKS/"+herenode.file, herenode.value,getchildtype(herenode.type))
+            downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"STREETS",12)
             uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(herenode.parent.dir+"/"+herenode.parent.file,"UP",12)
-            limb['UPDOWN'] = "<br>"+herenode.value+"<br>"+ uptag +"<br>"+ upload+"<br>"
-            herenode.tagno = len(self.children)+1
-            print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
-            self.children.append(herenode)
-        elif type == 'street':
-            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(herenode.parent.dir+"/"+herenode.parent.file,"UP",12)
-            limb['UPDOWN'] = "<br>"+herenode.value+"<br>"+ uptag +"<br>"
+            limb['UPDOWN'] =  uptag +"<br>"+ downtag+"<br>"
             herenode.tagno = len(self.children)+1
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
             self.children.append(herenode)
 
         numtag = str(herenode.tagno)+" "+str(herenode.value)
+        typetag = "from <br>"+str(herenode.type)+": "+str(herenode.value)+"<br> move :"
         here = [Decimal(herenode.centroid.y),Decimal(herenode.centroid.x)]
         fill = levelcolours["C"+str(random.randint(4,15))]
         print("______addingPoly:",herenode.value, limb.NAME)
 
         folium.GeoJson(limb,highlight_function=lambda feature: {"fillColor": ("green"),},
-          popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=True,
+          popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=[typetag,]),popup_keep_highlighted=True,
           style_function=lambda feature: {"fillColor": fill,"color": herenode.col,"dashArray": "5, 5","weight": 3,"fillOpacity": 0.4,},
           ).add_to(self.fg)
         mapfile = "/map/"+herenode.dir+"/"+herenode.file
@@ -399,7 +403,7 @@ class FGlayer:
         for c in herenode.childrenoftype(type):
             print("______Display children:",herenode.value, herenode.level,type)
             print('_______MAPLinesandMarkers')
-            layerfids = [x.fid for x in self.children]
+            layerfids = [x.fid for x in self.children if x.type == type]
             if c.fid not in layerfids:
                 if c.level <= len(Treepolys)-1:
                     pfile = Treepolys[c.level]
@@ -445,7 +449,6 @@ class FGlayer:
                         self.children.append(c)
 
 
-
                     numtag = str(c.tagno)+" "+str(c.value)
                     here = [ Decimal(c.centroid.y),Decimal(c.centroid.x)]
                     fill = levelcolours["C"+str(random.randint(4,15))]
@@ -455,6 +458,8 @@ class FGlayer:
                       popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=True,
                       style_function=lambda feature: {"fillColor": fill,"color": c.col,"dashArray": "5, 5","weight": 3,"fillOpacity": 0.4,},
                       ).add_to(self.fg)
+
+                    mapfile = "/map/"+c.dir+"/"+c.file
 
                     self.fg.add_child(folium.Marker(
                          location=here,
@@ -474,14 +479,14 @@ class FGlayer:
         global levelcolours
         global allelectors
         for c in herenode.childrenoftype(type):
-            print("______Display children:",herenode.value, herenode.level,type)
+            print("______Display children:",c.value, c.level,type)
             print('_______MAP Markers')
-            layerfids = [x.fid for x in self.children]
+            layerfids = [x.fid for x in self.children if x.type == type]
             if c.fid not in layerfids:
                 numtag = str(c.tagno)+" "+str(c.value)
                 here = [ Decimal(c.centroid.y),Decimal(c.centroid.x)]
                 fill = levelcolours["C"+str(random.randint(4,15))]
-                mapfile = "/map/"+herenode.dir+"/"+herenode.file
+                mapfile = "/map/"+c.dir+"/"+c.file
 
                 self.fg.add_child(folium.Marker(
                      location=here,
@@ -563,7 +568,8 @@ Featurelayers.append(FGlayer(id=4,name='Constituency Boundaries'))
 Featurelayers.append(FGlayer(id=5,name='Ward/Division Boundaries'))
 Featurelayers.append(FGlayer(id=6,name='Polling District Markers'))
 Featurelayers.append(FGlayer(id=7,name='Walk/Street Markers'))
-Featurelayers.append(FGlayer(id=8,name='Special Markers'))
+Featurelayers.append(FGlayer(id=8,name='Street Electors'))
+Featurelayers.append(FGlayer(id=9,name='Special Markers'))
 
 formdata = {}
 filename = "Surrey_HeathRegister.csv"
@@ -699,6 +705,7 @@ def login():
         formdata['candsurn'] = "Surname"
         formdata['electiondate'] = "DD-MMM-YY"
         formdata['filename'] = "NONE"
+        england = current_node
         for england in MapRoot.children:
             if england.value == 'ENGLAND':
                 break
@@ -822,16 +829,19 @@ def downPDbut(selnode):
             print("PDsfull", PDs)
             for PD in PDs:
               PDelectors = getblock(allelectors,'PD',PD)
-              maplongx = statistics.mean(PDelectors.Long.values)
-              maplaty = statistics.mean(PDelectors.Lat.values)
-              PDcoordinates = Point(Decimal(maplongx),Decimal(maplaty))
+              PDPtsdf0 = pd.DataFrame(PDelectors, columns=['PD', 'Long', 'Lat'])
+              PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+              PDPtsdf = PDPtsdf1.groupby(['Name']).mean()
+              maplongx = PDPtsdf.Long.values[0]
+              maplaty = PDPtsdf.Lat.values[0]
             # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
               if Wardboundary.geometry.contains(Point(Decimal(maplongx),Decimal(maplaty))).item():
                   Ward = list(Wardboundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
                   PDelectors['Ward'] = Ward
                   PDWardlist.append((PD,Ward, Wardboundary))
-                  PDPts.append((PD,PDcoordinates))
-                  newpd = current_node.create_data_branch('polling district',[(PD,PDcoordinates)])
+                  PDPts.append((PD,maplongx, maplaty))
+                  print("_______PDPoints",PDPtsdf)
+                  newpd = current_node.create_data_branch('polling district',PDPtsdf)
                   frames.append(PDelectors)
                   Featurelayers[current_node.level+1].add_convexhull(newpd, 'polling district',PDelectors)
             allelectors = pd.concat(frames)
@@ -863,6 +873,9 @@ def downSTbut(selnode):
     global environment
     global filename
 
+    def firstnameinlist(name,list):
+        posn = list.index(name)
+        return list[posn]
 
     steps = selnode.split("/")
     steps.pop()
@@ -875,12 +888,16 @@ def downSTbut(selnode):
 # if there is a selected file , then allelectors will be full of records
         PDelectors = getblock(allelectors, 'PD',current_node.value)
 
-        CCstreets = PDelectors.StreetName.unique()
-        StreetPts = [(x[0],Point(x[1],x[2])) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
+# we only want to plot with single streets , so we need to establish one street record with pt data to plot
+
+        StreetPts = [(x[0],x[1],x[2]) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
+        Streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat'])
+        Streetdf = Streetdf0.groupby(['Name']).mean()
 
         Featurelayers[current_node.level+1].children = []
         Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-        current_node.create_data_branch('street',StreetPts)
+
+        current_node.create_data_branch('street',Streetdf)
         Featurelayers[current_node.level+1].add_mapmarkers(current_node, 'street')
 
         if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
@@ -891,34 +908,14 @@ def downSTbut(selnode):
             print("________streets added  :  "+str(len(Featurelayers[current_node.level+1].children)))
 
 
-        for street_node in current_node.children:
+        for street_node in current_node.childrenoftype('street'):
               street = street_node.value
-    #          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",10)
-    #          flayers[6].children = []
-    #          flayers[6].fg = folium.FeatureGroup(id=7, name='Street Markers', overlay=True, control=True, show=True)
-    #          flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
-    #          Wardboundary["UPstreet"] = "<br>"+Ward+"</br>"+ uptag
-    #          add_to_ward_layer (Wardboundary, flayers[6].fg,"UPstreet", Ward)
-
-    #          if Divboundary is not None:
-    #            Divboundary["UPstreet"] =  "<br>"+Divname+"</br>"+uptag
-    #            add_to_div_layer (Divboundary, flayers[4].fg, "UPstreet", Divname)
 
               electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
-    #          maplongx = statistics.mean(electorwalks.Long.values)
-    #          maplaty = statistics.mean(electorwalks.Lat.values)
-    #          walkcoordinates = [maplaty, maplongx]
+
               STREET_ = street_node.value
 
-              streetgroup = [(y[0],Point(y[1],y[2])) for y in electorwalks[['StreetName','Long','Lat']].drop_duplicates().values]
-
-              current_node.create_data_branch('street',streetgroup)
-              Featurelayers[current_node.level+1].add_mapmarkers(street_node, 'street')
-
-#              here = Point(Decimal(maplongx),Decimal(maplaty))
-
               Postcode = electorwalks.loc[0].Postcode
-
 
               walk_name = street_node.parent.value+"-"+street_node.value
               type_colour = "indigo"
@@ -934,28 +931,6 @@ def downSTbut(selnode):
             # Create a geometry list from the GeoDataFrame
               geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
               CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
-
-    #          for streetcoordinates in CL_unique_list:
-    #            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",12)
-    #            downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.dir+"/"+street_node.file,street_node.value,12)
-
-                # in the Walk map add Street-postcode groups to the walk map with controls to go back up to the PD map or down to the Walk addresses
-    #            popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(Ward,STREET_, Postcode, uptag, downtag,12)
-
-                # in the PD map add PD-cluster walks to the PD map with controls to go back up to the Ward map or down to the Walk map
-    #            flayers[6].fg.add_child(
-    #              folium.Marker(
-    #                 location=streetcoordinates,
-    #                 popup = popuptext,
-    #                 icon=folium.Icon(color = type_colour,  icon='search'),
-    #                 )
-    #                 )
-
-
-            #      img_data = Walkmap._to_png(1)
-        #      img = Image.open(io.BytesIO(img_data))
-        #      img.save(BMapImg)
-        #      mapfull = BMapImg
 
               electorwalks['Team'] = ""
               electorwalks['M1'] = ""
@@ -1007,6 +982,8 @@ def downSTbut(selnode):
 
               data_filename = street_node.dir+"/"+walk_name+"-DATA.html"
               map_filename = street_node.parent.dir+"/"+street_node.parent.file
+
+              map = street_node.create_area_map(Featurelayers,electorwalks)
 
               context = {
                 "group": electorwalks,
@@ -1067,20 +1044,18 @@ def downWKbut(selnode):
 
         PDelectors.insert(0, "WalkName", klabels)
 
-#        CCstreets = PDelectors.StreetName.unique()
-#        StreetPts = [(x[0],Point(x[1],x[2])) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
-#        current_node.create_data_branch('walk',klabels)
-
         walks = PDelectors.WalkName.unique()
-        walkPts = [(x[0],Point(x[1],x[2])) for x in PDelectors[['WalkName','Long','Lat']].drop_duplicates().values]
+        walkPts = [(x[0],x[1],x[2]) for x in PDelectors[['WalkName','Long','Lat']].drop_duplicates().values]
+        walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat'])
+        walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
+        walkdfs = walkdf1.groupby(['Name']).mean()
         print ("____________walks",walks)
 
-        current_node.create_data_branch('walk',walkPts)
+        current_node.create_data_branch('walk',walkdfs)
 
         Featurelayers[current_node.level+1].children = []
         Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-        Featurelayers[current_node.level+1].add_convexhull(current_node, 'walk',PDelectors)
-#        Featurelayers[current_node.level+1].add_mapboundaries(current_node, 'polling district')
+
         map = current_node.create_area_map(Featurelayers,PDelectors)
         mapfile = current_node.dir+"/"+current_node.file
 
@@ -1094,23 +1069,10 @@ def downWKbut(selnode):
 
 
         for walk_node in current_node.childrenoftype('walk'):
+
               walk = walk_node.value
-    #          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(street_node.parent.dir+"/"+street_node.parent.file,"UP",10)
-    #          flayers[6].children = []
-    #          flayers[6].fg = folium.FeatureGroup(id=7, name='Street Markers', overlay=True, control=True, show=True)
-    #          flayers[4].fg = folium.FeatureGroup(name='Division Boundary', overlay=True, control=True, show=True)
-    #          Wardboundary["UPstreet"] = "<br>"+Ward+"</br>"+ uptag
-    #          add_to_ward_layer (Wardboundary, flayers[6].fg,"UPstreet", Ward)
-
-    #          if Divboundary is not None:
-    #            Divboundary["UPstreet"] =  "<br>"+Divname+"</br>"+uptag
-    #            add_to_div_layer (Divboundary, flayers[4].fg, "UPstreet", Divname)
-
+              walk_name = walk_node.parent.value+"-"+walk_node.value
               walkelectors = getblock(PDelectors, 'WalkName',walk_node.value)
-    #          maplongx = statistics.mean(walkelectors.Long.values)
-    #          maplaty = statistics.mean(walkelectors.Lat.values)
-    #          walkcoordinates = [maplaty, maplongx]
-
 
               geometry = gpd.points_from_xy(walkelectors.Long.values,walkelectors.Lat.values, crs="EPSG:4326")
             # create a geo dataframe for the Walk Map
@@ -1122,55 +1084,63 @@ def downWKbut(selnode):
               geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
               CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
 
+              StreetPts = [(x[0],x[1],x[2]) for x in walkelectors[['StreetName','Long','Lat']].drop_duplicates().values]
+              streetdf0 = pd.DataFrame(StreetPts, columns=['StreetName', 'Long', 'Lat'])
+              streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
+              streetdf = streetdf1.groupby(['Name']).mean()
+              print ("____________walklegs",streetdf)
+
+              walk_node.create_data_branch('walkleg',streetdf)
+
               type_colour = allowed[walk_node.value]
 
         #      marker_cluster = MarkerCluster().add_to(Walkmap)
               # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
 
-              Featurelayers[walk_node.level+1].children = []
-              Featurelayers[walk_node.level+1].fg = folium.FeatureGroup(id=str(walk_node.level+2),name=Featurelayers[walk_node.level+1].name, overlay=True, control=True, show=True)
               Featurelayers[walk_node.level+1].add_convexhull(walk_node, 'walk',walkelectors)
 #              Featurelayers[walk_node.level+1].add_mapboundaries(walk_node, 'walk')
 
 
-              for streetcoordinates in CL_unique_list:
+              for walkleg in walk_node.childrenoftype('walkleg'):
                     # in the Walk map add Street-postcode groups to the walk map with controls to go back up to the PD map or down to the Walk addresses
                     print("________WalkMarker",walk_node.parent.parent.value, "|",walk_node.value)
-                    downtag = "<form action= '/downwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(walk_node.dir+"/"+walk_node.file,"WALK",12)
-                    uptag = "<form action= '/upwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(walk_node.parent.parent.dir+"/"+walk_node.parent.parent.file,"WARD",12)
+                    downtag = "<form action= '/downwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(walkleg.dir+"/"+walkleg.file,"Streets",12)
+                    uptag = "<form action= '/upwalkbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(walkleg.parent.dir+"/"+walkleg.parent.file,"Walks",12)
             #            Wardboundary['UPDOWN'] = "<br>"+walk_node.value+"<br>"+ uptag +"<br>"+ downtag
             #        c.tagno = len(self.children)+1
                     Postcode = walkelectors.loc[0].Postcode
-                    popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walk_node.parent.parent.value,walk_node.parent.value, Postcode, uptag, downtag,12)
+                    popuptext = '<ul style="font-size: {5}pt;color: gray;" >PD: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walkleg.parent.value,walkleg.value, Postcode, uptag, downtag,12)
 
                     # in the PD map add PD-cluster walks to the PD map with controls to go back up to the Ward map or down to the Walk map
-                    Featurelayers[walk_node.level].fg.add_child(
+                    Featurelayers[walkleg.level].fg.add_child(
                       folium.Marker(
-                         location=streetcoordinates,
+                         location=[walkleg.centroid.y,walkleg.centroid.x],
                          popup = popuptext,
                          icon=folium.Icon(color = type_colour,  icon='search'),
                          )
                          )
-                    popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walk_node.parent.parent.value,walk_node.value, Postcode, uptag, downtag,12)
+                    popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(walkleg.parent.parent.value,walkleg.value, Postcode, uptag, downtag,12)
 
-                    Featurelayers[walk_node.level+1].fg.add_child(
+                    Featurelayers[walkleg.level+1].fg.add_child(
                         folium.Marker(
-                            location=streetcoordinates,
+                            location=[walkleg.centroid.y,walkleg.centroid.x],
                             popup= popuptext,
                             icon=folium.Icon(color = type_colour),
                         )
                         )
+                    map = walkleg.create_area_map(Featurelayers,PDelectors)
+
               map = walk_node.create_area_map(Featurelayers,PDelectors)
               mapfile = walk_node.dir+"/"+walk_node.file
 
 #              pclist = geo_df1.Postcode.tolist()
-#              wkposties = zip(pclist,geo_df1_list)
+#              walklegs = zip(pclist,geo_df1_list)
 #              plist =[]
-#              wkposties_unique = []
-#              for p,pt in wkposties:
+#              walklegs_unique = []
+#              for p,pt in walklegs:
 #                  if p not in plist:
 #                      plist.append(p)
-#                      wkposties_unique.append([p,pt])
+#                      walklegs_unique.append([p,pt])
 
 
 
@@ -1246,7 +1216,6 @@ def downWKbut(selnode):
             flash("Can't find any walks for this PD.")
         else:
             flash("________Walks added  :  "+str(len(Featurelayers[current_node.level].children)))
-
 
     return redirect(url_for('map',path=mapfile))
 
@@ -1486,6 +1455,18 @@ def map(path):
     print ("_________Nextmap",path)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
+
+
+@app.route('/showmore/<path:path>', methods=['GET','POST'])
+def showmore(path):
+    global current_node
+
+    mapfile = current_node.dir+"/"+current_node.file
+
+    flash ("_________ROUTE/showmore"+path)
+    print ("_________showmore",path)
+
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route('/upload', methods=['POST','GET'])
