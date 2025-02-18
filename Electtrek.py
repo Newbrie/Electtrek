@@ -154,8 +154,6 @@ class TreeNode:
       self.map.get_root().html.add_child(folium.Element(title_html))
 # just save the r-1,r,
       self.map.add_child(flayers[self.level].fg)
-      if self.level > 0:
-           self.map.add_child(flayers[self.level-1].fg)
       if self.level < 9:
           self.map.add_child(flayers[self.level+1].fg)
       self.map.add_child(folium.LayerControl())
