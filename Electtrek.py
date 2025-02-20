@@ -35,17 +35,24 @@ from werkzeug.exceptions import HTTPException
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
+levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
+
+WardsnotDivisions = True
+
 def getchildtype(parent):
-    levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
+    global levels
+    global WardsnotDivisions
+    WardsnotDivisions = True
     if parent == 'ward' or parent == 'division':
-        parent = 'ward/division'
+        parent = 'constituency'
     elif parent == 'walk' or parent == 'street' :
         parent = 'walk/street'
     elif parent == 'walkleg':
         parent = 'elector/walkleg'
     elif parent == 'walkelector':
         parent = 'elector/walkleg'
-
+    if parent == 'division':
+        WardsnotDivisions = False
     return levels[levels.index(parent)+1]
 
 def is_safe_url(target):
@@ -327,18 +334,19 @@ def add_boundaries(shelf,node):
         Con_Bound_layer = Con_Bound_layer.rename(columns = {'PCON24NM': 'NAME'})
         Treepolys[3] = Con_Bound_layer
         return Con_Bound_layer
-    elif shelf == 'ward':
-        print("__________reading Wards_May_2024_Boundaries = [4]")
-        Ward_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson')
-        Ward_Bound_layer = Ward_Bound_layer.rename(columns = {'WD24NM': 'NAME'})
-        Treepolys[4] = Ward_Bound_layer
-        return Ward_Bound_layer
-    elif shelf == 'division':
-        print("__________reading County_Electoral_Division_May_2023_Boundaries = [4]")
-        Division_Bound_layer = gpd.read_file( workdirectories['bounddir']+"/"+'County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson')
-        Division_Bound_layer = Division_Bound_layer.rename(columns = {'CED23NM': 'NAME'})
-        Treepolys[4] = Division_Bound_layer
-        return Division_Bound_layer
+    elif shelf == 'ward/division':
+        if WardsnotDivisions:
+            print("__________reading Wards_May_2024_Boundaries = [4]")
+            Ward_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson')
+            Ward_Bound_layer = Ward_Bound_layer.rename(columns = {'WD24NM': 'NAME'})
+            Treepolys[4] = Ward_Bound_layer
+            return Ward_Bound_layer
+        else:
+            print("__________reading County_Electoral_Division_May_2023_Boundaries = [4]")
+            Division_Bound_layer = gpd.read_file( workdirectories['bounddir']+"/"+'County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson')
+            Division_Bound_layer = Division_Bound_layer.rename(columns = {'CED23NM': 'NAME'})
+            Treepolys[4] = Division_Bound_layer
+            return Division_Bound_layer
 
 
 class FGlayer:
@@ -363,8 +371,8 @@ class FGlayer:
 
 
         if type == 'polling district':
-            showmessageST = "showMore(&#39;/PDshowST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype(herenode.type))
-            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype(herenode.type))
+            showmessageST = "showMore(&#39;/PDshowST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
+            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
             downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
 #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,herenode.source, herenode.dir+"/"+herenode.file)
@@ -374,7 +382,7 @@ class FGlayer:
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
             self.children.append(herenode)
         elif type == 'walk':
-            showmessage = "showMore(&#39;/showmore/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype(herenode.type))
+            showmessage = "showMore(&#39;/showmore/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('walk'))
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(herenode.parent.dir+"/"+herenode.parent.file,"UP",12)
             limb['UPDOWN'] =  uptag +"<br>"+ downtag+"<br>"
@@ -388,8 +396,8 @@ class FGlayer:
         fill = levelcolours["C"+str(random.randint(4,15))]
         print("______addingPoly:",herenode.value, limb.NAME)
 
-        folium.GeoJson(limb,highlight_function=lambda feature: {"fillColor": ("green"),},
-          popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=[typetag,]),popup_keep_highlighted=True,
+        folium.GeoJson(limb,smooth_factor=1,highlight_function=lambda feature: {"fillColor": ("blue"),},
+          popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=[typetag,]),popup_keep_highlighted=False,
           style_function=lambda feature: {"fillColor": fill,"color": herenode.col,"dashArray": "5, 5","weight": 3,"fillOpacity": 0.4,},
           ).add_to(self.fg)
         mapfile = "/map/"+herenode.dir+"/"+herenode.file
@@ -418,7 +426,7 @@ class FGlayer:
                     pfile = Treepolys[c.level]
                     limb = pfile[pfile['FID']==c.fid]
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downcountbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
@@ -427,19 +435,21 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
-                        downmessage = "moveDown(&#39;/downconbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
                         downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
+                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' id='down-button' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downconstag
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downconstag
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.type,c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downmessage = "moveDown(&#39;/downwardbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
-                        downmessage1 = "moveDown(&#39;/downdivbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
-                        downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"WARDS",12)
-                        downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage1,"DIVS",12)
+                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype('ward'))
+                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype('division'))
+                        downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downwardmessage,"WARDS",12)
+                        downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
                         uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
                         limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag +"<br>"+ downwardstag + " " + downdivstag
                         c.tagno = len(self.children)+1
@@ -447,7 +457,7 @@ class FGlayer:
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 3:
-                        downPDmessage = "moveDown(&#39;/downPDbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        downPDmessage = "moveDown(&#39;/downPDbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype('ward/division'))
                         PDbtn = "<input type='submit' form='uploadPD' value='Polling Districts' class='btn btn-norm' onclick='{0}'/>".format(downPDmessage)
                         upload = "<form id='uploadPD' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                         uptag = "<form action= '/upbut/{0}'><button type='submit' style='font-size: {2}pt;color: gray;'>{1}</button></form>".format(c.parent.dir+"/"+c.parent.file,"UP",12)
@@ -463,8 +473,8 @@ class FGlayer:
                     fill = levelcolours["C"+str(random.randint(4,15))]
                     print("______addingMarker:",c.value, limb.NAME)
 
-                    folium.GeoJson(limb,highlight_function=lambda feature: {"fillColor": ("green"),},
-                      popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=True,
+                    folium.GeoJson(limb,highlight_function=lambda feature: {"fillColor": ("yellow"),},
+                      popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=False,
                       style_function=lambda feature: {"fillColor": fill,"color": c.col,"dashArray": "5, 5","weight": 3,"fillOpacity": 0.4,},
                       ).add_to(self.fg)
 
@@ -646,6 +656,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 
 @app.errorhandler(HTTPException)
 def handle_exception(e):
+    global current_node
     """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
     response = e.get_response()
@@ -656,7 +667,9 @@ def handle_exception(e):
         "description": e.description,
     })
     response.content_type = "application/json"
-    return response
+    mapfile = current_node.dir+"/"+current_node.file
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
 
 @app.route("/index", methods=['POST', 'GET'])
 def index():
@@ -760,8 +773,8 @@ def dashboard ():
     return redirect(url_for('index'))
 
 
-@app.route('/downcountbut/<path:selnode>', methods=['GET','POST'])
-def downcountbut(selnode):
+@app.route('/downbut/<path:selnode>', methods=['GET','POST'])
+def downbut(selnode):
     global workdirectories
     global Directories
     global MapRoot
@@ -770,25 +783,26 @@ def downcountbut(selnode):
     global Treepolys
     global Featurelayers
     global environment
+    global levels
 
 
     formdata = {}
-#    dat = request.base_url
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
     steps = selnode.split("/")
+    count = len(steps)
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
 
 # the map under the selected node map needs to be configured
-    print("_________selected node",steps[-1],current_node.value, current_node.level,current_node.file)
+    print("_________selected node",steps,current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
-    add_boundaries('county',current_node)
-    current_node.create_map_branch('county',allelectors)
+    add_boundaries(levels[count-1],current_node)
+    current_node.create_map_branch(levels[count-1],allelectors)
     Featurelayers[current_node.level+1].children = []
     Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-    Featurelayers[current_node.level+1].add_mapboundaries(current_node, 'county')
+    Featurelayers[current_node.level+1].add_mapboundaries(current_node, levels[count-1])
     map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
     mapfile = current_node.dir+"/"+current_node.file
     print("________child nodes created",current_node.children)
@@ -801,10 +815,8 @@ def downcountbut(selnode):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['filename'] = "NONE"
-#    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-#    flash('_______ROUTE/downcountbut')
 
-    return redirect(url_for('map',path=mapfile))
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
 def downPDbut(selnode):
@@ -833,7 +845,7 @@ def downPDbut(selnode):
             filename = request.values['importfile']
             allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
             pfile = Treepolys[current_node.level]
-            Wardboundary = pfile[pfile['FID']==current_node.fid]
+            Level3boundary = pfile[pfile['FID']==current_node.fid]
             PDs = set(allelectors.PD.values)
             print("PDsfull", PDs)
             for PD in PDs:
@@ -844,10 +856,10 @@ def downPDbut(selnode):
               maplongx = PDPtsdf.Long.values[0]
               maplaty = PDPtsdf.Lat.values[0]
             # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-              if Wardboundary.geometry.contains(Point(Decimal(maplongx),Decimal(maplaty))).item():
-                  Ward = list(Wardboundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
-                  PDelectors['Ward'] = Ward
-                  PDWardlist.append((PD,Ward, Wardboundary))
+              if Level3boundary.geometry.contains(Point(Decimal(maplongx),Decimal(maplaty))).item():
+                  Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
+                  PDelectors['Ward'] = Area
+                  PDWardlist.append((PD,Area, Level3boundary))
                   PDPts.append((PD,maplongx, maplaty))
                   print("_______PDPoints",PDPtsdf)
                   newpd = current_node.create_data_branch('polling district',PDPtsdf,"-MAP")
@@ -862,7 +874,7 @@ def downPDbut(selnode):
             current_node.source = filename
             map = current_node.create_area_map(Featurelayers,wardelectors,"-MAP")
             if len(allelectors) == 0 or len(Featurelayers[current_node.level+1].children) == 0:
-                flash("Can't find any elector data for this Ward.")
+                flash("Can't find any elector data for this Area.")
                 allelectors = []
             else:
                 flash("________PDs added  :  "+str(len(Featurelayers[current_node.level+1].children)))
@@ -1203,7 +1215,7 @@ def PDshowWK(selnode):
               results_filename = walk_name+"-PRINT.html"
 
               datafile = walk_node.dir+"/"+walk_name+"-DATA.html"
-              mapfile = walk_node.parent.dir+"/"+walk_node.parent.file
+              mapfile = current_node.dir+"/"+current_node.file.replace("-MAP","-WALKS")
 
               context = {
                 "group": walkelectors,
@@ -1230,94 +1242,6 @@ def PDshowWK(selnode):
 
     return redirect(url_for('map',path=mapfile))
 
-@app.route('/downconbut/<path:selnode>', methods=['GET','POST'])
-def downconbut(selnode):
-    global Treepolys
-    global current_node
-    global Featurelayers
-    global allelectors
-    flash('_______ROUTE/downconbut',selnode)
-
-
-    steps = selnode.split("/")
-    steps.pop()
-    current_node = selected_childnode(current_node,steps[-1])
-    add_boundaries('constituency',current_node)
-    current_node.create_map_branch('constituency',allelectors)
-    Featurelayers[current_node.level+1].children = []
-    Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-    Featurelayers[current_node.level+1].add_mapboundaries(current_node, 'constituency')
-    map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-    mapfile = current_node.dir+"/"+current_node.file
-
-
-    print ("________Heading for Constituency :  ",current_node)
-    if len(Featurelayers[current_node.level+1].children) == 0:
-        flash("Can't find any constituencies for this county.")
-    else:
-        flash("________constituencies added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-
-    return redirect(url_for('map',path=mapfile))
-
-
-@app.route('/downwardbut/<path:selnode>', methods=['GET','POST'])
-def downwardbut(selnode):
-    global Treepolys
-    global current_node
-    global Featurelayers
-    flash('_______ROUTE/downwardbut')
-
-    global allelectors
-
-
-    steps = selnode.split("/")
-    steps.pop()
-    current_node = selected_childnode(current_node,steps[-1])
-
-    add_boundaries('ward',current_node)
-    current_node.create_map_branch('ward',allelectors)
-    Featurelayers[current_node.level+1].children = []
-    Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-    Featurelayers[current_node.level+1].add_mapboundaries(current_node, 'ward')
-    map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-    mapfile = current_node.dir+"/"+current_node.file
-    print ("________Heading for wards of :  ",current_node)
-    if len(Featurelayers[current_node.level].children) == 0:
-        flash("Can't find any wards for this Constituency.")
-    else:
-        flash("________wards added  :  "+str(len(Featurelayers[current_node.level].children)))
-
-    return redirect(url_for('map',path=mapfile))
-
-
-@app.route('/downdivbut/<path:selnode>', methods=['GET','POST'])
-def downdivbut(selnode):
-    global Treepolys
-    global current_node
-    global Featurelayers
-    flash('_______ROUTE/downdivbut')
-
-    global allelectors
-
-    steps = selnode.split("/")
-    steps.pop()
-    current_node = selected_childnode(current_node,steps[-1])
-    if current_node.level == 3 :
-        add_boundaries('division',current_node)
-        current_node.create_map_branch('division',allelectors)
-        Featurelayers[current_node.level+1].children = []
-        Featurelayers[current_node.level+1].fg = folium.FeatureGroup(id=str(current_node.level+2),name=Featurelayers[current_node.level+1].name, overlay=True, control=True, show=True)
-        Featurelayers[current_node.level+1].add_mapboundaries(current_node,'division')
-        map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-        mapfile = current_node.dir+"/"+current_node.file
-        print ("________Heading for division : ",current_node)
-    if len(Featurelayers[current_node.level].children) == 0:
-        flash("Can't find any county divisions for this Constituency.")
-    else:
-        flash("________divisions added  :  "+str(len(Featurelayers[current_node.level+1].children)))
-
-    return redirect(url_for('map',path=mapfile))
-
 
 @app.route('/layeritems/',methods=['GET','POST'])
 def layeritems():
@@ -1328,7 +1252,7 @@ def layeritems():
 
     layernodelist = Featurelayers[current_node.level+1].children
     current_node = current_node.parent
-    mapfile = url_for('downcountbut',selnode=current_node.dir+"/"+current_node.file)
+    mapfile = url_for('downbut',selnode=current_node.dir+"/"+current_node.file)
     print("________laynodelist", current_node.level, current_node.value, Featurelayers[current_node.level+1].children)
     return render_template("dash1.html", context = { "layernodelist" :layernodelist, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
@@ -1462,9 +1386,12 @@ def register():
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
-
+    global current_node
     flash ("_________ROUTE/map"+path)
     print ("_________Nextmap",path)
+    steps = path.split("/")
+    steps.pop()
+    current_node = selected_childnode(current_node,steps[-1])
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -1502,6 +1429,7 @@ def normalise():
     global environment
 
     flash('_______ROUTE/normalise',session)
+    print('_______ROUTE/normalise',session)
 
 
     formdata = {}
@@ -1558,7 +1486,7 @@ def postcode():
 
     layernodelist = Featurelayers[current_node.level+1].children
 
-    mapfile = url_for('downcountbut',selnode=current_node.dir+"/"+current_node.file)
+    mapfile = url_for('downbut',selnode=current_node.dir+"/"+current_node.file)
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
         postcodeentry = str(postcodeentry).replace(" ","")

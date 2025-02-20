@@ -12,14 +12,15 @@ normstats = {}
 
 def normz(LocalFile, normstats):
     print ("____________inside normz_________")
-    templdir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates/"
+    templdir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/templates/"
     workdir = "/Users/newbrie/Sites"
     testdir = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
-    bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/ElecttrekReference/Boundaries/"
+    bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/Boundaries/"
     os.chdir(workdir)
     Env1 = sys.base_prefix
     Mean_Lat = 51.240299
     Mean_Long = -0.562301
+
     def DFtoDF (df):
         vars = []
         vars_ = []
@@ -39,6 +40,7 @@ def normz(LocalFile, normstats):
           DF.insert(i, vars_[i], varvalues[i])
           i=i+1
         return DF
+
     def TabletoDF (T, compress):
     # extract into a dataframe from all column names in meta and attrubute section from the source Orange Table
         block = T
@@ -66,6 +68,71 @@ def normz(LocalFile, normstats):
           i=i+1
         return DF
       # electors0 uses compressed postcodes electors10 uses the expanded postcodes to extract elevation by postcode lookup
+
+    def checkelectorName(data):
+        pattern = r"(?P<Firstname>David|[A-Za-z'-]+)\s*(?P<Initials>(?:[A-Z](?:\s+[A-Z])*)*)\s*(?P<Surname>[A-Za-z'-]+)"
+        datamax = data.shape[0]
+        name_order = None
+
+        for col in data.columns:
+            i = 0
+            for name in data[col].astype(str).values.tolist():
+                match = re.match(pattern, name)
+                if match:
+                    # Determine the first match's order for Firstname, Surname, and Initials
+                    if name_order is None:
+                        if "David" in name:  # If 'David' appears in the name, treat it as Firstname
+                            name_order = ('Firstname', 'Surname', 'Initials')
+                        else:
+                            name_order = ('Firstname', 'Initials', 'Surname')
+
+                    # Extract data based on the determined order
+                    firstname = match.group(name_order[0])
+                    surname = match.group(name_order[1])
+                    initials = match.group(name_order[2]) if match.group(name_order[2]) else None
+
+                    # Output the extracted fields
+                    print(f"Firstname: {firstname}, Surname: {surname}, Initials: {initials}")
+
+                    if i > 0.95*(datamax) :
+                        return col
+
+        return None
+
+    def checkForeName(data):
+        pattern = r"^(?!\d+(\.\d+)?$)(?P<Surname>[A-Za-z-]+(?:'[A-Za-z]+)?)\s+(?P<Firstname>[A-Za-z-]+(?:'[A-Za-z]+)?)\s*(?P<Initials>(?:[A-Z](?:\s+[A-Z])*)*)$"
+        datamax = data.shape[0]
+        for col in data.columns:
+            i = 0
+            for row in data[col]:
+                match = re.match(pattern, str(row))
+                if match :
+                    i = i+1
+                    surname = match.group("Surname")
+                    firstname = match.group("Firstname")
+                    initials = match.group("Initials") if match.group("Initials") else None
+                    print("Surname: {0}, Firstname: {1}, Initials: {2}".format(surname,firstname,initials))
+                    if i > 0.95*(datamax) :
+                        return col
+
+        return None
+
+
+    def checkENOP(data):
+        pattern = r"([A-Za-z0-9]+)-(\d+)(?:/(\d+))?"
+        datamax = data.shape[0]
+        for col in data.columns:
+            i = 0
+            for row in data[col]:
+                match = re.match(pattern, str(row))
+                print("value ", str(row), i, match)
+                if match :
+                    i = i+1
+                    if i > 0.95*(datamax) :
+                        return col
+        return None
+
+
     electors0 = pd.DataFrame()
     electors10 = pd.DataFrame()
     Env1 = sys.base_prefix
@@ -101,21 +168,29 @@ def normz(LocalFile, normstats):
 #        dfx['RNO'] = dfx.index
         if 'AV' not in dfx.columns:
             dfx['AV'] = ""
-#        if 'Firstname' not in dfx.columns:
-#            dfx['Firstname'] = ""
-#        if 'Surname' not in dfx.columns:
-#            dfx['Surname'] = ""
-#        dfx = dfx[['Elector Number Prefix', 'Elector Number','Elector Number Suffix','Elector Markers','Elector DOB','Elector Forename','Elector Surname','Elector Name', 'PostCode',
-#             'Address1', 'Address2', 'Address3', 'Address4', 'Address5', 'Address6']]
-#        dfx = dfx.rename(columns= { "Elector Number Prefix" : "PD","Elector Number": "ENO","Elector Forename": "Firstname","Elector Surname": "Surname","Elector Name": "ElectorName","PostCode" : "Postcode","Elector Number Suffix" : "Suffix","Elector Markers" : "ElectorMarkers" ,"Elector DOB" : "ElectorDOB"})
-
-
+#       if find ENOP pattern - separate into 2 or 3 new fields
+#       else generate ENOP field from 3 seprate components (PD-ENO/Suffix)
+#       if find ElectorName pattern - separate into firstname, initisla dn Surname
+#       else generate ElectorName pattern from separate fields
+#       address field pattern matching and processing
+#       Lat Long , Elevation extraction from Postcode processing
+#       exclude all other fields, like markers etc
 
       #  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
         electors0 = DFtoDF(dfx)
         electors10 = dfx
       # now normalise the postcodes and other address fields
+        dfz = electors10[1:100]
+        dfzmax = dfz.shape[0]
+        print(ImportFilename," data rows: ", dfzmax )
 
+        dfzres = checkelectorName(dfz)
+        print("found ElectorName match in column: ", dfzres )
+
+#        dfzres = checkENOP(dfz)
+#        print("found ENO match in column: ", dfzres)
+
+    raise Exception('XYZ')
     count = 0
     Addno1 = ""
     Addno2 = ""
