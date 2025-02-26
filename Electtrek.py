@@ -312,7 +312,7 @@ def add_boundaries(shelf,node):
     global Con_Results_data
     if shelf == 'country':
         print("__________reading World_Countries_(Generalized)= [0]")
-        World_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'World_Countries_(Generalized)_9029012925078512962.geojson', bbox=(-7.57216793459, 49.959999905, 1.68153079591, 58.6350001085))
+        World_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'World_Countries_(Generalized)_9029012925078512962.geojson', bbox=[-7.57216793459, 49.959999905, 1.68153079591, 58.6350001085])
         World_Bound_layer = World_Bound_layer.rename(columns = {'COUNTRY': 'NAME'})
         UK_Bound_layer = World_Bound_layer[World_Bound_layer['FID'] == 238]
         UK_Bound_layer['LAT'] = 54.4361
@@ -1573,28 +1573,6 @@ def captains():
     group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
     mapfile = current_node.dir+"/"+current_node.file
     return render_template("captains.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
-
-@app.route('/candidates', methods=['POST','GET'])
-def candidates():
-    global workdirectories
-    global Directories
-    global MapRoot
-    global current_node
-    global allelectors
-    global Treepolys
-    global Featurelayers
-    global environment
-
-    formdata = {}
-    formdata['country'] = "UNITED_KINGDOM"
-    flash('_______ROUTE/candidates')
-    print('_______ROUTE/candidates')
-    formdata['importfile'] = "SCC-Candidates.xlsx"
-    if len(request.form) > 0:
-        formdata['importfile'] = request.files['importfile'].filename
-    group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
-    mapfile = current_node.dir+"/"+current_node.file
-    return render_template("candidates.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 
 @app.route('/cards', methods=['POST','GET'])
