@@ -1574,6 +1574,28 @@ def captains():
     mapfile = current_node.dir+"/"+current_node.file
     return render_template("captains.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
+@app.route('/candidates', methods=['POST','GET'])
+def candidates():
+    global workdirectories
+    global Directories
+    global MapRoot
+    global current_node
+    global allelectors
+    global Treepolys
+    global Featurelayers
+    global environment
+
+    formdata = {}
+    formdata['country'] = "UNITED_KINGDOM"
+    flash('_______ROUTE/candidates')
+    print('_______ROUTE/candidates')
+    formdata['importfile'] = "SCC-Candidates.xlsx"
+    if len(request.form) > 0:
+        formdata['importfile'] = request.files['importfile'].filename
+    group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    mapfile = current_node.dir+"/"+current_node.file
+    return render_template("candidates.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+
 
 @app.route('/cards', methods=['POST','GET'])
 def cards():

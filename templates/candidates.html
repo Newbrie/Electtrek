@@ -1,0 +1,36 @@
+{% extends "Dash0.html" %}
+
+{% block data %}
+<div id="datawin" class="innertube">
+
+	    <table id="candidates-table">
+				<thead>
+	      <tr>
+	      <th class="c1" >CC</th>
+				<th class="c1" >Firstname</th>
+				<th class="c1">Surname</th>
+				<th class="c1">Areaname</th>
+	      <th class="c1">email</th>
+	      <th class="c1">Mobile</th>
+	    </tr>
+	      </thead>
+				<tbody style="height: 70px">
+					{% for index,row in context.group.iterrows() %}
+	      <tr>
+	        <td class="c1">{{ row['CC'] }}</td>
+					<td class="c1">{{ row['Firstname'] }}</td>
+					<td class="c1">{{ row['Surname'] }}</td>
+					<td class="c1">{{ row['Area'] }}</td>
+					<td class="c1">{{ row['email'] }}</td>
+					<td class="c1"> +44
+(0
+{{ (row['mobile']|string)[0:4]}}
+){{(row['mobile']|string)[4:]}}
+  </td>
+	      </tr>
+	      {% endfor %}
+			</tbody>
+	    </table>
+
+</div>
+{% endblock data %}
