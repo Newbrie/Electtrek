@@ -312,7 +312,7 @@ def add_boundaries(shelf,node):
     global Con_Results_data
     if shelf == 'country':
         print("__________reading World_Countries_(Generalized)= [0]")
-        World_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'World_Countries_(Generalized)_9029012925078512962.geojson', bbox=[-7.57216793459, 49.959999905, 1.68153079591, 58.6350001085])
+        World_Bound_layer = gpd.read_file(workdirectories['bounddir']+"/"+'World_Countries_(Generalized)_9029012925078512962.geojson', bbox=(-7.57216793459, 49.959999905, 1.68153079591, 58.6350001085))
         World_Bound_layer = World_Bound_layer.rename(columns = {'COUNTRY': 'NAME'})
         UK_Bound_layer = World_Bound_layer[World_Bound_layer['FID'] == 238]
         UK_Bound_layer['LAT'] = 54.4361
