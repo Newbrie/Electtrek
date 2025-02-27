@@ -1,0 +1,36 @@
+{% extends "Dash0.html" %}
+
+{% block data %}
+<div id="datawin" class="innertube">
+
+	    <table id="Areas-table">
+				<thead>
+	      <tr>
+	      <th class="c1" >No</th>
+				<th class="c1" >Area</th>
+				<th class="c1">Constituency</th>
+				<th class="c1">Candidate Name</th>
+	      <th class="c1">email</th>
+	      <th class="c1">Mobile</th>
+	    </tr>
+	      </thead>
+				<tbody style="height: 70px">
+					{% for index,row in context.layeritems.iterrows() %}
+	      <tr>
+	        <td class="c1">{{ row['No'] }}</td>
+					<td class="c1">{{ row['Area'] }}</td>
+					<td class="c1">{{ row['Constituency'] }}</td>
+					<td class="c1">{{ row['Candidate'] }}</td>
+					<td class="c1">{{ row['Email'] }}</td>
+					<td class="c1"> +44
+(0
+{{ (row['Mobile']|string)[0:4]}}
+){{(row['Mobile']|string)[4:]}}
+  </td>
+	      </tr>
+	      {% endfor %}
+			</tbody>
+	    </table>
+
+</div>
+{% endblock data %}

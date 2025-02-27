@@ -32,6 +32,10 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import json, get_flashed_messages, request
 from werkzeug.exceptions import HTTPException
 
+import sys
+sys.path
+sys.path.append('/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/Electtrek.py')
+print(sys.path)
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
@@ -73,7 +77,7 @@ class TreeNode:
         self.col = levelcolours["C"+str(self.level+4)]
         self.tagno = 1
         self.centroid = Point(roid.x,roid.y)
-        self.bbox = []
+        self.bbox = [[],[]]
         self.map = {}
         self.source = ""
 
@@ -128,17 +132,17 @@ class TreeNode:
       nodemapfile = self.dir+"/"+self.file
       return newnode
 
-    def create_map_branch(self,electtype,block):
+    def create_map_branch(self,electtype):
         global Treepolys
+        block = pd.DataFrame()
         self.bbox = self.get_bounding_box(block)[0]
-        xmin, ymin, xmax, ymax = self.bbox
         self.centroid = self.get_bounding_box(block)[1]
         ChildPolylayer = Treepolys[self.level+1]
 #.cx[xmin:xmax, ymin:ymax]
         self.map = folium.Map(location=[self.centroid.y, self.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(self.level+0.75)*2)))
 
         print("_______CXofTreepoly level", self.level+1, ChildPolylayer.shape)
-        print ("________new branch elements in bbox:",self.value,self.level,"**", xmin, ymin, xmax, ymax)
+        print ("________new branch elements in bbox:",self.value,self.level,"**", self.bbox)
     # there are 2-0 (3) relative levels - absolute level are UK(0),nations(1), constituency(2), ward(3)
         index = 0
 
@@ -164,9 +168,9 @@ class TreeNode:
     def create_area_map (self,flayers,block,ending):
       self.file = self.file.replace("-MAP", ending)
       if self.level > 0:
-          title = self.parent.value+"-"+self.value+" "+ getchildtype(self.type)+ " set at level "+str(self.level)
+          title = self.parent.value+"-"+self.value+" set at level "+str(self.bbox)+" "+str(self.centroid)
       else:
-          title = self.value+" Level "+str(self.level)
+          title = self.value+" Level "+str(self.level)+ " "+str(self.bbox)+" "+str(self.centroid)
       title_html = '''<h1 style="z-index:1100;color: black;position: fixed;left:100px;">{0}</h1>'''.format(title)
       self.map.get_root().html.add_child(folium.Element(title_html))
 # just save the r-1,r,
@@ -184,7 +188,7 @@ class TreeNode:
       target = self.locmappath("")
       self.map.fit_bounds(self.bbox, padding = (10, 10))
       self.map.save(target)
-      print("_____saved map file:",target, self.level)
+      print("_____saved map file:",target, self.level, self.bbox)
 
       return self.map
 
@@ -205,15 +209,17 @@ class TreeNode:
           pfile = Treepolys[self.level]
           pb = pfile[pfile['FID']==self.fid]
           swne = pb.geometry.total_bounds
+          swne = [swne[1],swne[0],swne[3],swne[2]]
           roid = pb.dissolve().centroid
-          swne =[float('%.4f'%(swne[0])),float('%.4f'%(swne[1])),float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]
+          swne =[[float('%.4f'%(swne[0])),float('%.4f'%(swne[1]))],[float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]]
 # minx, miny, maxx, maxy
           print("_______Bbox swnemap",swne, pb, self.fid, self.value, self.level)
       else:
 #          swne = self.set_bounding_box(block)
           swne = block.geometry.total_bounds
+          swne = [swne[1],swne[0],swne[3],swne[2]]
           roid = block.dissolve().centroid
-          swne =[float('%.4f'%(swne[0])),float('%.4f'%(swne[1])),float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]
+          swne =[[float('%.4f'%(swne[0])),float('%.4f'%(swne[1]))],[float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]]
           print("_______Bbox swnedata",swne, len(block), self.parent.fid, self.parent.value, self.parent.level)
       return [swne,roid]
 
@@ -438,24 +444,28 @@ class FGlayer:
                         downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>" + downtag
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>"  + downtag
                         c.tagno = len(self.children)+1
                         print("_________new child boundary value and tagno:  ",c.type, c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 1:
+                        wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
+                        divreportmess = "moveDown(&#39;/divreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,getchildtype(c.type))
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
+                        wardreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(wardreportmess,"WARD Report",12)
+                        divreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(divreportmess,"DIV Report",12)
                         downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downconstag
+                        limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ wardreporttag + divreporttag+"<br>"+ downconstag
                         c.tagno = len(self.children)+1
                         print("_________new split child boundary value and tagno:  ",c.type,c.value, c.tagno)
                         mapfile = "/map/"+c.dir+"/"+c.file
                         self.children.append(c)
                     elif herenode.level == 2:
-                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" ward", c.value,getchildtype('ward'))
-                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" division", c.value,getchildtype('division'))
+                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" ward", c.value,"ward")
+                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" division", c.value,"division")
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
                         downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downwardmessage,"WARDS",12)
                         downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
@@ -629,7 +639,7 @@ Treepolys = [[],[],[],[],[],[]]
 current_node = MapRoot
 add_boundaries('country',MapRoot)
 add_boundaries('nation',MapRoot)
-MapRoot.create_map_branch('nation',allelectors)
+MapRoot.create_map_branch('nation')
 
 Featurelayers[current_node.level].children = []
 Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
@@ -753,7 +763,7 @@ def login():
                 break
 
         add_boundaries('county',england)
-        england.create_map_branch('county',allelectors)
+        england.create_map_branch('county')
         mapfile = current_node.dir+"/"+current_node.file
         return redirect(url_for('captains'))
     else:
@@ -823,7 +833,7 @@ def downbut(selnode):
     print("_________selected node",atype,steps,current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
     add_boundaries(atype,current_node)
-    current_node.create_map_branch(atype,allelectors)
+    current_node.create_map_branch(atype)
     Featurelayers[current_node.level].children = []
     Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     Featurelayers[current_node.level].add_mapboundaries(current_node, atype)
@@ -1278,18 +1288,73 @@ def PDshowWK(selnode):
     return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/layeritems/',methods=['GET','POST'])
-def layeritems():
+@app.route('/wardreport/<path:selnode>',methods=['GET','POST'])
+def wardreport(selnode):
     global current_node
 
-    flash('_______ROUTE/layeritems')
+    steps = selnode.split("/")
+    steps.pop()
+    current_node = selected_childnode(current_node,steps[-1])
 
+    flash('_______ROUTE/wardreport')
+    print('_______ROUTE/wardreport')
 
-    layernodelist = Featurelayers[current_node.level].children
-    current_node = current_node.parent
-    mapfile = url_for('downbut',selnode=current_node.dir+"/"+current_node.file)
-    print("________laynodelist", current_node.level, current_node.value, Featurelayers[current_node.level].children)
-    return render_template("dash1.html", context = { "layernodelist" :layernodelist, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+    i = 0
+    layeritems = pd.DataFrame()
+    alreadylisted = []
+    add_boundaries('constituency',current_node)
+    current_node.create_map_branch('constituency')
+    for group_node in current_node.childrenoftype('constituency'):
+        add_boundaries('ward',group_node)
+        group_node.create_map_branch('ward')
+        for item in group_node.childrenoftype('ward'):
+            if item.value not in alreadylisted:
+                alreadylisted.append(item.value)
+                layeritems.loc[i,'No']= i
+                layeritems.loc[i,'Area']=  item.value
+                layeritems.loc[i,'Constituency']=  group_node.value
+                layeritems.loc[i,'Candidate']=  "Joe Bloggs"
+                layeritems.loc[i,'Email']=  "xxx@reforumuk.com"
+                layeritems.loc[i,'Mobile']=  "07789 342456"
+                i = i + 1
+    mapfile = url_for('map',path=current_node.dir+"/"+current_node.file)
+    print("________layeritems  :  ", layeritems)
+
+    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+
+@app.route('/divreport/<path:selnode>',methods=['GET','POST'])
+def divreport(selnode):
+    global current_node
+
+    steps = selnode.split("/")
+    steps.pop()
+    current_node = selected_childnode(current_node,steps[-1])
+
+    flash('_______ROUTE/divreport')
+    print('_______ROUTE/divreport')
+
+    i = 0
+    layeritems = pd.DataFrame()
+    alreadylisted = []
+    add_boundaries('constituency',current_node)
+    current_node.create_map_branch('constituency')
+    for group_node in current_node.childrenoftype('constituency'):
+        add_boundaries('division',group_node)
+        group_node.create_map_branch('division')
+        for item in group_node.childrenoftype('division'):
+            if item.value not in alreadylisted:
+                alreadylisted.append(item.value)
+                layeritems.loc[i,'No']= i
+                layeritems.loc[i,'Area']=  item.value
+                layeritems.loc[i,'Constituency']=  group_node.value
+                layeritems.loc[i,'Candidate']=  "Joe Bloggs"
+                layeritems.loc[i,'Email']=  "xxx@reforumuk.com"
+                layeritems.loc[i,'Mobile']=  "07789 342456"
+                i = i + 1
+    mapfile = url_for('map',path=current_node.dir+"/"+current_node.file)
+    print("________layeritems  :  ",layeritems)
+
+    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/upbut/<path:selnode>', methods=['GET','POST'])
 def upbut(selnode):
@@ -1307,8 +1372,8 @@ def upbut(selnode):
 
 
 
-    Featurelayers[current_node.level].children = []
-    Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
+#    Featurelayers[current_node.level].children = []
+#    Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
     current_node = current_node.parent
 # the selected  boundary options need to be added to the layer
@@ -1422,11 +1487,11 @@ def register():
 @app.route('/map/<path:path>', methods=['GET','POST'])
 def map(path):
     global current_node
-    flash ("_________ROUTE/map"+path)
-    print ("_________Nextmap",path)
     steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
+    flash ("_________ROUTE/map"+path)
+    print ("_________ROUTE/map",path, current_node.dir)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -1573,6 +1638,28 @@ def captains():
     group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
     mapfile = current_node.dir+"/"+current_node.file
     return render_template("captains.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+
+@app.route('/candidates', methods=['POST','GET'])
+def candidates():
+    global workdirectories
+    global Directories
+    global MapRoot
+    global current_node
+    global allelectors
+    global Treepolys
+    global Featurelayers
+    global environment
+
+    formdata = {}
+    formdata['country'] = "UNITED_KINGDOM"
+    flash('_______ROUTE/candidates')
+    print('_______ROUTE/candidates')
+    formdata['importfile'] = "SCC-Candidates.xlsx"
+    if len(request.form) > 0:
+        formdata['importfile'] = request.files['importfile'].filename
+    group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    mapfile = current_node.dir+"/"+current_node.file
+    return render_template("candidates.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 
 @app.route('/cards', methods=['POST','GET'])

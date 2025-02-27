@@ -37,10 +37,14 @@
       old = pessages.pop();
       var ul = parent.document.getElementById("logwin");
       var li = parent.document.createElement("li");
+      var tab = parent.document.getElementById("captains-table");
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var tab = parent.document.getElementById("datawin");
-      tab.focus();
+      const areas_url = {{ url_for("displayareas")|tojson }}
+      const areas_div = getElementById("Areas-table")
+      fetch(areas_url)
+        .then(response => response.text)
+        .then(text => areas_div.innerHTML = text)
 
       };
 
@@ -57,9 +61,6 @@
       {% endfor %}
       </ul>
 
-		{% for x in context.layernodelist %}
-				<ul> {{ x.tagno | int}} | {{ x.value }} </ul>
-		{% endfor %}
 </div>
 {% endblock log %}
 
@@ -78,11 +79,10 @@
 					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
 					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
 					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
-					<input type="file" name="importfile" placeholder= " {{ context.formdata['filename']}} "/>
+					<input type="file" name="importfile" placeholder= " {{ context.formdata['importfile']}} "/>
 		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
 		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
 					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
-					<input type="submit" value="ProduceLayerReport" class="btn btn-norm" onclick="setActionForm('layeritems')"/>
 					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
 					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
           <input type="submit" value="UploadCaptainsTable" class="btn btn-norm" onclick="setActionForm('captains')"/>
@@ -106,11 +106,6 @@
 								form.method = 'POST';
 								document.body.style.cursor = 'wait'
 								form.submit();
-						} else if (action === 'layeritems') {
-								form.action = "{{url_for('layeritems')}}";
-								form.method = 'GET';
-								document.body.style.cursor = 'wait'
-								form.submit();
 						} else if (action === 'postcode') {
 									form.action = "{{url_for('postcode')}}";
 									form.method = 'POST';
@@ -128,5 +123,6 @@
 {% endblock nav %}
 {% block data %}
 <div id="datawin" class="innertube">
+{{ include "Areas.html" }}
 </div>
 {% endblock data %}
