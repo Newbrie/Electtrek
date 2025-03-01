@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="utf-8" />
+    <style>
+        #panel {
+            position: absolute;
+            top: 50px;
+            left: 250px;
+            width: 250px;
+            height: 150px;
+        }
+        #resultFocus {
+            position:absolute;
+            left: 650px;
+        }
+        .btn {
+            width: 150px;
+            height: 30px;
+            margin: 5px;
+            background-color: lightblue;
+        }
+    </style>
+    <script>
+        (function (window) {
+
+            var _hidePanel = function () {
+                var panel = document.getElementById('panel');
+                panel.style.display = 'none';
+            };
+            var _showPanel = function () {
+                var panel = document.getElementById('panel');
+                panel.style.display = '';
+            };
+
+            var _addListeners = function () {
+                var btnHide = document.getElementById('btnHide');
+                btnHide.addEventListener('click', function (event) {
+                    _hidePanel();
+                    _setFocusMainWindow();
+                    _showActiveFocus();
+                    });
+                var btnShow = document.getElementById('btnShow');
+                btnShow.addEventListener('click', function (event) {
+                    _showPanel();
+                });
+
+                var btnInner = document.getElementById('iframe').contentWindow.document.getElementById('btnInner');
+                btnInner.addEventListener('click', function (event) {
+                    _hidePanel();
+                    _setFocusMainWindow();
+                    _showActiveFocus();
+                });
+
+                var btnShowActiveFocus = document.getElementById('btnShowActiveFocus');
+                btnShowActiveFocus.addEventListener('click', function (event) {
+                    _showActiveFocus();
+                });
+            };
+
+            var _showActiveFocus = function () {
+                var resultFocus = document.getElementById('resultFocus');
+                resultFocus.innerHTML = '';
+                resultFocus.innerHTML = document.activeElement;
+            };
+
+            var _setFocusMainWindow = function () {
+                window.focus();
+            };
+
+            window.start = function () {
+                _addListeners();
+                _hidePanel();
+                _showActiveFocus();
+            }
+        })(window);
+    </script>
+</head>
+<body onload="start();">
+    <div id="btnShow" type="button" class="btn">01 show panel</div>
+    <div id="btnHide" type="button" class="btn" style="display:none;">03 hide panel</div>
+    <div id="btnShowActiveFocus" type="button" class="btn" style="display:none;">show active focus</div>
+    <div id="panel">
+        <iframe id="iframe" src="Nested.html"></iframe>
+    </div>
+    <div id="resultFocus" rows="2" cols="20"></div>
+</body>
+</html>

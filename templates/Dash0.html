@@ -37,14 +37,15 @@
       old = pessages.pop();
       var ul = parent.document.getElementById("logwin");
       var li = parent.document.createElement("li");
-      var tab = parent.document.getElementById("captains-table");
+      var tab = parent.document.getElementById("datawin");
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
+      tab.focus();
       const areas_url = {{ url_for("displayareas")|tojson }}
-      const areas_div = getElementById("Areas-table")
-      fetch(areas_url)
-        .then(response => response.text)
-        .then(text => areas_div.innerHTML = text)
+//      const areas_div = parent.document.getElementById("Areas-table")
+//      fetch(areas_url)
+//        .then(response => response.text)
+//        .then(text => tab.value = text)
 
       };
 
@@ -121,8 +122,7 @@
 </script>
 </div>
 {% endblock nav %}
-{% block data %}
-<div id="datawin" class="innertube">
-{{ include "Areas.html" }}
-</div>
-{% endblock data %}
+  {% block captains %}
+  {% endblock captains %}
+  {% block candidates %}
+  {% endblock candidates %}

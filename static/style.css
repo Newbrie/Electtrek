@@ -277,7 +277,7 @@ table {
   margin-left: 10px;
 }
 
-tbody {     
+tbody {
     overflow-y: auto;    /* Trigger vertical scroll    */
     overflow-x: hidden;  /* Hide the horizontal scroll */
 }
@@ -301,6 +301,10 @@ table tr td {
 
 tr:nth-child(even) {
   background-color: #dddddd;
+}
+
+tr:has(.selectRow:checked) > td {
+  background-color: #ccc;
 }
 
 /*! Guilfoss Design System 1.21 */

@@ -617,6 +617,7 @@ Featurelayers.append(FGlayer(id=11,name='Special Markers'))
 formdata = {}
 filename = "Surrey_HeathRegister.csv"
 allelectors = pd.DataFrame()
+layeritems = pd.DataFrame()
 #allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
 
 mapfile = ""
@@ -765,7 +766,7 @@ def login():
         add_boundaries('county',england)
         england.create_map_branch('county')
         mapfile = current_node.dir+"/"+current_node.file
-        return redirect(url_for('captains'))
+        return redirect(url_for('candidates'))
     else:
         flash (' Not logged in ! ')
 
@@ -1291,6 +1292,7 @@ def PDshowWK(selnode):
 @app.route('/wardreport/<path:selnode>',methods=['GET','POST'])
 def wardreport(selnode):
     global current_node
+    global layeritems
 
     steps = selnode.split("/")
     steps.pop()
@@ -1298,6 +1300,8 @@ def wardreport(selnode):
 
     flash('_______ROUTE/wardreport')
     print('_______ROUTE/wardreport')
+    mapfile = current_node.dir+"/"+current_node.file
+    print("________layeritems  :  ", layeritems)
 
     i = 0
     layeritems = pd.DataFrame()
@@ -1307,6 +1311,7 @@ def wardreport(selnode):
     for group_node in current_node.childrenoftype('constituency'):
         add_boundaries('ward',group_node)
         group_node.create_map_branch('ward')
+
         for item in group_node.childrenoftype('ward'):
             if item.value not in alreadylisted:
                 alreadylisted.append(item.value)
@@ -1316,11 +1321,20 @@ def wardreport(selnode):
                 layeritems.loc[i,'Candidate']=  "Joe Bloggs"
                 layeritems.loc[i,'Email']=  "xxx@reforumuk.com"
                 layeritems.loc[i,'Mobile']=  "07789 342456"
+                return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
                 i = i + 1
-    mapfile = url_for('map',path=current_node.dir+"/"+current_node.file)
-    print("________layeritems  :  ", layeritems)
+#    mapfile = current_node.parent.dir+"/"+current_node.parent.file
+#    print("________layeritems  :  ", layeritems)
 
-    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+#    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+#    return redirect(url_for('map',path=mapfile))
+
+
+@app.route('/displayareas',methods=['POST', 'GET'])
+def displayareas():
+    global layeritems
+    return jsonify([u.to_json() for u in layeritems])
+#    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/divreport/<path:selnode>',methods=['GET','POST'])
 def divreport(selnode):
@@ -1627,6 +1641,7 @@ def captains():
     global Treepolys
     global Featurelayers
     global environment
+    global layeritems
 
     formdata = {}
     formdata['country'] = "UNITED_KINGDOM"
@@ -1637,7 +1652,7 @@ def captains():
         formdata['importfile'] = request.files['importfile'].filename
     group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
     mapfile = current_node.dir+"/"+current_node.file
-    return render_template("captains.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+    return render_template("captains.html", context = {  "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 @app.route('/candidates', methods=['POST','GET'])
 def candidates():
@@ -1654,12 +1669,12 @@ def candidates():
     formdata['country'] = "UNITED_KINGDOM"
     flash('_______ROUTE/candidates')
     print('_______ROUTE/candidates')
-    formdata['importfile'] = "SCC-Candidates.xlsx"
+    formdata['importfile'] = "SCC-CandidateSelection.xlsx"
     if len(request.form) > 0:
         formdata['importfile'] = request.files['importfile'].filename
     group = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
     mapfile = current_node.dir+"/"+current_node.file
-    return render_template("candidates.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
+    return render_template("candidates.html", context = {  "session" : session, "formdata" : formdata, "group" : group , "mapfile" : mapfile})
 
 
 @app.route('/cards', methods=['POST','GET'])
