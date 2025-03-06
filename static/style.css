@@ -79,6 +79,8 @@ body {
 	    opacity: 0.8;
 		}
     #logwin {
+			max-height: 100vh;
+  	  overflow: auto;
 			z-index: 11;
 			display: inline-block;
 			position: absolute;
@@ -87,12 +89,12 @@ body {
 			width: 290px;
 			font-weight: normal;
 			background: white;
-		 padding : 16px 20px ;
-		 font-size: 1em;
-		 border-radius: 3px;
-		 border-color: indigo;
-		 cursor: pointer;
-		 opacity: 0.8;
+		  padding : 16px 20px ;
+		  font-size: 1em;
+		  border-radius: 3px;
+		  border-color: indigo;
+		  cursor: pointer;
+		  opacity: 0.8;
     }
 
 		.innertube {

@@ -33,22 +33,75 @@
         ul.appendChild(li);
       });
 
+      function toTitleCase(str) {
+        return str.replace(
+          /\w\S*/g,
+          text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+        );
+      }
+
       function updateMessages(){
       old = pessages.pop();
       var ul = parent.document.getElementById("logwin");
       var li = parent.document.createElement("li");
-      var tab = parent.document.getElementById("datawin");
+      var tabhead = parent.document.querySelector("div > table > thead");
+      var tabbody = parent.document.querySelector("div > table > tbody");
+      tabbody.checked = true;
+
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      tab.focus();
-      const areas_url = {{ url_for("displayareas")|tojson }}
+
 //      const areas_div = parent.document.getElementById("Areas-table")
-//      fetch(areas_url)
-//        .then(response => response.text)
-//        .then(text => tab.value = text)
+      fetch('/displayareas', {
+        "method": "GET",
+        "headers": {"Content-Type": "application/json"},
+      })
+        .then(   response => response.json())
+        .then(data => {
+        //    alert(data);
+            console.log("Data received:", data);  // Log the data structure to see the format
+
+            if (Array.isArray(data) && data.length > 0) {
+                // Extract column headers from the first record (keys)
+                const columnHeaders = Object.keys(data[0]);
+
+                // Build the table with column headers and record data
+                let frame1Content = '<table border="1"><thead><tr> \
+                  <td> \
+                     ?  \
+                  </td>'
+                // Loop through column headers and add them to the table header
+                columnHeaders.forEach(header => {
+                    frame1Content += `<th>${toTitleCase(header)}</th>`;
+                });
+
+                frame1Content += '</tr></thead><tbody>';
+                tabhead.innerHTML = frame1Content;
+                // Loop through the data and add each record (row) to the table
+                frame1Content = '<table border="1"><tbody><tr>';
+                  data.forEach(record => {
+                    frame1Content += '<tr> \
+                      <td> \
+            						<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
+            					</td>'
+                    columnHeaders.forEach(header => {
+                        frame1Content += `<td>${record[header]}</td>`;
+                    });
+                    frame1Content += '</tr>';
+                });
+
+                frame1Content += '</tbody></table>';
+                tabbody.innerHTML = frame1Content;
+
+            } else {
+                console.error("Data is not an array or is empty:", data);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching data for frame1:', error);
+        });
 
       };
-
     </script>
 </div>
 {% endblock map %}

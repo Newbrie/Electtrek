@@ -6,6 +6,7 @@
 	    <table id="candidates-table">
 				<thead>
 	      <tr>
+				<th class="c1" >?</th>
 	      <th class="c1" >CC</th>
 				<th class="c1">Areaname</th>
 				<th class="c1" >Constituency</th>
@@ -16,6 +17,10 @@
 				<tbody style="height: 70px">
 					{% for index,row in context.group.iterrows() %}
 	      <tr>
+					<td>
+						<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow">
+						<label for="selectRow1" class="visually-hidden"></label>
+					</td>
 	        <td class="c1">{{ row['No'] }}</td>
 					<td class="c1">{{ row['Area'] }}</td>
 					<td class="c1">{{ row['Constituency'] }}</td>
