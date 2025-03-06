@@ -79,8 +79,8 @@ body {
 	    opacity: 0.8;
 		}
     #logwin {
-			max-height: 100vh;
-  	  overflow: auto;
+			height: 220px;
+			overflow: scroll;
 			z-index: 11;
 			display: inline-block;
 			position: absolute;
