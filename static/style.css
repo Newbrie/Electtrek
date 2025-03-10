@@ -55,7 +55,7 @@ body {
 	position: absolute;
 	bottom: 0;
 	left: 0;
-	height: 220px;
+	height: 210px;
 	width: 1200px;
 	overflow: scroll;
 	background: white;
@@ -79,7 +79,7 @@ body {
 	    opacity: 0.8;
 		}
     #logwin {
-			height: 220px;
+			height: 210px;
 			overflow: scroll;
 			z-index: 11;
 			display: inline-block;
