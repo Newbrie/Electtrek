@@ -110,6 +110,7 @@
 	        <td class="righted">{{ row['StreetName'] }}</td>
 	        <td class="righted">{{ row['Postcode'] }}</td>
 					<td class="AV"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
+
 	       	<td class="VI"><span> <input type="text" onchange="inputVI(this)" maclength="2" size="2" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}} />
 				    </span></td>
 	        <td class="NS" ><span>

@@ -1013,133 +1013,136 @@ def PDshowST(selnode):
     mapfile = current_node.dir+"/"+current_node.file
     frames = []
 
-    if request.method == 'GET':
-# if there is a selected file , then allelectors will be full of records
-        PDelectors = getblock(allelectors, 'PD',current_node.value)
-        if len(current_node.childrenoftype('street')) == 0:
+    if request.method == 'POST':
+# if POST then take account of entered data in VI columns
+        VIdata = request.get_json()
+        print("________VIData :",VIdata)
+    PDelectors = getblock(allelectors, 'PD',current_node.value)
+    if len(current_node.childrenoftype('street')) == 0:
 
-    # we only want to plot with single streets , so we need to establish one street record with pt data to plot
+# we only want to plot with single streets , so we need to establish one street record with pt data to plot
 
-            StreetPts = [(x[0],x[1],x[2]) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
-            Streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat'])
-            Streetdf = Streetdf0.groupby(['Name']).mean()
-
-
-            Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-
-            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
-
-            Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
-
-            if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
-                flash("Can't find any elector data for this Polling District.")
-                print("Can't find any elector data for this Polling District.")
-            else:
-                flash("________streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
-                print("________streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+        StreetPts = [(x[0],x[1],x[2]) for x in PDelectors[['StreetName','Long','Lat']].drop_duplicates().values]
+        Streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat'])
+        Streetdf = Streetdf0.groupby(['Name']).mean()
 
 
-            for street_node in current_node.childrenoftype('street'):
-                  street = street_node.value
+        Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
-                  electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
+        streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
 
-                  STREET_ = street_node.value
+        Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
 
-                  Postcode = electorwalks.loc[0].Postcode
-
-                  walk_name = street_node.parent.value+"-"+street_node.value
-                  type_colour = "indigo"
-            #      BMapImg = walk_name+"-MAP.png"
-
-                # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
-                  geometry = gpd.points_from_xy(electorwalks.Long.values,electorwalks.Lat.values, crs="EPSG:4326")
-                # create a geo dataframe for the Walk Map
-                  geo_df1 = gpd.GeoDataFrame(
-                    electorwalks, geometry=geometry
-                    )
-
-                # Create a geometry list from the GeoDataFrame
-                  geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
-                  CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
-
-                  electorwalks['Team'] = ""
-                  electorwalks['M1'] = ""
-                  electorwalks['M2'] = ""
-                  electorwalks['M3'] = ""
-                  electorwalks['M4'] = ""
-                  electorwalks['M5'] = ""
-                  electorwalks['M6'] = ""
-                  electorwalks['M7'] = ""
-                  electorwalks['Notes'] = ""
-
-                  groupelectors = electorwalks.shape[0]
-                  if math.isnan(float('%.4f'%(electorwalks.Elevation.max()))):
-                      climb = 0
-                  else:
-                      climb = int(float('%.4f'%(electorwalks.Elevation.max())) - float('%.4f'%(electorwalks.Elevation.min())))
-
-                  x = electorwalks.AddressNumber.values
-                  y = electorwalks.StreetName
-                  z = electorwalks.AddressPrefix.values
-                  houses = len(list(set(zip(x,y,z))))+1
-                  streets = len(electorwalks.StreetName.unique())
-                  areamsq = 34*21.2*20*21.2
-                  avstrlen = 200
-                  housedensity = round(houses/(areamsq/10000),3)
-                  avhousem = 100*round(math.sqrt(1/housedensity),2)
-                  streetdash = avstrlen*streets/houses
-                  speed = 5*1000
-                  climbspeed = 5*1000 - climb*50/7
-                  leafmins = 0.5
-                  canvassmins = 5
-                  canvasssample = .5
-                  leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
-                  canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
-                  prodstats = {}
-                  prodstats['ward'] = current_node.parent.parent.value
-                  prodstats['polling district'] = current_node.parent.value
-                  prodstats['groupelectors'] = groupelectors
-                  prodstats['climb'] = climb
-                  prodstats['houses'] = houses
-                  prodstats['streets'] = streets
-                  prodstats['housedensity'] = housedensity
-                  prodstats['leafhrs'] = round(leafhrs,2)
-                  prodstats['canvasshrs'] = round(canvasshrs,2)
-
-                  electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
-                  target = street_node.locmappath("")
-                  results_filename = walk_name+"-PRINT.html"
-
-                  datafile = street_node.dir+"/"+walk_name+"-DATA.html"
-                  mapfile = street_node.parent.dir+"/"+street_node.parent.file
-
-    #              map = street_node.create_area_map(Featurelayers,electorwalks)
-
-
-                  context = {
-                    "group": electorwalks,
-                    "prodstats": prodstats,
-                    "mapfile": url_for('map',path=mapfile),
-                    "datafile": url_for('map',path=datafile),
-                    "walkname": walk_name,
-                    }
-                  results_template = environment.get_template('canvasscard1.html')
-
-                  with open(results_filename, mode="w", encoding="utf-8") as results:
-                    results.write(results_template.render(context, url_for=url_for))
-#           only create a map if the branch does not already exist
-            map = current_node.create_area_map(Featurelayers,PDelectors,"-STREETS")
-        layeritems = getlayeritems(current_node.childrenoftype('street'))
-        current_node.file = subending(current_node.file,"-STREETS")
-        mapfile = current_node.dir+"/"+current_node.file
-        print ("________Heading for the Streets in PD :  ",current_node.value, current_node.file)
-        if len(Featurelayers[current_node.level].fg._children) == 0:
-            flash("Can't find any Streets for this PD.")
+        if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
+            flash("Can't find any elector data for this Polling District.")
+            print("Can't find any elector data for this Polling District.")
         else:
-            flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+            flash("________streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+            print("________streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+
+
+        for street_node in current_node.childrenoftype('street'):
+              street = street_node.value
+
+              electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
+
+              STREET_ = street_node.value
+
+              Postcode = electorwalks.loc[0].Postcode
+
+              walk_name = street_node.parent.value+"-"+street_node.value
+              type_colour = "indigo"
+        #      BMapImg = walk_name+"-MAP.png"
+
+            # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
+              geometry = gpd.points_from_xy(electorwalks.Long.values,electorwalks.Lat.values, crs="EPSG:4326")
+            # create a geo dataframe for the Walk Map
+              geo_df1 = gpd.GeoDataFrame(
+                electorwalks, geometry=geometry
+                )
+
+            # Create a geometry list from the GeoDataFrame
+              geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
+              CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+
+              electorwalks['Team'] = ""
+              electorwalks['M1'] = ""
+              electorwalks['M2'] = ""
+              electorwalks['M3'] = ""
+              electorwalks['M4'] = ""
+              electorwalks['M5'] = ""
+              electorwalks['M6'] = ""
+              electorwalks['M7'] = ""
+              electorwalks['Notes'] = ""
+
+              groupelectors = electorwalks.shape[0]
+              if math.isnan(float('%.4f'%(electorwalks.Elevation.max()))):
+                  climb = 0
+              else:
+                  climb = int(float('%.4f'%(electorwalks.Elevation.max())) - float('%.4f'%(electorwalks.Elevation.min())))
+
+              x = electorwalks.AddressNumber.values
+              y = electorwalks.StreetName
+              z = electorwalks.AddressPrefix.values
+              houses = len(list(set(zip(x,y,z))))+1
+              streets = len(electorwalks.StreetName.unique())
+              areamsq = 34*21.2*20*21.2
+              avstrlen = 200
+              housedensity = round(houses/(areamsq/10000),3)
+              avhousem = 100*round(math.sqrt(1/housedensity),2)
+              streetdash = avstrlen*streets/houses
+              speed = 5*1000
+              climbspeed = 5*1000 - climb*50/7
+              leafmins = 0.5
+              canvassmins = 5
+              canvasssample = .5
+              leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
+              canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
+              prodstats = {}
+              prodstats['ward'] = current_node.parent.parent.value
+              prodstats['polling district'] = current_node.parent.value
+              prodstats['groupelectors'] = groupelectors
+              prodstats['climb'] = climb
+              prodstats['houses'] = houses
+              prodstats['streets'] = streets
+              prodstats['housedensity'] = housedensity
+              prodstats['leafhrs'] = round(leafhrs,2)
+              prodstats['canvasshrs'] = round(canvasshrs,2)
+
+              electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
+              target = street_node.locmappath("")
+              results_filename = walk_name+"-PRINT.html"
+
+              datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+              mapfile = street_node.parent.dir+"/"+street_node.parent.file
+
+#              map = street_node.create_area_map(Featurelayers,electorwalks)
+
+
+              context = {
+                "group": electorwalks,
+                "prodstats": prodstats,
+                "mapfile": url_for('map',path=mapfile),
+                "datafile": url_for('map',path=datafile),
+                "walkname": walk_name,
+                }
+              results_template = environment.get_template('canvasscard1.html')
+
+              with open(results_filename, mode="w", encoding="utf-8") as results:
+                results.write(results_template.render(context, url_for=url_for))
+#           only create a map if the branch does not already exist
+        map = current_node.create_area_map(Featurelayers,PDelectors,"-STREETS")
+    layeritems = getlayeritems(current_node.childrenoftype('street'))
+    current_node.file = subending(current_node.file,"-STREETS")
+    mapfile = current_node.dir+"/"+current_node.file
+    print ("________Heading for the Streets in PD :  ",current_node.value, current_node.file)
+    if len(Featurelayers[current_node.level].fg._children) == 0:
+        flash("Can't find any Streets for this PD.")
+    else:
+        flash("________Streets added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
 
 @app.route('/PDshowWK/<path:selnode>', methods=['GET','POST'])
 def PDshowWK(selnode):

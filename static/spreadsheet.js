@@ -28,6 +28,69 @@ if (!event.target.matches('.dropbtn')) {
 };
 };
 
+function saveVIData(action){
+  const url = '{{url_for('PDshowST', path= '[walkname]-PRINT.html')}}';
+  let VIdata = document.getElementById("td.VI");
+  let fetchData = {
+      method: 'POST',
+      body: JSON.stringify(VIdata),
+      headers: new Headers({
+        'Content-Type': 'application/json; charset=UTF-8'
+  });
+  if (action === 'savedata') {
+    fetch(url, fetchData)
+      .then(   response => response.json())
+      .then(data => {
+      //    alert(data);
+          console.log("Data received:", data);  // Log the data structure to see the format
+
+          if (Array.isArray(data) && data.length > 0) {
+              // Extract column headers from the first record (keys)
+              const columnHeaders = Object.keys(data[0]);
+
+              // Build the table with column headers and record data
+              let frame1Content = '<table border="1"><thead><tr> \
+                <td> \
+                   ?  \
+                </td>'
+              // Loop through column headers and add them to the table header
+              columnHeaders.forEach(header => {
+                  frame1Content += `<th>${toTitleCase(header)}</th>`;
+              });
+
+              frame1Content += '</tr></thead><tbody>';
+              tabhead.innerHTML = frame1Content;
+              // Loop through the data and add each record (row) to the table
+              frame1Content = '<table border="1"><tbody><tr>';
+                data.forEach(record => {
+                  frame1Content += '<tr> \
+                    <td> \
+                      <input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
+                    </td>'
+                  columnHeaders.forEach(header => {
+                      frame1Content += `<td>${record[header]}</td>`;
+                  });
+                  frame1Content += '</tr>';
+              });
+
+              frame1Content += '</tbody></table>';
+              tabbody.innerHTML = frame1Content;
+
+          } else {
+              console.error("Data is not an array or is empty:", data);
+          }
+      })
+      .catch(error => {
+          console.error('Error fetching data for frame1:', error);
+      });
+      form.action = "{{url_for('PDshowST', path= '[walkname]-PRINT.html')}}";
+      form.method = 'POST';
+      document.body.style.cursor = 'wait';
+      form.submit();
+    };
+};
+
+
 function email_csv(csv, filename) {
   var csvFile;
   var downloadLink;
@@ -136,6 +199,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
+  saveVIData('savedata');
 });
 
 function inputVI(VI) {
