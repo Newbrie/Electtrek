@@ -42,7 +42,7 @@ function saveVIData(action){
     fetch(url, fetchData)
       .then(   response => response.json())
       .then(data => {
-      //    alert(data);
+          alert(data);
           console.log("Data received:", data);  // Log the data structure to see the format
 
           if (Array.isArray(data) && data.length > 0) {
