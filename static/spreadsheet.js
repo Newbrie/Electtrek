@@ -84,10 +84,6 @@ function saveVIData(action){
       .catch(error => {
           console.error('Error fetching data for frame1:', error);
       });
-      form.action = "{{url_for('PDshowST', path= '[walkname]-PRINT.html')}}";
-      form.method = 'POST';
-      document.body.style.cursor = 'wait';
-      form.submit();
     }
 };
 
