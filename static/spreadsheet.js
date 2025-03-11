@@ -29,16 +29,16 @@ if (!event.target.matches('.dropbtn')) {
 };
 
 function saveVIData(action){
-  const url = "{{url_for('PDshowST', path= '[walkname]-PRINT.html')}}";
-  let VIdata = document.getElementById("td.VI");
-  let fetchData = {
-      method: 'POST',
-      body: JSON.stringify(VIdata),
-      headers: new Headers({
-        'Content-Type': 'application/json; charset=UTF-8'
-      })
-    };
   if (action === 'savedata') {
+    const url = "http://127.0.0.1:/PDshowST/KA-LUPIN_CLOSE-PRINT.html";
+    let VIdata = document.getElementById("td.VI");
+    let fetchData = {
+        method: 'POST',
+        body: JSON.stringify(VIdata),
+        headers: new Headers({
+          'Content-Type': 'application/json; charset=UTF-8'
+        })
+      };
     fetch(url, fetchData)
       .then(   response => response.json())
       .then(data => {
