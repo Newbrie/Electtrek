@@ -36,7 +36,7 @@ function saveVIData(action){
       body: JSON.stringify(VIdata),
       headers: new Headers({
         'Content-Type': 'application/json; charset=UTF-8'
-      });
+      })
     };
   if (action === 'savedata') {
     fetch(url, fetchData)
@@ -211,7 +211,7 @@ function inputVI(VI) {
     VI.style.color = 'lightgray';
     VI.innerHTML = x;
     VI.parentElement.parentElement.innerText = x;
-    };
+    }
   };
 
 function inputNS(NS) {
