@@ -47,7 +47,7 @@ function getVIData() {
     });
 
     console.log("Collected VI Data:", data);
-    alert(data);
+
     // Send data to server
     fetch("/PDshowST/UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html", {
         method: "POST",
@@ -58,10 +58,11 @@ function getVIData() {
     })
     .then(response => {
     console.log("Raw Response:", response);
+    alert(response);
     return response.json();  // Convert response to JSON
     })
     .then(data => {
-
+        alert(data);
         console.log("Server Response:", data);
         alert("VI data saved successfully!");
         alert(data);
