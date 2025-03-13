@@ -448,6 +448,7 @@ class FGlayer:
             here = [float('%.4f'%(herenode.centroid.y)),float('%.4f'%(herenode.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
             print("______addingPoly:",herenode.value, limb.NAME)
+            mapfile = current_node.dir+"/"+current_node.file
 
 #            self.children.append(herenode)
 

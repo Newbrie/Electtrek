@@ -30,7 +30,7 @@ if (!event.target.matches('.dropbtn')) {
 
 function saveVIData(action){
   if (action === 'savedata') {
-    const url = "http://127.0.0.1/PDshowST/KA-LUPIN_CLOSE-PRINT.html";
+    const url = "/PDshowST/KA-LUPIN_CLOSE-PRINT.html";
     let VIdata = document.getElementById("td.VI");
     let fetchData = {
         method: 'POST',
