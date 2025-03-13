@@ -59,8 +59,9 @@ function getVIData() {
     })
     .then(response => {
     console.log("Raw Response:", response);
-    alert(response.json());
-    return response.json();  // Convert response to JSON
+    jstext = response.json()
+    alert(jstext);
+    return jstext;  // Convert response to JSON
     })
     .then(data => {
         alert(data);
