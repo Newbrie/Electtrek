@@ -39,7 +39,7 @@ function saveVIData(action){
           'Content-Type': 'application/json; charset=UTF-8'
         })
       };
-    alert(VIData);
+    alert(VIdata);
     fetch(url, fetchData)
       .then(   response => response.json())
       .then(data => {
