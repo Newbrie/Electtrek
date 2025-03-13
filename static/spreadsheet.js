@@ -56,7 +56,10 @@ function getVIData() {
         },
         body: JSON.stringify({ viData: data }),
     })
-    .then(response => response.json())
+    .then(response => {
+    console.log("Raw Response:", response);
+    return response.json();  // Convert response to JSON
+    })
     .then(data => {
 
         console.log("Server Response:", data);
