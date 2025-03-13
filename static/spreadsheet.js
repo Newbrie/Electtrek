@@ -32,13 +32,13 @@ if (!event.target.matches('.dropbtn')) {
 
 function getVIData() {
     let table = document.getElementById("canvass-table");
-    let inputs = table.querySelectorAll("td.VI input"); // Select all VI input fields
+    let inputs = table.querySelectorAll("td.VI"); // Select all VI input fields
     let data = [];
 
     inputs.forEach(input => {
         let row = input.closest("tr"); // Get the closest row
         let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
-        let viValue = input.innerHTML; // Get input value
+        let viValue = VI.value; // Get input value
 
         data.push({
             electorID: electorID,
