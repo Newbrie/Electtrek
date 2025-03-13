@@ -208,7 +208,7 @@ function export_table_to_csv(html, filename) {
     // Download CSV
     download_csv(csv.join("\n"), filename);
 };
-get
+
 document.getElementById('save-btn').addEventListener('click', function() {
   var filename = document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
