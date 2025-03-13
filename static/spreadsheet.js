@@ -1,5 +1,7 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
+
+
 function myFunction() {
   var select = document.getElementById("dropCluster");
   var options = ["1", "2", "3", "4", "5"];
@@ -28,65 +30,80 @@ if (!event.target.matches('.dropbtn')) {
 };
 };
 
-function saveVIData(action){
-  if (action === 'savedata') {
-    const url = "/PDshowST/KA-LUPIN_CLOSE-PRINT.html";
-    let VIdata = document.getElementById("td VI");
-    let fetchData = {
-        method: 'POST',
-        body: JSON.stringify(VIdata),
-        headers: new Headers({
-          'Content-Type': 'application/json; charset=UTF-8'
-        })
-      };
-    alert(VIdata);
-    fetch(url, fetchData)
-      .then(   response => response.json())
-      .then(data => {
-          alert(data);
-          console.log("Data received:", data);  // Log the data structure to see the format
+function getVIData() {
+    let table = document.getElementById("canvass-table");
+    let inputs = table.querySelectorAll("td.VI input"); // Select all VI input fields
+    let data = [];
 
-          if (Array.isArray(data) && data.length > 0) {
-              // Extract column headers from the first record (keys)
-              const columnHeaders = Object.keys(data[0]);
+    inputs.forEach(input => {
+        let row = input.closest("tr"); // Get the closest row
+        let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
+        let viValue = input.value.trim(); // Get input value
 
-              // Build the table with column headers and record data
-              let frame1Content = '<table border="1"><thead><tr> \
-                <td> \
-                   ?  \
-                </td>'
-              // Loop through column headers and add them to the table header
-              columnHeaders.forEach(header => {
-                  frame1Content += `<th>${toTitleCase(header)}</th>`;
-              });
+        data.push({
+            electorID: electorID,
+            viResponse: viValue
+        });
+    });
 
-              frame1Content += '</tr></thead><tbody>';
-              tabhead.innerHTML = frame1Content;
-              // Loop through the data and add each record (row) to the table
-              frame1Content = '<table border="1"><tbody><tr>';
-                data.forEach(record => {
-                  frame1Content += '<tr> \
-                    <td> \
-                      <input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
-                    </td>'
-                  columnHeaders.forEach(header => {
-                      frame1Content += `<td>${record[header]}</td>`;
-                  });
-                  frame1Content += '</tr>';
-              });
+    console.log("Collected VI Data:", data);
 
-              frame1Content += '</tbody></table>';
-              tabbody.innerHTML = frame1Content;
+    // Send data to server
+    fetch("/PDshowST/KA-LUPIN_CLOSE-PRINT.html", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ viData: data }),
+    })
+    .then(response => response.json())
+    .then(data => {
 
-          } else {
-              console.error("Data is not an array or is empty:", data);
-          }
-      })
-      .catch(error => {
-          console.error('Error fetching data for frame1:', error);
-      });
-    }
-};
+        console.log("Server Response:", data);
+        alert("VI data saved successfully!");
+        alert(data);
+        if (Array.isArray(data) && data.length > 0) {
+            // Extract column headers from the first record (keys)
+            const columnHeaders = Object.keys(data[0]);
+
+            // Build the table with column headers and record data
+            let frame1Content = '<table border="1"><thead><tr> \
+              <td> \
+                 ?  \
+              </td>'
+            // Loop through column headers and add them to the table header
+            columnHeaders.forEach(header => {
+                frame1Content += `<th>${toTitleCase(header)}</th>`;
+            });
+
+            frame1Content += '</tr></thead><tbody>';
+            tabhead.innerHTML = frame1Content;
+            // Loop through the data and add each record (row) to the table
+            frame1Content = '<table border="1"><tbody><tr>';
+              data.forEach(record => {
+                frame1Content += '<tr> \
+                  <td> \
+                    <input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
+                  </td>'
+                columnHeaders.forEach(header => {
+                    frame1Content += `<td>${record[header]}</td>`;
+                });
+                frame1Content += '</tr>';
+            });
+
+            frame1Content += '</tbody></table>';
+            tabbody.innerHTML = frame1Content;
+
+        } else {
+            console.error("Data is not an array or is empty:", data);
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+    });
+}
+
+
 
 
 function email_csv(csv, filename) {
@@ -191,13 +208,13 @@ function export_table_to_csv(html, filename) {
     // Download CSV
     download_csv(csv.join("\n"), filename);
 };
-
+get
 document.getElementById('save-btn').addEventListener('click', function() {
   var filename = document.getElementById("save-btn").getAttribute("data1");
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
-  saveVIData('savedata');
+  getVIData();
 });
 
 function inputVI(VI) {
