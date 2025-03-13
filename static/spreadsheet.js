@@ -49,7 +49,7 @@ function getVIData() {
     console.log("Collected VI Data:", data);
     alert(data);
     // Send data to server
-    fetch("/PDshowST/KA-LUPIN_CLOSE-PRINT.html", {
+    fetch("/PDshowST/UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
