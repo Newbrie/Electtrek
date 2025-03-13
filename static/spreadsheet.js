@@ -36,9 +36,9 @@ function getVIData() {
     let data = [];
 
     inputs.forEach(input => {
-        let row = input.closest("tr"); // Get the closest row
+        let row = VI.closest("tr"); // Get the closest row
         let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
-        let viValue = VI.outerHTML; // Get input value
+        let viValue = VI.innerHTML; // Get input value
 
         data.push({
             electorID: electorID,
@@ -230,7 +230,7 @@ function inputVI(VI) {
 //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
     VI.style.color = 'lightgray';
     VI.innerHTML = x;
-    VI.parentElement.parentElement.innerText = x;
+//    VI.parentElement.parentElement.innerText = x;
     }
   };
 
