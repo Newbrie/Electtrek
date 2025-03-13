@@ -49,7 +49,8 @@ function getVIData() {
     console.log("Collected VI Data:", data);
 
     // Send data to server
-    fetch("/PDshowST/UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html", {
+    const selnode = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html";
+    fetch(`/PDshowST/${selnode}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -58,7 +59,7 @@ function getVIData() {
     })
     .then(response => {
     console.log("Raw Response:", response);
-    alert(response);
+    alert(response.json());
     return response.json();  // Convert response to JSON
     })
     .then(data => {
