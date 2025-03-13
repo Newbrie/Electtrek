@@ -47,7 +47,7 @@ function getVIData() {
     });
 
     console.log("Collected VI Data:", data);
-
+    alert(data);
     // Send data to server
     fetch("/PDshowST/KA-LUPIN_CLOSE-PRINT.html", {
         method: "POST",
