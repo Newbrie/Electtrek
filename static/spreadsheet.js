@@ -31,7 +31,7 @@ if (!event.target.matches('.dropbtn')) {
 function saveVIData(action){
   if (action === 'savedata') {
     const url = "/PDshowST/KA-LUPIN_CLOSE-PRINT.html";
-    let VIdata = document.getElementById("td.VI");
+    let VIdata = document.getElementById("td VI");
     let fetchData = {
         method: 'POST',
         body: JSON.stringify(VIdata),
@@ -39,7 +39,7 @@ function saveVIData(action){
           'Content-Type': 'application/json; charset=UTF-8'
         })
       };
-    alert(fetchData);
+    alert(VIData);
     fetch(url, fetchData)
       .then(   response => response.json())
       .then(data => {
