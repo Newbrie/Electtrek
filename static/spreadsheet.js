@@ -38,7 +38,7 @@ function getVIData() {
     inputs.forEach(input => {
         let row = input.closest("tr"); // Get the closest row
         let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
-        let viValue = VI.innerText; // Get input value
+        let viValue = VI.outerHTML; // Get input value
 
         data.push({
             electorID: electorID,
