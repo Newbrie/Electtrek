@@ -80,9 +80,11 @@ body {
 		}
     #logwin {
 			height: 200px;
-			overflow: scroll;
+			height: 100px;
+			overflow: auto;
+			display: flex;
+			flex-direction: column-reverse;
 			z-index: 11;
-			display: inline-block;
 			position: absolute;
 			bottom: 0;
 			right: 0;

@@ -576,12 +576,12 @@ class FGlayer:
             numtag = str(c.tagno)+" "+str(c.value)
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            mapfile = "/map/"+c.dir+"/"+c.file
+            choosefile = "displayXURL(&#39;/map/{0}/{1}&#39;)".format(c.dir,c.file)
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
             self.fg.add_child(folium.Marker(
                  location=here,
-                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(mapfile,numtag),
+                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(choosefile,numtag),
                  class_name = "leaflet-div-icon",
                  icon_size=(24,24),
                  icon_anchor=(14,40)),
@@ -992,6 +992,122 @@ def downPDbut(selnode):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 #    return redirect(url_for('map',path=mapfile))
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+@app.route('/STupdate/<path:selnode>', methods=['GET','POST'])
+def STupdate(selnode):
+    global Treepolys
+    global current_node
+    global Featurelayers
+    global workdirectories
+    global allelectors
+    global environment
+    global filename
+    global layeritems
+    steps = selnode.split("/")
+    steps.pop()
+    current_node = selected_childnode(current_node,steps[-1])
+    street_node = current_node
+    mapfile = current_node.dir+"/"+current_node.file
+    frames = []
+
+    if request.method == 'POST':
+# if POST then take account of entered data in VI columns
+        VIdata = request.get_json()
+        VIdf = pd.json_normalize(VIdata)
+
+        for index,newvalue in VIdf.iterrows():
+            print("________VIData :",newvalue)
+            selected = allelectors.query("ENO == {0}".format(newvalue['electorID'])).index[0]
+            allelectors.loc[[selected], ['VI']] = newvalue['viResponse']
+
+    PDelectors = getblock(allelectors, 'PD',current_node.parent.value)
+    street = street_node.value
+
+    electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
+
+    STREET_ = street_node.value
+
+    Postcode = electorwalks.loc[0].Postcode
+
+    walk_name = street_node.parent.value+"-"+street_node.value
+    type_colour = "indigo"
+    #      BMapImg = walk_name+"-MAP.png"
+
+    # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
+    geometry = gpd.points_from_xy(electorwalks.Long.values,electorwalks.Lat.values, crs="EPSG:4326")
+    # create a geo dataframe for the Walk Map
+    geo_df1 = gpd.GeoDataFrame(
+    electorwalks, geometry=geometry
+    )
+
+    # Create a geometry list from the GeoDataFrame
+    geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
+    CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+
+    electorwalks['Team'] = ""
+    electorwalks['M1'] = ""
+    electorwalks['M2'] = ""
+    electorwalks['M3'] = ""
+    electorwalks['M4'] = ""
+    electorwalks['M5'] = ""
+    electorwalks['M6'] = ""
+    electorwalks['M7'] = ""
+    electorwalks['Notes'] = ""
+
+    groupelectors = electorwalks.shape[0]
+    if math.isnan(float('%.4f'%(electorwalks.Elevation.max()))):
+      climb = 0
+    else:
+      climb = int(float('%.4f'%(electorwalks.Elevation.max())) - float('%.4f'%(electorwalks.Elevation.min())))
+
+    x = electorwalks.AddressNumber.values
+    y = electorwalks.StreetName
+    z = electorwalks.AddressPrefix.values
+    houses = len(list(set(zip(x,y,z))))+1
+    streets = len(electorwalks.StreetName.unique())
+    areamsq = 34*21.2*20*21.2
+    avstrlen = 200
+    housedensity = round(houses/(areamsq/10000),3)
+    avhousem = 100*round(math.sqrt(1/housedensity),2)
+    streetdash = avstrlen*streets/houses
+    speed = 5*1000
+    climbspeed = 5*1000 - climb*50/7
+    leafmins = 0.5
+    canvassmins = 5
+    canvasssample = .5
+    leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
+    canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
+    prodstats = {}
+    prodstats['ward'] = current_node.parent.parent.value
+    prodstats['polling district'] = current_node.parent.value
+    prodstats['groupelectors'] = groupelectors
+    prodstats['climb'] = climb
+    prodstats['houses'] = houses
+    prodstats['streets'] = streets
+    prodstats['housedensity'] = housedensity
+    prodstats['leafhrs'] = round(leafhrs,2)
+    prodstats['canvasshrs'] = round(canvasshrs,2)
+
+    electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
+    target = street_node.locmappath("")
+    results_filename = walk_name+"-PRINTX.html"
+
+    datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+    mapfile = street_node.parent.dir+"/"+street_node.parent.file
+
+    context = {
+        "group": electorwalks,
+        "prodstats": prodstats,
+        "mapfile": url_for('map',path=mapfile),
+        "datafile": url_for('map',path=datafile),
+        "walkname": walk_name,
+        }
+    results_template = environment.get_template('canvasscard1.html')
+
+    with open(results_filename, mode="w", encoding="utf-8") as results:
+        results.write(results_template.render(context, url_for=url_for))
+    #           only create a map if the branch does not already exist
+    return  send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
 
 @app.route('/PDshowST/<path:selnode>', methods=['GET','POST'])
 def PDshowST(selnode):
@@ -1014,11 +1130,8 @@ def PDshowST(selnode):
     mapfile = current_node.dir+"/"+current_node.file
     frames = []
 
-    if request.method == 'POST':
-# if POST then take account of entered data in VI columns
-        VIdata = request.get_json()
-        print("________VIData :",VIdata)
-    elif request.method == 'GET':
+
+    if request.method == 'GET':
         PDelectors = getblock(allelectors, 'PD',current_node.value)
         if len(current_node.childrenoftype('street')) == 0:
 

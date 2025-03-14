@@ -30,6 +30,27 @@ if (!event.target.matches('.dropbtn')) {
 };
 };
 
+async function displayXURL(url) {
+  try {
+    const response = await fetch(url);
+ 	if (!response.ok) {
+    console.log(`URL does not exist: ${url}`);
+    let pristineurl = url.replace("PRINTX.html", "PRINT.html");
+    window.location.assign(pristineurl);
+    return
+ }
+ else {
+   console.log(`URL exists: ${url}`);
+   window.location.assign(url);
+ }
+  } catch (error) {
+    console.log(`Error checking URL: ${error}`);
+  }
+};
+
+
+checkURL('https://www.example.com');
+
 function getVIData() {
     let table = document.getElementById("canvass-table");
     let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
@@ -50,7 +71,7 @@ function getVIData() {
 
     // Send data to server
     const selnode = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html";
-    fetch(`/PDshowST/${selnode}`, {
+    fetch(`/STupdate/${selnode}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
