@@ -25,22 +25,27 @@ var showMore = function (msg,area, type) {
 
       };
 
-async function displayXURL(url) {
-  try {
-    const response = await fetch(url);
- 	if (!response.ok) {
-    console.log(`URL does not exist: ${url}`);
-    let pristineurl = url.replace("PRINTX.html", "PRINT.html");
-    alert(pristineurl);
-    return pristineurl
- }
- else {
-   console.log(`URL exists: ${url}`);
-   alert(url);
-   return url
- }
-  } catch (error) {
-    console.log(`Error checking URL: ${error}`);
-    return ""
-  }
+function displayXURL(url) {
+    fetch(url, { method: 'HEAD' })
+        .then(response => {
+            if (response.ok) {
+                let script = document.createElement('script');
+                script.src = url;
+                alert("Exists:"+ script.src)
+                document.body.appendChild(script);
+            } else {
+                let script = document.createElement('script');
+                script.src = url.replace("PRINTX.html", "PRINT.html");
+                alert("NoExists:"+ script.src)
+                document.body.appendChild(script);
+            }
+        })
+        .catch(() => {
+            let script = document.createElement('script');
+            script.src = url.replace("PRINTX.html", "PRINT.html");
+            alert("Error:"+ script.src)
+            document.body.appendChild(script);
+        });
+
+    return false; // Prevent default action
 };
