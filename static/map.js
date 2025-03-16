@@ -16,3 +16,23 @@ var showMore = function (msg,area, type) {
       window.parent.postMessage("Showing the "+type+ " set within "+ area, '*');
       window.location.assign(msg);
       };
+
+async function displayXURL(url) {
+  try {
+    const response = await fetch(url);
+ 	if (!response.ok) {
+    console.log(`URL does not exist: ${url}`);
+    let pristineurl = url.replace("PRINTX.html", "PRINT.html");
+    alert(pristineurl);
+    window.location.assign(pristineurl);
+    return
+ }
+ else {
+   console.log(`URL exists: ${url}`);
+   alert(url);
+   window.location.assign(url);
+ }
+  } catch (error) {
+    console.log(`Error checking URL: ${error}`);
+  }
+};
