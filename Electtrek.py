@@ -74,7 +74,7 @@ def getlayeritems(nodelist):
 
 
 def subending(filename, ending):
-  stem = filename.replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
+  stem = filename.replace("-MAP", "@@@").replace("-PRINTX", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@").replace("-PRINT", "@@@")
   return stem.replace("@@@", ending)
 
 class TreeNode:
@@ -935,8 +935,6 @@ def downPDbut(selnode):
     mapfile = current_node.dir+"/"+current_node.file
 
 
-
-
     Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
     if request.method == 'GET':
@@ -1002,12 +1000,12 @@ def STupdate(selnode):
     global environment
     global filename
     global layeritems
-    steps = selnode.split("/")
-    steps.pop()
-    current_node = selected_childnode(current_node,steps[-1])
+#    steps = selnode.split("/")
+#    filename = steps.pop()
+#    current_node = selected_childnode(current_node,steps[-1])
     street_node = current_node
     mapfile = current_node.dir+"/"+current_node.file
-    frames = []
+
 
     if request.method == 'POST':
 # if POST then take account of entered data in VI columns
@@ -1089,7 +1087,7 @@ def STupdate(selnode):
 
     electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
     target = street_node.locmappath("")
-    results_filename = walk_name+"-PRINTX.html"
+    results_filename = walk_name+"-PRINT.html"
 
     datafile = street_node.dir+"/"+walk_name+"-DATA.html"
     mapfile = street_node.parent.dir+"/"+street_node.parent.file
@@ -1144,7 +1142,7 @@ def PDshowST(selnode):
 
             Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
-            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
+            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINTX")
 
             Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
 
@@ -1309,7 +1307,7 @@ def PDshowWK(selnode):
 
             Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     #  add the walk nodes
-            walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINT")
+            walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINTX")
 
     #        map = current_node.create_area_map(Featurelayers,PDelectors)
     #        mapfile = current_node.dir+"/"+current_node.file
@@ -1340,7 +1338,7 @@ def PDshowWK(selnode):
 
         # add walk legs for each street to the walk node
 
-                  streetnodelist = walk_node.create_data_branch('walkleg',streetdf.reset_index(),"-PRINT")
+                  streetnodelist = walk_node.create_data_branch('walkleg',streetdf.reset_index(),"-PRINTX")
 
                   type_colour = allowed[walk_node.value]
 
