@@ -576,7 +576,8 @@ class FGlayer:
             numtag = str(c.tagno)+" "+str(c.value)
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            choosefile = "displayXURL(&#39;/map/{0}/{1}&#39;);".format(c.dir,c.file)
+            url = url_for('showmore',path=c.dir+"/"+c.file)
+            choosefile = "javascript:displayXURL(&#39;{0}&#39;);".format(url)
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
             self.fg.add_child(folium.Marker(
