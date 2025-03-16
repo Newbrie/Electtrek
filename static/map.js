@@ -26,26 +26,22 @@ var showMore = function (msg,area, type) {
       };
 
 function displayXURL(url) {
-    fetch(url, { method: 'HEAD' })
-        .then(response => {
-            if (response.ok) {
-                let script = document.createElement('script');
-                script.src = url;
-                alert("Exists:"+ script.src)
-                document.body.appendChild(script);
-            } else {
-                let script = document.createElement('script');
-                script.src = url.replace("PRINTX.html", "PRINT.html");
-                alert("NoExists:"+ script.src)
-                document.body.appendChild(script);
-            }
-        })
-        .catch(() => {
-            let script = document.createElement('script');
-            script.src = url.replace("PRINTX.html", "PRINT.html");
-            alert("Error:"+ script.src)
-            document.body.appendChild(script);
-        });
+  const urlA = url; // Replace with actual URL
+  const urlB = url.replace("PRINTX.html", "PRINT.html") // Replace with actual URL
 
-    return false; // Prevent default action
-};
+  fetch(urlA, { method: 'HEAD' })
+      .then(response => {
+          if (response.ok) {
+              alert("Exists:"+ urlA)
+              window.location.href = urlA;
+          } else {
+              alert("NoExists:"+ urlB)
+              window.location.href = urlB;
+          }
+      })
+      .catch(() => {
+          window.location.href = urlB;
+      });
+
+  return false; // Prevent default action
+}
