@@ -577,12 +577,12 @@ class FGlayer:
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
             url = url_for('showmore',path=c.dir+"/"+c.file)
-            choosefile = "javascript:displayXURL(&#39;{0}&#39;);".format(url)
+            choosefile = "displayXURL(&#39;{0}&#39;);".format(url)
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
             self.fg.add_child(folium.Marker(
                  location=here,
-                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(choosefile,numtag),
+                 icon = folium.DivIcon(html="<a href='#' style='text-wrap: nowrap; font-size: 12pt; color: indigo;' onclick='{0}'>{1}</a>\n".format(choosefile,numtag),
                  class_name = "leaflet-div-icon",
                  icon_size=(24,24),
                  icon_anchor=(14,40)),
