@@ -83,7 +83,7 @@ body {
 			height: 100px;
 			overflow: auto;
 			display: flex;
-			flex-direction: column-reverse;
+			flex-direction: column;
 			z-index: 11;
 			position: absolute;
 			bottom: 0;
