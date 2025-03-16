@@ -36,13 +36,13 @@ async function displayXURL(url) {
  	if (!response.ok) {
     console.log(`URL does not exist: ${url}`);
     let pristineurl = url.replace("PRINTX.html", "PRINT.html");
-    alert(pristineurl)
+    alert(pristineurl);
     window.location.assign(pristineurl);
     return
  }
  else {
    console.log(`URL exists: ${url}`);
-   alert(url)
+   alert(url);
    window.location.assign(url);
  }
   } catch (error) {
