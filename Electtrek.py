@@ -576,7 +576,7 @@ class FGlayer:
             numtag = str(c.tagno)+" "+str(c.value)
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            url = url_for('showmore',path=c.dir+"/"+c.file)
+            url = url_for('/',path=workdirectories['workdir'] + c.dir+"/"+c.file)
             choosefile = "displayXURL(&#39;{0}&#39;);".format(url)
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
