@@ -70,7 +70,7 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= i
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
-        dfy.loc[i,x.VI['R']] = x.VI['R']
+        dfy.loc[i,x.'VI'] = x.VI['R']
         i = i + 1
     return dfy
 
