@@ -25,23 +25,7 @@ var showMore = function (msg,area, type) {
 
       };
 
-function displayXURL(url) {
-  const urlA = url; // Replace with actual URL
-  const urlB = url.replace("PRINTX.html", "PRINT.html") // Replace with actual URL
 
-  fetch(urlA, { method: 'HEAD' })
-      .then(response => {
-          if (response.ok) {
-              alert("Exists:"+ urlA)
-              window.location.href = urlA;
-          } else {
-              alert("NoExists:"+ urlB)
-              window.location.href = urlB;
-          }
-      })
-      .catch(() => {
-          window.location.href = urlB;
-      });
 
   return false; // Prevent default action
 }

@@ -74,7 +74,7 @@ def getlayeritems(nodelist):
 
 
 def subending(filename, ending):
-  stem = filename.replace("-MAP", "@@@").replace("-PRINTX", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@").replace("-PRINT", "@@@")
+  stem = filename.replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
   return stem.replace("@@@", ending)
 
 class TreeNode:
@@ -576,7 +576,7 @@ class FGlayer:
             numtag = str(c.tagno)+" "+str(c.value)
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            url = url_for('/',path=workdirectories['workdir'] + c.dir+"/"+c.file)
+            url = url_for('showmore', c.dir+"/"+c.file)
             choosefile = "displayXURL(&#39;{0}&#39;);".format(url)
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
@@ -736,21 +736,21 @@ def unauthorized_callback():            # In call back url we can specify where 
 #    flash("Not found: "+formdata['status'])
 #    return render_template("Dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.errorhandler(HTTPException)
-def handle_exception(e):
-    global current_node
-    """Return JSON instead of HTML for HTTP errors."""
+#@app.errorhandler(HTTPException)
+#def handle_exception(e):
+#    global current_node
+#    """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
-    response = e.get_response()
+#    response = e.get_response()
     # replace the body with JSON
-    response.data = json.dumps({
-        "code": e.code,
-        "name": e.name,
-        "description": e.description,
-    })
-    response.content_type = "application/json"
-    mapfile = current_node.dir+"/"+current_node.file
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+#    response.data = json.dumps({
+#        "code": e.code,
+#        "name": e.name,
+#        "description": e.description,
+#    })
+#    response.content_type = "application/json"
+#    mapfile = current_node.dir+"/"+current_node.file
+#    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route("/index", methods=['POST', 'GET'])
@@ -1143,7 +1143,7 @@ def PDshowST(selnode):
 
             Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
-            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINTX")
+            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
 
             Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
 
@@ -1308,7 +1308,7 @@ def PDshowWK(selnode):
 
             Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     #  add the walk nodes
-            walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINTX")
+            walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINT")
 
     #        map = current_node.create_area_map(Featurelayers,PDelectors)
     #        mapfile = current_node.dir+"/"+current_node.file
@@ -1339,7 +1339,7 @@ def PDshowWK(selnode):
 
         # add walk legs for each street to the walk node
 
-                  streetnodelist = walk_node.create_data_branch('walkleg',streetdf.reset_index(),"-PRINTX")
+                  streetnodelist = walk_node.create_data_branch('walkleg',streetdf.reset_index(),"-PRINT")
 
                   type_colour = allowed[walk_node.value]
 
