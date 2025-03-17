@@ -24,8 +24,3 @@ var showMore = function (msg,area, type) {
       ul.scrollTop = ul.scrollHeight;
 
       };
-
-
-
-  return false; // Prevent default action
-}
