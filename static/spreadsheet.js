@@ -31,7 +31,7 @@ if (!event.target.matches('.dropbtn')) {
 };
 
 
-function getVIData() {
+async function getVIData() {
     let table = document.getElementById("canvass-table");
     let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
     let data = [];
