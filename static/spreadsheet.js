@@ -105,7 +105,6 @@ async function getVIData() {
     alert("Error: " + error);
     console.error("Error:", error);
 });
-updateMessages();
 }
 
 
