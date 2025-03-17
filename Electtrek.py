@@ -41,9 +41,6 @@ levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "
 
 levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
 
-VI = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
-data = [[0] * len(VI)]  # Create a 2D list with one row
-VIC = pd.DataFrame(data, columns=list(VI.keys()))
 
 
 # want to equate levels with certain types, eg 4 is ward and div
@@ -73,6 +70,7 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= i
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
+        dfy.loc[i,x.VI['R']] = x.VI['R']
         i = i + 1
     return dfy
 
@@ -80,6 +78,11 @@ def getlayeritems(nodelist):
 def subending(filename, ending):
   stem = filename.replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
   return stem.replace("@@@", ending)
+
+VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+data = [[0] * len(VID)]  # Create a 2D list with one row
+VI0 = pd.DataFrame(data, columns=list(VID.keys()))
+
 
 class TreeNode:
     def __init__(self, value, fid, roid):
@@ -99,7 +102,19 @@ class TreeNode:
         self.bbox = [[],[]]
         self.map = {}
         self.source = ""
+        self.VI = VI0
 
+    def updateVI(self,viValue):
+        VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+        data = [[0] * len(VID)]  # Create a 2D list with one row
+        VIC = pd.DataFrame(data, columns=list(VID.keys()))
+        if self.type == 'street':
+            self.VI[viValue] = 1
+            sumnode = self
+            for x in range(self.level):
+                sumnode.parent.VI.add(sumnode.VI, fill_value=0)
+                sumnode = sumnode.parent
+        return
 
     def childrenoftype(self,electtype):
         typechildren = [x for x in self.children if x.type == electtype]
@@ -740,21 +755,21 @@ def unauthorized_callback():            # In call back url we can specify where 
 #    flash("Not found: "+formdata['status'])
 #    return render_template("Dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-#@app.errorhandler(HTTPException)
-#def handle_exception(e):
-#    global current_node
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    global current_node
 #    """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
-#    response = e.get_response()
+    response = e.get_response()
     # replace the body with JSON
-#    response.data = json.dumps({
-#        "code": e.code,
-#        "name": e.name,
-#        "description": e.description,
-#    })
-#    response.content_type = "application/json"
-#    mapfile = current_node.dir+"/"+current_node.file
-#    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    response.data = json.dumps({
+        "code": e.code,
+        "name": e.name,
+        "description": e.description,
+    })
+    response.content_type = "application/json"
+    mapfile = current_node.dir+"/"+current_node.file
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route("/index", methods=['POST', 'GET'])
@@ -914,7 +929,7 @@ def downbut(selnode):
     print("________child nodes created",current_node.children)
 
 # the selected node boundary options need to be added to the layer
-    allelectors = []
+
     #formdata['username'] = session["username"]
     formdata['country'] = "UNITED_KINGDOM"
     formdata['candfirst'] = "Firstname"
@@ -949,31 +964,35 @@ def downPDbut(selnode):
             flash ("_________Requestformfile"+request.values['importfile'])
             filename = request.values['importfile']
             allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-            pfile = Treepolys[current_node.level]
-            Level3boundary = pfile[pfile['FID']==current_node.fid]
-            PDs = set(allelectors.PD.values)
-            print("PDsfull", PDs)
+            current_node.source = filename
+            allelectors['VI'] = ""
+
+        pfile = Treepolys[current_node.level]
+        Level3boundary = pfile[pfile['FID']==current_node.fid]
+        PDs = set(allelectors.PD.values)
+        print("PDsfull", PDs)
 #            Featurelayers[current_node.level].fg._children.extend(PDnodelist)
-            frames = []
+        frames = []
 #            Dont know if PDs are within selected ward yet.
-            for PD in PDs:
-              PDnodeelectors = getblock(allelectors,'PD',PD)
-              maplongx = PDnodeelectors.Long.values[0]
-              maplaty = PDnodeelectors.Lat.values[0]
+        for PD in PDs:
+          PDnodeelectors = getblock(allelectors,'PD',PD)
+          maplongx = PDnodeelectors.Long.values[0]
+          maplaty = PDnodeelectors.Lat.values[0]
 
-            # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-              if Level3boundary.geometry.contains(Point(float('%.4f'%(maplongx)),float('%.4f'%(maplaty)))).item():
-                  Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
-                  allelectors['Area'] = Area
-                  frames.append(PDnodeelectors)
+        # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
+          if Level3boundary.geometry.contains(Point(float('%.4f'%(maplongx)),float('%.4f'%(maplaty)))).item():
+              Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
+              allelectors['Area'] = Area
+              frames.append(PDnodeelectors)
 
-            print("_______displayed PD markers",Featurelayers[current_node.level].fg._children)
-            allelectors = pd.concat(frames)
-            PDPtsdf0 = pd.DataFrame(allelectors, columns=['PD', 'Long', 'Lat'])
-            PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-            PDPtsdf = PDPtsdf1.groupby(['Name']).mean()
+        print("_______displayed PD markers",Featurelayers[current_node.level].fg._children)
+        allelectors = pd.concat(frames)
+        PDPtsdf0 = pd.DataFrame(allelectors, columns=['PD', 'Long', 'Lat'])
+        PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+        PDPtsdf = PDPtsdf1.groupby(['Name']).mean()
+        if len(current_node.childrenoftype('polling district')) == 0:
             WardPDnodelist = current_node.create_data_branch('polling district',PDPtsdf.reset_index(),"-MAP")
-# if there is a selected file , then allelectors will be full of records
+    # if there is a selected file , then allelectors will be full of records
             for PD_node in WardPDnodelist:
                   PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
                   Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDnodeelectors)
@@ -981,14 +1000,12 @@ def downPDbut(selnode):
 
 #            areaelectors = getblock(allelectors,'Area',current_node.value)
 
-            current_node.source = filename
-            if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
-                flash("Can't find any elector data for this Area.")
-                allelectors = []
-            else:
-                map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-                flash("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
-                print("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+        if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
+            flash("Can't find any elector data for this Area.")
+        else:
+            map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
+            flash("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+            print("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
 
         mapfile = current_node.dir+"/"+current_node.file
         layeritems = getlayeritems(current_node.childrenoftype('polling district'))
@@ -1026,7 +1043,7 @@ def STupdate(selnode):
                 if not electID:  # Skip if electorID is missing
                     print("Skipping entry with missing electorID")
                     continue
-
+                print("_____columns:",allelectors.columns)
                 if allelectors["ENO"].dtype != object:  # Convert electID if ENO is numeric
                     try:
                         electID = float(electID) if "." in electID else int(electID)
@@ -1041,6 +1058,7 @@ def STupdate(selnode):
                     # Update only if viResponse is non-empty
                     if new_value:
                         allelectors.loc[selected.index, "VI"] = new_value
+                        current_node.updateVI(new_value)
                         print(f"Updated elector {electID} with VI = {new_value}")
                     else:
                         print(f"Skipping elector {electID}, empty viResponse")
@@ -1054,6 +1072,11 @@ def STupdate(selnode):
     street = street_node.value
 
     electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
+
+    if electorwalks.empty:
+        print("⚠️ Error: electorwalks DataFrame is empty!")
+        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
 
     STREET_ = street_node.value
 
@@ -1137,6 +1160,7 @@ def STupdate(selnode):
     with open(results_filename, mode="w", encoding="utf-8") as results:
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
+    layeritems = getlayeritems(current_node.parent.childrenoftype('street'))
     return  send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
