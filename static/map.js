@@ -26,7 +26,7 @@ var showMore = function (msg,area, type) {
       };
 var layerUpdate = function () {
   // Send a message to the parent
-      window.parent.postMessage("Updating Data, '*');
+      window.parent.postMessage("Updating Layer Data.", '*');
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
       };
