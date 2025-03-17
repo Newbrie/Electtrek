@@ -219,6 +219,7 @@ document.getElementById('save-btn').addEventListener('click', function() {
 	export_table_to_csv(html, filename);
   console.log(filename);
   getVIData();
+  layerUpdate();
 });
 
 function inputVI(VI) {

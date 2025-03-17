@@ -24,7 +24,6 @@ var showMore = function (msg,area, type) {
       ul.scrollTop = ul.scrollHeight;
 
       };
-
 var layerUpdate = function () {
   // Send a message to the parent
       window.parent.postMessage("Updating Data, '*');
