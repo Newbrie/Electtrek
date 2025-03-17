@@ -52,64 +52,59 @@ function getVIData() {
     // Send data to server
     const selnode = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html";
     fetch(`/STupdate/${selnode}`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ viData: data }),
-    })
-    .then(response => {
-      console.log("Raw Response:", response);
-      jstext = response.json()
-      alert(jstext);
-      return jstext;  // Convert response to JSON
-    })
-    .then(data => {
-        alert(data);
-        console.log("Server Response:", data);
-        alert("VI data saved successfully!");
-        alert(data);
-        if (Array.isArray(data) && data.length > 0) {
-            // Extract column headers from the first record (keys)
-            const columnHeaders = Object.keys(data[0]);
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ viData: data }),
+})
+.then(response => {
+    // Check if response is ok before processing
+    if (!response.ok) {
+        throw new Error("Failed to fetch data: " + response.statusText);
+    }
+    return response.json();  // Return parsed JSON
+})
+.then(data => {
+    console.log("Server Response:", data);
+    alert("VI data saved successfully!");
+    alert(JSON.stringify(data, null, 2));  // Show formatted JSON
 
-            // Build the table with column headers and record data
-            let frame1Content = '<table border="1"><thead><tr> \
-              <td> \
-                 ?  \
-              </td>'
-            // Loop through column headers and add them to the table header
+    if (Array.isArray(data) && data.length > 0) {
+        // Extract column headers from the first record (keys)
+        const columnHeaders = Object.keys(data[0]);
+
+        let frame1Content = '<table border="1"><thead><tr>';
+        frame1Content += `<td>?</td>`; // You can replace '?' with something more meaningful
+
+        columnHeaders.forEach(header => {
+            frame1Content += `<th>${toTitleCase(header)}</th>`;
+        });
+
+        frame1Content += '</tr></thead><tbody>';
+
+        // Loop through the data and add each record (row) to the table
+        data.forEach(record => {
+            frame1Content += '<tr><td>' +
+                `<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow">` +
+                '</td>';
             columnHeaders.forEach(header => {
-                frame1Content += `<th>${toTitleCase(header)}</th>`;
+                frame1Content += `<td>${record[header]}</td>`;
             });
+            frame1Content += '</tr>';
+        });
 
-            frame1Content += '</tr></thead><tbody>';
-            tabhead.innerHTML = frame1Content;
-            // Loop through the data and add each record (row) to the table
-            frame1Content = '<table border="1"><tbody><tr>';
-              data.forEach(record => {
-                frame1Content += '<tr> \
-                  <td> \
-                    <input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
-                  </td>'
-                columnHeaders.forEach(header => {
-                    frame1Content += `<td>${record[header]}</td>`;
-                });
-                frame1Content += '</tr>';
-            });
-
-            frame1Content += '</tbody></table>';
-            tabbody.innerHTML = frame1Content;
-
-        } else {
-          alert("Data is not an array or is empty:"+ data);
-          console.error("Data is not an array or is empty:", data);
-        }
-    })
-    .catch(error => {
-      alert("Error:"+ error);
-      console.error("Error:", error);
-    });
+        frame1Content += '</tbody></table>';
+        tabbody.innerHTML = frame1Content;
+    } else {
+        alert("Data is not an array or is empty: " + JSON.stringify(data));
+        console.error("Data is not an array or is empty:", data);
+    }
+})
+.catch(error => {
+    alert("Error: " + error);
+    console.error("Error:", error);
+});
 }
 
 
