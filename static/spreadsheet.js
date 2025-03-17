@@ -222,6 +222,13 @@ document.getElementById('save-btn').addEventListener('click', function() {
   layerUpdate();
 });
 
+var layerUpdate = function () {
+  // Send a message to the parent
+      window.parent.postMessage("Updating Layer Data.", '*');
+      var ul = parent.document.getElementById("logwin");
+      ul.scrollTop = ul.scrollHeight;
+      };
+
 function inputVI(VI) {
   let x = VI.value.toUpperCase();
   const codes = ["C","R","S","LD","G","I","M","X","W"];
