@@ -59,10 +59,10 @@ function getVIData() {
         body: JSON.stringify({ viData: data }),
     })
     .then(response => {
-    console.log("Raw Response:", response);
-    jstext = response.json()
-    alert(jstext);
-    return jstext;  // Convert response to JSON
+      console.log("Raw Response:", response);
+      jstext = response.json()
+      alert(jstext);
+      return jstext;  // Convert response to JSON
     })
     .then(data => {
         alert(data);
@@ -102,11 +102,13 @@ function getVIData() {
             tabbody.innerHTML = frame1Content;
 
         } else {
-            console.error("Data is not an array or is empty:", data);
+          alert("Data is not an array or is empty:"+ data);
+          console.error("Data is not an array or is empty:", data);
         }
     })
     .catch(error => {
-        console.error("Error:", error);
+      alert("Error:"+ error);
+      console.error("Error:", error);
     });
 }
 

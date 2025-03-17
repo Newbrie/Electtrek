@@ -41,6 +41,10 @@ levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "
 
 levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
 
+VI = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+data = [[0] * len(VI)]  # Create a 2D list with one row
+VIC = pd.DataFrame(data, columns=list(VI.keys()))
+
 
 # want to equate levels with certain types, eg 4 is ward and div
 # want to look up the level of a type ,and the types in a level
@@ -576,13 +580,13 @@ class FGlayer:
             numtag = str(c.tagno)+" "+str(c.value)
             here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            url = url_for('showmore', c.dir+"/"+c.file)
-            choosefile = "displayXURL(&#39;{0}&#39;);".format(url)
+            mapfile = str("/showmore/"+c.dir+"/"+c.file)
+
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
             self.fg.add_child(folium.Marker(
                  location=here,
-                 icon = folium.DivIcon(html="<a href='#' style='text-wrap: nowrap; font-size: 12pt; color: indigo;' onclick='{0}'>{1}</a>\n".format(choosefile,numtag),
+                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo;' >{1}</a>".format(mapfile,numtag),
                  class_name = "leaflet-div-icon",
                  icon_size=(24,24),
                  icon_anchor=(14,40)),
@@ -1009,14 +1013,42 @@ def STupdate(selnode):
 
 
     if request.method == 'POST':
-# if POST then take account of entered data in VI columns
-        VIdata = request.get_json()
-        VIdf = pd.json_normalize(VIdata)
+    # Get JSON data from request
+        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
 
-        for index,newvalue in VIdf.iterrows():
-            print("________VIData :",newvalue)
-            selected = allelectors.query("ENO == {0}".format(newvalue['electorID'])).index[0]
-            allelectors.loc[[selected], ['VI']] = newvalue['viResponse']
+        print("Received JSON Data:", VIdata)
+
+        if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
+            for item in VIdata["viData"]:  # Loop through each elector entry
+                electID = str(item.get("electorID")).strip()  # Extract elector ID as string
+                new_value = item.get("viResponse", "").strip()  # Extract viResponse
+
+                if not electID:  # Skip if electorID is missing
+                    print("Skipping entry with missing electorID")
+                    continue
+
+                if allelectors["ENO"].dtype != object:  # Convert electID if ENO is numeric
+                    try:
+                        electID = float(electID) if "." in electID else int(electID)
+                    except ValueError:
+                        print(f"Error: Cannot convert electorID {electID} to numeric.")
+                        continue
+
+                # Find the row where ENO matches electID
+                selected = allelectors.query("ENO == @electID")
+
+                if not selected.empty:
+                    # Update only if viResponse is non-empty
+                    if new_value:
+                        allelectors.loc[selected.index, "VI"] = new_value
+                        print(f"Updated elector {electID} with VI = {new_value}")
+                    else:
+                        print(f"Skipping elector {electID}, empty viResponse")
+                else:
+                    print(f"Warning: No match found for ENO = {electID}")
+        else:
+            print("Error: Incorrect JSON format")
+
 
     PDelectors = getblock(allelectors, 'PD',current_node.parent.value)
     street = street_node.value
