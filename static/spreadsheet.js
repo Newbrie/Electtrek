@@ -69,11 +69,6 @@ async function getVIData() {
     alert(JSON.stringify(data, null, 2));  // Show formatted JSON
     console.log("Success:", data);
     window.location.href = data.file;
-
-    } else {
-        alert("Data is not an array or is empty: " + JSON.stringify(data));
-        console.error("Data is not an array or is empty:", data);
-    }
 })
 .catch(error => {
     alert("Error: " + error);
