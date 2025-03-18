@@ -66,36 +66,10 @@ async function getVIData() {
     return response.json();  // Return parsed JSON
 })
 .then(data => {
-    console.log("Server Response:", data);
-    alert("VI data saved successfully!");
     alert(JSON.stringify(data, null, 2));  // Show formatted JSON
+    console.log("Success:", data);
+    window.location.href = data.file;
 
-    if (Array.isArray(data) && data.length > 0) {
-        // Extract column headers from the first record (keys)
-        const columnHeaders = Object.keys(data[0]);
-
-        let frame1Content = '<table border="1"><thead><tr>';
-        frame1Content += `<td>?</td>`; // You can replace '?' with something more meaningful
-
-        columnHeaders.forEach(header => {
-            frame1Content += `<th>${toTitleCase(header)}</th>`;
-        });
-
-        frame1Content += '</tr></thead><tbody>';
-
-        // Loop through the data and add each record (row) to the table
-        data.forEach(record => {
-            frame1Content += '<tr><td>' +
-                `<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow">` +
-                '</td>';
-            columnHeaders.forEach(header => {
-                frame1Content += `<td>${record[header]}</td>`;
-            });
-            frame1Content += '</tr>';
-        });
-
-        frame1Content += '</tbody></table>';
-        tabbody.innerHTML = frame1Content;
     } else {
         alert("Data is not an array or is empty: " + JSON.stringify(data));
         console.error("Data is not an array or is empty:", data);
@@ -105,7 +79,7 @@ async function getVIData() {
     alert("Error: " + error);
     console.error("Error:", error);
 });
-}
+};
 
 
 

@@ -70,7 +70,7 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= i
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
-        dfy.loc[i,x.'VI'] = x.VI['R']
+        dfy.loc[i,'VI'] = x.VI['R'].values[0]
         i = i + 1
     return dfy
 
@@ -108,11 +108,13 @@ class TreeNode:
         VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
         data = [[0] * len(VID)]  # Create a 2D list with one row
         VIC = pd.DataFrame(data, columns=list(VID.keys()))
-        if self.type == 'street':
-            self.VI[viValue] = 1
+        print ("_____VIstatus:",self.value,self.type,self.VI)
+        if self.type == 'street' or self.type == 'walkleg':
+            self.VI[viValue] = self.VI[viValue]+1
             sumnode = self
             for x in range(self.level):
-                sumnode.parent.VI.add(sumnode.VI, fill_value=0)
+                sumnode.parent.VI[viValue] = sumnode.parent.VI[viValue] + 1
+                print ("_____VInode:",sumnode.value,sumnode.VI)
                 sumnode = sumnode.parent
         return
 
@@ -1025,16 +1027,24 @@ def STupdate(selnode):
 #    steps = selnode.split("/")
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
+    steps = selnode.split("/")
+    leaves = steps.pop().split("-")
+    current_node = selected_childnode(current_node,leaves[1])
+
     street_node = current_node
     mapfile = current_node.dir+"/"+current_node.file
 
 
     if request.method == 'POST':
     # Get JSON data from request
-        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
-
-        print("Received JSON Data:", VIdata)
-
+#        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
+        try:
+            VIdata = request.get_json()
+            if VIdata is None:
+                raise ValueError("No JSON received")
+        except Exception as e:
+            print(f"JSON Parsing Error: {e}")
+            return jsonify({"error": "Invalid JSON"}), 400
         if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
             for item in VIdata["viData"]:  # Loop through each elector entry
                 electID = str(item.get("electorID")).strip()  # Extract elector ID as string
@@ -1060,6 +1070,7 @@ def STupdate(selnode):
                         allelectors.loc[selected.index, "VI"] = new_value
                         current_node.updateVI(new_value)
                         print(f"Updated elector {electID} with VI = {new_value}")
+                        print("ElectorVI", allelectors.loc[selected.index, "ENO"], allelectors.loc[selected.index, "VI"])
                     else:
                         print(f"Skipping elector {electID}, empty viResponse")
                 else:
@@ -1074,7 +1085,7 @@ def STupdate(selnode):
     electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
 
     if electorwalks.empty:
-        print("⚠️ Error: electorwalks DataFrame is empty!")
+        print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
         return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
