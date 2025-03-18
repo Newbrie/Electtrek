@@ -149,7 +149,6 @@ class TreeNode:
         return target
 
     def create_data_branch(self, electtype, namepoints, ending):
-        layerfids = [x.fid for x in self.children if x.type == type]
         geometry = gpd.points_from_xy(namepoints.Long.values,namepoints.Lat.values, crs="EPSG:4326")
         block = gpd.GeoDataFrame(
             namepoints, geometry=geometry
@@ -162,14 +161,13 @@ class TreeNode:
 
         for index, limb  in namepoints.iterrows():
             datafid = abs(hash(limb.Name))
-            if datafid not in layerfids:
-                newnode = TreeNode(limb.Name,hash(limb.Name), Point(limb.Long,limb.Lat))
-                newnode.source = self.source
-                print('______Data nodes',newnode.value,newnode.fid, newnode.centroid)
-                self.davail = True
-                egg = self.add_Tchild(newnode, electtype)
-                egg.file = subending(egg.file,ending)
-                fam_nodes.append(egg)
+            newnode = TreeNode(limb.Name,datafid, Point(limb.Long,limb.Lat))
+            newnode.source = self.source
+            print('______Data nodes',newnode.value,newnode.fid, newnode.centroid)
+            self.davail = True
+            egg = self.add_Tchild(newnode, electtype)
+            egg.file = subending(egg.file,ending)
+            fam_nodes.append(egg)
 
         print('______Data frame:',namepoints, fam_nodes)
         return fam_nodes
@@ -267,20 +265,15 @@ class TreeNode:
           swne = pb.geometry.total_bounds
           swne = [swne[1],swne[0],swne[3],swne[2]]
           roid = pb.dissolve().centroid
-          swne =[[float('%.4f'%(swne[0])),float('%.4f'%(swne[1]))],[float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]]
+          swne =[[float('%.6f'%(swne[0])),float('%.6f'%(swne[1]))],[float('%.6f'%(swne[2])),float('%.6f'%(swne[3]))]]
 # minx, miny, maxx, maxy
           print("_______Bbox swnemap",swne, pb, self.fid, self.value, self.level)
       else:
 #          swne = self.set_bounding_box(block)
-          if len(block) > 3:
-              swne = block.geometry.total_bounds
-              swne = [swne[1],swne[0],swne[3],swne[2]]
-              roid = block.dissolve().centroid
-              swne =[[float('%.4f'%(swne[0])),float('%.4f'%(swne[1]))],[float('%.4f'%(swne[2])),float('%.4f'%(swne[3]))]]
-          else:
-              swne = self.parent.bbox
-              roid = self.parent.centroid
-
+          swne = block.geometry.total_bounds
+          swne = [swne[1],swne[0],swne[3],swne[2]]
+          roid = block.dissolve().centroid
+          swne =[[float('%.6f'%(swne[0])),float('%.6f'%(swne[1]))],[float('%.6f'%(swne[2])),float('%.6f'%(swne[3]))]]
           print("_______Bbox swnedata",swne, len(block), self.parent.fid, self.parent.value, self.parent.level)
       return [swne,roid]
 
@@ -433,68 +426,154 @@ class FGlayer:
         global levelcolours
         global allelectors
 
-        layerfids = [x.fid for x in herenode.children if x.type == type]
-        if herenode.fid not in layerfids:
-            print('_______Convexhull', herenode.value, herenode.level, herenode.fid, len(datablock))
-            convex = MultiPoint(gpd.points_from_xy(datablock.Long.values,datablock.Lat.values)).convex_hull
-    #        circle = herenode.centroid.buffer(0.005)
-    #        Twopts = maximum_inscribed_circle(MultiPoint(gpd.points_from_xy(datablock.Long.values,datablock.Lat.values)))
-    #        circle = Twopts[0].buffer(distance(Twopts[0],Twopts[1]))
-            df = {'NAME': [herenode.value],'FID': [herenode.fid],'LAT': [herenode.centroid.y],'LONG': [herenode.centroid.x]}
-            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
-    #        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
+        def create_enclosing_gdf(gdf, buffer_size=0.0005):
+            """
+            Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
 
-            if type == 'polling district':
-                showmessageST = "showMore(&#39;/PDshowST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
-                upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
-                showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
-                downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
-                downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
-    #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,herenode.source, herenode.dir+"/"+herenode.file)
-                uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                limb['UPDOWN'] = uptag1 +"<br>"+ downST+"<br>"+ downWK
-                print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, convex)
-            elif type == 'walk':
-                showmessage = "showMore(&#39;/showmore/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('walk'))
-                upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
-                downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
-                uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                limb['UPDOWN'] =  uptag1 +"<br>"+ downtag+"<br>"
-                print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
+            Parameters:
+                gdf (GeoDataFrame): A GeoDataFrame with Point geometries.
+                buffer_size (float, optional): Buffer size for single-point cases (default: 0.001).
+
+            Returns:
+                GeoDataFrame: A GeoDataFrame with one row containing the enclosing shape.
+            """
+            if gdf.empty:
+                return gpd.GeoDataFrame(columns=['geometry'], crs=gdf.crs)
+
+            # Extract the MultiPoint geometry from the GeoDataFrame
+            multi_point = gdf.iloc[0].geometry
+
+            if multi_point.is_empty:
+                return gpd.GeoDataFrame(columns=['geometry'], crs=gdf.crs)
+
+            points = list(multi_point.geoms)
+
+            if len(points) == 1:
+                # If there's only one point, apply a small buffer
+                enclosed_shape = points[0].buffer(buffer_size)
+
+            elif len(points) == 2:
+ # If there are exactly 2 points, generate a third artificial point
+                p1, p2 = points
+
+                # Compute midpoint of segment AB
+                mid_x = (p1.x + p2.x) / 2
+                mid_y = (p1.y + p2.y) / 2
+
+                # Compute distance between p1 and p2
+                d = np.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+
+                if d == 0:
+                    # Edge case where both points are identical (shouldn't happen but safeguard)
+                    enclosed_shape = p1.buffer(buffer_size)
+                else:
+                    # Compute height of equilateral triangle
+                    h = d / np.sqrt(3)
+
+                    # Compute perpendicular direction unit vector
+                    dx = (p2.y - p1.y) / d
+                    dy = -(p2.x - p1.x) / d
+
+                    # Compute two possible third points (above or below the segment)
+                    p3_a = Point(mid_x + h * dx, mid_y + h * dy)
+                    p3_b = Point(mid_x - h * dx, mid_y - h * dy)
+
+                    # Choose one of the two third points (by default picking p3_a)
+                    p3 = p3_a
+
+                    if p3.is_empty:
+                        raise ValueError("Computed third point is empty, check coordinate system and precision issues.")
+
+                    # Create a convex hull with the three points
+                    enclosed_shape = MultiPoint([p1, p2, p3]).convex_hull
+
+            else:
+                # For 3+ points, use a convex hull
+                enclosed_shape = MultiPoint(points).convex_hull
 
 
-            herenode.tagno = len(self.fg._children)+1
-            numtag = str(herenode.tagno)+" "+str(herenode.value)
-            typetag = "from <br>"+str(herenode.type)+": "+str(herenode.value)+"<br> move :"
-            here = [float('%.4f'%(herenode.centroid.y)),float('%.4f'%(herenode.centroid.x))]
-            fill = levelcolours["C"+str(random.randint(4,15))]
-            print("______addingPoly:",herenode.value, limb.NAME)
-            mapfile = current_node.dir+"/"+current_node.file
+            enclosing_gdf = gpd.GeoDataFrame(
+                {"NAME":gdf.NAME, "FID":gdf.FID, "LAT":gdf.LAT.values[0],"LONG":gdf.LONG.values[0],"geometry": [enclosed_shape]},  # Assign shape as geometry
+                crs=gdf.crs  # Use the same CRS as the input GeoDataFrame
+            )
+
+            return enclosing_gdf
+
+
+        print('_______Walk Shape', herenode.value, herenode.level, herenode.fid, len(datablock))
+
+        points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
+
+        # Create a single MultiPoint geometry that contains all the points
+        multi_point = MultiPoint(points)
+
+        # Create a new DataFrame for a single row GeoDataFrame
+        gdf = gpd.GeoDataFrame({
+            'NAME': [herenode.value],  # You can modify this name to fit your case
+            'FID': [herenode.fid],  # FID can be a unique value for the row
+            'LAT': [herenode.centroid.y],  # You can modify this name to fit your case
+            'LONG': [herenode.centroid.x],  # FID can be a unique value for the row
+            'geometry': [multi_point]  # The geometry field contains the MultiPoint geometry
+        }, crs="EPSG:4326")
+
+
+#            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
+#        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
+        # Generate enclosing shape
+        limb = create_enclosing_gdf(gdf)
+
+
+        if type == 'polling district':
+            showmessageST = "showMore(&#39;/PDshowST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
+            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling district'))
+            downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
+            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
+#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,herenode.source, herenode.dir+"/"+herenode.file)
+            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+            limb['UPDOWN'] = uptag1 +"<br>"+ downST+"<br>"+ downWK
+            print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
+        elif type == 'walk':
+            showmessage = "showMore(&#39;/showmore/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('walk'))
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
+            downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
+            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+            limb['UPDOWN'] =  uptag1 +"<br>"+ downtag+"<br>"
+            print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
+
+
+        herenode.tagno = len(self.fg._children)+1
+        numtag = str(herenode.tagno)+" "+str(herenode.value)
+        typetag = "from <br>"+str(herenode.type)+": "+str(herenode.value)+"<br> move :"
+        here = [float('%.6f'%(herenode.centroid.y)),float('%.6f'%(herenode.centroid.x))]
+        fill = levelcolours["C"+str(random.randint(4,15))]
+        print("______addingPoly:",herenode.value, limb.NAME, here)
+        mapfile = current_node.dir+"/"+current_node.file
 
 #            self.children.append(herenode)
 
-            folium.GeoJson(
-                limb,
-                smooth_factor=1,
-                highlight_function=lambda feature: {"fillColor": "blue"},
-                popup=folium.GeoJsonPopup(fields=['UPDOWN'], aliases=[typetag]),
-                style_function=lambda feature: {
-                    "fillColor": fill,
-                    "color": herenode.col,
-                    "dashArray": "5, 5",
-                    "weight": 3,
-                    "fillOpacity": 0.4,
-                }
-            ).add_to(self.fg)
+        folium.GeoJson(
+            limb,
+            smooth_factor=1,
+            highlight_function=lambda feature: {"fillColor": "blue"},
+            popup=folium.GeoJsonPopup(fields=['UPDOWN'], aliases=[typetag]),
+            style_function=lambda feature: {
+                "fillColor": fill,
+                "color": herenode.col,
+                "dashArray": "5, 5",
+                "weight": 3,
+                "fillOpacity": 0.4,
+            }
+        ).add_to(self.fg)
 
-            self.fg.add_child(folium.Marker(
-                 location=here,
-                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(mapfile,numtag),
-                 class_name = "leaflet-div-icon",
-                 icon_size=(24,24),
-                 icon_anchor=(14,40)),
-               )
-                     )
+        self.fg.add_child(folium.Marker(
+             location=here,
+             icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(mapfile,numtag),
+             class_name = "leaflet-div-icon",
+             icon_size=(24,24),
+             icon_anchor=(14,40)),
+           )
+                 )
         print("________Layer map polys",herenode.value,herenode.level,self.fg._children)
         return self.fg._children
 
@@ -561,7 +640,7 @@ class FGlayer:
 
 
                 numtag = str(c.tagno)+" "+str(c.value)
-                here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
+                here = [ float('%.6f'%(c.centroid.y)),float('%.6f'%(c.centroid.x))]
                 fill = levelcolours["C"+str(random.randint(4,15))]
                 print("______addingMarker:",c.value, limb.NAME)
 
@@ -595,7 +674,7 @@ class FGlayer:
 #            layerfids = [x.fid for x in self.children if x.type == type]
 #            if c.fid not in layerfids:
             numtag = str(c.tagno)+" "+str(c.value)
-            here = [ float('%.4f'%(c.centroid.y)),float('%.4f'%(c.centroid.x))]
+            here = [ float('%.6f'%(c.centroid.y)),float('%.6f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
             mapfile = str("/showmore/"+c.dir+"/"+c.file)
 
@@ -982,7 +1061,7 @@ def downPDbut(selnode):
           maplaty = PDnodeelectors.Lat.values[0]
 
         # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-          if Level3boundary.geometry.contains(Point(float('%.4f'%(maplongx)),float('%.4f'%(maplaty)))).item():
+          if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
               Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
               allelectors['Area'] = Area
               frames.append(PDnodeelectors)
@@ -1119,10 +1198,10 @@ def STupdate(selnode):
     electorwalks['Notes'] = ""
 
     groupelectors = electorwalks.shape[0]
-    if math.isnan(float('%.4f'%(electorwalks.Elevation.max()))):
+    if math.isnan(float('%.6f'%(electorwalks.Elevation.max()))):
       climb = 0
     else:
-      climb = int(float('%.4f'%(electorwalks.Elevation.max())) - float('%.4f'%(electorwalks.Elevation.min())))
+      climb = int(float('%.6f'%(electorwalks.Elevation.max())) - float('%.6f'%(electorwalks.Elevation.min())))
 
     x = electorwalks.AddressNumber.values
     y = electorwalks.StreetName
@@ -1172,7 +1251,7 @@ def STupdate(selnode):
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
     layeritems = getlayeritems(current_node.parent.childrenoftype('street'))
-    return  send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 
 @app.route('/PDshowST/<path:selnode>', methods=['GET','POST'])
@@ -1207,12 +1286,10 @@ def PDshowST(selnode):
             Streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat'])
             Streetdf = Streetdf0.groupby(['Name']).mean()
 
-
-            Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-
-            streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
-
-            Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
+            if len(current_node.childrenoftype('street')) == 0:
+                Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
+                streetnodelist = current_node.create_data_branch('street',Streetdf.reset_index(),"-PRINT")
+                Featurelayers[current_node.level].layeradd_nodemarks(current_node, 'street')
 
             if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
                 flash("Can't find any elector data for this Polling District.")
@@ -1257,10 +1334,10 @@ def PDshowST(selnode):
                   electorwalks['Notes'] = ""
 
                   groupelectors = electorwalks.shape[0]
-                  if math.isnan(float('%.4f'%(electorwalks.Elevation.max()))):
+                  if math.isnan(float('%.6f'%(electorwalks.Elevation.max()))):
                       climb = 0
                   else:
-                      climb = int(float('%.4f'%(electorwalks.Elevation.max())) - float('%.4f'%(electorwalks.Elevation.min())))
+                      climb = int(float('%.6f'%(electorwalks.Elevation.max())) - float('%.6f'%(electorwalks.Elevation.min())))
 
                   x = electorwalks.AddressNumber.values
                   y = electorwalks.StreetName
@@ -1372,13 +1449,13 @@ def PDshowWK(selnode):
             print ("____________walks",walkdfs)
 
     # clear down the layer to which we want to add walks
+            if len(current_node.childrenoftype('walk')) == 0:
+                Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
+        #  add the walk nodes
+                walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINT")
 
-            Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-    #  add the walk nodes
-            walknodelist = current_node.create_data_branch('walk',walkdfs.reset_index(),"-PRINT")
-
-    #        map = current_node.create_area_map(Featurelayers,PDelectors)
-    #        mapfile = current_node.dir+"/"+current_node.file
+        #        map = current_node.create_area_map(Featurelayers,PDelectors)
+        #        mapfile = current_node.dir+"/"+current_node.file
 
     # for each walk node, add a walk node convex hull to the walk_node parent layer (ie current_node.level+1)
             for walk_node in walknodelist:
@@ -1413,7 +1490,7 @@ def PDshowWK(selnode):
             #      marker_cluster = MarkerCluster().add_to(Walkmap)
                   # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
 
-                  Featurelayers[current_node.level].layeradd_walkshape(walk_node, 'walk',walkelectors)
+                  Featurelayers[current_node.level].layeradd_walkshape(walk_node, 'walk',streetdf.reset_index())
     #              Featurelayers[walk_node.level+1].layeradd_nodemaps(walk_node, 'walk')
                   print("_______new Walk Display node",walk_node,"|", Featurelayers[current_node.level].fg._children)
 
@@ -1441,10 +1518,10 @@ def PDshowWK(selnode):
                   walkelectors['Notes'] = ""
 
                   groupelectors = walkelectors.shape[0]
-                  if math.isnan(float('%.4f'%(walkelectors.Elevation.max()))):
+                  if math.isnan(float('%.6f'%(walkelectors.Elevation.max()))):
                       climb = 0
                   else:
-                      climb = int(float('%.4f'%(walkelectors.Elevation.max())) - float('%.4f'%(walkelectors.Elevation.min())))
+                      climb = int(float('%.6f'%(walkelectors.Elevation.max())) - float('%.6f'%(walkelectors.Elevation.min())))
 
                   x = walkelectors.AddressNumber.values
                   y = walkelectors.StreetName
@@ -1499,7 +1576,7 @@ def PDshowWK(selnode):
 
 
         layeritems = getlayeritems(current_node.childrenoftype('walk'))
-
+        current_node.file = subending(current_node.file,"-WALKS")
         mapfile = current_node.dir+"/"+current_node.file
         if len(PDelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
             flash("Can't find any elector data for this Polling District.")
@@ -1844,7 +1921,7 @@ def postcode():
     df1['Lat'] = df1['Lat'].astype(float)
     df1['Long'] = df1['Long'].astype(float)
     lookuplatlong = df1[df1['Postcode'] == postcodeentry]
-    here = Point(float('%.4f'%(lookuplatlong.Long.values[0])),float('%.4f'%(lookuplatlong.Lat.values[0])))
+    here = Point(float('%.6f'%(lookuplatlong.Long.values[0])),float('%.6f'%(lookuplatlong.Lat.values[0])))
     pfile = Treepolys[current_node.level+1]
     polylocated = electorwalks.find_boundary(pfile,here)
 

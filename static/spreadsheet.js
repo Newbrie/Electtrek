@@ -200,7 +200,9 @@ var layerUpdate = function () {
 
 function inputVI(VI) {
   let x = VI.value.toUpperCase();
-  const codes = ["C","R","S","LD","G","I","M","X","W"];
+  const VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+
+  const codes = Object.keys(VID);
   if (codes.includes(x)) {
 //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
     VI.style.color = 'lightgray';
