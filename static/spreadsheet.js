@@ -209,6 +209,11 @@ function inputVI(VI) {
 //    VI.innerHTML = x;
     VI.parentElement.parentElement.innerText = x;
     }
+  else {
+    VI.style.color = 'darkgray';
+//    VI.innerHTML = x;
+    VI.parentElement.parentElement.innerText = "??";
+  }
   };
 
 function inputNS(NS) {
