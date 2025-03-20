@@ -106,9 +106,8 @@ class TreeNode:
         self.VI = VIC.copy()
 
     def updateVI(self,viValue):
-
         print ("_____VIstatus:",self.value,self.type,self.VI)
-        if self.type == 'street' or self.type == 'walkleg':
+        if self.type == 'street' or self.type == 'walk':
             sumnode = self
             for x in range(self.level+1):
                 sumnode.VI[viValue] = sumnode.VI[viValue] + 1
@@ -808,6 +807,7 @@ Featurelayers.append(FGlayer(id=11,name='Special Markers'))
 formdata = {}
 filename = "Surrey_HeathRegister.csv"
 allelectors = pd.DataFrame()
+PDelectors = pd.DataFrame()
 layeritems = pd.DataFrame()
 #allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
 
@@ -1139,6 +1139,7 @@ def STupdate(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
+    global PDelectors
     global environment
     global filename
     global layeritems
@@ -1174,9 +1175,9 @@ def STupdate(selnode):
                     if not electID:  # Skip if electorID is missing
                         print("Skipping entry with missing electorID")
                         continue
-                    print("_____columns:",allelectors.columns)
+                    print("_____columns:",PDelectors.columns)
                     # Find the row where ENO matches electID
-                    selected = allelectors.query("ENO == @electID")
+                    selected = PDelectors.query("ENO == @electID")
 
                     if not selected.empty:
                         # Update only if viResponse is non-empty
@@ -1184,7 +1185,7 @@ def STupdate(selnode):
                             allelectors.loc[selected.index, "VI"] = VI_value
                             current_node.updateVI(VI_value)
                             print(f"Updated elector {electID} with VI = {VI_value}")
-                            print("ElectorVI", allelectors.loc[selected.index, "ENO"], allelectors.loc[selected.index, "VI"])
+                            print("ElectorVI", allelectors.loc[selected.index, "ENO"], PDelectors.loc[selected.index, "VI"])
                         else:
                             print(f"Skipping elector {electID}, empty viResponse")
                     else:
@@ -1195,22 +1196,26 @@ def STupdate(selnode):
         else:
             print("Error: Incorrect JSON format")
 
+    print("_____Where are we: ", current_node.value, current_node.type, PDelectors.columns)
 
-    PDelectors = getblock(allelectors, 'PD',current_node.parent.value)
-    street = street_node.value
+    street = current_node.value
+    electorwalks = pd.DataFrame()
 
-    electorwalks = getblock(PDelectors, 'StreetName',street_node.value)
+    if current_node.type == 'street':
+        electorwalks = getblock(PDelectors, 'StreetName',current_node.value)
+    elif current_node.type == 'walk':
+        electorwalks = getblock(PDelectors,'WalkName',current_node.value)
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
         return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
-    STREET_ = street_node.value
+    STREET_ = current_node.value
 
     Postcode = electorwalks.loc[0].Postcode
 
-    walk_name = street_node.parent.value+"-"+street_node.value
+    walk_name = current_node.parent.value+"-"+current_node.value
     type_colour = "indigo"
     #      BMapImg = walk_name+"-MAP.png"
 
@@ -1270,10 +1275,10 @@ def STupdate(selnode):
     prodstats['canvasshrs'] = round(canvasshrs,2)
 
     electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
-    target = street_node.locmappath("")
+    target = current_node.locmappath("")
     results_filename = walk_name+"-PRINT.html"
 
-    datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+    datafile = current_node.dir+"/"+walk_name+"-DATA.html"
 
 
     context = {
@@ -1289,7 +1294,10 @@ def STupdate(selnode):
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
     current_node = current_node.parent
-    layeritems = getlayeritems(current_node.childrenoftype('street'))
+    if current_node.type == 'street':
+        layeritems = getlayeritems(current_node.childrenoftype('street'))
+    elif current_node.type == 'walk':
+        layeritems = getlayeritems(current_node.childrenoftype('walk'))
     mapfile = current_node.dir+"/"+current_node.file
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
@@ -1301,6 +1309,7 @@ def PDshowST(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
+    global PDelectors
     global environment
     global filename
     global layeritems
@@ -1315,9 +1324,8 @@ def PDshowST(selnode):
     mapfile = current_node.dir+"/"+current_node.file
     frames = []
 
-
+    PDelectors = getblock(allelectors, 'PD',current_node.value)
     if request.method == 'GET':
-        PDelectors = getblock(allelectors, 'PD',current_node.value)
         if len(current_node.childrenoftype('street')) == 0:
 
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
@@ -1449,6 +1457,7 @@ def PDshowWK(selnode):
     global Featurelayers
     global workdirectories
     global allelectors
+    global PDelectors
     global environment
     global filename
     global layeritems
