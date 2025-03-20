@@ -68,7 +68,7 @@ async function getVIData(path) {
 .then(data => {
     alert(JSON.stringify(data, null, 2));  // Show formatted JSON
     console.log("Success:", data);
-    window.location.assign(data.file);
+    window.location.assign(data);
 })
 .catch(error => {
     alert("Error: " + error);

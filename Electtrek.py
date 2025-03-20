@@ -1469,10 +1469,9 @@ def PDshowWK(selnode):
     current_node = selected_childnode(current_node,steps[-1])
     frames = []
 
-
+    PDelectors = getblock(allelectors, 'PD',current_node.value)
     if request.method == 'GET':
 # if there is a selected file , then allelectors will be full of records
-        PDelectors = getblock(allelectors, 'PD',current_node.value)
         if len(current_node.childrenoftype('walk')) == 0:
             print("________PDMarker",current_node.type,"|", current_node.dir, "|",current_node.file)
 
