@@ -22,7 +22,6 @@ var showMore = function (msg,area, type) {
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
-
       };
 var layerUpdate = function () {
   // Send a message to the parent
