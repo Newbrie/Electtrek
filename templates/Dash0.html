@@ -63,6 +63,8 @@
 
             if (Array.isArray(data) && data.length > 0) {
                 // Extract column headers from the first record (keys)
+                const columnHeaders = Object.keys(data[0]);
+
                 let tableContent = '<table border="1"><thead><tr><td> ? </td>';
 
                 // Add column headers
@@ -85,7 +87,6 @@
 
                 // Update DOM once (reduces unnecessary repaints)
                 tabhead.innerHTML = tableContent;
-
             } else {
                 console.error("Data is not an array or is empty:", data);
             }
