@@ -187,8 +187,8 @@ document.getElementById('save-btn').addEventListener('click', function() {
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
-  var urlArray = document.url.split('/');
-  getVIData(urlArray[1]);
+  var path = URL(url).pathname;
+  getVIData(path);
   layerUpdate();
 });
 
