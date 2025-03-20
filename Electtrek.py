@@ -544,6 +544,8 @@ class FGlayer:
 
         herenode.tagno = len(self.fg._children)+1
         numtag = str(herenode.tagno)+" "+str(herenode.value)
+        num = str(herenode.tagno)
+        tag = str(herenode.value)
         typetag = "from <br>"+str(herenode.type)+": "+str(herenode.value)+"<br> move :"
         here = [float('%.6f'%(herenode.centroid.y)),float('%.6f'%(herenode.centroid.x))]
         fill = levelcolours["C"+str(random.randint(4,15))]
@@ -568,12 +570,21 @@ class FGlayer:
 
         self.fg.add_child(folium.Marker(
              location=here,
-             icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(mapfile,numtag),
-             class_name = "leaflet-div-icon",
-             icon_size=(24,24),
-             icon_anchor=(14,40)),
-           )
-                 )
+             icon = folium.DivIcon(
+                    html='''
+                    <a href='{2}'><div style="
+                        font-size: 10pt;
+                        font-weight: bold;
+                        text-align: center;
+                        padding: 5px;
+                        white-space: nowrap;">
+                        <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                        border: 2px solid black;">{0}</span>
+                        {1}</div></a>
+                        '''.format(num,tag,mapfile),
+                   )
+                   )
+                   )
         print("________Layer map polys",herenode.value,herenode.level,self.fg._children)
         return self.fg._children
 
@@ -640,6 +651,8 @@ class FGlayer:
 
 
                 numtag = str(c.tagno)+" "+str(c.value)
+                num = str(c.tagno)
+                tag = str(c.value)
                 here = [ float('%.6f'%(c.centroid.y)),float('%.6f'%(c.centroid.x))]
                 fill = levelcolours["C"+str(random.randint(4,15))]
                 print("______addingMarker:",c.value, limb.NAME)
@@ -654,12 +667,23 @@ class FGlayer:
 
                 self.fg.add_child(folium.Marker(
                      location=here,
-                     icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo'>{1}</b>\n".format(mapfile,numtag),
-                     class_name = "leaflet-div-icon",
-                     icon_size=(24,24),
-                     icon_anchor=(14,40)),
-                   )
-                 )
+                     icon = folium.DivIcon(
+                            html='''
+                            <a href='{2}'><div style="
+                                font-size: 10pt;
+                                font-weight: bold;
+                                text-align: center;
+                                padding: 5px;
+                                white-space: nowrap;">
+                                <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                                border: 2px solid black;">{0}</span>
+                                {1}</div></a>
+                                '''.format(num,tag,mapfile),
+
+                               )
+                               )
+                               )
+
 
         print("________Layer map polys",herenode.value,herenode.level,self.fg._children, Featurelayers[herenode.level].fg._children)
 
@@ -674,6 +698,8 @@ class FGlayer:
 #            layerfids = [x.fid for x in self.children if x.type == type]
 #            if c.fid not in layerfids:
             numtag = str(c.tagno)+" "+str(c.value)
+            num = str(c.tagno)
+            tag = str(c.value)
             here = [ float('%.6f'%(c.centroid.y)),float('%.6f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
             mapfile = str("/showmore/"+c.dir+"/"+c.file)
@@ -682,12 +708,22 @@ class FGlayer:
 
             self.fg.add_child(folium.Marker(
                  location=here,
-                 icon = folium.DivIcon(html="<a href='{0}' style='text-wrap: nowrap; font-size: 12pt; color: indigo;' >{1}</a>".format(mapfile,numtag),
-                 class_name = "leaflet-div-icon",
-                 icon_size=(24,24),
-                 icon_anchor=(14,40)),
-               )
-             )
+                 icon = folium.DivIcon(
+                        html='''
+                        <a href='{2}'><div style="
+                            font-size: 10pt;
+                            font-weight: bold;
+                            text-align: center;
+                            padding: 5px;
+                            white-space: nowrap;">
+                            <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                            border: 2px solid black;">{0}</span>
+                            {1}</div></a>
+                            '''.format(num,tag,mapfile),
+                       )
+                       )
+                       )
+
 
         print("________Layer map points",herenode.value,herenode.level,self.fg._children)
 
