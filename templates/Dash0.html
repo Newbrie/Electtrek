@@ -52,48 +52,60 @@
       ul.appendChild(li);
 
 //      const areas_div = parent.document.getElementById("Areas-table")
-      fetch('/displayareas', {
-        "method": "GET",
-        "headers": {"Content-Type": "application/json"},
-      })
-        .then(   response => response.json())
-        .then(data => {
-        //    alert(data);
-            console.log("Data received:", data);  // Log the data structure to see the format
+fetch('/displayareas', {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+})
+.then(response => response.json())
+.then(data => {
+    console.log("Data received:", data);
 
-            if (Array.isArray(data) && data.length > 0) {
-                // Extract column headers from the first record (keys)
-                const columnHeaders = Object.keys(data[0]);
+    if (!Array.isArray(data) || data.length < 2) {
+        console.error("Invalid or incomplete data:", data);
+        return;
+    }
 
-                let tableContent = '<table border="1"><thead><tr><td> ? </td>';
- 
-                // Add column headers
-                columnHeaders.forEach(header => {
-                    tableContent += `<th>${toTitleCase(header)}</th>`;
-                });
+    const tabhead = parent.document.getElementById("tabhead");
+    const tabbody = parent.document.getElementById("tabbody");
 
-                tableContent += '</tr></thead><tbody>';
+    if (!tabhead || !tabbody) {
+        console.error("tabhead or tabbody not found");
+        return;
+    }
 
-                // Add table rows
-                data.forEach(record => {
-                    tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
-                    columnHeaders.forEach(header => {
-                        tableContent += `<td>${record[header]}</td>`;
-                    });
-                    tableContent += '</tr>';
-                });
+    const columnHeaders = data[0];  // First element contains ordered column names
+    const rows = data[1];  // Second element contains data rows
 
-                tableContent += '</tbody></table>';
+    // Clear previous content
+    tabhead.innerHTML = "";
+    tabbody.innerHTML = "";
 
-                // Update DOM once (reduces unnecessary repaints)
-                tabhead.innerHTML = tableContent;
-            } else {
-                console.error("Data is not an array or is empty:", data);
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching data for frame1:', error);
+    let tableContent = '<table border="1"><thead><tr><td> ? </td>';
+
+    // Add headers in the correct order
+    columnHeaders.forEach(header => {
+        tableContent += `<th>${toTitleCase(header)}</th>`;
+    });
+
+    tableContent += '</tr></thead><tbody>';
+
+    // Add rows following the correct column order
+    rows.forEach(record => {
+        tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
+        columnHeaders.forEach(header => {
+            tableContent += `<td>${record[header] !== undefined ? record[header] : ""}</td>`; // Handle missing data
         });
+        tableContent += '</tr>';
+    });
+
+    tableContent += '</tbody></table>';
+
+    // Update DOM
+    setTimeout(() => {
+        tabhead.innerHTML = tableContent;
+    }, 100);
+})
+.catch(error => console.error("Fetch error:", error));
 
       };
     </script>

@@ -69,11 +69,13 @@ def getlayeritems(nodelist):
     for x in nodelist:
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
-         dfy.loc[i,party] = x.VI[party]
+            dfy.loc[i,party] = x.VI[party]
+            i=i+1
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
         i = i + 1
-    return dfy
+    dfyCO = list(dfy.columns)
+    return [dfy,dfyCO]
 
 
 def subending(filename, ending):
@@ -1682,12 +1684,14 @@ def wardreport(selnode):
 def displayareas():
     global layeritems
     print('_______ROUTE/displayareas')
-    json_data = layeritems.to_json(orient='records', lines=False)
+    json_data = layeritems[0].to_json(orient='records', lines=False)
+    json_cols = json.dumps(layeritems[1])
     # Convert JSON string to Python list
-    python_data = json.loads(json_data)
+    python_data2 = json.loads(json_data)
+    python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-    print('_______ROUTE/displayarea data', python_data)
-    return  jsonify(python_data)
+    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+    return  jsonify([python_data1, python_data2])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/divreport/<path:selnode>',methods=['GET','POST'])
