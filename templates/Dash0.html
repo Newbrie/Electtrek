@@ -63,33 +63,28 @@
 
             if (Array.isArray(data) && data.length > 0) {
                 // Extract column headers from the first record (keys)
-                const columnHeaders = Object.keys(data[0]);
+                let tableContent = '<table border="1"><thead><tr><td> ? </td>';
 
-                // Build the table with column headers and record data
-                let frame1Content = '<table border="1"><thead><tr> \
-                  <td> ? </td>'
-                // Loop through column headers and add them to the table header
+                // Add column headers
                 columnHeaders.forEach(header => {
-                    frame1Content += `<th>${toTitleCase(header)}</th>`;
+                    tableContent += `<th>${toTitleCase(header)}</th>`;
                 });
 
-                frame1Content += '</tr></thead><tbody>';
-                tabhead.innerHTML = frame1Content;
-                // Loop through the data and add each record (row) to the table
-                frame1Content = '<table border="1"><tbody><tr>';
-                  data.forEach(record => {
-                    frame1Content += '<tr> \
-                      <td> \
-            						<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow"> \
-            					</td>'
+                tableContent += '</tr></thead><tbody>';
+
+                // Add table rows
+                data.forEach(record => {
+                    tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
                     columnHeaders.forEach(header => {
-                        frame1Content += `<td>${record[header]}</td>`;
+                        tableContent += `<td>${record[header]}</td>`;
                     });
-                    frame1Content += '</tr>';
+                    tableContent += '</tr>';
                 });
 
-                frame1Content += '</tbody></table>';
-                tabbody.innerHTML = frame1Content;
+                tableContent += '</tbody></table>';
+
+                // Update DOM once (reduces unnecessary repaints)
+                tabhead.innerHTML = tableContent;
 
             } else {
                 console.error("Data is not an array or is empty:", data);
