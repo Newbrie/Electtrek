@@ -67,10 +67,11 @@ def getlayeritems(nodelist):
     dfy = pd.DataFrame()
     i = 0
     for x in nodelist:
-        dfy.loc[i,'No']= i
+        dfy.loc[i,'No']= x.tagno
+        for party in x.VI:
+         dfy.loc[i,party] = x.VI[party]
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
-        dfy.loc[i,'VI'] = x.VI['R'].values[0]
         i = i + 1
     return dfy
 
@@ -80,8 +81,8 @@ def subending(filename, ending):
   return stem.replace("@@@", ending)
 
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
-data = [[0] * len(VID)]  # Create a 2D list with one row
-VI0 = pd.DataFrame(data, columns=list(VID.keys()))
+data = [0] * len(VID)
+VIC = dict(zip(VID.keys(), data))
 
 
 class TreeNode:
@@ -102,19 +103,16 @@ class TreeNode:
         self.bbox = [[],[]]
         self.map = {}
         self.source = ""
-        self.VI = VI0
+        self.VI = VIC.copy()
 
     def updateVI(self,viValue):
-        VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
-        data = [[0] * len(VID)]  # Create a 2D list with one row
-        VIC = pd.DataFrame(data, columns=list(VID.keys()))
+
         print ("_____VIstatus:",self.value,self.type,self.VI)
         if self.type == 'street' or self.type == 'walkleg':
-            self.VI[viValue] = self.VI[viValue]+1
             sumnode = self
-            for x in range(self.level):
-                sumnode.parent.VI[viValue] = sumnode.parent.VI[viValue] + 1
-                print ("_____VInode:",sumnode.value,sumnode.VI)
+            for x in range(self.level+1):
+                sumnode.VI[viValue] = sumnode.VI[viValue] + 1
+                print ("_____VInode:",sumnode.value,sumnode.level,sumnode.VI)
                 sumnode = sumnode.parent
         return
 
@@ -303,9 +301,11 @@ class TreeNode:
         self.davail = True
         child_node.parent = self
         self.children.append(child_node)
+        child_node.type = etype
         child_node.level = child_node.parent.level + 1
         child_node.dir = self.dir+"/"+child_node.value
         child_node.file = child_node.value+"-MAP.html"
+        child_node.tagno = len([ x for x in self.children if x.type == etype])
         if etype == 'street':
             child_node.dir = self.dir+"/STREETS"
             child_node.file = self.value+"-"+child_node.value+"-MAP.html"
@@ -317,7 +317,7 @@ class TreeNode:
             child_node.file = self.value+"-"+child_node.value+"-MAP.html"
 
         child_node.davail = False
-        child_node.type = etype
+
         print("_________new child node dir:  ",child_node.dir)
         return child_node
 
@@ -542,7 +542,7 @@ class FGlayer:
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
 
 
-        herenode.tagno = len(self.fg._children)+1
+#        herenode.tagno = len(self.fg._children)+1
         numtag = str(herenode.tagno)+" "+str(herenode.value)
         num = str(herenode.tagno)
         tag = str(herenode.value)
@@ -573,12 +573,13 @@ class FGlayer:
              icon = folium.DivIcon(
                     html='''
                     <a href='{2}'><div style="
+                        color: white;
                         font-size: 10pt;
                         font-weight: bold;
                         text-align: center;
                         padding: 5px;
                         white-space: nowrap;">
-                        <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                        <span style="background: black; padding: 2px 5px; border-radius: 5px;
                         border: 2px solid black;">{0}</span>
                         {1}</div></a>
                         '''.format(num,tag,mapfile),
@@ -607,7 +608,7 @@ class FGlayer:
                     downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"COUNTIES",12)
 #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                     limb['UPDOWN'] = "<br>"+c.value+"<br>"  + downtag
-                    c.tagno = len(self.fg._children)+1
+#                    c.tagno = len(self.fg._children)+1
                     print("_________new child boundary value and tagno:  ",c.type, c.value, c.tagno)
                     mapfile = "/map/"+c.dir+"/"+c.file
 #                        self.children.append(c)
@@ -621,7 +622,7 @@ class FGlayer:
                     downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                     uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                     limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ wardreporttag + divreporttag+"<br>"+ downconstag
-                    c.tagno = len(self.fg._children)+1
+#                    c.tagno = len(self.fg._children)+1
                     print("_________new split child boundary value and tagno:  ",c.type,c.value, c.tagno)
                     mapfile = "/map/"+c.dir+"/"+c.file
 #                        self.children.append(c)
@@ -633,7 +634,7 @@ class FGlayer:
                     downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
                     uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                     limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downwardstag + " " + downdivstag
-                    c.tagno = len(self.fg._children)+1
+#                    c.tagno = len(self.fg._children)+1
                     print("_________new split child boundary value and tagno:  ",c.type, c.value, c.tagno)
                     mapfile = "/map/"+c.dir+"/"+c.file
 #                        self.children.append(c)
@@ -644,7 +645,7 @@ class FGlayer:
                     upload = "<form id='uploadPD' action= '/downPDbut/{0}' method='GET'><input type='file' name='importfile' placeholder={2} style='font-size: {1}pt;color: gray' enctype='multipart/form-data'></input></form>".format(c.dir+"/"+c.file,12,c.source)
                     uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                     limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ upload+PDbtn
-                    c.tagno = len(self.fg._children)+1
+#                    c.tagno = len(self.fg._children)+1
                     print("_________new Ward value and tagno:  ",c.type,c.value, c.tagno, PDbtn)
                     mapfile = "/map/"+c.dir+"/"+c.file
 #                        self.children.append(c)
@@ -670,12 +671,13 @@ class FGlayer:
                      icon = folium.DivIcon(
                             html='''
                             <a href='{2}'><div style="
+                                color: white;
                                 font-size: 10pt;
                                 font-weight: bold;
                                 text-align: center;
                                 padding: 5px;
                                 white-space: nowrap;">
-                                <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                                <span style="background: black; padding: 2px 5px; border-radius: 5px;
                                 border: 2px solid black;">{0}</span>
                                 {1}</div></a>
                                 '''.format(num,tag,mapfile),
@@ -711,12 +713,13 @@ class FGlayer:
                  icon = folium.DivIcon(
                         html='''
                         <a href='{2}'><div style="
+                            color: white;
                             font-size: 10pt;
                             font-weight: bold;
                             text-align: center;
                             padding: 5px;
                             white-space: nowrap;">
-                            <span style="background: rgba(255, 255, 255, 0.8); padding: 2px 5px; border-radius: 5px;
+                            <span style="background: black; padding: 2px 5px; border-radius: 5px;
                             border: 2px solid black;">{0}</span>
                             {1}</div></a>
                             '''.format(num,tag,mapfile),
@@ -1162,34 +1165,33 @@ def STupdate(selnode):
             return jsonify({"error": "Invalid JSON"}), 400
         if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
             for item in VIdata["viData"]:  # Loop through each elector entry
-                electID = str(item.get("electorID")).strip()  # Extract elector ID as string
-                new_value = item.get("viResponse", "").strip()  # Extract viResponse
-
-                if not electID:  # Skip if electorID is missing
-                    print("Skipping entry with missing electorID")
-                    continue
-                print("_____columns:",allelectors.columns)
-                if allelectors["ENO"].dtype != object:  # Convert electID if ENO is numeric
-                    try:
-                        electID = float(electID) if "." in electID else int(electID)
-                    except ValueError:
-                        print(f"Error: Cannot convert electorID {electID} to numeric.")
+                electIDpair = str(item.get("electorID")).strip().split(".")
+                suffix = int(electIDpair.pop())# Extract suffix as string and convert to int
+                electID = int(electIDpair.pop())# Extract elector ID as string and convert to int
+                VI_value = item.get("viResponse", "").strip()  # Extract viResponse
+                print("____Received electIDpair",electIDpair,electID,suffix)
+                if suffix == 0:
+                    if not electID:  # Skip if electorID is missing
+                        print("Skipping entry with missing electorID")
                         continue
+                    print("_____columns:",allelectors.columns)
+                    # Find the row where ENO matches electID
+                    selected = allelectors.query("ENO == @electID")
 
-                # Find the row where ENO matches electID
-                selected = allelectors.query("ENO == @electID")
-
-                if not selected.empty:
-                    # Update only if viResponse is non-empty
-                    if new_value:
-                        allelectors.loc[selected.index, "VI"] = new_value
-                        current_node.updateVI(new_value)
-                        print(f"Updated elector {electID} with VI = {new_value}")
-                        print("ElectorVI", allelectors.loc[selected.index, "ENO"], allelectors.loc[selected.index, "VI"])
+                    if not selected.empty:
+                        # Update only if viResponse is non-empty
+                        if VI_value:
+                            allelectors.loc[selected.index, "VI"] = VI_value
+                            current_node.updateVI(VI_value)
+                            print(f"Updated elector {electID} with VI = {VI_value}")
+                            print("ElectorVI", allelectors.loc[selected.index, "ENO"], allelectors.loc[selected.index, "VI"])
+                        else:
+                            print(f"Skipping elector {electID}, empty viResponse")
                     else:
-                        print(f"Skipping elector {electID}, empty viResponse")
+                        print(f"Warning: No match found for ENO = {electID}")
                 else:
-                    print(f"Warning: No match found for ENO = {electID}")
+                        print(f"Warning: Suffix > 0 = {suffix}")
+
         else:
             print("Error: Incorrect JSON format")
 
@@ -1272,7 +1274,7 @@ def STupdate(selnode):
     results_filename = walk_name+"-PRINT.html"
 
     datafile = street_node.dir+"/"+walk_name+"-DATA.html"
-    mapfile = street_node.parent.dir+"/"+street_node.parent.file
+
 
     context = {
         "group": electorwalks,
@@ -1286,7 +1288,9 @@ def STupdate(selnode):
     with open(results_filename, mode="w", encoding="utf-8") as results:
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
-    layeritems = getlayeritems(current_node.parent.childrenoftype('street'))
+    current_node = current_node.parent
+    layeritems = getlayeritems(current_node.childrenoftype('street'))
+    mapfile = current_node.dir+"/"+current_node.file
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 
@@ -1738,7 +1742,6 @@ def upbut(selnode):
 
     current_node = current_node.parent
     print("_________current+parent_node",current_node.value, current_node.parent.value)
-    current_node.file = subending(current_node.file,"-MAP")
 # the selected  boundary options need to be added to the layer
     mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer

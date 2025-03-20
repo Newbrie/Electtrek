@@ -31,7 +31,7 @@ if (!event.target.matches('.dropbtn')) {
 };
 
 
-async function getVIData() {
+async function getVIData(path) {
     let table = document.getElementById("canvass-table");
     let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
     let data = [];
@@ -50,7 +50,7 @@ async function getVIData() {
     console.log("Collected VI Data:", data);
 
     // Send data to server
-    const selnode = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html";
+    const selnode = path;
     fetch(`/STupdate/${selnode}`, {
     method: "POST",
     headers: {
@@ -187,7 +187,8 @@ document.getElementById('save-btn').addEventListener('click', function() {
   var html = document.querySelector("#canvass-table").outerHTML;
 	export_table_to_csv(html, filename);
   console.log(filename);
-  getVIData();
+  var urlArray = document.url.split('/');
+  getVIData(urlArray[1]);
   layerUpdate();
 });
 
