@@ -65,8 +65,8 @@ fetch('/displayareas', {
         return;
     }
 
-    const tabhead = parent.document.getElementById("tabhead");
-    const tabbody = parent.document.getElementById("tabbody");
+    const tabhead = parent.document.getElementById("thead");
+    const tabbody = parent.document.getElementById("tbody");
 
     if (!tabhead || !tabbody) {
         console.error("tabhead or tabbody not found");
