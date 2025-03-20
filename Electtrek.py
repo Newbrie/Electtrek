@@ -578,7 +578,7 @@ class FGlayer:
                         text-align: center;
                         padding: 5px;
                         white-space: nowrap;">
-                        <span style="background: black; padding: 2px 5px; border-radius: 5px;
+                        <span style="background: black; padding: 1px 3px; border-radius: 5px;
                         border: 2px solid black;">{0}</span>
                         {1}</div></a>
                         '''.format(num,tag,mapfile),
@@ -676,7 +676,7 @@ class FGlayer:
                                 text-align: center;
                                 padding: 5px;
                                 white-space: nowrap;">
-                                <span style="background: black; padding: 2px 5px; border-radius: 5px;
+                                <span style="background: black; padding: 1px 3px; border-radius: 5px;
                                 border: 2px solid black;">{0}</span>
                                 {1}</div></a>
                                 '''.format(num,tag,mapfile),
@@ -718,7 +718,7 @@ class FGlayer:
                             text-align: center;
                             padding: 5px;
                             white-space: nowrap;">
-                            <span style="background: black; padding: 2px 5px; border-radius: 5px;
+                            <span style="background: black; padding: 1px 3px; border-radius: 5px;
                             border: 2px solid black;">{0}</span>
                             {1}</div></a>
                             '''.format(num,tag,mapfile),
