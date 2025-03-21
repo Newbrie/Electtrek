@@ -225,11 +225,16 @@ var layerUpdate = function (msg, area, type) {
     layerUpdate();
   });
 
-  var layerUpdate = function () {
+  var layerUpdate = function (path) {
     // Send a message to the parent
         window.parent.postMessage("Updating Layer Data.", '*');
         var ul = parent.document.getElementById("logwin");
         ul.scrollTop = ul.scrollHeight;
+        var filename = path.split('/').pop();
+        var html = document.querySelector("#canvass-table").outerHTML;
+        export_table_to_csv(html, filename);
+        console.log(filename);
+        getVIData(path);
         };
 
   function inputVI(VI) {
