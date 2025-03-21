@@ -1279,7 +1279,7 @@ def STupdate(selnode):
     target = current_node.locmappath("")
     results_filename = walk_name+"-PRINT.html"
 
-    datafile = current_node.dir+"/"+walk_name+"-DATA.html"
+    datafile = current_node.dir+"/"+walk_name+"-DATA.csv"
 
 
     context = {
@@ -1420,7 +1420,7 @@ def PDshowST(selnode):
                   target = street_node.locmappath("")
                   results_filename = walk_name+"-PRINT.html"
 
-                  datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+                  datafile = street_node.dir+"/"+walk_name+"-DATA.csv"
                   mapfile = street_node.parent.dir+"/"+street_node.parent.file
 
     #              These are the street nodes which are the street data collection pages
@@ -1605,7 +1605,7 @@ def PDshowWK(selnode):
                   target = walk_node.locmappath("")
                   results_filename = walk_name+"-PRINT.html"
 
-                  datafile = walk_node.dir+"/"+walk_name+"-DATA.html"
+                  datafile = walk_node.dir+"/"+walk_name+"-DATA.csv"
                   current_node.file = subending(current_node.file,"-WALKS")
                   mapfile = current_node.dir+"/"+current_node.file
 

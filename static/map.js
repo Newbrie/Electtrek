@@ -58,7 +58,7 @@ var showMore = function (msg,area, type) {
 
 
   async function getVIData(path) {
-      let table = parent.document.getElementById("canvass-table");
+      let table = document.getElementById("canvass-table");
       let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
       let data = [];
       alert(inputs);
@@ -220,7 +220,8 @@ var showMore = function (msg,area, type) {
         alert("html"+html);
         export_table_to_csv(html, filename);
         console.log(filename);
-        getVIData(path);
+        var htmlfilepath = path.replace("DATA.csv","PRINT.html");
+        getVIData(htmlfilepath);
         };
 
   function inputVI(VI) {
