@@ -217,7 +217,7 @@ var showMore = function (msg,area, type) {
         var htmlpath = path.replace("DATA.csv","PRINT.html");
         getVIData(htmlpath);
         window.parent.postMessage("Refreshing summary data set ", '*');
-        window.location.assign(data.file);
+        window.location.assign(htmlpath);
         var ul = parent.document.getElementById("logwin");
         ul.scrollTop = ul.scrollHeight;
         };
