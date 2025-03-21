@@ -1322,7 +1322,7 @@ def PDshowST(selnode):
     steps = selnode.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
-    mapfile = current_node.dir+"/"+current_node.file
+# now pointing at the STREETS.html node containing a map of street markers
     frames = []
 
     PDelectors = getblock(allelectors, 'PD',current_node.value)
@@ -1423,7 +1423,7 @@ def PDshowST(selnode):
                   datafile = street_node.dir+"/"+walk_name+"-DATA.html"
                   mapfile = street_node.parent.dir+"/"+street_node.parent.file
 
-    #              map = street_node.create_area_map(Featurelayers,electorwalks)
+    #              These are the street nodes which are the street data collection pages
 
 
                   context = {
