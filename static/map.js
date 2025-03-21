@@ -64,7 +64,7 @@ var layerUpdate = function (msg, area, type) {
 
 
   async function getVIData(path) {
-      let table = document.getElementById("canvass-table");
+      let table = parent.document.getElementById("canvass-table");
       let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
       let data = [];
       alert(inputs);
@@ -215,9 +215,9 @@ var layerUpdate = function (msg, area, type) {
       download_csv(csv.join("\n"), filename);
   };
 
-  document.getElementById('save-btn').addEventListener('click', function() {
-    var filename = document.getElementById("save-btn").getAttribute("data1");
-    var html = document.querySelector("#canvass-table").outerHTML;
+  parent.document.getElementById('save-btn').addEventListener('click', function() {
+    var filename = parent.document.getElementById("save-btn").getAttribute("data1");
+    var html = parent.document.querySelector("#canvass-table").outerHTML;
   	export_table_to_csv(html, filename);
     console.log(filename);
     var path = window.location.pathname;
