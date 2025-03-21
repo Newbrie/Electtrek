@@ -70,12 +70,11 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
-            i=i+1
         dfy.loc[i,x.type]=  x.value
         dfy.loc[i,x.parent.type] =  x.parent.value
         i = i + 1
-    dfyCO = list(dfy.columns)
-    return [dfy,dfyCO]
+
+    return [list(dfy.columns.values),dfy]
 
 
 def subending(filename, ending):
@@ -810,7 +809,7 @@ formdata = {}
 filename = "Surrey_HeathRegister.csv"
 allelectors = pd.DataFrame()
 PDelectors = pd.DataFrame()
-layeritems = pd.DataFrame()
+layeritems = []
 #allelectors = pd.read_csv(workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
 
 mapfile = ""
@@ -990,7 +989,7 @@ def dashboard ():
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
 
         mapfile = current_node.dir+"/"+current_node.file
-        redirect(url_for('captains'))
+#        redirect(url_for('captains'))
         return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
     flash('_______ROUTE/dashboard no login session ')
@@ -1665,13 +1664,14 @@ def wardreport(selnode):
         for item in group_node.childrenoftype('ward'):
             if item.value not in alreadylisted:
                 alreadylisted.append(item.value)
-                layeritems.loc[i,'No']= i
-                layeritems.loc[i,'Area']=  item.value
-                layeritems.loc[i,'Constituency']=  group_node.value
-                layeritems.loc[i,'Candidate']=  "Joe Bloggs"
-                layeritems.loc[i,'Email']=  "xxx@reforumuk.com"
-                layeritems.loc[i,'Mobile']=  "07789 342456"
+                temp.loc[i,'No']= i
+                temp.loc[i,'Area']=  item.value
+                temp.loc[i,'Constituency']=  group_node.value
+                temp.loc[i,'Candidate']=  "Joe Bloggs"
+                temp.loc[i,'Email']=  "xxx@reforumuk.com"
+                temp.loc[i,'Mobile']=  "07789 342456"
                 i = i + 1
+        layeritems = [list(temp.columns.values), temp]
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 #  #    mapfile = current_node.parent.dir+"/"+current_node.parent.file
 #    print("________layeritems  :  ", layeritems)
@@ -1684,8 +1684,8 @@ def wardreport(selnode):
 def displayareas():
     global layeritems
     print('_______ROUTE/displayareas')
-    json_data = layeritems[0].to_json(orient='records', lines=False)
-    json_cols = json.dumps(layeritems[1])
+    json_data = layeritems[1].to_json(orient='records', lines=False)
+    json_cols = json.dumps(layeritems[0])
     # Convert JSON string to Python list
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
@@ -1723,14 +1723,14 @@ def divreport(selnode):
         for item in Featurelayers[group_node.level].fg._children:
             if item.value not in alreadylisted:
                 alreadylisted.append(item.value)
-                layeritems.loc[i,'No']= i
-                layeritems.loc[i,'Area']=  item.value
-                layeritems.loc[i,'Constituency']=  group_node.value
-                layeritems.loc[i,'Candidate']=  "Joe Bloggs"
-                layeritems.loc[i,'Email']=  "xxx@reforumuk.com"
-                layeritems.loc[i,'Mobile']=  "07789 342456"
+                temp.loc[i,'No']= i
+                temp.loc[i,'Area']=  item.value
+                temp.loc[i,'Constituency']=  group_node.value
+                temp.loc[i,'Candidate']=  "Joe Bloggs"
+                temp.loc[i,'Email']=  "xxx@reforumuk.com"
+                temp.loc[i,'Mobile']=  "07789 342456"
                 i = i + 1
-
+        layeritems = [list(temp.columns.values), temp]
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/upbut/<path:selnode>', methods=['GET','POST'])
@@ -2012,7 +2012,9 @@ def captains():
     formdata['importfile'] = "Captains.xlsx"
     if len(request.form) > 0:
         formdata['importfile'] = request.files['importfile'].filename
-    layeritems = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    df1 = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+
+    layeritems = [list(df1.columns.values),df1]
     mapfile = current_node.dir+"/"+current_node.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2035,9 +2037,10 @@ def candidates():
     formdata['importfile'] = "SCC-CandidateSelection.xlsx"
     if len(request.form) > 0:
         formdata['importfile'] = request.files['importfile'].filename
-    layeritems = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    df1 = pd.read_excel(workdirectories['workdir']+"/"+formdata['importfile'])
+    layeritems =[list(df1.columns.values),df1]
     mapfile = current_node.dir+"/"+current_node.file
-    return render_template("candidates.html", context = {  "session" : session, "formdata" : formdata, "group" : layeritems , "mapfile" : mapfile})
+    return render_template("candidates.html", context = {  "session" : session, "formdata" : formdata, "group" : layeritems[1] , "mapfile" : mapfile})
 
 
 @app.route('/cards', methods=['POST','GET'])

@@ -307,6 +307,18 @@ tr:nth-child(even) {
   background-color: #dddddd;
 }
 
+
+#datawin #datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
+#datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
+#datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),
+ { /* 2-13 columns */
+    width: 10px;
+    min-width: 10px;
+    max-width: 10px;
+    overflow: hidden;
+    white-space: nowrap; /* Prevents text from wrapping */
+}
+
 tr:has(.selectRow:checked) > td {
   background-color: #ccc;
 }

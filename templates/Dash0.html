@@ -33,10 +33,10 @@
         ul.appendChild(li);
       });
 
-      function toTitleCase(str) {
+      function toUpperCase(str) {
         return str.replace(
           /\w\S*/g,
-          text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+          text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
         );
       }
 
@@ -82,7 +82,7 @@ fetch('/displayareas', {
 
     // Add headers in the correct order
     columnHeaders.forEach(header => {
-        tableContent += `<th>${toTitleCase(header)}</th>`;
+        tableContent += `<th>${toUpperCase(header)}</th>`;
     });
 
     tableContent += '</tr></thead><tbody>';
