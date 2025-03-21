@@ -44,8 +44,8 @@
       old = pessages.pop();
       var ul = parent.document.getElementById("logwin");
       var li = parent.document.createElement("li");
-      var tabhead = parent.document.querySelector("div > table > thead");
-      var tabbody = parent.document.querySelector("div > table > tbody");
+      const tabhead = parent.document.querySelector("div > table > thead");
+      const tabbody = parent.document.querySelector("div > table > tbody");
       tabbody.checked = true;
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
