@@ -23,12 +23,6 @@ var showMore = function (msg,area, type) {
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
       };
-var layerUpdate = function (msg, area, type) {
-  // Send a message to the parent
-      window.parent.postMessage("Updating Layer Data.", '*');
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
-      };
 
       /* When the user clicks on the button,
       toggle between hiding and showing the dropdown content */
@@ -214,16 +208,6 @@ var layerUpdate = function (msg, area, type) {
       // Download CSV
       download_csv(csv.join("\n"), filename);
   };
-
-  document.getElementById('save-btn').addEventListener('click', function() {
-    var filename = document.getElementById("save-btn").getAttribute("data1");
-    var html = document.querySelector("#canvass-table").outerHTML;
-  	export_table_to_csv(html, filename);
-    console.log(filename);
-    var path = window.location.pathname;
-    getVIData(path);
-    layerUpdate();
-  });
 
   var layerUpdate = function (path) {
     // Send a message to the parent
