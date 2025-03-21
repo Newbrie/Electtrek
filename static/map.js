@@ -215,9 +215,9 @@ var layerUpdate = function (msg, area, type) {
       download_csv(csv.join("\n"), filename);
   };
 
-  parent.document.getElementById('save-btn').addEventListener('click', function() {
-    var filename = parent.document.getElementById("save-btn").getAttribute("data1");
-    var html = parent.document.querySelector("#canvass-table").outerHTML;
+  document.getElementById('save-btn').addEventListener('click', function() {
+    var filename = document.getElementById("save-btn").getAttribute("data1");
+    var html = document.querySelector("#canvass-table").outerHTML;
   	export_table_to_csv(html, filename);
     console.log(filename);
     var path = window.location.pathname;
