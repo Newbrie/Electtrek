@@ -231,7 +231,9 @@ var layerUpdate = function (msg, area, type) {
         var ul = parent.document.getElementById("logwin");
         ul.scrollTop = ul.scrollHeight;
         var filename = path.split('/').pop();
+        alert(filename);
         var html = document.querySelector("#canvass-table").outerHTML;
+        alert("html"+html);
         export_table_to_csv(html, filename);
         console.log(filename);
         getVIData(path);
