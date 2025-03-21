@@ -92,10 +92,7 @@ var showMore = function (msg,area, type) {
       return response.json();  // Return parsed JSON
   })
   .then(data => {
-      alert(JSON.stringify(data, null, 2));  // Show formatted JSON
       console.log("Success:", data);
-      window.parent.postMessage("Refreshing summary data set ", '*');
-      window.location.assign(data.file);
   })
   .catch(error => {
       alert("Error: " + error);
@@ -211,17 +208,18 @@ var showMore = function (msg,area, type) {
 
   var layerUpdate = function (path) {
     // Send a message to the parent
-        window.parent.postMessage("Updating Layer Data.", '*');
-        var ul = parent.document.getElementById("logwin");
-        ul.scrollTop = ul.scrollHeight;
         var filename = path.split('/').pop();
         alert(filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
         console.log(filename);
-        var htmlfilepath = path.replace("DATA.csv","PRINT.html");
-        getVIData(htmlfilepath);
+        var htmlpath = path.replace("DATA.csv","PRINT.html");
+        getVIData(htmlpath);
+        window.parent.postMessage("Refreshing summary data set ", '*');
+        window.location.assign(data.file);
+        var ul = parent.document.getElementById("logwin");
+        ul.scrollTop = ul.scrollHeight;
         };
 
   function inputVI(VI) {
