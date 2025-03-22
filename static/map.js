@@ -77,8 +77,8 @@ var showMore = function (msg,area, type) {
 
       // Send data to server
       const selnode = path;
-      alert(selnode);
-      fetch(`/STupdate/${selnode}`, {
+
+      fetch(`${selnode}`, {
       method: "POST",
       headers: {
           "Content-Type": "application/json",
@@ -94,14 +94,17 @@ var showMore = function (msg,area, type) {
   })
   .then(data => {
       console.log("Success:", data);
+      window.parent.postMessage("Upload of VI data ...  ", '*');
+      window.location.assign(data.file);
+      var ul = parent.document.getElementById("logwin");
+      ul.scrollTop = ul.scrollHeight;
   })
   .catch(error => {
       alert("Error: " + error);
       console.error("Error:", error);
   });
+
   };
-
-
 
 
   function email_csv(csv, filename) {

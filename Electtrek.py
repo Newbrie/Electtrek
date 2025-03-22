@@ -1134,21 +1134,9 @@ def downPDbut(selnode):
 #    return redirect(url_for('map',path=mapfile))
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.route('/STupdate/<selnode>', methods=['POST'])
-def update_data(selnode):
-    try:
-        data = request.get_json()  # Extract JSON payload
-        if not data:
-            return jsonify({"error": "No data received"}), 400  # Bad request
 
-        print(f"Received data for {selnode}:", data)  # Debugging output
-        return jsonify({"message": "Data updated successfully", "received": data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500  # Catch and return any errors
-
-
-@app.route('/XSTupdate/<path:selnode>', methods=['POST'])
-def XSTupdate(selnode):
+@app.route('/STupdate/<path:selnode>', methods=['GET','POST'])
+def STupdate(selnode):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1300,7 +1288,7 @@ def XSTupdate(selnode):
         "group": electorwalks,
         "prodstats": prodstats,
         "mapfile": url_for('map',path=mapfile),
-        "datafile": url_for('map',path=datafile),
+        "datafile": url_for('STupdate',selnode=datafile),
         "walkname": walk_name,
         }
     results_template = environment.get_template('canvasscard1.html')
@@ -1444,7 +1432,7 @@ def PDshowST(selnode):
                     "group": electorwalks,
                     "prodstats": prodstats,
                     "mapfile": url_for('map',path=mapfile),
-                    "datafile": url_for('map',path=datafile),
+                    "datafile": url_for('STupdate',selnode=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
@@ -1627,7 +1615,7 @@ def PDshowWK(selnode):
                     "group": walkelectors,
                     "prodstats": prodstats,
                     "mapfile": url_for('map',path=mapfile),
-                    "datafile": url_for('map',path=datafile),
+                    "datafile": url_for('STupdate',selnode=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
