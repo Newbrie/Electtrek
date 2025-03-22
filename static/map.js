@@ -77,6 +77,7 @@ var showMore = function (msg,area, type) {
 
       // Send data to server
       const selnode = path;
+      alert(selnode);
       fetch(`/STupdate/${selnode}`, {
       method: "POST",
       headers: {

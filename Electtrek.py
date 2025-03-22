@@ -1133,8 +1133,22 @@ def downPDbut(selnode):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 #    return redirect(url_for('map',path=mapfile))
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-@app.route('/STupdate/<path:selnode>', methods=['GET','POST'])
-def STupdate(selnode):
+
+@app.route('/STupdate/<selnode>', methods=['POST'])
+def update_data(selnode):
+    try:
+        data = request.get_json()  # Extract JSON payload
+        if not data:
+            return jsonify({"error": "No data received"}), 400  # Bad request
+
+        print(f"Received data for {selnode}:", data)  # Debugging output
+        return jsonify({"message": "Data updated successfully", "received": data})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500  # Catch and return any errors
+
+
+@app.route('/XSTupdate/<path:selnode>', methods=['POST'])
+def XSTupdate(selnode):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1150,6 +1164,7 @@ def STupdate(selnode):
     steps = selnode.split("/")
     leaves = steps.pop().split("-")
     current_node = selected_childnode(current_node,leaves[1])
+    print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
     mapfile = current_node.dir+"/"+current_node.file
@@ -1209,8 +1224,7 @@ def STupdate(selnode):
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
-        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
-
+        return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
     STREET_ = current_node.value
 
