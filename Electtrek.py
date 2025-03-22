@@ -1135,7 +1135,7 @@ def downPDbut(selnode):
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 
-@app.route('/STupdate/<path:selnode>', methods=['GET','POST'])
+@app.route('/STupdate/<path:selnode>', methods=['GET','POST'],strict_slashes=False)
 def STupdate(selnode):
     global Treepolys
     global current_node
@@ -1162,12 +1162,26 @@ def STupdate(selnode):
     # Get JSON data from request
 #        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
         try:
-            VIdata = request.get_json()
-            if VIdata is None:
-                raise ValueError("No JSON received")
+            print(f"📥 Incoming request for: {selnode}")
+
+            # ✅ Print raw request data (useful for debugging)
+            print("📄 Raw request data:", request.data)
+
+            # ✅ Ensure JSON request
+            if not request.is_json:
+                print("❌ Request did not contain JSON")
+                return jsonify({"error": "Invalid JSON format"}), 400
+
+            data = request.get_json()
+            print(f"✅ Received JSON: {data}")
+
+            return jsonify({"message": "Success", "received": data})
+
         except Exception as e:
-            print(f"JSON Parsing Error: {e}")
-            return jsonify({"error": "Invalid JSON"}), 400
+            print(f"❌ ERROR: {str(e)}")
+            traceback.print_exc()  # 🔥 Print full error traceback
+            return jsonify({"error": str(e)}), 500
+
         if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
             for item in VIdata["viData"]:  # Loop through each elector entry
                 electIDpair = str(item.get("electorID")).strip().split(".")

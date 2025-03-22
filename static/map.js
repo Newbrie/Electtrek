@@ -96,8 +96,8 @@ var showMore = function (msg,area, type) {
   .then(data => {
       console.log("Success:", data);
       window.parent.postMessage("Upload of VI data ...  ", '*');
-      alert("loading:"+data.file);
-      window.location.assign(data.file);
+      alert("loading:"+data);
+      window.location.assign(data);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
   })
