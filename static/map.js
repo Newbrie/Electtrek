@@ -97,12 +97,12 @@ var showMore = function (msg,area, type) {
           console.log("Success:", data);
 
           // Check if `file` is present and a valid URL
-          if (data && data.file) {
-              alert("Loading: " + data.file);
-              window.location.assign(data.file);  // Redirect using the file URL
-          } else {
-              console.error("Error: 'file' is missing or invalid");
-          }
+//          if (data && data.file) {
+//              alert("Loading: " + data.file);
+//              window.location.assign(data.file);  // Redirect using the file URL
+//          } else {
+//              console.error("Error: 'file' is missing or invalid");
+//          }
 
           // Update the log window
           var ul = parent.document.getElementById("logwin");
