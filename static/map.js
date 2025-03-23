@@ -76,7 +76,7 @@ var showMore = function (msg,area, type) {
       console.log("Collected VI Data:", data);
 
       // Send data to server
-      const selnode = path;
+      const selnode = "http://127.0.0.1:5000"+path;
 
       alert("fetching:"+selnode);
       fetch(selnode, {
