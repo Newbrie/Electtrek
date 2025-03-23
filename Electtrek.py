@@ -107,6 +107,7 @@ class TreeNode:
         self.VI = VIC.copy()
 
     def updateVI(self,viValue):
+        origin = self
         print ("_____VIstatus:",self.value,self.type,self.VI)
         if self.type == 'street' or self.type == 'walk':
             sumnode = self
@@ -114,6 +115,7 @@ class TreeNode:
                 sumnode.VI[viValue] = sumnode.VI[viValue] + 1
                 print ("_____VInode:",sumnode.value,sumnode.level,sumnode.VI)
                 sumnode = sumnode.parent
+        self = origin
         return
 
     def childrenoftype(self,electtype):
@@ -1172,48 +1174,47 @@ def STupdate(selnode):
                 print("❌ Request did not contain JSON")
                 return jsonify({"error": "Invalid JSON format"}), 400
 
-            data = request.get_json()
+            VIdata = request.get_json()
             print(f"✅ Received JSON: {data}")
 
-            return jsonify({"message": "Success", "received": data})
+            if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
+                for item in VIdata["viData"]:  # Loop through each elector entry
+                    electIDpair = str(item.get("electorID")).strip().split(".")
+                    suffix = int(electIDpair.pop())# Extract suffix as string and convert to int
+                    electID = int(electIDpair.pop())# Extract elector ID as string and convert to int
+                    VI_value = item.get("viResponse", "").strip()  # Extract viResponse
+                    print("____Received electIDpair",electIDpair,electID,suffix)
+                    if suffix == 0:
+                        if not electID:  # Skip if electorID is missing
+                            print("Skipping entry with missing electorID")
+                            continue
+                        print("_____columns:",allelectors.columns)
+                        # Find the row where ENO matches electID
+                        selected = PDelectors.query("ENO == @electID")
+
+                        if not selected.empty:
+                            # Update only if viResponse is non-empty
+                            if VI_value:
+                                allelectors.loc[selected.index, "VI"] = VI_value
+                                current_node.updateVI(VI_value)
+                                print(f"Updated elector {electID} with VI = {VI_value}")
+                                print("ElectorVI", allelectors.loc[selected.index, "ENO"], PDelectors.loc[selected.index, "VI"])
+                            else:
+                                print(f"Skipping elector {electID}, empty viResponse")
+                        else:
+                            print(f"Warning: No match found for ENO = {electID}")
+                    else:
+                            print(f"Warning: Suffix > 0 = {suffix}")
+
+            else:
+                print("Error: Incorrect JSON format")
 
         except Exception as e:
             print(f"❌ ERROR: {str(e)}")
             traceback.print_exc()  # 🔥 Print full error traceback
             return jsonify({"error": str(e)}), 500
 
-        if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
-            for item in VIdata["viData"]:  # Loop through each elector entry
-                electIDpair = str(item.get("electorID")).strip().split(".")
-                suffix = int(electIDpair.pop())# Extract suffix as string and convert to int
-                electID = int(electIDpair.pop())# Extract elector ID as string and convert to int
-                VI_value = item.get("viResponse", "").strip()  # Extract viResponse
-                print("____Received electIDpair",electIDpair,electID,suffix)
-                if suffix == 0:
-                    if not electID:  # Skip if electorID is missing
-                        print("Skipping entry with missing electorID")
-                        continue
-                    print("_____columns:",PDelectors.columns)
-                    # Find the row where ENO matches electID
-                    selected = PDelectors.query("ENO == @electID")
-
-                    if not selected.empty:
-                        # Update only if viResponse is non-empty
-                        if VI_value:
-                            allelectors.loc[selected.index, "VI"] = VI_value
-                            current_node.updateVI(VI_value)
-                            print(f"Updated elector {electID} with VI = {VI_value}")
-                            print("ElectorVI", allelectors.loc[selected.index, "ENO"], PDelectors.loc[selected.index, "VI"])
-                        else:
-                            print(f"Skipping elector {electID}, empty viResponse")
-                    else:
-                        print(f"Warning: No match found for ENO = {electID}")
-                else:
-                        print(f"Warning: Suffix > 0 = {suffix}")
-
-        else:
-            print("Error: Incorrect JSON format")
-
+# this is for get and post calls
     print("_____Where are we: ", current_node.value, current_node.type, PDelectors.columns)
 
     street = current_node.value
@@ -1310,12 +1311,15 @@ def STupdate(selnode):
     with open(results_filename, mode="w", encoding="utf-8") as results:
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
-    current_node = current_node.parent
-    if current_node.type == 'street':
-        layeritems = getlayeritems(current_node.childrenoftype('street'))
-    elif current_node.type == 'walk':
-        layeritems = getlayeritems(current_node.childrenoftype('walk'))
+#    current_node = current_node.parent
     mapfile = current_node.dir+"/"+current_node.file
+    if current_node.type == 'street':
+        layeritems = getlayeritems(current_node.parent.childrenoftype('street'))
+        print('_______Street Data uploaded:-',url_for('map', path=mapfile), layeritems)
+    elif current_node.type == 'walk':
+        print('_______Walk Data uploaded:-',url_for('map', path=mapfile))
+        layeritems = getlayeritems(current_node.parent.childrenoftype('walk'), layeritems)
+    print('_______Success mapfile:-',url_for('map', path=mapfile))
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 

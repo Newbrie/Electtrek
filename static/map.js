@@ -79,32 +79,36 @@ var showMore = function (msg,area, type) {
       const selnode = path;
 
       alert("fetching:"+selnode);
-      fetch(`${selnode}`, {
-      method: "POST",
-      headers: {
-          "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ viData: data }),
-  })
-  .then(response => {
-      // Check if response is ok before processing
-      if (!response.ok) {
-          throw new Error("Failed to fetch data: " + response.statusText);
-      }
-      return response.json();  // Return parsed JSON
-  })
-  .then(data => {
-      console.log("Success:", data);
-      window.parent.postMessage("Upload of VI data ...  ", '*');
-      alert("loading:"+data);
-      window.location.assign(data);
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
-  })
-  .catch(error => {
-      alert("Error: " + error);
-      console.error("Error:", error);
-  });
+      fetch(selnode, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ viData: data }),
+      })
+      .then(response => {
+          console.log("Response Status:", response.status);
+          return response.json();  // ✅ Parse response as JSON
+      })
+      .then(data => {
+          console.log("Success:", data);
+
+          // ✅ Ensure the response contains "file"
+          if (data.file) {
+              alert("Loading: " + data.file);
+              window.location.assign(data.file);  // ✅ Use data.file, NOT data
+          } else {
+              console.error("Error: Missing 'file' field in response");
+          }
+
+          // ✅ Update log window
+          var ul = parent.document.getElementById("logwin");
+          if (ul) {
+              ul.scrollTop = ul.scrollHeight;
+          }
+      })
+      .catch(error => {
+          alert("Error: " + error);
+          console.error("Fetch Error:", error);
+      });
 
   };
 
