@@ -1227,7 +1227,7 @@ def STupdate(selnode):
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
-        return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
+        return jsonify(["Success", url_for('map', path=mapfile)])
 
     STREET_ = current_node.value
 

@@ -89,7 +89,8 @@ var showMore = function (msg,area, type) {
           return response.json();  // ✅ Parse response as JSON
       })
       .then(data => {
-          console.log("Success:", data);
+        print("Success:", data.message);
+        console.log("Success:", data.message);
 
           // ✅ Ensure the response contains "file"
           if (data.file) {
