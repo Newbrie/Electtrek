@@ -1227,7 +1227,7 @@ def STupdate(selnode):
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
-        return jsonify(["Success", url_for('map', path=mapfile)])
+        return jsonify({"message": "Success", "file": [url_for('map', path=mapfile)]})
 
     STREET_ = current_node.value
 
@@ -1320,7 +1320,8 @@ def STupdate(selnode):
         print('_______Walk Data uploaded:-',url_for('map', path=mapfile))
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'), layeritems)
     print('_______Success mapfile:-',url_for('map', path=mapfile))
-    return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
+    return  jsonify({"message": "Success", "file": "/map/UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/BAGSHOT/KA/STREETS/KA-LUPIN_CLOSE-PRINT.html"})
+
 
 
 @app.route('/PDshowST/<path:selnode>', methods=['GET','POST'])

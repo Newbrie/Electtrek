@@ -79,28 +79,32 @@ var showMore = function (msg,area, type) {
       const selnode = "http://127.0.0.1:5000"+path;
 
       alert("fetching:"+selnode);
-      fetch(selnode, {
+      fetch(selnode, {  // Use full URL to ensure correct routing
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ viData: data }),
+          headers: {
+              "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ viData: data }),  // Send the necessary data
       })
       .then(response => {
-          console.log("Response Status:", response.status);
-          return response.json();  // ✅ Parse response as JSON
+          // Check if the response status is OK (200)
+          if (!response.ok) {
+              throw new Error("Failed to fetch data: " + response.statusText);
+          }
+          return response.json();  // Parse the response as JSON
       })
       .then(data => {
-        print("Success:", data.message);
-        console.log("Success:", data.message);
+          console.log("Success:", data);
 
-          // ✅ Ensure the response contains "file"
-          if (data.file) {
+          // Check if `file` is present and a valid URL
+          if (data && data.file) {
               alert("Loading: " + data.file);
-              window.location.assign(data.file);  // ✅ Use data.file, NOT data
+              window.location.assign(data.file);  // Redirect using the file URL
           } else {
-              console.error("Error: Missing 'file' field in response");
+              console.error("Error: 'file' is missing or invalid");
           }
 
-          // ✅ Update log window
+          // Update the log window
           var ul = parent.document.getElementById("logwin");
           if (ul) {
               ul.scrollTop = ul.scrollHeight;
@@ -108,9 +112,8 @@ var showMore = function (msg,area, type) {
       })
       .catch(error => {
           alert("Error: " + error);
-          console.error("Fetch Error:", error);
+          console.error("Error:", error);
       });
-
   };
 
 
