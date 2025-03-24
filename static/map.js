@@ -76,7 +76,7 @@ var showMore = function (msg,area, type) {
       console.log("Collected VI Data:", data);
 
       // Send data to server
-      const selnode = "http://127.0.0.1:5000"+path;
+      const selnode = path;
 
       alert("fetching:"+selnode);
       fetch(selnode, {  // Use full URL to ensure correct routing
@@ -91,18 +91,19 @@ var showMore = function (msg,area, type) {
           if (!response.ok) {
               throw new Error("Failed to fetch data: " + response.statusText);
           }
-          return response.json();  // Parse the response as JSON
+          response.json();
+          return   // Parse the response as JSON
       })
       .then(data => {
           console.log("Success:", data);
 
           // Check if `file` is present and a valid URL
-//          if (data && data.file) {
-//              alert("Loading: " + data.file);
-//              window.location.assign(data.file);  // Redirect using the file URL
-//          } else {
-//              console.error("Error: 'file' is missing or invalid");
-//          }
+          if (data && data.file) {
+              alert("Loading: " + data.file);
+              window.location.assign(data.file);  // Redirect using the file URL
+          } else {
+              console.error("Error: 'file' is missing or invalid");
+          }
 
           // Update the log window
           var ul = parent.document.getElementById("logwin");
