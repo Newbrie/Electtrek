@@ -878,21 +878,21 @@ def unauthorized_callback():            # In call back url we can specify where 
 #    flash("Not found: "+formdata['status'])
 #    return render_template("Dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.errorhandler(HTTPException)
-def handle_exception(e):
-    global current_node
+#@app.errorhandler(HTTPException)
+#def handle_exception(e):
+#    global current_node
 #    """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
-    response = e.get_response()
+#    response = e.get_response()
     # replace the body with JSON
-    response.data = json.dumps({
-        "code": e.code,
-        "name": e.name,
-        "description": e.description,
-    })
-    response.content_type = "application/json"
-    mapfile = current_node.dir+"/"+current_node.file
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+#    response.data = json.dumps({
+#        "code": e.code,
+#        "name": e.name,
+#        "description": e.description,
+#    })
+#    response.content_type = "application/json"
+#    mapfile = current_node.dir+"/"+current_node.file
+#    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route("/index", methods=['POST', 'GET'])
@@ -1136,7 +1136,7 @@ def downPDbut(selnode):
 #    return redirect(url_for('map',path=mapfile))
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.route('/STupdate/<path:selnode>', methods=['POST'],strict_slashes=False)
+@app.route('/STupdate/<path:selnode>', methods=['GET','POST'],strict_slashes=False)
 def STupdate(selnode):
     # Step 1: Log the incoming data (for debugging)
     print(f"Received request for path: {selnode}")
@@ -1153,7 +1153,7 @@ def STupdate(selnode):
         # Step 3: Send a response back with a 'file' path
         response = {
             "message": "Success",
-            "file": f"/map/{selnode}-map.html"  # Simple mock file path based on `selnode`
+            "file": f"/map/{selnode}"  # Simple mock file path based on `selnode`
         }
 
         return jsonify(response)  # Send back the JSON response
@@ -1328,7 +1328,7 @@ def XSTupdate(selnode):
         "group": electorwalks,
         "prodstats": prodstats,
         "mapfile": url_for('map',path=mapfile),
-        "datafile": url_for('STupdate',path=datafile),
+        "datafile": url_for('STupdate',selnode=datafile),
         "walkname": walk_name,
         }
     results_template = environment.get_template('canvasscard1.html')
@@ -1476,7 +1476,7 @@ def PDshowST(selnode):
                     "group": electorwalks,
                     "prodstats": prodstats,
                     "mapfile": url_for('map',path=mapfile),
-                    "datafile": url_for('STupdate',path=datafile),
+                    "datafile": url_for('STupdate',selnode=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
@@ -1659,7 +1659,7 @@ def PDshowWK(selnode):
                     "group": walkelectors,
                     "prodstats": prodstats,
                     "mapfile": url_for('map',path=mapfile),
-                    "datafile": url_for('STupdate',path=datafile),
+                    "datafile": url_for('STupdate',selnode=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
