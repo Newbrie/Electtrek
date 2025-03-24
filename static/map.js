@@ -91,8 +91,7 @@ var showMore = function (msg,area, type) {
           if (!response.ok) {
               throw new Error("Failed to fetch data: " + response.statusText);
           }
-          response.json();
-          return   // Parse the response as JSON
+          return response.json();  // Parse the response as JSON
       })
       .then(data => {
           console.log("Success:", data);
@@ -223,7 +222,7 @@ var showMore = function (msg,area, type) {
 
   var layerUpdate = function (path) {
     // Send a message to the parent
-        var filename = path.split('/').pop();
+        var filename = path.split('/').pop().replace("DATA.html","DATA.csv");
         alert(filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
