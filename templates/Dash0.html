@@ -50,7 +50,7 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var iframe = parent.document.querySelector("iframe[name='iframe1']");
+      var iframe = document.querySelector("iframe[name='iframe1']");
 
       if (!iframe) {
           console.error("❌ ERROR: iframe1 not found in parent document!");
