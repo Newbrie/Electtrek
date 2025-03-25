@@ -51,7 +51,7 @@
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
       var selnode = document.getElementsByName("iframe1").src;
-
+      alert(selnode);
 //      const areas_div = parent.document.getElementById("Areas-table")
 fetch('{{ url_for('displayareas',selnode=selnode) }}', {
     method: "GET",

@@ -1692,6 +1692,7 @@ def wardreport(selnode):
 
 @app.route('/displayareas/<path:selnode>',methods=['POST', 'GET'])
 def displayareas(selnode):
+    global current_node
     global layeritems
     print('_______ROUTE/displayareas:', selnode)
     json_data = layeritems[1].to_json(orient='records', lines=False)
