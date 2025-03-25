@@ -52,7 +52,7 @@
       ul.appendChild(li);
       var selnode = '{{ context.mapfile }}';
       var selurl = {{ url_for('displayareas',selnode=selnode) }}
-      alert(selurl);
+      alert(selurl, selnode);
 //      const areas_div = parent.document.getElementById("Areas-table")
 fetch(selurl, {
     method: "GET",
