@@ -51,9 +51,10 @@
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
       var selnode = '{{ context.mapfile }}';
-      alert(selnode);
+      selurl = {{ url_for('displayareas',selnode=selnode) }}
+      alert(selurl);
 //      const areas_div = parent.document.getElementById("Areas-table")
-fetch("{{ url_for('displayareas',selnode=selnode) }}", {
+fetch(selurl, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
 })
