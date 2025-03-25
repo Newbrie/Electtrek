@@ -53,7 +53,7 @@
       var selnode = document.getElementsByName("iframe1").src;
 
 //      const areas_div = parent.document.getElementById("Areas-table")
-fetch('{{ url_for('displayareas',selnode) }}', {
+fetch('{{ url_for('displayareas',path=selnode) }}', {
     method: "GET",
     headers: { "Content-Type": "application/json" },
 })
