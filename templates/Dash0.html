@@ -50,29 +50,9 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var iframe = document.querySelector("iframe[name='iframe1']");
-
-      if (!iframe) {
-          console.error("❌ ERROR: iframe1 not found in parent document!");
-          return;
-      }
-
-      // ✅ Get the `src` attribute of the iframe
-      var iframeSrc = iframe.getAttribute("src");
-
-      if (!iframeSrc) {
-          console.error("❌ ERROR: iframe1 has no src attribute!");
-          return;
-      }
-
-      console.log("📄 Iframe Source (from parent):", iframeSrc);
-
-      // ✅ Construct the fetch URL dynamically
-      var selurl = `/displayareas${iframeSrc}`;
-      console.log("🌍 Fetching from:", selurl);
-
+  
 //      const areas_div = parent.document.getElementById("Areas-table")
-fetch(selurl, {
+fetch( {
     method: "GET",
     headers: { "Content-Type": "application/json" },
 })

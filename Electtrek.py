@@ -1690,11 +1690,11 @@ def wardreport(selnode):
 #    return redirect(url_for('map',path=mapfile))
 
 
-@app.route('/displayareas/<path:selnode>',methods=['POST', 'GET'])
-def displayareas(selnode):
+@app.route('/displayareas',methods=['POST', 'GET'])
+def displayareas():
     global current_node
     global layeritems
-    print('_______ROUTE/displayareas:', selnode)
+    print('_______ROUTE/displayareas:')
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
     # Convert JSON string to Python list
@@ -1895,6 +1895,11 @@ def map(path):
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 def showmore(path):
     global current_node
+
+    steps = path.split("/")
+    last = steps.pop().split("-")
+    current_node = selected_childnode(current_node,last[1])
+
 
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
