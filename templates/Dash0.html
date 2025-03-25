@@ -50,7 +50,7 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var selnode = '{{ url_for('map',path=context.mapfile) }}';
+      var selnode = '{{ context.mapfile }}';
       alert(selnode);
 //      const areas_div = parent.document.getElementById("Areas-table")
 fetch('{{ url_for('displayareas',selnode=selnode) }}', {
