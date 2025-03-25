@@ -50,9 +50,12 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var selnode = "{{ context.mapfile }}"; // Ensure this is available
-      var selurl = `/displayareas/${encodeURIComponent(selnode)}`; // Construct URL dynamically
-      console.log("Updating messages with URL:", selurl);
+      var currentPath = window.location.pathname;
+      console.log("Current Path:", currentPath); // Debugging output
+
+      // ✅ Construct the fetch URL dynamically
+      var selurl = `/displayareas${currentPath}`;
+      console.log("Fetching from:", selurl);
 
 //      const areas_div = parent.document.getElementById("Areas-table")
 fetch(selurl, {
