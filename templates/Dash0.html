@@ -50,9 +50,9 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-  
+
 //      const areas_div = parent.document.getElementById("Areas-table")
-fetch( {
+fetch( '/displayareas',{
     method: "GET",
     headers: { "Content-Type": "application/json" },
 })
