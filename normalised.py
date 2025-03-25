@@ -5,17 +5,19 @@ import pandas as pd
 import os, sys, math, stat, json, statistics
 import requests
 from requests.auth import HTTPDigestAuth
+import config
 
 normstats = {}
 
+print("Config in Normalised loaded successfully:", config.workdirectories)
 
 
 def normz(LocalFile, normstats):
     print ("____________inside normz_________")
-    templdir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/templates/"
-    workdir = "/Users/newbrie/Sites"
-    testdir = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
-    bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/electtrek/Boundaries/"
+    templdir = config.workdirectories['templdir']
+    workdir = config.workdirectories['workdir']
+    testdir = config.workdirectories['testdir']
+    bounddir = config.workdirectories['bounddir']
     os.chdir(workdir)
     Env1 = sys.base_prefix
     Mean_Lat = 51.240299
@@ -190,7 +192,7 @@ def normz(LocalFile, normstats):
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
 
-    raise Exception('XYZ')
+
     count = 0
     Addno1 = ""
     Addno2 = ""
@@ -260,13 +262,14 @@ def normz(LocalFile, normstats):
     normstats['columns'] = str(electors2.columns)
     normstats['council'] = Councilx
     for index, elector in electors2.iterrows():
-        elector['RNO'] = index
+        electors2.loc[index,'RNO'] = index
+        electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
         if elector['AV'] is None:
-            elector['AV'] = ""
+            electors2.loc[index,'AV'] = ""
         if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
-            elector['Elevation'] = float(0.0)
+            electors2.loc[index,'Elevation'] = float(0.0)
         else:
-            elector['Elevation'] = float(elector['Elevation'])
+            electors2.loc[index,'Elevation'] = float(elector['Elevation'])
         if str(elector['ElectorName']) == "":
             electors2.loc[index,'ElectorName'] = str(elector['Surname']) +" "+ str(elector['Firstname'])
         if str(electors2.loc[index,'Firstname']) == "":

@@ -17,7 +17,8 @@ import re
 from decimal import Decimal
 from pyproj import Proj
 from flask import Flask,render_template, url_for, flash
-#from electtrek import locmappath, TreeNode, workdirectories, flayers
+import config
+#from electtrek import locmappath, TreeNode, config.workdirectories, flayers
 
 def getblock(source,joincol, colvalue):
   colvalfilter = pd.DataFrame([[colvalue]], columns=[joincol])
@@ -34,8 +35,6 @@ def find_boundary(polyfile,here):
 
 
 def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
-    global workdirectories
-    global Directories
     global MapRoot
     global allelectors
     global TreeNode
@@ -655,7 +654,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           prodstats['leafhrs'] = round(leafhrs,2)
           prodstats['canvasshrs'] = round(canvasshrs,2)
 
-          electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
+#          electorwalks['ENOP'] =  electorwalks['ENO']+ electorwalks['Suffix']*0.1
 
           results_filename = walk_name+"-PRINT.html"
 

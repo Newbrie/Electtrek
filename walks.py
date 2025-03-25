@@ -17,6 +17,7 @@ import re
 from decimal import Decimal
 from pyproj import Proj
 from flask import Flask,render_template, url_for
+import config
 
 def getblock(source,joincol, colvalue):
   colvalfilter = pd.DataFrame([[colvalue]], columns=[joincol])
@@ -32,8 +33,6 @@ def find_boundary(polyfile,here):
     return
 
 def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
-    global workdirectories
-    global Directories
     global MapRoot
     global allelectors
     global TreeNode
@@ -662,7 +661,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
           prodstats['leafhrs'] = round(leafhrs,2)
           prodstats['canvasshrs'] = round(canvasshrs,2)
 
-          walk['ENOP'] =  walk['ENO']+ walk['Suffix']/10
+#          walk['ENOP'] =  walk['ENO']+ walk['Suffix']/10
 
           mapfull = walk_node.file
 

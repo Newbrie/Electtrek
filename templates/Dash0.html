@@ -50,9 +50,10 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
+      var selnode = document.getElementsByName("iframe1").src;
 
 //      const areas_div = parent.document.getElementById("Areas-table")
-fetch('/displayareas', {
+fetch('{{ url_for('displayareas',selnode) }}', {
     method: "GET",
     headers: { "Content-Type": "application/json" },
 })
