@@ -3,7 +3,7 @@
 <div id="mapwin" class="innertube">
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()" >  </iframe>
+    <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages({{ url_for('displayareas',path=context.mapfile) }})" >  </iframe>
     <script >
       // Listen to message from child window
 
@@ -40,7 +40,7 @@
         );
       }
 
-      function updateMessages(){
+      function updateMessages(selurl){
       old = pessages.pop();
       var ul = parent.document.getElementById("logwin");
       var li = parent.document.createElement("li");
@@ -50,8 +50,6 @@
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-      var selnode = "{{ context.mapfile }}";
-      var selurl = "{{ url_for('displayareas', selnode='PLACEHOLDER') }}".replace("PLACEHOLDER", selnode);
 //      const areas_div = parent.document.getElementById("Areas-table")
 fetch(selurl, {
     method: "GET",
