@@ -33,6 +33,15 @@
         ul.appendChild(li);
       });
 
+      function changeIframeSrc(newurl) {
+        var msg = "Retrieving area "+newurl.split("/").pop();
+        var ul = document.getElementById("logwin");
+        var li = document.createElement("li");
+        li.appendChild(document.createTextNode(msg));
+        ul.appendChild(li);
+        document.getElementById("iframe1").src = newurl;
+          };
+
       function toUpperCase(str) {
         return str.replace(
           /\w\S*/g,

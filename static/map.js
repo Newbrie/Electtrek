@@ -24,10 +24,6 @@ var showMore = function (msg,area, type) {
       ul.scrollTop = ul.scrollHeight;
       };
 
-function changeIframeSrc(newurl) {
-        document.getElementById("iframe1").src = newurl;
-    };
-
       /* When the user clicks on the button,
       toggle between hiding and showing the dropdown content */
 
