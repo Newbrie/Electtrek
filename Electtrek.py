@@ -23,6 +23,7 @@ from pyproj import Proj
 from flask import Flask,render_template, request, redirect, session, url_for, send_from_directory, jsonify, flash
 import os, sys, math, stat, json , jinja2, random
 from os import listdir, system
+import glob
 from markupsafe import escape
 from urllib.parse import urlparse, urljoin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1080,8 +1081,6 @@ def downPDbut(selnode):
             filename = request.values['importfile']
             allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
             current_node.source = filename
-            allelectors['VI'] = ""
-
             pfile = Treepolys[current_node.level]
             Level3boundary = pfile[pfile['FID']==current_node.fid]
             PDs = set(allelectors.PD.values)
@@ -1136,6 +1135,32 @@ def downPDbut(selnode):
                 map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
                 flash("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
                 print("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+
+            allelectorscopy = allelectors.copy()
+            path = config.workdirectories['workdir']+"/"+current_node.parent.value+"-INDATA"
+            headtail = os.path.split(path)
+            path2 = headtail[0]
+            merge = headtail[1]+"Auto.xlsx"
+            indatamerge = headtail[1]+"inDataAuto.csv"
+            print ("path:", path, "path2:", path2, "merge:", merge)
+            if os.path.exists(path2+merge):
+                os.remove(path2+merge)
+            all_files = glob.glob(f'{path}/*-DATA*.csv')
+            print("all files",all_files)
+            full_revamped = []
+            for filename in all_files:
+                inDatadf = pd.read_csv(filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+                full_revamped.append(inDatadf)
+            print ("mergefile:",filename)
+            dfx = pd.concat(full_revamped,sort=False)
+            VIelectors = dfx[['ENOP','VI','Notes']].drop_duplicates(subset=['ENOP'], keep='first') 
+            VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
+            print("______original",allelectors.columns, allelectors.head())
+            print("______unmerged",VIelectors.columns, VIelectors.head())
+            allelectors = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
+            print("______merged",allelectors.columns, allelectors.head())
+            allelectors.to_excel(path2+"/"+merge)
+
 
     mapfile = current_node.dir+"/"+current_node.file
     layeritems = getlayeritems(current_node.childrenoftype('polling district'))
@@ -1754,12 +1779,6 @@ def upbut(selnode):
     global layeritems
 
 
-    steps = selnode.split("/")
-    last = steps.pop().split("-")
-    if current_node.type == 'polling_district':
-        from_node = selected_childnode(current_node,last[1])
-    else:
-        from_node = selected_childnode(current_node,steps[-1])
 
     flash('_______ROUTE/upbut',selnode)
     print('_______ROUTE/upbut',selnode, current_node.value)
@@ -1770,9 +1789,8 @@ def upbut(selnode):
 #    Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
     layeritems = getlayeritems(current_node.parent.childrenoftype(current_node.type))
-    print("_________leaf+parent_node",selnode, steps, last, from_node.value, from_node.parent.value)
 
-    current_node = from_node.parent
+    current_node = current_node.parent
     mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
 

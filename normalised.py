@@ -168,8 +168,7 @@ def normz(LocalFile, normstats):
         ImportFilename = str(LocalFile.filename)
         dfx = pd.read_excel(LocalFile)
 #        dfx['RNO'] = dfx.index
-        if 'AV' not in dfx.columns:
-            dfx['AV'] = ""
+
 #       if find ENOP pattern - separate into 2 or 3 new fields
 #       else generate ENOP field from 3 seprate components (PD-ENO/Suffix)
 #       if find ElectorName pattern - separate into firstname, initisla dn Surname
@@ -264,8 +263,6 @@ def normz(LocalFile, normstats):
     for index, elector in electors2.iterrows():
         electors2.loc[index,'RNO'] = index
         electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
-        if elector['AV'] is None:
-            electors2.loc[index,'AV'] = ""
         if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
             electors2.loc[index,'Elevation'] = float(0.0)
         else:

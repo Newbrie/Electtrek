@@ -28,35 +28,6 @@ var showMore = function (msg,area, type) {
       toggle between hiding and showing the dropdown content */
 
 
-  function myFunction() {
-    var select = document.getElementById("dropCluster");
-    var options = ["1", "2", "3", "4", "5"];
-
-    // Optional: Clear all existing options first:
-    select.innerHTML = "";
-    // Populate list with options:
-    for(var i = 0; i < options.length; i++) {
-        var opt = options[i];
-        select.innerHTML += "<option value=\"" + opt + "\">" + opt + "</option>";
-    };
-
-  };
-
-  // Close the dropdown if the user clicks outside of it
-  window.onclick = function(event) {
-  if (!event.target.matches('.dropbtn')) {
-    var dropdowns = document.getElementsByClassName("dropdown-content");
-    var i;
-    for (i = 0; i < dropdowns.length; i++) {
-      var openDropdown = dropdowns[i];
-      if (openDropdown.classList.contains('show')) {
-        openDropdown.classList.remove('show');
-      };
-    };
-  };
-  };
-
-
   async function getVIData(path) {
       let table = document.getElementById("canvass-table");
       let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
@@ -67,10 +38,12 @@ var showMore = function (msg,area, type) {
           let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
           let viValue = row.cells[7].innerText.trim(); // Get input value
 
+          if (viValue) {
           data.push({
               electorID: electorID,
               viResponse: viValue
-          });
+            });
+          };
       });
 
       console.log("Collected VI Data:", data);
