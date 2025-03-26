@@ -72,8 +72,8 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
-        dfy.loc[i,x.type]=  x.value
-        dfy.loc[i,x.parent.type] =  x.parent.value
+        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.dir}/{x.file}&#39;></a>); return false;">{x.value}</a>'
+        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.parent.dir}/{x.parent.file}&#39;></a>); return false;">{x.parent.value}</a>'
         i = i + 1
 
     return [list(dfy.columns.values),dfy]
@@ -1153,7 +1153,7 @@ def downPDbut(selnode):
                 full_revamped.append(inDatadf)
             print ("mergefile:",filename)
             dfx = pd.concat(full_revamped,sort=False)
-            VIelectors = dfx[['ENOP','VI','Notes']].drop_duplicates(subset=['ENOP'], keep='first') 
+            VIelectors = dfx[['ENOP','VI','Notes']].drop_duplicates(subset=['ENOP'], keep='first')
             VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
             print("______original",allelectors.columns, allelectors.head())
             print("______unmerged",VIelectors.columns, VIelectors.head())
