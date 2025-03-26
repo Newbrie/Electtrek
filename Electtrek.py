@@ -72,8 +72,8 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
-        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.dir}/{x.file}&#39;></a>); return false;">{x.value}</a>'
-        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.parent.dir}/{x.parent.file}&#39;></a>); return false;">{x.parent.value}</a>'
+        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
         i = i + 1
 
     return [list(dfy.columns.values),dfy]

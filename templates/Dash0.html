@@ -3,7 +3,7 @@
 <div id="mapwin" class="innertube">
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe name="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
+    <iframe id="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
     <script >
       // Listen to message from child window
 
@@ -14,7 +14,7 @@
       pessages.push(pack[x]);
       };
 
-      var iframeEl = document.getElementsByName('iframe1');
+      var iframeEl = document.getElementById('iframe1');
 
       function bindEvent( element, eventName, eventHandler) {
        if (element.addEventListener){
