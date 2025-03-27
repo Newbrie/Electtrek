@@ -1277,7 +1277,7 @@ def STupdate(selnode):
                         print(f"Warning: No match found for ENOP = {electID}")
                     i = i+1
 
-                changefile = path2+"/INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
+                changefile = path2+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
                 changefields.to_csv(changefile, sep='\t', encoding='utf-8')
                 print("Success: changed fields saved to ", changefile)
             else:

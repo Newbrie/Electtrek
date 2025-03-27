@@ -3,7 +3,7 @@ toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg,area, type) {
   // Send a message to the parent
-      window.parent.postMessage("Drilling down to "+type+ " set within "+ area, '*');
+      window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
@@ -18,7 +18,7 @@ var moveUp = function (msg,area, type) {
       };
 var showMore = function (msg,area, type) {
   // Send a message to the parent
-      window.parent.postMessage("Showing the "+type+ " set within "+ area, '*');
+      window.parent.postMessage("Showing the "+type+ " level within "+ area, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
