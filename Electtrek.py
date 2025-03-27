@@ -50,7 +50,7 @@ levels = ['country','nation','county','constituency','ward/division','polling di
 # want to look up the level of a type ,and the types in a level
 
 def get_creation_date(filepath):
-    if filepath = "":
+    if filepath == "":
         return datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     try:
         # On Windows & Linux
@@ -1239,9 +1239,12 @@ def STupdate(selnode):
             path2 = headtail[0]
 
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
+                changefields = pd.DataFrame(columns=['PD','ENOP','ElectorName','VI','Notes','cdate'])
+                i = 0
                 for item in VIdata["viData"]:  # Loop through each elector entry
                     electID = item.get("electorID","").strip()
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
+                    Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
                     print("____Received electIDtriple",electID,"xxx")
 
                     if not electID:  # Skip if electorID is missing
@@ -1250,35 +1253,38 @@ def STupdate(selnode):
                     print("_____columns:",PDelectors.columns)
                     # Find the row where ENO matches electID
                     selected = PDelectors.query("ENOP == @electID")
-                    changefields = pd.DataFrame()
-                    changefields['electID'] = VI_value
+                    changefields.loc[i,'PD'] = VI_value.split("-")[0]
+                    changefields.loc[i,'ENOP'] = VI_value
                     if not selected.empty:
                         # Update only if viResponse is non-empty
                         if VI_value:
                             PDelectors.loc[selected.index, "VI"] = VI_value
                             street_node.updateVI(VI_value)
-                            changefields['VI'] = VI_value
+                            changefields.loc[i,'VI'] = VI_value
+                        if Notes_value:
+                            PDelectors.loc[selected.index, "Notes"] = Notes_value
+                            changefields.loc[i,'Notes'] = Notes_value
 
-                            print(f"Updated elector {electID} with VI = {VI_value}")
+                            print(f"Updated elector {electID} with VI = {VI_value} and Notes = {Notes_value}")
                             print("ElectorVI", PDelectors.loc[selected.index, "ENOP"], PDelectors.loc[selected.index, "VI"])
 
                         else:
                             print(f"Skipping elector {electID}, empty viResponse")
 
-                        changefields['cdate'] = get_creation_date("")
-                    changelist.append[changedfields]
+                        changefields.loc[i,'cdate'] = get_creation_date("")
+
                     else:
                         print(f"Warning: No match found for ENOP = {electID}")
+                    i = i+1
 
-                changedf = pd.concat(changelist,sort=False)
-                changefile = path2+"/"+current_node.dir+"/"+current_node.file
-                changedf.to_csv(changefile, sep='\t', encoding='utf-8')            
+                changefile = path2+"/INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
+                changefields.to_csv(changefile, sep='\t', encoding='utf-8')
+                print("Success: changed fields saved to ", changefile)
             else:
                 print("Error: Incorrect JSON format")
 
         except Exception as e:
             print(f"❌ ERROR: {str(e)}")
-            traceback.print_exc()  # 🔥 Print full error traceback
             return jsonify({"error": str(e)}), 500
 
 # this is for get and post calls
@@ -1388,7 +1394,6 @@ def STupdate(selnode):
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'))
     print('_______Success mapfile:-',url_for('map', path=mapfile))
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
-
 
 
 @app.route('/PDshowST/<path:selnode>', methods=['GET','POST'])
@@ -1763,7 +1768,7 @@ def displayareas():
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+#    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
     return  jsonify([python_data1, python_data2])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
