@@ -1168,13 +1168,13 @@ def downPDbut(selnode):
             print("all files",all_files)
             full_revamped = []
             for filename in all_files:
-                inDatadf = pd.read_csv(filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+                inDatadf = pd.read_csv(filename, engine='python', encoding='utf-8',keep_default_na=False, na_values=[''])
                 inDatadf['cdate'] = get_creation_date(filename)
                 full_revamped.append(inDatadf)
             print ("mergefile:",filename)
             dfx = pd.concat(full_revamped,sort=False)
             df_sorted = dfx.sort_values(by='cdate', ascending=False)
-            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='first')
+            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='last')
             VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
             print("______original",allelectors.columns, allelectors.head())
             print("______unmerged",VIelectors.columns, VIelectors.head())
