@@ -36,12 +36,14 @@ var showMore = function (msg,area, type) {
       inputs.forEach(input => {
           let row = input.closest("tr"); // Get the closest row
           let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
+          let ElectorName = row.cells[2].innerText.trim(); // Get input value
           let viValue = row.cells[7].innerText.trim(); // Get input value
           let notesValue = row.cells[8].innerText.trim(); // Get input value
 
           if (viValue) {
           data.push({
               electorID: electorID,
+              ElectorName: ElectorName,
               viResponse: viValue,
               notesResponse: notesValue
             });

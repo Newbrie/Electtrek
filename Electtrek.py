@@ -1243,6 +1243,7 @@ def STupdate(selnode):
                 i = 0
                 for item in VIdata["viData"]:  # Loop through each elector entry
                     electID = item.get("electorID","").strip()
+                    ElectorName = item.get("ElectorName","").strip()
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
                     print("____Received electIDtriple",electID,"xxx")
@@ -1253,8 +1254,9 @@ def STupdate(selnode):
                     print("_____columns:",PDelectors.columns)
                     # Find the row where ENO matches electID
                     selected = PDelectors.query("ENOP == @electID")
-                    changefields.loc[i,'PD'] = VI_value.split("-")[0]
-                    changefields.loc[i,'ENOP'] = VI_value
+                    changefields.loc[i,'PD'] = electID.split("-")[0]
+                    changefields.loc[i,'ENOP'] = electID
+                    changefields.loc[i,'ElectorName'] = ElectorName
                     if not selected.empty:
                         # Update only if viResponse is non-empty
                         if VI_value:
@@ -1277,8 +1279,8 @@ def STupdate(selnode):
                         print(f"Warning: No match found for ENOP = {electID}")
                     i = i+1
 
-                changefile = path2+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
-                changefields.to_csv(changefile, sep='\t', encoding='utf-8')
+                changefile = path2+"/"+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
+                changefields.to_csv(changefile, sep='\t', encoding='utf-8', index=False)
                 print("Success: changed fields saved to ", changefile)
             else:
                 print("Error: Incorrect JSON format")
