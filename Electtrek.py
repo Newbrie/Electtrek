@@ -33,6 +33,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import json, get_flashed_messages, request
 from werkzeug.exceptions import HTTPException
 import config
+from datetime import datetime
 
 import sys
 sys.path
@@ -47,6 +48,17 @@ levels = ['country','nation','county','constituency','ward/division','polling di
 
 # want to equate levels with certain types, eg 4 is ward and div
 # want to look up the level of a type ,and the types in a level
+
+def get_creation_date(filepath):
+    try:
+        # On Windows & Linux
+        creation_time = os.path.getctime(filepath)
+
+        # Convert timestamp to readable format
+        return datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        print(f"Error getting creation date for {filepath}: {e}")
+        return None  # Return None if the file is inaccessible
 
 def getchildtype(parent):
     global levels
@@ -995,8 +1007,6 @@ def dashboard ():
 
 @app.route('/downbut/<path:selnode>', methods=['GET','POST'])
 def downbut(selnode):
-
-
     global MapRoot
     global current_node
     global allelectors
@@ -1011,6 +1021,7 @@ def downbut(selnode):
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
+    selnode = selnode.replace("/STREETS","").replace("/WALKS","")
     steps = selnode.split("/")
     last = steps.pop()
 
@@ -1019,6 +1030,12 @@ def downbut(selnode):
     atype = levels[count]
     if last.find(" ") > -1:
         atype = last.split(" ")[1]
+    if atype == 'polling district':
+        mapfile = "/map/"+current_node.dir+"/"+current_node.file
+        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    if atype == 'walk/street':
+        mapfile = "/map/"+current_node.dir+"/"+current_node.file
+        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 # the map under the selected node map needs to be configured
     print("_________selected node",atype,steps,current_node.value, current_node.level,current_node.file)
@@ -1143,6 +1160,8 @@ def downPDbut(selnode):
             merge = headtail[1]+"Auto.xlsx"
             indatamerge = headtail[1]+"inDataAuto.csv"
             print ("path:", path, "path2:", path2, "merge:", merge)
+            if os.path.exists(path2+indatamerge):
+                os.remove(path2+indatamerge)
             if os.path.exists(path2+merge):
                 os.remove(path2+merge)
             all_files = glob.glob(f'{path}/*-DATA*.csv')
@@ -1150,10 +1169,12 @@ def downPDbut(selnode):
             full_revamped = []
             for filename in all_files:
                 inDatadf = pd.read_csv(filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+                inDatadf['cdate'] = get_creation_date(filename)
                 full_revamped.append(inDatadf)
             print ("mergefile:",filename)
             dfx = pd.concat(full_revamped,sort=False)
-            VIelectors = dfx[['ENOP','VI','Notes']].drop_duplicates(subset=['ENOP'], keep='first')
+            df_sorted = dfx.sort_values(by='cdate', ascending=False)
+            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='first')
             VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
             print("______original",allelectors.columns, allelectors.head())
             print("______unmerged",VIelectors.columns, VIelectors.head())

@@ -27,18 +27,21 @@
       bindEvent( window, 'message', function (e) {
         pessages.pop();
         pessages.push(e.data);
-        var ul = document.getElementById("logwin");
+        var logWindow = document.getElementById("logwin");
         var li = document.createElement("li");
         li.appendChild(document.createTextNode(e.data));
-        ul.appendChild(li);
+        logWindow.appendChild(li);
+        logWindow.scrollTop = logWindow.scrollHeight;
+
       });
 
       function changeIframeSrc(newurl) {
         var msg = "Retrieving area "+newurl.split("/").pop();
-        var ul = document.getElementById("logwin");
+        var logWindow = document.getElementById("logwin");
         var li = document.createElement("li");
         li.appendChild(document.createTextNode(msg));
-        ul.appendChild(li);
+        logWindow.appendChild(li);
+        logWindow.scrollTop = logWindow.scrollHeight;
         document.getElementById("iframe1").src = newurl;
           };
 
