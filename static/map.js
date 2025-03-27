@@ -163,35 +163,41 @@ var showMore = function (msg,area, type) {
   };
 
   function export_table_to_csv(html, filename) {
-  	var csv = [];
-  	var rows = document.querySelectorAll("table tr");
-    var headcols = ["PD","ENOP","ElectorName","VI","Notes"];
-    var head = []
+    var csv = [];
+    var rows = document.querySelectorAll("table tr");
+    var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
+    var head = [];
 
     for (var i = 0; i < rows.length; i++) {
-    if (i==0){
-      for (var j = 0; j < headcols.length; j++){
-          head.push(headcols[j]) };
-      csv.push(head.join(","));
-      }
-    else if (i==1){
-      }
-    else {
-      var row = [], cols = rows[i].querySelectorAll("td");
-          if (cols.length > 6) {
-              var pick = [0,1,2,7,8];
-              for (var j = 0; j < cols.length; j++){
-                if (pick.includes(j)){
-                  row.push(cols[j].innerText.replaceAll(",", ""));
-                };
-              };
-          };
-      csv.push(row.join(","));
-      };
-    };
-      // Download CSV
-      download_csv(csv.join("\n"), filename);
-  };
+        if (i == 0) {
+            // Add header row
+            csv.push(headcols.join(","));
+        } else {
+            var row = [], cols = rows[i].querySelectorAll("td");
+
+            if (cols.length > 6) {
+                var pick = [0, 1, 2, 7, 8]; // Indices for relevant columns
+                for (var j = 0; j < cols.length; j++) {
+                    if (pick.includes(j)) {
+                        row.push(cols[j].innerText.trim().replaceAll(",", ""));
+                    }
+                }
+
+                // ✅ Only add rows where "VI" (index 3) or "Notes" (index 4) are not empty
+                if (row.length > 0 && (row[3] || row[4])) {
+                    csv.push(row.join(","));
+                }
+            }
+        }
+    }
+
+    // Download CSV if there's data (excluding header)
+    if (csv.length > 1) {
+        download_csv(csv.join("\n"), filename);
+    } else {
+        alert("No data entered to save!"); // Optional: Notify the user
+    }
+}
 
   var layerUpdate = function (path) {
     // Send a message to the parent

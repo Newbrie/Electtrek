@@ -50,6 +50,8 @@ levels = ['country','nation','county','constituency','ward/division','polling di
 # want to look up the level of a type ,and the types in a level
 
 def get_creation_date(filepath):
+    if filepath = "":
+        return datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     try:
         # On Windows & Linux
         creation_time = os.path.getctime(filepath)
@@ -1173,8 +1175,9 @@ def downPDbut(selnode):
                 full_revamped.append(inDatadf)
             print ("mergefile:",filename)
             dfx = pd.concat(full_revamped,sort=False)
-            df_sorted = dfx.sort_values(by='cdate', ascending=False)
-            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='last')
+            dfx2 = dfx.dropna(axis=0,subset=['VI', 'Notes'], how='all')
+            df_sorted = dfx2.sort_values(by='cdate', ascending=False)
+            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='first')
             VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
             print("______original",allelectors.columns, allelectors.head())
             print("______unmerged",VIelectors.columns, VIelectors.head())
@@ -1230,6 +1233,10 @@ def STupdate(selnode):
 
             VIdata = request.get_json()
             print(f"✅ Received JSON: {data}")
+            changelist =[]
+            path = config.workdirectories['workdir']+"/"+current_node.parent.value+"-INDATA"
+            headtail = os.path.split(path)
+            path2 = headtail[0]
 
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
                 for item in VIdata["viData"]:  # Loop through each elector entry
@@ -1243,20 +1250,29 @@ def STupdate(selnode):
                     print("_____columns:",PDelectors.columns)
                     # Find the row where ENO matches electID
                     selected = PDelectors.query("ENOP == @electID")
-
+                    changefields = pd.DataFrame()
+                    changefields['electID'] = VI_value
                     if not selected.empty:
                         # Update only if viResponse is non-empty
                         if VI_value:
                             PDelectors.loc[selected.index, "VI"] = VI_value
                             street_node.updateVI(VI_value)
+                            changefields['VI'] = VI_value
+
                             print(f"Updated elector {electID} with VI = {VI_value}")
                             print("ElectorVI", PDelectors.loc[selected.index, "ENOP"], PDelectors.loc[selected.index, "VI"])
+
                         else:
                             print(f"Skipping elector {electID}, empty viResponse")
+
+                        changefields['cdate'] = get_creation_date("")
+                    changelist.append[changedfields]
                     else:
                         print(f"Warning: No match found for ENOP = {electID}")
 
-
+                changedf = pd.concat(changelist,sort=False)
+                changefile = path2+"/"+current_node.dir+"/"+current_node.file
+                changedf.to_csv(changefile, sep='\t', encoding='utf-8')            
             else:
                 print("Error: Incorrect JSON format")
 
