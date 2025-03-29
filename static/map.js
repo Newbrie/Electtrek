@@ -55,7 +55,7 @@ var showMore = function (msg,area, type) {
       // Send data to server
       const selnode = path;
 
-      alert("fetching:"+selnode);
+      alert("POSTING:"+data);
       fetch(selnode, {  // Use full URL to ensure correct routing
           method: "POST",
           headers: {
