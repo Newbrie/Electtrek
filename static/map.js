@@ -30,7 +30,7 @@ var showMore = function (msg,area, type) {
 
   async function getVIData(path) {
       let table = document.getElementById("canvass-table");
-      let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
+      let inputs = table.querySelectorAll("td.VI td.NS"); // Select all VI fields
       let data = [];
 
       inputs.forEach(input => {
@@ -187,7 +187,7 @@ var showMore = function (msg,area, type) {
                     }
                 }
 
-                // ✅ Only add rows where "VI" (index 3) or "Notes" (index 4) are not empty
+                // ✅ Only add rows where "VI" (index 7) or "Notes" (index 8) are not empty
                 if (row.length > 0 && (row[7] || row[8])) {
                     csv.push(row.join(","));
                 }
