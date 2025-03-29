@@ -590,7 +590,8 @@ class FGlayer:
         here = [float('%.6f'%(herenode.centroid.y)),float('%.6f'%(herenode.centroid.x))]
         fill = levelcolours["C"+str(random.randint(4,15))]
         print("______addingPoly:",herenode.value, limb.NAME, here)
-        mapfile = current_node.dir+"/"+current_node.file
+        pathref = herenode.dir+"/"+herenode.file
+        mapfile = '/map/'+pathref
 
 #            self.children.append(herenode)
 
@@ -687,7 +688,8 @@ class FGlayer:
                     limb['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ upload+PDbtn
 #                    c.tagno = len(self.fg._children)+1
                     print("_________new Ward value and tagno:  ",c.type,c.value, c.tagno, PDbtn)
-                    mapfile = "/map/"+c.dir+"/"+c.file
+                    pathref = c.dir+"/"+c.file
+                    mapfile = '/map/'+pathref
 #                        self.children.append(c)
 
 
@@ -702,8 +704,8 @@ class FGlayer:
                   popup=folium.GeoJsonPopup(fields=['UPDOWN',],aliases=["Move:",]),popup_keep_highlighted=False,
                   style_function=lambda feature: {"fillColor": fill,"color": c.col,"dashArray": "5, 5","weight": 3,"fillOpacity": 0.4,},
                   ).add_to(self.fg)
-
-                mapfile = "/map/"+c.dir+"/"+c.file
+                pathref = c.dir+"/"+c.file
+                mapfile = '/map/'+pathref
 
 
                 self.fg.add_child(folium.Marker(
@@ -744,7 +746,8 @@ class FGlayer:
             tag = str(c.value)
             here = [ float('%.6f'%(c.centroid.y)),float('%.6f'%(c.centroid.x))]
             fill = levelcolours["C"+str(random.randint(4,15))]
-            mapfile = str("/showmore/"+c.dir+"/"+c.file)
+            pathref = c.dir+"/"+c.file
+            mapfile = '/map/'+pathref
 
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
 
@@ -2077,8 +2080,8 @@ def postcode():
 
     flash('_______ROUTE/postcode')
 
-
-    mapfile = url_for('downbut',selnode=current_node.dir+"/"+current_node.file)
+    pthref = current_node.dir+"/"+current_node.file
+    mapfile = url_for('downbut',selnode=pathref)
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
         postcodeentry = str(postcodeentry).replace(" ","")

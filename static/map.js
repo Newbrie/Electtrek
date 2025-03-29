@@ -188,7 +188,7 @@ var showMore = function (msg,area, type) {
                 }
 
                 // ✅ Only add rows where "VI" (index 3) or "Notes" (index 4) are not empty
-                if (row.length > 0 && (row[3] || row[4])) {
+                if (row.length > 0 && (row[7] || row[8])) {
                     csv.push(row.join(","));
                 }
             }
