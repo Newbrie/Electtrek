@@ -1210,7 +1210,7 @@ def downPDbut(selnode):
 
         print ("uploaded mergefile:",filename)
         dfx = pd.concat(full_revamped,sort=False)
-        VIelectors = dfx[['ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False)
+        VIelectors = dfx[['ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False).drop_duplicates(subset=['ENOP'],keep='last')
         VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8', index=False)
         print("______original",allelectors.columns, allelectors.head())
         print("______unmerged",VIelectors.columns, VIelectors.head())

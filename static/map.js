@@ -32,14 +32,13 @@ var showMore = function (msg,area, type) {
       let table = document.getElementById("canvass-table");
       let inputs = table.querySelectorAll("td.VI, td.NS"); // Select all VI fields
       let data = [];
-      alert("_____td.VI"+inputs);
       inputs.forEach(input => {
           let row = input.closest("tr"); // Get the closest row
           let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
           let ElectorName = row.cells[2].innerText.trim(); // Get input value
           let viValue = row.cells[7].innerText.trim(); // Get input value
           let notesValue = row.cells[8].innerText.trim(); // Get input value
-          alert(electorID+viValue+notesValue);
+
           if (viValue) {
           data.push({
               electorID: electorID,
@@ -55,7 +54,6 @@ var showMore = function (msg,area, type) {
       // Send data to server
       const selnode = path;
 
-      alert("POSTING:"+data);
       fetch(selnode, {  // Use full URL to ensure correct routing
           method: "POST",
           headers: {
