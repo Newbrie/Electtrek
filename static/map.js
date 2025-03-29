@@ -40,7 +40,7 @@ var showMore = function (msg,area, type) {
           let viValue = row.cells[7].innerText.trim(); // Get input value
           let notesValue = row.cells[8].innerText.trim(); // Get input value
           alert(electorID+viValue+notesValue);
-          if (viValue || notesValue) {
+          if (viValue) {
           data.push({
               electorID: electorID,
               ElectorName: ElectorName,
