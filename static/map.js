@@ -30,7 +30,7 @@ var showMore = function (msg,area, type) {
 
   async function getVIData(path) {
       let table = document.getElementById("canvass-table");
-      let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
+      let inputs = table.querySelectorAll("td.VI, td.NS"); // Select all VI fields
       let data = [];
       alert("_____td.VI"+inputs);
       inputs.forEach(input => {
