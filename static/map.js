@@ -30,9 +30,9 @@ var showMore = function (msg,area, type) {
 
   async function getVIData(path) {
       let table = document.getElementById("canvass-table");
-      let inputs = table.querySelectorAll("td.VI, td.NS"); // Select all VI fields
+      let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
       let data = [];
-
+      alert(inputs);
       inputs.forEach(input => {
           let row = input.closest("tr"); // Get the closest row
           let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
@@ -102,7 +102,7 @@ var showMore = function (msg,area, type) {
     FileLink.download = filename;
     FileLink.href = window.URL.createObjectURL(csvFile);
     document.body.appendChild(FileLink);
-    alert("Need to invoke javascript email client"+ FileLink)
+    alert("Nede to invoke javascript email client"+ FileLink)
   };
 
 
@@ -187,8 +187,8 @@ var showMore = function (msg,area, type) {
                     }
                 }
 
-                // ✅ Only add rows where "VI" (index 7) or "Notes" (index 8) are not empty
-                if (row.length > 0 && (row[7] || row[8])) {
+                // ✅ Only add rows where "VI" (index 3) or "Notes" (index 4) are not empty
+                if (row.length > 0 && (row[3] || row[4])) {
                     csv.push(row.join(","));
                 }
             }
@@ -206,7 +206,7 @@ var showMore = function (msg,area, type) {
   var layerUpdate = function (path) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("DATA.html","DATA.csv");
-
+        alert(filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);

@@ -105,7 +105,7 @@
 	        <td class="righted">{{ row['Postcode'] }}</td>
 					<td class="AV"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
 
-	       	<td class="centred"><span> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maclength="2" size="2" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}} />
+	       	<td class="VI"><span> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maclength="2" size="2" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}} />
 				    </span></td>
 	        <td class="NS" ><span>
 						<input type="text" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" onchange="inputNS(this)" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}} />
