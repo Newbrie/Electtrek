@@ -206,7 +206,7 @@ var showMore = function (msg,area, type) {
   var layerUpdate = function (path) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("DATA.html","DATA.csv");
-        
+
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
@@ -238,7 +238,7 @@ var showMore = function (msg,area, type) {
     let x = NS.value;
     NS.style.color = 'lightgray';
     NS.innerHTML = x;
-    NS.parentElement.parentElement.value = x;
+    NS.parentElement.parentElement.innerText = x;
 
     };
 
