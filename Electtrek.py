@@ -86,8 +86,8 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
-        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
-        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
+        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
         i = i + 1
 
     return [list(dfy.columns.values),dfy]
@@ -352,7 +352,7 @@ class TreeNode:
         self.children = [child for child in self.children
                          if child is not child_node]
 
-    def traverse(self):
+    def traverse(self,leaf):
     # moves through each node referenced from self downwards
         nodes_to_visit = [self]
         count = 0
@@ -360,14 +360,37 @@ class TreeNode:
         while len(nodes_to_visit) > 0:
           current_node = nodes_to_visit.pop()
           node_list.append(current_node)
-          print("_________Traverse node  ",current_node.value,current_node.fid,current_node.level )
+#          print("_________Traverse node  ",current_node.value,current_node.fid,current_node.level )
           if current_node.parent is not None:
+              if current_node.file == leaf:
+                  return c
               print("_________Parent node  ",current_node.parent.value,current_node.parent.fid,current_node.parent.level )
           nodes_to_visit += current_node.children
           count = count+1
 
         print("_________leafnodes  ",count)
         return sorted (node_list, key=lambda TreeNode: TreeNode.level, reverse=True)
+    # Iterative DFS function
+    def find_node(self, start, target):
+        visited = set()  # Track visited nodes
+        stack = [start]  # Stack for DFS
+
+        while stack:  # Continue until stack is empty
+            node = stack.pop()  # Pop a node from the stack
+            if node not in visited:
+                visited.add(node)  # Mark node as visited
+                if node.type == 'street' or node.type == 'walk':
+                    PDstreet = node.parent.value+"-"+node.value
+                    print("_____find visited node:",PDstreet, target)        # Print the current node (for illustration)
+                    if PDstreet == target:
+                        return node
+                else:
+                    print("_____find visited node:",node.value, target)        # Print the current node (for illustration)
+                    if node.value == target:
+                        return node
+                stack.extend(reversed(node.children))  # Add child nodes to stack
+        return None
+    # Run DFS starting from node 'A'
 
     def makemapfiles(self):
     # moves through each node referenced from self downwards
@@ -1094,96 +1117,103 @@ def downPDbut(selnode):
 
     if request.method == 'GET':
         print ("_________ROUTE/downPDbut", current_node.source, len(allelectors))
+        print ("_________Requestformfile",request.values['importfile'])
+        flash ("_________Requestformfile"+request.values['importfile'])
+        filename = request.values['importfile']
+        allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+        current_node.source = filename
+        pfile = Treepolys[current_node.level]
+        Level3boundary = pfile[pfile['FID']==current_node.fid]
+        PDs = set(allelectors.PD.values)
+        print("PDsfull", PDs)
+#            Featurelayers[current_node.level].fg._children.extend(PDnodelist)
+        frames = []
+#            Dont know if PDs are within selected ward yet.
+        for PD in PDs:
+            PDelectors = getblock(allelectors,'PD',PD)
+            maplongx = PDelectors.Long.values[0]
+            maplaty = PDelectors.Lat.values[0]
+
+        # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
+            if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
+                Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
+                PDelectors['Area'] = Area
+
+                x = PDelectors.Long.values
+                y = PDelectors.Lat.values
+                kmeans_dist_data = list(zip(x, y))
+
+                walkset = min(math.ceil(PDelectors.shape[0]/100),35)
+
+                kmeans = KMeans(n_clusters=walkset)
+                kmeans.fit(kmeans_dist_data)
+
+                klabels1 = np.char.mod('C%d', kmeans.labels_)
+                klabels = klabels1.tolist()
+
+                PDelectors.insert(0, "WalkName", klabels)
+                frames.append(PDelectors)
+
+        print("_______displayed PD markers",Featurelayers[current_node.level].fg._children)
+        allelectors = pd.concat(frames)
+
+        PDPtsdf0 = pd.DataFrame(allelectors, columns=['PD', 'Long', 'Lat'])
+        PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+        PDPtsdf = PDPtsdf1.groupby(['Name']).mean()
         if len(current_node.childrenoftype('polling district')) == 0:
-            print ("_________Requestformfile",request.values['importfile'])
-            flash ("_________Requestformfile"+request.values['importfile'])
-            filename = request.values['importfile']
-            allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-            current_node.source = filename
-            pfile = Treepolys[current_node.level]
-            Level3boundary = pfile[pfile['FID']==current_node.fid]
-            PDs = set(allelectors.PD.values)
-            print("PDsfull", PDs)
-    #            Featurelayers[current_node.level].fg._children.extend(PDnodelist)
-            frames = []
-    #            Dont know if PDs are within selected ward yet.
-            for PD in PDs:
-                PDelectors = getblock(allelectors,'PD',PD)
-                maplongx = PDelectors.Long.values[0]
-                maplaty = PDelectors.Lat.values[0]
+            WardPDnodelist = current_node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
+    # if there is a selected file , then allelectors will be full of records
+            for PD_node in WardPDnodelist:
+                  PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
+                  Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDnodeelectors)
+                  print("_______new PD Display node",PD_node,"|", Featurelayers[current_node.level].fg._children)
 
-            # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-                if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
-                    Area = list(Level3boundary['NAME'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper())[0]
-                    PDelectors['Area'] = Area
+#            areaelectors = getblock(allelectors,'Area',current_node.value)
 
-                    x = PDelectors.Long.values
-                    y = PDelectors.Lat.values
-                    kmeans_dist_data = list(zip(x, y))
+        if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
+            flash("Can't find any elector data for this Area.")
+        else:
+            map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
+            flash("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+            print("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
 
-                    walkset = min(math.ceil(PDelectors.shape[0]/100),35)
-
-                    kmeans = KMeans(n_clusters=walkset)
-                    kmeans.fit(kmeans_dist_data)
-
-                    klabels1 = np.char.mod('C%d', kmeans.labels_)
-                    klabels = klabels1.tolist()
-
-                    PDelectors.insert(0, "WalkName", klabels)
-                    frames.append(PDelectors)
-
-            print("_______displayed PD markers",Featurelayers[current_node.level].fg._children)
-            allelectors = pd.concat(frames)
-
-            PDPtsdf0 = pd.DataFrame(allelectors, columns=['PD', 'Long', 'Lat'])
-            PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-            PDPtsdf = PDPtsdf1.groupby(['Name']).mean()
-            if len(current_node.childrenoftype('polling district')) == 0:
-                WardPDnodelist = current_node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
-        # if there is a selected file , then allelectors will be full of records
-                for PD_node in WardPDnodelist:
-                      PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
-                      Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDnodeelectors)
-                      print("_______new PD Display node",PD_node,"|", Featurelayers[current_node.level].fg._children)
-
-    #            areaelectors = getblock(allelectors,'Area',current_node.value)
-
-            if len(allelectors) == 0 or len(Featurelayers[current_node.level].fg._children) == 0:
-                flash("Can't find any elector data for this Area.")
+        allelectorscopy = allelectors.copy()
+        path = config.workdirectories['workdir']+"/"+current_node.parent.value+"-INDATA"
+        headtail = os.path.split(path)
+        path2 = headtail[0]
+        merge = headtail[1]+"Auto.xlsx"
+        indatamerge = headtail[1]+"inDataAuto.csv"
+        print ("path:", path, "path2:", path2, "merge:", merge)
+        if os.path.exists(path2+indatamerge):
+            os.remove(path2+indatamerge)
+        if os.path.exists(path2+merge):
+            os.remove(path2+merge)
+        all_files = glob.glob(f'{path}/*-DATA.csv')
+        print("all files",all_files)
+        full_revamped = []
+#upload street and walk VI and Notes saved updates
+        for filename in all_files:
+            inDatadf = pd.read_csv(filename,sep='\t')
+            inDatadf['cdate'] = get_creation_date(filename)
+            full_revamped.append(inDatadf)
+            nodeval = filename.replace("-DATA.csv","").split("/").pop()
+            street_node = MapRoot.find_node(MapRoot,nodeval)
+            if street_node:
+                for index,entry in inDatadf.iterrows():
+                    street_node.updateVI(entry['VI'])
             else:
-                map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-                flash("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
-                print("________PDs added  :  "+str(len(Featurelayers[current_node.level].fg._children)))
+                print("______No StreetNode found for this update:",nodeval)
 
-            allelectorscopy = allelectors.copy()
-            path = config.workdirectories['workdir']+"/"+current_node.parent.value+"-INDATA"
-            headtail = os.path.split(path)
-            path2 = headtail[0]
-            merge = headtail[1]+"Auto.xlsx"
-            indatamerge = headtail[1]+"inDataAuto.csv"
-            print ("path:", path, "path2:", path2, "merge:", merge)
-            if os.path.exists(path2+indatamerge):
-                os.remove(path2+indatamerge)
-            if os.path.exists(path2+merge):
-                os.remove(path2+merge)
-            all_files = glob.glob(f'{path}/*-DATA*.csv')
-            print("all files",all_files)
-            full_revamped = []
-            for filename in all_files:
-                inDatadf = pd.read_csv(filename, engine='python', encoding='utf-8',keep_default_na=False, na_values=[''])
-                inDatadf['cdate'] = get_creation_date(filename)
-                full_revamped.append(inDatadf)
-            print ("mergefile:",filename)
-            dfx = pd.concat(full_revamped,sort=False)
-            dfx2 = dfx.dropna(axis=0,subset=['VI', 'Notes'], how='all')
-            df_sorted = dfx2.sort_values(by='cdate', ascending=False)
-            VIelectors = df_sorted[['ENOP','VI','Notes','cdate']].drop_duplicates(subset=['ENOP'], keep='first')
-            VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8')
-            print("______original",allelectors.columns, allelectors.head())
-            print("______unmerged",VIelectors.columns, VIelectors.head())
-            allelectors = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
-            print("______merged",allelectors.columns, allelectors.head())
-            allelectors.to_excel(path2+"/"+merge)
+
+        print ("uploaded mergefile:",filename)
+        dfx = pd.concat(full_revamped,sort=False)
+        VIelectors = dfx[['ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False)
+        VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8', index=False)
+        print("______original",allelectors.columns, allelectors.head())
+        print("______unmerged",VIelectors.columns, VIelectors.head())
+        allelectors = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
+        print("______merged",allelectors.columns, allelectors.head())
+        allelectors.to_excel(path2+"/"+merge)
 
 
     mapfile = current_node.dir+"/"+current_node.file
@@ -1517,6 +1547,7 @@ def PDshowST(selnode):
                   results_filename = walk_name+"-PRINT.html"
                   datafile = street_node.dir+"/"+walk_name+"-DATA.html"
                   mapfile = street_node.dir+"/"+street_node.file
+                  electorwalks = electorwalks.fillna("")
 
     #              These are the street nodes which are the street data collection pages
 

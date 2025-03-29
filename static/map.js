@@ -32,7 +32,7 @@ var showMore = function (msg,area, type) {
       let table = document.getElementById("canvass-table");
       let inputs = table.querySelectorAll("td.VI"); // Select all VI fields
       let data = [];
-      alert(inputs);
+
       inputs.forEach(input => {
           let row = input.closest("tr"); // Get the closest row
           let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
@@ -102,7 +102,7 @@ var showMore = function (msg,area, type) {
     FileLink.download = filename;
     FileLink.href = window.URL.createObjectURL(csvFile);
     document.body.appendChild(FileLink);
-    alert("Nede to invoke javascript email client"+ FileLink)
+    alert("Need to invoke javascript email client"+ FileLink)
   };
 
 
@@ -206,7 +206,7 @@ var showMore = function (msg,area, type) {
   var layerUpdate = function (path) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("DATA.html","DATA.csv");
-        alert(filename);
+        
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
@@ -238,7 +238,7 @@ var showMore = function (msg,area, type) {
     let x = NS.value;
     NS.style.color = 'lightgray';
     NS.innerHTML = x;
-    NS.parentElement.parentElement.innerText = x;
+    NS.parentElement.parentElement.value = x;
 
     };
 
