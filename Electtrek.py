@@ -98,6 +98,7 @@ def subending(filename, ending):
   return stem.replace("@@@", ending)
 
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+VCO = {"R" : "light blue","C" : "blue","S" : "red","LD" :"yellow","G" :"light green","I" :"light grey","PC" : "dark red","SD" : "orange","Z" : "indigo","W" :  "white", "X" :  "dark grey"}
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 
@@ -114,6 +115,8 @@ class TreeNode:
         self.dir = self.value
         self.davail = True
         self.col = levelcolours["C"+str(self.level+4)]
+        if self.type == 'constituency':
+            self.col = VCO[Con_Results_data[self.value]]
         self.tagno = 1
         self.centroid = Point(roid.x,roid.y)
         self.bbox = [[],[]]
@@ -850,11 +853,11 @@ layeritems = []
 
 mapfile = ""
 
-Con_Results_data = pd.read_csv(config.workdirectories['bounddir']+'/'+'HoC_General_Election_2024_Results.csv',sep='\t')
-Con_Results_data = Con_Results_data.rename(columns = {'Constituency name': 'NAME'})
+Con_Results_data = pd.read_csv(config.workdirectories['resultdir']+'/'+'HoC_General_Election_2024_Results.csv',sep='\t')
+Con_Results_data['NAME'] = Con_Results_data['Constituency name'].str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace(",","").str.replace(" ","_").str.upper()
 #        Con_Results_data = Con_Bound_layer.merge(Con_Results_data, how='left', on='NAME' )
 
-print("_____Test Results data: ",Con_Results_data.columns)
+print("_________HoC Results data: ",Con_Results_data.columns)
 
 
 
@@ -1073,18 +1076,19 @@ def downbut(selnode):
     layeritems = getlayeritems(current_node.create_map_branch(atype))
     Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     Featurelayers[current_node.level].layeradd_nodemaps(current_node, atype)
-#    if current_node.level == 2:
-#        Con_Results_data.columns = ["NAME","First party","Second party"]
-#        Chorodata = Con_Results_data.rename(columns= {'First party': 'FIRST','Second party' : 'SECOND'})
 
-#        Chorodata['NAME'] = Con_Results_data['NAME']
-#        Chorodata['FIRST'] = Con_Results_data['First party'].index
+    if current_node.level == 2:
+        Con_Results_data.columns = ["NAME","First party","Second party"]
+        Chorodata = Con_Results_data.rename(columns= {'First party': 'FIRST','Second party' : 'SECOND'})
 
-#        folium.Choropleth(
-#            geo_data=Treepolys[3],
-#            data=Chorodata,
-#            columns=["NAME", "FIRST"],
-#            key_on="feature.properties.NAME",).add_to(current_node.map)
+        Chorodata['NAME'] = Con_Results_data['NAME']
+        Chorodata['FIRST'] = Con_Results_data['First party'].index
+
+        folium.Choropleth(
+            geo_data=Treepolys[3],
+            data=Chorodata,
+            columns=["NAME", "FIRST"],
+            key_on="feature.properties.NAME",).add_to(current_node.map)
 
     map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
     mapfile = current_node.dir+"/"+current_node.file
