@@ -429,6 +429,7 @@ class TreeNode:
         print("_________leafnodes  ",count)
         return sorted (node_list, key=lambda TreeNode: TreeNode.level, reverse=True)
     # Iterative DFS function
+    # Run DFS starting from node 'A'
     def find_node(self, start, target):
         visited = set()  # Track visited nodes
         stack = [start]  # Stack for DFS
@@ -448,7 +449,55 @@ class TreeNode:
                         return node
                 stack.extend(reversed(node.children))  # Add child nodes to stack
         return None
-    # Run DFS starting from node 'A'
+
+    # Run path directed establishment of node 'A'
+
+    def ping_node(self, path, roid):
+        global Treepolys# Track visited nodes
+        steps = path.split("/")
+        steps.reverse()
+        print("____ping steps", path, steps)
+        node = self
+        while steps:
+            next = steps.pop()
+            for chip in node.children:
+                if chip.value == next:
+                    node = chip
+                    print("____ EXISTNG NODE FOUND  ",node.level,node.value,node.fid)
+                if node.value.find("-DATA.csv") >= 0:
+                    return node
+                break
+            if node.level < 5:
+                add_boundaries(levels[node.level],node)
+                ChildPolylayer = Treepolys[node.level]
+                block = pd.DataFrame()
+                self.bbox = node.get_bounding_box(block)[0]
+                self.centroid = node.get_bounding_box(block)[1]
+                for index, limb in ChildPolylayer.iterrows():
+                    newname = normalname(limb.NAME)
+        #            if  newname != "UNITED_KINGDOM":
+                    print ("________child of",node.value,node.level)
+                    here = limb.geometry.centroid
+                    if newname == next:
+                        possnode = TreeNode(newname,limb.FID, roid)
+                        pfile = Treepolys[self.level]
+                        poly = pfile[pfile['FID']==self.fid]
+                        print ("_____same name orchan child found:", limb.NAME )
+                        if intersection(poly.geometry,limb.geometry).item().area > 0.0001:
+                            print("_________ORPHAN ADDED AS INSIDE ",node.level,limb.NAME, node.value)
+                            node.add_Tchild(possnode,levels[node.level+1])
+                            node = possnode
+                            break
+            else:
+                newdatanode = TreeNode(next,abs(hash(next)),roid)
+                node.add_Tchild(newdatanode,levels[node.level+1])
+                node = newdatanode
+                print("____ DATA ORPHAN CREATED  ",node.level,node.value,node.fid)
+                if next.find("-DATA.csv") >= 0:
+                    return node
+                else:
+                    break
+        return node
 
     def makemapfiles(self):
     # moves through each node referenced from self downwards
@@ -462,7 +511,7 @@ class TreeNode:
           nodes_to_visit += current_node.children
           count = count+1
         print("_________leafnodes  ",count)
-
+        return
 
 def add_boundaries(shelf,node):
     global Treepolys
@@ -1208,6 +1257,7 @@ def downPDbut(selnode):
     global Treepolys
     global current_node
     global Featurelayers
+    global MapRoot
 
     global allelectors
     global filename
@@ -1301,24 +1351,30 @@ def downPDbut(selnode):
             inDatadf = pd.read_csv(filename,sep='\t')
             inDatadf['cdate'] = get_creation_date(filename)
             full_revamped.append(inDatadf)
-            nodeval = filename.replace("-DATA.csv","").split("/").pop()
-            street_node = MapRoot.find_node(MapRoot,nodeval)
+            pathval = inDatadf['Path'][0]
+            Lat = inDatadf['Lat'][0]
+            Long = inDatadf['Long'][0]
+            print("____pathval param:",pathval, Long,Lat)
+            street_node = MapRoot.ping_node(pathval, roid)
             if street_node:
                 for index,entry in inDatadf.iterrows():
                     street_node.updateVI(entry['VI'])
             else:
                 print("______No StreetNode found for this update:",nodeval)
 
-
         print ("uploaded mergefile:",filename)
-        dfx = pd.concat(full_revamped,sort=False)
-        VIelectors = dfx[['ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False).drop_duplicates(subset=['ENOP'],keep='last')
-        VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8', index=False)
-        print("______original",allelectors.columns, allelectors.head())
-        print("______unmerged",VIelectors.columns, VIelectors.head())
-        allelectors = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
-        print("______merged",allelectors.columns, allelectors.head())
-        allelectors.to_excel(path2+"/"+merge)
+        if len(full_revamped) > 0:
+            dfx = pd.concat(full_revamped,sort=False)
+            VIelectors = dfx[['Path','ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False).drop_duplicates(subset=['ENOP'],keep='last')
+            VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8', index=False)
+            print("______original data",allelectors.columns, allelectors.head())
+            print("______unmerged imported data ",VIelectors.columns, VIelectors.head())
+            allelectors = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
+            print("______merged and imported data",allelectors.columns, allelectors.head())
+            allelectors.to_excel(path2+"/"+merge)
+        else:
+            print("______NO Data found to be imported ",full_revamped)
+
 
 
     layeritems = getlayeritems(current_node.childrenoftype('polling district'))
@@ -1389,7 +1445,9 @@ def STupdate(selnode):
                     print("_____columns:",PDelectors.columns)
                     # Find the row where ENO matches electID
                     selected = PDelectors.query("ENOP == @electID")
-                    changefields.loc[i,'PD'] = electID.split("-")[0]
+                    changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file
+                    changefields.loc[i,'Lat'] = street_node.centroid.y
+                    changefields.loc[i,'Long'] = street_node.centroid.x
                     changefields.loc[i,'ENOP'] = electID
                     changefields.loc[i,'ElectorName'] = ElectorName
                     if not selected.empty:
