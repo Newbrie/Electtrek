@@ -93,7 +93,6 @@ def getlayeritems(nodelist):
     i = 0
     for x in nodelist:
 
-
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
@@ -347,7 +346,6 @@ class TreeNode:
         child_node.type = etype
         child_node.level = child_node.parent.level + 1
         child_node.dir = self.dir+"/"+child_node.value
-        child_node.file = child_node.value+"-MAP.html"
         child_node.tagno = len([ x for x in self.children if x.type == etype])
         party = "O"
         if etype == 'constituency':
@@ -365,24 +363,28 @@ class TreeNode:
                 selected = Ward_Results_data.query('NAME == @sname')
                 party = selected['FIRST'].values[0]
         elif etype == 'nation':
+            child_node.file = child_node.value+"-MAP.html"
             party = 'O'
         elif etype == 'county':
+            child_node.file = child_node.value+"-MAP.html"
             party = 'O'
         elif etype == 'division':
+            child_node.file = child_node.value+"-MAP.html"
             party = 'O'
         elif etype == 'polling district':
+            child_node.file = child_node.value+"-MAP.html"
             party = 'O'
-        elif etype == 'street':
+        elif etype == 'street' or etype == 'walk/street':
             child_node.dir = self.dir+"/STREETS"
-            child_node.file = self.value+"-"+child_node.value+"-MAP.html"
+            child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
             party = 'O'
         elif etype == 'walk':
             child_node.dir = self.dir+"/WALKS"
-            child_node.file = self.value+"-"+child_node.value+"-MAP.html"
+            child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
             party = 'O'
         elif etype == 'walkleg':
             child_node.dir = self.dir
-            child_node.file = self.value+"-"+child_node.value+"-MAP.html"
+            child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
             party = 'O'
 
         if party not in VNORM:
@@ -454,48 +456,47 @@ class TreeNode:
 
     def ping_node(self, path, roid):
         global Treepolys# Track visited nodes
+        global levels
         steps = path.split("/")
+        last = steps.pop()
+        steps.append(last.split("-").pop())
         steps.reverse()
+        steps.pop()
         print("____ping steps", path, steps)
         node = self
-        while steps:
+        while node.file.find("-PRINT.html") < 0:
             next = steps.pop()
-            for chip in node.children:
-                if chip.value == next:
+            nameoptions = [x.value for x in node.children]
+            if not steps:
+                next = next.split("-").pop()
+            if next in nameoptions:
+                for chip in [x for x in node.children if x.value == next]:
                     node = chip
-                    print("____ EXISTNG NODE FOUND  ",node.level,node.value,node.fid)
-                if node.value.find("-DATA.csv") >= 0:
-                    return node
-                break
-            if node.level < 5:
-                add_boundaries(levels[node.level],node)
-                ChildPolylayer = Treepolys[node.level]
-                block = pd.DataFrame()
-                self.bbox = node.get_bounding_box(block)[0]
-                self.centroid = node.get_bounding_box(block)[1]
-                for index, limb in ChildPolylayer.iterrows():
-                    newname = normalname(limb.NAME)
-        #            if  newname != "UNITED_KINGDOM":
-                    print ("________child of",node.value,node.level)
-                    here = limb.geometry.centroid
-                    if newname == next:
-                        possnode = TreeNode(newname,limb.FID, roid)
-                        pfile = Treepolys[self.level]
-                        poly = pfile[pfile['FID']==self.fid]
-                        print ("_____same name orchan child found:", limb.NAME )
-                        if intersection(poly.geometry,limb.geometry).item().area > 0.0001:
-                            print("_________ORPHAN ADDED AS INSIDE ",node.level,limb.NAME, node.value)
-                            node.add_Tchild(possnode,levels[node.level+1])
-                            node = possnode
-                            break
+                    print("____ EXISTNG NODE FOUND  ",levels[node.level],node.value,node.file)
+                    break
             else:
-                newdatanode = TreeNode(next,abs(hash(next)),roid)
-                node.add_Tchild(newdatanode,levels[node.level+1])
-                node = newdatanode
-                print("____ DATA ORPHAN CREATED  ",node.level,node.value,node.fid)
-                if next.find("-DATA.csv") >= 0:
-                    return node
+                if node.level < 5:
+                    ChildPolylayer = Treepolys[node.level]
+                    block = pd.DataFrame()
+                    node.bbox = node.get_bounding_box(block)[0]
+                    node.centroid = node.get_bounding_box(block)[1]
+                    for index, limb in ChildPolylayer.iterrows():
+                        newname = normalname(limb.NAME)
+            #            if  newname != "UNITED_KINGDOM":
+                        print ("________child of",node.value,node.level)
+                        roid = limb.geometry.centroid
+                        if newname == next:
+                            possnode = TreeNode(next,abs(hash(next)), roid)
+                            node.add_Tchild(possnode,levels[node.level])
+                            node = possnode
+                            print("____ NEW MAP NODE CREATED  ",levels[node.level],node.value,node.file)
+
+                            break
                 else:
+                    newdatanode = TreeNode(next,abs(hash(next)),roid)
+                    node.add_Tchild(newdatanode,levels[node.level+1])
+                    node = newdatanode
+                    print("____ DATA ORPHAN CREATED  ",levels[node.level],node.value,node.file)
                     break
         return node
 
@@ -1074,7 +1075,9 @@ def handle_exception(e):
         "description": e.description,
     })
     response.content_type = "application/json"
-    mapfile = current_node.parent.dir+"/"+current_node.parent.file
+    mapfile = current_node.dir+"/"+current_node.file
+    if current_node.level > 0:
+        mapfile = current_node.parent.dir+"/"+current_node.parent.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -1352,6 +1355,7 @@ def downPDbut(selnode):
             inDatadf['cdate'] = get_creation_date(filename)
             full_revamped.append(inDatadf)
             pathval = inDatadf['Path'][0]
+            pathval = pathval.replace("/STREETS","").replace("/WALKS","").replace("-PRINT.html","")
             Lat = inDatadf['Lat'][0]
             Long = inDatadf['Long'][0]
             print("____pathval param:",pathval, Long,Lat)
@@ -1359,6 +1363,7 @@ def downPDbut(selnode):
             if street_node:
                 for index,entry in inDatadf.iterrows():
                     street_node.updateVI(entry['VI'])
+                    print("line VI update:",street_node.value,street_node.VI, entry['VI'])
             else:
                 print("______No StreetNode found for this update:",nodeval)
 
