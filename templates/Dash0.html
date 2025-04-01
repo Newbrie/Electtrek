@@ -36,7 +36,7 @@
       });
 
       function changeIframeSrc(newurl) {
-        var msg = "Retrieving area "+newurl.split("/").pop();
+        var msg = "Retrieving area "+newurl;
         var logWindow = document.getElementById("logwin");
         var li = document.createElement("li");
         li.appendChild(document.createTextNode(msg));
@@ -58,7 +58,7 @@
       var li = parent.document.createElement("li");
       var tabhead = parent.document.querySelector("div > table > thead");
       var tabbody = parent.document.querySelector("div > table > tbody");
-      
+
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
