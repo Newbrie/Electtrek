@@ -204,7 +204,7 @@ var showMore = function (msg,area, type) {
   var layerUpdate = function (path) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("-DATA.html","-DATA.csv");
-        alert(filename);
+        alert(path,filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
