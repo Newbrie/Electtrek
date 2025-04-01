@@ -165,36 +165,41 @@ var showMore = function (msg,area, type) {
   };
 
   function export_table_to_csv(html, filename) {
-      var csv = [];
-      var rows = document.querySelectorAll("table tr");
-      var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
+    var csv = [];
+    var rows = document.querySelectorAll("table tr");
+    var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
 
-      // ✅ Add header row
-      csv.push(headcols.join(","));
+    csv.push(headcols.join(",")); // ✅ Add header row
 
-      for (var i = 1; i < rows.length; i++) { // ✅ Start from index 1 (skip header)
-          var row = [], cols = rows[i].querySelectorAll("td");
+    let seen = new Set(); // ✅ Track unique rows
 
-          if (cols.length > 8) { // ✅ Ensure enough columns exist
-              var pick = [0, 1, 2, 7, 8]; // ✅ Pick only these column indices
-              for (var j of pick) {
-                  row.push(cols[j].innerText.trim().replaceAll(",", ""));
-              }
+    for (var i = 1; i < rows.length; i++) { // ✅ Start from row 1 (skip header)
+        var row = [], cols = rows[i].querySelectorAll("td");
 
-              // ✅ Only add rows where "VI" (index 3) or "Notes" (index 4) are NOT empty
-              if (row[3] || row[4]) {
-                  csv.push(row.join(","));
-              }
-          }
-      }
+        if (cols.length > 8) { // ✅ Ensure sufficient columns exist
+            var pick = [0, 1, 2, 7, 8]; // ✅ Select relevant columns
+            for (var j of pick) {
+                row.push(cols[j].innerText.trim().replaceAll(",", ""));
+            }
 
-      // ✅ Download CSV if there's data (excluding header)
-      if (csv.length > 1) {
-          download_csv(csv.join("\n"), filename);
-      } else {
-          alert("No data entered to save!");
-      }
-  }
+            let rowString = row.join(","); // Convert row to string for Set tracking
+
+            // ✅ Avoid duplicates & ensure "VI" or "Notes" is filled
+            if (!seen.has(rowString) && (row[3] || row[4])) {
+                seen.add(rowString); // ✅ Mark row as added
+                csv.push(rowString);
+            }
+        }
+    }
+
+    console.log("CSV Output:\n", csv.join("\n")); // ✅ Debug CSV output
+
+    if (csv.length > 1) {
+        download_csv(csv.join("\n"), filename);
+    } else {
+        alert("No data entered to save!");
+    }
+}
 
   var layerUpdate = function (path) {
     // Send a message to the parent
