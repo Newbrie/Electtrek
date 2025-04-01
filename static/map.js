@@ -193,7 +193,7 @@ var showMore = function (msg,area, type) {
     }
 
     console.log("CSV Output:\n", csv.join("\n")); // ✅ Debug CSV output
-
+    console.log("CSV Array Inside the Function:", csv);
     if (csv.length > 1) {
         download_csv(csv.join("\n"), filename);
     } else {
