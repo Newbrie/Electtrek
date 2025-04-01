@@ -52,9 +52,8 @@ var showMore = function (msg,area, type) {
       console.log("Collected VI Data:", data);
 
       // Send data to server
-      const selnode = path;
 
-      fetch(selnode, {  // Use full URL to ensure correct routing
+      fetch(path, {  // Use full URL to ensure correct routing
           method: "POST",
           headers: {
               "Content-Type": "application/json",

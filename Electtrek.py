@@ -105,7 +105,7 @@ def getlayeritems(nodelist):
 
 
 def subending(filename, ending):
-  stem = filename.replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
+  stem = filename.replace("-DATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
   return stem.replace("@@@", ending)
 
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
@@ -452,16 +452,18 @@ class TreeNode:
     # Run path directed establishment of node 'A'
 
     def ping_node(self, path, roid):
-        global Treepolys# Track visited nodes
+        global Treepolys
         global levels
+        path = path.replace("/STREETS","").replace("/WALKS","").replace(".html","").replace(".HTML","")
+        path = subending(path, "")
         steps = path.split("/")
-        last = steps.pop()
-        steps.append(last.split("-").pop())
-        steps.reverse()
-        steps.pop()
+        last = steps.pop() #eg KA-SMITH_STREET
+        steps.append(last.split("-").pop()) #eg SMITH_STREET
+        steps.reverse() # make the top the first node
+        steps.pop() # MapRoot is already selected as the first node
         print("____ping steps", path, steps)
         node = self
-        while node.file.find("-PRINT.html") < 0:
+        while steps:
             next = steps.pop()
             nameoptions = [x.value for x in node.children]
             if not steps:
@@ -1182,8 +1184,8 @@ def dashboard ():
     return redirect(url_for('index'))
 
 
-@app.route('/downbut/<path:selnode>', methods=['GET','POST'])
-def downbut(selnode):
+@app.route('/downbut/<path:path>', methods=['GET','POST'])
+def downbut(path):
     global MapRoot
     global current_node
     global allelectors
@@ -1199,9 +1201,9 @@ def downbut(selnode):
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
-    selnode = selnode.replace("/STREETS","").replace("/WALKS","")
-    ward_div = selnode.split(" ").pop()
-    steps = selnode.split("/")
+    path = path.replace("/STREETS","").replace("/WALKS","")
+    ward_div = path.split(" ").pop()
+    steps = path.split("/")
     last = steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     count = len(steps)
@@ -1268,16 +1270,18 @@ def transfer(path):
     formdata = {}
 # transfering to another any other node with siblings listed below
 
-    path = path.replace("/STREETS","").replace("/WALKS","")
+
     current_node = MapRoot.ping_node(path,current_node.centroid)
     mapfile = current_node.dir +"/"+ current_node.file
-    layeritems = getlayeritems(current_node.parent.children)
+    if current_node.level < 4:
+        redirect(url_for('downbut',path=mapfile))
+    layeritems = getlayeritems(current_node.children)
 
     return   redirect(url_for('map',path=mapfile))
 
 
-@app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
-def downPDbut(selnode):
+@app.route('/downPDbut/<path:path>', methods=['GET','POST'])
+def downPDbut(path):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1287,7 +1291,7 @@ def downPDbut(selnode):
     global filename
     global layeritems
 
-    steps = selnode.split("/")
+    steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     mapfile = current_node.dir+"/"+current_node.file
@@ -1376,7 +1380,6 @@ def downPDbut(selnode):
             inDatadf['cdate'] = get_creation_date(filename)
             full_revamped.append(inDatadf)
             pathval = inDatadf['Path'][0]
-            pathval = pathval.replace("/STREETS","").replace("/WALKS","").replace("-PRINT.html","")
             Lat = inDatadf['Lat'][0]
             Long = inDatadf['Long'][0]
             roid = Point(Long,Lat)
@@ -1411,8 +1414,8 @@ def downPDbut(selnode):
 #    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 
-@app.route('/STupdate/<path:selnode>', methods=['GET','POST'],strict_slashes=False)
-def STupdate(selnode):
+@app.route('/STupdate/<path:path>', methods=['GET','POST'],strict_slashes=False)
+def STupdate(path):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1422,24 +1425,23 @@ def STupdate(selnode):
     global environment
     global filename
     global layeritems
-#    steps = selnode.split("/")
+#    steps = path.split("/")
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
-    steps = selnode.split("/")
-    leaves = steps.pop()
-    current_node = selected_childnode(current_node,leaves.split("-").pop())
-    print(f"Selected selnode: {selnode} leaves: {leaves}")
+    path = path.replace("/STREETS","").replace("/WALKS","")
+    current_node = MapRoot.ping_node(path,current_node.centroid)
+
+    print(f"passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
     mapfile = current_node.dir+"/"+current_node.file
 
-
     if request.method == 'POST':
     # Get JSON data from request
 #        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
         try:
-            print(f"📥 Incoming request for: {selnode}")
+            print(f"📥 Incoming request for: {path}")
 
             # ✅ Print raw request data (useful for debugging)
             print("📄 Raw request data:", request.data)
@@ -1597,8 +1599,8 @@ def STupdate(selnode):
     context = {
         "group": electorwalks,
         "prodstats": prodstats,
-        "mapfile": url_for('upbut',selnode=mapfile),
-        "datafile": url_for('STupdate',selnode=datafile),
+        "mapfile": url_for('upbut',path=mapfile),
+        "datafile": url_for('STupdate',path=datafile),
         "walkname": walk_name,
         }
     results_template = environment.get_template('canvasscard1.html')
@@ -1618,8 +1620,8 @@ def STupdate(selnode):
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 
-@app.route('/PDshowST/<path:selnode>', methods=['GET','POST'])
-def PDshowST(selnode):
+@app.route('/PDshowST/<path:path>', methods=['GET','POST'])
+def PDshowST(path):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1634,7 +1636,7 @@ def PDshowST(selnode):
         posn = list.index(name)
         return list[posn]
 
-    steps = selnode.split("/")
+    steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
 # now pointing at the STREETS.html node containing a map of street markers
@@ -1745,8 +1747,8 @@ def PDshowST(selnode):
                   context = {
                     "group": electorwalks,
                     "prodstats": prodstats,
-                    "mapfile": url_for('upbut',selnode=mapfile),
-                    "datafile": url_for('STupdate',selnode=datafile),
+                    "mapfile": url_for('upbut',path=mapfile),
+                    "datafile": url_for('STupdate',path=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
@@ -1767,8 +1769,8 @@ def PDshowST(selnode):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
-@app.route('/PDshowWK/<path:selnode>', methods=['GET','POST'])
-def PDshowWK(selnode):
+@app.route('/PDshowWK/<path:path>', methods=['GET','POST'])
+def PDshowWK(path):
     global Treepolys
     global current_node
     global Featurelayers
@@ -1781,7 +1783,7 @@ def PDshowWK(selnode):
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
-    steps = selnode.split("/")
+    steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
 
@@ -1914,8 +1916,8 @@ def PDshowWK(selnode):
                   context = {
                     "group": walkelectors,
                     "prodstats": prodstats,
-                    "mapfile": url_for('upbut',selnode=mapfile),
-                    "datafile": url_for('STupdate',selnode=datafile),
+                    "mapfile": url_for('upbut',path=mapfile),
+                    "datafile": url_for('STupdate',path=datafile),
                     "walkname": walk_name,
                     }
                   results_template = environment.get_template('canvasscard1.html')
@@ -1937,12 +1939,12 @@ def PDshowWK(selnode):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
-@app.route('/wardreport/<path:selnode>',methods=['GET','POST'])
-def wardreport(selnode):
+@app.route('/wardreport/<path:path>',methods=['GET','POST'])
+def wardreport(path):
     global current_node
     global layeritems
 
-    steps = selnode.split("/")
+    steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
 
@@ -1995,13 +1997,13 @@ def displayareas():
     return  jsonify([python_data1, python_data2])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-@app.route('/divreport/<path:selnode>',methods=['GET','POST'])
-def divreport(selnode):
+@app.route('/divreport/<path:path>',methods=['GET','POST'])
+def divreport(path):
     global current_node
     global layeritems
 
 
-    steps = selnode.split("/")
+    steps = path.split("/")
     steps.pop()
     current_node = selected_childnode(current_node,steps[-1])
     mapfile = current_node.dir+"/"+current_node.file
@@ -2034,8 +2036,8 @@ def divreport(selnode):
         layeritems = [list(temp.columns.values), temp]
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
-@app.route('/upbut/<path:selnode>', methods=['GET','POST'])
-def upbut(selnode):
+@app.route('/upbut/<path:path>', methods=['GET','POST'])
+def upbut(path):
     global current_node
     global allelectors
     global Treepolys
@@ -2045,8 +2047,8 @@ def upbut(selnode):
 
 
 
-    flash('_______ROUTE/upbut',selnode)
-    print('_______ROUTE/upbut',selnode, current_node.value)
+    flash('_______ROUTE/upbut',path)
+    print('_______ROUTE/upbut',path, current_node.value)
     formdata = {}
 # a up button on a node has been selected on the map, so the parent map must be displayed with new up/down options
 # the selected node has to be found from the selected button URL
@@ -2268,7 +2270,7 @@ def postcode():
     flash('_______ROUTE/postcode')
 
     pthref = current_node.dir+"/"+current_node.file
-    mapfile = url_for('downbut',selnode=pathref)
+    mapfile = url_for('downbut',path=pathref)
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
         postcodeentry = str(postcodeentry).replace(" ","")
