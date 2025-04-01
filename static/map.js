@@ -203,13 +203,13 @@ var showMore = function (msg,area, type) {
 
   var layerUpdate = function (path) {
     // Send a message to the parent
-        var filename = path.split('/').pop().replace("DATA.html","DATA.csv");
+        var filename = path.split('/').pop().replace("-DATA.html","-DATA.csv");
         alert(filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
         console.log(filename);
-        var htmlpath = path.replace("DATA.csv","PRINT.html");
+        var htmlpath = path.replace("-DATA.csv","-PRINT.html");
         getVIData(htmlpath);
         window.parent.postMessage("Refreshing summary data set ", '*');
         };

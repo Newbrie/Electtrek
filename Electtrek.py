@@ -96,12 +96,9 @@ def getlayeritems(nodelist):
         dfy.loc[i,'No']= x.tagno
         for party in x.VI:
             dfy.loc[i,party] = x.VI[party]
-        if x.level < 6:
-            dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
-            dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/downbut/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
-        else:
-            dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
-            dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/map/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
+
+        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
         i = i + 1
 
     return [list(dfy.columns.values),dfy]
@@ -1255,6 +1252,30 @@ def downbut(selnode):
     mapfile =current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
 
+@app.route('/transfer/<path:path>', methods=['GET','POST'])
+def transfer(path):
+    global MapRoot
+    global current_node
+    global allelectors
+    global Treepolys
+    global Featurelayers
+    global environment
+    global levels
+    global Con_Results_data
+    global Ward_Results_data
+    global layeritems
+
+    formdata = {}
+# transfering to another any other node with siblings listed below
+
+    path = path.replace("/STREETS","").replace("/WALKS","")
+    current_node = MapRoot.ping_node(path,current_node.centroid)
+    mapfile = current_node.dir +"/"+ current_node.file
+    layeritems = getlayeritems(current_node.parent.children)
+
+    return   redirect(url_for('map',path=mapfile))
+
+
 @app.route('/downPDbut/<path:selnode>', methods=['GET','POST'])
 def downPDbut(selnode):
     global Treepolys
@@ -1358,8 +1379,9 @@ def downPDbut(selnode):
             pathval = pathval.replace("/STREETS","").replace("/WALKS","").replace("-PRINT.html","")
             Lat = inDatadf['Lat'][0]
             Long = inDatadf['Long'][0]
-            print("____pathval param:",pathval, Long,Lat)
-            street_node = MapRoot.ping_node(pathval, roid)
+            roid = Point(Long,Lat)
+            print("____pathval param:",pathval,Long,Lat)
+            street_node = MapRoot.ping_node(pathval,roid)
             if street_node:
                 for index,entry in inDatadf.iterrows():
                     street_node.updateVI(entry['VI'])
@@ -1404,8 +1426,8 @@ def STupdate(selnode):
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
     steps = selnode.split("/")
-    leaves = steps.pop().split("-")
-    current_node = selected_childnode(current_node,leaves[1])
+    leaves = steps.pop()
+    current_node = selected_childnode(current_node,leaves.split("-").pop())
     print(f"Selected selnode: {selnode} leaves: {leaves}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
