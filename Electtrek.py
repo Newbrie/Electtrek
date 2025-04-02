@@ -1481,12 +1481,13 @@ def STupdate(path):
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
                 changefields = pd.DataFrame(columns=['PD','ENOP','ElectorName','VI','Notes','cdate'])
                 i = 0
+                print("______items in html upload:",len(VIdata))
                 for item in VIdata["viData"]:  # Loop through each elector entry
                     electID = item.get("electorID","").strip()
                     ElectorName = item.get("ElectorName","").strip()
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
-                    print("____Received electIDtriple",electID,"xxx")
+                    print("VIdata item:",item)  # Print each elector entry to see if duplicates exist
 
                     if not electID:  # Skip if electorID is missing
                         print("Skipping entry with missing electorID")
@@ -1508,7 +1509,6 @@ def STupdate(path):
                         if Notes_value:
                             PDelectors.loc[selected.index, "Notes"] = Notes_value
                             changefields.loc[i,'Notes'] = Notes_value
-
                             print(f"Updated elector {electID} with VI = {VI_value} and Notes = {Notes_value}")
                             print("ElectorVI", PDelectors.loc[selected.index, "ENOP"], PDelectors.loc[selected.index, "VI"])
 
@@ -1522,6 +1522,7 @@ def STupdate(path):
                     i = i+1
 
                 changefile = path2+"/"+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html",fileending.replace(".html",".csv"))
+                changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName', 'VI', 'Notes'])
                 changefields.to_csv(changefile, sep='\t', encoding='utf-8', index=False)
                 print("Success: changed fields saved to ", changefields)
             else:
