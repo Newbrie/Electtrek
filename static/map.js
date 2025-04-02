@@ -163,9 +163,9 @@ var showMore = function (msg,area, type) {
       downloadLink.click();
   };
 
-  function export_table_to_csv(rows, filename) {
+  function export_table_to_csv(html, filename) {
     var csv = [];
-//    var rows = html.querySelectorAll("table tr");
+    var rows = document.querySelectorAll("table tr");
     var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
 
     csv.push(headcols.join(",")); // ✅ Add header row
@@ -201,7 +201,7 @@ var showMore = function (msg,area, type) {
     console.log("CSV Array Inside the Function:", csv);
 
     if (csv.length > 1) {
-        download_csv(csv.join("\n"), filename);
+        download_csv(csv.join("\n"), filename.split("/").pop());
     } else {
         alert("No data entered to save!");
     }
@@ -211,9 +211,9 @@ var showMore = function (msg,area, type) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("-SDATA.html","-SDATA.csv").replace("-WDATA.html","-WDATA.csv");
         alert(path+"*"+filename);
-        var rows = document.querySelector("#canvass-table").outerHTML;
-        alert("rows"+rows);
-        export_table_to_csv(rows, filename);
+        var html = document.querySelector("#canvass-table").outerHTML;
+        alert("html"+html);
+        export_table_to_csv(html, filename);
         console.log(filename);
         var htmlpath = path.replace("-SDATA.csv","-PRINT.html").replace("-WDATA.csv","-PRINT.html");
         getVIData(htmlpath);
