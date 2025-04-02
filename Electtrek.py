@@ -1386,7 +1386,7 @@ def downPDbut(path):
             os.remove(path2+indatamerge)
         if os.path.exists(path2+merge):
             os.remove(path2+merge)
-        all_files = glob.glob(f'{path}/*-DATA.csv')
+        all_files = glob.glob(f'{path}/*DATA.csv')
         print("all files",all_files)
         full_revamped = []
 #upload street and walk VI and Notes saved updates
@@ -1444,9 +1444,9 @@ def STupdate(path):
 #    steps = path.split("/")
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
-    datafileending = "-SDATA.html"
+    fileending = "-SDATA.html"
     if path.find("/STREETS") < 0:
-        datafileending = "-WDATA.html"
+        fileending = "-WDATA.html"
 
     path = path.replace("/STREETS","").replace("/WALKS","")
     current_node = MapRoot.ping_node(path,current_node.centroid)
@@ -1521,9 +1521,9 @@ def STupdate(path):
                         print(f"Warning: No match found for ENOP = {electID}")
                     i = i+1
 
-                changefile = path2+"/"+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html","-DATA.csv")
+                changefile = path2+"/"+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html",fileending.replace(".html",".csv"))
                 changefields.to_csv(changefile, sep='\t', encoding='utf-8', index=False)
-                print("Success: changed fields saved to ", changefile)
+                print("Success: changed fields saved to ", changefields)
             else:
                 print("Error: Incorrect JSON format")
 
@@ -1613,7 +1613,7 @@ def STupdate(path):
     target = current_node.locmappath("")
     results_filename = walk_name+"-PRINT.html"
     mapfile = street_node.dir+"/"+street_node.file
-    datafile = street_node.dir+"/"+walk_name+datafileending
+    datafile = street_node.dir+"/"+walk_name+fileending
 
 
     context = {

@@ -210,11 +210,9 @@ var showMore = function (msg,area, type) {
   var layerUpdate = function (path) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("-SDATA.html","-SDATA.csv").replace("-WDATA.html","-WDATA.csv");
-        alert(path+"*"+filename);
         var html = document.querySelector("#canvass-table").outerHTML;
-        alert("html"+html);
-        export_table_to_csv(html, filename);
-        console.log(filename);
+//         export_table_to_csv(html, filename);
+//        console.log(filename);
         var htmlpath = path.replace("-SDATA.csv","-PRINT.html").replace("-WDATA.csv","-PRINT.html");
         getVIData(htmlpath);
         window.parent.postMessage("Refreshing summary data set ", '*');
