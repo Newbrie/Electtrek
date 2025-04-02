@@ -165,7 +165,7 @@ var showMore = function (msg,area, type) {
 
   function export_table_to_csv(html, filename) {
     var csv = [];
-    var rows = document.querySelectorAll("table tr");
+    var rows = html.querySelectorAll("table tr");
     var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
 
     csv.push(headcols.join(",")); // ✅ Add header row
@@ -190,7 +190,6 @@ var showMore = function (msg,area, type) {
 
             if (!seen.has(rowString) && (vi !== "" || notes !== "")) {
                 seen.add(rowString); // ✅ Mark row as added
-                alert("modified row for export:"+seen+"|"+rowString+"|"+vi+"|"+notes)
                 csv.push(rowString);
             } else {
                 console.log(`Skipped duplicate or empty row ${i}:`, rowString);
@@ -210,13 +209,13 @@ var showMore = function (msg,area, type) {
 
   var layerUpdate = function (path) {
     // Send a message to the parent
-        var filename = path.split('/').pop().replace("-DATA.html","-DATA.csv");
+        var filename = path.split('/').pop().replace("-SDATA.html","-SDATA.csv").replace("-WDATA.html","-WDATA.csv");
         alert(path+"*"+filename);
         var html = document.querySelector("#canvass-table").outerHTML;
         alert("html"+html);
         export_table_to_csv(html, filename);
         console.log(filename);
-        var htmlpath = path.replace("-DATA.csv","-PRINT.html");
+        var htmlpath = path.replace("-SDATA.csv","-PRINT.html").replace("-WDATA.csv","-PRINT.html");
         getVIData(htmlpath);
         window.parent.postMessage("Refreshing summary data set ", '*');
         };
