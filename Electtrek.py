@@ -94,7 +94,9 @@ def getlayeritems(nodelist):
     for x in nodelist:
 
         dfy.loc[i,'No']= x.tagno
-        for party in x.VI:
+        options = x.VI
+        print("___options:",options)
+        for party in options:
             dfy.loc[i,party] = x.VI[party]
 
         dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
@@ -105,7 +107,7 @@ def getlayeritems(nodelist):
 
 
 def subending(filename, ending):
-  stem = filename.replace("-DATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
+  stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
   return stem.replace("@@@", ending)
 
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
@@ -136,14 +138,14 @@ class TreeNode:
 
     def updateVI(self,viValue):
         origin = self
-        print ("_____VIstatus:",self.value,self.type,self.VI)
         if self.type == 'street' or self.type == 'walk':
-            sumnode = self
-            for x in range(self.level+1):
+            sumnode = origin
+            for x in range(origin.level+1):
                 sumnode.VI[viValue] = sumnode.VI[viValue] + 1
                 print ("_____VInode:",sumnode.value,sumnode.level,sumnode.VI)
                 sumnode = sumnode.parent
         self = origin
+        print ("_____VIstatus:",self.value,self.type,self.VI)
         return
 
     def childrenoftype(self,electtype):
@@ -371,7 +373,7 @@ class TreeNode:
         elif etype == 'polling district':
             child_node.file = child_node.value+"-MAP.html"
             party = 'O'
-        elif etype == 'street' or etype == 'walk/street':
+        elif etype == 'street':
             child_node.dir = self.dir+"/STREETS"
             child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
             party = 'O'
@@ -454,6 +456,11 @@ class TreeNode:
     def ping_node(self, path, roid):
         global Treepolys
         global levels
+
+        etype = 'walk' # in case we need to create orphan nodes - default
+        if path.find("-WDATA.html") < 0:
+            etype = 'street'
+
         path = path.replace("/STREETS","").replace("/WALKS","").replace(".html","").replace(".HTML","")
         path = subending(path, "")
         steps = path.split("/")
@@ -471,7 +478,7 @@ class TreeNode:
             if next in nameoptions:
                 for chip in [x for x in node.children if x.value == next]:
                     node = chip
-                    print("____ EXISTNG NODE FOUND  ",levels[node.level],node.value,node.file)
+                    print("____ EXISTNG NODE FOUND  ",node.type,node.value,node.file)
                     break
             else:
                 if node.level < 5:
@@ -485,17 +492,20 @@ class TreeNode:
                         print ("________child of",node.value,node.level)
                         roid = limb.geometry.centroid
                         if newname == next:
+                            mtype = levels[node.level]
+                            if mtype == 'ward/division':
+                                mtype = 'ward'
                             possnode = TreeNode(next,abs(hash(next)), roid)
-                            node.add_Tchild(possnode,levels[node.level])
+                            node.add_Tchild(possnode,mtype)
                             node = possnode
-                            print("____ NEW MAP NODE CREATED  ",levels[node.level],node.value,node.file)
+                            print("____ NEW MAP NODE CREATED  ",mtype,node.value,node.file)
 
                             break
                 else:
                     newdatanode = TreeNode(next,abs(hash(next)),roid)
-                    node.add_Tchild(newdatanode,levels[node.level+1])
+                    node.add_Tchild(newdatanode,etype)
                     node = newdatanode
-                    print("____ DATA ORPHAN CREATED  ",levels[node.level],node.value,node.file)
+                    print("____ DATA ORPHAN CREATED  ",etype,node.value,node.file)
                     break
         return node
 
@@ -1201,6 +1211,10 @@ def downbut(path):
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
+    walk_street = 'street'
+    if path.find("/STREETS") < 0:
+        walk_street = 'walk'
+
     path = path.replace("/STREETS","").replace("/WALKS","")
     ward_div = path.split(" ").pop()
     steps = path.split("/")
@@ -1211,13 +1225,14 @@ def downbut(path):
     if last.find(" ") > -1:
         atype = last.split(" ")[1]
     mapfile = current_node.dir+"/"+current_node.file
+    pmapfile = current_node.parent.dir+"/"+current_node.parent.file
     print("_________selected node",count,atype,ward_div,steps,current_node.value, current_node.level,current_node.file)
     if atype == 'ward/division' and len(current_node.childrenoftype(ward_div)) > 0:
-        return   redirect(url_for('map',path=mapfile))
+        atype = ward_div
     if atype == 'polling district':
-        return   redirect(url_for('map',path=mapfile))
+        return   redirect(url_for('map',path=pmapfile))
     if atype == 'walk/street':
-        return   redirect(url_for('map',path=mapfile))
+        atype = ward_div
 
 # the map under the selected node map needs to be configured
     print("_________selected node",atype,steps,current_node.value, current_node.level,current_node.file)
@@ -1275,7 +1290,7 @@ def transfer(path):
     mapfile = current_node.dir +"/"+ current_node.file
     if current_node.level < 4:
         redirect(url_for('downbut',path=mapfile))
-    layeritems = getlayeritems(current_node.children)
+    layeritems = getlayeritems(current_node.parent.children)
 
     return   redirect(url_for('map',path=mapfile))
 
@@ -1389,6 +1404,7 @@ def downPDbut(path):
                 for index,entry in inDatadf.iterrows():
                     street_node.updateVI(entry['VI'])
                     print("line VI update:",street_node.value,street_node.VI, entry['VI'])
+                print("file VI update:",street_node.value,street_node.VI, entry['VI'])
             else:
                 print("______No StreetNode found for this update:",nodeval)
 
@@ -1428,6 +1444,10 @@ def STupdate(path):
 #    steps = path.split("/")
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
+    datafileending = "-SDATA.html"
+    if path.find("/STREETS") < 0:
+        datafileending = "-WDATA.html"
+
     path = path.replace("/STREETS","").replace("/WALKS","")
     current_node = MapRoot.ping_node(path,current_node.centroid)
 
@@ -1593,7 +1613,7 @@ def STupdate(path):
     target = current_node.locmappath("")
     results_filename = walk_name+"-PRINT.html"
     mapfile = street_node.dir+"/"+street_node.file
-    datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+    datafile = street_node.dir+"/"+walk_name+datafileending
 
 
     context = {
@@ -1737,7 +1757,7 @@ def PDshowST(path):
 #                  electorwalks['ENOP'] =  electorwalks['PD']+"-"+electorwalks['ENO']+ electorwalks['Suffix']*0.1
                   target = street_node.locmappath("")
                   results_filename = walk_name+"-PRINT.html"
-                  datafile = street_node.dir+"/"+walk_name+"-DATA.html"
+                  datafile = street_node.dir+"/"+walk_name+"-SDATA.html"
                   mapfile = street_node.dir+"/"+street_node.file
                   electorwalks = electorwalks.fillna("")
 
@@ -1910,7 +1930,7 @@ def PDshowWK(path):
                   target = walk_node.locmappath("")
                   results_filename = walk_name+"-PRINT.html"
 
-                  datafile = walk_node.dir+"/"+walk_name+"-DATA.html"
+                  datafile = walk_node.dir+"/"+walk_name+"-WDATA.html"
                   mapfile = walk_node.dir+"/"+walk_node.file
 
                   context = {

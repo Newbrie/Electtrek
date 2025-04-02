@@ -178,21 +178,28 @@ var showMore = function (msg,area, type) {
         if (cols.length > 8) { // ✅ Ensure sufficient columns exist
             var pick = [0, 1, 2, 7, 8]; // ✅ Select relevant columns
             for (var j of pick) {
-                row.push(cols[j].innerText.trim().replaceAll(",", ""));
+                let cellText = cols[j].innerText.trim().replaceAll(",", "").toLowerCase(); // ✅ Normalize text
+                row.push(cellText);
             }
 
-            let rowString = row.join(","); // Convert row to string for Set tracking
+            let rowString = row.join(",").replace(/\s+/g, " "); // ✅ Remove extra spaces
 
-            // ✅ Avoid duplicates & ensure "VI" or "Notes" is filled
-            if (!seen.has(rowString) && (row[3] || row[4])) {
+            // ✅ Ensure "VI" or "Notes" is filled properly
+            let vi = row[3] ? row[3].trim() : "";
+            let notes = row[4] ? row[4].trim() : "";
+
+            if (!seen.has(rowString) && (vi !== "" || notes !== "")) {
                 seen.add(rowString); // ✅ Mark row as added
                 csv.push(rowString);
+            } else {
+                console.log(`Skipped duplicate or empty row ${i}:`, rowString);
             }
         }
     }
 
     console.log("CSV Output:\n", csv.join("\n")); // ✅ Debug CSV output
     console.log("CSV Array Inside the Function:", csv);
+
     if (csv.length > 1) {
         download_csv(csv.join("\n"), filename);
     } else {
