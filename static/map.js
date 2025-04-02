@@ -173,7 +173,6 @@ var showMore = function (msg,area, type) {
     let seen = new Set(); // ✅ Track unique rows
 
     for (var i = 1; i < rows.length; i++) { // ✅ Start from row 1 (skip header)
-        alert("Rows in the table:"+rows.length)
         var row = [], cols = rows[i].querySelectorAll("td");
 
         if (cols.length > 8) { // ✅ Ensure sufficient columns exist
@@ -191,6 +190,7 @@ var showMore = function (msg,area, type) {
 
             if (!seen.has(rowString) && (vi !== "" || notes !== "")) {
                 seen.add(rowString); // ✅ Mark row as added
+                alert("modified row for export:"+seen+"|"+rowString+"|"+vi+"|"+notes)
                 csv.push(rowString);
             } else {
                 console.log(`Skipped duplicate or empty row ${i}:`, rowString);
