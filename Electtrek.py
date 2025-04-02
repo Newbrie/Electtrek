@@ -953,7 +953,19 @@ def selected_childnode(cnode,val):
             return child
     return cnode
 
+def get_versioned_filename(base_path, base_name, extension):
+    """Generate a versioned filename to prevent overwriting existing files."""
+    version = 1
+    new_filename = f"{base_name}_v{version}{extension}"
+    new_filepath = os.path.join(base_path, new_filename)
 
+    # Increment version number if file already exists
+    while os.path.exists(new_filepath):
+        version += 1
+        new_filename = f"{base_name}_v{version}{extension}"
+        new_filepath = os.path.join(base_path, new_filename)
+
+    return new_filepath
 
 # create and configure the app
 app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
@@ -1481,7 +1493,7 @@ def STupdate(path):
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
                 changefields = pd.DataFrame(columns=['PD','ENOP','ElectorName','VI','Notes','cdate'])
                 i = 0
-                print("______items in html upload:",len(VIdata))
+
                 for item in VIdata["viData"]:  # Loop through each elector entry
                     electID = item.get("electorID","").strip()
                     ElectorName = item.get("ElectorName","").strip()
@@ -1523,8 +1535,17 @@ def STupdate(path):
 
                 changefile = path2+"/"+current_node.parent.parent.parent.value+"-INDATA/"+current_node.file.replace("-PRINT.html",fileending.replace(".html",".csv"))
                 changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName', 'VI', 'Notes'])
-                changefields.to_csv(changefile, sep='\t', encoding='utf-8', index=False)
-                print("Success: changed fields saved to ", changefields)
+# Example Usage
+# base_path = "/your/output/directory"
+# base_name = "changefile"
+# extension = ".csv"
+
+                versioned_filename = get_versioned_filename(base_path, base_name, extension)
+
+                # Save DataFrame to the new file
+                changefields.to_csv(versioned_filename, sep='\t', encoding='utf-8', index=False)
+
+                print(f"✅ CSV saved as: {versioned_filename}")
             else:
                 print("Error: Incorrect JSON format")
 

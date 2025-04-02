@@ -13,10 +13,10 @@ body {
 		#main {
 			break-before: always;
 			position: fixed;
-/*			top: 110px; */
+/			top: 10px;
 			right : 240px;
 			left: 20px;
-/*			bottom: 110px; /* Set this to the height of the footer */
+			bottom: 10px; /* Set this to the height of the footer */
 			overflow: auto;
 			background: white;
 		}
