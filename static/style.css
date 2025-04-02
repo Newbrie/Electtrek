@@ -13,7 +13,7 @@ body {
 		#main {
 			break-before: always;
 			position: fixed;
-/			top: 10px;
+			top: 10px;
 			right : 240px;
 			left: 20px;
 			bottom: 10px; /* Set this to the height of the footer */
