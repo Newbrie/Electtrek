@@ -163,9 +163,9 @@ var showMore = function (msg,area, type) {
       downloadLink.click();
   };
 
-  function export_table_to_csv(html, filename) {
+  function export_table_to_csv(rows, filename) {
     var csv = [];
-    var rows = html.querySelectorAll("table tr");
+//    var rows = html.querySelectorAll("table tr");
     var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
 
     csv.push(headcols.join(",")); // ✅ Add header row
@@ -211,9 +211,9 @@ var showMore = function (msg,area, type) {
     // Send a message to the parent
         var filename = path.split('/').pop().replace("-SDATA.html","-SDATA.csv").replace("-WDATA.html","-WDATA.csv");
         alert(path+"*"+filename);
-        var html = document.querySelector("#canvass-table").outerHTML;
-        alert("html"+html);
-        export_table_to_csv(html, filename);
+        var rows = document.querySelector("#canvass-table").outerHTML;
+        alert("rows"+rows);
+        export_table_to_csv(rows, filename);
         console.log(filename);
         var htmlpath = path.replace("-SDATA.csv","-PRINT.html").replace("-WDATA.csv","-PRINT.html");
         getVIData(htmlpath);
