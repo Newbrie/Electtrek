@@ -35,17 +35,25 @@ var showMore = function (msg,area, type) {
 
     let data = [];
 
-    rows.forEach(row => {
-        let electorID = row.cells[1]?.innerText.trim(); // Check if cell exists
-        let ElectorName = row.cells[2]?.innerText.trim();
+    rows.forEach((row, index) => {
+        let electorID = row.cells[1]?.innerText.trim() || "N/A"; // Fallback to "N/A" if missing
+        let ElectorName = row.cells[2]?.innerText.trim() || "N/A";
 
-        let viInput = row.cells[7]?.querySelector("input"); // Get input element in VI column
-        let notesInput = row.cells[8]?.querySelector("input"); // Get input element in Notes column
+        let viCell = row.cells[7]; // VI input is inside this cell
+        let notesCell = row.cells[8]; // Notes input is inside this cell
+
+        let viInput = viCell ? viCell.querySelector("input") : null;
+        let notesInput = notesCell ? notesCell.querySelector("input") : null;
 
         let viValue = viInput ? (viInput.value.trim() || viInput.placeholder.trim()) : "";
         let notesValue = notesInput ? (notesInput.value.trim() || notesInput.placeholder.trim()) : "";
 
-        // Only add rows where at least one input has data
+        console.log(`Row ${index + 1}:`);
+        console.log("ElectorID:", electorID);
+        console.log("ElectorName:", ElectorName);
+        console.log("VI Value:", viValue);
+        console.log("Notes Value:", notesValue);
+
         if (viValue || notesValue) {
             data.push({
                 electorID: electorID,
@@ -54,9 +62,10 @@ var showMore = function (msg,area, type) {
                 notesResponse: notesValue
             });
         }
-      });
+    });
 
-      console.log(data);
+    console.log("Final Data Array:", data);
+
       // Send data to server
 
       fetch(path, {  // Use full URL to ensure correct routing
