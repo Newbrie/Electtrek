@@ -29,29 +29,35 @@ var showMore = function (msg,area, type) {
 
 
   async function getVIData(path) {
-      let table = document.getElementById("canvass-table");
-      let inputs = table.querySelectorAll("tr"); // Select all VI fields
-      let data = [];
-      inputs.forEach(input => {
+    let table = document.getElementById("canvass-table");
+    let rows = table.querySelectorAll("tbody tr"); // Select all data rows (not header)
 
-          let row = input.closest("tr"); // Get the closest row
-          alert(input+"|"+row );
-          let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
-          let ElectorName = row.cells[2].innerText.trim(); // Get input value
-          let viValue = row.cells[7].innerText.trim(); // Get input value
-          let notesValue = row.cells[8].innerText.trim(); // Get input value
+    let data = [];
 
-          if (viValue) {
-          data.push({
-              electorID: electorID,
-              ElectorName: ElectorName,
-              viResponse: viValue,
-              notesResponse: notesValue
+    rows.forEach(row => {
+        let electorID = row.cells[1]?.innerText.trim(); // Check if cell exists
+        let ElectorName = row.cells[2]?.innerText.trim();
+
+        let viInput = row.cells[7]?.querySelector("input"); // Select input in VI column
+        let notesInput = row.cells[8]?.querySelector("input"); // Select input in Notes column
+
+        let viValue = viInput ? viInput.value.trim() : "";
+        let notesValue = notesInput ? notesInput.value.trim() : "";
+
+        // Debugging alert
+        console.log(`ElectorID: ${electorID}, VI: ${viValue}, Notes: ${notesValue}`);
+
+        if (viValue) {
+            data.push({
+                electorID: electorID,
+                ElectorName: ElectorName,
+                viResponse: viValue,
+                notesResponse: notesValue
             });
-          };
-      });
+        }
+    });
 
-      console.log("Collected VI Data:", data);
+    console.log(data);
 
       // Send data to server
 
