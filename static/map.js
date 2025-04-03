@@ -29,8 +29,9 @@ var showMore = function (msg,area, type) {
 
 
   async function getVIData(path) {
+
     let table = document.getElementById("canvass-table");
-    let rows = table.querySelectorAll("tbody tr"); // Select all data rows (not header)
+    let rows = table.querySelectorAll("tbody tr"); // Select all data rows
 
     let data = [];
 
@@ -38,16 +39,14 @@ var showMore = function (msg,area, type) {
         let electorID = row.cells[1]?.innerText.trim(); // Check if cell exists
         let ElectorName = row.cells[2]?.innerText.trim();
 
-        let viInput = row.cells[7]?.querySelector("input"); // Select input in VI column
-        let notesInput = row.cells[8]?.querySelector("input"); // Select input in Notes column
+        let viInput = row.cells[7]?.querySelector("input"); // Get input element in VI column
+        let notesInput = row.cells[8]?.querySelector("input"); // Get input element in Notes column
 
-        let viValue = viInput ? viInput.value.trim() : "";
-        let notesValue = notesInput ? notesInput.value.trim() : "";
+        let viValue = viInput ? (viInput.value.trim() || viInput.placeholder.trim()) : "";
+        let notesValue = notesInput ? (notesInput.value.trim() || notesInput.placeholder.trim()) : "";
 
-        // Debugging alert
-        console.log(`ElectorID: ${electorID}, VI: ${viValue}, Notes: ${notesValue}`);
-
-        if (viValue) {
+        // Only add rows where at least one input has data
+        if (viValue || notesValue) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
@@ -55,10 +54,9 @@ var showMore = function (msg,area, type) {
                 notesResponse: notesValue
             });
         }
-    });
+      });
 
-    console.log(data);
-
+      console.log(data);
       // Send data to server
 
       fetch(path, {  // Use full URL to ensure correct routing
