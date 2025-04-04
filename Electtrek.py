@@ -1021,6 +1021,7 @@ Con_Results_data['NAME'] = normalname(Con_Results_data['Constituency name'])
 Con_Results_data['FIRST'] = normalname(Con_Results_data['First party'])
 
 Ward_Results_data = pd.read_excel(config.workdirectories['resultdir']+'/'+'LEH-Candidates-2023.xlsx')
+Ward_Results_data = Ward_Results_data.query(['WINNER' == 1])
 Ward_Results_data['NAME'] = normalname(Ward_Results_data['WARDNAME'])
 Ward_Results_data['FIRST'] = normalname(Ward_Results_data['PARTYNAME'])
 
