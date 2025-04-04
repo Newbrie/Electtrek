@@ -239,12 +239,18 @@ var showMore = function (msg,area, type) {
     }
     };
 
-  function inputNS(NS) {
-    let x = NS.value;
-    NS.style.color = 'lightgray';
-    NS.value = x;
+    function inputNS(NS) {
+        if (!NS) return;  // Ensure NS is not null or undefined
 
-    };
+        let x = NS.value.trim(); // Trim whitespace
+        NS.style.color = 'lightgray'; // Apply styling
+
+        // ✅ Ensure value is updated and retained
+        NS.value = x;
+
+        console.log("NS Input value Updated:", x); // Debugging log
+        console.log("NS  Updated2:", NS); //
+    }
 
 
   //document.querySelector("button.SAVE").addEventListener("click", function () {

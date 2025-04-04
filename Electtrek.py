@@ -1492,7 +1492,7 @@ def STupdate(path):
             path2 = headtail[0]
 
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
-                changefields = pd.DataFrame(columns=['PD','ENOP','ElectorName','VI','Notes','cdate'])
+                changefields = pd.DataFrame(columns=['ENOP','ElectorName','VI','Notes','cdate'])
                 i = 0
 
                 for item in VIdata["viData"]:  # Loop through each elector entry
