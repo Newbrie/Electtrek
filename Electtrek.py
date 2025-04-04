@@ -155,14 +155,14 @@ class TreeNode:
 
     def updatePTarget(self):
         global levels
-            if self.type == 'ward' or self.type == 'division':
-                self.target = 0
-                i = 1
-                for x in self.childrenoftype(levels[self.level+1]):
-                    self.turnout = (self.turnout+ x.turnout)/i
-                    self.electorate = self.electorate + x.electorate
-                    self.target = self.target + x.target
-                    print ("_____PTarget:",self.target)
+        if self.type == 'ward' or self.type == 'division':
+            self.target = 0
+            i = 1
+            for x in self.childrenoftype(levels[self.level+1]):
+                self.turnout = (self.turnout+ x.turnout)/i
+                self.electorate = self.electorate + x.electorate
+                self.target = self.target + x.target
+                print ("_____PTarget:",self.target)
 
         return
 
@@ -371,7 +371,12 @@ class TreeNode:
         child_node.level = child_node.parent.level + 1
         child_node.dir = self.dir+"/"+child_node.value
         child_node.tagno = len([ x for x in self.children if x.type == etype])
-        party = "O"
+        sname = child_node.value
+        turnout = 100
+        electorate = 4000
+        target = 1000
+        party = 'O'
+
         if etype == 'constituency':
             sname = child_node.value
             if sname not in Con_Results_data['NAME'].to_list():
@@ -380,11 +385,6 @@ class TreeNode:
                 selected = Con_Results_data.query('NAME == @sname')
                 party = selected['FIRST'].values[0]
         elif etype == 'ward':
-            sname = child_node.value
-            turnout = 100
-            electorate = 4000
-            target = 1000
-            party = 'O'
             if sname in Ward_Results_data['NAME'].to_list():
                 selected = Ward_Results_data.query('NAME == @sname')
                 turnout = float('%.6f'%(selected['TURNOUT']))
