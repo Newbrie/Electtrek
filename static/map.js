@@ -242,7 +242,7 @@ var showMore = function (msg,area, type) {
     function inputNS(NS) {
         if (!NS) return;  // Ensure NS is not null or undefined
 
-        let x = NS.value.trim(); // Trim whitespace
+        let x = NS.value.toUpperCase(); // Trim whitespace
         NS.style.color = 'lightgray'; // Apply styling
 
         // ✅ Ensure value is updated and retained
