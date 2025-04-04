@@ -235,7 +235,7 @@ var showMore = function (msg,area, type) {
     else {
       VI.style.color = 'darkgray';
   //    VI.innerHTML = x;
-      VI.parentElement.parentElement.innerText = "??";
+      VI.value = "??";
     }
     };
 
@@ -243,7 +243,6 @@ var showMore = function (msg,area, type) {
     let x = NS.value;
     NS.style.color = 'lightgray';
     NS.value = x;
-    NS.parentElement.parentElement.innerText = x;
 
     };
 

@@ -2005,8 +2005,8 @@ def wardreport(path):
 
         layeritems = getlayeritems(group_node.create_map_branch('ward'))
 
-        for item in group_node.childrenoftype('ward'):
-            if item.value not in alreadylisted:
+        for temp in group_node.childrenoftype('ward'):
+            if temp.value not in alreadylisted:
                 alreadylisted.append(item.value)
                 temp.loc[i,'No']= i
                 temp.loc[i,'Area']=  item.value
