@@ -242,7 +242,7 @@ var showMore = function (msg,area, type) {
   function inputNS(NS) {
     let x = NS.value;
     NS.style.color = 'lightgray';
-    NS.innerHTML = x;
+    NS.value = x;
     NS.parentElement.parentElement.innerText = x;
 
     };
