@@ -31,11 +31,12 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
-        let inputs = table.querySelectorAll("tbody tr"); // Select all VI fields
+        let inputs = table.querySelectorAll("tr"); // Select all VI fields
         let data = [];
         inputs.forEach(input => {
 
             let row = input.closest("tr"); // Get the closest row
+            alert(input+"|"+row );
             let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
             let ElectorName = row.cells[2].innerText.trim(); // Get input value
             let viValue = row.cells[7].innerText.trim(); // Get input value
@@ -52,7 +53,6 @@ var showMore = function (msg,area, type) {
         });
 
         console.log("Collected VI Data:", data);
-
 
       // Send data to server
 
@@ -230,18 +230,18 @@ var showMore = function (msg,area, type) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
       VI.style.color = 'lightgray';
   //    VI.innerHTML = x;
-      }
+        }
     else {
-      VI.style.color = 'black';
+      VI.style.color = 'darkgray';
   //    VI.innerHTML = x;
-      VI.value = "??";
+      VI.parentElement.parentElement.innerText = "??";
     }
     };
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
     NS.style.color = 'lightgray';
-    NS.value = x;
+    NS.innerHTML = x;
 
     };
 
