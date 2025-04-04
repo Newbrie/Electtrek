@@ -232,7 +232,7 @@ var showMore = function (msg,area, type) {
   //    VI.innerHTML = x;
       }
     else {
-      VI.style.color = 'darkgray';
+      VI.style.color = 'black';
   //    VI.innerHTML = x;
       VI.value = "??";
     }
