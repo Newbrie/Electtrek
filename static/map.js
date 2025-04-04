@@ -53,7 +53,7 @@ var showMore = function (msg,area, type) {
         });
 
         console.log("Collected VI Data:", data);
-      };
+
 
       // Send data to server
 
