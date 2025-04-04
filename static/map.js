@@ -31,28 +31,51 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
-    let rows = table.querySelectorAll("tbody tr"); // Select all data rows
+
+    if (!table) {
+        console.error("❌ Table not found!");
+    } else {
+        console.log("✅ Table found.");
+    }
+
+    let rows = table.querySelectorAll("tbody tr"); // Select only data rows
+
+    if (rows.length === 0) {
+        console.error("❌ No rows found in the table!");
+    } else {
+        console.log(`✅ Found ${rows.length} rows.`);
+    }
 
     let data = [];
 
     rows.forEach((row, index) => {
-        let electorID = row.cells[1]?.innerText.trim() || "N/A"; // Fallback to "N/A" if missing
+        console.log(`🔹 Checking Row ${index + 1}`);
+
+        let electorID = row.cells[1]?.innerText.trim() || "N/A";
         let ElectorName = row.cells[2]?.innerText.trim() || "N/A";
 
-        let viCell = row.cells[7]; // VI input is inside this cell
-        let notesCell = row.cells[8]; // Notes input is inside this cell
+        let viCell = row.cells[7]; // VI input column
+        let notesCell = row.cells[8]; // Notes input column
 
-        let viInput = viCell ? viCell.querySelector("input") : null;
-        let notesInput = notesCell ? notesCell.querySelector("input") : null;
+        if (!viCell || !notesCell) {
+            console.warn(`⚠️ Row ${index + 1}: Missing VI or Notes column.`);
+            return; // Skip this row
+        }
+
+        let viInput = viCell.querySelector("input");
+        let notesInput = notesCell.querySelector("input");
+
+        if (!viInput && !notesInput) {
+            console.warn(`⚠️ Row ${index + 1}: No input fields found.`);
+            return; // Skip this row
+        }
+
+        console.log("🟢 Inputs Found:", viInput, notesInput);
 
         let viValue = viInput ? (viInput.value.trim() || viInput.placeholder.trim()) : "";
         let notesValue = notesInput ? (notesInput.value.trim() || notesInput.placeholder.trim()) : "";
 
-        console.log(`Row ${index + 1}:`);
-        console.log("ElectorID:", electorID);
-        console.log("ElectorName:", ElectorName);
-        console.log("VI Value:", viValue);
-        console.log("Notes Value:", notesValue);
+        console.log(`📝 Extracted Data - VI: '${viValue}', Notes: '${notesValue}'`);
 
         if (viValue || notesValue) {
             data.push({
@@ -64,7 +87,7 @@ var showMore = function (msg,area, type) {
         }
     });
 
-    console.log("Final Data Array:", data);
+    console.log("🚀 Final Data Array:", data);
 
       // Send data to server
 
