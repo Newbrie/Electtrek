@@ -31,12 +31,11 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
-        let inputs = table.querySelectorAll("tbody tr"); // Select all VI fields
+        let rows = table.querySelectorAll("tbody tr"); // Select all VI fields
         let data = [];
-        inputs.forEach(input => {
+        rows.forEach(row => {
 
-            let row = input.closest("tr"); // Get the closest row
-            alert(input+"|"+row );
+            alert(rows+"|"+row );
             let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
             let ElectorName = row.cells[2].innerText.trim(); // Get input value
             let viValue = row.cells[7].innerText.trim(); // Get input value

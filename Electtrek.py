@@ -1021,10 +1021,10 @@ Con_Results_data['NAME'] = normalname(Con_Results_data['Constituency name'])
 Con_Results_data['FIRST'] = normalname(Con_Results_data['First party'])
 
 Ward_Results_data = pd.read_excel(config.workdirectories['resultdir']+'/'+'LEH-Candidates-2023.xlsx')
-xxx = '1'
-Ward_Results_data = Ward_Results_data.query('WINNER == @xxx')
+Ward_Results_data.loc[Ward_Results_data['WINNER'] == 1]
 Ward_Results_data['NAME'] = normalname(Ward_Results_data['WARDNAME'])
 Ward_Results_data['FIRST'] = normalname(Ward_Results_data['PARTYNAME'])
+print("____Ward Results", Ward_Results_data.head())
 
 #        Con_Results_data = Con_Bound_layer.merge(Con_Results_data, how='left', on='NAME' )
 
