@@ -199,7 +199,7 @@ class TreeNode:
                 self.davail = True
                 egg = self.add_Tchild(newnode, electtype)
                 egg.file = subending(egg.file,ending)
-                /STupdate.append(egg)
+                fam_nodes.append(egg)
 
         print('______Data frame:',namepoints, fam_nodes)
         return fam_nodes

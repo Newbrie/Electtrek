@@ -31,63 +31,29 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
+        let inputs = table.querySelectorAll("tbody tr"); // Select all VI fields
+        let data = [];
+        inputs.forEach(input => {
 
-    if (!table) {
-        console.error("❌ Table not found!");
-    } else {
-        console.log("✅ Table found.");
-    }
+            let row = input.closest("tr"); // Get the closest row
+            alert(input+"|"+row );
+            let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
+            let ElectorName = row.cells[2].innerText.trim(); // Get input value
+            let viValue = row.cells[7].innerText.trim(); // Get input value
+            let notesValue = row.cells[8].innerText.trim(); // Get input value
 
-    let rows = table.querySelectorAll("tbody tr"); // Select only data rows
-
-    if (rows.length === 0) {
-        console.error("❌ No rows found in the table!");
-    } else {
-        console.log(`✅ Found ${rows.length} rows.`);
-    }
-
-    let data = [];
-
-    rows.forEach((row, index) => {
-        console.log(`🔹 Checking Row ${index + 1}`);
-
-        let electorID = row.cells[1]?.innerText.trim() || "N/A";
-        let ElectorName = row.cells[2]?.innerText.trim() || "N/A";
-
-        let viCell = row.cells[7]; // VI input column
-        let notesCell = row.cells[8]; // Notes input column
-
-        if (!viCell || !notesCell) {
-            console.warn(`⚠️ Row ${index + 1}: Missing VI or Notes column.`);
-            return; // Skip this row
-        }
-
-        let viInput = viCell.querySelector("input");
-        let notesInput = notesCell.querySelector("input");
-
-        if (!viInput && !notesInput) {
-            console.warn(`⚠️ Row ${index + 1}: No input fields found.`);
-            return; // Skip this row
-        }
-
-        console.log("🟢 Inputs Found:", viInput, notesInput);
-
-        let viValue = viInput ? (viInput.value.trim() || viInput.placeholder.trim()) : "";
-        let notesValue = notesInput ? (notesInput.value.trim() || notesInput.placeholder.trim()) : "";
-
-        console.log(`📝 Extracted Data - VI: '${viValue}', Notes: '${notesValue}'`);
-
-        if (viValue || notesValue) {
+            if (viValue) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
                 viResponse: viValue,
                 notesResponse: notesValue
-            });
-        }
-    });
+              });
+            };
+        });
 
-    console.log("🚀 Final Data Array:", data);
+        console.log("Collected VI Data:", data);
+      };
 
       // Send data to server
 
