@@ -89,6 +89,7 @@ def is_safe_url(target):
             ref_url.netloc == test_url.netloc
 
 def getlayeritems(nodelist):
+    global GOTV
     dfy = pd.DataFrame()
     i = 0
     for x in nodelist:
@@ -101,6 +102,7 @@ def getlayeritems(nodelist):
 
         dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
         dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
+        dfy.loc[i,'target'] = x.target
         i = i + 1
 
     return [list(dfy.columns.values),dfy]
@@ -135,6 +137,9 @@ class TreeNode:
         self.map = {}
         self.source = ""
         self.VI = VIC.copy()
+        self.turnout = 100
+        self.electorate = 1
+        self.target = 1
 
     def updateVI(self,viValue):
         origin = self
@@ -148,7 +153,24 @@ class TreeNode:
         print ("_____VIstatus:",self.value,self.type,self.VI)
         return
 
+    def updatePTarget(self):
+        global levels
+            if self.type == 'ward' or self.type == 'division':
+                self.target = 0
+                i = 1
+                for x in self.childrenoftype(levels[self.level+1]):
+                    self.turnout = (self.turnout+ x.turnout)/i
+                    self.electorate = self.electorate + x.electorate
+                    self.target = self.target + x.target
+                    print ("_____PTarget:",self.target)
+
+        return
+
     def childrenoftype(self,electtype):
+        if electtype == 'ward/division':
+            electype = 'ward'
+        elif electtype == 'walk/street':
+            electype = 'street'
         typechildren = [x for x in self.children if x.type == electtype]
         return typechildren
 
@@ -201,6 +223,7 @@ class TreeNode:
                 egg.file = subending(egg.file,ending)
                 fam_nodes.append(egg)
 
+        self.updatePTarget()
         print('______Data frame:',namepoints, fam_nodes)
         return fam_nodes
 
@@ -358,10 +381,15 @@ class TreeNode:
                 party = selected['FIRST'].values[0]
         elif etype == 'ward':
             sname = child_node.value
-            if sname not in Ward_Results_data['NAME'].to_list():
-                party = 'O'
-            else:
+            turnout = 100
+            electorate = 4000
+            target = 1000
+            party = 'O'
+            if sname in Ward_Results_data['NAME'].to_list():
                 selected = Ward_Results_data.query('NAME == @sname')
+                turnout = float('%.6f'%(selected['TURNOUT']))
+                electorate = int(selected['ELECT'])
+                ptarget = int(((child_node.electorate*child_node.turnout)/2+1)/GOTV)
                 party = selected['FIRST'].values[0]
         elif etype == 'nation':
             child_node.file = child_node.value+"-MAP.html"
@@ -392,6 +420,9 @@ class TreeNode:
             party = "O"
         party = VNORM[party]
         child_node.col = VCO[party]
+        child_node.turnout = turnout
+        child_node.electorate = electorate
+        child_node.target = ptarget
         print("______VNORM:", child_node.value, party, child_node.col)
 
         child_node.davail = False
@@ -991,6 +1022,8 @@ login_manager.login_message = "<h1>You really need to login!!</h1>"
 login_manager.refresh_view = "<h1>Login</h1>"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
 
+
+GOTV = 0.36
 
 Featurelayers = []
 

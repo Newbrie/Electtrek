@@ -223,7 +223,7 @@ var showMore = function (msg,area, type) {
   function inputVI(VI) {
     let x = VI.value.toUpperCase();
     const VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
-
+    VI.value = x;
     const codes = Object.keys(VID);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
@@ -233,14 +233,13 @@ var showMore = function (msg,area, type) {
     else {
       VI.style.color = 'darkgray';
   //    VI.innerHTML = x;
-      VI.parentElement.parentElement.innerText = "??";
     }
     };
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
     NS.style.color = 'lightgray';
-    NS.innerHTML = x;
+    NS.value = x;
 
     };
 
