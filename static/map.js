@@ -31,7 +31,7 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
-        let inputs = table.querySelectorAll("tr"); // Select all VI fields
+        let inputs = table.querySelectorAll("tbody tr"); // Select all VI fields
         let data = [];
         inputs.forEach(input => {
 
