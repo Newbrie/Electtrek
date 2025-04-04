@@ -230,7 +230,6 @@ var showMore = function (msg,area, type) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
       VI.style.color = 'lightgray';
   //    VI.innerHTML = x;
-      VI.parentElement.parentElement.innerText = x;
       }
     else {
       VI.style.color = 'darkgray';
@@ -239,18 +238,12 @@ var showMore = function (msg,area, type) {
     }
     };
 
-    function inputNS(NS) {
-        if (!NS) return;  // Ensure NS is not null or undefined
+  function inputNS(NS) {
+    let x = NS.value.toUpperCase();
+    NS.style.color = 'lightgray';
+    NS.value = x;
 
-        let x = NS.value.toUpperCase(); // Trim whitespace
-        NS.style.color = 'lightgray'; // Apply styling
-
-        // ✅ Ensure value is updated and retained
-        NS.value = x;
-
-        console.log("NS Input value Updated:", x); // Debugging log
-        console.log("NS  Updated2:", NS); //
-    }
+    };
 
 
   //document.querySelector("button.SAVE").addEventListener("click", function () {
