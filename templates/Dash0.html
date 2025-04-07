@@ -144,11 +144,14 @@ fetch( '/displayareas',{
         {% endfor %}
 
 			<h2>Generate Walks</h2>
+      <form id="GOTV-form" method="POST">
+        GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
+      </form>
 
-				<form id="normal-file" action="{{ url_for('login') }}" method="POST" enctype="multipart/form-data">
-					<input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/>
-					<input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/>
-					<input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
+				<form id="normal-file" method="POST" enctype="multipart/form-data">
+          FIRST: <input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/><br>
+					SECOND: <input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/><br>
+					DATE: <input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
 					<input type="file" name="importfile" placeholder= " {{ context.formdata['importfile']}} "/>
 		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
 		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
@@ -159,6 +162,14 @@ fetch( '/displayareas',{
 		  </form>
 
   <script>
+          function setGOTVForm(action){
+          if (action === 'setgotv') {
+              form.action = "{{url_for('setgotv')}}";
+              form.method = 'POST';
+              form.submit();
+
+            };
+
 			    function setActionForm(action){
 			      let form = document.getElementById("normal-file")
 			      if (action === 'normalise') {
@@ -166,7 +177,7 @@ fetch( '/displayareas',{
 			          form.method = 'POST';
 			          document.body.style.cursor = 'wait'
 			          form.submit();
-			      } else if (action === 'produce') {
+  		      } else if (action === 'produce') {
 			          form.action = "{{url_for('walks')}}";
 			          form.method = 'POST';
 			          document.body.style.cursor = 'wait'
