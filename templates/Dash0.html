@@ -163,6 +163,7 @@ fetch( '/displayareas',{
 
   <script>
           function setGOTVForm(action){
+            let form = document.getElementById("GOTV-form");
           if (action === 'setgotv') {
               form.action = "{{url_for('setgotv')}}";
               form.method = 'POST';
@@ -172,7 +173,7 @@ fetch( '/displayareas',{
           };
 
 			    function setActionForm(action){
-			      let form = document.getElementById("normal-file")
+			      let form = document.getElementById("normal-file");
 			      if (action === 'normalise') {
 			          form.action = "{{url_for('normalise')}}";
 			          form.method = 'POST';
