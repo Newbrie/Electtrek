@@ -106,7 +106,8 @@ def getlayeritems(nodelist):
         dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
         dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
         dfy.loc[i,'pop'] = x.electorate
-        dfy.loc[i,'target'] = x.target
+        dfy.loc[i,'target'] = int(((x.electorate*x.turnout)/2+1)/float(GOTV))
+
         i = i + 1
 
     return [list(dfy.columns.values),dfy]
@@ -398,7 +399,6 @@ class TreeNode:
         sname = child_node.value
         turnout = 0
         electorate = 0
-        ptarget = 0
         party = 'O'
 
         if etype == 'constituency':
@@ -406,16 +406,14 @@ class TreeNode:
                 selected = Con_Results_data.query('NAME == @sname')
                 turnout = float('%.6f'%(selected['Turnout'].values[0]))
                 electorate = int(selected['Electorate'].values[0])
-                ptarget = int(((electorate*turnout)/2+1)/GOTV)
                 party = selected['FIRST'].values[0]
         elif etype == 'ward':
             if sname in Ward_Results_data['NAME'].to_list():
                 selected = Ward_Results_data.query('NAME == @sname')
                 turnout = float('%.6f'%(selected['TURNOUT'].values[0]/100))
                 electorate = int(selected['ELECT'].values[0])
-                ptarget = int(((electorate*turnout)/2+1)/GOTV)
                 party = selected['FIRST'].values[0]
-                print ("___pTarget",electorate,turnout, GOTV,ptarget, party)
+                print ("___pTarget",electorate,turnout, party)
         elif etype == 'nation':
             child_node.file = child_node.value+"-MAP.html"
         elif etype == 'county':
@@ -440,7 +438,6 @@ class TreeNode:
         child_node.col = VCO[party]
         child_node.turnout = turnout
         child_node.electorate = electorate
-        child_node.target = ptarget
         print("______VNORM:", child_node.value, party, child_node.col)
 
         child_node.davail = False
@@ -2307,6 +2304,8 @@ def upload():
 @app.route('/setgotv', methods=['POST'])
 def setgotv():
     global GOTV
+    global current_node
+
 
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
@@ -2314,10 +2313,13 @@ def setgotv():
 
     formdata = {}
     formdata['GOTV'] =  request.form["GOTV"]
+
     GOTV = request.form["GOTV"]
     mapfile = current_node.dir+"/"+current_node.file
+    layeritems = getlayeritems(current_node.parent.childrenoftype(gettypeoflevel(current_node.level)))
 
-    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+    return render_template('candidates.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+
 
 @app.route('/normalise', methods=['POST','GET'])
 def normalise():

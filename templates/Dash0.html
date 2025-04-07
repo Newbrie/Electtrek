@@ -59,63 +59,61 @@
       var tabhead = parent.document.querySelector("div > table > thead");
       var tabbody = parent.document.querySelector("div > table > tbody");
 
+      fetch( '/displayareas',{
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+      })
+      .then(response => response.json())
+      .then(data => {
+          console.log("Data received:", data);
+
+          if (!Array.isArray(data) || data.length < 2) {
+              console.error("Invalid or incomplete data:", data);
+              return;
+          }
+
+
+          if (!tabhead || !tabbody) {
+              console.error("tabhead or tabbody not found");
+              return;
+          }
+
+          const columnHeaders = data[0];  // First element contains ordered column names
+          const rows = data[1];  // Second element contains data rows
+
+          // Clear previous content
+          tabhead.innerHTML = "";
+          tabbody.innerHTML = "";
+
+          let tableContent = '<table border="1"><thead><tr><td> ? </td>';
+
+          // Add headers in the correct order
+          columnHeaders.forEach(header => {
+              tableContent += `<th>${toUpperCase(header)}</th>`;
+          });
+
+          tableContent += '</tr></thead><tbody>';
+
+          // Add rows following the correct column order
+          rows.forEach(record => {
+              tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
+              columnHeaders.forEach(header => {
+                  tableContent += `<td>${record[header] !== undefined ? record[header] : ""}</td>`; // Handle missing data
+              });
+              tableContent += '</tr>';
+          });
+
+          tableContent += '</tbody></table>';
+
+          // Update DOM
+          setTimeout(() => {
+              tabhead.innerHTML = tableContent;
+          }, 100);
+      })
+      .catch(error => console.error("Fetch error:", error));
 
       li.appendChild(parent.document.createTextNode(old+":completed"));
       ul.appendChild(li);
-
-//      const areas_div = parent.document.getElementById("Areas-table")
-fetch( '/displayareas',{
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-})
-.then(response => response.json())
-.then(data => {
-    console.log("Data received:", data);
-
-    if (!Array.isArray(data) || data.length < 2) {
-        console.error("Invalid or incomplete data:", data);
-        return;
-    }
-
-
-    if (!tabhead || !tabbody) {
-        console.error("tabhead or tabbody not found");
-        return;
-    }
-
-    const columnHeaders = data[0];  // First element contains ordered column names
-    const rows = data[1];  // Second element contains data rows
-
-    // Clear previous content
-    tabhead.innerHTML = "";
-    tabbody.innerHTML = "";
-
-    let tableContent = '<table border="1"><thead><tr><td> ? </td>';
-
-    // Add headers in the correct order
-    columnHeaders.forEach(header => {
-        tableContent += `<th>${toUpperCase(header)}</th>`;
-    });
-
-    tableContent += '</tr></thead><tbody>';
-
-    // Add rows following the correct column order
-    rows.forEach(record => {
-        tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
-        columnHeaders.forEach(header => {
-            tableContent += `<td>${record[header] !== undefined ? record[header] : ""}</td>`; // Handle missing data
-        });
-        tableContent += '</tr>';
-    });
-
-    tableContent += '</tbody></table>';
-
-    // Update DOM
-    setTimeout(() => {
-        tabhead.innerHTML = tableContent;
-    }, 100);
-})
-.catch(error => console.error("Fetch error:", error));
 
       };
     </script>
