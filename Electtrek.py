@@ -2091,7 +2091,7 @@ def displayareas():
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-#    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
     return  jsonify([python_data1, python_data2])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
