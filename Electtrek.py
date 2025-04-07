@@ -2317,7 +2317,7 @@ def setgotv():
     GOTV = request.form["GOTV"]
     mapfile = current_node.dir+"/"+current_node.file
 
-    return redirect(url_for('dashboard'))
+    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
 
 @app.route('/normalise', methods=['POST','GET'])
 def normalise():
