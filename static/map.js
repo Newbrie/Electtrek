@@ -167,7 +167,7 @@ var showMore = function (msg,area, type) {
 
   function export_table_to_csv(html, filename) {
     var csv = [];
-    var rows = document.querySelectorAll("tbody tr");
+    var rows = document.querySelectorAll("table tbody tr");
     var headcols = ["PD", "ENOP", "ElectorName", "VI", "Notes"];
 
     csv.push(headcols.join(",")); // ✅ Add header row
