@@ -142,15 +142,26 @@
         {% endfor %}
 
 			<h2>Generate Walks</h2>
-      <form id="GOTV-form" method="POST">
+      <form id="GOTV-form" action="setGOTVForm('setgotv')" method="POST">
+        <label for="elections">Type of Election:</label>
+        <select name="elections" id="elections">
+          <option value="westminster">Westminster</option>
+          <option value="county">County</option>
+          <option value="borough">Borough</option>
+          <option value="parish">Parish</option>
+        </select><br>
         GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
+        <input type="submit" value="Commit"><br>
       </form>
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
+          <br>CANDIDATE DETAILS:<br>
           FIRST: <input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/><br>
 					SECOND: <input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/><br>
-					DATE: <input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
-					<input type="file" name="importfile" placeholder= " {{ context.formdata['importfile']}} "/>
+					DATE OF ELECTION: <input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
+					<br>
+          CONTROLS:<br>
+          <input type="file" name="importfile" placeholder= " {{ context.formdata['importfile']}} "/>
 		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
 		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
 					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>

@@ -5,9 +5,43 @@
 
 	<div id="header">
     <h1>Postal and Non Postal Vote Canvass Cards </h1>
-		{% for x,y in prodstats.items() %}
-				<ul> {{ x }} : {{ y }} </ul>
-		{% endfor %}
+		<span>
+			<b>Ward: {{ prodstats['ward'] }} ,</b>
+		</span>
+		<span>
+    	<b>Polling District: {{ prodstats['polling district'] }} ,</b
+    </span>
+		<span>
+			<b>Walk: {{ prodstats['walk'] }} ,</b>
+		</span>
+		  <span>
+    	<b>Electors:</b>
+    	<b>{{ prodstats['groupelectors'] }} ,</b>
+    </span>
+    <span>
+    	<b>Houses:</b>
+    	<b>{{ prodstats['houses'] }} ,</b>
+    </span>
+    <span>
+    	<b>Streets:</b>
+    	<b>{{ prodstats['streets'] }} ,</b>
+    </span>
+    <span>
+        <b>Climb(m):</b>
+    		<b>{{ prodstats['climb'] }} ,</b>
+    </span>
+    <span>
+        <b>Housing Density (UKAv=1.97):</b>
+    		<b>{{ prodstats['housedensity'] }} ,</b>
+    </span>
+    <span>
+        <b>Leafleting Time:</b>
+    		<b>{{ prodstats['leafhrs'] | round | int }}hrs {{ (prodstats['leafhrs']%1*60) | round | int }}mins ,</b>
+    </span>
+    <span>
+        <b>Canvassing Time:</b>
+    		<b>{{ prodstats['canvasshrs'] | round | int }}hrs {{ (prodstats['leafhrs']%1*60) | round | int }}mins.</b>
+    </span>
     <span>
     <b>Please collect the data below and upload data for area overview.</b>
     </span>
