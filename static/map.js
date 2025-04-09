@@ -177,8 +177,8 @@ var showMore = function (msg,area, type) {
     for (var i = 1; i < rows.length; i++) { // ✅ Start from row 1 (skip header)
         var row = [], cols = rows[i].querySelectorAll("td");
 
-        if (cols.length > 4) { // ✅ Ensure sufficient columns exist
-            var pick = [0, 1, 2, 3, 4]; // ✅ Select relevant columns
+        if (cols.length > 8) { // ✅ Ensure sufficient columns exist
+            var pick = [0, 1, 2, 7, 8]; // ✅ Select relevant columns
             for (var j of pick) {
                 let cellText = cols[j].innerText.trim().replaceAll(",", "").toUpperCase(); // ✅ Normalize text
                 row.push(cellText);
