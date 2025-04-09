@@ -31,28 +31,32 @@ var showMore = function (msg,area, type) {
   async function getVIData(path) {
 
     let table = document.getElementById("canvass-table");
-        let rows = table.querySelectorAll("tbody tr"); // Select all VI fields
-        let data = [];
-        rows.forEach(row => {
+    let rows = table.querySelectorAll("tbody tr");
+    let data = [];
 
+    rows.forEach(row => {
+        let electorID = row.cells[1].innerText.trim(); // ENOP
+        let ElectorName = row.cells[2].innerText.trim(); // Name
 
-            let electorID = row.cells[1].innerText.trim(); // Assuming 'ENOP' is in the second column
-            let ElectorName = row.cells[2].innerText.trim(); // Get input value
-            let viValue = row.cells[7].innerText.trim(); // Get input value
-            let notesValue = row.cells[8].innerText.trim(); // Get input value
-            alert(electorID+"|"+viValue+"|"+notesValue );
-            if (viValue) {
+        let viInput = row.cells[7].querySelector('input');
+        let viValue = viInput ? viInput.value.trim() : "";
+
+        let notesInput = row.cells[8].querySelector('input');
+        let notesValue = notesInput ? notesInput.value.trim() : "";
+
+        console.log(`Row data: ${electorID} | ${viValue} | ${notesValue}`);
+
+        if (viValue) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
                 viResponse: viValue,
                 notesResponse: notesValue
-              });
-            };
-        });
+            });
+        }
+    });
 
-        console.log("Collected VI Data:", data);
-
+    console.log("Collected VI Data:", data);
       // Send data to server
 
       fetch(path, {  // Use full URL to ensure correct routing
