@@ -4,155 +4,67 @@
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
     <iframe id="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
-    <script >
-      // Listen to message from child window
 
-      const pessages = [];
-      var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
-
-      for (let x in pack) {
-      pessages.push(pack[x]);
-      };
-
-      var iframeEl = document.getElementById('iframe1');
-
-      function bindEvent( element, eventName, eventHandler) {
-       if (element.addEventListener){
-           element.addEventListener(eventName, eventHandler, false);
-       } else if (element.attachEvent) {
-           element.attachEvent('on' + eventName, eventHandler);
-       };
-      };
-
-      bindEvent( window, 'message', function (e) {
-        pessages.pop();
-        pessages.push(e.data);
-        var logWindow = document.getElementById("logwin");
-        var li = document.createElement("li");
-        li.appendChild(document.createTextNode(e.data));
-        logWindow.appendChild(li);
-        logWindow.scrollTop = logWindow.scrollHeight;
-
-      });
-
-      function changeIframeSrc(newurl) {
-        var msg = "Retrieving area "+newurl;
-        var logWindow = document.getElementById("logwin");
-        var li = document.createElement("li");
-        li.appendChild(document.createTextNode(msg));
-        logWindow.appendChild(li);
-        logWindow.scrollTop = logWindow.scrollHeight;
-        document.getElementById("iframe1").src = newurl;
-          };
-
-      function toUpperCase(str) {
-        return str.replace(
-          /\w\S*/g,
-          text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
-        );
-      };
-      
-      function setGOTVForm(action){
-        let form = document.getElementById("GOTV-form");
-        if (action === 'setgotv') {
-            form.action = "{{url_for('setgotv')}}";
-            form.method = 'POST';
-            form.submit();
-
-          }
-      };
-
-      function updateMessages() {
-      const old = pessages.pop();
-      const ul = parent.document.getElementById("logwin");
-      const li = parent.document.createElement("li");
-      const tabhead = parent.document.querySelector("div > table > thead");
-      const tabbody = parent.document.querySelector("div > table > tbody");
-
-      // Define your party color lookup
-      const VCO = {
-          "O": "brown", "R": "cyan", "C": "blue", "S": "red",
-          "LD": "yellow", "G": "limegreen", "I": "indigo",
-          "PC": "darkred", "SD": "orange", "Z": "lightgray",
-          "W": "white", "X": "darkgray"
-      };
-
-      fetch('/displayareas', {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-      })
-      .then(response => response.json())
-      .then(data => {
-          console.log("Data received:", data);
-
-          if (!Array.isArray(data) || data.length < 2) {
-              console.error("Invalid or incomplete data:", data);
-              return;
-          }
-
-          if (!tabhead || !tabbody) {
-              console.error("tabhead or tabbody not found");
-              return;
-          }
-
-          const columnHeaders = data[0];  // First element contains ordered column names
-          const rows = data[1];           // Second element contains data rows
-
-          // Clear previous content
-          tabhead.innerHTML = "";
-          tabbody.innerHTML = "";
-
-          // Build table head row
-          const headRow = document.createElement("tr");
-          const checkboxHeader = document.createElement("th");
-          checkboxHeader.textContent = "?";
-          headRow.appendChild(checkboxHeader);
-
-          columnHeaders.forEach(header => {
-              const th = document.createElement("th");
-              th.textContent = header.toUpperCase();
-              headRow.appendChild(th);
-          });
-
-          tabhead.appendChild(headRow);
-
-          // Build table body
-          rows.forEach(record => {
-              const row = document.createElement("tr");
-
-              // Checkbox cell
-              const checkboxCell = document.createElement("td");
-              const checkbox = document.createElement("input");
-              checkbox.type = "checkbox";
-              checkbox.name = "selectRow[]";
-              checkbox.classList.add("selectRow");
-              checkboxCell.appendChild(checkbox);
-              row.appendChild(checkboxCell);
-
-              // Data cells
-              columnHeaders.forEach(header => {
-                const cell = document.createElement("td");
-                const value = record[header] !== undefined ? record[header] : "";
-                cell.innerHTML = value;
-
-                // Highlight the column whose name matches `yourparty`
-                if (header === yourparty.value) {
-                    const color = VCO[yourparty.value] || "inherit";
-                    cell.style.backgroundColor = color;
-                }
-
-                row.appendChild(cell);
-                });
-                tabbody.appendChild(row);
-             });
-         })
-         .catch(error => console.error("Fetch error:", error));
-
-          li.appendChild(parent.document.createTextNode(old + ":completed"));
-          ul.appendChild(li);
-};
-    </script>
 </div>
+<script >
+  // Listen to message from child window
+
+  const pessages = [];
+  var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
+
+  for (let x in pack) {
+  pessages.push(pack[x]);
+  };
+
+  var iframeEl = document.getElementById('iframe1');
+
+  function bindEvent( element, eventName, eventHandler) {
+   if (element.addEventListener){
+       element.addEventListener(eventName, eventHandler, false);
+   } else if (element.attachEvent) {
+       element.attachEvent('on' + eventName, eventHandler);
+   };
+  };
+
+  bindEvent( window, 'message', function (e) {
+    pessages.pop();
+    pessages.push(e.data);
+    var logWindow = document.getElementById("logwin");
+    var li = document.createElement("li");
+    li.appendChild(document.createTextNode(e.data));
+    logWindow.appendChild(li);
+    logWindow.scrollTop = logWindow.scrollHeight;
+
+  });
+
+  function changeIframeSrc(newurl) {
+    var msg = "Retrieving area "+newurl;
+    var logWindow = document.getElementById("logwin");
+    var li = document.createElement("li");
+    li.appendChild(document.createTextNode(msg));
+    logWindow.appendChild(li);
+    logWindow.scrollTop = logWindow.scrollHeight;
+    document.getElementById("iframe1").src = newurl;
+      };
+
+  function toUpperCase(str) {
+    return str.replace(
+      /\w\S*/g,
+      text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
+    );
+  };
+
+  function setGOTVForm(action){
+    let form = document.getElementById("GOTV-form");
+    if (action === 'setgotv') {
+        form.action = "{{url_for('setgotv')}}";
+        form.method = 'POST';
+        form.submit();
+
+      }
+  };
+
+</script>
 {% endblock map %}
 
 {% block log %}
