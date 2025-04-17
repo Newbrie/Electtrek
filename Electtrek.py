@@ -1309,6 +1309,29 @@ def handle_exception(e):
         mapfile = current_node.parent.dir+"/"+current_node.parent.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
+@app.route('/get-constant/<key>')
+def get_constant(key):
+    value = ElectionSettings.get(key)
+    if value is not None:
+        return jsonify({key: value})
+    else:
+        return jsonify({"error": "Key not found"}), 404
+
+@app.route('/set-constant', methods=['POST'])
+def set_constant():
+    data = request.get_json()
+
+    key = data.get('key')
+    value = data.get('value')
+
+    if key in ElectionSettings:
+        if ElectionSettings[key] != value:
+            ElectionSettings[key] = value
+            return jsonify({"status": "updated"}), 200
+        else:
+            return jsonify({"status": "no change"}), 200
+    else:
+        return jsonify({"error": "Unknown constant"}), 400
 
 @app.route("/index", methods=['POST', 'GET'])
 def index():

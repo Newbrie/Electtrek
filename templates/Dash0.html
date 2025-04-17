@@ -89,6 +89,8 @@
         {% endfor %}
 
 			<h2>Application Preferences</h2>
+      <div id="constants-container"></div>
+
       <form id="GOTV-form" action="setGOTVForm('setgotv')" method="POST">
         <label for="elections">Type of Election:</label>
         <select name="elections" id="elections">
@@ -99,9 +101,7 @@
         </select><br>
         <label for="yourparty">Your Party:</label>
         <select id="yourparty"></select><br>
-        GOTV: <input type="text" name="GOTV" id="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
-        <br>
-        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
+        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="updateConstantIfChanged("walksize", input.value);"/><br>
         <br>
       </form>
 
@@ -154,11 +154,15 @@
                   };
 			    };
 
+          document.addEventListener('DOMContentLoaded', () => {
+            fetch('/get-constants')
+              .then(res => res.json())
+              .then(constants => renderConstants(constants));
+          });
 
           document.addEventListener('DOMContentLoaded', () => {
              const options = {{ VID_json | safe }};
              const yourparty = document.getElementById('yourparty');
-             const GOTV = document.getElementById('GOTV');
              const walksize = document.getElementById('walksize');
 
              if (!yourparty) {
@@ -176,7 +180,6 @@
 
              // ✅ Add listener after the dropdown exists
              yourparty.addEventListener('change', updateMessages);
-             GOTV.addEventListener('changeGOTV', updateMessages);
              walksize.addEventListener('changewalk', updateMessages);
 
              // ✅ Optionally load once on page load
