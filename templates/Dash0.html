@@ -74,7 +74,7 @@
       .then(response => response.json())
       .then(data => {
           console.log("Data received:", data);
-          alert("Value of yourparty:"+yourparty);
+          alert("Value of yourparty:"+yourparty.value);
 
           if (!Array.isArray(data) || data.length < 2) {
               console.error("Invalid or incomplete data:", data);
@@ -178,7 +178,7 @@
           <option value="parish">Parish</option>
         </select><br>
         <label for="yourparty">Your Party:</label>
-        <select id="yourparty"></select><br>
+        <select id="alert"></select><br>
         GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
         <input type="submit" value="Commit"><br>
         Walk Size: <input type="text" name="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
