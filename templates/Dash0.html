@@ -178,10 +178,10 @@
         </select><br>
         <label for="yourparty">Your Party:</label>
         <select id="yourparty"></select><br>
-        GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
-        <input type="submit" value="Commit"><br>
-        Walk Size: <input type="text" name="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
-        <input type="submit" value="Commit"><br>
+        GOTV: <input type="text" name="GOTV" id="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
+        <br>
+        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
+        <br>
       </form>
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
@@ -244,6 +244,8 @@
           document.addEventListener('DOMContentLoaded', () => {
              const options = {{ VID_json | safe }};
              const yourparty = document.getElementById('yourparty');
+             const GOTV = document.getElementById('GOTV');
+             const walksize = document.getElementById('walksize');
 
              if (!yourparty) {
                alert("⚠️ Could not find element with id 'yourparty'");
@@ -260,6 +262,8 @@
 
              // ✅ Add listener after the dropdown exists
              yourparty.addEventListener('change', updateMessages);
+             GOTV.addEventListener('changeGOTV', updateMessages);
+             walksize.addEventListener('changeGOTV', updateMessages);
 
              // ✅ Optionally load once on page load
              updateMessages();
