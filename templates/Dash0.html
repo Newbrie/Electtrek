@@ -52,14 +52,22 @@
         );
       }
 
-      function updateMessages(){
-      old = pessages.pop();
-      var ul = parent.document.getElementById("logwin");
-      var li = parent.document.createElement("li");
-      var tabhead = parent.document.querySelector("div > table > thead");
-      var tabbody = parent.document.querySelector("div > table > tbody");
+      function updateMessages() {
+      const old = pessages.pop();
+      const ul = parent.document.getElementById("logwin");
+      const li = parent.document.createElement("li");
+      const tabhead = parent.document.querySelector("div > table > thead");
+      const tabbody = parent.document.querySelector("div > table > tbody");
 
-      fetch( '/displayareas',{
+      // Define your party color lookup
+      const VCO = {
+          "O": "brown", "R": "cyan", "C": "blue", "S": "red",
+          "LD": "yellow", "G": "limegreen", "I": "indigo",
+          "PC": "darkred", "SD": "orange", "Z": "lightgray",
+          "W": "white", "X": "darkgray"
+      };
+
+      fetch('/displayareas', {
           method: "GET",
           headers: { "Content-Type": "application/json" },
       })
@@ -72,51 +80,65 @@
               return;
           }
 
-
           if (!tabhead || !tabbody) {
               console.error("tabhead or tabbody not found");
               return;
           }
 
           const columnHeaders = data[0];  // First element contains ordered column names
-          const rows = data[1];  // Second element contains data rows
+          const rows = data[1];           // Second element contains data rows
 
           // Clear previous content
           tabhead.innerHTML = "";
           tabbody.innerHTML = "";
 
-          let tableContent = '<table border="1"><thead><tr><td> ? </td>';
+          // Build table head row
+          const headRow = document.createElement("tr");
+          const checkboxHeader = document.createElement("th");
+          checkboxHeader.textContent = "?";
+          headRow.appendChild(checkboxHeader);
 
-          // Add headers in the correct order
           columnHeaders.forEach(header => {
-              tableContent += `<th>${toUpperCase(header)}</th>`;
+              const th = document.createElement("th");
+              th.textContent = header.toUpperCase();
+              headRow.appendChild(th);
           });
 
-          tableContent += '</tr></thead><tbody>';
+          tabhead.appendChild(headRow);
 
-          // Add rows following the correct column order
+          // Build table body
           rows.forEach(record => {
-              tableContent += '<tr><td><input type="checkbox" name="selectRow[]" class="selectRow"></td>';
+              const row = document.createElement("tr");
+
+              // Checkbox cell
+              const checkboxCell = document.createElement("td");
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.name = "selectRow[]";
+              checkbox.classList.add("selectRow");
+              checkboxCell.appendChild(checkbox);
+              row.appendChild(checkboxCell);
+
+              // Data cells
               columnHeaders.forEach(header => {
-                  tableContent += `<td>${record[header] !== undefined ? record[header] : ""}</td>`; // Handle missing data
-              });
-              tableContent += '</tr>';
-          });
+                const cell = document.createElement("td");
+                const value = record[header] !== undefined ? record[header] : "";
+                cell.textContent = value;
 
-          tableContent += '</tbody></table>';
+                // Highlight the column whose name matches `yourparty`
+                if (header === yourparty) {
+                    const color = VCO[yourparty] || "inherit";
+                    cell.style.backgroundColor = color;
+                }
 
-          // Update DOM
-          setTimeout(() => {
-              tabhead.innerHTML = tableContent;
-          }, 100);
+                row.appendChild(cell);
+            });
       })
       .catch(error => console.error("Fetch error:", error));
 
-      li.appendChild(parent.document.createTextNode(old+":completed"));
+      li.appendChild(parent.document.createTextNode(old + ":completed"));
       ul.appendChild(li);
-
-      };
-
+  };
 
     </script>
 </div>
@@ -153,7 +175,7 @@
           <option value="parish">Parish</option>
         </select><br>
         <label for="yourparty">Your Party:</label>
-        <select id="yourparty"></select>
+        <select id="yourparty"></select><br>
         GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
         <input type="submit" value="Commit"><br>
         Walk Size: <input type="text" name="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
