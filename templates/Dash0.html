@@ -101,8 +101,14 @@
         </select><br>
         <label for="yourparty">Your Party:</label>
         <select id="yourparty"></select><br>
-        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="updateConstantIfChanged("walksize", input.value);"/><br>
+        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="updateConstantIfChanged('walksize', walksize.value);"/><br>
         <br>
+        <label for="GOTV">GOTV:</label>
+        <select id="GOTV"></select><br>
+        GOTV: <input type="number" name="GOTV" id="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="updateConstantIfChanged('GOTV', GOTV.value);"/><br>
+        <br>
+
+
       </form>
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
@@ -164,6 +170,7 @@
              const options = {{ VID_json | safe }};
              const yourparty = document.getElementById('yourparty');
              const walksize = document.getElementById('walksize');
+             const GOTV = document.getElementById('GOTV');
 
              if (!yourparty) {
                alert("⚠️ Could not find element with id 'yourparty'");
@@ -179,7 +186,7 @@
              });
 
              // ✅ Add listener after the dropdown exists
-      
+
              yourparty.addEventListener('changeparty', updateMessages);
              walksize.addEventListener('changewalk', updateMessages);
 
