@@ -142,8 +142,6 @@
           li.appendChild(parent.document.createTextNode(old + ":completed"));
           ul.appendChild(li);
 };
-document.getElementById('yourparty').addEventListener('change', updateMessages);
-
     </script>
 </div>
 {% endblock map %}
@@ -204,24 +202,6 @@ document.getElementById('yourparty').addEventListener('change', updateMessages);
 
   <script>
 
-
-          document.addEventListener('DOMContentLoaded', () => {
-            const options = {{ VID_json | safe }};
-            const yourparty = document.getElementById('yourparty');
-
-            if (!yourparty) {
-              alert("⚠️ Could not find element with id 'yourparty'");
-              return;
-            }
-
-            Object.entries(options).forEach(([value, label]) => {
-              const option = document.createElement("option");
-              option.value = value;
-              option.textContent = label;
-              yourparty.appendChild(option);
-            });
-          });
-
           function setGOTVForm(action){
             let form = document.getElementById("GOTV-form");
           if (action === 'setgotv') {
@@ -261,6 +241,29 @@ document.getElementById('yourparty').addEventListener('change', updateMessages);
                     form.submit();
                   };
 			    };
+          document.addEventListener('DOMContentLoaded', () => {
+             const options = {{ VID_json | safe }};
+             const yourparty = document.getElementById('yourparty');
+
+             if (!yourparty) {
+               alert("⚠️ Could not find element with id 'yourparty'");
+               return;
+             }
+
+             // Populate dropdown
+             Object.entries(options).forEach(([value, label]) => {
+               const option = document.createElement("option");
+               option.value = value;
+               option.textContent = label;
+               yourparty.appendChild(option);
+             });
+
+             // ✅ Add listener after the dropdown exists
+             yourparty.addEventListener('change', updateMessages);
+
+             // ✅ Optionally load once on page load
+             updateMessages();
+           });
 </script>
 </div>
 {% endblock nav %}
