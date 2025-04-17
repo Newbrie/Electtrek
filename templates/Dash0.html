@@ -132,13 +132,14 @@
                 }
 
                 row.appendChild(cell);
-            });
-      })
-      .catch(error => console.error("Fetch error:", error));
+                });
+                tabbody.appendChild(row);
+             });
+         })
+         .catch(error => console.error("Fetch error:", error));
 
-      li.appendChild(parent.document.createTextNode(old + ":completed"));
-      ul.appendChild(li);
-  });
+          li.appendChild(parent.document.createTextNode(old + ":completed"));
+          ul.appendChild(li);
 };
 
     </script>
