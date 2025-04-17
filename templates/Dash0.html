@@ -202,15 +202,6 @@
 
   <script>
 
-          function setGOTVForm(action){
-            let form = document.getElementById("GOTV-form");
-          if (action === 'setgotv') {
-              form.action = "{{url_for('setgotv')}}";
-              form.method = 'POST';
-              form.submit();
-
-            }
-          };
 
 			    function setActionForm(action){
 			      let form = document.getElementById("normal-file");
@@ -241,6 +232,16 @@
                     form.submit();
                   };
 			    };
+
+          function setGOTVForm(action){
+            let form = document.getElementById("GOTV-form");
+            if (action === 'setgotv') {
+                form.action = "{{url_for('setgotv')}}";
+                form.method = 'POST';
+                form.submit();
+
+              }
+          };
           document.addEventListener('DOMContentLoaded', () => {
              const options = {{ VID_json | safe }};
              const yourparty = document.getElementById('yourparty');
@@ -263,7 +264,7 @@
              // ✅ Add listener after the dropdown exists
              yourparty.addEventListener('change', updateMessages);
              GOTV.addEventListener('changeGOTV', updateMessages);
-             walksize.addEventListener('changeGOTV', updateMessages);
+             walksize.addEventListener('changewalk', updateMessages);
 
              // ✅ Optionally load once on page load
              updateMessages();
