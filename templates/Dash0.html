@@ -50,8 +50,17 @@
           /\w\S*/g,
           text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
         );
-      }
+      };
+      
+      function setGOTVForm(action){
+        let form = document.getElementById("GOTV-form");
+        if (action === 'setgotv') {
+            form.action = "{{url_for('setgotv')}}";
+            form.method = 'POST';
+            form.submit();
 
+          }
+      };
 
       function updateMessages() {
       const old = pessages.pop();
@@ -233,15 +242,7 @@
                   };
 			    };
 
-          function setGOTVForm(action){
-            let form = document.getElementById("GOTV-form");
-            if (action === 'setgotv') {
-                form.action = "{{url_for('setgotv')}}";
-                form.method = 'POST';
-                form.submit();
 
-              }
-          };
           document.addEventListener('DOMContentLoaded', () => {
              const options = {{ VID_json | safe }};
              const yourparty = document.getElementById('yourparty');
