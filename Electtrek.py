@@ -116,7 +116,7 @@ def getlayeritems(nodelist):
         dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
         dfy.loc[i,'elect'] = x.electorate
         dfy.loc[i,'turn'] = '%.2f'%(x.turnout)
-        dfy.loc[i,'gotv'] = '%.2f'%(ElectionSettings['GOTV'])
+        dfy.loc[i,'gotv'] = '%.2f'%(float(ElectionSettings['GOTV']))
         dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(ElectionSettings['GOTV']))-int(x.VI[ElectionSettings['yourparty']])
         i = i + 1
 
@@ -177,7 +177,7 @@ class TreeNode:
         sname = self.value
         origin = self
         casnode = origin
-        if ElectionSettings['Type of Election'] == 'national':
+        if ElectionSettings['elections'] == 'national':
 #cascade last constituency turnout figure to all wards(children) and streets(children)
 
 # electorate is for a constituency is derived from wards is derived from streets (if you have electoral roll uploaded )
@@ -638,14 +638,6 @@ class TreeNode:
 
         else:
             # For 3+ points, use a convex hull
-            enclosed_shape = MultiPoint(points).convex_hull
-
-        if len(points) == 1:
-            enclosed_shape = points[0]  # defer buffering
-        elif len(points) == 2:
-            # ... same code ...
-            enclosed_shape = MultiPoint([p1, p2, p3]).convex_hull
-        else:
             enclosed_shape = MultiPoint(points).convex_hull
 
         # Final smoothing buffer — applied to all cases
@@ -1192,7 +1184,7 @@ ElectionSettings = {}
 ElectionSettings['GOTV'] = 0.50
 ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
-ElectionSettings['Type of Election'] = 'national'
+ElectionSettings['elections'] = 'national'
 ElectionSettings['importfile'] = ""
 ward_div = 'ward'
 
@@ -1308,6 +1300,10 @@ def handle_exception(e):
     if current_node.level > 0:
         mapfile = current_node.parent.dir+"/"+current_node.parent.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
+@app.route('/get-constants')
+def get_constants():
+    return jsonify(ElectionSettings)
 
 @app.route('/get-constant/<key>')
 def get_constant(key):

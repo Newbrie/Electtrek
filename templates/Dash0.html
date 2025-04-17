@@ -91,7 +91,7 @@
 			<h2>Application Preferences</h2>
       <div id="constants-container"></div>
 
-      <form id="GOTV-form" action="setGOTVForm('setgotv')" method="POST">
+
         <label for="elections">Type of Election:</label>
         <select name="elections" id="elections">
           <option value="westminster">Westminster</option>
@@ -101,15 +101,20 @@
         </select><br>
         <label for="yourparty">Your Party:</label>
         <select id="yourparty"></select><br>
-        Walk Size: <input type="text" name="walksize" id="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="updateConstantIfChanged('walksize', walksize.value);"/><br>
+        Walk Size: <input type="number" min="100" step="1" name="walksize" id="walksize" onchange="updateConstantIfChanged('walksize', walksize.value);"/><br>
         <br>
         <label for="GOTV">GOTV:</label>
-        <select id="GOTV"></select><br>
-        GOTV: <input type="number" name="GOTV" id="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="updateConstantIfChanged('GOTV', GOTV.value);"/><br>
-        <br>
+        <input
+          type="number"
+          id="GOTV"
+          name="GOTV"
+          min="0.01"
+          max="0.99"
+          step="0.01"
+          value="0.5"
+        />
+        
 
-
-      </form>
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
           <br>CANDIDATE DETAILS:<br>
