@@ -16,6 +16,8 @@
 
       var iframeEl = document.getElementById('iframe1');
 
+      document.getElementById('yourparty').addEventListener('change', updateMessages);
+
       function bindEvent( element, eventName, eventHandler) {
        if (element.addEventListener){
            element.addEventListener(eventName, eventHandler, false);
@@ -51,6 +53,7 @@
           text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
         );
       }
+
 
       function updateMessages() {
       const old = pessages.pop();
@@ -127,8 +130,8 @@
                 cell.innerHTML = value;
 
                 // Highlight the column whose name matches `yourparty`
-                if (header === yourparty) {
-                    const color = VCO[yourparty] || "inherit";
+                if (header === yourparty.value) {
+                    const color = VCO[yourparty.value] || "inherit";
                     cell.style.backgroundColor = color;
                 }
 
@@ -178,7 +181,7 @@
           <option value="parish">Parish</option>
         </select><br>
         <label for="yourparty">Your Party:</label>
-        <select id="alert"></select><br>
+        <select id="yourparty"></select><br>
         GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
         <input type="submit" value="Commit"><br>
         Walk Size: <input type="text" name="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
