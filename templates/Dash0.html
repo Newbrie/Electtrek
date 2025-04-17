@@ -116,6 +116,8 @@
       ul.appendChild(li);
 
       };
+
+
     </script>
 </div>
 {% endblock map %}
@@ -141,7 +143,7 @@
         		<ul> {{ x }} : {{ y }} </ul>
         {% endfor %}
 
-			<h2>Generate Walks</h2>
+			<h2>Application Preferences</h2>
       <form id="GOTV-form" action="setGOTVForm('setgotv')" method="POST">
         <label for="elections">Type of Election:</label>
         <select name="elections" id="elections">
@@ -150,7 +152,11 @@
           <option value="borough">Borough</option>
           <option value="parish">Parish</option>
         </select><br>
+        <label for="yourparty">Your Party:</label>
+        <select id="yourparty"></select>
         GOTV: <input type="text" name="GOTV" placeholder=" {{ context.formdata['GOTV']}}" onchange="setGOTVForm('setgotv')"/><br>
+        <input type="submit" value="Commit"><br>
+        Walk Size: <input type="text" name="walksize" placeholder=" {{ context.formdata['walksize']}}" onchange="setGOTVForm('setgotv')"/><br>
         <input type="submit" value="Commit"><br>
       </form>
 
@@ -171,6 +177,25 @@
 		  </form>
 
   <script>
+
+
+          document.addEventListener('DOMContentLoaded', () => {
+            const options = {{ VID_json | safe }};
+            const yourparty = document.getElementById('yourparty');
+
+            if (!yourparty) {
+              alert("⚠️ Could not find element with id 'yourparty'");
+              return;
+            }
+
+            Object.entries(options).forEach(([value, label]) => {
+              const option = document.createElement("option");
+              option.value = value;
+              option.textContent = label;
+              yourparty.appendChild(option);
+            });
+          });
+
           function setGOTVForm(action){
             let form = document.getElementById("GOTV-form");
           if (action === 'setgotv') {
