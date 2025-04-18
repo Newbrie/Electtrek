@@ -104,6 +104,11 @@ def is_safe_url(target):
 
 def getlayeritems(nodelist):
     global ElectionSettings
+    global Historynodelist
+    if nodelist == []:
+        nodelist = Historynodelist
+    else:
+        Historynodelist = nodelist
     dfy = pd.DataFrame()
     i = 0
     for x in nodelist:
@@ -127,6 +132,8 @@ def subending(filename, ending):
   stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
   return stem.replace("@@@", ending)
 
+
+Historynodelist = []
 
 ElectionOptions = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
@@ -2276,6 +2283,7 @@ def displayareas():
     global current_node
     global layeritems
     print('_______ROUTE/displayareas:')
+    layeritems = getlayeritems([])
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
     # Convert JSON string to Python list

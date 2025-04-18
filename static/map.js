@@ -118,7 +118,7 @@ var showMore = function (msg,area, type) {
   .then(response => response.json())
   .then(data => {
       console.log("Data received:", data);
-      alert("Inside update messages");
+
       if (!Array.isArray(data) || data.length < 2) {
           console.error("Invalid or incomplete data:", data);
           return;
