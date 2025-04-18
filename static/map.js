@@ -366,7 +366,7 @@ var showMore = function (msg,area, type) {
           }
 
           // Add change listener
-          el.addEventListener("change", () => {
+          el.addEventListener("input", () => {
             let newVal = el.value;
             if (el.type === "number") {
               newVal = parseFloat(newVal);
@@ -381,11 +381,10 @@ var showMore = function (msg,area, type) {
             })
             .then(res => res.json())
             .then(resp => {
-              if (!resp.success) {
-                alert("Error updating constant: " + resp.error);
+              if (resp.success) {
+                updateMessages();  // ✅ Trigger only after backend update
               } else {
-                // 🔁 Refresh your page content
-                updateMessages();
+                alert("Failed to update constant: " + resp.error);
               }
             });
           });
