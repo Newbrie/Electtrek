@@ -383,9 +383,13 @@ var showMore = function (msg,area, type) {
             .then(resp => {
               if (!resp.success) {
                 alert("Error updating constant: " + resp.error);
+              } else {
+                // 🔁 Refresh your page content
+                updateMessages();
               }
             });
           });
+
         });
       });
   });

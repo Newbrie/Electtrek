@@ -211,7 +211,7 @@ class TreeNode:
 #cascade last council ward turnout figure to all streets(children)
             if self.level == 4:
                 selected = Ward_Results_data.query('NAME == @sname')
-                self.turnout = float('%.6f'%(selected['Turnout'].values[0]))
+                self.turnout = float('%.6f'%(selected['TURNOUT'].values[0]))
                 for l in range(origin.level):
                     casnode.parent.turnout = 0
                     i=1
