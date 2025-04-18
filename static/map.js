@@ -337,53 +337,55 @@ var showMore = function (msg,area, type) {
     };
 
   document.addEventListener("DOMContentLoaded", () => {
-  fetch("/get-constants")
-    .then(res => res.json())
-    .then(data => {
-      const constants = data.constants;
-      const options = data.options;
+    fetch("/get-constants")
+      .then(res => res.json())
+      .then(data => {
+        const constants = data.constants;
+        const options = data.options;
 
-      Object.entries(constants).forEach(([key, value]) => {
-        const el = document.getElementById(key);
-        if (!el) return;
+        Object.entries(constants).forEach(([key, value]) => {
+          const el = document.getElementById(key);
+          if (!el) return;
 
-        if (el.tagName === "SELECT") {
-          // Populate dropdown
-          const opts = options[key] || [];
-          el.innerHTML = "";
-          opts.forEach(opt => {
-            const o = document.createElement("option");
-            o.value = opt;
-            o.textContent = opt;
-            if (opt === value) o.selected = true;
-            el.appendChild(o);
-          });
-        } else {
-          // Input field
-          el.value = value;
-        }
+          if (el.tagName === "SELECT") {
+            // Populate dropdown
+            const opts = options[key] || [];
+            el.innerHTML = "";
 
-        // Add change listener
-        el.addEventListener("change", () => {
-          let newVal = el.value;
-          if (el.type === "number") {
-            newVal = parseFloat(newVal);
+            Object.entries(opts).forEach(([optValue, optLabel]) => {
+              const o = document.createElement("option");
+              o.value = optValue;
+              o.textContent = optLabel;
+              if (optValue === value) o.selected = true;
+              el.appendChild(o);
+            });
+
+          } else {
+            // Input field
+            el.value = value;
           }
 
-          fetch("/set-constant", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ name: key, value: newVal })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (!resp.success) {
-              alert("Error updating constant: " + resp.error);
+          // Add change listener
+          el.addEventListener("change", () => {
+            let newVal = el.value;
+            if (el.type === "number") {
+              newVal = parseFloat(newVal);
             }
+
+            fetch("/set-constant", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ name: key, value: newVal })
+            })
+            .then(res => res.json())
+            .then(resp => {
+              if (!resp.success) {
+                alert("Error updating constant: " + resp.error);
+              }
+            });
           });
         });
       });
-    });
-});
+  });
