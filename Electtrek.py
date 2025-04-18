@@ -1305,11 +1305,7 @@ def handle_exception(e):
 @app.route('/get-constants')
 def get_constants():
     return jsonify({
-        "constants": ElectionSettings,
-        "options": {
-            "elections": ElectionOptions,
-            "yourparty": VID
-        }
+        "constants": ElectionSettings
     })
 
 @app.route('/get-constant/<key>')
