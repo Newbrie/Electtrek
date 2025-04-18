@@ -92,33 +92,27 @@
       <div id="constants-container"></div>
 
 
-        <label for="elections">Type of Election:</label>
-        <select name="elections" id="elections"></select><br>
-        <label for="yourparty">Your Party:</label>
-        <select name="yourparty" id="yourparty"></select><br>
-        <label for="walksize">Walk Size:</label>
-        <input type="number" min="100" max=500 step="50" name="walksize" id="walksize" /><br>
+      <label for="elections">Type of Election:</label>
+      <select name="elections" id="elections"></select><br>
 
-        <label for="GOTV">GOTV:</label>
-        <input
-          type="number"
-          id="GOTV"
-          name="GOTV"
-          min="0.01"
-          max="0.99"
-          step="0.01"
-          value="0.5"
-        />
+      <label for="yourparty">Your Party:</label>
+      <select name="yourparty" id="yourparty"></select><br>
+
+      <label for="walksize">Walk Size:</label>
+      <input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
+
+      <label for="GOTV">GOTV:</label>
+      <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01" /><br>
+
+      Firstname: <input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst'] }} "/><br>
+      Surname: <input type="text" name="candsurn" placeholder=" {{ context.formdata['candsurn'] }} "/><br>
+      Date of election: <input type="text" name="electiondate" placeholder=" {{ context.formdata['electiondate'] }} "/><br>
+
 
 
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
-          <br>CANDIDATE DETAILS:<br>
-          FIRST: <input type="text" name="candfirst" placeholder=" {{ context.formdata['candfirst']}} "/><br>
-					SECOND: <input type="text" name="candsurn" placeholder= " {{ context.formdata['candsurn']}} "/><br>
-					DATE OF ELECTION: <input type="text" name="electiondate" placeholder= " {{ context.formdata['electiondate']}} "/>
-					<br>
-          CONTROLS:<br>
+            CONTROLS:<br>
           <input type="file" name="importfile" placeholder= " {{ context.formdata['importfile']}} "/>
 		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
 		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
@@ -161,39 +155,6 @@
                   };
 			    };
 
-          document.addEventListener('DOMContentLoaded', () => {
-            fetch('/get-constants')
-              .then(res => res.json())
-              .then(constants => renderConstants(constants));
-          });
-
-          document.addEventListener('DOMContentLoaded', () => {
-             const options = {{ VID_json | safe }};
-             const yourparty = document.getElementById('yourparty');
-             const walksize = document.getElementById('walksize');
-             const GOTV = document.getElementById('GOTV');
-
-             if (!yourparty) {
-               alert("⚠️ Could not find element with id 'yourparty'");
-               return;
-             }
-
-             // Populate dropdown
-             Object.entries(options).forEach(([value, label]) => {
-               const option = document.createElement("option");
-               option.value = value;
-               option.textContent = label;
-               yourparty.appendChild(option);
-             });
-
-             // ✅ Add listener after the dropdown exists
-
-             yourparty.addEventListener('changeparty', updateMessages);
-             walksize.addEventListener('changewalk', updateMessages);
-
-             // ✅ Optionally load once on page load
-             updateMessages();
-           });
 </script>
 </div>
 {% endblock nav %}

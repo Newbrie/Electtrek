@@ -336,70 +336,54 @@ var showMore = function (msg,area, type) {
 
     };
 
-    function renderConstants(constants) {
-      const container = document.getElementById('constants-container');
-      container.innerHTML = ''; // Clear previous
-
-      const selectOptions = {
-        A3: ["True", "False"],
-        // Add more key-specific options if needed
-      };
+  document.addEventListener("DOMContentLoaded", () => {
+  fetch("/get-constants")
+    .then(res => res.json())
+    .then(data => {
+      const constants = data.constants;
+      const options = data.options;
 
       Object.entries(constants).forEach(([key, value]) => {
-        const label = document.createElement("label");
-        label.textContent = `${key}: `;
-        label.setAttribute("for", key);
+        const el = document.getElementById(key);
+        if (!el) return;
 
-        let input;
-
-        if (selectOptions[key]) {
-          input = document.createElement("select");
-          selectOptions[key].forEach(opt => {
-            const option = document.createElement("option");
-            option.value = opt;
-            option.textContent = opt;
-            if (String(value) === opt) option.selected = true;
-            input.appendChild(option);
+        if (el.tagName === "SELECT") {
+          // Populate dropdown
+          const opts = options[key] || [];
+          el.innerHTML = "";
+          opts.forEach(opt => {
+            const o = document.createElement("option");
+            o.value = opt;
+            o.textContent = opt;
+            if (opt === value) o.selected = true;
+            el.appendChild(o);
           });
         } else {
-          input = document.createElement("input");
-          input.type = "number";
-          input.step = "any";
-          input.value = value;
+          // Input field
+          el.value = value;
         }
 
-        input.id = key;
-        input.addEventListener('change', () => {
-          const newValue = input.type === "number" ? parseFloat(input.value) : input.value;
-          updateConstantIfChanged(key, newValue);
+        // Add change listener
+        el.addEventListener("change", () => {
+          let newVal = el.value;
+          if (el.type === "number") {
+            newVal = parseFloat(newVal);
+          }
+
+          fetch("/set-constant", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ name: key, value: newVal })
+          })
+          .then(res => res.json())
+          .then(resp => {
+            if (!resp.success) {
+              alert("Error updating constant: " + resp.error);
+            }
+          });
         });
-
-        const div = document.createElement("div");
-        div.appendChild(label);
-        div.appendChild(input);
-        container.appendChild(div);
       });
-    }
-
-    function updateConstantIfChanged(key, newValue) {
-      if (window.constants && window.constants[key] == newValue) return;
-
-      fetch('/set-constant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value: newValue })
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log(`Updated ${key}:`, data);
-        if (!window.constants) window.constants = {};
-        window.constants[key] = newValue;
-      });
-    };
-
-
-  //document.querySelector("button.SAVE").addEventListener("click", function () {
-  //  var html = document.querySelector("table").outerHTML;
-  //  var filename = "{{ walkname }}-data.csv";
-  //  export_table_to_csv(html, filename);
-  //  });
+    });
+});
