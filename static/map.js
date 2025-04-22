@@ -61,7 +61,7 @@ var showMore = function (msg,area, type) {
 
       fetch(path, {  // Use full URL to ensure correct routing
           method: "POST",
-          credentials: "include",  // 👈 THIS IS CRITICAL
+          {credentials: 'include'},  // 👈 THIS IS CRITICAL
           headers: {
               "Content-Type": "application/json",
           },
@@ -115,7 +115,7 @@ var showMore = function (msg,area, type) {
   fetch('/displayareas', {
       method: "GET",
       headers: { "Content-Type": "application/json" },
-      credentials: "include"  // 👈 THIS IS CRITICAL
+      {credentials: 'include'}  // 👈 THIS IS CRITICAL
   })
   .then(response => response.json())
   .then(data => {
@@ -340,7 +340,7 @@ var showMore = function (msg,area, type) {
 
   document.addEventListener("DOMContentLoaded", () => {
     fetch("/get-constants",
-    credentials: "include"  // 👈 THIS IS CRITICAL
+    {credentials: 'include'}  // 👈 THIS IS CRITICAL
   )
       .then(res => res.json())
       .then(data => {
@@ -378,7 +378,7 @@ var showMore = function (msg,area, type) {
 
             fetch("/set-constant", {
               method: "POST",
-              credentials: "include",  // 👈 THIS IS CRITICAL
+              {credentials: 'include'},  // 👈 THIS IS CRITICAL
               headers: {
                 "Content-Type": "application/json"
               },
