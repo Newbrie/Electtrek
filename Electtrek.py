@@ -47,7 +47,6 @@ levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "
 levels = ['country','nation','county','constituency','ward/division','polling district','walk/street','elector/walkleg','walkelector']
 
 
-
 # want to equate levels with certain types, eg 4 is ward and div
 # want to look up the level of a type ,and the types in a level
 
@@ -1192,16 +1191,19 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['UPLOAD_FOLDER'] = '/Users/newbrie/Sites'
 app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/Electtrek'
 #app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
-app.secret_key = 'your_super_secret_key'
+app.config['SESSION_PROTECTION'] = 'strong'  # Stronger session protection
+
 
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = '<h1>login</h1>'
+
+login_manager.login_view = "<h1>login</h1>"
 login_manager.login_message = "<h1>You really need to login!!</h1>"
 login_manager.refresh_view = "<h1>Login</h1>"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
+login_manager.login_message_category = "info"
 
 
 ElectionSettings = {}
@@ -1275,7 +1277,7 @@ from jinja2 import Environment, FileSystemLoader
 templateLoader = jinja2.FileSystemLoader(searchpath=config.workdirectories['templdir'])
 environment = jinja2.Environment(loader=templateLoader,auto_reload=True)
 
-class User(UserMixin, db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(30), unique=True, nullable=False)
     password_hash = db.Column(db.String(150), nullable=False)
@@ -1287,13 +1289,12 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 
-#@login_manager.user_loader
-#def load_user(user_id):
-#    return User.get_id(user_id)
-
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.filter(User.id == int(user_id)).first()
+    print(f"🔁 load_user called with user_id: {user_id}")
+    user = db.session.get(User, int(user_id))
+    print(f"🔍 load_user found: {user}")
+    return user
 
 @login_manager.unauthorized_handler     # In unauthorized_handler we have a callback URL
 def unauthorized_callback():            # In call back url we can specify where we want to
@@ -1362,8 +1363,6 @@ def index():
 #login
 @app.route('/login', methods=['POST', 'GET'])
 def login():
-
-
     global MapRoot
     global current_node
     global allelectors
@@ -1372,30 +1371,28 @@ def login():
     global environment
     global layeritems
     global ElectionSettings
-    global formdata
-    global VID_json
 
-    #collect info from forms in the login db
+    # Collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
-#check if it exists
 
+    # Check if it exists
     if not user:
         flash("_______ROUTE/login User not found", username)
-
         return render_template("index.html")
     elif user and user.check_password(password):
-
+        # Successful login
         session["username"] = username
-
-        print("_______ROUTE/login User found", session['username'],"|", session.get('username'))
-
         login_user(user)
+
+        # Debugging session user ID
+        print(f"🔐 session['user_id']: {session.get('user_id')}")
+        print(f"🧪 Logging in user with ID: {user.id}")
+        print("🧪 session keys after login:", dict(session))
         next = request.args.get('next')
         formdata = {}
         current_node = MapRoot
-
 
         formdata['country'] = 'UNITED_KINGDOM'
         formdata['GOTV'] = ElectionSettings['GOTV']
@@ -1412,21 +1409,17 @@ def login():
         add_boundaries('county')
         england.create_map_branch('county')
         layeritems = getlayeritems(england.create_map_branch('county'))
-        mapfile = current_node.dir+"/"+current_node.file
-        return redirect(url_for('candidates'))
+        mapfile = current_node.dir + "/" + current_node.file
+        return redirect(url_for('firstpage'))
     else:
-        flash (' Not logged in ! ')
-
+        flash('Not logged in!')
         return render_template("index.html")
 
-    session['next'] = request.args.get('next')
-    flash ('_____FLASH Found existing session ! ')
-
-    return render_template ('index.html')
 
 #dashboard
 
 @app.route('/dashboard', methods=['GET','POST'])
+@login_required
 def dashboard ():
     #formdata['username'] = session["username"]
 
@@ -2623,8 +2616,6 @@ def postcode():
 
 @app.route('/captains', methods=['POST','GET'])
 def captains():
-
-
     global MapRoot
     global current_node
     global allelectors
@@ -2646,10 +2637,17 @@ def captains():
     mapfile = current_node.dir+"/"+current_node.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
-@app.route('/candidates', methods=['POST','GET'])
-def candidates():
+@app.route('/firstpage', methods=['GET', 'POST'])
+@login_required
+def firstpage():
+    print("👤 current_user:", current_user)
+    print("🔐 is_authenticated:", current_user.is_authenticated)
+    print("🚀 Candidates route hit")
+    return "We made it!"
 
-
+@app.route('/test')
+@login_required
+def test():
     global MapRoot
     global current_node
     global allelectors
@@ -2658,17 +2656,22 @@ def candidates():
     global environment
     global layeritems
 
-    formdata = {}
-    formdata['country'] = "UNITED_KINGDOM"
-    flash('_______ROUTE/candidates')
-    print('_______ROUTE/candidates')
-    formdata['importfile'] = "SCC-CandidateSelection.xlsx"
-    if len(request.form) > 0:
-        formdata['importfile'] = request.files['importfile'].filename
-    df1 = pd.read_excel(config.workdirectories['workdir']+"/"+formdata['importfile'])
-    layeritems =[list(df1.columns.values),df1]
-    mapfile = current_node.dir+"/"+current_node.file
-    return render_template("candidates.html", VID_json=VID_json, context = { "session" : session, "formdata" : formdata, "group" : layeritems[1] , "mapfile" : mapfile})
+    print("🚀 Current user authenticated:", current_user.is_authenticated)  # Debug line
+    if current_user.is_authenticated:
+        formdata = {}
+        formdata['country'] = "UNITED_KINGDOM"
+        flash('_______ROUTE/firstpage')
+        print('_______ROUTE/firstpage')
+        formdata['importfile'] = "SCC-CandidateSelection.xlsx"
+        if len(request.form) > 0:
+            formdata['importfile'] = request.files['importfile'].filename
+        df1 = pd.read_excel(config.workdirectories['workdir']+"/"+formdata['importfile'])
+        layeritems =[list(df1.columns.values),df1]
+        mapfile = current_node.dir+"/"+current_node.file
+        return render_template("candidates.html", VID_json=VID_json, context={ ... })
+    else:
+        return redirect(url_for('login'))
+
 
 
 @app.route('/cards', methods=['POST','GET'])
