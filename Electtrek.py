@@ -136,7 +136,7 @@ def subending(filename, ending):
 Historynodelist = []
 
 ElectionOptions = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
-VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"getlayeritems","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
 VNORM = {"O":"O","REFORM" : "R" , "REFORM DERBY" : "R" ,"REFORM UK" : "R" ,"REF" : "R", "RUK" : "R","R" :"R","CONSERVATIVE AND UNIONIST" : "C","CONSERVATIVE" : "C", "CON" : "C", "C":"C","LABOUR PARTY" : "S","LABOUR" : "S", "LAB" :"S", "L" : "L", "LIBERAL DEMOCRATS" :"LD" ,"LIBDEM" :"LD" , "LIB" :"LD","LD" :"LD", "GREEN PARTY" : "G" ,"GREEN" : "G" ,"G":"G", "INDEPENDENT" : "I", "IND" : "I" ,"I" : "I" ,"PLAID CYMRU" : "PC" ,"PC" : "PC" ,"SNP": "SNP" ,"MAYBE" : "Z" ,"WONT VOTE" : "W" ,"WON'T SAY" : "X" , "SDLP" : "S", "SINN FEIN" : "SF", "SPK": "N", "TUV" : "C", "UUP" : "C", "DUP" : "C","APNI" : "N", "INET": "I", "NIP": "I","PBPA": "I","WPB": "S","OTHER" : "O"}
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
 
@@ -360,7 +360,13 @@ class TreeNode:
         block = pd.DataFrame()
         self.bbox = self.get_bounding_box(block)[0]
         self.centroid = self.get_bounding_box(block)[1]
-        ChildPolylayer = Treepolys[self.level+1]
+        parent_poly = Treepolys[self.level]
+        parent_geom = parent_poly[parent_poly["FID"] == self.fid].geometry.values[0]
+
+        bbox = self.bbox
+        ChildPolylayer = Treepolys[self.level + 1].cx[bbox[0][0]:bbox[0][1],bbox[1][0] :bbox[1][1]]
+
+#        ChildPolylayer = Treepolys[self.level+1]
 #.cx[xmin:xmax, ymin:ymax]
         self.map = folium.Map(location=[self.centroid.y, self.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(self.level+1.2)*2)))
 
@@ -373,29 +379,21 @@ class TreeNode:
         childtable = pd.DataFrame()
         fam_values = [x.value for x in fam_nodes]
 
-        for index, limb in ChildPolylayer.iterrows():
+        for limb in ChildPolylayer.itertuples(index=False):
             newname = normalname(limb.NAME)
-            if newname not in fam_values:
-    #            if  newname != "UNITED_KINGDOM":
-                print ("________child of",self.value,self.level)
-                here = limb.geometry.centroid
-                egg = TreeNode(newname,limb.FID, here)
-        #        here = Point(Decimal(limb.LONG),Decimal(limb.LAT))
-        # make sure that the child centroid is within the node boundary
-                pfile = Treepolys[self.level]
-                poly = pfile[pfile['FID']==self.fid]
-                print ("_________child :", limb.NAME )
-                if intersection(poly.geometry,limb.geometry).item().area > 0.0001:
-                    print("_________TESTED AS INSIDE ",self.level,limb.NAME, self.value)
-                    egg = self.add_Tchild(egg,electtype)
-                    fam_nodes.append(egg)
-                    egg.updateParty()
-                    egg.updateTurnout()
-                    egg.updateElectorate("0")
+            here = limb.geometry.centroid
+
+            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
+                egg = TreeNode(newname, limb.FID, here)
+                egg = self.add_Tchild(egg, electtype)
+                fam_nodes.append(egg)
+                egg.updateParty()
+                egg.updateTurnout()
+                egg.updateElectorate("0")
             #                    childtable.loc[i,'No']= i
     #                    childtable.loc[i,electtype]=  childnode.value
     #                    childtable.loc[i,self.type] =  self.value
-                    i = i + 1
+            i = i + 1
 
     #        for limb in fam_nodes:
     #            childtable.loc[i,'No']= i
@@ -589,7 +587,7 @@ class TreeNode:
 
     # Run path directed establishment of node 'A'
 
-    def create_enclosing_gdf(self, gdf, buffer_size=0.001):
+    def create_enclosing_gdf(self, gdf, buffer_size=0.0001):
         global current_node
         """
         Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
@@ -686,11 +684,22 @@ class TreeNode:
         node = self
         block = pd.DataFrame()
         frames = []
-        if len(allelectors) == 0 and electrollfile != "":
-            allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+        if node.level == 4 and len(node.children) == 0 and len(allelectors) == 0 and electrollfile != "":
+            allelectors0 = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+            node.parent.source = electrollfile
+            alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
+            alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
+# we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
+            g = {'Popz':'count'}
+            alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
+            alldf['Popz'] = alldf['Popz'].rdiv(1)
+
+            allelectors = allelectors0.merge(alldf, on='Postcode',how='left' )
+            print("____- Popz allelectors:",len(alldf), len(allelectors), len(allelectors0))
             pfile = Treepolys[self.level]
             Level3boundary = pfile[pfile['FID']==node.fid]
             PDs = set(allelectors.PD.values)
+            print("____- PDs:",PDs)
             for PD in PDs:
                 PDelectors = getblock(allelectors,'PD',PD)
                 maplongx = PDelectors.Long.values[0]
@@ -698,11 +707,13 @@ class TreeNode:
 
             # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
                 if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
-                    Area = normalname(Level3boundary['NAME'])
+                    Area = normalname(Level3boundary['NAME'].values[0])
                     PDelectors['Area'] = Area
 
                     x = PDelectors.Long.values
                     y = PDelectors.Lat.values
+
+
                     kmeans_dist_data = list(zip(x, y))
 
                     walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
@@ -753,6 +764,7 @@ class TreeNode:
                 if gettypeoflevel(path,node.level+1) == 'polling district':
                     PDPtsdf0 = pd.DataFrame(PDelectors, columns=['PD', 'ENOP','Long', 'Lat'])
                     PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+# we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
                     g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                     PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
                     WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
@@ -864,12 +876,8 @@ class FGlayer:
         global levelcolours
         global allelectors
 
-
-
-
-        print('_______Walk Shape', herenode.value, herenode.level, herenode.fid, len(datablock))
-
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
+        print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
 
         # Create a single MultiPoint geometry that contains all the points
         multi_point = MultiPoint(points)
@@ -1447,6 +1455,7 @@ def dashboard ():
 
 
 @app.route('/downbut/<path:path>', methods=['GET','POST'])
+@login_required
 def downbut(path):
     global MapRoot
     global current_node
@@ -1546,6 +1555,7 @@ def transfer(path):
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
+@login_required
 def downPDbut(path):
     global Treepolys
     global current_node
@@ -1556,68 +1566,35 @@ def downPDbut(path):
     global filename
     global layeritems
 
-    steps = path.split("/")
-    steps.pop()
-    current_node = selected_childnode(current_node,steps[-1])
-    mapfile = current_node.dir+"/"+current_node.file
-
-    Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
     if request.method == 'GET':
         print ("_________Requestformfile",request.values['importfile'])
         flash ("_________Requestformfile"+request.values['importfile'])
-        filename = request.values['importfile']
-        allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-        current_node.parent.source = filename
-        print ("_________ROUTE/downPDbut", current_node.parent.source, len(allelectors))
+        electrollfile = request.values['importfile']
+        current_node = current_node.ping_node(path,electrollfile)
+        mapfile = current_node.dir+"/"+current_node.file
 
-        pfile = Treepolys[current_node.level]
-        Level3boundary = pfile[pfile['FID']==current_node.fid]
-        PDs = set(allelectors.PD.values)
-        print("PDsfull", PDs)
-#            Featurelayers[current_node.level].fg._children.extend(PDnodelist)
-        frames = []
-#            Dont know if PDs are within selected ward yet.
-        for PD in PDs:
-            PDelectors = getblock(allelectors,'PD',PD)
-            maplongx = PDelectors.Long.values[0]
-            maplaty = PDelectors.Lat.values[0]
-
-        # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-            if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
-                Area = normalname(Level3boundary['NAME'])
-                PDelectors['Area'] = Area
-
-                x = PDelectors.Long.values
-                y = PDelectors.Lat.values
-                kmeans_dist_data = list(zip(x, y))
-
-                walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
-
-                kmeans = KMeans(n_clusters=walkset)
-                kmeans.fit(kmeans_dist_data)
-
-                klabels1 = np.char.mod('C%d', kmeans.labels_)
-                klabels = klabels1.tolist()
-
-                PDelectors.insert(0, "WalkName", klabels)
-                frames.append(PDelectors)
+        Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
         print("_______displayed PD markers",Featurelayers[current_node.level].fg._children)
-        allelectors = pd.concat(frames)
 
         PDPtsdf0 = pd.DataFrame(allelectors, columns=['PD', 'ENOP','Long', 'Lat'])
         PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-        print ("______PDPtsdf1:",PDPtsdf1)
         g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
         PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
+        print ("______PDPtsdf:",PDPtsdf)
 
         WardPDnodelist = current_node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
 # if there is a selected file , then allelectors will be full of records
         for PD_node in WardPDnodelist:
-              PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
-              Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDnodeelectors)
-              print("_______new PD Display node",PD_node,"|", Featurelayers[current_node.level].fg._children)
+            PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
+            PDPtsdf0 = pd.DataFrame(allelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
+            PDPtsdf1 = PDPtsdf0.rename(columns= {'StreetName': 'Name'})
+            print ("______PDPtsdf1:",PDPtsdf1)
+            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+            PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
+            Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDPtsdf)
+            print("_______new PD Display node",PD_node,"|", Featurelayers[current_node.level].fg._children)
 
 #            areaelectors = getblock(allelectors,'Area',current_node.value)
 
@@ -2109,37 +2086,38 @@ def PDshowWK(path):
 
 # for each walk node, add a walk node convex hull to the walk_node parent layer (ie PD_node.level+1)
         for walk_node in walknodelist:
-              print("________WalkMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
+          print("________WalkMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
 
-              walk = walk_node.value
-              walk_name = walk_node.parent.value+"-"+walk_node.value
-              walkelectors = getblock(PDelectors, 'WalkName',walk_node.value)
+          walk = walk_node.value
+          walk_name = walk_node.parent.value+"-"+walk_node.value
+          walkelectors = getblock(PDelectors, 'WalkName',walk_node.value)
 
-              geometry = gpd.points_from_xy(walkelectors.Long.values,walkelectors.Lat.values, crs="EPSG:4326")
-            # create a geo dataframe for the Walk Map
-              geo_df1 = gpd.GeoDataFrame(
-                walkelectors, geometry=geometry
-                )
+          geometry = gpd.points_from_xy(walkelectors.Long.values,walkelectors.Lat.values, crs="EPSG:4326")
+        # create a geo dataframe for the Walk Map
+          geo_df1 = gpd.GeoDataFrame(
+            walkelectors, geometry=geometry
+            )
 
-            # Create a geometry list from the GeoDataFrame
-              geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
-              CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+        # Create a geometry list from the GeoDataFrame
+          geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
+          CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
 
-              StreetPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-              streetdf0 = pd.DataFrame(StreetPts, columns=['StreetName', 'Long', 'Lat','ENOP'])
-              streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
-              g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-              streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
+          StreetPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
+          streetdf0 = pd.DataFrame(StreetPts, columns=['StreetName', 'Long', 'Lat','ENOP'])
+          streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
+          g = {'Lat':'mean','Long':'mean','ENOP':'count'}
+          streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
 
-              print ("____________walklegs",streetdf)
-              streetnodelist = walk_node.create_data_branch('walkleg',streetdf.reset_index(),"-PRINT")
+          print ("____________walklegs",streetdf)
+          streetnodelist = walk_node.create_data_branch('walkleg',streetdf,"-PRINT")
 #
-              type_colour = allowed[walk_node.value]
+          type_colour = allowed[walk_node.value]
 
-        #      marker_cluster = MarkerCluster().add_to(Walkmap)
-              # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
+    #      marker_cluster = MarkerCluster().add_to(Walkmap)
+          # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
 
-              Featurelayers[PD_node.level].layeradd_walkshape(walk_node, 'walk',streetdf.reset_index())
+          if len(streetdf.reset_index()) > 0:
+              Featurelayers[PD_node.level].layeradd_walkshape(walk_node, 'walk',streetdf)
               Featurelayers[walk_node.level+1].layeradd_nodemaps(walk_node, 'walk')
               print("_______new Walk Display node",walk_node,"|", Featurelayers[PD_node.level].fg._children)
 
@@ -2221,6 +2199,9 @@ def PDshowWK(path):
               with open(results_filename, mode="w", encoding="utf-8") as results:
                 results.write(results_template.render(context, url_for=url_for))
 #           only create a map file if branch does not already exist
+          else:
+              print("________ERROR empty walk  :",streetdf.reset_index())
+
         map = PD_node.create_area_map(Featurelayers,PDelectors, "-WALKS")
 
         mapfile = PD_node.dir+"/"+PD_node.file
