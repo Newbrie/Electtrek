@@ -1185,14 +1185,16 @@ sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
 # Configure Alchemy
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/newbrie/Documents/ReformUK/GitHub/Electtrek/trekusers.db'
 app.config['SECRET_KEY'] = 'rosebutt'
-#app.config['USE_SESSION_FOR_NEXT'] = True
+app.config['USE_SESSION_FOR_NEXT'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['UPLOAD_FOLDER'] = '/Users/newbrie/Sites'
 app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/Electtrek'
 #app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
 app.config['SESSION_PROTECTION'] = 'strong'  # Stronger session protection
-
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Try 'None' if cross-origin
 
 
 db = SQLAlchemy(app)
@@ -1292,7 +1294,7 @@ class User(db.Model, UserMixin):
 @login_manager.user_loader
 def load_user(user_id):
     print(f"🔁 load_user called with user_id: {user_id}")
-    user = db.session.get(User, int(user_id))
+    user = User.query.get(int(user_id))
     print(f"🔍 load_user found: {user}")
     return user
 
@@ -1354,8 +1356,12 @@ def index():
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
         print("__________Session Alive:"+ session['username'])
+        formdata = {}
+        allelectors = []
+        mapfile = current_node.dir+"/"+current_node.file
+#        redirect(url_for('captains'))
+        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-        return redirect (url_for('dashboard'))
 
     return render_template("index.html")
 
@@ -1376,51 +1382,59 @@ def login():
     username = request.form['username']
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
+    print("_______ROUTE/login page", username, user)
 
     # Check if it exists
     if not user:
         flash("_______ROUTE/login User not found", username)
+        print("_______ROUTE/login User not found", username)
         return render_template("index.html")
     elif user and user.check_password(password):
         # Successful login
         session["username"] = username
+        session["user_id"] = user.id
         login_user(user)
+        session.modified = True
+        if 'next' in session:
+            next = session['next']
+            print("_______ROUTE/login next found", next)
+            return next
+
+        print("_______ROUTE/login User found", username)
 
         # Debugging session user ID
-        print(f"🔐 session['user_id']: {session.get('user_id')}")
-        print(f"🧪 Logging in user with ID: {user.id}")
+        print(f"🧍 current_user.id: {current_user.id if current_user.is_authenticated else 'Anonymous'}")
+        print(f"🧪 Logging in user with ID: {current_user.id}")
         print("🧪 session keys after login:", dict(session))
         next = request.args.get('next')
         formdata = {}
         current_node = MapRoot
-
-        formdata['country'] = 'UNITED_KINGDOM'
-        formdata['GOTV'] = ElectionSettings['GOTV']
-        formdata['walksize'] = ElectionSettings['walksize']
-        formdata['candfirst'] = "Firstname"
-        formdata['candsurn'] = "Surname"
-        formdata['electiondate'] = "DD-MMM-YY"
-        formdata['importfile'] = ""
-        england = current_node
-        for england in MapRoot.children:
-            if england.value == 'ENGLAND':
-                break
-
-        add_boundaries('county')
-        england.create_map_branch('county')
-        layeritems = getlayeritems(england.create_map_branch('county'))
-        mapfile = current_node.dir + "/" + current_node.file
         return redirect(url_for('firstpage'))
+#        formdata['country'] = 'UNITED_KINGDOM'
+#        formdata['GOTV'] = ElectionSettings['GOTV']
+#        formdata['walksize'] = ElectionSettings['walksize']
+#        formdata['candfirst'] = "Firstname"
+#        formdata['candsurn'] = "Surname"
+#        formdata['electiondate'] = "DD-MMM-YY"
+#        formdata['importfile'] = ""
+#        england = current_node
+#        for england in MapRoot.children:
+#            if england.value == 'ENGLAND':
+#                break
+
+#        add_boundaries('county')
+#        england.create_map_branch('county')
+#        layeritems = getlayeritems(england.create_map_branch('county'))
+#        mapfile = current_node.dir + "/" + current_node.file
+
     else:
         flash('Not logged in!')
         return render_template("index.html")
 
 
-#dashboard
-
-@app.route('/dashboard', methods=['GET','POST'])
+@app.route('/test2', methods=['GET','POST'])
 @login_required
-def dashboard ():
+def test2 ():
     #formdata['username'] = session["username"]
 
 
@@ -1437,7 +1451,8 @@ def dashboard ():
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
-
+        formdata = {}
+        allelectors = []
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
         return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
@@ -2385,7 +2400,7 @@ def resetdashboard():
 #    user = User.query.filter_by(username=username).first()
 #    if not user:
 #        return '<h1>User not found!</h1>'
-#    login_user(user, remember=True)
+#    login_user(user)
 #
 #    if 'next' in session:
 #        next = session['next']
@@ -2399,8 +2414,6 @@ def resetdashboard():
 @login_required
 def logout():
     flash('_______ROUTE/logout')
-
-
     print("Logout", session)
     if "username" in session:
         session.pop('username', None)
@@ -2479,6 +2492,7 @@ def setgotv():
     global formdata
     global current_node
     global layeritems
+    global allelectors
 
 
     flash('_______ROUTE/setgotv',session)
@@ -2505,8 +2519,8 @@ def setgotv():
 
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)))
 
-    return render_template('candidates.html', context = {  "session" : session, "formdata" : ElectionSettings, "group" : allelectors , "mapfile" : mapfile})
-
+        return render_template('candidates.html', context = {  "session" : session, "formdata" : ElectionSettings, "group" : allelectors , "mapfile" : mapfile})
+    return ""
 
 @app.route('/normalise', methods=['POST','GET'])
 def normalise():
@@ -2637,17 +2651,9 @@ def captains():
     mapfile = current_node.dir+"/"+current_node.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
-@app.route('/firstpage', methods=['GET', 'POST'])
-@login_required
-def firstpage():
-    print("👤 current_user:", current_user)
-    print("🔐 is_authenticated:", current_user.is_authenticated)
-    print("🚀 Candidates route hit")
-    return "We made it!"
 
-@app.route('/test')
-@login_required
-def test():
+@app.route('/firstpage', methods=['GET', 'POST'])
+def firstpage():
     global MapRoot
     global current_node
     global allelectors
@@ -2655,8 +2661,9 @@ def test():
     global Featurelayers
     global environment
     global layeritems
-
-    print("🚀 Current user authenticated:", current_user.is_authenticated)  # Debug line
+    print("🔍 firstpage accessed by:", current_user)
+    print("✅ Authenticated:", current_user.is_authenticated)
+    print("🆔 User ID:", getattr(current_user, 'id', 'N/A'))
     if current_user.is_authenticated:
         formdata = {}
         formdata['country'] = "UNITED_KINGDOM"
