@@ -2489,7 +2489,6 @@ def upload():
 @app.route('/setgotv', methods=['POST'])
 def setgotv():
     global ElectionSettings
-    global formdata
     global current_node
     global layeritems
     global allelectors
@@ -2500,18 +2499,18 @@ def setgotv():
     selected = None
     if request.method == 'POST':
 
-        formdata = {}
-        filled_data = {
+
+        form_data = {
         key: value
         for key, value in request.form.items()
             if value.strip()  # Only keep non-empty inputs
             }
 
-        print("User submitted:", filled_data)
+        print("User submitted:", form_data)
         # Now `filled_data` contains only the meaningful inputs
 
         # You can now process only what's been entered
-        for field,value in filled_data.items():
+        for field,value in form_data.items():
             ElectionSettings['field'] =  value
 
         GOTV = ElectionSettings['GOTV']
