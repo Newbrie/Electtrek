@@ -1364,7 +1364,7 @@ def index():
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
         DQstats = pd.DataFrame()
-        return render_template("candidates.html", context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
+        return render_template("candidates.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -2455,7 +2455,7 @@ def setgotv():
 
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)))
 
-        return render_template('candidates.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
+        return render_template("candidates.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     return ""
 
 @app.route('/normalise', methods=['POST','GET'])

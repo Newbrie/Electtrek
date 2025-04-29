@@ -102,6 +102,7 @@ var showMore = function (msg,area, type) {
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
   const table = parent.document.getElementById("captains-table");
+  alert("Captains Table:"+table);
   const tabhead = table.querySelector("thead");
   const tabbody = table.querySelector("tbody");
   // Define your party color lookup
