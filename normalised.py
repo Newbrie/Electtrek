@@ -149,6 +149,7 @@ def normz(LocalFile, normstats):
 
     electors0 = pd.DataFrame()
     electors10 = pd.DataFrame()
+    DQstats = pd.DataFrame(columns=['Field','P1', 'P2', 'P3', 'Ready'])
     Env1 = sys.base_prefix
 
     normstats['env'] = Env1
@@ -206,21 +207,23 @@ def normz(LocalFile, normstats):
         "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" , "NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
 
-        Outcomes = read_excel(workdir+"/"+"RuncornRegister.xlsx")
+        Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
         Outcols = Outcomes.columns
         for z in Outcols :
             DQstats.loc[Outcols.index(z),'Field'] = z
 
         DQStats = pd.Dataframe(columns = Outcols)
 
+        print("Before first pass : ", DQstats )
         incols = dfz.columns
+
 
         INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
         Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
         typechildren = [x for x in self.children if x.type == electtype]
 
         for y in [x for x in Outcols if x in Incols]:
-            DQstats.loc[Outcols.index(y),'Pass1'] = 1
+            DQstats.loc[Outcols.index(y),'P1'] = 1
 
         print("Completed first pass : ", DQstats )
         dfzres = extractfactors(dfz)
