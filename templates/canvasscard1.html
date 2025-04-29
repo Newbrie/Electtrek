@@ -73,7 +73,7 @@
 	</div>
 	<div id="main" style="page-break-before: always;">
 	    <table id="canvass-table">
-				<thead id="canvass-table">
+				<thead>
 					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
  			 		constituency by-election on {{ prodstats['electiondate'] }}. Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
  			 		PLEASE DO NOT SAY “I’m sorry to bother you”.</th>
@@ -87,7 +87,7 @@
 	    </tr>
 
 	      </thead>
-				<tbody id="canvass-table">
+				<tbody>
 					{% for index,row in group.iterrows() %}
 	      <tr>
 	        <td class="c0">{{ row['WalkName'] }}</td>
@@ -111,7 +111,7 @@
 	      </tr>
 	      {% endfor %}
 			</tbody>
-			<tfoot id="canvass-table">
+			<tfoot>
 						<tr>  <td colspan='10' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
 							VI Box:  R=Reform   |   Z=Maybe   I   C=Conservative  |  S=Labour (Socialists)  |  W=Won’t vote  |  X=Won’t say <br>
 							Notes Box:  How did they vote in the last election?   (cont.  LD=Lib Dems   |   G=Green   |   I=Independent) <br>
