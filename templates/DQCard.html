@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block body%}
+		<title>ELECTTREK</title>
+
+    <b><iframe src= {{ mapfull }}  height= "800" width = "1200" title="Walk Map"></iframe> </b>
+
+		<div id="nav" class=innertube>
+    <h1 >elecTrek</h1>
+		<ul>Walk Information</ul>
+		<ul>
+		<b>Constituency:</b>
+		<b>{{ dash['constituency']}} </b>
+		</ul>
+		<ul>
+		<b>Ward:</b>
+		<b>{{ dash['ward'] }} </b>
+		</ul>
+		<ul>
+    <b>Polling District:</b>
+    <b>{{ dash['PD'] }} </b>
+    </ul>
+    <ul>
+    <b>Walk:</b>
+    <b>{{ dash['walk_name'] }} </b>
+    </ul>
+    <ul>
+    <b>Electors:</b>
+    <b>{{ dash['clusterelectors'] }} </b>
+    </ul>
+    <ul>
+    <b>Houses:</b>
+    <b>{{ dash['houses'] }} </b>
+    </ul>
+    <ul>
+    <b>Streets:</b>
+    <b>{{ dash['streets']}} </b>
+    </ul>
+    <ul>
+        <b>Area(sqm):</b>
+    <b>{{ dash['areamsq'] | round | int}} </b>
+    </ul>
+    <ul>
+        <b>Climb(m):</b>
+    <b>{{ dash['climb'] }} </b>
+    </ul>
+    <ul>
+        <b>Housing Density (UKAv=1.97):</b>
+    <b>{{ dash['housedensity'] }} </b>
+    </ul>
+    <ul>
+        <b>Leafleting Time:</b>
+    <b>{{ dash['leafhrs'] | round | int }}hrs {{ (dash['leafhrs']%1*60) | round | int }}mins</b>
+    </ul>
+    <ul>
+        <b>Canvassing Time:</b>
+    <b>{{ dash['canvasshrs'] | round | int }}hrs {{ (dash['leafhrs']%1*60) | round | int }}mins</b>
+    </ul>
+    <ul>
+    <p>Please collect the data below and press save for an uploadable file of voter data</p>
+    </ul>
+
+    <ul>
+      <button id="Show_the_Walk_Map">
+        <label class="guil-action_button" for="Show_the_Walk_Map"  >
+          <a href= {{ mapfull }} >WALKMAP</a>
+        </label>
+      </button>
+    </ul>
+    <ul>
+      <button id="Save_the_data" class="SAVE">
+        <label class="guil-action_button" for="Save_the_data" >
+          <b>SAVE DATA</b>
+        </label>
+			</button>
+		</ul>
+
+
+	</div>
+
+	<div class="form-popup" id="myForm">
+	<!--    <form action="/action_page.php" class="form-container">-->
+
+			<form action="mailto:surrey@reformuk.com?subject={{walk_name}}" method="GET" enctype="text/plain">
+		Subject:<br>
+			<input type="text" name="subject" placeholder="{{walk_name}}"><br>
+			Email:<br>
+			<input type="email" name="sender" placeholder="surrey@reformuk.com"><br>
+			Message:<br>
+			<textarea name="body" rows="3" cols="30" placeholder="Your Message"></textarea><br>
+			<input type="submit" value="Send">
+		<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</form>
+
+	</div>
+
+	    <table>
+	      <thead>
+	      <tr>
+	      <th class="c1">Ward</th>
+	      <th class="c2">PD</th>
+	      <th class="c3">Elector Number</th>
+	      <th class="c4">Name</th>
+				<th class="c5">No.</th>
+	      <th class="c5">Street</th>
+	      <th class="c6">Postcode</th>
+	       <th class="c10">V.I.</th>
+	      <th class="c11">Notes</th>
+	    </tr>
+
+	      </thead>
+	      {% for index,row in group.iterrows() %}
+
+	      <tr>
+	        <td class="c1">{{ ward }}</td>
+	        <td class="c2">{{ PD }}</td>
+	        <td class="c3">{{ '{:.1f}'.format(row['ENOP']) }}</td>
+					<td class="c2">{{ row['ElectorName'] }}</td>
+	        {% if row['AddressPrefix'] | int  > 0 and row['AddressNumber'] | int > 0 %}
+	           <td class="c4">{{ row['AddressPrefix'] }}, {{row['AddressNumber'] | int }}</td>
+	        {% else %}
+	          {% if row['AddressNumber'] | int > 0 %}
+	            <td class="c4">{{ row['AddressNumber'] | int }}</td>
+	          {% else %}
+	            <td class="c4">{{ row['AddressPrefix'] }}</td>
+	          {% endif %}
+	        {% endif %}
+	        <td class="c5">{{ row['StreetName'] }}</td>
+	        <td class="c6">{{ row['Postcode'] }}</td>
+	             <td class="guil-radio_button-group">
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-A" ~ row['ENOP']}} value="LAB" />
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-A" ~ row['ENOP']}}>
+	                    <div class="guil-radio_faux">L</div>
+	                  </label>
+	                </span>
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-B" ~ row['ENOP']}}  value="LIB" />
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-B" ~ row['ENOP']}} >
+	                    <div class="guil-radio_faux">LD</div>
+	                  </label>
+	                </span>
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-C" ~ row['ENOP']}}  value="REF" />
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-C" ~ row['ENOP']}} >
+	                    <div class="guil-radio_faux">R</div>
+	                  </label>
+	                </span>
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-D" ~ row['ENOP']}}  value="CON" />
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-D" ~ row['ENOP']}} >
+	                    <div class="guil-radio_faux">C</div>
+	                  </label>
+	                </span>
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-E" ~ row['ENOP']}}   value="OTH" />
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-E" ~ row['ENOP']}}  >
+	                    <div class="guil-radio_faux">G</div>
+	                  </label>
+	                </span>
+	                <span class="guil-button guil-radio_button">
+	                  <input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}}   value="UNK" checked/>
+	                  <label class="guil-radio_button__label" for={{"example-unique-id-F" ~ row['ENOP']}}  >
+	                    <div class="guil-radio_faux">I</div>
+	                  </label>
+	                </span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-G" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-G" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">RP</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-H" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-H" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">A</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-I" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-I" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">W</div>
+										</label>
+									</span>
+									<span class="guil-button guil-radio_button">
+										<input type="radio" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-J" ~ row['ENOP']}}   value="UNK" checked/>
+										<label class="guil-radio_button__label" for={{"example-unique-id-J" ~ row['ENOP']}}  >
+											<div class="guil-radio_faux">X</div>
+										</label>
+									</span>
+	              </td>
+	        <td class="c8"><span>
+						<input type="text" name={{"example-unique-id-A" ~ row['ENOP']}} id={{"example-unique-id-F" ~ row['ENOP']}} />
+	        {{ row['Notes'] }}
+	          </span>
+	        </td>
+	      </tr>
+	      {% endfor %}
+			</tbody>
+	    </table>
+
+{% endblock %}

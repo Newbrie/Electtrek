@@ -3,7 +3,7 @@
 <div id="mapwin" class="innertube">
     <h1>elecTrek - The Canvassing App</h1>
     <h1>Welcome to your dashboard, {{ session['username'] }}</h1>
-    <iframe id="iframe1" src= {{ url_for('map',path=context.mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
+    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
 
 </div>
 <script >
@@ -105,23 +105,54 @@
       <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       <br>
 
-      Firstname: <input type="text" name="candfirst" placeholder=" {{ formdata['candfirst'] }} "/><br>
-      Surname: <input type="text" name="candsurn" placeholder=" {{ formdata['candsurn'] }} "/><br>
-      Date of election: <input type="text" name="electiondate" placeholder=" {{ formdata['electiondate'] }} "/><br>
+      Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
+      Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
+      Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
 
 
 
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
             CONTROLS:<br>
-          <input type="file" name="importfile" placeholder= " {{ formdata['importfile']}} "/>
+          <input type="file" name="importfile" placeholder= " {{ (formdata or {}).get('importfile', '')}} "/>
 		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
 		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
 					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
 					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
 					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
-          <input type="submit" value="UploadCaptainsTable" class="btn btn-norm" onclick="setActionForm('captains')"/>
 		  </form>
+
+          <table id="DQ-table">
+            <thead>
+             <tr><th style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> Importing from file </th>
+             </tr>
+            <tr>
+            <th >Field</th>
+            <th >Pass1</th>
+            <th >Pass2</th>
+            <th >Pass3</th>
+            <th >Ready</th>
+          </tr>
+
+            </thead>
+            <tbody>
+              {% for index,row in DQstats.iterrows() %}
+            <tr>
+              <td class="colname">{{ row['Field'] }}</td>
+              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass1'] }}" onclick="return false;" name= 'pass1' id='pass1' /></td>
+              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass2'] }}" onclick="return false;" name= 'pass2' id='pass2' /></td>
+              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass3'] }}" onclick="return false;" name= 'pass3' id='pass3' /></td>
+              <td class="pass"> <input type="checkbox" placeholder= "{{ row['ready'] }}" onclick="return false;" name= 'ready' id='ready' /></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+                <tr>  <td colspan='5' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
+                  _________________________________________ <br></td>
+                </tr>
+          </tfoot>
+          </table>
+
 
   <script>
 
@@ -148,11 +179,6 @@
 									form.method = 'POST';
 									document.body.style.cursor = 'wait'
 									form.submit();
-              } else if (action === 'captains') {
-                    form.action = "{{url_for('captains')}}";
-                    form.method = 'POST';
-                    document.body.style.cursor = 'wait'
-                    form.submit();
                   };
 			    };
 

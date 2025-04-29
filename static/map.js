@@ -101,8 +101,8 @@ var showMore = function (msg,area, type) {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
-  const tabhead = parent.document.querySelector("div > table > thead");
-  const tabbody = parent.document.querySelector("div > table > tbody");
+  const tabhead = parent.document.querySelector("#canvass-table > thead");
+  const tabbody = parent.document.querySelector("#canvass-table > tbody");
 
   // Define your party color lookup
   const VCO = {

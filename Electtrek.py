@@ -1,6 +1,7 @@
 from canvasscards import prodcards, getblock, find_boundary
 from walks import prodwalks
 #import electwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
+import config
 from normalised import normz
 #import normz
 import folium
@@ -30,14 +31,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
-from flask import json, get_flashed_messages, request
+from flask import json, get_flashed_messages, request, make_response
 from werkzeug.exceptions import HTTPException
-import config
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
 import sys
+
+
 sys.path
 sys.path.append('/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/Electtrek.py')
 print(sys.path)
@@ -49,6 +51,7 @@ levels = ['country','nation','county','constituency','ward/division','polling di
 
 # want to equate levels with certain types, eg 4 is ward and div
 # want to look up the level of a type ,and the types in a level
+
 
 def get_creation_date(filepath):
     if filepath == "":
@@ -246,6 +249,8 @@ class TreeNode:
         elif self.type == 'constituency' and sname in Con_Results_data['NAME'].to_list():
             selected = Con_Results_data.query('NAME == @sname')
             party = selected['FIRST'].values[0]
+        if party not in VNORM.keys():
+            party = "O"
         party = VNORM[party]
         self.col = VCO[party]
         print("______VNORM:", self.value, party, self.col)
@@ -351,7 +356,7 @@ class TreeNode:
                 fam_nodes.append(egg)
 
     #    self.aggTarget()
-        print('______Data frame:',namepoints, fam_nodes, self.value, self.bbox)
+#        print('______Data frame:',namepoints, fam_nodes, self.value, self.bbox)
         return fam_nodes
 
     def create_map_branch(self,electtype):
@@ -400,7 +405,7 @@ class TreeNode:
     #            childtable.loc[i,self.type] =  self.value
     #            i = i + 1
 
-        print ("_________fam_nodes :", fam_nodes )
+#        print ("_________fam_nodes :", fam_nodes )
         return fam_nodes
 
     def create_area_map (self,flayers,block,ending):
@@ -683,50 +688,6 @@ class TreeNode:
         node = self
         block = pd.DataFrame()
         frames = []
-        if node.level == 4 and len(node.children) == 0 and len(allelectors) == 0 and electrollfile != "":
-            allelectors0 = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-            node.parent.source = electrollfile
-            alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
-            alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
-# we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
-            g = {'Popz':'count'}
-            alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
-            alldf['Popz'] = alldf['Popz'].rdiv(1)
-
-            allelectors = allelectors0.merge(alldf, on='Postcode',how='left' )
-            print("____- Popz allelectors:",len(alldf), len(allelectors), len(allelectors0))
-            pfile = Treepolys[self.level]
-            Level3boundary = pfile[pfile['FID']==node.fid]
-            PDs = set(allelectors.PD.values)
-            print("____- PDs:",PDs)
-            for PD in PDs:
-                PDelectors = getblock(allelectors,'PD',PD)
-                maplongx = PDelectors.Long.values[0]
-                maplaty = PDelectors.Lat.values[0]
-
-            # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-                if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
-                    Area = normalname(Level3boundary['NAME'].values[0])
-                    PDelectors['Area'] = Area
-
-                    x = PDelectors.Long.values
-                    y = PDelectors.Lat.values
-
-
-                    kmeans_dist_data = list(zip(x, y))
-
-                    walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
-
-                    kmeans = KMeans(n_clusters=walkset)
-                    kmeans.fit(kmeans_dist_data)
-
-                    klabels1 = np.char.mod('C%d', kmeans.labels_)
-                    klabels = klabels1.tolist()
-
-                    PDelectors.insert(0, "WalkName", klabels)
-                    frames.append(PDelectors)
-
-            allelectors = pd.concat(frames)
 
         while steps:
             next = steps.pop()
@@ -759,14 +720,59 @@ class TreeNode:
                         print("____ NEW MAP NODE CREATED  ",mtype,node.value,node.fid,node.file)
                         break
             elif node.level == 4:
-                PDelectors = getblock(allelectors,'Area',node.value)
-                if gettypeoflevel(path,node.level+1) == 'polling district':
-                    PDPtsdf0 = pd.DataFrame(PDelectors, columns=['PD', 'ENOP','Long', 'Lat'])
-                    PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-# we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
-                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-                    PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                    WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
+                if len(node.children) == 0 and len(allelectors) == 0 and electrollfile != "":
+                    allelectors0 = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+                    node.parent.source = electrollfile
+                    alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
+                    alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
+        # we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
+                    g = {'Popz':'count'}
+                    alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
+                    alldf['Popz'] = alldf['Popz'].rdiv(1)
+
+                    allelectors = allelectors0.merge(alldf, on='Postcode',how='left' )
+                    print("____- Popz allelectors:",len(alldf), len(allelectors), len(allelectors0))
+                    pfile = Treepolys[node.level]
+                    Level3boundary = pfile[pfile['FID']==node.fid]
+                    PDs = set(allelectors.PD.values)
+                    print("____- PDs:",PDs)
+                    for PD in PDs:
+                        PDelectors = getblock(allelectors,'PD',PD)
+                        maplongx = PDelectors.Long.values[0]
+                        maplaty = PDelectors.Lat.values[0]
+
+                    # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
+                        if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
+                            Area = normalname(Level3boundary['NAME'].values[0])
+                            PDelectors['Area'] = Area
+
+                            x = PDelectors.Long.values
+                            y = PDelectors.Lat.values
+
+
+                            kmeans_dist_data = list(zip(x, y))
+
+                            walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
+
+                            kmeans = KMeans(n_clusters=walkset)
+                            kmeans.fit(kmeans_dist_data)
+
+                            klabels1 = np.char.mod('C%d', kmeans.labels_)
+                            klabels = klabels1.tolist()
+
+                            PDelectors.insert(0, "WalkName", klabels)
+                            frames.append(PDelectors)
+
+                    allelectors = pd.concat(frames)
+                else:
+                    PDelectors = getblock(allelectors,'PD',node.value)
+                    if gettypeoflevel(path,node.level+1) == 'polling district':
+                        PDPtsdf0 = pd.DataFrame(PDelectors, columns=['PD', 'ENOP','Long', 'Lat'])
+                        PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+    # we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
+                        g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                        PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
+                        WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-WALKS")
             elif node.level == 5:
                 PDelectors = getblock(allelectors,'PD',node.value)
                 if gettypeoflevel(path,node.level+1) == 'street':
@@ -783,7 +789,7 @@ class TreeNode:
                     walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
                     walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-PRINT")
             elif node.level == 6 and gettypeoflevel(path,node.level+1) == 'walkleg':
-                PDelectors = getblock(allelectors,'PD',node.parent.parent.value)
+                PDelectors = getblock(allelectors,'Area',node.parent.parent.value)
                 walk_name = node.parent.value+"-"+node.value
                 walkelectors = getblock(PDelectors, 'WalkName',node.value)
                 StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
@@ -1043,12 +1049,12 @@ class FGlayer:
                 limb = limbX.iloc[[0]].__geo_interface__  # Ensure this returns a GeoJSON dictionary for the row
 
                 # Ensure 'properties' exists in the GeoJSON and add 'col'
-                print("GeoJSON creation:", limb)
+#                print("GeoJSON creation:", limb)
                 if 'properties' not in limb:
                     limb['properties'] = {}
 
                 # Now you can use limb_geojson as a valid GeoJSON feature
-                print("GeoJSON Feature:", limb)
+#                print("GeoJSON Feature:", limb)
 
                 folium.GeoJson(
                     limb,  # This is the GeoJSON feature (not the GeoDataFrame)
@@ -1092,7 +1098,7 @@ class FGlayer:
                                )
 
 
-        print("________Layer map polys",herenode.value,herenode.level,self.fg._children, Featurelayers[herenode.level].fg._children)
+        print("________Layer map polys",herenode.value,herenode.level,len(self.fg._children), len(Featurelayers[herenode.level].fg._children))
 
         return herenode
 
@@ -1185,25 +1191,29 @@ sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
 # Configure Alchemy
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/newbrie/Documents/ReformUK/GitHub/Electtrek/trekusers.db'
 app.config['SECRET_KEY'] = 'rosebutt'
-app.config['USE_SESSION_FOR_NEXT'] = True
+app.config['USE_SESSION_FOR_NEXT'] = False
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['UPLOAD_FOLDER'] = '/Users/newbrie/Sites'
 app.config['APPLICATION_ROOT'] = '/Users/newbrie/Documents/ReformUK/GitHub/Electtrek'
 #app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
-app.config['SESSION_PROTECTION'] = 'strong'  # Stronger session protection
+#app.config['SESSION_PROTECTION'] = 'strong'  # Stronger session protection
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Try 'None' if cross-origin
+app.config['SESSION_COOKIE_NAME'] = 'session'
+app.config['TESTING'] = False
+app.config['SESSION_COOKIE_PATH'] = '/'
+
 
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-login_manager.login_view = "<h1>login</h1>"
+login_manager.login_view = 'login'
 login_manager.login_message = "<h1>You really need to login!!</h1>"
-login_manager.refresh_view = "<h1>Login</h1>"
+login_manager.refresh_view = "index"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
 login_manager.login_message_category = "info"
 
@@ -1293,22 +1303,13 @@ class User(db.Model, UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    print(f"🔁 load_user called with user_id: {user_id}")
     user = User.query.get(int(user_id))
-    print(f"🔍 load_user found: {user}")
     return user
 
 @login_manager.unauthorized_handler     # In unauthorized_handler we have a callback URL
 def unauthorized_callback():            # In call back url we can specify where we want to
     return render_template("index.html") # redirect the user in my case it is login page!
 
-#@app.errorhandler(404)
-#def handle_error(error):
-#    response = jsonify(error.to_dict())
-#    response.status_code = error.status_code
-#    formdata['status'] = response.status_code
-#    flash("Not found: "+formdata['status'])
-#    return render_template("Dash0.html", context = { "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.errorhandler(HTTPException)
 def handle_exception(e):
@@ -1329,6 +1330,7 @@ def handle_exception(e):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route("/get-constants", methods=["GET"])
+@login_required
 def get_constants():
     return jsonify({
         "constants": ElectionSettings,
@@ -1336,6 +1338,7 @@ def get_constants():
     })
 
 @app.route("/set-constant", methods=["POST"])
+@login_required
 def set_constant():
     data = request.get_json()
     name = data.get("name")
@@ -1360,8 +1363,8 @@ def index():
         allelectors = []
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-
+        DQstats = pd.DataFrame()
+        return render_template("candidates.html", context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
 
     return render_template("index.html")
 
@@ -1378,11 +1381,16 @@ def login():
     global layeritems
     global ElectionSettings
 
+    if 'username' in session:
+        flash("User already logged in:", session['username'])
+        print("_______ROUTE/Already logged in:", session['username'])
+        return redirect(url_for('dashboard'))
     # Collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
+    print("Flask Current time:", datetime.utcnow())
 
     # Check if it exists
     if not user:
@@ -1393,8 +1401,14 @@ def login():
         # Successful login
         session["username"] = username
         session["user_id"] = user.id
+        print("🔑 app.secret_key:", app.secret_key)
+        print("👤 user.get_id():", user.get_id())
         login_user(user)
+        print("get-id-after",user.get_id())
         session.modified = True
+        # Debugging: Check the session and cookies
+        print("Session after login:", dict(session))  # Print session content
+
         if 'next' in session:
             next = session['next']
             print("_______ROUTE/login next found", next)
@@ -1407,34 +1421,34 @@ def login():
         print(f"🧪 Logging in user with ID: {current_user.id}")
         print("🧪 session keys after login:", dict(session))
         next = request.args.get('next')
-        formdata = {}
         current_node = MapRoot
-        return redirect(url_for('firstpage'))
-#        formdata['country'] = 'UNITED_KINGDOM'
-#        formdata['GOTV'] = ElectionSettings['GOTV']
-#        formdata['walksize'] = ElectionSettings['walksize']
-#        formdata['candfirst'] = "Firstname"
-#        formdata['candsurn'] = "Surname"
-#        formdata['electiondate'] = "DD-MMM-YY"
-#        formdata['importfile'] = ""
-#        england = current_node
-#        for england in MapRoot.children:
-#            if england.value == 'ENGLAND':
-#                break
 
-#        add_boundaries('county')
-#        england.create_map_branch('county')
-#        layeritems = getlayeritems(england.create_map_branch('county'))
-#        mapfile = current_node.dir + "/" + current_node.file
+        return redirect(url_for('firstpage'))
 
     else:
         flash('Not logged in!')
         return render_template("index.html")
 
 
-@app.route('/test2', methods=['GET','POST'])
+@app.route('/logout', methods=['POST', 'GET'])
 @login_required
-def test2 ():
+def logout():
+    flash("🔓 Logging out user:"+ current_user.get_id())
+    print("🔓 Logging out user:", current_user.get_id())
+
+    # Always log out the user
+    logout_user()
+
+    # Clear the entire session to remove 'username', 'user_id', etc.
+    session.clear()
+
+    return redirect(url_for('index'))
+
+
+
+@app.route('/dashboard', methods=['GET','POST'])
+@login_required
+def dashboard ():
     #formdata['username'] = session["username"]
 
 
@@ -1453,9 +1467,10 @@ def test2 ():
         flash('_______ROUTE/dashboard'+ session['username'] + ' is already logged in ')
         formdata = {}
         allelectors = []
+        DQstats = pd.DataFrame()
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        return render_template("Dash0.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash0.html", context = {  "session" : session, "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -1474,8 +1489,6 @@ def downbut(path):
     global Featurelayers
     global environment
     global levels
-    global Con_Results_data
-    global Ward_Results_data
     global layeritems
     global ward_div
 
@@ -1486,41 +1499,17 @@ def downbut(path):
 
     current_node = current_node.ping_node(path,current_node.source)
     path = path.replace("/STREETS","").replace("/WALKS","")
-    ward_div = path.split(" ").pop()
-    steps = path.split("/")
-    last = steps.pop()
-    count = len(steps)
-    atype = gettypeoflevel(path,count)
-    mapfile = current_node.dir+"/"+current_node.file
-    pmapfile = current_node.parent.dir+"/"+current_node.parent.file
-    print("_________selected node",count,atype,ward_div,steps,current_node.value, current_node.level,current_node.file)
-
-
+    atype = gettypeoflevel(path,current_node.level+1)
 # the map under the selected node map needs to be configured
-    print("_________selected node",atype,steps,current_node.value, current_node.level,current_node.file)
+    print("_________selected node",atype,current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
     add_boundaries(atype)
-
     layeritems = getlayeritems(current_node.create_map_branch(atype))
     Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     Featurelayers[current_node.level].layeradd_nodemaps(current_node, atype)
 
-#    if current_node.level == 2:
-#        Con_Results_data.columns = ["NAME","FIRST","SECOND"]
-#        Chorodata = Con_Results_data[['NAME','First party','Second party']]
-#        Chorodata['NAME'] = Con_Results_data['NAME']
-#        Chorodata['FIRST'] = Con_Results_data['First party'].index
-#
-#        folium.Choropleth(
-#            geo_data=Treepolys[3],
-#            data=Chorodata,
-#            columns=["NAME", "FIRST"],
-#            key_on="feature.properties.NAME",).add_to(current_node.map)
-
     map = current_node.create_area_map(Featurelayers,allelectors,"-MAP")
-    print("________child nodes created",current_node.children)
-
-# the selected node boundary options need to be added to the layer
+    print("________child nodes created",len(current_node.children))
 
     #formdata['username'] = session["username"]
     formdata['country'] = "UNITED_KINGDOM"
@@ -1530,10 +1519,11 @@ def downbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
-    mapfile =current_node.dir+"/"+current_node.file
+    mapfile = current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
 
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
+@login_required
 def transfer(path):
     global MapRoot
     global current_node
@@ -1542,24 +1532,23 @@ def transfer(path):
     global Featurelayers
     global environment
     global levels
-    global Con_Results_data
-    global Ward_Results_data
     global layeritems
     global ElectionSettings
     global formdata
 
+
     formdata = {}
 # transfering to another any other node with siblings listed below
-
     previous_node = current_node
     current_node = MapRoot.ping_node(path,current_node.source)
     mapfile = current_node.dir +"/"+ current_node.file
     print("____Route/transfer:",previous_node.value,current_node.value, path)
-    if current_node.level < 4:
+    if current_node.level < 5:
         redirect(url_for('downbut',path=mapfile))
-    layeritems = getlayeritems(current_node.parent.children)
-
-    return   redirect(url_for('map',path=mapfile))
+    else:
+        layeritems = getlayeritems(current_node.parent.children)
+        return   redirect(url_for('map',path=mapfile))
+    return redirect(url_for('map',path=mapfile))
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
@@ -1596,13 +1585,13 @@ def downPDbut(path):
 # if there is a selected file , then allelectors will be full of records
         for PD_node in WardPDnodelist:
             PDnodeelectors = getblock(allelectors,'PD',PD_node.value)
-            PDPtsdf0 = pd.DataFrame(allelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
+            PDPtsdf0 = pd.DataFrame(PDnodeelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
             PDPtsdf1 = PDPtsdf0.rename(columns= {'StreetName': 'Name'})
             print ("______PDPtsdf1:",PDPtsdf1)
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
             PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
             Featurelayers[current_node.level].layeradd_walkshape(PD_node, 'polling district',PDPtsdf)
-            print("_______new PD Display node",PD_node,"|", Featurelayers[current_node.level].fg._children)
+            print("_______new PD Display node",PD_node,"|", PDPtsdf)
 
 #            areaelectors = getblock(allelectors,'Area',current_node.value)
 
@@ -1669,10 +1658,10 @@ def downPDbut(path):
     mapfile = current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
 
-#    return render_template("dash1.html", context = {  "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 
 @app.route('/STupdate/<path:path>', methods=['GET','POST'],strict_slashes=False)
+@login_required
 def STupdate(path):
     global Treepolys
     global current_node
@@ -1899,6 +1888,7 @@ def STupdate(path):
 
 
 @app.route('/PDshowST/<path:path>', methods=['GET','POST'])
+@login_required
 def PDshowST(path):
     global Treepolys
     global current_node
@@ -2050,6 +2040,7 @@ def PDshowST(path):
 
 
 @app.route('/PDshowWK/<path:path>', methods=['GET','POST'])
+@login_required
 def PDshowWK(path):
     global Treepolys
     global current_node
@@ -2125,8 +2116,8 @@ def PDshowWK(path):
           # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
 
           if len(streetdf.reset_index()) > 0:
-              Featurelayers[PD_node.level].layeradd_walkshape(walk_node, 'walk',streetdf)
-              Featurelayers[walk_node.level+1].layeradd_nodemaps(walk_node, 'walk')
+              Featurelayers[current_node.level].layeradd_walkshape(walk_node, 'walk',streetdf)
+              Featurelayers[current_node.level+1].layeradd_nodemarks(walk_node, 'walkleg')
               print("_______new Walk Display node",walk_node,"|", Featurelayers[PD_node.level].fg._children)
 
 
@@ -2225,6 +2216,7 @@ def PDshowWK(path):
 
 
 @app.route('/wardreport/<path:path>',methods=['GET','POST'])
+@login_required
 def wardreport(path):
     global current_node
     global layeritems
@@ -2268,6 +2260,7 @@ def wardreport(path):
 
 
 @app.route('/displayareas',methods=['POST', 'GET'])
+@login_required
 def displayareas():
     global current_node
     global layeritems
@@ -2279,11 +2272,12 @@ def displayareas():
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+#    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
     return  jsonify([python_data1, python_data2])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
+@login_required
 def divreport(path):
     global current_node
     global layeritems
@@ -2323,6 +2317,7 @@ def divreport(path):
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
+@login_required
 def upbut(path):
     global current_node
     global allelectors
@@ -2356,70 +2351,7 @@ def upbut(path):
 
     print("________chosen node url",mapfile)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
-#    return render_template("dash1.html", context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
-
-@app.route('/resetdashboard', methods=['POST', 'GET'])
-def resetdashboard():
-
-
-    global MapRoot
-    global current_node
-    global allelectors
-
-    global Treepolys
-    global Featurelayers
-    global environment
-
-    formdata = {}
-    print("__________setupdashboard", session)
-    print("__________in session", "username")
-
-#    County_Bound_layer = gpd.read_file(config.workdirectories['bounddir']+"/"+'Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson')
-#    County_Bound_layer = County_Bound_layer.rename(columns = {'PCON24NM': 'NAME'})
-
-
-#        sw = [Country_Bound_layer.geometry.bounds.miny.to_list()[0],Country_Bound_layer.geometry.bounds.minx.to_list()[0]]
-#        ne = [Country_Bound_layer.geometry.bounds.maxy.to_list()[0],Country_Bound_layer.geometry.bounds.maxx.to_list()[0]]
-
-    area =  CountryMapfile.replace("-MAP.html","")
-    mapfile = "/"+area+"/"+CountryMapfile
-
-    #formdata['username'] = session["username"]
-    formdata['country'] = 'UNITED_KINGDOM'
-    formdata['candfirst'] = "Firstname"
-    formdata['candsurn'] = "Surname"
-    formdata['electiondate'] = "DD-MMM-YY"
-    formdata['importfile'] = ""
-    return render_template("Dash0.html", context = {  "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
-#    else:
-#        print("__________no",  "in session", session)
-#        return render_template("index.html")
-
-#    username = request.form['username']
-#    user = User.query.filter_by(username=username).first()
-#    if not user:
-#        return '<h1>User not found!</h1>'
-#    login_user(user)
-#
-#    if 'next' in session:
-#        next = session['next']
-#        if is_safe_url(next):
-#            return redirect(next)
-#    return '<h1> Hey '+ username+' - You are now logged in!</h1>'
-
-#logout
-
-@app.route('/logout', methods=['POST', 'GET'])
-@login_required
-def logout():
-    flash('_______ROUTE/logout')
-    print("Logout", session)
-    if "username" in session:
-        session.pop('username', None)
-        logout_user()
-        return "<h1> Hey - You are now logged out</h1>"
-    return redirect(url_for('login'))
 
 #Register user
 @app.route('/register', methods=['POST'])
@@ -2449,18 +2381,20 @@ def register():
         return redirect(url_for('dashboard'))
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
+@login_required
 def map(path):
     global current_node
     steps = path.split("/")
     last = steps.pop()
     current_node = selected_childnode(current_node,last)
-    flash ("_________ROUTE/map"+path)
-    print ("_________ROUTE/map",path, current_node.dir)
+    flash ("_________ROUTE/map:"+path)
+    print ("_________ROUTE/map:",path, current_node.dir)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
+@login_required
 def showmore(path):
     global current_node
 
@@ -2476,6 +2410,7 @@ def showmore(path):
 
 
 @app.route('/upload', methods=['POST','GET'])
+@login_required
 def upload():
     flash('_______ROUTE/upload')
 
@@ -2487,6 +2422,7 @@ def upload():
     return redirect(url_for('dashboard'))
 
 @app.route('/setgotv', methods=['POST'])
+@login_required
 def setgotv():
     global ElectionSettings
     global current_node
@@ -2499,18 +2435,19 @@ def setgotv():
     selected = None
     if request.method == 'POST':
 
-
-        form_data = {
+        formdata = {}
+        formdata = {
         key: value
         for key, value in request.form.items()
             if value.strip()  # Only keep non-empty inputs
             }
 
-        print("User submitted:", form_data)
+        DQstats = pd.DataFrame()
+        print("User submitted:", formdata)
         # Now `filled_data` contains only the meaningful inputs
 
         # You can now process only what's been entered
-        for field,value in form_data.items():
+        for field,value in formdata.items():
             ElectionSettings['field'] =  value
 
         GOTV = ElectionSettings['GOTV']
@@ -2518,12 +2455,12 @@ def setgotv():
 
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)))
 
-        return render_template('candidates.html', context = {  "session" : session, "formdata" : ElectionSettings, "group" : allelectors , "mapfile" : mapfile})
+        return render_template('candidates.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
     return ""
 
 @app.route('/normalise', methods=['POST','GET'])
+@login_required
 def normalise():
-
 
     global MapRoot
     global current_node
@@ -2539,24 +2476,20 @@ def normalise():
 
 
     formdata = {}
+    DQstats = pd.DataFrame()
     ElectionSettings['importfile'] = request.files['importfile']
-    ElectionSettings['GOTV'] =  request.form["GOTV"]
-    ElectionSettings['candfirst'] =  request.form["candfirst"]
-    ElectionSettings['candsurn'] = request.form["candsurn"]
-    ElectionSettings['electiondate'] = request.form["electiondate"]
-    formdata['importfile'] = ElectionSettings['importfile']
-    formdata['GOTV'] = ElectionSettings['GOTV']
-    formdata['candfirst'] = ElectionSettings['candfirst']
-    formdata['candsurn'] = ElectionSettings['candsurn']
-    formdata['electiondate'] = ElectionSettings['electiondate']
     results = normz(ElectionSettings['importfile'], formdata)
+# normz delivers [normalised elector data df,stats dict,original data quality stats in df]
     formdata = results[1]
+    DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+    print('_______ROUTE/normalise/exit:',session)
+    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
 
 @app.route('/walks', methods=['POST','GET'])
+@login_required
 def walks():
 
 
@@ -2582,11 +2515,13 @@ def walks():
         print("_________Mapfile",electwalks[2])
         mapfile = electwalks[2]
         group = electwalks[0]
+        DQstats = pd.DataFrame()
 #    formdata['username'] = session['username']
-        return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+        return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors ,"DQstats" : DQstats, "mapfile" : mapfile})
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
+@login_required
 def postcode():
     global current_node
     global Treepolys
@@ -2627,31 +2562,9 @@ def postcode():
     current_node.map.save(target)
     return redirect(url_for('dashboard'))
 
-@app.route('/captains', methods=['POST','GET'])
-def captains():
-    global MapRoot
-    global current_node
-    global allelectors
-    global Treepolys
-    global Featurelayers
-    global environment
-    global layeritems
-
-    formdata = {}
-    formdata['country'] = "UNITED_KINGDOM"
-    flash('_______ROUTE/captains')
-    print('_______ROUTE/captains')
-    formdata['importfile'] = "Captains.xlsx"
-    if len(request.form) > 0:
-        formdata['importfile'] = request.files['importfile'].filename
-    df1 = pd.read_excel(config.workdirectories['workdir']+"/"+formdata['importfile'])
-
-    layeritems = [list(df1.columns.values),df1]
-    mapfile = current_node.dir+"/"+current_node.file
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
-
 
 @app.route('/firstpage', methods=['GET', 'POST'])
+@login_required
 def firstpage():
     global MapRoot
     global current_node
@@ -2660,9 +2573,12 @@ def firstpage():
     global Featurelayers
     global environment
     global layeritems
-    print("🔍 firstpage accessed by:", current_user)
-    print("✅ Authenticated:", current_user.is_authenticated)
-    print("🆔 User ID:", getattr(current_user, 'id', 'N/A'))
+    print("🔍 Accessed /firstpage")
+    print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
+    print("🧪 current_user:", current_user)
+    print("🧪 session keys:", list(session.keys()))
+    print("🧪 full session content:", dict(session))
+
     if current_user.is_authenticated:
         formdata = {}
         formdata['country'] = "UNITED_KINGDOM"
@@ -2674,13 +2590,15 @@ def firstpage():
         df1 = pd.read_excel(config.workdirectories['workdir']+"/"+formdata['importfile'])
         layeritems =[list(df1.columns.values),df1]
         mapfile = current_node.dir+"/"+current_node.file
-        return render_template("candidates.html", VID_json=VID_json, context={ ... })
+        DQstats = pd.DataFrame()
+        return render_template("candidates.html", VID_json=VID_json, session=session, formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 
 
 
 @app.route('/cards', methods=['POST','GET'])
+@login_required
 def cards():
 
 
@@ -2715,7 +2633,8 @@ def cards():
                 flash ( "Electoral data for" + formdata['constituency'] + " can now be explored.")
                 mapfile =  prodcards[2]
                 group = prodcards[0]
-                return render_template('Dash0.html', context = { "current_node" : current_node, "session" : session, "formdata" : formdata, "group" : allelectors , "mapfile" : mapfile})
+                DQstats = pd.DataFrame()
+                return render_template('Dash0.html', context = { "session" : session, "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

@@ -71,35 +71,47 @@ def normz(LocalFile, normstats):
         return DF
       # electors0 uses compressed postcodes electors10 uses the expanded postcodes to extract elevation by postcode lookup
 
-    def checkelectorName(data):
-        pattern = r"(?P<Firstname>David|[A-Za-z'-]+)\s*(?P<Initials>(?:[A-Z](?:\s+[A-Z])*)*)\s*(?P<Surname>[A-Za-z'-]+)"
+    def extractfactors(data):
+
+        def checkEname(name):
+            pattern = r"(?P<Firstname>David|[A-Za-z'-]+)\s*(?P<Initials>(?:[A-Z](?:\s+[A-Z])*)*)\s*(?P<Surname>[A-Za-z'-]+)"
+            return re.match(pattern, name)
+
+
         datamax = data.shape[0]
         name_order = None
 
         for col in data.columns:
             i = 0
-            for name in data[col].astype(str).values.tolist():
-                match = re.match(pattern, name)
-                if match:
-                    # Determine the first match's order for Firstname, Surname, and Initials
-                    if name_order is None:
-                        if "David" in name:  # If 'David' appears in the name, treat it as Firstname
-                            name_order = ('Firstname', 'Surname', 'Initials')
-                        else:
-                            name_order = ('Firstname', 'Initials', 'Surname')
+        #make every column name in the source UpperCase
+        #remove unnecessary surplus pre-fix words like ELECTOR, PROPERTY
+        # normalise the column names
+        # add in derived columns Lat, Long,
 
-                    # Extract data based on the determined order
-                    firstname = match.group(name_order[0])
-                    surname = match.group(name_order[1])
-                    initials = match.group(name_order[2]) if match.group(name_order[2]) else None
+            DATA = data.rename(columns= {col: Ncol})
+            if Ncol == "ElectorName":
+                for name in data[Ncol].astype(str).values.tolist():
+                    match = checkEname(name)
+                    if match:
+                        # Determine the first match's order for Firstname, Surname, and Initials
+                        if name_order is None:
+                            if "David" in name:  # If 'David' appears in the name, treat it as Firstname
+                                name_order = ('Firstname', 'Surname', 'Initials')
+                            else:
+                                name_order = ('Firstname', 'Initials', 'Surname')
 
-                    # Output the extracted fields
-                    print(f"Firstname: {firstname}, Surname: {surname}, Initials: {initials}")
+                        # Extract data based on the determined order
+                        firstname = match.group(name_order[0])
+                        surname = match.group(name_order[1])
+                        initials = match.group(name_order[2]) if match.group(name_order[2]) else None
 
-                    if i > 0.95*(datamax) :
-                        return col
+                        # Output the extracted fields
+                        print(f"Firstname: {firstname}, Surname: {surname}, Initials: {initials}")
+                        i = i+1
+                        if i > 0.95*(datamax) :
+                            return DATA
 
-        return None
+        return DATA
 
     def checkForeName(data):
         pattern = r"^(?!\d+(\.\d+)?$)(?P<Surname>[A-Za-z-]+(?:'[A-Za-z]+)?)\s+(?P<Firstname>[A-Za-z-]+(?:'[A-Za-z]+)?)\s*(?P<Initials>(?:[A-Z](?:\s+[A-Z])*)*)$"
@@ -167,30 +179,56 @@ def normz(LocalFile, normstats):
     else:
         ImportFilename = str(LocalFile.filename)
         dfx = pd.read_excel(LocalFile)
-#        dfx['RNO'] = dfx.index
+        dfx['RNO'] = dfx.index
 
-#       if find ENOP pattern - separate into 2 or 3 new fields
-#       else generate ENOP field from 3 seprate components (PD-ENO/Suffix)
-#       if find ElectorName pattern - separate into firstname, initisla dn Surname
-#       else generate ElectorName pattern from separate fields
-#       address field pattern matching and processing
-#       Lat Long , Elevation extraction from Postcode processing
-#       exclude all other fields, like markers etc
+#AUTO DATA IMPORT
+#1 - read in columns into a normalised list if columns and derive outcomes df
+#2 - check the content of EVERY column matches the desired outcome type 	(need content checkers for each column type - eg Fname, Surname, initials, ENOP, ENO, ENOS, PD,
+#3 - compare names with the required outcomes column list to identify all present and absent
+#4 - fill all factor gaps first - row by row
+#	eg fname, sname, initials, ENO, Suffix, Postcode, Address1-6
+#5 - then fill any ‘multi-col value derived’ gaps second row by row
+# 	eg ename, ENOP, ENOS, StreetName, AddressPrefix, Address_1-6, Lat, Long , Elevation
+#6 - fill any ‘group row value derived’ columns third by
+# 	eg Ward (needs a contains test of PD mean lat long), Con(needs a contains test of PD mean lat long), County(needs a contains test of PD mean lat long), Country(needs a contains test of PD mean lat long), Council
 
-      #  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
+#  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
+
         electors0 = DFtoDF(dfx)
         electors10 = dfx
-      # now normalise the postcodes and other address fields
+
         dfz = electors10[1:100]
         dfzmax = dfz.shape[0]
         print(ImportFilename," data rows: ", dfzmax )
 
-        dfzres = checkelectorName(dfz)
-        print("found ElectorName match in column: ", dfzres )
+        COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
+        "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
+        "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" , "NAME" :"ElectorName", "STREETNAME" :"StreetName" }
+
+
+        Outcomes = read_excel(workdir+"/"+"RuncornRegister.xlsx")
+        Outcols = Outcomes.columns
+        for z in Outcols :
+            DQstats.loc[Outcols.index(z),'Field'] = z
+
+        DQStats = pd.Dataframe(columns = Outcols)
+
+        incols = dfz.columns
+
+        INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
+        Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
+        typechildren = [x for x in self.children if x.type == electtype]
+
+        for y in [x for x in Outcols if x in Incols]:
+            DQstats.loc[Outcols.index(y),'Pass1'] = 1
+
+        print("Completed first pass : ", DQstats )
+        dfzres = extractfactors(dfz)
+
 
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
-
+        raise Exception('')
 
     count = 0
     Addno1 = ""
@@ -449,7 +487,7 @@ def normz(LocalFile, normstats):
 #    normstats['Mean_Lat'] = np.mean(electors2['Lat']).astype(float)
 #    normstats['Mean_Elev'] = np.mean(electors2['Elevation']).astype(float)
     normstats['status'] = "NormComplete"
-    return [electors2,normstats]
+    return [electors2,normstats,DQstats]
 
 
 if __name__ == '__main__':

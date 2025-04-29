@@ -15,20 +15,7 @@
 	    </tr>
 	      </thead>
 				<tbody style="height: 70px">
-					{% for index,row in context.group.iterrows() %}
-	      <tr>
-					<td>
-						<input type="checkbox" id="selectRow1" name="selectRow[]" value="1" class="selectRow">
-						<label for="selectRow1" class="visually-hidden"></label>
-					</td>
-	        <td class="c1">{{ row['No'] }}</td>
-					<td class="c1">{{ row['Area'] }}</td>
-					<td class="c1">{{ row['Constituency'] }}</td>
-					<td class="c1">{{ row['Candidate'] }}</td>
-
-
-	      </tr>
-	      {% endfor %}
+	
 			</tbody>
 	    </table>
 
