@@ -208,11 +208,11 @@ def normz(LocalFile, normstats):
 
 
         Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
-        Outcols = Outcomes.columns
+        Outcols = Outcomes.columns.to_list()
         for z in Outcols :
             DQstats.loc[Outcols.index(z),'Field'] = z
 
-        DQStats = pd.Dataframe(columns = Outcols)
+        DQStats = pd.DataFrame(columns = Outcols)
 
         print("Before first pass : ", DQstats )
         incols = dfz.columns
@@ -220,18 +220,17 @@ def normz(LocalFile, normstats):
 
         INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
         Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
-        typechildren = [x for x in self.children if x.type == electtype]
 
         for y in [x for x in Outcols if x in Incols]:
             DQstats.loc[Outcols.index(y),'P1'] = 1
 
         print("Completed first pass : ", DQstats )
-        dfzres = extractfactors(dfz)
-
+#        dfzres = extractfactors(dfz)
+        return [electors10,normstats,DQstats]
 
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
-        raise Exception('')
+
 
     count = 0
     Addno1 = ""

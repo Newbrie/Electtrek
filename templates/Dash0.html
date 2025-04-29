@@ -91,7 +91,6 @@
 			<h2>Application Preferences</h2>
       <div id="constants-container"></div>
 
-
       <label for="elections">Type of Election:</label>
       <select name="elections" id="elections"></select><br>
 
@@ -108,9 +107,6 @@
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
-
-
-
 
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
             CONTROLS:<br>
@@ -136,13 +132,13 @@
 
             </thead>
             <tbody>
-              {% for index,row in DQstats.iterrows() %}
+            {% for index,row in DQstats.iterrows() %}
             <tr>
-              <td class="colname">{{ row['Field'] }}</td>
-              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass1'] }}" onclick="return false;" name= 'pass1' id='pass1' /></td>
-              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass2'] }}" onclick="return false;" name= 'pass2' id='pass2' /></td>
-              <td class="pass"> <input type="checkbox" placeholder= "{{ row['pass3'] }}" onclick="return false;" name= 'pass3' id='pass3' /></td>
-              <td class="pass"> <input type="checkbox" placeholder= "{{ row['ready'] }}" onclick="return false;" name= 'ready' id='ready' /></td>
+              <td class="field">{{ row['Field'] }}</td>
+              <td class="pass"> <input type="checkbox" {% if row['P1'] == 1 %}checked{% endif %} onclick="return false;" name="P1" id="pass1" /></td>
+              <td class="pass"> <input type="checkbox" {% if row['P2'] == 1 %}checked{% endif %} onclick="return false;" name="P2" id="pass2" /></td>
+              <td class="pass"> <input type="checkbox" {% if row['P3'] == 1 %}checked{% endif %} onclick="return false;" name="P3" id="pass3" /></td>
+              <td class="pass"> <input type="checkbox" {% if row['Ready'] == 1 %}checked{% endif %} onclick="return false;" name="Ready" id="Ready" /></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -185,7 +181,10 @@
 </script>
 </div>
 {% endblock nav %}
+
+<div id="datawin" class="innertube">
+	    <table id="captains-table">
 {% block captains %}
 {% endblock captains %}
-{% block candidates %}
-{% endblock candidates %}
+	    </table>
+  </div>

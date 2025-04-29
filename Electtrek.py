@@ -2461,7 +2461,6 @@ def setgotv():
 @app.route('/normalise', methods=['POST','GET'])
 @login_required
 def normalise():
-
     global MapRoot
     global current_node
     global allelectors
@@ -2485,8 +2484,8 @@ def normalise():
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    print('_______ROUTE/normalise/exit:',session)
-    return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors , "DQstats" : DQstats ,"mapfile" : mapfile})
+    print('_______ROUTE/normalise/exit:',DQstats)
+    return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required
@@ -2517,7 +2516,7 @@ def walks():
         group = electwalks[0]
         DQstats = pd.DataFrame()
 #    formdata['username'] = session['username']
-        return render_template('Dash0.html', context = {  "session" : session, "formdata" : formdata, "group" : allelectors ,"DQstats" : DQstats, "mapfile" : mapfile})
+        return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -2634,7 +2633,7 @@ def cards():
                 mapfile =  prodcards[2]
                 group = prodcards[0]
                 DQstats = pd.DataFrame()
-                return render_template('Dash0.html', context = { "session" : session, "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
+                return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")
