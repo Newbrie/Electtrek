@@ -97,96 +97,6 @@ var showMore = function (msg,area, type) {
       });
   };
 
-  function updateMessages() {
-  const old = pessages.pop();
-  const ul = parent.document.getElementById("logwin");
-  const li = parent.document.createElement("li");
-  const table = parent.document.getElementById("captains-table");
-  const tabhead = table.querySelector("thead");
-  const tabbody = table.querySelector("tbody");
-  // Define your party color lookup
-  const VCO = {
-      "O": "brown", "R": "cyan", "C": "blue", "S": "red",
-      "LD": "yellow", "G": "limegreen", "I": "indigo",
-      "PC": "darkred", "SD": "orange", "Z": "lightgray",
-      "W": "white", "X": "darkgray"
-  };
-
-  fetch('/displayareas', {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-       credentials: 'same-origin'   // 👈 THIS IS CRITICAL
-  })
-  .then(response => response.json())
-  .then(data => {
-      console.log("Data received:", data);
-
-      if (!Array.isArray(data) || data.length < 2) {
-          console.error("Invalid or incomplete data:", data);
-          return;
-      }
-
-      if (!tabhead || !tabbody) {
-          console.error("tabhead or tabbody not found");
-          return;
-      }
-
-      const columnHeaders = data[0];  // First element contains ordered column names
-      const rows = data[1];           // Second element contains data rows
-
-      // Clear previous content
-      tabhead.innerHTML = "";
-      tabbody.innerHTML = "";
-
-      // Build table head row
-      const headRow = document.createElement("tr");
-      const checkboxHeader = document.createElement("th");
-      checkboxHeader.textContent = "?";
-      headRow.appendChild(checkboxHeader);
-
-      columnHeaders.forEach(header => {
-          const th = document.createElement("th");
-          th.textContent = header.toUpperCase();
-          headRow.appendChild(th);
-      });
-
-      tabhead.appendChild(headRow);
-
-      // Build table body
-      rows.forEach(record => {
-          const row = document.createElement("tr");
-
-          // Checkbox cell
-          const checkboxCell = document.createElement("td");
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.name = "selectRow[]";
-          checkbox.classList.add("selectRow");
-          checkboxCell.appendChild(checkbox);
-          row.appendChild(checkboxCell);
-
-          // Data cells
-          columnHeaders.forEach(header => {
-            const cell = document.createElement("td");
-            const value = record[header] !== undefined ? record[header] : "";
-            cell.innerHTML = value;
-
-            // Highlight the column whose name matches `yourparty`
-            if (header === yourparty.value) {
-                const color = VCO[yourparty.value] || "inherit";
-                cell.style.backgroundColor = color;
-            }
-
-            row.appendChild(cell);
-            });
-            tabbody.appendChild(row);
-         });
-     })
-     .catch(error => console.error("Fetch error:", error));
-
-      li.appendChild(parent.document.createTextNode(old + ":completed"));
-      ul.appendChild(li);
-};
 
   function email_csv(csv, filename) {
     var csvFile;
@@ -369,30 +279,7 @@ var showMore = function (msg,area, type) {
             el.value = value;
           }
 
-          // Add change listener
-          el.addEventListener("input", () => {
-            let newVal = el.value;
-            if (el.type === "number") {
-              newVal = parseFloat(newVal);
-            }
 
-            fetch("/set-constant", {
-              method: "POST",
-              credentials: 'same-origin' ,  // 👈 THIS IS CRITICAL
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ name: key, value: newVal })
-            })
-            .then(res => res.json())
-            .then(resp => {
-              if (resp.success) {
-                updateMessages();  // ✅ Trigger only after backend update
-              } else {
-                alert("Failed to update constant: " + resp.error);
-              }
-            });
-          });
 
         });
       });
