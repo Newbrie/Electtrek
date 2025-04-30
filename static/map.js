@@ -374,8 +374,8 @@ var showMore = function (msg,area, type) {
           } else {
             // Input field
             el.value = value;
-          }
-
+          };
+          alert("listener:"+key+el.type+el.value);
           // Add change listener
           el.addEventListener("input", () => {
             let newVal = el.value;
@@ -385,7 +385,6 @@ var showMore = function (msg,area, type) {
             if (el.type === "checkbox") {
               newVal = int(newVal);
             };
-            alert("listener:"+key+el.type+el.value);
 
             fetch("/set-constant", {
               method: "POST",
