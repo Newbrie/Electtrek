@@ -149,12 +149,26 @@
           </table>
 </div>
 {% endblock nav %}
+{% block captains %}
 <div id="datawin" class="innertube">
 	    <table id="captains-table">
-{% block captains %}
-{% endblock captains %}
+
+      <thead>
+      <tr>
+      <th class="c1" >?</th>
+      <th class="c1" >CC</th>
+      <th class="c1">Areaname</th>
+      <th class="c1" >Constituency</th>
+      <th class="c1">Candidate</th>
+      </tr>
+      </thead>
+      <tbody style="height: 70px">
+
+      </tbody>
+
 	    </table>
 </div>
+{% endblock captains %}
 <script>
   function setActionForm(action){
     let form = document.getElementById("normal-file");

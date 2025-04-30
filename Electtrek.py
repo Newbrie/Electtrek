@@ -1364,7 +1364,7 @@ def index():
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
         DQstats = pd.DataFrame()
-        return render_template("candidates.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -1459,8 +1459,6 @@ def dashboard ():
     global Featurelayers
     global formdata
     global ElectionSettings
-
-
 
     mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
@@ -2455,7 +2453,7 @@ def setgotv():
 
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)))
 
-        return render_template("candidates.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     return ""
 
 @app.route('/normalise', methods=['POST','GET'])
@@ -2590,7 +2588,7 @@ def firstpage():
         layeritems =[list(df1.columns.values),df1]
         mapfile = current_node.dir+"/"+current_node.file
         DQstats = pd.DataFrame()
-        return render_template("candidates.html", VID_json=VID_json, session=session, formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html", VID_json=VID_json, session=session, formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 
