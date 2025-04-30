@@ -101,8 +101,9 @@ var showMore = function (msg,area, type) {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
-  const tabtitle = parent.document.getElementById("tabletitle");
+  const tabletitle = parent.document.getElementById("tabletitle");
   const table = parent.document.getElementById("captains-table");
+  const tabtitle = table.querySelector("h1");
   const tabhead = table.querySelector("thead");
   const tabbody = table.querySelector("tbody");
   // Define your party color lookup
@@ -132,7 +133,7 @@ var showMore = function (msg,area, type) {
           return;
       }
 
-      const tabletitle = "Mockup";
+
       const columnHeaders = data[0];  // First element contains ordered column names
       const rows = data[1];           // Second element contains data rows
 
@@ -142,11 +143,11 @@ var showMore = function (msg,area, type) {
       tabbody.innerHTML = "";
 
       // Build table head row
-      const tabdiv = tabtitle.querySelector("h1");
+      
       const headRow = document.createElement("tr");
       const checkboxHeader = document.createElement("th");
 
-      tabdiv.innerHTML = tabletitle;
+      tabtitle.innerHTML = "Mockup";
       checkboxHeader.textContent = "?";
       headRow.appendChild(checkboxHeader);
 
