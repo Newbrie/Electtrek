@@ -137,7 +137,6 @@ var showMore = function (msg,area, type) {
       const columnHeaders = data[0];  // First element contains ordered column names
       const rows = data[1];
       const title = data[2];           // Second element contains data rows
-      alert ("title "+title)
       // Clear previous content
       tabtitle.innerHTML = "";
       tabhead.innerHTML = "";

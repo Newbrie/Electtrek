@@ -108,11 +108,14 @@ def is_safe_url(target):
 def getlayeritems(nodelist,title):
     global ElectionSettings
     global Historynodelist
+    global Historytitle
 
     if isinstance(nodelist, list) and nodelist == []:
         nodelist = Historynodelist
+        title = Historytitle
     else:
         Historynodelist = nodelist
+        Historytitle = title
     if isinstance(nodelist, pd.DataFrame):
         dfy = nodelist
     elif isinstance(nodelist, list) and nodelist != []:
@@ -140,6 +143,7 @@ def subending(filename, ending):
 
 
 Historynodelist = []
+Historytitle = ""
 
 ElectionOptions = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"getlayeritems","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
@@ -1282,7 +1286,7 @@ current_node = MapRoot
 add_boundaries('country')
 add_boundaries('nation')
 
-formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
 
 layeritems = getlayeritems(MapRoot.create_map_branch('nation'), formdata['tabledetails'])
 
@@ -1511,7 +1515,7 @@ def downbut(path):
     print("_________selected node",atype,current_node.value, current_node.level,current_node.file)
 # the selected  boundary options need to be added to the layer
     add_boundaries(atype)
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.create_map_branch(atype),formdata['tabledetails'] )
     Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
     Featurelayers[current_node.level].layeradd_nodemaps(current_node, atype)
@@ -1555,7 +1559,7 @@ def transfer(path):
     if current_node.level < 5:
         redirect(url_for('downbut',path=mapfile))
     else:
-        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
         layeritems = getlayeritems(current_node.parent.children,formdata['tabledetails'] )
         return   redirect(url_for('map',path=mapfile))
 
@@ -1664,7 +1668,7 @@ def downPDbut(path):
             print("______NO Data found to be imported ",full_revamped)
 
 
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.childrenoftype('polling district'),formdata['tabledetails'] )
     mapfile = current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
@@ -1888,7 +1892,7 @@ def STupdate(path):
     #           only create a map if the branch does not already exist
 #    current_node = current_node.parent
     mapfile = street_node.dir+"/"+street_node.file
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     if current_node.type == 'street':
         layeritems = getlayeritems(current_node.parent.childrenoftype('street'),formdata['tabledetails'])
         print('_______Street Data uploaded:-',url_for('map', path=mapfile))
@@ -2042,7 +2046,7 @@ def PDshowST(path):
 #           only create a map if the branch does not already exist
         map = PD_node.create_area_map(Featurelayers,PDelectors,"-STREETS")
     mapfile = PD_node.dir+"/"+PD_node.file
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(PD_node.childrenoftype('street'),formdata['tabledetails'])
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -2219,7 +2223,7 @@ def PDshowWK(path):
         map = PD_node.create_area_map(Featurelayers,PDelectors, "-WALKS")
 
         mapfile = PD_node.dir+"/"+PD_node.file
-        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
         layeritems = getlayeritems(PD_node.childrenoftype('walk'), formdata['tabledetails'])
 
 
@@ -2252,7 +2256,7 @@ def wardreport(path):
     i = 0
     alreadylisted = []
     add_boundaries('constituency')
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.create_map_branch('constituency'),formdata['tabledetails'])
     for group_node in current_node.childrenoftype('constituency'):
         add_boundaries('ward')
@@ -2320,7 +2324,7 @@ def divreport(path):
     layeritems = pd.DataFrame()
     alreadylisted = []
     add_boundaries('constituency')
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ " details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s' details"
     layeritems = getlayeritems(current_node.create_map_branch('constituency'),formdata['tabledetails'])
 
     for group_node in current_node.childrenoftype('division'):
@@ -2363,7 +2367,7 @@ def upbut(path):
 # the selected node has to be found from the selected button URL
 #
 #    Featurelayers[current_node.level].fg = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "s details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.parent.childrenoftype(gettypeoflevel(path,current_node.level)),formdata['tabledetails'])
 
     current_node = current_node.parent
@@ -2418,7 +2422,7 @@ def map(path):
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
 
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "s details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
@@ -2437,7 +2441,7 @@ def showmore(path):
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
 
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "s details"
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
@@ -2486,7 +2490,7 @@ def setgotv():
 
         GOTV = ElectionSettings['GOTV']
         mapfile = current_node.dir+"/"+current_node.file
-        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "s details"
+        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
         return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
@@ -2521,20 +2525,16 @@ def normalise():
     group = results[0]
 #    formdata['username'] = session['username']
     print('_______ROUTE/normalise/exit:',DQstats)
-    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
+    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile'].filename+" Details"
     layeritems = getlayeritems(group.head(), formdata['tabledetails'])
     return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required
 def walks():
-
-
     global MapRoot
     global current_node
     global allelectors
-
-
     global Treepolys
     global Featurelayers
     global environment
