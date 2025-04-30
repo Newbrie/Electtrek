@@ -2286,7 +2286,7 @@ def displayareas():
     global current_node
     global layeritems
     global formdata
-    print('_______ROUTE/displayareas:')
+    print('_______ROUTE/displayareas:', layeritems[2])
     layeritems = getlayeritems([],"")
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
