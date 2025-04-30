@@ -101,6 +101,7 @@ var showMore = function (msg,area, type) {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
+  const tabdetails = parent.document.getElementById("tabledetails");
   const table = parent.document.getElementById("captains-table");
   const tabhead = table.querySelector("thead");
   const tabbody = table.querySelector("tbody");
@@ -126,15 +127,17 @@ var showMore = function (msg,area, type) {
           return;
       }
 
-      if (!tabhead || !tabbody) {
+      if (!tabhead || !tabbody || !tabdetails) {
           console.error("tabhead or tabbody not found");
           return;
       }
 
+      const tabledetails = "Mockup";
       const columnHeaders = data[0];  // First element contains ordered column names
       const rows = data[1];           // Second element contains data rows
 
       // Clear previous content
+      tabdetails.innerHTML = tabledetails;
       tabhead.innerHTML = "";
       tabbody.innerHTML = "";
 

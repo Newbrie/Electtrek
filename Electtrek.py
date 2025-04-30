@@ -77,12 +77,13 @@ def normalname(name):
 
 def getchildtype(parent):
     global levels
-    matches = [index for index, x in enumerate(levels) if x.find(parent) > -1  ]
-    return levels[matches[0]+1]
+    lev = min(levels.index(parent)+1,8)
+    return levels[lev]
+#    matches = [index for index, x in enumerate(levels) if x.find(parent) > -1  ]
+#    return levels[matches[0]+1]
 
 def gettypeoflevel(path,level):
     global levels
-
     type = levels[level]
     if path.find(" ") > -1:
         type = path.split(" ")[1]
@@ -160,7 +161,7 @@ class TreeNode:
         global levelcolours
         self.value = normalname(str(value))
         self.children = []
-        self.type = 'UK'
+        self.type = 'country'
         self.parent = None
         self.fid = fid
         self.level = 0
@@ -1522,9 +1523,8 @@ def downbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
-    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
     mapfile = current_node.dir+"/"+current_node.file
-    formdata['tabledetails'] = "Other "+ getchildtype(current_node).upper()+ " Details"
 
     return   redirect(url_for('map',path=mapfile))
 
@@ -1554,7 +1554,7 @@ def transfer(path):
     else:
         layeritems = getlayeritems(current_node.parent.children)
         return   redirect(url_for('map',path=mapfile))
-    formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = "Other "+getchildtype(current_node.type).upper()+ " Details"
 
     return redirect(url_for('map',path=mapfile))
 
@@ -1663,7 +1663,7 @@ def downPDbut(path):
 
 
     layeritems = getlayeritems(current_node.childrenoftype('polling district'))
-    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
     mapfile = current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
 
@@ -1894,7 +1894,7 @@ def STupdate(path):
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'))
     print('_______Success mapfile:-',url_for('map', path=mapfile))
 
-    formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = "Other "+getchildtype(current_node.type).upper()+ " Details"
 
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
@@ -2041,7 +2041,7 @@ def PDshowST(path):
         map = PD_node.create_area_map(Featurelayers,PDelectors,"-STREETS")
     mapfile = PD_node.dir+"/"+PD_node.file
     layeritems = getlayeritems(PD_node.childrenoftype('street'))
-    formdata['tabledetails'] = "Other "+ getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = "Other "+ getchildtype(current_node.type).upper()+ " Details"
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
     if len(Featurelayers[PD_node.level].fg._children) == 0:
@@ -2218,7 +2218,7 @@ def PDshowWK(path):
 
         mapfile = PD_node.dir+"/"+PD_node.file
         layeritems = getlayeritems(PD_node.childrenoftype('walk'))
-        formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+        formdata['tabledetails'] = "Other "+getchildtype(current_node.type).upper()+ " Details"
 
 
         if len(PDelectors) == 0 or len(Featurelayers[PD_node.level].fg._children) == 0:
@@ -2370,7 +2370,7 @@ def upbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
-    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
 
     print("________chosen node url",mapfile)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -2413,7 +2413,7 @@ def map(path):
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
 
-    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -2431,7 +2431,7 @@ def showmore(path):
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
 
-    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+    formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -2547,7 +2547,7 @@ def walks():
         group = electwalks[0]
         DQstats = pd.DataFrame()
 #    formdata['username'] = session['username']
-        formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+        formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
 
         return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
