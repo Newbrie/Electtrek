@@ -146,7 +146,7 @@ var showMore = function (msg,area, type) {
       const headRow = document.createElement("tr");
       const checkboxHeader = document.createElement("th");
 
-      tabdiv.textContent = tabletitle;
+      tabdiv.innerHTML = tabletitle;
       checkboxHeader.textContent = "?";
       headRow.appendChild(checkboxHeader);
 
