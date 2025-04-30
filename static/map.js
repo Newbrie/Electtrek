@@ -356,7 +356,6 @@ var showMore = function (msg,area, type) {
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
-          alert("element:"+key);
           if (!el) return;
 
           if (el.tagName === "SELECT") {
@@ -382,7 +381,8 @@ var showMore = function (msg,area, type) {
             let newVal = el.value;
             if (el.type === "number") {
               newVal = parseFloat(newVal);
-            }
+            };
+            alert("listener:"+key+el.type+el.value);
 
             fetch("/set-constant", {
               method: "POST",
