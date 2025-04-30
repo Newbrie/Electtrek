@@ -1237,6 +1237,10 @@ ElectionSettings['walksize'] = 200
 ElectionSettings['elections'] = 'Westminster'
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
+ElectionSettings['candfirst'] = ""
+ElectionSettings['candsurn'] = ""
+ElectionSettings['electiondate'] = "01/01/2030"
+
 ward_div = 'ward'
 Featurelayers = []
 

@@ -382,6 +382,9 @@ var showMore = function (msg,area, type) {
             if (el.type === "number") {
               newVal = parseFloat(newVal);
             };
+            if (el.type === "checkbox") {
+              newVal = int(newVal);
+            };
             alert("listener:"+key+el.type+el.value);
 
             fetch("/set-constant", {
