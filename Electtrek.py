@@ -107,28 +107,31 @@ def is_safe_url(target):
 def getlayeritems(nodelist):
     global ElectionSettings
     global Historynodelist
-    if nodelist == []:
+
+    if isinstance(nodelist, list) and nodelist == []:
         nodelist = Historynodelist
     else:
         Historynodelist = nodelist
-    dfy = pd.DataFrame()
-    i = 0
-    for x in nodelist:
-        dfy.loc[i,'No']= x.tagno
-        options = x.VI
-        for party in options:
-            dfy.loc[i,party] = x.VI[party]
+    if isinstance(nodelist, pd.DataFrame):
+        dfy = nodelist
+    else:
+        dfy = pd.DataFrame()
+        i = 0
+        for x in nodelist:
+            dfy.loc[i,'No']= x.tagno
+            options = x.VI
+            for party in options:
+                dfy.loc[i,party] = x.VI[party]
 
-        dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
-        dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
-        dfy.loc[i,'elect'] = x.electorate
-        dfy.loc[i,'turn'] = '%.2f'%(x.turnout)
-        dfy.loc[i,'gotv'] = '%.2f'%(float(ElectionSettings['GOTV']))
-        dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(ElectionSettings['GOTV']))-int(x.VI[ElectionSettings['yourparty']])
-        i = i + 1
+            dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+            dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
+            dfy.loc[i,'elect'] = x.electorate
+            dfy.loc[i,'turn'] = '%.2f'%(x.turnout)
+            dfy.loc[i,'gotv'] = '%.2f'%(float(ElectionSettings['GOTV']))
+            dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(ElectionSettings['GOTV']))-int(x.VI[ElectionSettings['yourparty']])
+            i = i + 1
 
     return [list(dfy.columns.values),dfy]
-
 
 def subending(filename, ending):
   stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-STREETS", "@@@")
@@ -2467,6 +2470,7 @@ def normalise():
     global environment
     global ElectionSettings
     global formdata
+    global layeritems
 
     flash('_______ROUTE/normalise',session)
     print('_______ROUTE/normalise',session)
@@ -2475,6 +2479,7 @@ def normalise():
     formdata = {}
     DQstats = pd.DataFrame()
     ElectionSettings['importfile'] = request.files['importfile']
+    print("Import filename:",ElectionSettings['importfile'])
     results = normz(ElectionSettings['importfile'], formdata)
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
     formdata = results[1]
@@ -2483,6 +2488,7 @@ def normalise():
     group = results[0]
 #    formdata['username'] = session['username']
     print('_______ROUTE/normalise/exit:',DQstats)
+    layeritems = getlayeritems(group.head())
     return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 
 @app.route('/walks', methods=['POST','GET'])

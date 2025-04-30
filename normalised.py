@@ -18,6 +18,8 @@ def normz(LocalFile, normstats):
     workdir = config.workdirectories['workdir']
     testdir = config.workdirectories['testdir']
     bounddir = config.workdirectories['bounddir']
+    datadir = config.workdirectories['datadir']
+    os.chdir(workdir)
     os.chdir(workdir)
     Env1 = sys.base_prefix
     Mean_Lat = 51.240299
@@ -179,7 +181,10 @@ def normz(LocalFile, normstats):
         ImportFilename = str(OrangeE[0,'Source ID'])
     else:
         ImportFilename = str(LocalFile.filename)
-        dfx = pd.read_excel(LocalFile)
+        if ImportFilename.find(".csv") >= 0:
+            dfx = pd.read_csv(LocalFile)
+        elif ImportFilename.find(".xlsx") >= 0:
+            dfx = pd.read_excel(LocalFile)
         dfx['RNO'] = dfx.index
 
 #AUTO DATA IMPORT
@@ -209,22 +214,23 @@ def normz(LocalFile, normstats):
 
         Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
         Outcols = Outcomes.columns.to_list()
+        incols = dfz.columns
         for z in Outcols :
             DQstats.loc[Outcols.index(z),'Field'] = z
 
+        #pass 1
+        for y in [x for x in Outcols if x in incols]:
+            DQstats.loc[Outcols.index(y),'P1'] = 1
+
+
         DQStats = pd.DataFrame(columns = Outcols)
-
-        print("Before first pass : ", DQstats )
-        incols = dfz.columns
-
 
         INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
         Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
-
+        # pass 2
         for y in [x for x in Outcols if x in Incols]:
-            DQstats.loc[Outcols.index(y),'P1'] = 1
+            DQstats.loc[Outcols.index(y),'P2'] = 1
 
-        print("Completed first pass : ", DQstats )
 #        dfzres = extractfactors(dfz)
         return [electors10,normstats,DQstats]
 

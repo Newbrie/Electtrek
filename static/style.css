@@ -50,6 +50,14 @@ body {
 	left: 0px;
 	width: 1200px;
 }
+#tabletitle{
+position: absolute;
+height: 12px;
+width: 1200px;
+background: white;
+left: 0;
+bottom: 220px;
+}
 #datawin {
 	z-index: 12;
 	position: absolute;

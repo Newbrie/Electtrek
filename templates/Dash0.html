@@ -65,7 +65,11 @@
 
 </script>
 {% endblock map %}
-
+{% block tabletitle %}
+<div id="tabletitle" >
+<h1>Details for : {{ (formdata or {}).get('importfile', '')}} </h1>
+</div>
+{% endblock tabletitle %}
 {% block log %}
 <div id="logwin" class="innertube">
 		<h1>elecTrek Status Reports: </h1>
@@ -80,7 +84,7 @@
 
 
 {% block nav %}
-<div id="nav" class="innertube">
+<div id="nav" >
 
         <h1>Map Data </h1>
         {% for x, y in (formdata or {}).items() %}
@@ -168,7 +172,6 @@
 
 	    </table>
 </div>
-{% endblock captains %}
 <script>
   function setActionForm(action){
     let form = document.getElementById("normal-file");
@@ -196,3 +199,5 @@
   };
 
 </script>
+
+{% endblock captains %}
