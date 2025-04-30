@@ -142,7 +142,7 @@ var showMore = function (msg,area, type) {
       tabbody.innerHTML = "";
 
       // Build table head row
-      const tabdiv = document.createElement("h1");
+      const tabdiv = tabtitle.querySelector("h1");
       const headRow = document.createElement("tr");
       const checkboxHeader = document.createElement("th");
 
