@@ -1335,6 +1335,7 @@ def handle_exception(e):
 @app.route("/get-constants", methods=["GET"])
 @login_required
 def get_constants():
+    global ElectionSettings
     return jsonify({
         "constants": ElectionSettings,
         "options": OPTIONS
@@ -1343,6 +1344,7 @@ def get_constants():
 @app.route("/set-constant", methods=["POST"])
 @login_required
 def set_constant():
+    global ElectionSettings
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
