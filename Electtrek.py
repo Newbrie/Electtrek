@@ -1522,7 +1522,10 @@ def downbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
+    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
     mapfile = current_node.dir+"/"+current_node.file
+    formdata['tabledetails'] = "Other "+ getchildtype(current_node).upper()+ " Details"
+
     return   redirect(url_for('map',path=mapfile))
 
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
@@ -1551,6 +1554,8 @@ def transfer(path):
     else:
         layeritems = getlayeritems(current_node.parent.children)
         return   redirect(url_for('map',path=mapfile))
+    formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+
     return redirect(url_for('map',path=mapfile))
 
 
@@ -1658,6 +1663,7 @@ def downPDbut(path):
 
 
     layeritems = getlayeritems(current_node.childrenoftype('polling district'))
+    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
     mapfile = current_node.dir+"/"+current_node.file
     return   redirect(url_for('map',path=mapfile))
 
@@ -1887,6 +1893,9 @@ def STupdate(path):
         print('_______Walk Data uploaded:-',url_for('map', path=mapfile))
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'))
     print('_______Success mapfile:-',url_for('map', path=mapfile))
+
+    formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+
     return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 
@@ -2032,6 +2041,7 @@ def PDshowST(path):
         map = PD_node.create_area_map(Featurelayers,PDelectors,"-STREETS")
     mapfile = PD_node.dir+"/"+PD_node.file
     layeritems = getlayeritems(PD_node.childrenoftype('street'))
+    formdata['tabledetails'] = "Other "+ getchildtype(current_node).upper()+ " Details"
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
     if len(Featurelayers[PD_node.level].fg._children) == 0:
@@ -2208,6 +2218,9 @@ def PDshowWK(path):
 
         mapfile = PD_node.dir+"/"+PD_node.file
         layeritems = getlayeritems(PD_node.childrenoftype('walk'))
+        formdata['tabledetails'] = "Other "+getchildtype(current_node).upper()+ " Details"
+
+
         if len(PDelectors) == 0 or len(Featurelayers[PD_node.level].fg._children) == 0:
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.")
@@ -2254,6 +2267,9 @@ def wardreport(path):
                 temp.loc[i,'Mobile']=  "07789 342456"
                 i = i + 1
         layeritems = [list(temp.columns.values), temp]
+
+    formdata['tabledetails'] = "Other Ward Details"
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 #  #    mapfile = current_node.parent.dir+"/"+current_node.parent.file
 #    print("________layeritems  :  ", layeritems)
@@ -2317,6 +2333,9 @@ def divreport(path):
                 temp.loc[i,'Mobile']=  "07789 342456"
                 i = i + 1
         layeritems = [list(temp.columns.values), temp]
+
+    formdata['tabledetails'] = "Other Division Details"
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
@@ -2351,6 +2370,7 @@ def upbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
+    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
 
     print("________chosen node url",mapfile)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -2393,6 +2413,8 @@ def map(path):
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
 
+    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
 
@@ -2408,6 +2430,8 @@ def showmore(path):
 
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
+
+    formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -2491,6 +2515,7 @@ def normalise():
 #    formdata['username'] = session['username']
     print('_______ROUTE/normalise/exit:',DQstats)
     layeritems = getlayeritems(group.head())
+    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
     return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 
 @app.route('/walks', methods=['POST','GET'])
@@ -2522,6 +2547,8 @@ def walks():
         group = electwalks[0]
         DQstats = pd.DataFrame()
 #    formdata['username'] = session['username']
+        formdata['tabledetails'] = getchildtype(current_node).upper()+ " Details"
+
         return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
@@ -2596,6 +2623,8 @@ def firstpage():
         layeritems =[list(df1.columns.values),df1]
         mapfile = current_node.dir+"/"+current_node.file
         DQstats = pd.DataFrame()
+        formdata['tabledetails'] = "Candidates File "+formdata['importfile']+" Details"
+
         return render_template("Dash0.html", VID_json=VID_json, session=session, formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
