@@ -65,11 +65,7 @@
 
 </script>
 {% endblock map %}
-{% block tabletitle %}
-<div id="tabletitle" >
-<h1>Details for : {{ (formdata or {}).get('importfile', '')}} </h1>
-</div>
-{% endblock tabletitle %}
+
 {% block log %}
 <div id="logwin" class="innertube">
 		<h1>elecTrek Status Reports: </h1>
@@ -154,6 +150,11 @@
 </div>
 {% endblock nav %}
 {% block captains %}
+
+<div id="tabletitle" >
+<h1>Details for : {{ (formdata or {}).get('importfile', '')}} </h1>
+</div>
+
 <div id="datawin" class="innertube">
 	    <table id="captains-table">
 

@@ -53,11 +53,11 @@ body {
 
 #tabletitle {
 position: absolute;
-height: 12px;
+height: 14px;
 width: 1200px;
 background: white;
 left: 0;
-bottom: 220px;
+bottom: 230px;
 }
 
 #datawin {
