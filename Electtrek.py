@@ -2285,8 +2285,9 @@ def wardreport(path):
 def displayareas():
     global current_node
     global layeritems
+    global formdata
     print('_______ROUTE/displayareas:')
-    layeritems = getlayeritems([])
+    layeritems = getlayeritems([],"")
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
     json_title = json.dumps(layeritems[2])
