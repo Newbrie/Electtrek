@@ -137,13 +137,16 @@ var showMore = function (msg,area, type) {
       const rows = data[1];           // Second element contains data rows
 
       // Clear previous content
-      tabtitle.innerHTML = tabletitle;
+      tabtitle.innerHTML = "";
       tabhead.innerHTML = "";
       tabbody.innerHTML = "";
 
       // Build table head row
+      const tabdiv = document.createElement("h1");
       const headRow = document.createElement("tr");
       const checkboxHeader = document.createElement("th");
+
+      tabdiv.textContent = tabletitle;
       checkboxHeader.textContent = "?";
       headRow.appendChild(checkboxHeader);
 
