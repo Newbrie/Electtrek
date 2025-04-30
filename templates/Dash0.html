@@ -103,7 +103,8 @@
       <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       <br>
       <label for="autofix">AutoFix:</label>
-      <input type="checkbox" id="autofix" name="autofix"   />
+      <input type="hidden" id="autofix" name="autofix" value=0  />
+      <input type="checkbox" id="autofix" name="autofix" value=1  />
       <br>
 
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>

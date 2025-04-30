@@ -145,14 +145,18 @@ def subending(filename, ending):
 Historynodelist = []
 Historytitle = ""
 
+
 ElectionOptions = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
 VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"getlayeritems","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
 VNORM = {"O":"O","REFORM" : "R" , "REFORM DERBY" : "R" ,"REFORM UK" : "R" ,"REF" : "R", "RUK" : "R","R" :"R","CONSERVATIVE AND UNIONIST" : "C","CONSERVATIVE" : "C", "CON" : "C", "C":"C","LABOUR PARTY" : "S","LABOUR" : "S", "LAB" :"S", "L" : "L", "LIBERAL DEMOCRATS" :"LD" ,"LIBDEM" :"LD" , "LIB" :"LD","LD" :"LD", "GREEN PARTY" : "G" ,"GREEN" : "G" ,"G":"G", "INDEPENDENT" : "I", "IND" : "I" ,"I" : "I" ,"PLAID CYMRU" : "PC" ,"PC" : "PC" ,"SNP": "SNP" ,"MAYBE" : "Z" ,"WONT VOTE" : "W" ,"WON'T SAY" : "X" , "SDLP" : "S", "SINN FEIN" : "SF", "SPK": "N", "TUV" : "C", "UUP" : "C", "DUP" : "C","APNI" : "N", "INET": "I", "NIP": "I","PBPA": "I","WPB": "S","OTHER" : "O"}
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
+onoff = {"on" : 1, 'off': 0}
+
 
 OPTIONS = {
     "elections": ElectionOptions,
-    "yourparty": VID
+    "yourparty": VID,
+    "autofix" : onoff
     # Add more mappings here if needed
 }
 
@@ -1232,8 +1236,8 @@ ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
 ElectionSettings['elections'] = 'Westminster'
 ElectionSettings['importfile'] = ""
+ElectionSettings['autofix'] = 0
 ward_div = 'ward'
-
 Featurelayers = []
 
 
@@ -2490,8 +2494,10 @@ def setgotv():
             ElectionSettings['field'] =  value
 
         GOTV = ElectionSettings['GOTV']
+        autofix = ElectionSettings['autofix']
         mapfile = current_node.dir+"/"+current_node.file
         formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
+        print('_______ElectionSettings:',ElectionSettings)
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
         return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
@@ -2518,7 +2524,7 @@ def normalise():
     DQstats = pd.DataFrame()
     ElectionSettings['importfile'] = request.files['importfile']
     print("Import filename:",ElectionSettings['importfile'])
-    results = normz(ElectionSettings['importfile'], formdata)
+    results = normz(ElectionSettings['importfile'], formdata,ElectionSettings['autofix'])
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
     formdata = results[1]
     DQstats = results[2]
