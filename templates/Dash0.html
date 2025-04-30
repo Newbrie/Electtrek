@@ -88,7 +88,7 @@
         {% endfor %}
 
 			<h2>Application Preferences</h2>
-      <div id="constants-container"></div>
+      <div id="constants-container">
 
       <label for="elections">Type of Election:</label>
       <select name="elections" id="elections"></select><br>
@@ -107,10 +107,11 @@
       <input type="checkbox" id="autofix" name="autofix" value=1  />
       <br>
 
+
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
-
+      </div>
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
             CONTROLS:<br>
           <input type="file" name="importfile" placeholder= " {{ (formdata or {}).get('importfile', '')}} "/>

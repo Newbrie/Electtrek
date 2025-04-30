@@ -356,6 +356,7 @@ var showMore = function (msg,area, type) {
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
+          alert("element:"+key+el.value);
           if (!el) return;
 
           if (el.tagName === "SELECT") {
