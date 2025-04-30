@@ -13,6 +13,7 @@ print("Config in Normalised loaded successfully:", config.workdirectories)
 
 
 def normz(LocalFile, normstats):
+    global ElectionSettings
     print ("____________inside normz_________")
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -214,28 +215,26 @@ def normz(LocalFile, normstats):
 
         Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
         Outcols = Outcomes.columns.to_list()
-        incols = dfz.columns
         for z in Outcols :
             DQstats.loc[Outcols.index(z),'Field'] = z
 
-        #pass 1
+        #pass 1 - how many required fieldnames are in the source file?
+        incols = dfz.columns
         for y in [x for x in Outcols if x in incols]:
             DQstats.loc[Outcols.index(y),'P1'] = 1
-
-
-        DQStats = pd.DataFrame(columns = Outcols)
-
-        INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
-        Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
-        # pass 2
-        for y in [x for x in Outcols if x in Incols]:
-            DQstats.loc[Outcols.index(y),'P2'] = 1
-
+        if ElectionSettings['dataautofix'] != 1:
+            return [electors10,normstats,DQstats]
 #        dfzres = extractfactors(dfz)
-        return [electors10,normstats,DQstats]
-
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
+
+        # pass 2 - how many required fieldnames can be derived by normalising fields in the source file
+        INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
+        Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
+        for y in [x for x in Outcols if x in Incols]:
+            DQstats.loc[Outcols.index(y),'P2'] = 1
+        if ElectionSettings['dataautofix'] != 1:
+            return [electors10,normstats,DQstats]
 
 
     count = 0
@@ -495,6 +494,19 @@ def normz(LocalFile, normstats):
 #    normstats['Mean_Lat'] = np.mean(electors2['Lat']).astype(float)
 #    normstats['Mean_Elev'] = np.mean(electors2['Elevation']).astype(float)
     normstats['status'] = "NormComplete"
+
+    # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
+    pass3cols = electors2.columns
+    for y in [x for x in Outcols if x in pass3cols]:
+        DQstats.loc[Outcols.index(y),'P3'] = 1
+    if ElectionSettings['dataautofix'] != 1:
+        return [electors2,normstats,DQstats]
+    # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
+    for y in [x for x in Outcols if x in pass3cols]:
+        DQstats.loc[Outcols.index(y),'Ready'] = 1
+    if ElectionSettings['dataautofix'] != 1:
+        return [electors2,normstats,DQstats]
+
     return [electors2,normstats,DQstats]
 
 
