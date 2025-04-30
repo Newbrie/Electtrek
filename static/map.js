@@ -123,7 +123,7 @@ var showMore = function (msg,area, type) {
   .then(data => {
       console.log("Data received:", data);
 
-      if (!Array.isArray(data) || data.length < 2) {
+      if (!Array.isArray(data) || data.length < 3) {
           console.error("Invalid or incomplete data:", data);
           return;
       }
@@ -135,7 +135,8 @@ var showMore = function (msg,area, type) {
 
 
       const columnHeaders = data[0];  // First element contains ordered column names
-      const rows = data[1];           // Second element contains data rows
+      const rows = data[1];
+      const title = data[2];           // Second element contains data rows
 
       // Clear previous content
       tabtitle.innerHTML = "";
@@ -147,7 +148,7 @@ var showMore = function (msg,area, type) {
       const headRow = document.createElement("tr");
       const checkboxHeader = document.createElement("th");
 
-      tabtitle.innerHTML = "Mockup";
+      tabtitle.innerHTML = title;
       checkboxHeader.textContent = "?";
       headRow.appendChild(checkboxHeader);
 
