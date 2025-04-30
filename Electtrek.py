@@ -2370,7 +2370,8 @@ def upbut(path):
     formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     layeritems = getlayeritems(current_node.parent.childrenoftype(gettypeoflevel(path,current_node.level)),formdata['tabledetails'])
 
-    current_node = current_node.parent
+    if current_node.level > 0:
+        current_node = current_node.parent
     mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
 
