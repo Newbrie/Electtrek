@@ -220,7 +220,7 @@ def normz(LocalFile, normstats, autofix):
         incols = dfz.columns
         for y in [x for x in Outcols if x in incols]:
             DQstats.loc[Outcols.index(y),'P1'] = 1
-        if autofix != 1:
+        if autofix <= 0:
             return [electors10,normstats,DQstats]
 #        dfzres = extractfactors(dfz)
 #        dfzres = checkENOP(dfz)
@@ -231,7 +231,7 @@ def normz(LocalFile, normstats, autofix):
         Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
         for y in [x for x in Outcols if x in Incols]:
             DQstats.loc[Outcols.index(y),'P2'] = 1
-        if autofix != 1:
+        if autofix <= 1:
             return [electors10,normstats,DQstats]
 
 
@@ -497,12 +497,12 @@ def normz(LocalFile, normstats, autofix):
     pass3cols = electors2.columns
     for y in [x for x in Outcols if x in pass3cols]:
         DQstats.loc[Outcols.index(y),'P3'] = 1
-    if autofix != 1:
+    if autofix <= 2:
         return [electors2,normstats,DQstats]
     # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
     for y in [x for x in Outcols if x in pass3cols]:
         DQstats.loc[Outcols.index(y),'Ready'] = 1
-    if autofix != 1:
+    if autofix <= 3:
         return [electors2,normstats,DQstats]
 
     return [electors2,normstats,DQstats]
