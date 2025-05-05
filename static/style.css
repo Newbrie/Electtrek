@@ -863,16 +863,17 @@ html {
 
 .container-grid {
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(2, 1fr);
 	grid-template-rows: 1fr var(--sds-g-sizing-9);
-	gap:1rem
+	grid-gap:1rem;
+	grid-auto-rows: 100px;
 }
 
 .border-radius {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     grid-template-rows: 1fr var(--sds-g-sizing-9);
-    gap:1rem
+    gap:1rem;
 }
 
 .border-radius [data-value], .border-width [data-value], .shadow [data-value] {
