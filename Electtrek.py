@@ -77,6 +77,10 @@ def normalname(name):
 
 def getchildtype(parent):
     global levels
+    if parent == 'ward' or parent == 'division':
+        parent = 'ward/division'
+    elif parent == 'walk' or parent == 'street':
+        parent = 'walk/street'
     lev = min(levels.index(parent)+1,8)
     return levels[lev]
 #    matches = [index for index, x in enumerate(levels) if x.find(parent) > -1  ]
@@ -764,7 +768,8 @@ class TreeNode:
 
                             kmeans_dist_data = list(zip(x, y))
 
-                            walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
+    #                        walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
+                            walkset = min(math.ceil(ElectionSettings['teamsize']),35)
 
                             kmeans = KMeans(n_clusters=walkset)
                             kmeans.fit(kmeans_dist_data)
@@ -1234,6 +1239,7 @@ ElectionSettings = {}
 ElectionSettings['GOTV'] = 0.50
 ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
+ElectionSettings['teamsize'] = 5
 ElectionSettings['elections'] = 'Westminster'
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
@@ -1535,6 +1541,7 @@ def downbut(path):
     formdata['country'] = "UNITED_KINGDOM"
     formdata['GOTV'] = ElectionSettings['GOTV']
     formdata['walksize'] = ElectionSettings['walksize']
+    formdata['teamsize'] = ElectionSettings['teamsize']
     formdata['candfirst'] = "Firstname"
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
@@ -2526,17 +2533,17 @@ def normalise():
 
     formdata = {}
     DQstats = pd.DataFrame()
-    ElectionSettings['importfile'] = request.files['importfile']
+    ElectionSettings['importfile'] = request.files['importfile'].filename
     print("Import filename:",ElectionSettings['importfile'])
-    results = normz(ElectionSettings['importfile'], formdata,ElectionSettings['autofix'])
+    results = normz(request.files['importfile'], formdata,ElectionSettings['autofix'])
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
     formdata = results[1]
     DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    print('_______ROUTE/normalise/exit:',DQstats)
-    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile'].filename+" Details"
+    print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats)
+    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
     layeritems = getlayeritems(group.head(), formdata['tabledetails'])
     return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 

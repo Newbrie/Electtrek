@@ -861,6 +861,13 @@ html {
     gap:1rem
 }
 
+.container-grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	grid-template-rows: 1fr var(--sds-g-sizing-9);
+	gap:1rem
+}
+
 .border-radius {
     display: grid;
     grid-template-columns: repeat(5, 1fr);

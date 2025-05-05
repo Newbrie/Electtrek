@@ -310,9 +310,9 @@ def normz(LocalFile, normstats, autofix):
             electors2.loc[index,'Elevation'] = float(0.0)
         else:
             electors2.loc[index,'Elevation'] = float(elector['Elevation'])
-        if str(elector['ElectorName']) == "":
+        if DQstats.loc[Outcols.index('ElectorName'),'P2'] != 1:
             electors2.loc[index,'ElectorName'] = str(elector['Surname']) +" "+ str(elector['Firstname'])
-        if str(electors2.loc[index,'Firstname']) == "":
+        if DQstats.loc[Outcols.index('Firstname'),'P2'] != 1:
             wordlist = str(elector['ElectorName']).split()
             l = len(wordlist)
             electors2.loc[index,'Surname'] = str(wordlist[0])
@@ -321,9 +321,9 @@ def normz(LocalFile, normstats, autofix):
             if l>2:
                 for i in range(l-2):
                     electors2.loc[index,'Initials'] = "".join(wordlist[i+2],)
-        if str(elector["PD"]) is None:
+        if DQstats.loc[Outcols.index('PD'),'P2'] != 1:
             print("no PD:", elector)
-        if elector['Council'] is None :
+        if DQstats.loc[Outcols.index('Firstname'),'P2'] != 1 :
             print("No Council:", elector)
       #  set up the address attributes
         xx = str(elector["Address1"])
@@ -338,7 +338,7 @@ def normz(LocalFile, normstats, autofix):
           addr = str(elector.Address2)
           if Addno2 is None :
             Addno = ""
-            street = elector.Address2.lstrip()
+            street = str(elector.Address2).lstrip()
             electors2.loc[index,'StreetName'] = street
             electors2.loc[index,'Address_1'] = elector["Address3"]
             electors2.loc[index,'Address_2'] = elector["Address4"]
@@ -349,7 +349,7 @@ def normz(LocalFile, normstats, autofix):
             Addnolen = len(Addno2.group())
             Addno = str(Addno2.group())
             Addnoindex = addr.index(Addno)
-            addr = elector.Address2.lstrip()
+            addr = str(elector.Address2).lstrip()
             street = addr[Addnolen+Addnoindex:].rstrip().lstrip()
             electors2.loc[index,'Address_1'] = elector["Address2"]
             electors2.loc[index,'Address_2'] = elector["Address3"]
@@ -357,7 +357,7 @@ def normz(LocalFile, normstats, autofix):
             electors2.loc[index,'Address_4'] = elector["Address5"]
             print ("len01:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             if street == "" or street is None:
-              street = elector.Address3.lstrip()
+              street = str(elector.Address3).lstrip()
               electors2.loc[index,'Address_1'] = elector["Address3"]
               electors2.loc[index,'Address_2'] = elector["Address4"]
               electors2.loc[index,'Address_3'] = elector["Address5"]

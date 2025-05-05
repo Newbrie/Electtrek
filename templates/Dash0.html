@@ -99,6 +99,9 @@
       <label for="walksize">Walk Size:</label>
       <input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
 
+      <label for="teamsize">Team Size:</label>
+      <input type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
+
       <label for="GOTV">GOTV:</label>
       <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       <br>
@@ -110,16 +113,19 @@
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
-      </div>
+
+      </div class=container-grid>
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
-            CONTROLS:<br>
-          <input type="file" name="importfile" placeholder= " {{ (formdata or {}).get('importfile', '')}} "/>
-		      <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/>
-		      <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/>
-					<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/>
-					<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/>
-					<input type="submit" value="PostcodeLookup" class="btn btn-norm" onclick="setActionForm('postcode')"/>
+            SETTINGS:<br>
+        <div>  <input type="file" name="importfile" placeholder= " {{ (formdata or {}).get('importfile', '')}} "/> </div>
+		    <div>   <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/> </div>
+		    <div>    <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/> </div>
+				<div>  	<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/> </div>
+			  <div>  	<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/> </div>
+			  <div>  	<input type="submit" value="Settings" class="btn btn-norm" onclick="setActionForm('settings')"/> </div>
 		  </form>
+      </div>
+      <div>
 
           <table id="DQ-table">
             <thead>
