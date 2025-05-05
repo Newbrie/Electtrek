@@ -114,6 +114,28 @@
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
 
+
+          <div class = "grid-container">
+            <div class="grid-item">
+              <button type = "button" id = "b1" class = "small_btn">Maps</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b2" class = "small_btn">Results</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b3" class = "small_btn">Roll</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b4" class = "small_btn">Intention</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b5" class = "big_btn">Telling</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b6" class = "big_btn">Teams</button>
+            </div>
+    </div>
+
       </div class=container-grid>
 				<form id="normal-file" method="POST" enctype="multipart/form-data">
             SETTINGS:<br>
@@ -125,7 +147,6 @@
 			  <div>  	<input type="submit" value="Settings" class="btn btn-norm" onclick="setActionForm('settings')"/> </div>
 		  </form>
       </div>
-      <div>
 
           <table id="DQ-table">
             <thead>
