@@ -8,7 +8,7 @@ var moveDown = function (msg, area, type) {
 
     const fileInput = document.getElementById('shared_importfile');
     if (!fileInput || fileInput.files.length === 0) {
-        alert("Please select a file before submitting.");
+      window.location.assign(msg);
         return;
     }
 
@@ -17,7 +17,7 @@ var moveDown = function (msg, area, type) {
     const form = document.getElementById(formId);
 
     if (!form) {
-      window.location.assign(msg);
+        alert(`Form with ID "${formId}" not found.`);
         return;
     }
 
