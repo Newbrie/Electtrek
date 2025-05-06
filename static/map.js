@@ -4,7 +4,10 @@ toggle between hiding and showing the dropdown content */
 var moveDown = function (msg,area, type) {
   // Get the file input and extract the file name
       const fileInput = document.getElementById('importfile');
-
+      window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
+      var ul = parent.document.getElementById("logwin");
+      ul.scrollTop = ul.scrollHeight;
+    
       if (fileInput) {
         const file = fileInput.files[0];
 
@@ -25,12 +28,10 @@ var moveDown = function (msg,area, type) {
       // Submit the form
       form.submit();
       }
+      else{}
   // Send a message to the parent
-      window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       window.location.assign(msg);
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
-      };
+    };
 
 var moveUp = function (msg,area, type) {
   // Send a message to the parent
