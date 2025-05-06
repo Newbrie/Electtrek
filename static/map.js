@@ -2,25 +2,24 @@
 toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg,area, type) {
+  // Get the file input and extract the file name
+    const fileInput = document.getElementById('importfile');
+    const fileName = fileInput.files[0] ? fileInput.files[0].name : '';  // Check if file is selected
 
-      // Construct the full URL with the file name
-      const fullUrl = msg;
+    if (!fileName) {
+        alert("Please select a file before submitting.");
+        return;
+    }
+    const fileURL = URL.createObjectURL(file);
+    // Construct the full URL with the file name
+    const fullUrl = fileURL + '/' + fileName;
 
-      console.log('Requesting URL:', fullUrl);
+    // Dynamically set the form action to the full URL
+    const form = document.getElementById(districtType === 'polling district' ? 'PDForm' : 'WKForm');
+    form.action = fullUrl;
 
-      // Perform the GET request using fetch
-      fetch(fullUrl)
-          .then(response => response.text())  // Convert the response to text
-          .then(data => {
-              console.log('Response received:', data);
-              // You can update the page or do other things with the response
-          })
-          .catch(error => {
-              console.error('Error:', error);
-              alert("There was an error processing your request."+error+fullUrl);
-          });
-
-
+    // Submit the form
+    form.submit();
   // Send a message to the parent
       window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       window.location.assign(msg);
