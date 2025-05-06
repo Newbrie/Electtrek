@@ -2,8 +2,7 @@
 toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg,area, type) {
-      const fileInput = document.getElementById('importfile');
-      const fileName = fileInput.files[0] ? fileInput.files[0].name : '';  // Check if file is selected
+      const fileName = document.getElementById('importfile').files[0].name;
 
       if (!fileName) {
           alert("Please select a file before submitting.");
