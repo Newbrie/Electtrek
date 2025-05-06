@@ -4,7 +4,7 @@ toggle between hiding and showing the dropdown content */
 var moveDown = function (msg,area, type) {
   // Get the file input and extract the file name
     const fileInput = document.getElementById('importfile');
-    if fileInput {
+    if (fileInput) {
       const fileName = fileInput.files[0] ? fileInput.files[0].name : '';  // Check if file is selected
 
       if (!fileName) {
@@ -21,7 +21,7 @@ var moveDown = function (msg,area, type) {
 
       // Submit the form
       form.submit();
-    };
+      }
   // Send a message to the parent
       window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       window.location.assign(msg);
