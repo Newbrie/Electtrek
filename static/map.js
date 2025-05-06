@@ -26,7 +26,7 @@ var moveDown = function (msg,area, type) {
               console.error('Error:', error);
               alert("There was an error processing your request.");
           });
-      }
+
 
   // Send a message to the parent
       window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
@@ -34,6 +34,7 @@ var moveDown = function (msg,area, type) {
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
       };
+
 var moveUp = function (msg,area, type) {
   // Send a message to the parent
       window.parent.postMessage("Moving up to "+ area + " "+ type+ " level ", '*');

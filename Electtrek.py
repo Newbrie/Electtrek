@@ -1081,8 +1081,8 @@ class FGlayer:
 #                        self.children.append(c)
                 elif herenode.level == 3:
                     upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
-                    PDbtn = "<button type='submit' class='guil-button' onclick='const xxx = &#39;/downPDbut/{0} &#39; + document.getElementById(&#39;importfile&#39;).files[0].name;moveDown(xxx ,&#39;{1}&#39;,&#39;{2}&#39;);' value='Polling Districts' class='btn btn-norm'>POLLING DISTRICTS</button>".format(c.dir+"/"+c.file,c.value,'polling district')
-                    WKbtn = "<button type='submit' class='guil-button' onclick='const xxx = &#39;/downWKbut/{0} &#39; + document.getElementById(&#39;importfile&#39;).files[0].name;moveDown(xxx ,&#39;{1}&#39;,&#39;{2}&#39;);' value='Walks' class='btn btn-norm'>WALKS</button>".format(c.dir+"/"+c.file,c.value,'walk')
+                    PDbtn = "<button type='button' class='guil-button' onclick='const xxx = &#39;/downPDbut/{0} &#39; + document.getElementById(&#39;importfile&#39;).files[0].name;moveDown(xxx ,&#39;{1}&#39;,&#39;{2}&#39;);' value='Polling Districts' class='btn btn-norm'>POLLING DISTRICTS</button>".format(c.dir+"/"+c.file,c.value,'polling district')
+                    WKbtn = "<button type='button' class='guil-button' onclick='const xxx = &#39;/downWKbut/{0} &#39; + document.getElementById(&#39;importfile&#39;).files[0].name;moveDown(xxx ,&#39;{1}&#39;,&#39;{2}&#39;);' value='Walks' class='btn btn-norm'>WALKS</button>".format(c.dir+"/"+c.file,c.value,'walk')
                     upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12,herenode.source)
                     uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                     limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ upload+"<br>"+PDbtn+" "+WKbtn
