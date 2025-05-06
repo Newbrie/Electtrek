@@ -1,39 +1,46 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-var moveDown = function (msg,area, type) {
-  // Get the file input and extract the file name
-      const fileInput = document.getElementById('importfile');
-      window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
+var moveDown = function (msg, area, type) {
+    window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
-      if (fileInput) {
-        const file = fileInput.files[0];
+    const ul = parent.document.getElementById("logwin");
+    if (ul) ul.scrollTop = ul.scrollHeight;
 
-        if (!file) {
-            alert("Please select a file before submitting.");
-            return;
-        }
+    const fileInput = document.getElementById('shared_importfile');
+    if (!fileInput || fileInput.files.length === 0) {
+        alert("Please select a file before submitting.");
+        return;
+    }
 
-      const fileName = file.name;
-      const fileURL = URL.createObjectURL(file);
-      // Construct the full URL with the file name
-      const fullUrl = fileURL + '/' + fileName;
+    // Select the appropriate form based on the type
+    const formId = (type === 'polling district') ? 'PDForm' : 'WKForm';
+    const form = document.getElementById(formId);
 
-      // Dynamically set the form action to the full URL
-      const form = document.getElementById(type === 'polling district' ? 'PDForm' : 'WKForm');
-      form.action = msg;
-      form.method = 'POST';
-      alert(msg);
-      // Submit the form
-      form.submit();
-      }
-      else {
-  // Send a message to the parent
-      window.location.assign(msg);
-      }
-    };
+    if (!form) {
+        alert(`Form with ID "${formId}" not found.`);
+        return;
+    }
+
+    // Clone the file input, preserving the selected file(s)
+    const clone = fileInput.cloneNode();
+    clone.files = fileInput.files;
+
+    // Remove the previous file input inside the form (if any)
+    const existingInput = form.querySelector("input[type='file']");
+    if (existingInput) form.removeChild(existingInput);
+
+    // Append the cloned file input to the form
+    form.appendChild(clone);
+
+    // Set form attributes and submit
+    form.action = msg;
+    form.method = 'POST';
+    form.enctype = 'multipart/form-data';
+
+    alert("Submitting to: " + msg);
+    form.submit();
+};
 
 var moveUp = function (msg,area, type) {
   // Send a message to the parent

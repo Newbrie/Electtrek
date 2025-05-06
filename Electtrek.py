@@ -1081,21 +1081,27 @@ class FGlayer:
 #                        self.children.append(c)
                 elif herenode.level == 3:
                     upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+                    upload = "<input id='shared_importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12, herenode.source)
+
                     PDbtn = """
-                        <form id='PDForm' method='GET' style='display: none;' action=''>
-                          <input type='file' id='importfile' name='importfile' style='display: none;'>
-                          <button type='submit' style='display: none;'>Submit</button>
+                        <form id='PDForm' method='POST' enctype='multipart/form-data' style='display: none;' action=''>
+                            <!-- Form to submit the file, hidden from user -->
                         </form>
-                        <button type='button' class='guil-button' onclick='moveDown(&#39;/downPDbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;);' value='Polling Districts' class='btn btn-norm'>POLLING DISTRICTS</button>
-                        """.format(c.dir+"/"+c.file,c.value,'polling district')
+                        <button type='button' class='guil-button' onclick='moveDown("/downPDbut/{0}", "{1}", "polling district");' class='btn btn-norm'>
+                            POLLING DISTRICTS
+                        </button>
+                    """.format(c.dir+"/"+c.file, c.value)
+
                     WKbtn = """
-                        <form id='WKForm' method='GET' style='display: none;' action=''>
-                          <input type='file' id='importfile' name='importfile' style='display: none;'>
-                          <button type='submit' style='display: none;'>Submit</button>
+                        <form id='WKForm' method='POST' enctype='multipart/form-data' style='display: none;' action=''>
+                            <!-- Form to submit the file, hidden from user -->
                         </form>
-                        <button type='button' class='guil-button' onclick='moveDown(&#39;/downWKbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;);' value='Walks' class='btn btn-norm'>WALKS</button>
-                        """.format(c.dir+"/"+c.file,c.value,'walk')
-                    upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12,herenode.source)
+                        <button type='button' class='guil-button' onclick='moveDown("/downWKbut/{0}", "{1}", "walk");' class='btn btn-norm'>
+                            WALKS
+                        </button>
+                    """.format(c.dir+"/"+c.file, c.value)
+
+
                     uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                     limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ upload+"<br>"+PDbtn+" "+WKbtn
 #                    c.tagno = len(self.fg._children)+1
@@ -1699,7 +1705,7 @@ def downPDbut(path):
     print ("_________ROUTE/downPDbut/",path, request.method)
     print('_______Requestformfile',request.values['importfile'])
     flash ("_________Requestformfile"+request.values['importfile'])
-    if request.method == 'GET':
+    if request.method == 'POST':
         electrollfile = request.values['importfile']
         print ("_________ROUTE/downPDbut/",request.method, electrollfile)
 
