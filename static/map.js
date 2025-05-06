@@ -11,7 +11,7 @@ var moveDown = function (msg,area, type) {
           alert("Please select a file before submitting.");
           return;
       }
-      const fileURL = URL.createObjectURL(file);
+      const fileURL = URL.createObjectURL(fileName);
       // Construct the full URL with the file name
       const fullUrl = fileURL + '/' + fileName;
 
