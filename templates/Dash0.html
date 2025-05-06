@@ -114,16 +114,16 @@
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
 
-
-          <div class = "grid-container">
+</div>
+        <div class = "grid-container">
             <div class="grid-item">
-              <button type = "button" id = "b1" class = "small_btn">Maps</button>
+              <button type = "button" id = "b1" class = "small_btn" onclick="setActionForm('filelist',filelist='maps')">Maps</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b2" class = "small_btn">Results</button>
+              <button type = "button" id = "b2" class = "small_btn" onclick="setActionForm('filelist',filelist='results')">Results</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b3" class = "small_btn">Roll</button>
+              <button type = "button" id = "b3" class = "small_btn" onclick="setActionForm('filelist',filelist='roll')">Electoral Roll</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b4" class = "small_btn">Intention</button>
@@ -134,19 +134,11 @@
             <div class="grid-item">
               <button type = "button" id = "b6" class = "big_btn">Teams</button>
             </div>
-    </div>
+            <div class="grid-item">
+              <button type = "button" id = "b6" class = "big_btn" onclick="setActionForm('produce')">Search</button>
+            </div>
 
-      </div class=container-grid>
-				<form id="normal-file" method="POST" enctype="multipart/form-data">
-            SETTINGS:<br>
-        <div>  <input type="file" name="importfile" placeholder= " {{ (formdata or {}).get('importfile', '')}} "/> </div>
-		    <div>   <input type="submit" value="Normalise" class="btn btn-norm" onclick="setActionForm('normalise')"/> </div>
-		    <div>    <input type="submit" value="ProduceWalks" class="btn btn-norm" onclick="setActionForm('produce')"/> </div>
-				<div>  	<input type="submit" value="ProduceCanvasCards" class="btn btn-norm" onclick="setActionForm('canvass')"/> </div>
-			  <div>  	<input type="text" name="postcodeentry" placeholder="e.g SA6 17HR"/> </div>
-			  <div>  	<input type="submit" value="Settings" class="btn btn-norm" onclick="setActionForm('settings')"/> </div>
-		  </form>
-      </div>
+          </div>
 
           <table id="DQ-table">
             <thead>
@@ -205,7 +197,7 @@
 	    </table>
 </div>
 <script>
-  function setActionForm(action){
+  function setActionForm(action,subject){
     let form = document.getElementById("normal-file");
     if (action === 'normalise') {
         form.action = "{{url_for('normalise')}}";

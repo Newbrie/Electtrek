@@ -2,6 +2,32 @@
 toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg,area, type) {
+      const fileInput = document.getElementById('importfile');
+      const fileName = fileInput.files[0] ? fileInput.files[0].name : '';  // Check if file is selected
+
+      if (!fileName) {
+          alert("Please select a file before submitting.");
+          return;
+      }
+
+      // Construct the full URL with the file name
+      const fullUrl = msg;
+
+      console.log('Requesting URL:', fullUrl);
+
+      // Perform the GET request using fetch
+      fetch(fullUrl)
+          .then(response => response.text())  // Convert the response to text
+          .then(data => {
+              console.log('Response received:', data);
+              // You can update the page or do other things with the response
+          })
+          .catch(error => {
+              console.error('Error:', error);
+              alert("There was an error processing your request.");
+          });
+      }
+
   // Send a message to the parent
       window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       window.location.assign(msg);

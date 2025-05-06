@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+<title>V3.3 electtrek canvassing - Map Files</title>
+
+	{% block map %}
+	<div id="main" style="page-break-before: always;">
+	    <table id="canvass-table">
+				<thead>
+					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> MAP FILES</th>
+				 </tr>
+	      <tr>
+	      <th class="c1" colspan='3' >clipnode</th>
+				<th class="centred" colspan='3'>fileurl</th>
+				<th class="c8">level</th>
+	      <th class="coded">boundarytype</th>
+	      <th class="c10">cdate</th>
+	      <th class="c10">applied</th>
+				</tr>
+
+	      </thead>
+				<tbody>
+					{% for index,row in group.iterrows() %}
+	      <tr>
+	        <td class="c0">{{ row['clipnode'] }}</td>
+	        <td class="c1">{{ row['fileurl'] }}</td>
+					<td class="c2">{{ row['level'] }}</td>
+		       <td class="righted">{{ row['boundarytype'] }}</td>
+	        <td class="righted">{{ row['cdate'] }}</td>
+					<td class="centred">{{ row['applied'] }}  </td>
+	      </tr>
+	      {% endfor %}
+			</tbody>
+			<tfoot>
+						<tr>  <td colspan='10' >footercell</td>
+						</tr>
+			</tfoot>
+	    </table>
+</div>
+
+{% endblock %}
