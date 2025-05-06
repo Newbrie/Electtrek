@@ -19,7 +19,7 @@ var moveDown = function (msg,area, type) {
       const fullUrl = fileURL + '/' + fileName;
 
       // Dynamically set the form action to the full URL
-      const form = document.getElementById(districtType === 'polling district' ? 'PDForm' : 'WKForm');
+      const form = document.getElementById(type === 'polling district' ? 'PDForm' : 'WKForm');
       form.action = fullUrl;
 
       // Submit the form
