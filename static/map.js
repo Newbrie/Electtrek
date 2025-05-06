@@ -1,6 +1,5 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
-
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -18,7 +17,7 @@ var moveDown = function (msg, area, type) {
     const form = document.getElementById(formId);
 
     if (!form) {
-        alert(`Form with ID "${formId}" not found.`);
+      window.location.assign(msg);
         return;
     }
 
@@ -41,6 +40,7 @@ var moveDown = function (msg, area, type) {
     alert("Submitting to: " + msg);
     form.submit();
 };
+
 
 var moveUp = function (msg,area, type) {
   // Send a message to the parent
