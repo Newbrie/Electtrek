@@ -2,12 +2,6 @@
 toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg,area, type) {
-      const fileName = document.getElementById('importfile').files[0].name;
-
-      if (!fileName) {
-          alert("Please select a file before submitting.");
-          return;
-      }
 
       // Construct the full URL with the file name
       const fullUrl = msg;
