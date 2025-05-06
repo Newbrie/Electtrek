@@ -7,7 +7,7 @@ var moveDown = function (msg,area, type) {
       window.parent.postMessage("Drilling down to "+type+ " level within "+ area, '*');
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
-    
+
       if (fileInput) {
         const file = fileInput.files[0];
 
@@ -24,13 +24,15 @@ var moveDown = function (msg,area, type) {
       // Dynamically set the form action to the full URL
       const form = document.getElementById(type === 'polling district' ? 'PDForm' : 'WKForm');
       form.action = msg;
+      form.method = 'POST';
       alert(msg);
       // Submit the form
       form.submit();
       }
-      else{}
+      else {
   // Send a message to the parent
       window.location.assign(msg);
+      }
     };
 
 var moveUp = function (msg,area, type) {
