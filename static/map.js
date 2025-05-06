@@ -20,8 +20,8 @@ var moveDown = function (msg,area, type) {
 
       // Dynamically set the form action to the full URL
       const form = document.getElementById(type === 'polling district' ? 'PDForm' : 'WKForm');
-      form.action = fullUrl;
-      alert(fullUrl);
+      form.action = msg;
+      alert(msg);
       // Submit the form
       form.submit();
       }
