@@ -17,7 +17,7 @@ var moveDown = function (msg,area, type) {
           })
           .catch(error => {
               console.error('Error:', error);
-              alert("There was an error processing your request.");
+              alert("There was an error processing your request."+error+fullUrl);
           });
 
 
