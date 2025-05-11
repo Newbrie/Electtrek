@@ -409,7 +409,7 @@ var showMore = function (msg,area, type) {
             // Input field
             el.value = value;
           };
-          alert("listener:"+key+el.type+el.value);
+
           // Add change listener
           el.addEventListener("input", () => {
             let newVal = el.value;
@@ -431,6 +431,7 @@ var showMore = function (msg,area, type) {
             .then(res => res.json())
             .then(resp => {
               if (resp.success) {
+                alert("confirmed:"+key+" --"+ newVal);
                 updateMessages();  // ✅ Trigger only after backend update
               } else {
                 alert("Failed to update constant: " + resp.error);
