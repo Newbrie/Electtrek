@@ -373,14 +373,15 @@ class TreeNode:
                 self.davail = True
                 egg = self.add_Tchild(newnode, electtype)
                 egg.file = subending(egg.file,ending)
+                egg.bbox = self.bbox
                 egg.updateParty()
                 egg.updateTurnout()
                 egg.updateElectorate(limb.ENOP)
-                print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.target)
+                print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.target,egg.bbox)
                 fam_nodes.append(egg)
 
     #    self.aggTarget()
-#        print('______Data frame:',namepoints, fam_nodes, self.value, self.bbox)
+        print('______Data frame:',namepoints, fam_nodes)
         return fam_nodes
 
     def create_map_branch(self,electtype):
@@ -414,6 +415,7 @@ class TreeNode:
             if parent_geom.intersection(limb.geometry).area > 0.0001 and newname not in fam_values:
                 egg = TreeNode(newname, limb.FID, here,self.level+1)
                 egg = self.add_Tchild(egg, electtype)
+                egg.bbox = egg.get_bounding_box(block)[0]
                 fam_nodes.append(egg)
                 egg.updateParty()
                 egg.updateTurnout()
@@ -451,7 +453,8 @@ class TreeNode:
       self.map.add_js_link("electtrekmap","https://newbrie.github.io/Electtrek/static/map.js")
       target = self.locmappath("")
       print("_____before saved map file:",len(self.map._children), self.value, self.level)
-
+      if self.level == 4:
+          print("_____bboxcheck",self.value,self.bbox)
       self.map.fit_bounds(self.bbox, padding = (0, 0))
       self.map.save(target)
       print("_____saved map file:",target,len(flayers), self.value, self.dir,self.file)
@@ -713,7 +716,7 @@ class TreeNode:
 
         node = self
         block = pd.DataFrame()
-        frames = []
+
 
         while steps:
             next = steps.pop()
@@ -722,7 +725,7 @@ class TreeNode:
             if next in nameoptions:
                 for chip in [x for x in node.children if x.value == next]:
                     node = chip
-                    print("____ EXISTNG NODE FOUND  ",node.type,node.value,node.file)
+                    print("____ EXISTNG NODE FOUND  ",node.type,node.value,node.file, node.bbox)
                     if not all:
                         break
                 steps.append(next)
@@ -750,20 +753,20 @@ class TreeNode:
             elif node.level == 4:
                 #add next back into the queue after these nodes have been added
                 try:
-                    test = len(areaelectors)
+                    test = len(allelectors00)
                 # catch when df1 is None
                 except AttributeError:
-                    print(" areaelectors is None")
+                    print(" allelectors is None")
                     test = 0
                     pass
                 # catch when it hasn't even been defined
                 except NameError:
-                    print(" areaelectors is not defined")
+                    print(" allelectors is not defined")
                     test = 0
                     pass
 
                 if  test == 0 and electrollfile != "":
-                # ward/division level for first time in the loop so import data and create PDs and Walks
+                # ward/division level for first time in the loop so import data and calc populations in postcodes
 
                     node.parent.source = electrollfile
                     allelectors0 = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
@@ -774,76 +777,81 @@ class TreeNode:
                     alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
                     alldf['Popz'] = alldf['Popz'].rdiv(1)
 
-                    allelectors = allelectors0.merge(alldf, on='Postcode',how='left' )
-                    pfile = Treepolys[node.level]
-                    Level3boundary = pfile[pfile['FID']==node.fid]
-                    PDs = set(allelectors.PD.values)
-                    print("____- PDs:",PDs)
-                    for PD in PDs:
-                        PDelectors = getblock(allelectors,'PD',PD)
-                        maplongx = PDelectors.Long.values[0]
-                        maplaty = PDelectors.Lat.values[0]
+                    allelectors00 = allelectors0.merge(alldf, on='Postcode',how='left' )
 
-                    # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
-                        if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
-                            Area = normalname(Level3boundary['NAME'].values[0])
-                            PDelectors['Area'] = Area
-                            frames.append(PDelectors)
+    # this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
+                pfile = Treepolys[node.level]
+                Level3boundary = pfile[pfile['FID']==node.fid]
+                PDs = set(allelectors00.PD.values)
+                print("____ward - PDs:",node.value,PDs)
+                frames = []
+                for PD in PDs:
+                    PDelectors = getblock(allelectors00,'PD',PD)
+                    maplongx = PDelectors.Long.values[0]
+                    maplaty = PDelectors.Lat.values[0]
 
-                    allelectors = pd.concat(frames)
-                    areaelectors = getblock(allelectors,'Area',node.value)
-                    print("____lenallelectors+areaelectors:",len(allelectors),len(areaelectors))
+                # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
+                    if Level3boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
+                        Area = normalname(Level3boundary['NAME'].values[0])
+                        PDelectors['Area'] = Area
+                        frames.append(PDelectors)
 
-                    x = areaelectors.Long.values
-                    y = areaelectors.Lat.values
+                allelectors = pd.concat(frames)
+                areaelectors = getblock(allelectors,'Area',node.value)
+
+                print("____lenallelectors+areaelectors:",len(allelectors),len(areaelectors))
+
+                x = areaelectors.Long.values
+                y = areaelectors.Lat.values
+
+                areaelectors['WalkName'] = ""
 
 
-                    kmeans_dist_data = list(zip(x, y))
+                kmeans_dist_data = list(zip(x, y))
 
 #                        walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
-                    walkset = min(math.ceil(ElectionSettings['teamsize']),35)
+                walkset = min(math.ceil(ElectionSettings['teamsize']),35)
 
-                    kmeans = KMeans(n_clusters=walkset)
-                    kmeans.fit(kmeans_dist_data)
+                kmeans = KMeans(n_clusters=walkset)
+                kmeans.fit(kmeans_dist_data)
 
-                    klabels1 = np.char.mod('C%d', kmeans.labels_)
-                    klabels = klabels1.tolist()
+                klabels1 = np.char.mod('C%d', kmeans.labels_)
+                klabels = klabels1.tolist()
 
-                    areaelectors.insert(0, "WalkName", klabels)
-    #                if gettypeoflevel(path,node.level+1) == 'polling district':
+                areaelectors["WalkName"]= klabels
+#                if gettypeoflevel(path,node.level+1) == 'polling district':
+                PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
+                PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+#  group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
+                WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-MAP")
+                print("____- Walks:",ElectionSettings['teamsize'],list(set(klabels)))
+#                    elif gettypeoflevel(path,node.level+1) == 'walk':
+                walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
+                walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat', 'ENOP'])
+                walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
+#  group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for node.electorate
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
+                walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-MAP")
+
+# already have data so node is ward/division level children should be either PDs and Walks
+                if gettypeoflevel(path,node.level) == 'polling district':
                     PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
                     PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-#  group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
+# we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
                     g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                     PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
                     WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-MAP")
-                    print("____- Walks:",ElectionSettings['teamsize'],list(set(klabels)))
-#                    elif gettypeoflevel(path,node.level+1) == 'walk':
+                elif gettypeoflevel(path,node.level) == 'walk':
                     walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
                     walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat', 'ENOP'])
                     walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
-#  group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for node.electorate
+# we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for node.electorate
                     g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                     walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
                     walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-MAP")
-
-                elif test > 0:
-    # already have data so node is ward/division level children should be either PDs and Walks
-                    if gettypeoflevel(path,node.level) == 'polling district':
-                        PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
-                        PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-    # we group electors by each polling district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
-                        g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-                        PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                        WardPDnodelist = node.create_data_branch('polling district',PDPtsdf.reset_index(),"-MAP")
-                    elif gettypeoflevel(path,node.level) == 'walk':
-                        walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
-                        walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat', 'ENOP'])
-                        walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
-    # we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for node.electorate
-                        g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-                        walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
-                        walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-MAP")
             elif node.level == 5:
                 #add next back into the queue after these nodes have been added
 
@@ -1538,7 +1546,10 @@ def set_constant():
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
+    print("____Back End1:",name,"-",value)
     if name in ElectionSettings:
+        print("____Back End2:",name,"-",value)
+        print("____ElectionSettings:",ElectionSettings['teamsize'])
         ElectionSettings[name] = value
         return jsonify(success=True)
     return jsonify(success=False, error="Invalid constant name"), 400
@@ -1792,9 +1803,9 @@ def downPDbut(path):
 
 #            areaelectors = getblock(allelectors,'Area',current_node.value)
 
-        if len(areaelectors) == 0 or len(selectedlayer(current_node.type)._children) == 0:
+        if len(areaelectors) == 0:
             flash("Can't find any elector data for this Area.")
-            print("Can't find any elector data for this Area.")
+            print("Can't find any elector data for this Area.", len(areaelectors),current_node.type,selectedlayer(current_node.type)._children )
         else:
             print("_______just before create_area_map call:",current_node.level, len(selectedlayer(current_node.type)._children))
 
@@ -1857,9 +1868,9 @@ def downWKbut(path):
 
 #            areaelectors = getblock(allelectors,'Area',current_node.value)
 
-        if len(areaelectors) == 0 or len(selectedlayer(current_node.type)._children) == 0:
+        if len(areaelectors) == 0:
             flash("Can't find any elector data for this Area.")
-            print("Can't find any elector data for this Area.")
+            print("Can't find any elector data for this Area.",len(areaelectors),current_node.type,selectedlayer(current_node.type)._children )
         else:
             print("_______just before walk create_area_map call:")
 
