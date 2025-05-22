@@ -103,7 +103,7 @@ def getchildtype(parent):
 def gettypeoflevel(path,level):
     global levels
     type = levels[level]
-    if path.find(" ") > -1:
+    if level == 4 and path.find(" ") > -1:
         type = path.split(" ")[1] # this is the path syntax override
     if type == 'ward/division' and path.find("_ED/") < 0:
         return 'ward'
@@ -212,7 +212,10 @@ class TreeNode:
     def upby(self,notch):
         node = self
         for i in range(notch):
-            node = self.parent
+            if node.parent is None:
+                break
+            else:
+                node = node.parent
         return node
 
     def ping_node(self, path,electrollfile, all):
@@ -225,29 +228,31 @@ class TreeNode:
         global current_node
 
         all = bool(all)
-        path2 = path
+        dest = path
         if path.find(" ") > -1:
             path3 = path.split(" ")
             path3.pop() # take off any trailing parameters
-            path2 = path3[0]
+            dest = path3[0]
 
-        steps = list(reversed(stepify(path2))) # make the top the first node
-        trunk = self.path_intersect(path2)
-        node = self.upby(self.level-len(trunk)+1) # the start node for the depth first search - mostly MapNode
 
-        print("____ping steps -next, trunk vs steps:", node.value, list(reversed(trunk)), " int ",steps)
+        deststeps = list(reversed(stepify(dest))) # lowest left - UK right
+        sourcetrunk = list(reversed(self.path_intersect(dest))) # lowest left - UK right
+        node = self.upby(self.level+1 -len(sourcetrunk)) # the start node for the depth first Ping_node search
+
+        steps = deststeps[0:len(deststeps)-len(sourcetrunk)]
+        print("____ping start,  deststeps vs, sourcetrunk vs steps, :", self.value,node.value, deststeps," vs ", sourcetrunk," vs ",steps)
         block = pd.DataFrame()
         newnodes = [node]
-        #if self.value is in not in steps, then error
+#starting at the bottom of the trunk
         i = 0
         next = ""
         while steps:
-            # move the node to the next step along the path(starting at MapRoot)
+# shuffle down child nodes looking for the 'next' = child.value
             next = steps.pop()
             print("____After pop next vs newnodes :",next," vs ",[x.value for x in newnodes])
             i = i+1
             catch = [x for x in newnodes if x.value == next]
-            print("____Ping Loop Test:",node.value, next, "children",node.children,"Catch", catch)
+            print("____Ping Loop Test:",node.value, node.level,next, "children",[x.value for x in node.children],"Catch", catch)
             if catch:
                 node = catch[0]
                 print("____ EXISTNG NODE FOUND  ",node.value,catch[0].value)
@@ -257,15 +262,16 @@ class TreeNode:
                     if len(newnodes) == 0:
                         print(f"____ cant find any children in {node.value} of type {ntype} ")
             elif node.level < 4:
-                # add new map branch nodes and add next back to the queue
+    # add new map branch nodes and add next back to the queue
                 ntype = gettypeoflevel(path, node.level+1)
                 print("____ TRYING NEW NODES AT ", node.value,node.level,ntype,path)
                 newnodes = node.create_map_branch(ntype)
                 steps.append(next)
                 print("____ NEW NODES AT ",node.value,[x.value for x in newnodes], [x.value for x in node.children])
             elif node.level == 4:
-                #add next back into the queue after data nodes have been added
-                # new data nodes will be both PDs(polling districts) or Walks (from kmeans)
+#add 'next' back into the queue after the following data nodes have been added to tree
+                steps.append(next)
+# This is ward/division level - lower data nodes will be both PDs(polling districts) or Walks (from kmeans)
 
                 try:
                     test = len(allelectors00)
@@ -281,7 +287,7 @@ class TreeNode:
                     pass
 
                 if  test == 0 and electrollfile != "":
-                # ward/division level for first time in the loop so import data and calc populations in postcodes
+    # ward/division level for first time in the loop so import data and calc populations in postcodes
 
                     node.parent.source = electrollfile
                     allelectors0 = pd.read_csv(config.workdirectories['workdir']+"/"+ electrollfile, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
@@ -347,7 +353,7 @@ class TreeNode:
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
                 walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-MAP")
-    # already have data so node is ward/division level children should be either PDs and Walks
+    # already have data so node is ward/division level children should be PDs and Walks
                 if gettypeoflevel(path,node.level) == 'polling district':
                     PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
                     PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
@@ -364,8 +370,8 @@ class TreeNode:
                     walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
                     walknodelist = node.create_data_branch('walk',walkdfs.reset_index(),"-MAP")
             elif node.level == 5:
-                #add next back into the queue after these nodes have been added
-                #this is walk/PD level so child node type will be street so add street nodes
+                steps.append(next)
+#this is the walk/PD level - add 'next' back into the queue after lower (street/walkleg) nodes have been added
                 if gettypeoflevel(path,node.level) == 'polling district':
                     areaelectors = getblock(areaelectors,'PD',node.parent.value)
                 # street level , so create street nodes
@@ -386,10 +392,9 @@ class TreeNode:
                     Streetdf = Streetdf1.groupby(['Name']).agg(g).reset_index()
                     streetnodelist = node.create_data_branch('walkleg',Streetdf.reset_index(),"-PRINT")
             elif node.level == 6 and gettypeoflevel(path,node.level+1) == 'elector':
-            #this is street level so child node type is the actual elector for whcih there are noe nodes
+#this is base/street/walkleg level so child type is the actual elector for which there are no lower nodes
                 break
                 #
-
         print("____ping end:", node.value, node.level,next, steps)
         return node
 
@@ -626,13 +631,13 @@ class TreeNode:
         bbox = self.bbox
 
         ChildPolylayer = Treepolys[electtype]
-        print("____Full ChildPolylayer",Treepolys[electtype] )
+#        print("____Full ChildPolylayer",Treepolys[electtype] )
 
             # there are 2-0 (3) relative levels - absolute level are UK(0),nations(1), constituency(2), ward(3)
         index = 0
         i = 0
         fam_nodes = self.childrenoftype(electtype)
-        print ("________new branch elements to fam nodes:",self.value,self.level,"**", electtype, fam_nodes)
+#        print ("________new branch elements to fam nodes:",self.value,self.level,"**", electtype, fam_nodes)
 
         if fam_nodes == []:
             Treepolys[electtype] = Fullpolys[electtype]
@@ -645,7 +650,7 @@ class TreeNode:
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if parent_geom.intersection(limb.geometry).area > 0.0001 and newname not in fam_values:
                 egg = TreeNode(newname, limb.FID, here,self.level+1)
-                print ("________limb selected:",newname)
+                print ("________limb selected and added:",electtype,newname, self.level+1)
                 egg = self.add_Tchild(egg, electtype)
                 egg.bbox = egg.get_bounding_box(block)[0]
                 fam_nodes.append(egg)
@@ -816,7 +821,7 @@ class TreeNode:
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}
         d3 = {k: d1[k] for k in d1 if k in d2}
-        d = dict(sorted(d3.items()))
+        d = dict(sorted(d3.items(), key=lambda item: item[1]))
         print("___sorted intersection:",list(d.keys()))
         return list(d.keys())
 
@@ -1738,13 +1743,14 @@ def get_location():
                 color: white;
                 font-family: sans-serif;
                 text-align: center;
-                padding-top: 50px;
-            }
+            height: 100%;
+            margin: 0;
+            padding: 0;}
 
             .road {
                 position: relative;
                 width: 100%;
-                height: 800px;
+                height: 100vh;
                 margin: 0 auto;
                 background: #00bed6;
                 overflow: hidden;
@@ -1759,12 +1765,12 @@ def get_location():
 
             .left {
                 left: 45%;
-                transform: rotate(-15deg);
+                transform: rotate(-12deg);
             }
 
             .right {
                 left: 52%;
-                transform: rotate(15deg);
+                transform: rotate(12deg);
             }
 
             @keyframes stepFade {
@@ -1778,13 +1784,13 @@ def get_location():
     <body>
         <h2>elecTrek is finding democracy at your location...</h2>
         <div class="road">
-    {% for i in range(12) %}
+    {% for i in range(8) %}
     {% set is_left = i % 2 == 0 %}
     <img src="{{ url_for('static', filename='left_foot.svg') if is_left else url_for('static', filename='right_foot.svg') }}"
          class="footprint {{ 'left' if is_left else 'right' }}"
          style="
             top: {{ 800 - i * 100 }}px;
-            animation-delay: {{ i * 0.5 }}s;
+            animation-delay: {{ i * 0.7 }}s;
          ">
          {% endfor %}
         </div>
