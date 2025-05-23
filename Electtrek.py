@@ -632,7 +632,7 @@ class TreeNode:
             parent_geom = parent_geom.geometry.values[0]
         bbox = self.bbox
 
-        ChildPolylayer = Fullpolys[electtype]
+        ChildPolylayer = Treepolys[electtype]
         print(f"____Full ChildPolylayer for {electtype}" )
         index = 0
         i = 0
@@ -1099,7 +1099,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 #            layerfids = [x.fid for x in self._children if x.type == type]
 #            if c.fid not in layerfids:
             if c.level+1 <= 6:
-                pfile = Fullpolys[type]
+                pfile = Treepolys[type]
                 limbX = pfile[pfile['FID']==c.fid].copy()
                 print("______line 1068:")
 #
@@ -1877,6 +1877,9 @@ def downbut(path):
 
 # the selected node has to be found from the selected button URL
 
+    if current_node.level < 4:
+        Treepolys[gettypeoflevel(path,current_node.level+2)] = Fullpolys[gettypeoflevel(path,current_node.level+2)]
+        print(f"____Maxing up Treepoly to Fullpolys for :{gettypeoflevel(path,current_node.level+1)}")
     previous_node = current_node
     current_node = previous_node.ping_node(path,previous_node.source,False)
     print("____Route/downbut:",previous_node.value,current_node.value, path)
@@ -1959,7 +1962,7 @@ def transfer(path):
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.parent.children,formdata['tabledetails'] )
 
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return redirect(url_for('map',path=mapfile))
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
@@ -2770,6 +2773,10 @@ def upbut(path):
 
     if current_node.level > 0:
         current_node = current_node.parent
+
+    if current_node.level < 3:
+        Treepolys[current_node.type] = Fullpolys[current_node.type]
+
     mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
     atype = gettypeoflevel(path,current_node.level+1)
@@ -3096,7 +3103,7 @@ def firstpage():
         step = ""
         [step,Treepolys['country'],Fullpolys['country']] = filterArea(config.workdirectories['bounddir']+"/"+"World_Countries_(Generalized)_9029012925078512962.geojson",'COUNTRY',here, config.workdirectories['bounddir']+"/"+"Country_Boundaries.geojson")
         sourcepath = step
-        [step,Treepolys['nation'],Fullpolys['nation']] = intersectingArea(config.workdirectories['bounddir']+"/"+"Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",'CTRY21NM',here,Treepolys['country'], config.workdirectories['bounddir']+"/"+"Nation_Boundaries.geojson")
+        [step,Treepolys['nation'],Fullpolys['nation']] = filterArea(config.workdirectories['bounddir']+"/"+"Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",'CTRY21NM',here, config.workdirectories['bounddir']+"/"+"Nation_Boundaries.geojson")
         sourcepath = sourcepath+"/"+step
         [step,Treepolys['county'],Fullpolys['county']] = filterArea(config.workdirectories['bounddir']+"/"+"Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",'CTYUA23NM',here, config.workdirectories['bounddir']+"/"+"County_Boundaries.geojson")
         sourcepath = sourcepath+"/"+step
