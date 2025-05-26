@@ -5,40 +5,9 @@ var moveDown = function (msg, area, type) {
 
     const ul = parent.document.getElementById("logwin");
     if (ul) ul.scrollTop = ul.scrollHeight;
-
-    const fileInput = document.getElementById('shared_importfile');
-    if (!fileInput || fileInput.files.length === 0) {
-      window.location.assign(msg);
-        return;
-    }
-
-    // Select the appropriate form based on the type
-    const formId = (type === 'polling district') ? 'PDForm' : 'WKForm';
-    const form = document.getElementById(formId);
-
-    if (!form) {
-        alert(`Form with ID "${formId}" not found.`);
-        return;
-    }
-
-    // Clone the file input, preserving the selected file(s)
-    const clone = fileInput.cloneNode();
-    clone.files = fileInput.files;
-
-    // Remove the previous file input inside the form (if any)
-    const existingInput = form.querySelector("input[type='file']");
-    if (existingInput) form.removeChild(existingInput);
-
-    // Append the cloned file input to the form
-    form.appendChild(clone);
-
-    // Set form attributes and submit
-    form.action = msg;
-    form.method = 'POST';
-    form.enctype = 'multipart/form-data';
-
+    window.location.assign(msg);
     alert("Submitting to: " + msg);
-    form.submit();
+
 };
 
 
