@@ -4,5 +4,5 @@ workdirectories['staticdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtr
 workdirectories['workdir'] = "/Users/newbrie/Sites"
 workdirectories['datadir'] = "/Users/newbrie/Sites/INDATA"
 workdirectories['templdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates"
-workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/Boundaries/"
+workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/Boundaries"
 workdirectories['resultdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/AreaIndicators/"

@@ -108,6 +108,9 @@
       <label for="autofix">AutoFix:</label>
       <input type="number" min="1" max="3" step="1" id="autofix" name="autofix" placeholder=0  />
       <br>
+      <form id="upload-form" action="/upload" method="POST" enctype="multipart/form-data">
+    <input type="file" name="file" id="file-input" onchange="document.getElementById('upload-form').submit();">
+    </form>
 
 
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
