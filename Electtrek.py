@@ -123,6 +123,10 @@ def gettypeoflevel(path,level):
         type = 'street'
     elif type == 'street/walkleg'and path.find("/WALKS") >= 0:
         type = 'walkleg'
+    elif type == 'polling_district/walk'and path.find("-PDS.html") >= 0:
+        type = 'polling_district'
+    elif type == 'polling_district/walk'and path.find("-WALKS.html") >= 0:
+        type = 'walk'
     print(f"____check len steps {deststeps} vs level {level} to override {moretype}")
     if len(deststeps) == level and moretype != "":
         type = moretype # this is the path syntax type override if levelmax reached
@@ -220,10 +224,10 @@ class TreeNode:
         self.electorate = 0
         self.target = 1
 
-    def upby(self,notch):
+    def upto(self,deststeps):
         node = self
-        for i in range(notch):
-            if node.parent is None:
+        while node.value not in deststeps:
+            if node.level == 0:
                 break
             else:
                 node = node.parent
@@ -234,23 +238,26 @@ class TreeNode:
         global Fullpolys
         global levels
         global current_node
-# used to grab the node in the tree at which an operation is to be conducted
-#        moretype values - "none", "any", ward, etc for specifics
+# used to grab the node in the node tree at which an operation is to be conducted
+# the dest_path provides the steps to get from the top to the destination leaf
+#  in dest_path the moretype values -  ward, etc if you want to create nodes of certain type at the end of the search
         moretype = ""
         dest = dest_path
         if dest_path.find(" ") > -1:
             dest_path3 = dest_path.split(" ")
             moretype = dest_path3.pop() # take off any trailing parameters
             dest = dest_path3[0]
+# dest not provides the first part of the part only (no moretype)
 
-
-        deststeps = list(reversed(stepify(dest))) # lowest left - UK right
-        sourcetrunk = list(reversed(self.path_intersect(dest))) # lowest left - UK right
-        node = self.upby(self.level -len(sourcetrunk)) # the start node for the depth first Ping_node search
-
-        stepindex = len(deststeps)-len(sourcetrunk)+1
-        steps = deststeps[0:stepindex]
-        print("____ping start,  deststeps vs, sourcetrunk vs steps, :", self.value,node.value, deststeps," vs ", sourcetrunk," vs ",steps)
+        deststeps = list(reversed(stepify(dest)))
+#dest steps is a list of steps from lowest(level) to highest(level) leaf
+#        sourcetrunk = list(reversed(self.path_intersect(dest))) # lowest left - UK right
+#sourcetrunk is the overlapping steps of the start(self node) with the dest path
+        node = self.upto(deststeps) # the start node for the depth first Ping_node search
+#so node will be the node at which to start the ping search len(trunk will range from 1 to level)
+# the steps to cycle through will be the last trunk node plus remaining steps in dest_path
+        steps = list(deststeps[0:len(deststeps)-node.level]) # lowest level righ( UK pops first)
+        print(f"____ping self: {self.value} start: {node.value}  deststeps: { deststeps} vs remaining steps: {steps} :")
         block = pd.DataFrame()
         newnodes = [node]
 #starting at the bottom of the trunk
@@ -262,13 +269,15 @@ class TreeNode:
 # set the next level type according to the path OR if specified the moretype parameter
 
             print(f"____In path {dest_path} after pop next {next} vs newnodes {[x.value for x in newnodes]} :")
-            if next in ["PDS","WALKS","DIVISIONS","WARDS", "UNITED_KINGDOM"]:
+            if next in ["PDS","WALKS","DIVISIONS","WARDS"]:
                 pass
             else:
                 # node is a polling_district data node - check they exist and exit, or read file and create
                 i = i+1
-
-                catch = [x for x in node.children if x.value == next]
+                options = [node]
+                if node.children:
+                    options.extend(node.children)
+                catch = [x for x in options if x.value == next]
                 print(f"____Ping Loop Test - Next:{next} vs Node{node.value} at node lev {node.level}", "node children:",[x.value for x in node.children],"Catch:", catch)
                 if catch:
                     node = catch[0]
@@ -278,7 +287,7 @@ class TreeNode:
                         if moretype != "":
                             ntype = moretype
         # ping also used to retrieve children of destination node of dest_path type
-                        print(f"____ need to create new nodes at {node.value} / {catch[0].value} lev {node.level} of type: {ntype}")
+                        print(f"____ Creating new nodes at {node.value} / {catch[0].value} lev {node.level} of type: {ntype}")
                         if node.level < 4:
 # set the next level type according to the path OR if specified the moretype parameter
                             Treepolys[ntype] = Fullpolys[ntype]
@@ -546,7 +555,7 @@ class TreeNode:
 # if the electoral file hasn't been loaded yet then that needs to be done first.
         nodelist = []
 
-        file_path = app.config['UPLOAD_FOLDER']+"/ActiveElectoralRoll.csv"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
         if not file_path or not os.path.exists(file_path):
             print('_______Redirect to upload_form', file_path)
             return nodelist
@@ -596,59 +605,62 @@ class TreeNode:
                 PDelectors['Area'] = Area
                 frames.append(PDelectors)
 
-        allelectors = pd.concat(frames)
-        areaelectors = getblock(allelectors,'Area',Level4node.value)
+        if len(frames) > 0:
+            allelectors = pd.concat(frames)
+            areaelectors = getblock(allelectors,'Area',Level4node.value)
 
-        print("____lenallelectors+areaelectors:",len(allelectors),len(areaelectors))
+            print("____lenallelectors+areaelectors:",len(allelectors),len(areaelectors))
 
-        x = areaelectors.Long.values
-        y = areaelectors.Lat.values
+            x = areaelectors.Long.values
+            y = areaelectors.Lat.values
 
-        areaelectors['WalkName'] = ""
-        kmeans_dist_data = list(zip(x, y))
-#                        walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
-        walkset = min(math.ceil(ElectionSettings['teamsize']),35)
-        kmeans = KMeans(n_clusters=walkset)
-        kmeans.fit(kmeans_dist_data)
+            areaelectors['WalkName'] = ""
+            kmeans_dist_data = list(zip(x, y))
+    #                        walkset = min(math.ceil(PDelectors.shape[0]/int(ElectionSettings['walksize'])),35)
+            walkset = min(math.ceil(ElectionSettings['teamsize']),35)
+            kmeans = KMeans(n_clusters=walkset)
+            kmeans.fit(kmeans_dist_data)
 
-        klabels1 = np.char.mod('C%d', kmeans.labels_)
-        klabels = klabels1.tolist()
-        areaelectors["WalkName"]= klabels
+            klabels1 = np.char.mod('C%d', kmeans.labels_)
+            klabels = klabels1.tolist()
+            areaelectors["WalkName"]= klabels
 
-# so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
+    # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
 
-# already have data so node is ward/division level children should be PDs or Walks
-        if electtype == 'polling_district':
-            PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
-            PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-# we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
-            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-            PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-            nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-MAP")
-        elif electtype == 'walk':
-            walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
-            walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat', 'ENOP'])
-            walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
-# we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for self.electorate
-            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-            walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
-            nodelist = self.create_name_nodes('walk',walkdfs.reset_index(),"-MAP")
-        elif electtype == 'street':
-            PDelectors = getblock(areaelectors,'PD',self.value)
-            StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-            streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat','ENOP'])
-            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-            streetdf = streetdf0.groupby(['Name']).agg(g).reset_index()
-            nodelist = self.create_name_nodes('street',streetdf.reset_index(),"-PRINT")
-        elif electtype == 'walkleg':
-            walkelectors = getblock(areaelectors,'WalkName',self.value)
-            StreetPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-            streetdf0 = pd.DataFrame(StreetPts, columns=['StreetName', 'Long', 'Lat','ENOP'])
-            streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
-            g = {'Lat':'mean','Long':'mean','ENOP':'count'}
-            streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
-            nodelist = self.create_name_nodes('walkleg',streetdf,"-PRINT")
-
+    # already have data so node is ward/division level children should be PDs or Walks
+            if electtype == 'polling_district':
+                PDPtsdf0 = pd.DataFrame(areaelectors, columns=['PD', 'ENOP','Long', 'Lat'])
+                PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
+    # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
+                nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-MAP")
+            elif electtype == 'walk':
+                walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
+                walkdf0 = pd.DataFrame(walkPts, columns=['WalkName', 'Long', 'Lat', 'ENOP'])
+                walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
+    # we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for self.electorate
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
+                nodelist = self.create_name_nodes('walk',walkdfs.reset_index(),"-MAP")
+            elif electtype == 'street':
+                PDelectors = getblock(areaelectors,'PD',self.value)
+                StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
+                streetdf0 = pd.DataFrame(StreetPts, columns=['Name', 'Long', 'Lat','ENOP'])
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+                streetdf = streetdf0.groupby(['Name']).agg(g).reset_index()
+                nodelist = self.create_name_nodes('street',streetdf.reset_index(),"-PRINT")
+            elif electtype == 'walkleg':
+                walkelectors = getblock(areaelectors,'WalkName',self.value)
+                StreetPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
+                streetdf0 = pd.DataFrame(StreetPts, columns=['StreetName', 'Long', 'Lat','ENOP'])
+                streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
+                g = {'Lat':'mean','Long':'mean','ENOP':'count'}
+                streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
+                nodelist = self.create_name_nodes('walkleg',streetdf,"-PRINT")
+        else:
+            print("_____ Electoral file contains no relevant data for this area - Please load correct file")
+            nodelist = []
         return nodelist
 
     def create_map_branch(self,electtype):
@@ -1144,9 +1156,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             print("______Display children:",herenode.value, c.value,type)
 #            layerfids = [x.fid for x in self._children if x.type == type]
 #            if c.fid not in layerfids:
-            if c.level+1 <= 6:
+            if c.level+1 <= 5:
     #need to select the children boundaries associated with the children nodes - to paint
-                pfile = Treepolys[gettypeoflevel(herenode.dir,herenode.level+1)]
+                pfile = Treepolys[gettypeoflevel(herenode.dir+"/"+herenode.file,herenode.level+1)]
                 limbX = pfile[pfile['FID']==c.fid].copy()
                 print("______line 1068:")
 #
@@ -1704,7 +1716,7 @@ def index():
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
         DQstats = pd.DataFrame()
-        return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -1824,7 +1836,7 @@ def get_location():
         </style>
     </head>
     <body>
-        <h2>elecTrek is finding democracy at your location...</h2>
+        <h2>elecTrek is finding democracy in your area ...</h2>
         <div class="road">
     {% for i in range(8) %}
     {% set is_left = i % 2 == 0 %}
@@ -1897,7 +1909,7 @@ def dashboard ():
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        return render_template("Dash0.html", context = {  "session" : session, "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash0.html", context = {   "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -1997,9 +2009,9 @@ def transfer(path):
 
             formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
             layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
-            focuslayer = Featurelayers[atype].reset()
-            focuslayer.add_nodemaps(current_node, atype)
-            if not os.path.exists(mapfile):
+            if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+                focuslayer = Featurelayers[atype].reset()
+                focuslayer.add_nodemaps(current_node, atype)
                 current_node.create_area_map(current_node.getselectedlayers(path),"-MAP")
             #formdata['username'] = session["username"]
             formdata['country'] = "UNITED_KINGDOM"
@@ -2038,43 +2050,40 @@ def downPDbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         previous_node = current_node
         current_node = previous_node.ping_node(path)
-        if current_node == previous_node:
-            session['next'] = 'downPDbut/'+path
+
+        current_node.map = folium.Map(location=[current_node.centroid.y, current_node.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(current_node.level,5)+0.75)*2)))
+
+        shapelayer = Featurelayers['polling_district'].reset()
+        print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
+
+        WardPDnodelist = current_node.childrenoftype('polling_district')
+# if there is a selected file , then allelectors will be full of records
+        for PD_node in WardPDnodelist:
+            PDelectors = getblock(areaelectors,'PD',PD_node.value)
+            Streetsdf0 = pd.DataFrame(PDelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
+            Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
+            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+            Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
+            print ("______PDPtsdf:",Streetsdf)
+            shapelayer.add_walkshape(PD_node, 'polling_district',Streetsdf)
+            print("_______new PD Display node",PD_node,"|", Streetsdf, current_node.level, len(Featurelayers['polling_district']._children))
+
+#            areaelectors = getblock(allelectors,'Area',current_node.value)
+
+        if len(WardPDnodelist) == 0:
+            flash("Can't find any elector data for this Area.")
+            print("Can't find any elector data for this Area.",current_node.type,Featurelayers['polling_district']._children )
         else:
+            print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children))
 
-            current_node.map = folium.Map(location=[current_node.centroid.y, current_node.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(current_node.level,5)+0.75)*2)))
-
-            shapelayer = Featurelayers['polling_district'].reset()
-            print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-
-            WardPDnodelist = current_node.childrenoftype('polling_district')
-    # if there is a selected file , then allelectors will be full of records
-            for PD_node in WardPDnodelist:
-                PDelectors = getblock(areaelectors,'PD',PD_node.value)
-                Streetsdf0 = pd.DataFrame(PDelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
-                Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
-                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-                Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
-                print ("______PDPtsdf:",Streetsdf)
-                shapelayer.add_walkshape(PD_node, 'polling_district',Streetsdf)
-                print("_______new PD Display node",PD_node,"|", Streetsdf, current_node.level, len(Featurelayers['polling_district']._children))
-
-    #            areaelectors = getblock(allelectors,'Area',current_node.value)
-
-            if len(areaelectors) == 0:
-                flash("Can't find any elector data for this Area.")
-                print("Can't find any elector data for this Area.", len(areaelectors),current_node.type,Featurelayers['polling_district']._children )
-            else:
-                print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children))
-
-                current_node.create_area_map(current_node.getselectedlayers(path),"-PDS")
-                flash("________PDs added  :  "+str(len(Featurelayers['polling_district']._children)))
-                print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
+            current_node.create_area_map(current_node.getselectedlayers(path),"-PDS")
+            flash("________PDs added  :  "+str(len(Featurelayers['polling_district']._children)))
+            print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
 
-    moredata = importVI(allelectors.copy())
-    if moredata != []:
-        allelectors = moredata
+            moredata = importVI(allelectors.copy())
+            if moredata != []:
+                allelectors = moredata
 
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
@@ -2496,7 +2505,8 @@ def PDdownST(path):
               target = street_node.locmappath("")
               results_filename = streetfile_name+"-PRINT.html"
               datafile = street_node.dir+"/"+streetfile_name+"-SDATA.html"
-              mapfile = street_node.dir+"/"+street_node.file
+# mapfile is used for the up link to the PD streets list
+              mapfile = street_node.parent.dir+"/"+subending(street_node.parent.file,"-PDS")
               electorwalks = electorwalks.fillna("")
 
 #              These are the street nodes which are the street data collection pages
@@ -2549,7 +2559,7 @@ def WKdownST(path):
 
     walk_node = current_node.ping_node(path)
     walkelectors = getblock(areaelectors, 'WalkName',walk_node.value)
-    walks = walkelectors.WalkName.unique()
+    walks = areaelectors.WalkName.unique()
     if request.method == 'GET':
 # if there is a selected file , then allelectors will be full of records
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
@@ -2557,10 +2567,10 @@ def WKdownST(path):
         focuslayer = Featurelayers['walkleg'].reset()
         focuslayer.add_nodemarks(walk_node, 'walkleg')
         walklegnodelist = walk_node.childrenoftype('walkleg')
-        print ("____________walklegs",walk_node.type,walklegnodelist)
+        print ("________Walklegs",walk_node.type,len(walklegnodelist))
 # for each walk node, add a walk node convex hull to the walk_node parent layer (ie PD_node.level+1)
         for walkleg_node in walklegnodelist:
-          print("________WalkMarker",walkleg_node.type,"|", walkleg_node.dir, "|",walkleg_node.file)
+          print("________WalkMarker",walkleg_node.type,"|", walkleg_node.dir, "|",walkleg_node.value)
 
           walkleg = walkleg_node.value
           walk_name = walkleg_node.value
@@ -2637,7 +2647,8 @@ def WKdownST(path):
               results_filename = walk_name+"-PRINT.html"
 
               datafile = walk_node.dir+"/"+walk_name+"-WDATA.html"
-              mapfile = walk_node.dir+"/"+walkleg_node.file
+# mapfile will capture the walk streetmarkers map at node level
+              mapfile = walk_node.dir+"/"+walk_node.file
 
               context = {
                 "group": walkelectors,
@@ -2796,8 +2807,7 @@ def upbut(path):
 #
 #    Featurelayers[current_node.level] = folium.FeatureGroup(id=str(current_node.level+1),name=Featurelayers[current_node.level].name, overlay=True, control=True, show=True)
 
-    previous_node = current_node
-    current_node = previous_node.ping_node(path)
+    current_node = current_node.ping_node(path)
 
     if current_node.level < 3:
         Treepolys[current_node.type] = Fullpolys[current_node.type]
@@ -2813,10 +2823,10 @@ def upbut(path):
     formdata['importfile'] = ""
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(atype),formdata['tabledetails'] )
-    focuslayer = Featurelayers[atype].reset()
-    focuslayer.add_nodemaps(current_node, atype)
 
-    if not os.path.exists(current_node.dir+"/"+current_node.file):
+    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+        focuslayer = Featurelayers[atype].reset()
+        focuslayer.add_nodemaps(current_node, atype)
         current_node.create_area_map(current_node.getselectedlayers(mapfile),"-MAP")
 
     print("________chosen node url",mapfile)
@@ -2887,31 +2897,40 @@ def showmore(path):
 
 @app.route('/upload', methods=['POST'])
 @login_required
-def upload():
-    global formdata
-    global allelectors
-    global current_node
+def upload_file():
+    global ElectionSettings
+    uploaded_file = request.files.get('importfile')
+    placement = request.form.get('placement')
 
-       # Check if a file is provided in the form submission
-    if 'file' not in request.files:
-        return "No file part", 400
+    if uploaded_file and uploaded_file.filename != '':
+        filename = secure_filename(uploaded_file.filename)
+        if filename.find(".csv") >= 0:
+            xfilename = "RawImportFile.csv"
+        elif ImportFilename.find(".xlsx") >= 0:
+            xfilename = "RawImportFile.xlsx"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], xfilename)
+        rawfilename = os.path.join(app.config['UPLOAD_FOLDER'], xfilename)
+        uploaded_file.save(rawfilename)
+  # Only update on new file
+        ElectionSettings['importfile'] = rawfilename  # Only update on new file
+        flash(f"New file uploaded: {rawfilename}", "success")
 
-    file = request.files['file']
-
-    if file.filename == '':
-        return "No selected file", 400
-
-    # Save the file's name in the session (you can also save the file itself if needed)
-    filename = secure_filename(file.filename)
-    session['importfile'] = filename  # Store the filename in the session
+    elif placement:
+        placement_path = os.path.join(app.config['UPLOAD_FOLDER'], placement)
+        if os.path.isfile(placement_path):
+            flash(f"Using existing file: {placement}", "info")
+        else:
+            flash(f"Could not find the file: {placement}", "warning")
+    else:
+        flash("Please upload a file or provide the name of the electoral roll file.", "error")
 
     # You could optionally save the file to disk if needed:
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv"))
     DQstats = pd.DataFrame()
     returnurl = session['next']
     mapfile = current_node.dir+"/"+current_node.file
     # Redirect to the process route
-    return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+#    return render_template("Dash0.html", formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+    return redirect(url_for('normalise'))
 
 @app.route('/setgotv', methods=['POST'])
 @login_required
@@ -2950,7 +2969,7 @@ def setgotv():
         print('_______ElectionSettings:',ElectionSettings)
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
-        return render_template("Dash0.html", session=session, formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     return ""
 
 @app.route('/filelist/<filetype>', methods=['POST','GET'])
@@ -2985,7 +3004,6 @@ def normalise():
     global areaelectors
     global Treepolys
     global Fullpolys
-
     global environment
     global ElectionSettings
     global formdata
@@ -2997,19 +3015,20 @@ def normalise():
 
     formdata = {}
     DQstats = pd.DataFrame()
-    ElectionSettings['importfile'] = request.files['importfile'].filename
-    print("Import filename:",ElectionSettings['importfile'])
-    results = normz(request.files['importfile'], formdata,ElectionSettings['autofix'])
+#    ElectionSettings['importfile'] = request.files['importfile'].filename
+    Sourcefile = ElectionSettings['importfile']
+    print("Import filename:",Sourcefile)
+    results = normz(Sourcefile,formdata,ElectionSettings['autofix'])
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
     formdata = results[1]
     DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
 #    formdata['username'] = session['username']
-    print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats)
-    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
+    print('_______ROUTE/normalise/exit:',session.get('importfile'),DQstats)
+    formdata['tabledetails'] = "Electoral Roll File "+session.get('importfile')+" Details"
     layeritems = getlayeritems(group.head(), formdata['tabledetails'])
-    return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+    return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required
@@ -3042,7 +3061,7 @@ def walks():
         formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
-        return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+        return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -3116,8 +3135,8 @@ def firstpage():
     lat = request.args.get('lat')
     lon = request.args.get('lon')
 
-    lat = 53.2730
-    lon = -2.7694
+#    lat = 53.2730 - Runcorn
+#    lon = -2.7694 - Runcorn
 
     if lat and lon:
         # Use lat/lon to filter data, e.g., find matching region in GeoJSON
@@ -3187,7 +3206,7 @@ def firstpage():
 
         mapfile = current_node.dir+"/"+current_node.file
         DQstats = pd.DataFrame()
-        return render_template("Dash0.html", VID_json=VID_json, session=session, formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html", VID_json=VID_json,  formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 
@@ -3239,7 +3258,7 @@ def cards():
                 layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
 
-                return render_template('Dash0.html', session=session, formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+                return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

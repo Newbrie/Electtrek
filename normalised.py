@@ -7,11 +7,12 @@ import requests
 from requests.auth import HTTPDigestAuth
 import config
 
+
 normstats = {}
 
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
-def normz(LocalFile, normstats, autofix):
+def normz(ImportFilename, normstats, autofix):
     print ("____________inside normz_________")
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -179,11 +180,10 @@ def normz(LocalFile, normstats, autofix):
         OrangeE = in_data.transform(new_domain1)
         ImportFilename = str(OrangeE[0,'Source ID'])
     else:
-        ImportFilename = str(LocalFile.filename)
         if ImportFilename.find(".csv") >= 0:
-            dfx = pd.read_csv(LocalFile)
+            dfx = pd.read_csv(ImportFilename)
         elif ImportFilename.find(".xlsx") >= 0:
-            dfx = pd.read_excel(LocalFile)
+            dfx = pd.read_excel(ImportFilename)
         dfx['RNO'] = dfx.index
 
 #AUTO DATA IMPORT

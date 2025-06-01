@@ -206,7 +206,7 @@ var showMore = function (msg,area, type) {
     FileLink.download = filename;
     FileLink.href = window.URL.createObjectURL(csvFile);
     document.body.appendChild(FileLink);
-    alert("Nede to invoke javascript email client"+ FileLink)
+    alert("Need to invoke javascript email client"+ FileLink)
   };
 
 
@@ -400,7 +400,7 @@ var showMore = function (msg,area, type) {
             .then(res => res.json())
             .then(resp => {
               if (resp.success) {
-                alert("confirmed:"+key+" --"+ newVal);
+  //              alert("confirmed:"+key+" --"+ newVal);
                 updateMessages();  // ✅ Trigger only after backend update
               } else {
                 alert("Failed to update constant: " + resp.error);
