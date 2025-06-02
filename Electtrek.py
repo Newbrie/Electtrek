@@ -3073,11 +3073,11 @@ def normalise():
     DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
-    targetfile = Sourcefile.replace(".csv","-NORMZ.csv")
+    targetfile = Sourcefile.replace(".csv","-NORMZ.csv").replace(".xlsx","-NORMZ.csv")
     group.to_csv(urljoin(config.workdirectories['workdir'],"ActiveElectoralRoll.csv"))
     ElectionSettings['importfile'] = targetfile
 #    formdata['username'] = session['username']
-    print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats)
+    print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats, targetfile)
     formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
     layeritems = getlayeritems(group.head(), formdata['tabledetails'])
     return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)

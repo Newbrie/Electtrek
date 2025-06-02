@@ -78,7 +78,7 @@ font-size: 1.5em;
 			position: absolute;
 			overflow: scroll;
 			top: 0;
-			right: 10;
+			right: 0;
 			width: 290px;
 			background: #DAE9BC;
 	    display: inline-block;
@@ -106,7 +106,7 @@ font-size: 1.5em;
 			z-index: 11;
 			position: absolute;
 			bottom: 0;
-			right: 10;
+			right: 0;
 			width: 290px;
 			font-weight: normal;
 
