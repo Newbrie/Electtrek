@@ -36,10 +36,8 @@ from flask import json, get_flashed_messages, make_response
 from werkzeug.exceptions import HTTPException
 from datetime import datetime, timedelta
 import geocoder
-
-
-
-import sys
+from matplotlib.colors import to_hex, to_rgb
+import colorsys
 
 
 sys.path
@@ -558,6 +556,7 @@ class TreeNode:
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
         if not file_path or not os.path.exists(file_path):
             print('_______Redirect to upload_form', file_path)
+            flash("Please upload a file or provide the name of the electoral roll file.", "error")
             return nodelist
 
         try:
@@ -565,26 +564,27 @@ class TreeNode:
         # catch when df1 is None
         except AttributeError:
             print("_____Electoral Roll Data Error - allelectors is None")
-            test = 0
+            flash("Please upload a file or provide the name of the electoral roll file.", "error")
+            return nodelist
 
         # catch when it hasn't even been defined
         except NameError:
             print("_____Electoral Roll Data Error -  allelectors is not defined")
-            test = 0
+            flash("Please upload a file or provide the name of the electoral roll file.", "error")
+            return nodelist
 
 
-        if  test == 0 :
 # ward/division level for first time in the loop so import data and calc populations in postcodes
 
-            allelectors0 = pd.read_csv(file_path, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-            alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
-            alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
+        allelectors0 = pd.read_csv(file_path, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+        alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
+        alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
 # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
-            g = {'Popz':'count'}
-            alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
-            alldf['Popz'] = alldf['Popz'].rdiv(1)
+        g = {'Popz':'count'}
+        alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
+        alldf['Popz'] = alldf['Popz'].rdiv(1)
 
-            allelectors00 = allelectors0.merge(alldf, on='Postcode',how='left' )
+        allelectors00 = allelectors0.merge(alldf, on='Postcode',how='left' )
 
 # this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
 
@@ -1104,6 +1104,9 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         # Now you can use limb_geojson as a valid GeoJSON feature
         print("GeoJSON Convex Hull Feature:", limb)
+        tcol = get_text_color(to_hex(herenode.col))
+        bcol = adjust_boundary_color(to_hex(herenode.col),0.7)
+        fcol = invert_black_white(tcol)
 
         folium.GeoJson(
             limb,  # This is the GeoJSON feature (not the GeoDataFrame)
@@ -1115,7 +1118,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             popup_keep_highlighted=False,
             style_function=lambda x: {
                 "fillColor": x['properties']['col'],  # Access 'col' in the properties for the fill color
-                "color": 'lightgray',      # Same for the border color
+                "color": bcol,      # Same for the border color
                 "dashArray": "5, 5",
                 "weight": 3,
                 "fillOpacity": 0.4
@@ -1127,21 +1130,22 @@ class ExtendedFeatureGroup(FeatureGroup):
              icon = folium.DivIcon(
                     html='''
                     <a href='{2}'><div style="
-                        color: white;
+                        color: {3};
                         font-size: 10pt;
                         font-weight: bold;
                         text-align: center;
                         padding: 2px;
                         white-space: nowrap;">
-                        <span style="background: black; padding: 1px 2px; border-radius: 5px;
+                        <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
                         border: 2px solid black;">{0}</span>
                         {1}</div></a>
-                        '''.format(num,tag,mapfile),
+                        '''.format(num,tag,mapfile,tcol,fcol),
                    )
                    )
                    )
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
+
 
     def add_nodemaps (self,herenode,type):
         global Treepolys
@@ -1242,6 +1246,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                 # Now you can use limb_geojson as a valid GeoJSON feature
 #                print("GeoJSON Feature:", limb)
 
+                tcol = get_text_color(to_hex(herenode.col))
+                bcol = adjust_boundary_color(to_hex(herenode.col),0.7)
+                fcol = invert_black_white(tcol)
+
                 folium.GeoJson(
                     limb,  # This is the GeoJSON feature (not the GeoDataFrame)
                     highlight_function=lambda x: {"fillColor": 'lightgray'},  # Access 'col' in the properties
@@ -1252,7 +1260,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     popup_keep_highlighted=False,
                     style_function=lambda x: {
                         "fillColor": x['properties']['col'],  # Access 'col' in the properties for the fill color
-                        "color": 'lightgray',      # Same for the border color
+                        "color": bcol,      # Same for the border color
                         "dashArray": "5, 5",
                         "weight": 3,
                         "fillOpacity": 0.4
@@ -1268,16 +1276,16 @@ class ExtendedFeatureGroup(FeatureGroup):
                      icon = folium.DivIcon(
                             html='''
                             <a href='{2}'><div style="
-                                color: white;
+                                color: {3};
                                 font-size: 10pt;
                                 font-weight: bold;
                                 text-align: center;
                                 padding: 2px;
                                 white-space: nowrap;">
-                                <span style="background: black; padding: 1px 2px; border-radius: 5px;
+                                <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
                                 border: 2px solid black;">{0}</span>
                                 {1}</div></a>
-                                '''.format(num,tag,mapfile),
+                                '''.format(num,tag,mapfile,tcol,fcol),
 
                                )
                                )
@@ -1305,22 +1313,25 @@ class ExtendedFeatureGroup(FeatureGroup):
             mapfile = '/transfer/'+pathref
 
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
+            tcol = get_text_color(to_hex(herenode.col))
+            bcol = adjust_boundary_color(to_hex(herenode.col),0.7)
+            fcol = invert_black_white(tcol)
 
             self.add_child(folium.Marker(
                  location=here,
                  icon = folium.DivIcon(
                         html='''
                         <a href='{2}'><div style="
-                            color: white;
+                            color: {3};
                             font-size: 10pt;
                             font-weight: bold;
                             text-align: center;
                             padding: 2px;
                             white-space: nowrap;">
-                            <span style="background: black; padding: 1px 2px; border-radius: 5px;
+                            <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
                             border: 2px solid black;">{0}</span>
                             {1}</div></a>
-                            '''.format(num,tag,mapfile),
+                            '''.format(num,tag,mapfile, tcol, fcol),
                        )
                        )
                        )
@@ -1330,6 +1341,43 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return herenode
 
+def get_text_color(fill_hex):
+    # Convert hex to RGB
+    fill_hex = fill_hex.lstrip('#')
+    r, g, b = [int(fill_hex[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+
+    # Calculate luminance
+    def adjust(c): return c/12.92 if c <= 0.03928 else ((c+0.055)/1.055)**2.4
+    lum = 0.2126 * adjust(r) + 0.7152 * adjust(g) + 0.0722 * adjust(b)
+
+    # Contrast against white and black
+    white_contrast = (1.05) / (lum + 0.05)
+    black_contrast = (lum + 0.05) / 0.05
+
+    return '#ffffff' if white_contrast >= black_contrast else '#000000'
+
+def invert_black_white(hex_color):
+    hex_color = hex_color.strip().lower()
+    if hex_color in ("#000000", "000000"):
+        return "#ffffff"
+    elif hex_color in ("#ffffff", "ffffff"):
+        return "#000000"
+    else:
+        return None  # or raise ValueError("Not black or white")
+
+def adjust_boundary_color(fill_hex, factor=0.7):
+    fill_hex = fill_hex.lstrip('#')
+    r, g, b = [int(fill_hex[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+
+    # Convert to HLS (Hue, Lightness, Saturation)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+
+    # Darken or lighten
+    new_l = max(0, min(1, l * factor))
+    new_r, new_g, new_b = colorsys.hls_to_rgb(h, new_l, s)
+
+    # Back to hex
+    return '#{:02x}{:02x}{:02x}'.format(int(new_r*255), int(new_g*255), int(new_b*255))
 
 
 def importVI(electorsVI):
@@ -1359,7 +1407,7 @@ def importVI(electorsVI):
         Long = inDatadf['Long'][0]
         roid = Point(Long,Lat)
         session['importfile'] = inDatadf['Electrollfile'][0]
-        print("____pathval param:",pathval,Long,Lat,session.get('importfile'))
+        print("____pathval param:",pathval,Long,Lat,ElectionSettings['importfile'])
 #use ping to precisely locate the node for which this update appies
         street_node = MapRoot.ping_node(pathval)
         if street_node:
@@ -2903,12 +2951,13 @@ def upload_file():
     placement = request.form.get('placement')
 
     if uploaded_file and uploaded_file.filename != '':
-        filename = secure_filename(uploaded_file.filename)
-        if filename.find(".csv") >= 0:
+        actualfilename = secure_filename(uploaded_file.filename)
+        filename = actualfilename.upper()
+        if filename.find(".CSV") >= 0:
             xfilename = "RawImportFile.csv"
-        elif ImportFilename.find(".xlsx") >= 0:
+        elif filename.find(".XLSX") >= 0:
             xfilename = "RawImportFile.xlsx"
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], xfilename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], actualfilename)
         rawfilename = os.path.join(app.config['UPLOAD_FOLDER'], xfilename)
         uploaded_file.save(rawfilename)
   # Only update on new file
@@ -3024,9 +3073,12 @@ def normalise():
     DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
+    targetfile = Sourcefile.replace(".csv","-NORMZ.csv")
+    group.to_csv(urljoin(config.workdirectories['workdir'],"ActiveElectoralRoll.csv"))
+    ElectionSettings['importfile'] = targetfile
 #    formdata['username'] = session['username']
-    print('_______ROUTE/normalise/exit:',session.get('importfile'),DQstats)
-    formdata['tabledetails'] = "Electoral Roll File "+session.get('importfile')+" Details"
+    print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats)
+    formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
     layeritems = getlayeritems(group.head(), formdata['tabledetails'])
     return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
 

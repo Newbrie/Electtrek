@@ -13,7 +13,7 @@ normstats = {}
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
 def normz(ImportFilename, normstats, autofix):
-    print ("____________inside normz_________")
+    print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
     testdir = config.workdirectories['testdir']
@@ -155,35 +155,13 @@ def normz(ImportFilename, normstats, autofix):
     Env1 = sys.base_prefix
 
     normstats['env'] = Env1
-    if Env1.find("Orange")>0:
-        from Orange.data import ContinuousVariable, StringVariable, DiscreteVariable, Domain
-        from Orange.data import Table, Instance
-        electors0 = TabletoDF(in_data, True)
-        electors10 = TabletoDF(in_data, False)
-        domain = in_data.domain
-        addrNo = StringVariable("AddressNumber", )
-        prefix = StringVariable("AddressPrefix", )
-        street = StringVariable("StreetName", )
-        addr1 = StringVariable("Address_1", )
-        addr2 = StringVariable("Address_2", )
-        addr3 = StringVariable("Address_3", )
-        addr4 = StringVariable("Address_4", )
-        addr5 = StringVariable("Address_5", )
-        addr6 = StringVariable("Address_6", )
-        RNO = ContinuousVariable("RNO", )
-        Lat = ContinuousVariable("Lat", )
-        Long = ContinuousVariable("Long", )
-        elevation = ContinuousVariable("Elevation",)
-        council = DiscreteVariable("Council", values=["Runcorn","Skipton","Northallerton","Thirsk","Kingston","Spelthorne","Mole_Valley", "Tandridge" , "Epsom_and_Ewell", "Elmbridge", "Guildford", "Surrey_Heath", "Woking", "Reigate_and_Banstead", "Waverley", "Runnymede", "East_Hampshire"])
-        new_domain1 = Domain(attributes=domain.attributes + (council, elevation, Lat, Long, RNO), metas=domain.metas + (addr1, addr2, addr3, addr4, addr5, addr6, addrNo, prefix, street), class_vars=domain.class_vars)
-    #  Normalise Address and Name Data using a new extended Orange domain
-        OrangeE = in_data.transform(new_domain1)
-        ImportFilename = str(OrangeE[0,'Source ID'])
-    else:
-        if ImportFilename.find(".csv") >= 0:
-            dfx = pd.read_csv(ImportFilename)
-        elif ImportFilename.find(".xlsx") >= 0:
-            dfx = pd.read_excel(ImportFilename)
+
+    dfx = pd.DataFrame()
+    if ImportFilename.find(".csv") >= 0:
+        dfx = pd.read_csv(ImportFilename)
+        dfx['RNO'] = dfx.index
+    elif ImportFilename.find(".xlsx") >= 0:
+        dfx = pd.read_excel(ImportFilename)
         dfx['RNO'] = dfx.index
 
 #AUTO DATA IMPORT
@@ -199,53 +177,68 @@ def normz(ImportFilename, normstats, autofix):
 
 #  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
 
-        electors0 = DFtoDF(dfx)
-        electors10 = dfx
+    electors0 = DFtoDF(dfx)
+    electors100 = dfx
 
-        dfz = electors10[1:100]
-        dfzmax = dfz.shape[0]
-        print(ImportFilename," data rows: ", dfzmax )
+    dfz = electors100[1:100]
+    dfzmax = dfz.shape[0]
+    print(ImportFilename," data rows: ", dfzmax )
 
-        COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
-        "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
-        "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" , "NAME" :"ElectorName", "STREETNAME" :"StreetName" }
+    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
+    "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
+    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" , "NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
 
-        Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
-        Outcols = Outcomes.columns.to_list()
-        for z in Outcols :
-            DQstats.loc[Outcols.index(z),'Field'] = z
+    Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
+    Outcols = Outcomes.columns.to_list()
+    for i in range(len(Outcols)):
+        DQstats.loc[i,'P1'] = 0
+        DQstats.loc[i,'P2'] = 0
+        DQstats.loc[i,'P3'] = 0
+        DQstats.loc[i,'Ready'] = 0
 
-        #pass 1 - how many required fieldnames are in the source file?
-        incols = dfz.columns
-        for y in [x for x in Outcols if x in incols]:
-            DQstats.loc[Outcols.index(y),'P1'] = 1
-        if autofix <= 0:
-            return [electors10,normstats,DQstats]
+    for z in Outcols :
+        DQstats.loc[Outcols.index(z),'Field'] = z
+
+    #pass 1 - how many required fieldnames are in the source file?
+    incols = dfz.columns
+    for y in [x for x in Outcols if x in incols]:
+        DQstats.loc[Outcols.index(y),'P1'] = 1
+
+    if autofix <= 0:
+        return [electors100,normstats,DQstats]
 #        dfzres = extractfactors(dfz)
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
 
-        # pass 2 - how many required fieldnames can be derived by normalising fields in the source file
-        INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYNG","").replace(" ","").replace("_","") for x in incols]
-        Incols = [COLNORM[x] for x in INCOLS if x in COLNORM.keys()]
-        for y in [x for x in Outcols if x in Incols]:
-            DQstats.loc[Outcols.index(y),'P2'] = 1
-        if autofix <= 1:
-            return [electors10,normstats,DQstats]
+    # pass 2 - how many required fieldnames can be derived by normalising fields in the source file
+    INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYING","").replace(" ","").replace("_","") for x in incols]
+    Incolstuple = [(incols[INCOLS.index(x)],COLNORM[x]) for x in INCOLS if x in COLNORM.keys()]
+
+    for a,b in Incolstuple:
+        electors100 = electors100.rename(columns= {a: b})
+        print(f"___NRenamed from {a} to {b} leaving:",electors10.columns)
+
+    incol_first_set = {t[1] for t in Incolstuple}  # set for fast lookup
+    for y in [x for x in Outcols if x in incol_first_set]:
+        DQstats.loc[Outcols.index(y), 'P2'] = 1
+    if autofix <= 1:
+        return [electors100,normstats,DQstats]
 
 
-    count = 0
+
     Addno1 = ""
     Addno2 = ""
     Addno = ""
     count = 0
-    dfx = pd.read_csv(bounddir+"National_Statistics_Postcode_Lookup_UK_20241022.csv")
+    dfx = pd.read_csv(bounddir+"/National_Statistics_Postcode_Lookup_UK_20241022.csv")
     df1 = dfx[['Postcode 1','Latitude','Longitude']]
     df1 = df1.rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
-    electors1 = electors0.merge(df1, how='left', on='Postcode' )
+    electors10 = electors100.dropna(subset=['Postcode']) # filter out all records with no Postcode
+
+    electors1 = electors10.merge(df1, how='left', on='Postcode' )
     electors1.to_csv("mergedlatlong.csv")
-    df1 = pd.read_csv(bounddir+"open_postcode_elevation.csv")
+    df1 = pd.read_csv(bounddir+"/open_postcode_elevation.csv")
     df1.columns = ["Postcode","Elevation"]
     electors2 = electors10.merge(df1, how='left', on='Postcode' )
     electors2['Lat'] = electors1['Lat'].astype(float)
@@ -458,32 +451,13 @@ def normz(ImportFilename, normstats, autofix):
         else:
             Mean_Lat = statistics.mean([Decimal(Mean_Lat), Decimal(elector.Lat)])
             Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(elector.Long)])
-        if Env1.find("Orange")>0:
-          OrangeE[count]['Lat'] = elector["Lat"]
-          OrangeE[count]['Long'] = elector["Long"]
-          OrangeE[count]['StreetName'] = elector["StreetName"].replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
-          OrangeE[count]['AddressPrefix'] = elector["AddressPrefix"]
-          OrangeE[count]['AddressNumber'] = elector['AddressNumber']
-          OrangeE[count]['Council'] = elector['Council']
-          OrangeE[count]['ElectorName'] = elector['ElectorName']
-          OrangeE[count]['Elevation'] = elector['Elevation']
-          OrangeE[count]['Firstname'] = elector['Firstname']
-          OrangeE[count]['Surname'] = elector['Surname']
-          OrangeE[count]['Initials'] = elector['Initials']
-          OrangeE[count]['Address_1'] = elector['Address_1']
-          OrangeE[count]['Address_2'] = elector['Address_2']
-          OrangeE[count]['Address_3'] = elector['Address_3']
-          OrangeE[count]['Address_4'] = elector['Address_4']
-          OrangeE[count]['Address_5'] = elector['Address_5']
-          OrangeE[count]['Address_6'] = elector['Address_6']
-        count = count + 1
-      #  if count > 500: break
 
-    if Env1.find("Orange")>0:
-        out_data = OrangeE
-    else:
-        electors2.to_csv(Councilx+"Register.csv")
-        print("____________Normalisation_Complete________in ",Councilx, "Register.csv" )
+        count = count + 1
+        if count > 5000: break
+
+
+
+    print("____________Normalisation_Complete________in ",Councilx, "Register.csv" )
     normstats['count'] = count
     normstats['Mean_Lat'] = Decimal(Mean_Lat)
     normstats['Mean_Long'] = Decimal(Mean_Long)
