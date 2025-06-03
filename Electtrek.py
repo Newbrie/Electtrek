@@ -133,10 +133,10 @@ def gettypeoflevel(path,level):
         type = 'walk'
     elif type == 'polling_district/walk':
         type = 'polling_district'
-    print(f"____check len steps {deststeps} vs level {level} to override {moretype}")
+    print(f"____check len steps {deststeps} vs level {level}+1 to override {moretype}")
 
-    if len(deststeps) == level and moretype != "":
-        type = moretype # this is the path syntax type override if levelmax reached
+    if len(deststeps) >= level and moretype != "":
+        type = moretype # this is the type override syntax if node level+1 >= len steps
     return type
 
 
@@ -278,7 +278,7 @@ class TreeNode:
 # set the next level type according to the path OR if specified the moretype parameter
 
             print(f"____In path {dest_path} after pop next {next} vs newnodes {[x.value for x in newnodes]} :")
-            if next in ["PDS","WALKS","DIVISIONS","WARDS"]:
+            if next in ["PDS","WALKS","DIVS","WARDS"]:
                 pass
             else:
                 # node is a polling_district data node - check they exist and exit, or read file and create
@@ -390,6 +390,7 @@ class TreeNode:
         sname = self.value
         origin = self
         casnode = origin
+        print("____Turnout for Election Type:",ElectionSettings['elections'] )
         if ElectionSettings['elections'] == 'Westminster':
 #cascade last constituency turnout figure to all wards(children) and streets(children)
 
@@ -1193,9 +1194,9 @@ class ExtendedFeatureGroup(FeatureGroup):
 #            if c.fid not in layerfids:
             if c.level+1 <= 5:
     #need to select the children boundaries associated with the children nodes - to paint
-                pfile = Treepolys[gettypeoflevel(herenode.dir+"/"+herenode.file,herenode.level+1)]
+                pfile = Treepolys[type]
                 limbX = pfile[pfile['FID']==c.fid].copy()
-                print("______Add_Nodes Treepolys type:",gettypeoflevel(herenode.dir+"/"+herenode.file,herenode.level+1))
+                print("______Add_Nodes Treepolys type:",type)
 #
                 limbX['col'] = c.col
 
@@ -2018,14 +2019,6 @@ def downbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(path)
     print("____Route/downbut:",previous_node.value,current_node.value, path)
-    if current_node == previous_node:
-        session['next'] = 'downbut/'+path
-        return '''
-    <script>
-        alert("Please select a file first.");
-        window.location.href = "/upbut";  // Redirect to the file selection page
-    </script>
-    '''
     atype = gettypeoflevel(path,current_node.level+1)
 
 # the map under the selected node map needs to be configured
@@ -2035,12 +2028,16 @@ def downbut(path):
     layeritems = getlayeritems(current_node.childrenoftype(atype),formdata['tabledetails'] )
     mapfile = current_node.dir+"/"+current_node.file
     if atype == 'ward':
-        mapfile = current_node.dir+"/"+subending(current_node.file,"-WARDS")
+        current_node.file = subending(current_node.file,"-WARDS")
+        mapfile = current_node.dir+"/"+current_node.file
+        print("_____ward map test:",mapfile)
         focuslayer = Featurelayers[atype].reset()
         focuslayer.add_nodemaps(current_node, atype)
         current_node.create_area_map(current_node.getselectedlayers(path))
     elif atype == 'division':
-        mapfile = current_node.dir+"/"+subending(current_node.file,"-DIVS")
+        current_node.file = subending(current_node.file,"-DIVS")
+        mapfile = current_node.dir+"/"+current_node.file
+        print("_____division map test:",mapfile)
         focuslayer = Featurelayers[atype].reset()
         focuslayer.add_nodemaps(current_node, atype)
         current_node.create_area_map(current_node.getselectedlayers(path))
@@ -2136,6 +2133,8 @@ def downPDbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         previous_node = current_node
         current_node = previous_node.ping_node(path)
+        current_node.file = subending(current_node.file,"-PDS")
+        mapfile = current_node.dir+"/"+current_node.file
 
         current_node.map = folium.Map(location=[current_node.centroid.y, current_node.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(current_node.level,5)+0.75)*2)))
 
@@ -2176,7 +2175,6 @@ def downPDbut(path):
     formdata['tabledetails'] = "Click for "+current_node.value + "\'s polling_district details"
     layeritems = getlayeritems(current_node.childrenoftype('polling_district'),formdata['tabledetails'] )
 
-    mapfile = current_node.dir+"/"+current_node.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -2203,38 +2201,38 @@ def downWKbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         previous_node = current_node
         current_node = previous_node.ping_node(path)
-        if current_node == previous_node:
-            session['next'] = 'downWKbut/'+path
+        current_node.file = subending(current_node.file,"-WALKS")
+        mapfile = current_node.dir+"/"+current_node.file
+
+        current_node.map = folium.Map(location=[current_node.centroid.y, current_node.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(current_node.level,5)+0.75)*2)))
+
+        shapelayer = Featurelayers['walk'].reset()
+
+        print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
+
+        WardWalknodelist = current_node.childrenoftype('walk')
+# if there is a selected file , then areaelectors will be full of records for the ward/div
+        for walk_node in WardWalknodelist:
+            walkelectors = getblock(areaelectors,'WalkName',walk_node.value)
+            walksdf0 = pd.DataFrame(walkelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
+            walksdf1 = walksdf0.rename(columns= {'StreetName': 'Name'})
+            g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
+            walksdf = walksdf1.groupby(['Name']).agg(g).reset_index()
+            print ("______walksdf:",walk_node.value, walkelectors.columns, walksdf)
+
+            shapelayer.add_walkshape(walk_node, 'walk',walksdf)
+            print("_______new Walk Display node",walk_node.value,"|", walksdf)
+
+#            areaelectors = getblock(allelectors,'Area',current_node.value)
+
+        if len(WardWalknodelist) == 0:
+            flash("Can't find any elector data for this Area.")
+            print("Can't find any elector data for this Area.",current_node.type,Featurelayers['walk']._children )
         else:
-            current_node.map = folium.Map(location=[current_node.centroid.y, current_node.centroid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(current_node.level,5)+0.75)*2)))
-
-            shapelayer = Featurelayers['walk'].reset()
-
-            print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
-
-            WardWalknodelist = current_node.childrenoftype('walk')
-    # if there is a selected file , then areaelectors will be full of records for the ward/div
-            for walk_node in WardWalknodelist:
-                walkelectors = getblock(areaelectors,'WalkName',walk_node.value)
-                walksdf0 = pd.DataFrame(walkelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
-                walksdf1 = walksdf0.rename(columns= {'StreetName': 'Name'})
-                g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
-                walksdf = walksdf1.groupby(['Name']).agg(g).reset_index()
-                print ("______walksdf:",walk_node.value, walkelectors.columns, walksdf)
-
-                shapelayer.add_walkshape(walk_node, 'walk',walksdf)
-                print("_______new Walk Display node",walk_node.value,"|", walksdf)
-
-    #            areaelectors = getblock(allelectors,'Area',current_node.value)
-
-            if len(areaelectors) == 0:
-                flash("Can't find any elector data for this Area.")
-                print("Can't find any elector data for this Area.",len(areaelectors),current_node.type,Featurelayers['walk']._children )
-            else:
-                print("_______just before walk create_area_map call:")
-                current_node.create_area_map(current_node.getselectedlayers(path))
-                flash("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
-                print("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
+            print("_______just before walk create_area_map call:")
+            current_node.create_area_map(current_node.getselectedlayers(path))
+            flash("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
+            print("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
 
     moredata = importVI(allelectors.copy())
     if moredata != []:
@@ -2244,7 +2242,6 @@ def downWKbut(path):
     formdata['tabledetails'] = "Click for "+current_node.value+ "\'s walk details"
     layeritems = getlayeritems(current_node.childrenoftype('walk'),formdata['tabledetails'] )
 
-    mapfile = current_node.dir+"/"+current_node.file
     print("_______writing to file:", mapfile)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2593,7 +2590,8 @@ def PDdownST(path):
               results_filename = streetfile_name+"-PRINT.html"
               datafile = street_node.dir+"/"+streetfile_name+"-SDATA.html"
 # mapfile is used for the up link to the PD streets list
-              mapfile = street_node.parent.dir+"/"+subending(street_node.parent.file,"-PDS")
+              PD_node.file = subending(PD_node.file,"-PDS")
+              mapfile = PD_node.dir+"/"+ PD_node.file
               electorwalks = electorwalks.fillna("")
 
 #              These are the street nodes which are the street data collection pages
@@ -2742,6 +2740,7 @@ def WKdownST(path):
 
               datafile = walk_node.dir+"/"+walk_name+"-WDATA.html"
 # mapfile will capture the walk streetmarkers map at node level
+              walk_node.file = subending(walk_node.file,"-WALKS")
               mapfile = walk_node.dir+"/"+walk_node.file
 
               context = {

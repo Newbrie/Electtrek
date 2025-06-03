@@ -400,7 +400,7 @@ var showMore = function (msg,area, type) {
             .then(res => res.json())
             .then(resp => {
               if (resp.success) {
-  //              alert("confirmed:"+key+" --"+ newVal);
+                alert("confirmed:"+key+" --"+ newVal);
                 updateMessages();  // ✅ Trigger only after backend update
               } else {
                 alert("Failed to update constant: " + resp.error);
