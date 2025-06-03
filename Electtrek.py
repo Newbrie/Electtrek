@@ -109,10 +109,12 @@ def gettypeoflevel(path,level):
     deststeps = list(stepify(dest)) # lowest left - UK right
 
     type = levels[level]
-    if type == 'ward/division' and path.find("_ED") < 0:
+    if type == 'ward/division' and path.find("/WARDS") >= 0:
         type = 'ward'
-    elif type == 'ward/division' and path.find("_ED") >= 0:
+    elif type == 'ward/division' and path.find("/DIVS") >= 0:
         type = 'division'
+    elif type == 'ward/division':
+        type = 'ward'
     elif type == 'polling_district/walk'and path.find("/PDS") >= 0:
         type = 'polling_district'
     elif type == 'polling_district/walk'and path.find("/WALKS") >= 0:
@@ -121,11 +123,18 @@ def gettypeoflevel(path,level):
         type = 'street'
     elif type == 'street/walkleg'and path.find("/WALKS") >= 0:
         type = 'walkleg'
+    elif type == 'street/walkleg':
+        type = 'street'
+    elif type == 'polling_district/walk'and path.find("-MAP.html") >= 0:
+        type = 'polling_district'
     elif type == 'polling_district/walk'and path.find("-PDS.html") >= 0:
         type = 'polling_district'
     elif type == 'polling_district/walk'and path.find("-WALKS.html") >= 0:
         type = 'walk'
+    elif type == 'polling_district/walk':
+        type = 'polling_district'
     print(f"____check len steps {deststeps} vs level {level} to override {moretype}")
+
     if len(deststeps) == level and moretype != "":
         type = moretype # this is the path syntax type override if levelmax reached
     return type
@@ -166,6 +175,7 @@ def getlayeritems(nodelist,title):
             dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
             dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
             dfy.loc[i,'elect'] = x.electorate
+            dfy.loc[i,'hous'] = x.houses
             dfy.loc[i,'turn'] = '%.2f'%(x.turnout)
             dfy.loc[i,'gotv'] = '%.2f'%(float(ElectionSettings['GOTV']))
             dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(ElectionSettings['GOTV']))-int(x.VI[ElectionSettings['yourparty']])
@@ -174,7 +184,7 @@ def getlayeritems(nodelist,title):
     return [list(dfy.columns.values),dfy, title]
 
 def subending(filename, ending):
-  stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-PDS", "@@@")
+  stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-PDS", "@@@").replace("-DIVS", "@@@").replace("-WARDS", "@@@")
   return stem.replace("@@@", ending)
 
 
@@ -220,6 +230,7 @@ class TreeNode:
         self.VI = VIC.copy()
         self.turnout = 0
         self.electorate = 0
+        self.houses = 0
         self.target = 1
 
     def upto(self,deststeps):
@@ -438,7 +449,7 @@ class TreeNode:
         party = VNORM[party]
         self.col = VCO[party]
         print("______VNORM:", self.value, party, self.col)
-        print("_______Electorate:", self.value,self.electorate)
+        print("_______Electorate:", self.value,self.electorate, self.houses)
 
         return
 
@@ -476,6 +487,39 @@ class TreeNode:
         print ("_____OriginElectorate:",MapRoot.electorate,self.value,self.type,self.electorate)
         return
 
+    def updateHouses(self,pop):
+        global MapRoot
+        global ElectionSettings
+        global VNORM
+        global VCO
+        sname = self.value
+        pop = int(pop)
+        if pop > 0:
+            origin = self
+            sumnode = origin
+            sumnode.houses = pop
+    # electorate is for a constituency is derived from wards is derived from streets (if you have electoral roll uploaded )
+    # turnover is fixed for constituency(National) or wards(non-National) - streets inherit from either wards or constituency depending on election type - in set up
+            for l in range(origin.level):
+                sumnode.parent.houses = 0
+                i=1
+                for x in sumnode.parent.childrenoftype(gettypeoflevel(sumnode.dir,sumnode.level)):
+                    sumnode.parent.houses = sumnode.parent.houses + x.houses
+                    print ("_____Houseslevel:",sumnode.level,sumnode.value,sumnode.houses)
+                    i = i+1
+                sumnode = sumnode.parent
+                self = origin
+        else:
+            if self.type == 'constituency'and sname in Con_Results_data['NAME'].to_list():
+                selected = Con_Results_data.query('NAME == @sname')
+                self.houses = int(int(selected['Electorate'].values[0])/2)
+            elif self.type == 'ward' and sname in Ward_Results_data['NAME'].to_list():
+                selected = Ward_Results_data.query('NAME == @sname')
+                self.houses = int(int(selected['ELECT'].values[0])/2)
+            print ("___Results:",self.value,self.houses)
+
+        print ("_____OriginHouses:",MapRoot.houses,self.value,self.type,self.houses)
+        return
 
     def childrenoftype(self,electtype):
         typechildren = [x for x in self.children if x.type == electtype]
@@ -528,7 +572,7 @@ class TreeNode:
                 egg.updateParty()
                 egg.updateTurnout()
                 egg.updateElectorate(limb.ENOP)
-                print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.target,egg.bbox)
+                print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
                 fam_nodes.append(egg)
 
     #    self.aggTarget()
@@ -556,20 +600,6 @@ class TreeNode:
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
         if not file_path or not os.path.exists(file_path):
             print('_______Redirect to upload_form', file_path)
-            flash("Please upload a file or provide the name of the electoral roll file.", "error")
-            return nodelist
-
-        try:
-            test = len(allelectors00)
-        # catch when df1 is None
-        except AttributeError:
-            print("_____Electoral Roll Data Error - allelectors is None")
-            flash("Please upload a file or provide the name of the electoral roll file.", "error")
-            return nodelist
-
-        # catch when it hasn't even been defined
-        except NameError:
-            print("_____Electoral Roll Data Error -  allelectors is not defined")
             flash("Please upload a file or provide the name of the electoral roll file.", "error")
             return nodelist
 
@@ -609,7 +639,7 @@ class TreeNode:
             allelectors = pd.concat(frames)
             areaelectors = getblock(allelectors,'Area',Level4node.value)
 
-            print("____lenallelectors+areaelectors:",len(allelectors),len(areaelectors))
+            print("____lenallelectors+areaelectors:",Level4node.value,len(allelectors),len(areaelectors))
 
             x = areaelectors.Long.values
             y = areaelectors.Lat.values
@@ -723,8 +753,7 @@ class TreeNode:
         print ("_________fam_nodes :", i, fam_nodes )
         return fam_nodes
 
-    def create_area_map (self,flayers,ending):
-      self.file = subending(self.file, ending)
+    def create_area_map (self,flayers):
       if self.level > 0:
           title = self.parent.value+"-"+self.value+" set at level "+str(self.bbox)+" "+str(self.centroid)
       else:
@@ -838,13 +867,15 @@ class TreeNode:
         if etype == 'constituency':
             child_node.file = child_node.value+"-MAP.html"
         elif etype == 'ward':
-            child_node.file = child_node.value+"-MAP.html"
+            child_node.dir = self.dir+"/WARDS/"+child_node.value
+            child_node.file = child_node.value+"-WARDS.html"
         elif etype == 'nation':
             child_node.file = child_node.value+"-MAP.html"
         elif etype == 'county':
             child_node.file = child_node.value+"-MAP.html"
         elif etype == 'division':
-            child_node.file = child_node.value+"-MAP.html"
+            child_node.dir = self.dir+"/DIVS/"+child_node.value
+            child_node.file = child_node.value+"-DIVS.html"
         elif etype == 'polling_district':
             child_node.dir = self.dir+"/PDS/"+child_node.value
             child_node.file = child_node.value+"-MAP.html"
@@ -1164,7 +1195,7 @@ class ExtendedFeatureGroup(FeatureGroup):
     #need to select the children boundaries associated with the children nodes - to paint
                 pfile = Treepolys[gettypeoflevel(herenode.dir+"/"+herenode.file,herenode.level+1)]
                 limbX = pfile[pfile['FID']==c.fid].copy()
-                print("______line 1068:")
+                print("______Add_Nodes Treepolys type:",gettypeoflevel(herenode.dir+"/"+herenode.file,herenode.level+1))
 #
                 limbX['col'] = c.col
 
@@ -2002,9 +2033,17 @@ def downbut(path):
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level+1)+" details"
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     layeritems = getlayeritems(current_node.childrenoftype(atype),formdata['tabledetails'] )
-    Featurelayers[atype].add_nodemaps(current_node, atype)
-
-    current_node.create_area_map(current_node.getselectedlayers(path),"-MAP")
+    mapfile = current_node.dir+"/"+current_node.file
+    if atype == 'ward':
+        mapfile = current_node.dir+"/"+subending(current_node.file,"-WARDS")
+        focuslayer = Featurelayers[atype].reset()
+        focuslayer.add_nodemaps(current_node, atype)
+        current_node.create_area_map(current_node.getselectedlayers(path))
+    elif atype == 'division':
+        mapfile = current_node.dir+"/"+subending(current_node.file,"-DIVS")
+        focuslayer = Featurelayers[atype].reset()
+        focuslayer.add_nodemaps(current_node, atype)
+        current_node.create_area_map(current_node.getselectedlayers(path))
 
     #formdata['username'] = session["username"]
     formdata['country'] = "UNITED_KINGDOM"
@@ -2015,7 +2054,6 @@ def downbut(path):
     formdata['candsurn'] = "Surname"
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
-    mapfile = current_node.dir+"/"+current_node.file
 
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2060,7 +2098,7 @@ def transfer(path):
             if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
                 focuslayer = Featurelayers[atype].reset()
                 focuslayer.add_nodemaps(current_node, atype)
-                current_node.create_area_map(current_node.getselectedlayers(path),"-MAP")
+                current_node.create_area_map(current_node.getselectedlayers(path))
             #formdata['username'] = session["username"]
             formdata['country'] = "UNITED_KINGDOM"
             formdata['GOTV'] = ElectionSettings['GOTV']
@@ -2124,7 +2162,7 @@ def downPDbut(path):
         else:
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children))
 
-            current_node.create_area_map(current_node.getselectedlayers(path),"-PDS")
+            current_node.create_area_map(current_node.getselectedlayers(path))
             flash("________PDs added  :  "+str(len(Featurelayers['polling_district']._children)))
             print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
@@ -2194,7 +2232,7 @@ def downWKbut(path):
                 print("Can't find any elector data for this Area.",len(areaelectors),current_node.type,Featurelayers['walk']._children )
             else:
                 print("_______just before walk create_area_map call:")
-                current_node.create_area_map(current_node.getselectedlayers(path),"-WALKS")
+                current_node.create_area_map(current_node.getselectedlayers(path))
                 flash("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
                 print("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
 
@@ -2524,6 +2562,7 @@ def PDdownST(path):
               y = electorwalks.StreetName
               z = electorwalks.AddressPrefix.values
               houses = len(list(set(zip(x,y,z))))+1
+              street_node.updateHouses(houses)
               streets = len(electorwalks.StreetName.unique())
               areamsq = 34*21.2*20*21.2
               avstrlen = 200
@@ -2573,7 +2612,7 @@ def PDdownST(path):
                 results.write(results_template.render(context, url_for=url_for))
 #           only create a map if the branch does not already exist
 
-        PD_node.create_area_map(PD_node.getselectedlayers(path),"-MAP")
+        PD_node.create_area_map(PD_node.getselectedlayers(path))
     mapfile = PD_node.dir+"/"+PD_node.file
     formdata['tabledetails'] = "Click for "+current_node.value+  "\'s street details"
     layeritems = getlayeritems(streetnodelist,formdata['tabledetails'])
@@ -2621,12 +2660,18 @@ def WKdownST(path):
           print("________WalkMarker",walkleg_node.type,"|", walkleg_node.dir, "|",walkleg_node.value)
 
           walkleg = walkleg_node.value
+          walklegstreets = walkelectors.StreetName.unique()
+          frames = []
+          for street in walklegstreets:
+              walklegelectors = getblock(walkelectors, 'StreetName',street)
+              frames.append(walklegelectors)
+          walklegelectors = pd.concat(frames)
           walk_name = walkleg_node.value
 
-          geometry = gpd.points_from_xy(walkelectors.Long.values,walkelectors.Lat.values, crs="EPSG:4326")
+          geometry = gpd.points_from_xy(walklegelectors.Long.values,walklegelectors.Lat.values, crs="EPSG:4326")
         # create a geo dataframe for the Walk Map
           geo_df1 = gpd.GeoDataFrame(
-            walkelectors, geometry=geometry
+            walklegelectors, geometry=geometry
             )
 
         # Create a geometry list from the GeoDataFrame
@@ -2638,33 +2683,34 @@ def WKdownST(path):
     #      marker_cluster = MarkerCluster().add_to(Walkmap)
           # Iterate through the street-postcode list and add a marker for each unique lat long, color-coded by its Cluster.
 
-          if len(walkelectors.reset_index()) > 0:
+          if len(walklegelectors.reset_index()) > 0:
               print("_______new walkleg Display node",walkleg_node.value,"|", len(Featurelayers['walkleg']._children))
 
               walk_name = walk_node.value+"-"+walkleg_node.value
               type_colour = "indigo"
 
-              walkelectors['Team'] = ""
-              walkelectors['M1'] = ""
-              walkelectors['M2'] = ""
-              walkelectors['M3'] = ""
-              walkelectors['M4'] = ""
-              walkelectors['M5'] = ""
-              walkelectors['M6'] = ""
-              walkelectors['M7'] = ""
-              walkelectors['Notes'] = ""
+              walklegelectors['Team'] = ""
+              walklegelectors['M1'] = ""
+              walklegelectors['M2'] = ""
+              walklegelectors['M3'] = ""
+              walklegelectors['M4'] = ""
+              walklegelectors['M5'] = ""
+              walklegelectors['M6'] = ""
+              walklegelectors['M7'] = ""
+              walklegelectors['Notes'] = ""
 
-              groupelectors = walkelectors.shape[0]
-              if math.isnan(float('%.6f'%(walkelectors.Elevation.max()))):
+              groupelectors = walklegelectors.shape[0]
+              if math.isnan(float('%.6f'%(walklegelectors.Elevation.max()))):
                   climb = 0
               else:
-                  climb = int(float('%.6f'%(walkelectors.Elevation.max())) - float('%.6f'%(walkelectors.Elevation.min())))
+                  climb = int(float('%.6f'%(walklegelectors.Elevation.max())) - float('%.6f'%(walklegelectors.Elevation.min())))
 
-              x = walkelectors.AddressNumber.values
-              y = walkelectors.StreetName
-              z = walkelectors.AddressPrefix.values
+              x = walklegelectors.AddressNumber.values
+              y = walklegelectors.StreetName
+              z = walklegelectors.AddressPrefix.values
               houses = len(list(set(zip(x,y,z))))+1
-              streets = len(walkelectors.StreetName.unique())
+              walkleg_node.updateHouses(houses)
+              streets = len(walklegelectors.StreetName.unique())
               areamsq = 34*21.2*20*21.2
               avstrlen = 200
               housedensity = round(houses/(areamsq/10000),3)
@@ -2690,7 +2736,7 @@ def WKdownST(path):
               prodstats['leafhrs'] = round(leafhrs,2)
               prodstats['canvasshrs'] = round(canvasshrs,2)
 
-#                  walkelectors['ENOP'] =  walkelectors['PD']+"-"+walkelectors['ENO']+ walkelectors['Suffix']*0.1
+#                  walklegelectors['ENOP'] =  walklegelectors['PD']+"-"+walklegelectors['ENO']+ walklegelectors['Suffix']*0.1
               target = walk_node.locmappath("")
               results_filename = walk_name+"-PRINT.html"
 
@@ -2699,7 +2745,7 @@ def WKdownST(path):
               mapfile = walk_node.dir+"/"+walk_node.file
 
               context = {
-                "group": walkelectors,
+                "group": walklegelectors,
                 "prodstats": prodstats,
                 "mapfile": url_for('upbut',path=mapfile),
                 "datafile": url_for('STupdate',path=datafile),
@@ -2714,7 +2760,7 @@ def WKdownST(path):
               print("________ERROR empty walk  :",streetdf.reset_index())
 
 
-        walk_node.create_area_map(walk_node.getselectedlayers(path), "-MAP")
+        walk_node.create_area_map(walk_node.getselectedlayers(path))
 
     mapfile = walk_node.dir+"/"+walk_node.file
     formdata['tabledetails'] = "Click for "+walk_node.value +  "\'s street details"
@@ -2875,7 +2921,7 @@ def upbut(path):
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         focuslayer = Featurelayers[atype].reset()
         focuslayer.add_nodemaps(current_node, atype)
-        current_node.create_area_map(current_node.getselectedlayers(mapfile),"-MAP")
+        current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -2961,7 +3007,7 @@ def upload_file():
         rawfilename = os.path.join(app.config['UPLOAD_FOLDER'], xfilename)
         uploaded_file.save(rawfilename)
   # Only update on new file
-        ElectionSettings['importfile'] = rawfilename  # Only update on new file
+        ElectionSettings['rawimportfile'] = rawfilename  # Only update on new file
         flash(f"New file uploaded: {rawfilename}", "success")
 
     elif placement:
@@ -3065,7 +3111,7 @@ def normalise():
     formdata = {}
     DQstats = pd.DataFrame()
 #    ElectionSettings['importfile'] = request.files['importfile'].filename
-    Sourcefile = ElectionSettings['importfile']
+    Sourcefile = ElectionSettings['rawimportfile']
     print("Import filename:",Sourcefile)
     results = normz(Sourcefile,formdata,ElectionSettings['autofix'])
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
@@ -3073,8 +3119,9 @@ def normalise():
     DQstats = results[2]
     mapfile = current_node.dir+"/"+current_node.file
     group = results[0]
-    targetfile = Sourcefile.replace(".csv","-NORMZ.csv").replace(".xlsx","-NORMZ.csv")
-    group.to_csv(urljoin(config.workdirectories['workdir'],"ActiveElectoralRoll.csv"))
+    targetfile = Sourcefile.upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
+    group.to_csv(targetfile)
+    group.to_csv("ActiveElectoralRoll.csv")
     ElectionSettings['importfile'] = targetfile
 #    formdata['username'] = session['username']
     print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats, targetfile)
@@ -3253,7 +3300,7 @@ def firstpage():
         newlayer = Featurelayers[atype].reset()
         newlayer.add_nodemaps(current_node, atype)
 
-        current_node.create_area_map(current_node.getselectedlayers(sourcepath),"-MAP")
+        current_node.create_area_map(current_node.getselectedlayers(sourcepath))
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(sourcepath)[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file

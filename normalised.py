@@ -453,7 +453,7 @@ def normz(ImportFilename, normstats, autofix):
             Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(elector.Long)])
 
         count = count + 1
-        if count > 5000: break
+        if count > 500: break
 
 
 
