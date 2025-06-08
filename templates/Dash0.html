@@ -127,7 +127,7 @@
               <button type = "button" id = "b2" class = "small_btn" onclick="setActionForm('filelist',filelist='results')">Results</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b3" class = "small_btn" onclick="setActionForm('filelist',filelist='roll')">Electoral Roll</button>
+              <button type="button" id="b3" class="small_btn" >Electoral Roll</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b4" class = "small_btn">Intention</button>
@@ -139,42 +139,15 @@
               <button type = "button" id = "b6" class = "big_btn">Teams</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b6" class = "big_btn" onclick="setActionForm('produce')">Search</button>
+              <button type = "button" id = "b7" class = "small_btn" >Search</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b8" class = "small_btn" >DASH</button>
             </div>
 
           </div>
 
-          <table id="DQ-table">
-            <thead>
-             <tr><th style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> Importing from file </th>
-             </tr>
-            <tr>
-            <th >Field</th>
-            <th >P1</th>
-            <th >P2</th>
-            <th >P3</th>
-            <th >Ready</th>
-          </tr>
-
-            </thead>
-            <tbody>
-            {% for index,row in DQstats.iterrows() %}
-            <tr>
-              <td class="field">{{ row['Field'] }}</td>
-              <td class="pass"> <input type="checkbox" {% if row['P1'] == 1 %}checked{% endif %} onclick="return false;" name="P1" id="pass1" /></td>
-              <td class="pass"> <input type="checkbox" {% if row['P2'] == 1 %}checked{% endif %} onclick="return false;" name="P2" id="pass2" /></td>
-              <td class="pass"> <input type="checkbox" {% if row['P3'] == 1 %}checked{% endif %} onclick="return false;" name="P3" id="pass3" /></td>
-              <td class="pass"> <input type="checkbox" {% if row['Ready'] == 1 %}checked{% endif %} onclick="return false;" name="Ready" id="Ready" /></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-          <tfoot>
-                <tr>  <td colspan='5' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
-                  _________________________________________ <br></td>
-                </tr>
-          </tfoot>
-          </table>
-</div>
+  </div>
 {% endblock nav %}
 {% block captains %}
 
@@ -225,6 +198,18 @@
 					form.submit();
           };
   };
+  // Handle the "Back to Main" button click
+  document.getElementById("b8").addEventListener("click", function() {
+      // Change the iframe src to the stream processing input page
+      document.getElementById("iframe1").src = "{{ url_for('dashboard') }}";
+  });
+
+    // Handle the "Electoral Roll" button click
+    document.getElementById("b3").addEventListener("click", function() {
+        // Change the iframe src to the stream processing input page
+        document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
+    });
+
 
 </script>
 

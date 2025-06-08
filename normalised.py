@@ -8,11 +8,9 @@ from requests.auth import HTTPDigestAuth
 import config
 
 
-normstats = {}
-
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
-def normz(ImportFilename, normstats, autofix):
+def normz(stream,ImportFilename,dfx,autofix):
     print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -151,18 +149,8 @@ def normz(ImportFilename, normstats, autofix):
 
     electors0 = pd.DataFrame()
     electors10 = pd.DataFrame()
-    DQstats = pd.DataFrame(columns=['Field','P1', 'P2', 'P3', 'Ready'])
-    Env1 = sys.base_prefix
+    DQstats = pd.DataFrame(columns=['Stream','File','Field','P1', 'P2', 'P3', 'Ready'])
 
-    normstats['env'] = Env1
-
-    dfx = pd.DataFrame()
-    if ImportFilename.find(".csv") >= 0:
-        dfx = pd.read_csv(ImportFilename)
-        dfx['RNO'] = dfx.index
-    elif ImportFilename.find(".xlsx") >= 0:
-        dfx = pd.read_excel(ImportFilename)
-        dfx['RNO'] = dfx.index
 
 #AUTO DATA IMPORT
 #1 - read in columns into a normalised list if columns and derive outcomes df
@@ -180,13 +168,13 @@ def normz(ImportFilename, normstats, autofix):
     electors0 = DFtoDF(dfx)
     electors100 = dfx
 
-    dfz = electors100[1:100]
+    dfz = electors100[1:10]
     dfzmax = dfz.shape[0]
-    print(ImportFilename," data rows: ", dfzmax )
+    print(dfz.columns," data rows: ", dfzmax )
 
-    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
+    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","SHORTNUMBER":"Suffix","ROLLNO":"ENO","ENO":"ENO",
     "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
-    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" , "NAME" :"ElectorName", "STREETNAME" :"StreetName" }
+    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDescription" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
 
     Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
@@ -196,17 +184,22 @@ def normz(ImportFilename, normstats, autofix):
         DQstats.loc[i,'P2'] = 0
         DQstats.loc[i,'P3'] = 0
         DQstats.loc[i,'Ready'] = 0
+    print(f"___DQ Stats1",DQstats, Outcols)
 
     for z in Outcols :
+        DQstats.loc[Outcols.index(z),'Stream'] = stream
+        DQstats.loc[Outcols.index(z),'File'] = ImportFilename
         DQstats.loc[Outcols.index(z),'Field'] = z
+    print(f"___DQ Stats2",DQstats, Outcols)
 
     #pass 1 - how many required fieldnames are in the source file?
     incols = dfz.columns
     for y in [x for x in Outcols if x in incols]:
         DQstats.loc[Outcols.index(y),'P1'] = 1
+    print(f"___DQ Stats3",DQstats, incols)
 
     if autofix <= 0:
-        return [electors100,normstats,DQstats]
+        return [electors100,DQstats]
 #        dfzres = extractfactors(dfz)
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
@@ -219,11 +212,13 @@ def normz(ImportFilename, normstats, autofix):
         electors100 = electors100.rename(columns= {a: b})
         print(f"___NRenamed from {a} to {b} leaving:",electors10.columns)
 
-    incol_first_set = {t[1] for t in Incolstuple}  # set for fast lookup
-    for y in [x for x in Outcols if x in incol_first_set]:
+    incols2 = electors100.columns
+    print(f"___Original Columns",electors100.columns)
+    for y in [x for x in Outcols if x in incols2]:
         DQstats.loc[Outcols.index(y), 'P2'] = 1
     if autofix <= 1:
-        return [electors100,normstats,DQstats]
+        return [electors100,DQstats]
+    print(f"____Autofix = 0 , DQstats:",DQstats)
 
 
 
@@ -241,6 +236,7 @@ def normz(ImportFilename, normstats, autofix):
     df1 = pd.read_csv(bounddir+"/open_postcode_elevation.csv")
     df1.columns = ["Postcode","Elevation"]
     electors2 = electors10.merge(df1, how='left', on='Postcode' )
+    print("___Postcode merged")
     electors2['Lat'] = electors1['Lat'].astype(float)
     electors2['Long'] = electors1['Long'].astype(float)
     electors2['AddressNumber'] = ""
@@ -293,9 +289,9 @@ def normz(ImportFilename, normstats, autofix):
     elif ImportFilename.find("Runcorn") >= 0:
         Councilx = "Runcorn"
     electors2['Council'] = Councilx
-    normstats['source'] = ImportFilename
-    normstats['columns'] = str(electors2.columns)
-    normstats['council'] = Councilx
+
+    print("___Council and Source set")
+
     for index, elector in electors2.iterrows():
         electors2.loc[index,'RNO'] = index
         electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
@@ -453,33 +449,26 @@ def normz(ImportFilename, normstats, autofix):
             Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(elector.Long)])
 
         count = count + 1
-        if count > 500: break
+#        if count > 500: break
 
 
 
     print("____________Normalisation_Complete________in ",Councilx, "Register.csv" )
-    normstats['count'] = count
-    normstats['Mean_Lat'] = Decimal(Mean_Lat)
-    normstats['Mean_Long'] = Decimal(Mean_Long)
 
-#    normstats['Mean_Long'] = np.mean(electors2['Long']).astype(float)
-#    normstats['Mean_Lat'] = np.mean(electors2['Lat']).astype(float)
-#    normstats['Mean_Elev'] = np.mean(electors2['Elevation']).astype(float)
-    normstats['status'] = "NormComplete"
 
     # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
     pass3cols = electors2.columns
     for y in [x for x in Outcols if x in pass3cols]:
         DQstats.loc[Outcols.index(y),'P3'] = 1
     if autofix <= 2:
-        return [electors2,normstats,DQstats]
+        return [electors2,DQstats]
     # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
     for y in [x for x in Outcols if x in pass3cols]:
         DQstats.loc[Outcols.index(y),'Ready'] = 1
     if autofix <= 3:
-        return [electors2,normstats,DQstats]
+        return [electors2,DQstats]
 
-    return [electors2,normstats,DQstats]
+    return [electors2,DQstats]
 
 
 if __name__ == '__main__':

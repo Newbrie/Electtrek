@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Order Table</title>
+</head>
+<body>
+
+<h2>Order of Files to Import</h2>
+
+<table id="fileOrderTable">
+    <thead>
+        <tr>
+            <th>Order</th>
+            <th>Stream</th>
+            <th>File Name</th>
+            <th>File Type</th>
+            <th>Purpose</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><input type="number" value="2"></td>
+            <td><input type="text" value="A"></td>
+            <td><input type="text" value="BEEP_Absent Voters List (June 2025).XLSX"></td>
+            <td><input type="text" value="csv"></td>
+            <td>
+                <select>
+                    <option value="avi">AVI</option>
+                    <option value="main">Main</option>
+                    <option value="delta">Delta</option>
+                </select>
+            </td>
+            <td><button class="deleteBtn">Delete</button></td>
+        </tr>
+        <tr>
+            <td><input type="number" value="1"></td>
+            <td><input type="text" value="A"></td>
+            <td><input type="text" value="BEEP_ElectoralRoll (June 2025NX).XLSX"></td>
+            <td><input type="text" value="xlsx"></td>
+            <td>
+                <select>
+                    <option value="main">Main</option>
+                    <option value="avi">AVI</option>
+                    <option value="delta">Delta</option>
+                </select>
+            </td>
+            <td><button class="deleteBtn">Delete</button></td>
+        </tr>
+    </tbody>
+</table>
+
+<button id="addRowBtn">Add Row</button>
+<button id="importFilesBtn">Import Files</button>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Add new row
+        $('#addRowBtn').click(function () {
+            $('#fileOrderTable tbody').append(
+                `<tr>
+                    <td><input type="number" value="1"></td>
+                    <td><input type="text" value="A"></td>
+                    <td><input type="text" value="new_file.csv"></td>
+                    <td><input type="text" value="csv"></td>
+                    <td>
+                        <select>
+                            <option value="main">Main</option>
+                            <option value="avi">AVI</option>
+                            <option value="delta">Delta</option>
+                        </select>
+                    </td>
+                    <td><button class="deleteBtn">Delete</button></td>
+                </tr>`
+            );
+        });
+
+        // Delete row
+        $(document).on('click', '.deleteBtn', function () {
+            $(this).closest('tr').remove();
+        });
+
+        // When Import is clicked, send data to server
+        $('#importFilesBtn').click(function () {
+            let files = [];
+            $('#fileOrderTable tbody tr').each(function () {
+                let order = $(this).find('td:nth-child(1) input').val();
+                let stream = $(this).find('td:nth-child(2) input').val();
+                let fileName = $(this).find('td:nth-child(3) input').val();
+                let fileType = $(this).find('td:nth-child(4) input').val();
+                let purpose = $(this).find('td:nth-child(5) select').val();
+                files.push({ order, stream, fileName, fileType, purpose });
+            });
+
+            // Send files in order to the server (Python backend)
+            $.ajax({
+                url: '/import_files',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ files }),
+                success: function (data) {
+                    console.log('Files imported successfully:', data);
+                }
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

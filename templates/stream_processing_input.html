@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block map %}
+<!-- Editable File Information Table -->
+<!-- Editable File Information Table -->
+<h2>Specify Electoral Roll Processing Streams for Each Election</h2>
+<button id="add-row-btn">Add Row</button>
+<button id="add-stream-btn">Add Stream</button>
+<button id="save-btn">Save</button>
+
+<table id="stream-table" border="1">
+  <thead>
+    <tr>
+      <th>Order</th>
+      <th>Stream</th>
+      <th>Filename</th>
+      <th>Type</th>
+      <th>Purpose</th>
+      <th>Fixlevel</th>
+      <th>Active</th>
+    </tr>
+  </thead>
+  <tbody id="file-info-tbody">
+    {% for row in table_data %}
+    <tr>
+      <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
+      <td>
+        <select class="editable stream">
+          {% for stream in streams %}
+          <option value="{{ stream }}" {% if row['stream'] == stream %}selected{% endif %}>{{ stream }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+      <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
+      <input type="hidden" class="file-path">
+      <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
+      <button type="button" class="file-btn">📂</button>
+      </td>
+      <td>
+        <select class="editable type" style="width: 60px;">
+          <option value="csv" {% if row['type'] == 'csv' %}selected{% endif %}>csv</option>
+          <option value="xlsx" {% if row['type'] == 'xlsx' %}selected{% endif %}>xlsx</option>
+          <option value="json" {% if row['type'] == 'json' %}selected{% endif %}>json</option>
+        </select>
+      </td>
+      <td>
+        <select class="editable purpose" style="width: 60px;">
+          <option value="main" {% if row['purpose'] == 'main' %}selected{% endif %}>main</option>
+          <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
+          <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
+        </select>
+      </td>
+      <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
+      <td><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked {% endif %}></td>
+      <td><button class="delete-btn">Delete</button></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<!-- Import Table -->
+<div id="importTable" class="section">
+    <h2>STREAM DATA QUALITY STATISTICS</h2>
+    <table id="DQ-table">
+        <thead>
+          <button id="process-btn">PROCESS</button>
+            <tr>
+                <th>Stream</th>
+                <th>Filename</th>
+                <th>Field</th>
+                <th>P1</th>
+                <th>P2</th>
+                <th>P3</th>
+                <th>Ready</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for index, row in DQstats.iterrows() %}
+                <tr>
+                    <td>{{ row['Stream'] }}</td>
+                    <td>{{ row['File'] }}</td>
+                    <td>{{ row['Field'] }}</td>
+                    <td><label>
+                      <input type="checkbox" class="maximpact-checkbox" {% if row['P1'] == 1 %}checked{% endif %} disabled>
+                      <strong>Enable Critical Data Corrections</strong> (Max Impact)
+                    </label></td>
+                    <td><input type="checkbox" {% if row['P2'] == 1 %}checked{% endif %} disabled></td>
+                    <td><input type="checkbox" {% if row['P3'] == 1 %}checked{% endif %} disabled></td>
+                    <td><input type="checkbox" {% if row['Ready'] == 1 %}checked{% endif %} disabled></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+
+
+
+    document.getElementById('add-row-btn').addEventListener('click', function () {
+      const tbody = document.getElementById('file-info-tbody');
+      const newRow = document.createElement('tr');
+      newRow.innerHTML = `
+        <td><input type="number" class="editable order" value="1" style="width: 50px;"></td>
+        <td>
+          <select class="editable stream">
+            {% for stream in streams %}
+            <option value="{{ stream }}">{{ stream }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <input type="text" class="editable filename">
+          <input type="file" class="file-picker" style="display: none;">
+          <button type="button" class="file-btn">📂</button>
+        </td>
+        <td><input type="text" class="editable type"></td>
+        <td><input type="text" class="editable purpose"></td>
+        <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
+        <td><input type="checkbox" class="editable active"></td>
+        <td><button class="delete-btn">Delete</button></td>
+      `;
+        tbody.appendChild(newRow);
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.filename').forEach(input => {
+        input.addEventListener('input', function () {
+            const row = input.closest('tr');
+            const activeCheckbox = row.querySelector('.active');
+            if (input.value.trim() === '') {
+                activeCheckbox.checked = false;
+            }
+        });
+      });
+    });
+
+    document.getElementById('add-stream-btn').addEventListener('click', function () {
+      let newStream = prompt("Enter the new stream name:");
+      if (newStream) {
+        document.querySelectorAll('.editable.stream').forEach(select => {
+          const option = document.createElement('option');
+          option.value = newStream;
+          option.textContent = newStream;
+          select.appendChild(option);
+        });
+      }
+    });
+
+    document.getElementById('process-btn').addEventListener('click', function () {
+    const streamToProcess = prompt("Enter the stream name you wish to process:");
+    if (!streamToProcess) return;
+
+    const normalizedInput = streamToProcess.trim().toLowerCase();
+    const rows = document.querySelectorAll('#file-info-tbody tr');
+    const formData = new FormData();
+    let found = false;
+
+    rows.forEach((row, index) => {
+      const stream = row.querySelector('.stream').value.trim().toLowerCase();
+      const active = row.querySelector('.active').checked;
+      const order = row.querySelector('.order').value;
+      const ftype = row.querySelector('.type').value;
+      const purpose = row.querySelector('.purpose').value;
+      const fixlevel = row.querySelector('.fixlevel').value;
+      const fileInput = row.querySelector('.file-picker');
+      const filepath = row.querySelector('.file-path').value;
+
+      if (active && stream === normalizedInput) {
+        if (fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          formData.append('files', file);  // upload if picked this session
+        } else if (filepath) {
+          formData.append(`stored_path_${index}`, filepath);  // use stored safe path
+        } else {
+          console.warn(`No file selected or stored path for stream '${stream}'`);
+          return; // skip this row
+        }
+
+        // Append other metadata
+        formData.append(`meta_${index}_order`, order);
+        formData.append(`meta_${index}_type`, ftype);
+        formData.append(`meta_${index}_purpose`, purpose);
+        formData.append(`meta_${index}_fixlevel`, fixlevel);
+        formData.append(`meta_${index}_stream`, stream);
+
+        found = true;
+      }
+    });
+
+    if (!found) {
+      alert("No matching files found for stream: " + streamToProcess);
+      return;
+    }
+
+    fetch('/normalise', {
+      method: 'POST',
+      body: formData
+    })
+      .then(response => response.text())
+      .then(html => {
+        document.open();
+        document.write(html);
+        document.close();
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert("Processing error: " + error);
+      });
+  });
+
+    function collectTableData() {
+      const rows = document.querySelectorAll('#file-info-tbody tr');
+      const data = [];
+
+      rows.forEach(row => {
+        data.push({
+          order: parseInt(row.querySelector('.order').value),
+          stream: row.querySelector('.stream').value,
+          filename: row.querySelector('.filename').value,
+          type: row.querySelector('.type').value,
+          purpose: row.querySelector('.purpose').value,
+          fixlevel: parseInt(row.querySelector('.fixlevel').value),
+          active: row.querySelector('.active').checked
+        });
+      });
+
+      return data;
+    };
+
+    document.getElementById('save-btn').addEventListener('click', function () {
+      const tableData = collectTableData();
+      fetch('/save_table_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: tableData })
+      })
+      .then(res => res.json())
+      .then(data => alert(data.message))
+      .catch(err => alert("Error saving: " + err));
+    });
+
+    document.getElementById('file-info-tbody').addEventListener('click', function (e) {
+      if (e.target.classList.contains('file-btn')) {
+             const td = e.target.closest('td');
+             const row = td.closest('tr');
+             const fileInput = td.querySelector('.file-picker');
+             const activeCheckbox = row.querySelector('.active');
+             const filenameField = td.querySelector('.filename');
+             const filePathField = td.querySelector('.file-path');
+
+             fileInput.click();
+
+             fileInput.onchange = async function () {
+                 if (fileInput.files.length > 0) {
+                     const file = fileInput.files[0];
+                     const formData = new FormData();
+                     formData.append('file', file);
+
+                     try {
+                         const res = await fetch('/upload_file', {
+                             method: 'POST',
+                             body: formData
+                         });
+                         const result = await res.json();
+
+                         if (result.error) {
+                             alert("Upload error: " + result.error);
+                             return;
+                         }
+                         filenameField.value = file.name;
+                         filePathField.value = result.path;
+
+
+                         filenameField.value = file.name;
+                         filePathField.value = result.path;  // backend returns full saved path
+                         // Auto-check active if filename is set
+                           if (file.name.trim() == '') {
+                             activeCheckbox.checked = false;
+                           }
+                     } catch (err) {
+                         alert("Failed to upload file: " + err);
+                     }
+                 }
+             };
+         }
+
+         // Unchecking active flag resets the row
+         if (e.target.classList.contains('active')) {
+             const checkbox = e.target;
+             const row = checkbox.closest('tr');
+
+             if (!checkbox.checked) {
+                 const filenameField = row.querySelector('.filename');
+                 const filePathField = row.querySelector('.file-path');
+                 const fileInput = row.querySelector('.file-picker');
+
+                 filenameField.value = '';
+                 filePathField.value = '';
+                 if (fileInput) fileInput.value = '';  // reset input so onchange re-triggers
+             }
+         }
+
+      if (e.target.classList.contains('delete-btn')) {
+        e.target.closest('tr').remove();
+      }
+    });
+
+</script>
+{% endblock map %}
