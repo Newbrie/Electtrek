@@ -156,6 +156,7 @@ var showMore = function (msg,area, type) {
       tabtitle.innerHTML = title;
       checkboxHeader.textContent = "?";
       headRow.appendChild(checkboxHeader);
+      console.log("grabbed tabtitle :", tabtitle.innerHTML);
 
       columnHeaders.forEach(header => {
           const th = document.createElement("th");
@@ -168,6 +169,7 @@ var showMore = function (msg,area, type) {
       // Build table body
       rows.forEach(record => {
           const row = document.createElement("tr");
+          console.log("creating checkboxcells :");
 
           // Checkbox cell
           const checkboxCell = document.createElement("td");
@@ -177,22 +179,27 @@ var showMore = function (msg,area, type) {
           checkbox.classList.add("selectRow");
           checkboxCell.appendChild(checkbox);
           row.appendChild(checkboxCell);
+          console.log("creating datacells :");
 
           // Data cells
           columnHeaders.forEach(header => {
             const cell = document.createElement("td");
             const value = record[header] !== undefined ? record[header] : "";
             cell.innerHTML = value;
+            console.log("setting partyhighlight :");
+
 
             // Highlight the column whose name matches `yourparty`
             if (header === yourparty.value) {
                 const color = VCO[yourparty.value] || "inherit";
                 cell.style.backgroundColor = color;
             }
+            console.log("adding a cell :");
 
             row.appendChild(cell);
             });
-            tabbody.appendChild(row);
+            console.log("adding a row :");
+          tabbody.appendChild(row);
          });
      })
      .catch(error => console.error("Fetch error:", error));

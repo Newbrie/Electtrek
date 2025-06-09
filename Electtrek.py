@@ -148,12 +148,8 @@ def is_safe_url(target):
 
 def getlayeritems(nodelist,title):
     global ElectionSettings
-    global current_node
 
     dfy = pd.DataFrame()
-    if isinstance(nodelist, list) and nodelist == []:
-        nodelist = [current_node]
-        title = "Load data from your electoral register"
     if isinstance(nodelist, pd.DataFrame):
         dfy = nodelist
         title = "Load data from Dataframe"+str(list(dfy.columns.values))
@@ -2967,17 +2963,19 @@ def displayareas():
     global current_node
     global layeritems
     global formdata
+    python_data3 = {}
+    python_data2 = {}
+    python_data1 = {}
     print('_______ROUTE/displayareas:', str(layeritems[2]))
-    layeritems = getlayeritems([],"EMPTY")
-
-    json_data = layeritems[1].to_json(orient='records', lines=False)
-    json_cols = json.dumps(layeritems[0])
-    json_title = json.dumps(str(layeritems[2]))
-    # Convert JSON string to Python list
-    python_data3 = json.loads(json_title)
-    python_data2 = json.loads(json_data)
-    python_data1 = json.loads(json_cols)
-    # Return the Python list using jsonify
+    if layeritems != []:
+        json_data = layeritems[1].to_json(orient='records', lines=False)
+        json_cols = json.dumps(layeritems[0])
+        json_title = json.dumps(str(layeritems[2]))
+        # Convert JSON string to Python list
+        python_data3 = json.loads(json_title)
+        python_data2 = json.loads(json_data)
+        python_data1 = json.loads(json_cols)
+        # Return the Python list using jsonify
     print('_______ROUTE/displayarea data', python_data1 ,python_data2, python_data3)
     return  jsonify([python_data1, python_data2,python_data3])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
