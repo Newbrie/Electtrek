@@ -148,21 +148,15 @@ def is_safe_url(target):
 
 def getlayeritems(nodelist,title):
     global ElectionSettings
-    global Historynodelist
-    global Historytitle
+    global current_node
+
     dfy = pd.DataFrame()
     if isinstance(nodelist, list) and nodelist == []:
-        print("___History layeritems being used")
-        nodelist = Historynodelist
-        if Historytitle:
-            title = Historytitle
-        else:
-            title = "Load data from your electoral register"
-    else:
-        Historynodelist = nodelist
-        Historytitle = title
+        nodelist = [current_node]
+        title = "Load data from your electoral register"
     if isinstance(nodelist, pd.DataFrame):
         dfy = nodelist
+        title = "Load data from Dataframe"+str(list(dfy.columns.values))
     elif isinstance(nodelist, list) and nodelist != []:
         dfy = pd.DataFrame()
         i = 0
@@ -181,6 +175,7 @@ def getlayeritems(nodelist,title):
             dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(ElectionSettings['GOTV']))-int(x.VI[ElectionSettings['yourparty']])
             i = i + 1
 
+    print("___existing getlayeritems",list(dfy.columns.values), dfy, title)
     return [list(dfy.columns.values),dfy, title]
 
 def subending(filename, ending):
@@ -2971,17 +2966,18 @@ def displayareas():
     global current_node
     global layeritems
     global formdata
-    print('_______ROUTE/displayareas:', layeritems[2])
-    layeritems = getlayeritems([],"")
+    print('_______ROUTE/displayareas:', str(layeritems[2]))
+#    layeritems = getlayeritems([],"")
+
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
-    json_title = json.dumps(layeritems[2])
+    json_title = json.dumps(str(layeritems[2]))
     # Convert JSON string to Python list
     python_data3 = json.loads(json_title)
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-#    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
     return  jsonify([python_data1, python_data2,python_data3])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
@@ -3235,34 +3231,45 @@ def normalise():
     global layeritems
 
     files = request.files.getlist('files')
-    stream = request.form.get('stream')
-    fixlevel = request.form.get('fixlevel')
-    purpose = request.form.get('purpose')
-    filetype = request.form.get('type')
+    stream = str(request.form.get('meta_0_stream')).upper()
+    fixlevel = int(request.form.get('meta_0_fixlevel'))
+    purpose = request.form.get('meta_0_purpose')
+    filetype = request.form.get('meta_0_type')
+    file_path = request.form.get('meta_0_filepath')
+    print(f"___Route/normalise Form files: {[x for x in files]} Str: {stream} FP:{file_path} Fix {fixlevel} Purp {purpose} Ftype {filetype}")
+
     mainframe = pd.DataFrame()
     deltaframes = []
     aviframe = pd.DataFrame()
     DQstats = pd.DataFrame()
-    print("___Route/normalise", [x for x in files], stream)
+    print("___Route/normalise", [x for x in files],"Str:", stream,"FP:", file_path)
     if not files:
         return jsonify({'error': 'No files provided'}), 400
 
     try:
         for file in files:
             formdata = {}
-            ImportFilename = file.filename
+            ImportFilename = str(file.filename)
             print("_____ reading file outside normz",ImportFilename)
             if ImportFilename.upper().find(".CSV") >= 0:
-                dfx = pd.read_csv(file)
+                if file_path:
+                    with open(file_path, 'rb') as f:
+                        dfx = pd.read_csv(f)
+                else:
+                    dfx = pd.read_csv(file)
                 dfx['RNO'] = dfx.index
                 print("readingCSVfile inside normz")
             elif ImportFilename.upper().find(".XLSX") >= 0:
-                dfx = pd.read_excel(file)
+                if file_path:
+                    with open(file_path, 'rb') as f:
+                        dfx = pd.read_excel(f)
+                else:
+                    dfx = pd.read_excel(file)
                 dfx['RNO'] = dfx.index
                 print("readingEXCELfile inside normz")
 
             print("____entering normz:", dfx.columns)
-            results = normz(stream,ImportFilename,dfx,ElectionSettings['autofix'])
+            results = normz(stream,ImportFilename,dfx,fixlevel)
         # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
 
             print("__concat of DQstats", DQstats,results[1])
@@ -3305,10 +3312,10 @@ def normalise():
         # Collect unique streams for dropdowns
         streams = sorted(set(row['stream'] for row in table_data))
 
-        print('_______ROUTE/normalise/exit:',ElectionSettings['importfile'],DQstats, targetfile)
-        formdata['tabledetails'] = "Electoral Roll File "+ElectionSettings['importfile']+" Details"
-        layeritems = getlayeritems(mainframe.head(), formdata['tabledetails'])
+        formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
+        layeritems = getlayeritems(mainframe, formdata['tabledetails'])
 #        return render_template("Dash0.html", formdata=formdata,group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        print('_______ROUTE/normalise/exit:',ImportFilename)
         return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
 
 #            return render_template('stream_processing_input.html' , DQstats=DQstats )

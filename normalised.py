@@ -146,6 +146,95 @@ def normz(stream,ImportFilename,dfx,autofix):
                         return col
         return None
 
+    def normalise_id_columns(df):
+    # Track which columns exist and which are missing
+        required_cols = ['ENO', 'ENOT', 'ENOP', 'Suffix', 'PD']
+        available = [col for col in required_cols if col in df.columns and df[col].notna().any()]
+
+        # Early exit if we don't have enough to infer the rest
+        if set(available).isdisjoint({'ENOT', 'ENOP', 'Suffix'}) or ('ENO' not in available and 'PD' not in available):
+            return "Insufficient data"
+
+        # Preserve original
+        df = df.copy()
+
+        # Derive Suffix from ENOP or ENOT
+        if 'Suffix' not in df.columns:
+            if 'ENOP' in df.columns:
+                df['Suffix'] = df['ENOP'].str.extract(r'\.(.*)$')[0]
+            elif 'ENOT' in df.columns:
+                df['Suffix'] = df['ENOT'].str.extract(r'\.(.*)$')[0]
+
+        # Derive ENOT from ENOP or PD + ENO
+        if 'ENOT' not in df.columns:
+            if 'ENOP' in df.columns:
+                df['ENOT'] = df['ENOP'].str.extract(r'(.*)\.')[0]
+            elif 'PD' in df.columns and 'ENO' in df.columns:
+                df['ENOT'] = df['PD'] + '-' + df['ENO']
+
+        # Derive ENOP from ENOT and Suffix
+        if 'ENOP' not in df.columns and 'ENOT' in df.columns and 'Suffix' in df.columns:
+            df['ENOP'] = df['ENOT'] + '.' + df['Suffix']
+
+        # Derive ENO from ENOT or ENOP
+        if 'ENO' not in df.columns:
+            if 'ENOT' in df.columns:
+                df['ENO'] = df['ENOT'].str.extract(r'-(.*?)(?:\.|$)')[0]
+            elif 'ENOP' in df.columns:
+                df['ENO'] = df['ENOP'].str.extract(r'-(.*?)(?:\.|$)')[0]
+
+        # Derive PD from ENOT or ENOP
+        if 'PD' not in df.columns:
+            if 'ENOT' in df.columns:
+                df['PD'] = df['ENOT'].str.extract(r'^(.*?)-')[0]
+            elif 'ENOP' in df.columns:
+                df['PD'] = df['ENOP'].str.extract(r'^(.*?)-')[0]
+
+        return df
+
+    def reclassify_eno_column(df):
+        """
+        Classifies and renames the 'ENO' column into ENO, ENOT, or ENOP depending on its content pattern:
+        - ENO: Just the base number (e.g. '123')
+        - ENOT: Has a '-' but no '.' (e.g. 'AA1-123')
+        - ENOP: Has both '-' and '.' (e.g. 'AA1-123.9')
+        The function returns a DataFrame with the correctly named column.
+        """
+        df = df.copy()
+
+        if 'ENO' not in df.columns:
+            raise ValueError("Input DataFrame must have an 'ENO' column.")
+
+        # Define patterns
+        def classify(val):
+            if pd.isna(val):
+                return 'ENO'
+            if '-' in val and '.' in val:
+                return 'ENOP'
+            elif '-' in val:
+                return 'ENOT'
+            else:
+                return 'ENO'
+
+        # Classify each row
+        df['classification'] = df['ENO'].apply(classify)
+
+        # Create new columns based on classification
+        df['ENOP'] = df.apply(lambda x: x['ENO'] if x['classification'] == 'ENOP' else None, axis=1)
+        df['ENOT'] = df.apply(lambda x: x['ENO'] if x['classification'] == 'ENOT' else None, axis=1)
+        df['ENO_clean'] = df.apply(lambda x: x['ENO'] if x['classification'] == 'ENO' else None, axis=1)
+
+        # Drop old column and classification marker
+        df.drop(columns=['ENO', 'classification'], inplace=True)
+
+        # Rename to final expected columns (fill only non-null ones)
+        for col in ['ENO_clean', 'ENOT', 'ENOP']:
+            if df[col].notna().any():
+                df.rename(columns={col: col.replace('_clean', '')}, inplace=True)
+            else:
+                df.drop(columns=[col], inplace=True)
+
+        return df
 
     electors0 = pd.DataFrame()
     electors10 = pd.DataFrame()
@@ -161,7 +250,7 @@ def normz(stream,ImportFilename,dfx,autofix):
 #5 - then fill any ‘multi-col value derived’ gaps second row by row
 # 	eg ename, ENOP, ENOS, StreetName, AddressPrefix, Address_1-6, Lat, Long , Elevation
 #6 - fill any ‘group row value derived’ columns third by
-# 	eg Ward (needs a contains test of PD mean lat long), Con(needs a contains test of PD mean lat long), County(needs a contains test of PD mean lat long), Country(needs a contains test of PD mean lat long), Council
+# 	eg Ward (needs a contains test of PD mean lat long), Con(needs a contains test of PD mean lat long), County(needs a contains test of PD mean lat long), Country(needs a contains test of PD mean lat long),
 
 #  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
 
@@ -174,7 +263,7 @@ def normz(stream,ImportFilename,dfx,autofix):
 
     COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"ENO","SHORTNUMBER":"Suffix","ROLLNO":"ENO","ENO":"ENO",
     "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
-    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDescription" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"COUNCIL" : "Council" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
+    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDescription" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
 
     Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
@@ -192,11 +281,15 @@ def normz(stream,ImportFilename,dfx,autofix):
         DQstats.loc[Outcols.index(z),'Field'] = z
     print(f"___DQ Stats2",DQstats, Outcols)
 
-    #pass 1 - how many required fieldnames are in the source file?
+#pass 1 - how many required fieldnames are in the source file?
     incols = dfz.columns
-    for y in [x for x in Outcols if x in incols]:
+    for y in list(set(Outcols) & set(incols)):
         DQstats.loc[Outcols.index(y),'P1'] = 1
     print(f"___DQ Stats3",DQstats, incols)
+    if autofix <= 0:
+        print(f"____Autofix = 0 , DQstats:",DQstats)
+        return [electors100,DQstats]
+
 
     if autofix <= 0:
         return [electors100,DQstats]
@@ -204,23 +297,31 @@ def normz(stream,ImportFilename,dfx,autofix):
 #        dfzres = checkENOP(dfz)
 #        print("found ENO match in column: ", dfzres)
 
-    # pass 2 - how many required fieldnames can be derived by normalising fields in the source file
+# pass 2 - how many required fieldnames can be derived by simply capitalising and debunking fields in the source file
     INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYING","").replace(" ","").replace("_","") for x in incols]
-    Incolstuple = [(incols[INCOLS.index(x)],COLNORM[x]) for x in INCOLS if x in COLNORM.keys()]
+    Incolstuple = [(incols[INCOLS.index(x)],COLNORM[x]) for x in list(set(INCOLS) & set(COLNORM.keys()))]
+    print(f"__________Debunked: {Incolstuple} ")
 
     for a,b in Incolstuple:
         electors100 = electors100.rename(columns= {a: b})
-        print(f"___NRenamed from {a} to {b} leaving:",electors10.columns)
+        print(f"___NRenamed from {a} to {b} ")
 
     incols2 = electors100.columns
     print(f"___Original Columns",electors100.columns)
-    for y in [x for x in Outcols if x in incols2]:
+    for y in list(set(Outcols) & set(incols2)):
         DQstats.loc[Outcols.index(y), 'P2'] = 1
     if autofix <= 1:
+        print(f"____Autofix = 1 , DQstats:",DQstats)
         return [electors100,DQstats]
-    print(f"____Autofix = 0 , DQstats:",DQstats)
+#pass 3 - how many required required identity columns can be derived from existing columns, eg ENOP  etc
+    electors100 = reclassify_eno_column(electors100)
+    print ("_____ENO RECLASSIFICAION: ", electors100.columns)
+    electors100 = normalise_id_columns(electors100)
 
-
+    if autofix <= 2:
+        print(f"____Autofix = 2 , DQstats:",DQstats)
+        return [electors100,DQstats]
+#pass 4 - how many required required columns can be calculated from existing columns, eg Lat Long, StreetName, AddressPrefix, AddressNumber  etc
 
     Addno1 = ""
     Addno2 = ""
@@ -248,52 +349,20 @@ def normz(stream,ImportFilename,dfx,autofix):
     electors2['Address_4'] = ""
     electors2['Address_5'] = ""
     electors2['Address_6'] = ""
-    Councilx = ""
-    #  set up the council attribute
-    if ImportFilename.find("Runcorn_and_Helsby") >= 0:
-        Councilx = "Runcorn_and_Helsby"
-    if ImportFilename.find("MoleValley") >= 0:
-        Councilx = "Mole Valley"
-    elif ImportFilename.find("Tandridge")>= 0:
-        Councilx = "Tandridge"
-    elif ImportFilename.find("Epsom") >= 0:
-        Councilx = "Epsom_and_Ewell"
-    elif ImportFilename.find("Elmbridge")>= 0:
-        Councilx = "Elmbridge"
-    elif ImportFilename.find("Guildford")>= 0:
-        Councilx = "Guildford"
-    elif ImportFilename.find("Heath") >= 0:
-        Councilx = "Surrey_Heath"
-    elif ImportFilename.find("Woking") >= 0:
-        Councilx = "Woking"
-    elif ImportFilename.find("Reigate") >= 0:
-        Councilx = "Reigate_and_Banstead"
-    elif ImportFilename.find("Waverley") >= 0:
-        Councilx = "Waverley"
-    elif ImportFilename.find("Runnymede") >= 0:
-        Councilx = "Runnymede"
-    elif ImportFilename.find("Hampshire") >= 0:
-        Councilx = "East Hampshire"
-    elif ImportFilename.find("Spelthorne") >= 0:
-        Councilx = "Spelthorne"
-    elif ImportFilename.find("Kingston") >= 0:
-        Councilx = "Kingston"
-    elif ImportFilename.find("Tendring") >= 0:
-        Councilx = "Tendring"
-    elif ImportFilename.find("Skipton") >= 0:
-        Councilx = "Skipton"
-    elif ImportFilename.find("Northallerton") >= 0:
-        Councilx = "Northallerton"
-    elif ImportFilename.find("Thirsk") >= 0:
-        Councilx = "Thirsk"
-    elif ImportFilename.find("Runcorn") >= 0:
-        Councilx = "Runcorn"
-    electors2['Council'] = Councilx
 
-    print("___Council and Source set")
+    #  set up the council attribute
 
     for index, elector in electors2.iterrows():
         electors2.loc[index,'RNO'] = index
+        if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
+            enot = elector['ENOT'].split("-")
+            electors2.loc[index,'PD'] =  enot[0]
+            electors2.loc[index,'ENO'] = enot[1]
+        if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOP'),'P2'] == 1:
+            enop = elector['ENOP'].split("-")
+            electors2.loc[index,'PD'] =  enop[0]
+            electors2.loc[index,'ENO'] = enop[1].split(".")[0]
+            electors2.loc[index,'Suffix'] = enop[1].split(".")[1]
         electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
         if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
             electors2.loc[index,'Elevation'] = float(0.0)
@@ -310,10 +379,10 @@ def normz(stream,ImportFilename,dfx,autofix):
             if l>2:
                 for i in range(l-2):
                     electors2.loc[index,'Initials'] = "".join(wordlist[i+2],)
-        if DQstats.loc[Outcols.index('PD'),'P2'] != 1:
+
             print("no PD:", elector)
         if DQstats.loc[Outcols.index('Firstname'),'P2'] != 1 :
-            print("No Council:", elector)
+            print("No Firstname:", elector)
       #  set up the address attributes
         xx = str(elector["Address1"])
         addr = xx.replace('"', '')
@@ -453,7 +522,7 @@ def normz(stream,ImportFilename,dfx,autofix):
 
 
 
-    print("____________Normalisation_Complete________in ",Councilx, "Register.csv" )
+    print("____________Normalisation_Complete________in ",ImportFilename )
 
 
     # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file

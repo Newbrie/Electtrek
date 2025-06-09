@@ -10,16 +10,21 @@
     border-radius: 8px;
 }
 
-.maximpact-container {
-  padding: 10px;
-  background-color: #ffecec;
-  border: 2px solid #ff4d4d;
-  border-radius: 6px;
-  margin-top: 10px;
+.maximpact-label {
+  font-size: 1.2em;
   font-weight: bold;
-  color: #990000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-
+.maximpact-checkbox {
+  width: 24px;
+  height: 24px;
+  accent-color: #ff0000; /* Bright red tick (modern browsers only) */
+  transform: scale(1.5);  /* Fallback for browsers that don't support accent-color */
+  cursor: pointer;
+  border: 2px solid #444;
+}
 #streamProcessing {
     background-color: #f9f9f9;
 }
