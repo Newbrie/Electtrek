@@ -2872,7 +2872,8 @@ def WKdownST(path):
           canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
           prodstats = {}
           prodstats['ward'] = walk_node.parent.parent.value
-          prodstats['polling_district'] = walk_node.parent.value
+          prod
+          stats['polling_district'] = walk_node.parent.value
           prodstats['groupelectors'] = groupelectors
           prodstats['walk'] = walk_node.value
           prodstats['climb'] = climb
@@ -2967,7 +2968,7 @@ def displayareas():
     global layeritems
     global formdata
     print('_______ROUTE/displayareas:', str(layeritems[2]))
-#    layeritems = getlayeritems([],"")
+    layeritems = getlayeritems([],"EMPTY")
 
     json_data = layeritems[1].to_json(orient='records', lines=False)
     json_cols = json.dumps(layeritems[0])
@@ -2977,7 +2978,7 @@ def displayareas():
     python_data2 = json.loads(json_data)
     python_data1 = json.loads(json_cols)
     # Return the Python list using jsonify
-    print('_______ROUTE/displayarea data', python_data1 ,python_data2)
+    print('_______ROUTE/displayarea data', python_data1 ,python_data2, python_data3)
     return  jsonify([python_data1, python_data2,python_data3])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 

@@ -144,6 +144,9 @@ var showMore = function (msg,area, type) {
       tabtitle.innerHTML = "";
       tabhead.innerHTML = "";
       tabbody.innerHTML = "";
+      console.log("grabbed columnHeaders :", columnHeaders);
+      console.log("grabbed rows :", rows);
+      console.log("grabbed title :", title);
 
       // Build table head row
 
