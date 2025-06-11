@@ -152,7 +152,7 @@ def getlayeritems(nodelist,title):
     dfy = pd.DataFrame()
     if isinstance(nodelist, pd.DataFrame):
         dfy = nodelist
-        title = "Load data from Dataframe"+str(list(dfy.columns.values))
+        title = "Load data from Dataframe rows: "+str(len(dfy))
     elif isinstance(nodelist, list) and nodelist != []:
         dfy = pd.DataFrame()
         i = 0
@@ -3229,97 +3229,123 @@ def normalise():
     global formdata
     global layeritems
 
+    # 1. Get uploaded files
     files = request.files.getlist('files')
-    stream = str(request.form.get('meta_0_stream')).upper()
-    fixlevel = int(request.form.get('meta_0_fixlevel'))
-    purpose = request.form.get('meta_0_purpose')
-    filetype = request.form.get('meta_0_type')
-    file_path = request.form.get('meta_0_filepath')
-    print(f"___Route/normalise Form files: {[x for x in files]} Str: {stream} FP:{file_path} Fix {fixlevel} Purp {purpose} Ftype {filetype}")
 
+    # 2. Loop over metadata
+    meta_data = {}
+    for key in request.form:
+        if key.startswith('meta_'):
+            # meta_0_order → split into index and field
+            parts = key.split('_')
+            if len(parts) < 3:
+                continue  # malformed key
+            index = parts[1]
+            field = '_'.join(parts[2:])
+            meta_data.setdefault(index, {})[field] = request.form[key]
+
+    # 3. Add file paths from stored paths
+    for key in request.form:
+        if key.startswith('stored_path_'):
+            index = key.replace('stored_path_', '')
+            meta_data.setdefault(index, {})['stored_path'] = request.form[key]
+
+    # 4. Pair uploaded files with metadata (optional, depends on how many files you expect)
+    file_index = 0
     mainframe = pd.DataFrame()
     deltaframes = []
     aviframe = pd.DataFrame()
     DQstats = pd.DataFrame()
-    print("___Route/normalise", [x for x in files],"Str:", stream,"FP:", file_path)
-    if not files:
-        return jsonify({'error': 'No files provided'}), 400
+    print("___Route/normalise")
 
-    try:
-        for file in files:
-            formdata = {}
-            ImportFilename = str(file.filename)
-            print("_____ reading file outside normz",ImportFilename)
-            if ImportFilename.upper().find(".CSV") >= 0:
-                if file_path:
-                    with open(file_path, 'rb') as f:
-                        dfx = pd.read_csv(f)
+    for index, data in meta_data.items():
+        print(f"\nRow index {index}")
+        print(f"Stream: {data.get('stream')}")
+        stream = data.get('stream')
+        print(f"Order: {data.get('order')}")
+        order = data.get('order')
+        print(f"Type: {data.get('type')}")
+        filetype = data.get('type')
+        print(f"Purpose: {data.get('purpose')}")
+        purpose = data.get('purpose')
+        print(f"Fixlevel: {data.get('fixlevel')}")
+        fixlevel = int(data.get('fixlevel'))
+        print(f"Stored Path: {data.get('stored_path', '')}")
+        file_path = data.get('stored_path', '')
+        formdata = {}
+        ImportFilename = str(file_path)
+        print("_____ reading file outside normz",ImportFilename)
+        if file_path and os.path.exists(file_path):
+            try:
+                if file_path.upper().endswith('.CSV'):
+                    dfx = pd.read_csv(file_path)
+                    print("readingCSVfile outside normz")
+                elif file_path.upper().endswith('.XLSX'):
+                    dfx = pd.read_excel(file_path)
+                    print("readingEXCELfile outside normz")
                 else:
-                    dfx = pd.read_csv(file)
-                dfx['RNO'] = dfx.index
-                print("readingCSVfile inside normz")
-            elif ImportFilename.upper().find(".XLSX") >= 0:
-                if file_path:
-                    with open(file_path, 'rb') as f:
-                        dfx = pd.read_excel(f)
-                else:
-                    dfx = pd.read_excel(file)
-                dfx['RNO'] = dfx.index
-                print("readingEXCELfile inside normz")
+                    print("error-Unsupported file format")
+                    continue
 
-            print("____entering normz:", dfx.columns)
-            results = normz(stream,ImportFilename,dfx,fixlevel)
-        # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
-
-            print("__concat of DQstats", DQstats,results[1])
-            DQstats = pd.concat([DQstats,results[1]])
-            if purpose == "main":
-            # this is the main index
-                mainframe = results[0]
-            elif purpose == 'delta':
-            # this is one of many changes that needs to be applied to the main index
-                deltaframes.append(results[0])
-            elif purpose == 'avi':
-            # this is an addition of columns to the main index
-                aviframe =  results[0]
-# full stream now received - need to apply changes to main
-        if len(mainframe) > 0:
-            if len(deltaframes) > 0:
-                for delta in deltaframes:
-                    for change in delta:
-                        electID = change['ENOP']
-                        selected = mainframe.query("ENOP == @electID")
-                        selected = change
-            if len(aviframe) > 0:
-                main = mainframe.merge(aviframe, on='ENOP',how='left' )
-
-        print("__concat of mainframe", mainframe.head())
-        allelectors = mainframe
-
-        targetfile = str(file.filename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
-        mainframe.to_csv(targetfile)
-        allelectors.to_csv("ActiveElectoralRoll.csv")
-        ElectionSettings['importfile'] = targetfile
-        #    formdata['username'] = session['username']
-        mapfile = current_node.dir+"/"+current_node.file
-        if os.path.exists(TABLE_FILE):
-            with open(TABLE_FILE) as f:
-                table_data = json.load(f)
+                print("rows_loaded",len(dfx))
+                print("loaded columns",dfx.columns.tolist())
+            except Exception as e:
+                print("error-file access exception:",str(e))
         else:
-            table_data = []
+            print("error - File path does not exist or is not provided")
 
-        # Collect unique streams for dropdowns
-        streams = sorted(set(row['stream'] for row in table_data))
+        print("____entering normz:", dfx.columns)
+        results = normz(stream,ImportFilename,dfx,fixlevel, purpose)
+    # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
 
-        formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
-        layeritems = getlayeritems(mainframe, formdata['tabledetails'])
+        if purpose == "main":
+        # this is the main index
+            mainframe = results[0]
+        elif purpose == 'delta':
+        # this is one of many changes that needs to be applied to the main index
+            deltaframes.append(results[0])
+        elif purpose == 'avi':
+        # this is an addition of columns to the main index
+            aviframe =  results[0]
+        DQstats = pd.concat([DQstats,results[1]])
+        print("__concat of DQstats", DQstats,results[1])
+# full stream now received - need to apply changes to main
+    if len(mainframe) > 0:
+        print("__Processed mainframe electors:", len(mainframe))
+        if len(deltaframes) > 0:
+            for delta in deltaframes:
+                delta = pd.DataFrame(delta, columns=['PD','StreetName','Address1','Address2','Address3','Address4','Address5','Postcode','Prefix','AddressNumber','Firstname','Surname','DOB','ENO','CreatedMonth','ENOP','AV'])
+                for change in delta:
+                    mainframe = mainframe.append(change)
+                print("__Processed deltaframe electors:", len(delta))
+        if len(aviframe) > 0:
+            mainframe = mainframe.merge(aviframe, on='ENOP',how='left' )
+            print("__Processed aviframe:", len(aviframe))
+
+    mainframe = mainframe.reset_index(drop=True)
+    print("__concat of mainframe", mainframe)
+    allelectors = mainframe
+
+    targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
+    mainframe.to_csv(targetfile)
+    allelectors.to_csv("ActiveElectoralRoll.csv")
+    ElectionSettings['importfile'] = targetfile
+    #    formdata['username'] = session['username']
+    mapfile = current_node.dir+"/"+current_node.file
+    if os.path.exists(TABLE_FILE):
+        with open(TABLE_FILE) as f:
+            table_data = json.load(f)
+    else:
+        table_data = []
+
+    # Collect unique streams for dropdowns
+    streams = sorted(set(row['stream'] for row in table_data))
+
+    formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
+    layeritems = getlayeritems(mainframe.head(), formdata['tabledetails'])
 #        return render_template("Dash0.html", formdata=formdata,group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
-        print('_______ROUTE/normalise/exit:',ImportFilename)
-        return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
-
-#            return render_template('stream_processing_input.html' , DQstats=DQstats )
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    print('_______ROUTE/normalise/exit:',ImportFilename)
+    return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
 
 
 @app.route('/walks', methods=['POST','GET'])
