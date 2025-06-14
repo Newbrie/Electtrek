@@ -11,7 +11,7 @@ from datetime import datetime
 
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
-def normz(stream,ImportFilename,dfx,autofix,purpose):
+def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -20,47 +20,72 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
     datadir = config.workdirectories['datadir']
     os.chdir(workdir)
     os.chdir(workdir)
-    Env1 = sys.base_prefix
-    Mean_Lat = 51.240299
-    Mean_Long = -0.562301
+
+
+    def extract_initials(words):
+        """Extract initials from word list and return (remaining_words, initials_string)"""
+        initials = [w for w in words if re.fullmatch(r'([A-Z]\s?)+', w)]
+        remaining = [w for w in words if w not in initials]
+        return remaining, ' '.join(initials)
+
+    def classify_namecolumn(series):
+        """Count how often values in a column appear as common firstnames or surnames"""
+# Sample common names (you can expand these sets as needed)
+        COMMON_FIRSTNAMES = {'John', 'Jane', 'Mike', 'Manoja', 'David', 'Ashley', 'Robert', 'Emily'}
+        COMMON_SURNAMES = {'Smith', 'Davies', 'Thomas', 'Baker', 'Radford', 'Roberts', 'Senthilnathan', 'Stephens'}
+
+        counts = {'firstname': 0, 'surname': 0}
+        for val in series.dropna():
+            val = val.strip()
+            if val in COMMON_FIRSTNAMES:
+                counts['firstname'] += 1
+            if val in COMMON_SURNAMES:
+                counts['surname'] += 1
+        return counts
 
     def NormaliseName(df):
         df = df.copy()
+        if 'ElectorName' not in df.columns:
+            if 'Initials' not in df.columns:
+                df['ElectorName'] = df['Firstname']+" "+df['Surname']
+                df['ElectorName_Normalized'] = df['ElectorName']
+            else:
+                df['ElectorName'] = df['Firstname']+" "+df['Initials']+" "+df['Surname']
+                df['ElectorName_Normalized'] = df['ElectorName']
+        else:
+            # Step 1: Split and extract initials
+            parts = df['ElectorName'].dropna().apply(lambda x: x.strip().split())
+            processed = parts.apply(lambda x: extract_initials(x))
+            df['Initials'] = processed.apply(lambda x: x[1])
+            df['part1'] = processed.apply(lambda x: x[0][0] if len(x[0]) > 0 else None)
+            df['part2'] = processed.apply(lambda x: x[0][1] if len(x[0]) > 1 else None)
 
-        # Split ElectorName into components if ElectorName exists
-        def split_name(name):
-            parts = str(name).split()
-            if len(parts) < 2:
-                return pd.Series([None, None, None])
-            firstname = parts[0]
-            surname = parts[-1]
-            initials = ' '.join(parts[1:-1]) if len(parts) > 2 else None
-            return pd.Series([firstname, initials, surname])
+            # Step 2: Classify part1 vs part2
+            classification = {
+                'part1': classify_namecolumn(df['part1']),
+                'part2': classify_namecolumn(df['part2'])
+            }
 
-        # Always try to split ElectorName
-        name_parts = df['ElectorName'].apply(split_name)
-        name_parts.columns = ['split_firstname', 'split_initials', 'split_surname']
+            firstname_col = 'part1' if classification['part1']['firstname'] >= classification['part2']['firstname'] else 'part2'
+            surname_col = 'part2' if firstname_col == 'part1' else 'part1'
 
-        # Fill missing name parts only
-        for col, split_col in zip(['Firstname', 'Initials', 'Surname'],
-                                  ['split_firstname', 'split_initials', 'split_surname']):
-            df[col] = df[col].fillna(name_parts[split_col])
+            # Step 3: Assign columns
+            df['Firstname'] = df[firstname_col]
+            df['Surname'] = df[surname_col]
 
-        # Always try to construct ElectorName if any component is missing or ElectorName is missing
-        def join_name(row):
-            if pd.notnull(row['Firstname']) and pd.notnull(row['Surname']):
-                parts = [row['Firstname']]
-                if pd.notnull(row['Initials']):
-                    parts.append(row['Initials'])
-                parts.append(row['Surname'])
-                return ' '.join(parts)
-            return row['ElectorName']  # fallback to original
+            # Step 4: Create normalized ElectorName
+            df['ElectorName_Normalized'] = df[['Firstname', 'Initials', 'Surname']].fillna('').apply(
+                lambda row: ' '.join(filter(None, row)), axis=1
+            )
 
-        df['ElectorName'] = df.apply(join_name, axis=1)
+                    # Reorder if desired
+        cols_to_front = ['ElectorName', 'Firstname', 'Initials', 'Surname', 'ElectorName_Normalized']
+        df = df[[c for c in cols_to_front if c in df.columns] + [c for c in df.columns if c not in cols_to_front]]
 
+        # Return full enriched DataFrame
         return df
 
-    def DFtoDF (df):
+    def DFpostcodetoDF (df):
         vars = []
         vars_ = []
         varvalues = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
@@ -183,206 +208,133 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                         return col
         return None
 
-    def normalise_id_columns(df):
-    # Track which columns exist and which are missing
-        required_cols = ['ENO', 'ENOT', 'ENOP', 'Suffix', 'PD']
-        available = [col for col in required_cols if col in df.columns and df[col].notna().any()]
 
-        # Early exit if we don't have enough to infer the rest
-        if set(available).isdisjoint({'ENOT', 'ENOP', 'Suffix'}) or ('ENO' not in available and 'PD' not in available):
-            return "Insufficient data"
+    def classify_column(series):
+        """
+        Classifies a column based on regex pattern matching,
+        requiring ENO and Suffix to be positive integers (no leading zeros).
+        """
+        series = series.dropna().astype(str).str.strip()
 
-        # Preserve original
+    #    patterns = {
+    #        'ENOP': r'^[A-Za-z]+[0-9]*-[1-9][0-9]*[./][1-9][0-9]*$',  # PD-ENO.Suffix or PD-ENO/Suffix
+    #        'ENOT': r'^[A-Za-z]+[0-9]*-[1-9][0-9]*$',                 # PD-ENO
+    #        'ENO': r'^[1-9][0-9]*$',                                  # positive integer ENO only
+    #        'PD': r'^[A-Za-z]+[0-9]*$',                               # alphanumeric PD
+    #        'Suffix': r'^[1-9][0-9]*$',                               # positive integer suffix
+    #    }
+
+        patterns = {
+            'ENOP': r'^[A-Za-z]+\d+-\d+[./]\d+$',
+            'ENOT': r'^[A-Za-z]+\d+-\d+$',
+            'ENO': r'^[1-9]\d*$',
+            'PD': r'^[A-Za-z]+\d+$',
+            'Suffix': r'^[1-9]\d*$',
+        }
+        best_label = 'Unknown'
+        best_ratio = 0
+
+        for label, pattern in patterns.items():
+            match_ratio = series.str.match(pattern).mean()
+            if match_ratio > best_ratio:
+                best_ratio = match_ratio
+                best_label = label
+
+        return best_label if best_ratio >= 0.5 else 'Unknown'
+
+
+    def normalise_eno_column(df):
+#In the normalize_eno_column(df) logic:
+#Only classify columns named X, PD, ENO, ENOT, ENOP, or Suffix (if they exist in the input df).
+#Classify each column using regex based on:
+#PD: alphanumeric prefix starting with letters and ending with digits
+#ENO: integer > 0
+#Suffix: integer > 0 or empty
+#ENOT: PD-ENO
+#ENOP: PD-ENO.Suffix or PD-ENO/Suffix (with / normalized to .)
+#Rename columns according to classification only if classified as PD, ENO, or Suffix — and only if there is no existing PD, ENO, or Suffix column (i.e. these values are not present already).
+#If a column is classified as ENOT or ENOP, use it to derive PD, ENO, Suffix, ENOT, and ENOP.
+#Always normalize ENOP to use . instead of /.
+#Keep X column unless it is renamed due to classification.
         df = df.copy()
 
-        # Derive Suffix from ENOP or ENOT
-        if 'Suffix' not in df.columns:
-            if 'ENOP' in df.columns:
-                df['Suffix'] = df['ENOP'].str.extract(r'\.(.*)$')[0]
-            else:
-                df['Suffix'] = 0
+        allowed_cols = {'X', 'PD', 'ENO', 'Suffix', 'ENOT', 'ENOP'}
+        candidate_cols = [col for col in df.columns if col in allowed_cols]
 
-        # Derive ENOT from ENOP or PD + ENO
-        if 'ENOT' not in df.columns:
-            if 'ENOP' in df.columns:
-                df['ENOT'] = df['ENOP'].str.extract(r'(.*)\.')[0]
-            elif 'PD' in df.columns and 'ENO' in df.columns:
-                df['ENOT'] = df['PD'] + '-' + df['ENO'].astype("string")
+        classification_map = {}
+        for col in candidate_cols:
+            label = classify_column(df[col])
+            if label != 'Unknown':
+                classification_map[col] = label
 
-        # Derive ENOP from ENOT and Suffix
-        if 'ENOP' not in df.columns and 'ENOT' in df.columns and 'Suffix' in df.columns:
-            df['ENOP'] = df['ENOT'] + '.' + df['Suffix'].astype("string")
+        # Rename columns based on classification (only if not already present)
+        for col, label in classification_map.items():
+            if label in {'PD', 'ENO', 'Suffix'} and label not in df.columns:
+                df.rename(columns={col: label}, inplace=True)
 
-        # Derive ENO from ENOT or ENOP
-        if 'ENO' not in df.columns:
-            if 'ENOT' in df.columns:
-                df['ENO'] = df['ENOT'].str.extract(r'-(.*?)(?:\.|$)')[0]
-            elif 'ENOP' in df.columns:
-                df['ENO'] = df['ENOP'].str.extract(r'-(.*?)(?:\.|$)')[0]
+        # Use ENOT/ENOP for parsing only if PD, ENO, and Suffix are not already present
+        if 'PD' not in df.columns or 'ENO' not in df.columns:
+            eno_source_col = None
+            for col, label in classification_map.items():
+                if label in {'ENOT', 'ENOP'}:
+                    eno_source_col = col
+                    break
 
-        # Derive PD from ENOT or ENOP
-        if 'PD' not in df.columns:
-            if 'ENOT' in df.columns:
-                df['PD'] = df['ENOT'].str.extract(r'^(.*?)-')[0]
-            elif 'ENOP' in df.columns:
-                df['PD'] = df['ENOP'].str.extract(r'^(.*?)-')[0]
+            if eno_source_col:
+                parse_series = df[eno_source_col].astype(str).str.strip().str.replace('/', '.', regex=False)
+
+                df['PD'] = parse_series.str.extract(r'^([A-Za-z]+[0-9]+)-')[0]
+                df['ENO'] = parse_series.str.extract(r'-([1-9][0-9]*)')[0]
+                df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
+
+                # Clean types
+                df['ENO'] = pd.to_numeric(df['ENO'], errors='coerce')
+                df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce')
+                df.loc[df['ENO'] <= 0, 'ENO'] = None
+                df.loc[df['Suffix'] == 0, 'Suffix'] = None
+
+        # Derive ENOT and ENOP if PD and ENO exist
+        df['ENOT'] = None
+        valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
+        df.loc[valid_enot_mask, 'ENOT'] = (
+            df.loc[valid_enot_mask, 'PD'] + '-' + df.loc[valid_enot_mask, 'ENO'].astype(int).astype(str)
+        )
+
+        df['ENOP'] = df['ENOT']
+        valid_enop_mask = valid_enot_mask & df['Suffix'].notna()
+        df.loc[valid_enop_mask, 'ENOP'] = (
+            df.loc[valid_enop_mask, 'ENOT'] + '.' + df.loc[valid_enop_mask, 'Suffix'].astype(int).astype(str)
+        )
 
         return df
 
-    def reclassify_eno_column(df):
-        """
-        Classifies and renames the 'ENO' column into ENO, ENOT, or ENOP depending on its content pattern:
-        - ENO: Just the base number (e.g. '123')
-        - ENOT: Has a '-' but no '.' (e.g. 'AA1-123')
-        - ENOP: Has both '-' and '.' (e.g. 'AA1-123.9')
-        The function returns a DataFrame with the correctly named column.
-        """
-        df = df.copy()
 
-        if 'X' not in df.columns:
-            raise ValueError("Input DataFrame must have an 'X' column.")
 
-        # Define patterns
-        def classify(val):
-            if pd.isna(val):
-                return 'ENO'
-            val = str(val)
-            if '-' in val and '.' in val:
-                return 'ENOP'
-            elif '-' in val:
-                return 'ENOT'
-            else:
-                return 'ENO'
 
-        # Classify each row
-        df['classification'] = df['X'].apply(classify)
+    def add_row_number(df, column_name='RNO'):
 
-        # Create new columns based on classification
-        df['ENOP'] = df.apply(lambda x: x['X'] if x['classification'] == 'ENOP' else None, axis=1)
-        df['ENOT'] = df.apply(lambda x: x['X'] if x['classification'] == 'ENOT' else None, axis=1)
-        df['ENO_clean'] = df.apply(lambda x: x['X'] if x['classification'] == 'ENO' else None, axis=1)
+        # Only add if RNO doesn't already exist
+        if column_name not in df.columns:
+            df[column_name] = range(1, len(df) + 1)
 
-        # Drop old column and classification marker
-        df.drop(columns=['X', 'classification'], inplace=True)
-
-        # Rename to final expected columns (fill only non-null ones)
-        for col in ['ENO_clean', 'ENOT', 'ENOP']:
-            if df[col].notna().any():
-                df.rename(columns={col: col.replace('_clean', '')}, inplace=True)
-            else:
-                df.drop(columns=[col], inplace=True)
-
+        # Reorder so RNO is the first column
+        cols = [column_name] + [col for col in df.columns if col != column_name]
         return df
 
-    electors0 = pd.DataFrame()
-    electors10 = pd.DataFrame()
-    DQstats = pd.DataFrame(columns=['Stream','File','Field','P0', 'P1', 'P2', 'P3'])
 
+    def NormaliseAddress(RunningVals,Lookups,filename,df):
 
-#AUTO DATA IMPORT
-#1 - read in columns into a normalised list if columns and derive outcomes df
-#2 - check the content of EVERY column matches the desired outcome type 	(need content checkers for each column type - eg Fname, Surname, initials, ENOP, ENO, ENOS, PD,
-#3 - compare names with the required outcomes column list to identify all present and absent
-#4 - fill all factor gaps first - row by row
-#	eg fname, sname, initials, ENO, Suffix, Postcode, Address1-6
-#5 - then fill any ‘multi-col value derived’ gaps second row by row
-# 	eg ename, ENOP, ENOS, StreetName, AddressPrefix, Address_1-6, Lat, Long , Elevation
-#6 - fill any ‘group row value derived’ columns third by
-# 	eg Ward (needs a contains test of PD mean lat long), Con(needs a contains test of PD mean lat long), County(needs a contains test of PD mean lat long), Country(needs a contains test of PD mean lat long),
-
-#  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
-
-    electors0 = DFtoDF(dfx)
-    electors100 = dfx
-
-    dfz = electors100[1:10]
-    dfzmax = dfz.shape[0]
-    print(dfz.columns," data rows: ", dfzmax )
-
-    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
-    "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
-    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDESCRIPTION" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","ELECTORNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
-
-
-    Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
-    Outcols = Outcomes.columns.to_list()
-    for i in range(len(Outcols)):
-        DQstats.loc[i,'P0'] = 0
-        DQstats.loc[i,'P1'] = 0
-        DQstats.loc[i,'P2'] = 0
-        DQstats.loc[i,'P3'] = 0
-    print(f"___DQ Stats1",DQstats, Outcols)
-
-
-    for z in Outcols :
-        DQstats.loc[Outcols.index(z),'Stream'] = stream.upper()
-        DQstats.loc[Outcols.index(z),'File'] = ImportFilename
-        DQstats.loc[Outcols.index(z),'Field'] = z
-    print(f"___DQ Stats2",DQstats, Outcols)
-
-#pass 0 - how many required fieldnames are in the source file?
-    incols = electors100.columns
-
-    for y in list(set(Outcols) & set(electors100.columns)):
-        DQstats.loc[Outcols.index(y),'P0'] = 1
-    print(f"___DQ Stats3",DQstats, electors100.columns)
-
-    if autofix == 0:
-        print(f"____Autofix = 0 , DQstats:{DQstats} at : {datetime.now()}")
-        return [electors100,DQstats]
-#        dfzres = extractfactors(dfz)
-#        dfzres = checkENOP(dfz)
-#        print("found ENO match in column: ", dfzres)
-
-# pass 1 - how many required fieldnames can be derived by simply capitalising and debunking fields in the source file
-    INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYING","").replace(" ","").replace("_","") for x in incols]
-    Incolstuple = [(incols[INCOLS.index(x)],COLNORM[x]) for x in list(set(INCOLS) & set(COLNORM.keys()))]
-    print(f"__________Debunked: {Incolstuple} ")
-
-    DQstats.loc[Outcols.index('RNO'),'P1'] = 1
-    for a,b in Incolstuple:
-        electors100 = electors100.rename(columns= {a: b})
-        print(f"___NRenamed from {a} to {b} ")
-
-    electors100 = electors100.reset_index(drop=True)
-    for y in list(set(Outcols) & set(electors100.columns)):
-        DQstats.loc[Outcols.index(y), 'P1'] = 1
-    if autofix == 1:
-        print(f"____Autofix = 1 , DQstats:{DQstats} at : {datetime.now()}")
-        return [electors100,DQstats]
-#pass 2 - how many required required identity columns and name columns can be derived from existing columns, eg ENOP  etc
-    electors100 = reclassify_eno_column(electors100)
-    print ("_____ENO & NAME RECLASSIFICATION start: ", electors100.columns)
-    electors100 = normalise_id_columns(electors100)
-    electors100 = NormaliseName(electors100)
-    electors100 = electors100.reset_index(drop=True)
-    DQstats.loc[Outcols.index('RNO'),'P2'] = 1
-    print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
-    for y in list(set(Outcols) & set(electors100.columns)):
-        DQstats.loc[Outcols.index(y), 'P2'] = 1
-    if autofix == 2:
-        print(f"____Autofix = 2 , DQstats:{DQstats} at : {datetime.now()}")
-        return [electors100,DQstats]
-#pass 3 - how many required 'purpose-related columns can be calculated from existing columns, ie avi - AV, adds - new ID, Streetname,AddrNo, & main - Lat Long, StreetName, AddressPrefix, AddressNumber  etc
-    if purpose == 'delta':
-        electors2 = electors100[electors100['CreatedMonth'] > 0] # filter out all records with no Postcode
-        print("____________DELTA file processing starting for : ",ImportFilename, electors2.columns )
-    if purpose == 'main' or purpose == 'delta':
+# fort convert postcodes to 8 charcter compressed format used in postcode files
+        df = DFpostcodetoDF(df)
         Addno1 = ""
         Addno2 = ""
         Addno = ""
         count = 0
-        dfx = pd.read_csv(bounddir+"/National_Statistics_Postcode_Lookup_UK_20241022.csv")
-        df1 = dfx[['Postcode 1','Latitude','Longitude']]
-        df1 = df1.rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
-        electors10 = electors100.dropna(subset=['Postcode']) # filter out all records with no Postcode
-
-        electors1 = electors10.merge(df1, how='left', on='Postcode' )
-        electors1.to_csv("mergedlatlong.csv")
-        df1 = pd.read_csv(bounddir+"/open_postcode_elevation.csv")
-        df1.columns = ["Postcode","Elevation"]
-        electors2 = electors10.merge(df1, how='left', on='Postcode' )
-        print("___Postcode merged")
+        electors10 = df.dropna(subset=['Postcode']) # filter out all records with no Postcode
+        electors1 = electors10.merge(Lookups['LatLong'], how='left', on='Postcode' )
+        electors1.to_csv(filename+"-latlongs.csv")
+        electors2 = electors1.merge(Lookups['Elevation'], how='left', on='Postcode' )
+        print("____Lat Long and Elevation merged")
         electors2['Lat'] = electors1['Lat'].astype(float)
         electors2['Long'] = electors1['Long'].astype(float)
         electors2['AddressNumber'] = ""
@@ -398,37 +350,26 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
         #  set up the council attribute
 
         for index, elector in electors2.iterrows():
-            electors2.loc[index,'RNO'] = index
-#            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
-#                enot = elector['ENOT'].split("-")
-#                electors2.loc[index,'PD'] =  enot[0]
-#                electors2.loc[index,'ENO'] = enot[1]
-#            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOP'),'P2'] == 1:
-#                enop = elector['ENOP'].split("-")
-#                electors2.loc[index,'PD'] =  enop[0]
-#                electors2.loc[index,'ENO'] = enop[1].split(".")[0]
-#                electors2.loc[index,'Suffix'] = enop[1].split(".")[1]
-#            electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
-            if DQstats.loc[Outcols.index('ElectorName'),'P2'] != 1:
-                electors2.loc[index,'ElectorName'] = str(elector['Surname']) +" "+ str(elector['Firstname'])
-            if DQstats.loc[Outcols.index('Firstname'),'P2'] != 1:
-                wordlist = str(elector['ElectorName']).split()
-                l = len(wordlist)
-                electors2.loc[index,'Surname'] = str(wordlist[0])
-                if l>1:
-                    electors2.loc[index,'Firstname'] = str(wordlist[1])
-                if l>2:
-                    for i in range(l-2):
-                        electors2.loc[index,'Initials'] = "".join(wordlist[i+2],)
+        #            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
+        #                enot = elector['ENOT'].split("-")
+        #                electors2.loc[index,'PD'] =  enot[0]
+        #                electors2.loc[index,'ENO'] = enot[1]
+        #            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOP'),'P2'] == 1:
+        #                enop = elector['ENOP'].split("-")
+        #                electors2.loc[index,'PD'] =  enop[0]
+        #                electors2.loc[index,'ENO'] = enop[1].split(".")[0]
+        #                electors2.loc[index,'Suffix'] = enop[1].split(".")[1]
+        #            electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
 
-                print("no PD:", elector)
-            if DQstats.loc[Outcols.index('Firstname'),'P2'] != 1 :
-                print("No Firstname:", elector)
           #  set up the address attributes
+            if elector.ElectorName == "Fenton Luke":
+                print("_____foundexception Luke Fenton", elector)
+                raise Exception('Luke Fenton no lat long')
+
             xx = str(elector["Address1"])
             addr = xx.replace('"', '')
-    #        Addno1 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address1"]))
-    #        Addno2 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address2"]))
+        #        Addno1 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address1"]))
+        #        Addno2 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address2"]))
             Addno1 = re.search("(?:House|Flat|Apartment)?\s*((\d+[A-Za-z]?(?:\s*-\s*\d+[A-Za-z]?|\s*/\s*\d+[A-Za-z]?)?[\s,]*)+)", str(elector["Address1"]))
             Addno2 = re.search("(?:House|Flat|Apartment)?\s*((\d+[A-Za-z]?(?:\s*-\s*\d+[A-Za-z]?|\s*/\s*\d+[A-Za-z]?)?[\s,]*)+)", str(elector["Address2"]))
             prefix = str(elector["Address1"]).lstrip()
@@ -442,7 +383,7 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                 electors2.loc[index,'Address_1'] = elector["Address3"]
                 electors2.loc[index,'Address_2'] = elector["Address4"]
                 electors2.loc[index,'Address_3'] = elector["Address5"]
-                electors2.loc[index,'Address_4'] = elector["Address6"]
+                electors2.loc[index,'Address_4'] = elector.get('Address6', None)
                 print ("len00:", 0, "ind10:", 0, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
               else:
                 Addnolen = len(Addno2.group())
@@ -460,7 +401,7 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                   electors2.loc[index,'Address_1'] = elector["Address3"]
                   electors2.loc[index,'Address_2'] = elector["Address4"]
                   electors2.loc[index,'Address_3'] = elector["Address5"]
-                  electors2.loc[index,'Address_4'] = elector["Address6"]
+                  electors2.loc[index,'Address_4'] = elector.get('Address6', None)
                   print ("len010:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             else:
               if Addno2 is None:
@@ -480,7 +421,7 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                   electors2.loc[index,'Address_2'] = elector["Address3"]
                   electors2.loc[index,'Address_3'] = elector["Address4"]
                   electors2.loc[index,'Address_4'] = elector["Address5"]
-                  electors2.loc[index,'Address_5'] = elector["Address6"]
+                  electors2.loc[index,'Address_5'] = elector.get('Address6', None)
                   print ("len100:", Addnolen, "ind2:", Addnoindex, "str:", street, "addr:", elector['Address_1'],"addr2:", elector['Address_2'])
               else:
                 if re.sub(r"\s+", "", str(elector['Address2'])) == re.sub(r"\s+", "", str(elector['Postcode'])):
@@ -512,13 +453,13 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                         street = str(elector["Address3"])
                         electors2.loc[index,'Address_1'] = elector["Address4"]
                         electors2.loc[index,'Address_2'] = elector["Address5"]
-                        electors2.loc[index,'Address_3'] = elector["Address6"]
+                        electors2.loc[index, 'Address_3'] = elector.get('Address6', None)
                         print ("len110:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
                     else:
                         electors2.loc[index,'Address_1'] = elector["Address3"]
                         electors2.loc[index,'Address_2'] = elector["Address4"]
                         electors2.loc[index,'Address_3'] = elector["Address5"]
-                        electors2.loc[index,'Address_4'] = elector["Address6"]
+                        electors2.loc[index,'Address_4'] = elector.get('Address6', None)
                         print ("len111:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
                     Addnolen1 = len(Addno1.group())
                     Addno1 = str(Addno1.group())
@@ -534,11 +475,12 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
             if math.isnan(elector.Lat):
               if str(elector.Postcode) != "?":
                 url = "http://api.getthedata.com/postcode/"+str(elector.Postcode).replace(" ","+")
-            # It is a good practice not to hardcode the credentials. So ask the user to enter credentials at runtime
+              # It is a good practice not to hardcode the credentials. So ask the user to enter credentials at runtime
                 myResponse = requests.get(url)
                 print("retrieving postcode latlong",url)
                 print (myResponse.status_code)
                 print (myResponse.content)
+
             # For successful API call, response code will be 200 (OK)
                 if(myResponse.status_code == 200):
             # Loading the response data into a dict variable
@@ -546,35 +488,140 @@ def normz(stream,ImportFilename,dfx,autofix,purpose):
                   if latlong['status'] == "match" :
                       electors2.loc[index,"Lat"] = latlong['data']['latitude']
                       electors2.loc[index,"Long"] = latlong['data']['longitude']
+                      RunningVals['Last_Lat'] = latlong['data']['latitude']
+                      RunningVals['Last_Long'] = latlong['data']['longitude']
                   else:
                       print("______Postcode Nomatch & GTD Response:", str(elector.Postcode), myResponse)
-                      electors2.loc[index,"Lat"] = Mean_Lat
-                      electors2.loc[index,"Long"] = Mean_Long
-                  Mean_Lat = statistics.mean([Decimal(Mean_Lat), Decimal(electors2.loc[index,"Lat"])])
-                  Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(electors2.loc[index,"Long"])])
+                      electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
+                      electors2.loc[index,"Long"] = RunningVals['Last_Long']
+                  RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(electors2.loc[index,"Lat"])])
+                  RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(electors2.loc[index,"Long"])])
                 else:
-                  electors2.loc[index,"Lat"] = Mean_Lat
-                  electors2.loc[index,"Long"] = Mean_Long
+                  electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
+                  electors2.loc[index,"Long"] = RunningVals['Last_Long']
                   print("______Postcode Error GTD Response:", str(elector.Postcode), myResponse.status_code)
-                  Mean_Lat = statistics.mean([Decimal(Mean_Lat), Decimal(elector.Lat)])
-                  Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(elector.Long)])
+                  RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(elector.Lat)])
+                  RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(elector.Long)])
+              else:
+                electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
+                electors2.loc[index,"Long"] = RunningVals['Last_Long']
             else:
-                Mean_Lat = statistics.mean([Decimal(Mean_Lat), Decimal(elector.Lat)])
-                Mean_Long = statistics.mean([Decimal(Mean_Long), Decimal(elector.Long)])
+                RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(elector.Lat)])
+                RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(elector.Long)])
 
             count = count + 1
             if count > 500: break
+        return electors2
+
+
+    electors10 = pd.DataFrame()
+    DQstats = pd.DataFrame(columns=['Stream','File','Field','P0', 'P1', 'P2', 'P3'])
+
+
+#AUTO DATA IMPORT
+#1 - read in columns into a normalised list if columns and derive outcomes df
+#2 - check the content of EVERY column matches the desired outcome type 	(need content checkers for each column type - eg Fname, Surname, initials, ENOP, ENO, ENOS, PD,
+#3 - compare names with the required outcomes column list to identify all present and absent
+#4 - fill all factor gaps first - row by row
+#	eg fname, sname, initials, ENO, Suffix, Postcode, Address1-6
+#5 - then fill any ‘multi-col value derived’ gaps second row by row
+# 	eg ename, ENOP, ENOS, StreetName, AddressPrefix, Address_1-6, Lat, Long , Elevation
+#6 - fill any ‘group row value derived’ columns third by
+# 	eg Ward (needs a contains test of PD mean lat long), Con(needs a contains test of PD mean lat long), County(needs a contains test of PD mean lat long), Country(needs a contains test of PD mean lat long),
+
+#  make two electors dataframes - one for compressed 7 char postcodes(electors0), the other for 8 char postcodes(electors10)
+
+
+    electors100 = dfx
+    print ("_____pass 0.1 start: ", dfx.columns)
+
+    electors100 = add_row_number(electors100)
+    print ("_____pass 0.2 start: ", electors100.columns)
+
+    dfz = electors100[1:10]
+    dfzmax = dfz.shape[0]
+    print(dfz.columns," data rows: ", dfzmax )
+
+    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
+    "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
+    "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDESCRIPTION" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","ELECTORNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
+
+
+    Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
+    Outcols = Outcomes.columns.to_list()
+    for i in range(len(Outcols)):
+        DQstats.loc[i,'P0'] = 0
+        DQstats.loc[i,'P1'] = 0
+        DQstats.loc[i,'P2'] = 0
+        DQstats.loc[i,'P3'] = 0
+    print(f"___DQ Stats1",DQstats, Outcols)
+
+    for z in Outcols :
+        DQstats.loc[Outcols.index(z),'Stream'] = stream.upper()
+        DQstats.loc[Outcols.index(z),'File'] = ImportFilename
+        DQstats.loc[Outcols.index(z),'Field'] = z
+    print(f"___DQ Stats2",DQstats, Outcols)
+
+#pass 0 - how many required fieldnames are in the source file?
+
+    incols = list(set(electors100.columns))
+
+    for y in list(set(Outcols) & set(electors100.columns)):
+        DQstats.loc[Outcols.index(y),'P0'] = 1
+    electors100['Source_ID'] = ImportFilename
+    electors100['Stream'] = stream
+    electors100['Purpose'] = purpose
+    print(f"___DQ Stats3",DQstats, electors100.columns)
+
+    if autofix == 0:
+        print(f"____Autofix = 0 , DQstats:{DQstats} at : {datetime.now()}")
+        return [electors100,DQstats]
+#        dfzres = extractfactors(dfz)
+#        dfzres = checkENOP(dfz)
+#        print("found ENO match in column: ", dfzres)
+
+# pass 1 - how many required fieldnames can be derived by simply capitalising and debunking fields in the source file
+    INCOLS = [x.upper().replace("ELECTOR","").replace("PROPERTY","").replace("REGISTERED","").replace("QUALIFYING","").replace(" ","").replace("_","") for x in incols]
+    Incolstuple = [(incols[INCOLS.index(x)],COLNORM[x]) for x in list(set(INCOLS) & set(COLNORM.keys()))]
+    print(f"__________Debunked: {Incolstuple} INCOLS{INCOLS} incols{incols} CONNORMKEYS {COLNORM.keys()}")
+
+    for a,b in Incolstuple:
+        electors100 = electors100.rename(columns= {a: b})
+        print(f"___NRenamed from {a} to {b} ")
+
+    electors100 = electors100.reset_index(drop=True)
+    for y in list(set(Outcols) & set(electors100.columns)):
+        DQstats.loc[Outcols.index(y), 'P1'] = 1
+    if autofix == 1:
+        print(f"____Autofix = 1 , DQstats:{DQstats} at : {datetime.now()}")
+        return [electors100,DQstats]
+
+#pass 2 - how many required required identity columns and name columns can be derived from existing columns, eg ENOP  etc
+    print ("_____ENO & NAME RECLASSIFICATION start: ", electors100.columns)
+    electors100 = normalise_eno_column(electors100)
+    electors100 = NormaliseName(electors100)
+    electors100 = electors100.reset_index(drop=True)
+
+    print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
+    for y in list(set(Outcols) & set(electors100.columns)):
+        DQstats.loc[Outcols.index(y), 'P2'] = 1
+    if autofix == 2:
+        print(f"____Autofix = 2 , DQstats:{DQstats} at : {datetime.now()}")
+        return [electors100,DQstats]
+
+#pass 3 - how many required 'purpose-related columns can be calculated from existing columns, ie avi - AV, adds - new ID, Streetname,AddrNo, & main - Lat Long, StreetName, AddressPrefix, AddressNumber  etc
+    if purpose == 'delta':
+        electors2 = NormaliseAddress(RunningVals,Lookups,ImportFilename,electors100)
+        print(f"____________DELTA file {ImportFilename} contains {len(electors2)} records: " )
+    elif purpose == 'main':
+        electors2 = NormaliseAddress(RunningVals,Lookups,ImportFilename,electors100)
         print("____________MAIN file processing complete for : ",ImportFilename, electors2.columns )
-
     elif purpose == 'avi':
-        electors2 = pd.DataFrame(electors100, columns=['ENOP','AV'])
+        # not processing addresses , just the elector identity and AV
+        electors2 = pd.DataFrame(electors100, columns=['ENOP','ENOT','Suffix','ENO','AV'])
         print("____________AVI file processing complete for : ",ImportFilename, electors2.columns )
-
     print("____________Normalisation_Complete________in ",ImportFilename )
 
-    # pass 3 - how many required fieldnames can be derived by factoring and regrouping fields in the source file
-
-    DQstats.loc[Outcols.index('RNO'),'P3'] = 1
     for y in list(set(Outcols) & set(electors2.columns)):
         DQstats.loc[Outcols.index(y),'P3'] = 1
     if autofix == 3:

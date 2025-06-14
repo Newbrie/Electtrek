@@ -1705,6 +1705,7 @@ environment = jinja2.Environment(loader=templateLoader,auto_reload=True)
 
 
 
+
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(30), unique=True, nullable=False)
@@ -2966,7 +2967,7 @@ def displayareas():
     python_data3 = {}
     python_data2 = {}
     python_data1 = {}
-    print('_______ROUTE/displayareas:', str(layeritems[2]))
+    print('_______ROUTE/displayareas:', len(layeritems),str(layeritems[2]))
     if layeritems != []:
         json_data = layeritems[1].to_json(orient='records', lines=False)
         json_cols = json.dumps(layeritems[0])
@@ -3229,6 +3230,24 @@ def normalise():
     global formdata
     global layeritems
 
+    RunningVals = {
+    'Mean_Lat' : 51.240299,
+    'Mean_Long' : -0.562301,
+    'Last_Lat'  : 51.240299,
+    'Last_Long' : -0.562301
+    }
+
+    Lookups = {
+        'LatLong': {},
+        'Elevation': {}
+    }
+
+    dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20241022.csv")
+    Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
+    Lookups['LatLong'] = Lookups['LatLong'].rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
+    Lookups['Elevation'] = pd.read_csv(config.workdirectories['bounddir']+"/open_postcode_elevation.csv")
+    Lookups['Elevation'].columns = ["Postcode","Elevation"]
+
     # 1. Get uploaded files
     files = request.files.getlist('files')
 
@@ -3275,55 +3294,73 @@ def normalise():
         formdata = {}
         ImportFilename = str(file_path)
         print("_____ reading file outside normz",ImportFilename)
-        if file_path and os.path.exists(file_path):
-            try:
+        if os.path.exists(TABLE_FILE):
+            with open(TABLE_FILE) as f:
+                table_data = json.load(f)
+        else:
+            table_data = []
+    # Collect unique streams for dropdowns
+        streams = sorted(set(row['stream'] for row in table_data))
+
+        dfx = pd.DataFrame()
+
+        try:
+            if file_path and os.path.exists(file_path):
                 if file_path.upper().endswith('.CSV'):
-                    dfx = pd.read_csv(file_path)
+                    dfx = pd.read_csv(file_path, encoding='ISO-8859-1')
                     print("readingCSVfile outside normz")
                 elif file_path.upper().endswith('.XLSX'):
                     dfx = pd.read_excel(file_path)
                     print("readingEXCELfile outside normz")
                 else:
                     print("error-Unsupported file format")
-                    continue
+                    return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+            else:
+                flash("error - File path does not exist or is not provided")
+                print("error - File path does not exist or is not provided")
+                return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+        except Exception as e:
+            flash("error-file access exception:"+str(e))
+            print("error-file access exception:",str(e))
+            return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
 
-                print("rows_loaded",len(dfx))
-                print("loaded columns",dfx.columns.tolist())
-            except Exception as e:
-                print("error-file access exception:",str(e))
-        else:
-            print("error - File path does not exist or is not provided")
-
-        print("____entering normz:", dfx.columns)
-        results = normz(stream,ImportFilename,dfx,fixlevel, purpose)
+        print("____entering normz:", file_path,dfx.columns)
     # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
 
         if purpose == "main":
         # this is the main index
+            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
             mainframe = results[0]
         elif purpose == 'delta':
         # this is one of many changes that needs to be applied to the main index
+            dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # filter out all records with no Postcode
+            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
             deltaframes.append(results[0])
         elif purpose == 'avi':
         # this is an addition of columns to the main index
+            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
             aviframe =  results[0]
         DQstats = pd.concat([DQstats,results[1]])
+        formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
+        layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
         print("__concat of DQstats", DQstats,results[1])
 # full stream now received - need to apply changes to main
     if len(mainframe) > 0:
-        print("__Processed mainframe electors:", len(mainframe))
+        print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe))
         if len(deltaframes) > 0:
-            for delta in deltaframes:
-                delta = pd.DataFrame(delta, columns=['PD','StreetName','Address1','Address2','Address3','Address4','Address5','Postcode','Prefix','AddressNumber','Firstname','Surname','DOB','ENO','CreatedMonth','ENOP','AV'])
-                for change in delta:
-                    mainframe = mainframe.append(change)
-                print("__Processed deltaframe electors:", len(delta))
+            for deltaframe in deltaframes:
+                deltaframe = pd.DataFrame(deltaframe, columns=['PD','ENO','ENOP','ENOT','StreetName','Address1','Address2','Address3','Address4','Address5','Postcode','Prefix','AddressNumber','Firstname','Surname','DOB','ElectorCreatedMonth','AV'])
+                print("_____Deltaframe Details:", deltaframe)
+                for index, change in deltaframe.iterrows():
+                    print("_____Delta Change Details:", change)
+                mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
+                print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
         if len(aviframe) > 0:
             mainframe = mainframe.merge(aviframe, on='ENOP',how='left' )
             print("__Processed aviframe:", len(aviframe))
 
     mainframe = mainframe.reset_index(drop=True)
-    print("__concat of mainframe", mainframe)
+    print(f"__concat of mainframe of length {len(mainframe)}") 
     allelectors = mainframe
 
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
@@ -3332,17 +3369,8 @@ def normalise():
     ElectionSettings['importfile'] = targetfile
     #    formdata['username'] = session['username']
     mapfile = current_node.dir+"/"+current_node.file
-    if os.path.exists(TABLE_FILE):
-        with open(TABLE_FILE) as f:
-            table_data = json.load(f)
-    else:
-        table_data = []
 
-    # Collect unique streams for dropdowns
-    streams = sorted(set(row['stream'] for row in table_data))
 
-    formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
-    layeritems = getlayeritems(mainframe.head(), formdata['tabledetails'])
 #        return render_template("Dash0.html", formdata=formdata,group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     print('_______ROUTE/normalise/exit:',ImportFilename)
     return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
@@ -3439,10 +3467,9 @@ def firstpage():
     global Fullpolys
     global workdirectories
     global Featurelayers
-
-
     global environment
     global layeritems
+
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
     print("🧪 current_user:", current_user)
@@ -3491,10 +3518,8 @@ def firstpage():
         sourcepath = sourcepath+"/"+step+"-MAP.html"
         [step,Treepolys['division'],Fullpolys['division']] = intersectingArea(config.workdirectories['bounddir']+"/"+"County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",'CED23NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Division_Boundaries.geojson")
 
-        session['next'] = 'firstpage/'
-
+        session['next'] = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-
         current_node = MapRoot.ping_node(sourcepath)
         print("____Firstpage Sourcepath",sourcepath, current_node.value)
 
@@ -3510,7 +3535,7 @@ def firstpage():
 #        formdata['tabledetails'] = "Candidates File "+formdata['importfile']+" Details"
 #        layeritems =[list(df1.columns.values),df1, formdata['tabledetails']]
 
-        atype = gettypeoflevel(sourcepath,current_node.level+1)
+        atype = gettypeoflevel(session['next'],current_node.level+1)
     # the map under the selected node map needs to be configured
     # the selected  boundary options need to be added to the layer
 
@@ -3519,8 +3544,8 @@ def firstpage():
         newlayer = Featurelayers[atype].reset()
         newlayer.add_nodemaps(current_node, atype)
 
-        current_node.create_area_map(current_node.getselectedlayers(sourcepath))
-        print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(sourcepath)[0]._children),current_node.value, current_node.level,current_node.file)
+        current_node.create_area_map(current_node.getselectedlayers(session['next']))
+        print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
         DQstats = pd.DataFrame()

@@ -127,8 +127,20 @@
           <input type="file" class="file-picker" style="display: none;">
           <button type="button" class="file-btn">📂</button>
         </td>
-        <td><input type="text" class="editable type"></td>
-        <td><input type="text" class="editable purpose"></td>
+        <td>
+          <select class="editable type" style="width: 60px;">
+            <option value="csv" selected>csv</option>
+            <option value="xlsx" selected>xlsx</option>
+            <option value="json" selected>json</option>
+          </select>
+        </td>
+        <td>
+          <select class="editable purpose" style="width: 60px;">
+            <option value="main" selected>main</option>
+            <option value="delta" selected>delta</option>
+            <option value="avi" selected>avi</option>
+          </select>
+        </td>
         <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
         <td><input type="checkbox" class="editable active"></td>
         <td><button class="delete-btn">Delete</button></td>
