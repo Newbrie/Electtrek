@@ -221,6 +221,9 @@
       alert("No matching files found for stream: " + streamToProcess);
       return;
     }
+    for (let pair of formData.entries()) {
+      console.log(pair[0], pair[1]);
+    }
 
     fetch('/normalise', {
       method: 'POST',

@@ -106,7 +106,7 @@ var showMore = function (msg,area, type) {
   const li = parent.document.createElement("li");
   const tabletitle = parent.document.getElementById("tabletitle");
   const table = parent.document.getElementById("captains-table");
-  const tabtitle = tabletitle.querySelector("h1");
+  const tabtitle = tabletitle.querySelector("h2");
   const tabhead = table.querySelector("thead");
   const tabbody = table.querySelector("tbody");
   // Define your party color lookup

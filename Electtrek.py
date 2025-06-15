@@ -3242,7 +3242,7 @@ def normalise():
         'Elevation': {}
     }
 
-    dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20241022.csv")
+    dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
     Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
     Lookups['LatLong'] = Lookups['LatLong'].rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
     Lookups['Elevation'] = pd.read_csv(config.workdirectories['bounddir']+"/open_postcode_elevation.csv")
@@ -3250,26 +3250,56 @@ def normalise():
 
     # 1. Get uploaded files
     files = request.files.getlist('files')
-
-    # 2. Loop over metadata
+    print(f"📂 Files received: {len(files)}")
+    for i, f in enumerate(files):
+        print(f"  File[{i}]: {f.filename}")
+    # 2. Extract metadata
     meta_data = {}
     for key in request.form:
         if key.startswith('meta_'):
-            # meta_0_order → split into index and field
             parts = key.split('_')
             if len(parts) < 3:
                 continue  # malformed key
             index = parts[1]
             field = '_'.join(parts[2:])
             meta_data.setdefault(index, {})[field] = request.form[key]
+            print("___META:",field,"**", request.form[key])
 
-    # 3. Add file paths from stored paths
-    for key in request.form:
-        if key.startswith('stored_path_'):
-            index = key.replace('stored_path_', '')
-            meta_data.setdefault(index, {})['stored_path'] = request.form[key]
+    # 3. Combine files with their order metadata
+    # We assume the index of `files[i]` corresponds to `meta_data[str(i)]`
+    indexed_files = []
 
-    # 4. Pair uploaded files with metadata (optional, depends on how many files you expect)
+    for i, file in enumerate(files):
+        print(f"🔍 Looking up meta for index {i}")
+        meta = meta_data.get(str(i), {})
+        print("____meta=:", meta)
+        if not meta:
+            print(f"⚠️ No metadata found for file index {i}")
+        try:
+            order = int(meta.get('order', 0))
+        except (ValueError, TypeError):
+            order = 0  # fallback
+        indexed_files.append((order, file))
+
+    # 4. Sort files by order
+    sorted_files = [file for _, file in sorted(indexed_files, key=lambda x: x[0])]
+    print("____indexed files:", indexed_files)
+    print("____Sorted files:", sorted_files)
+
+    # 5. Add file paths from stored paths
+    stored_paths = []
+
+    for i, file in enumerate(sorted_files):
+        filename = file.filename
+        if not filename:
+            continue
+        save_path = os.path.join(upload_dir, filename)
+        file.save(save_path)
+        stored_paths.append(save_path)
+        # Optional: Add to metadata for future use
+        meta_data[str(i)]['saved_path'] = save_path
+
+    # 6. Pair uploaded files with metadata (optional, depends on how many files you expect)
     file_index = 0
     mainframe = pd.DataFrame()
     deltaframes = []
@@ -3348,8 +3378,9 @@ def normalise():
     if len(mainframe) > 0:
         print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe))
         if len(deltaframes) > 0:
+            Outcols = mainframe.columns.to_list()
             for deltaframe in deltaframes:
-                deltaframe = pd.DataFrame(deltaframe, columns=['PD','ENO','ENOP','ENOT','StreetName','Address1','Address2','Address3','Address4','Address5','Postcode','Prefix','AddressNumber','Firstname','Surname','DOB','ElectorCreatedMonth','AV'])
+                deltaframe = pd.DataFrame(deltaframe,columns=Outcols)
                 print("_____Deltaframe Details:", deltaframe)
                 for index, change in deltaframe.iterrows():
                     print("_____Delta Change Details:", change)
@@ -3360,7 +3391,7 @@ def normalise():
             print("__Processed aviframe:", len(aviframe))
 
     mainframe = mainframe.reset_index(drop=True)
-    print(f"__concat of mainframe of length {len(mainframe)}") 
+    print(f"__concat of mainframe of length {len(mainframe)}")
     allelectors = mainframe
 
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")

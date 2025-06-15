@@ -11,7 +11,7 @@ from datetime import datetime
 
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
-def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
+def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -289,6 +289,7 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
 
                 # Clean types
                 df['ENO'] = pd.to_numeric(df['ENO'], errors='coerce')
+                df.loc[df['ENO'] <= 0, 'ENO'] = None
                 df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce')
                 df.loc[df['ENO'] <= 0, 'ENO'] = None
                 df.loc[df['Suffix'] == 0, 'Suffix'] = None
@@ -322,7 +323,7 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         return df
 
 
-    def NormaliseAddress(RunningVals,Lookups,filename,df):
+    def NormaliseAddress(RunningVals2,Lookups,filename,df):
 
 # fort convert postcodes to 8 charcter compressed format used in postcode files
         df = DFpostcodetoDF(df)
@@ -330,7 +331,18 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         Addno2 = ""
         Addno = ""
         count = 0
-        electors10 = df.dropna(subset=['Postcode']) # filter out all records with no Postcode
+        print("__200RunningVals2 values before ")
+        print("__200RunningVals2 values", RunningVals2)
+        print("__200RunningVals2 values after ")
+        # STEP 1: Clean up the column
+        df['Postcode'] = df['Postcode'].astype(str).str.strip()
+
+        # STEP 2: Replace blanks, whitespace-only, or 'nan' string values with actual np.nan
+        df['Postcode'].replace(['', 'nan', 'NaN', 'None'], np.nan, inplace=True)
+
+        # STEP 3: Now drop all rows where Postcode is missing
+        df = df.dropna(subset=['Postcode'])
+        electors10 = df
         electors1 = electors10.merge(Lookups['LatLong'], how='left', on='Postcode' )
         electors1.to_csv(filename+"-latlongs.csv")
         electors2 = electors1.merge(Lookups['Elevation'], how='left', on='Postcode' )
@@ -348,7 +360,10 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         electors2['Address_6'] = ""
 
         #  set up the council attribute
-
+        RunningVals2.setdefault('Last_Lat', 51.240299)   # Fallback Lat
+        RunningVals2.setdefault('Last_Long', -0.562301)  # Fallback Long
+        RunningVals2.setdefault('Mean_Lat', 51.240299)
+        RunningVals2.setdefault('Mean_Long', 51.240299)
         for index, elector in electors2.iterrows():
         #            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
         #                enot = elector['ENOT'].split("-")
@@ -362,10 +377,9 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         #            electors2.loc[index,'ENOP'] =  f"{elector['PD']}-{elector['ENO']}.{elector['Suffix']}"
 
           #  set up the address attributes
-            if elector.ElectorName == "Fenton Luke":
-                print("_____foundexception Luke Fenton", elector)
-                raise Exception('Luke Fenton no lat long')
 
+#            if elector['RNO'] == 72798:
+#                raise Exception('XYZ')
             xx = str(elector["Address1"])
             addr = xx.replace('"', '')
         #        Addno1 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address1"]))
@@ -468,49 +482,66 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
             electors2.loc[index,'StreetName'] = street.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
             electors2.loc[index,'AddressNumber'] = Addno
             electors2.loc[index,'AddressPrefix'] = prefix
+            print("__200RunningVals2CALL values", RunningVals2)
             if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
                 electors2.loc[index,'Elevation'] = float(0.0)
             else:
                 electors2.loc[index,'Elevation'] = float(elector['Elevation'])
-            if math.isnan(elector.Lat):
-              if str(elector.Postcode) != "?":
-                url = "http://api.getthedata.com/postcode/"+str(elector.Postcode).replace(" ","+")
-              # It is a good practice not to hardcode the credentials. So ask the user to enter credentials at runtime
-                myResponse = requests.get(url)
-                print("retrieving postcode latlong",url)
-                print (myResponse.status_code)
-                print (myResponse.content)
+            try:
+            #        Try/exception block for the API call
+                if math.isnan(elector.Lat):
+                  if str(elector.Postcode) != "?":
+                    url = "http://api.getthedata.com/postcode/"+str(elector.Postcode).replace(" ","+")
+                  # It is a good practice not to hardcode the credentials. So ask the user to enter credentials at runtime
+                    myResponse = requests.get(url)
+                    print("retrieving postcode latlong",url)
+                    print (myResponse.status_code)
+                    print (myResponse.content)
 
-            # For successful API call, response code will be 200 (OK)
-                if(myResponse.status_code == 200):
-            # Loading the response data into a dict variable
-                  latlong = json.loads(myResponse.content)
-                  if latlong['status'] == "match" :
-                      electors2.loc[index,"Lat"] = latlong['data']['latitude']
-                      electors2.loc[index,"Long"] = latlong['data']['longitude']
-                      RunningVals['Last_Lat'] = latlong['data']['latitude']
-                      RunningVals['Last_Long'] = latlong['data']['longitude']
+                # For successful API call, response code will be 200 (OK)
+                    if myResponse.status_code == 200:
+                      latlong = json.loads(myResponse.content)
+                      if latlong.get('match') is True and 'data' in latlong:
+                        electors2.loc[index, "Lat"] = float(latlong['data']['latitude'])
+                        electors2.loc[index, "Long"] = float(latlong['data']['longitude'])
+                        RunningVals2['Last_Lat'] = float(latlong['data']['latitude'])
+                        RunningVals2['Last_Long'] = float(latlong['data']['longitude'])
+                      else:
+                        print("______Postcode Nomatch & GTD Response1:", str(elector.Postcode), myResponse.text)
+                        if 'Last_Lat' not in RunningVals2 or RunningVals2['Last_Lat'] is None:
+                            print(f"⚠️ Last_Lat not available in RunningVals2 at index {index}")
+                        electors2.loc[index, "Lat"] = RunningVals2['Last_Lat']
+                        print("______Postcode Nomatch & GTD Response2:", str(elector.Postcode), myResponse.text)
+                        if 'Last_Long' not in RunningVals2 or RunningVals2['Last_Long'] is None:
+                            print(f"⚠️ Last_Long not available in RunningVals2 at index {index}")
+                        print("______Postcode Nomatch & GTD Response3:", str(elector.Postcode), myResponse.text)
+                        electors2.loc[index, "Long"] = RunningVals2['Last_Long']
+                        if 'Mean_Lat' not in RunningVals2 or RunningVals2['Mean_Lat'] is None:
+                            print(f"⚠️ Mean_Lat not available in RunningVals2 at index {index}")
+                        print("______Postcode Nomatch & GTD Response4:", str(elector.Postcode), myResponse.text)
+                        RunningVals2['Mean_Lat'] = statistics.mean([RunningVals2['Mean_Lat'], electors2.loc[index, "Lat"]])
+                        if 'Mean_Long' not in RunningVals2 or RunningVals2['Mean_Long'] is None:
+                            print(f"⚠️ Mean_Long not available in RunningVals2 at index {index}")
+                        print("______Postcode Nomatch & GTD Response5:", str(elector.Postcode), myResponse.text)
+                        RunningVals2['Mean_Long'] = statistics.mean([RunningVals2['Mean_Long'], electors2.loc[index, "Long"]])
+                        print("______Postcode Nomatch - using lastmatch:", RunningVals2['Last_Lat'], RunningVals2['Last_Long'])
+                    else:
+                      electors2.loc[index,"Lat"] = RunningVals2['Last_Lat']
+                      electors2.loc[index,"Long"] = RunningVals2['Last_Long']
+                      print("______Postcode Error GTD Response:", str(elector.Postcode), myResponse.status_code)
                   else:
-                      print("______Postcode Nomatch & GTD Response:", str(elector.Postcode), myResponse)
-                      electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
-                      electors2.loc[index,"Long"] = RunningVals['Last_Long']
-                  RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(electors2.loc[index,"Lat"])])
-                  RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(electors2.loc[index,"Long"])])
+                    electors2.loc[index,"Lat"] = RunningVals2['Last_Lat']
+                    electors2.loc[index,"Long"] = RunningVals2['Last_Long']
                 else:
-                  electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
-                  electors2.loc[index,"Long"] = RunningVals['Last_Long']
-                  print("______Postcode Error GTD Response:", str(elector.Postcode), myResponse.status_code)
-                  RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(elector.Lat)])
-                  RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(elector.Long)])
-              else:
-                electors2.loc[index,"Lat"] = RunningVals['Last_Lat']
-                electors2.loc[index,"Long"] = RunningVals['Last_Long']
-            else:
-                RunningVals['Mean_Lat'] = statistics.mean([Decimal(RunningVals['Mean_Lat']), Decimal(elector.Lat)])
-                RunningVals['Mean_Long'] = statistics.mean([Decimal(RunningVals['Mean_Long']), Decimal(elector.Long)])
-
+                    RunningVals2['Mean_Lat'] = statistics.mean([RunningVals2['Mean_Lat'], elector.Lat])
+                    RunningVals2['Mean_Long'] = statistics.mean([RunningVals2['Mean_Long'], elector.Long])
+            #        Try/exception block for the API call
+            except Exception as e:
+                    print(f"❌ Exception occurred for index {index}, postcode {elector.Postcode}: {e}")
+                    electors2.loc[index, "Lat"] = RunningVals2['Last_Lat']
+                    electors2.loc[index, "Long"] = RunningVals2['Last_Long']
             count = count + 1
-            if count > 500: break
+#            if count > 500: break
         return electors2
 
 
@@ -610,14 +641,18 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         return [electors100,DQstats]
 
 #pass 3 - how many required 'purpose-related columns can be calculated from existing columns, ie avi - AV, adds - new ID, Streetname,AddrNo, & main - Lat Long, StreetName, AddressPrefix, AddressNumber  etc
+
     if purpose == 'delta':
-        electors2 = NormaliseAddress(RunningVals,Lookups,ImportFilename,electors100)
+        electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
         print(f"____________DELTA file {ImportFilename} contains {len(electors2)} records: " )
     elif purpose == 'main':
-        electors2 = NormaliseAddress(RunningVals,Lookups,ImportFilename,electors100)
+        print("__200RunningVals1 values before ")
+        print("__200RunningVals1 values", RunningVals1)
+        print("__200RunningVals1 values after ")
+        electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
         print("____________MAIN file processing complete for : ",ImportFilename, electors2.columns )
     elif purpose == 'avi':
-        # not processing addresses , just the elector identity and AV
+        # not processing addresses , just the elector identity and their AV
         electors2 = pd.DataFrame(electors100, columns=['ENOP','ENOT','Suffix','ENO','AV'])
         print("____________AVI file processing complete for : ",ImportFilename, electors2.columns )
     print("____________Normalisation_Complete________in ",ImportFilename )
@@ -627,7 +662,7 @@ def normz(RunningVals,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     if autofix == 3:
         print(f"____Autofix = 3 , DQstats:{DQstats} at : {datetime.now()}")
         return [electors2,DQstats]
-
+    electors2 = pd.DataFrame(electors2,columns=Outcols)
     return [electors2,DQstats]
 
 
