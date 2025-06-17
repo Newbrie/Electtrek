@@ -211,30 +211,26 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
 
     def classify_column(series):
         """
-        Classifies a column based on regex pattern matching,
-        requiring ENO and Suffix to be positive integers (no leading zeros).
+        Classify a column based on regex pattern matching.
+        Supports ENOP, ENOT, ENOS, ENO, PD, and Suffix.
         """
         series = series.dropna().astype(str).str.strip()
 
-    #    patterns = {
-    #        'ENOP': r'^[A-Za-z]+[0-9]*-[1-9][0-9]*[./][1-9][0-9]*$',  # PD-ENO.Suffix or PD-ENO/Suffix
-    #        'ENOT': r'^[A-Za-z]+[0-9]*-[1-9][0-9]*$',                 # PD-ENO
-    #        'ENO': r'^[1-9][0-9]*$',                                  # positive integer ENO only
-    #        'PD': r'^[A-Za-z]+[0-9]*$',                               # alphanumeric PD
-    #        'Suffix': r'^[1-9][0-9]*$',                               # positive integer suffix
-    #    }
-
         patterns = {
-            'ENOP': r'^[A-Za-z]+\d+-\d+[./]\d+$',
-            'ENOT': r'^[A-Za-z]+\d+-\d+$',
-            'ENO': r'^[1-9]\d*$',
-            'PD': r'^[A-Za-z]+\d+$',
-            'Suffix': r'^[1-9]\d*$',
+            'ENOP': r'^[A-Za-z]+\d+-\d+[./]\d+$',  # e.g. PD123-456/7 or PD123-456.7
+            'ENOT': r'^[A-Za-z]+\d+-\d+$',         # e.g. PD123-456
+            'ENOS': r'^\d+[./]\d+$',               # e.g. 1234/2 or 1234.2
+            'ENO':  r'^[1-9]\d*$',                 # e.g. 1234
+            'PD':   r'^[A-Za-z]+\d+$',             # e.g. PD123
+            'Suffix': r'^[1-9]\d*$',               # e.g. 2
         }
+
+        preferred_order = ['ENOP', 'ENOT', 'ENOS', 'ENO', 'PD', 'Suffix']
         best_label = 'Unknown'
         best_ratio = 0
 
-        for label, pattern in patterns.items():
+        for label in preferred_order:
+            pattern = patterns[label]
             match_ratio = series.str.match(pattern).mean()
             if match_ratio > best_ratio:
                 best_ratio = match_ratio
@@ -244,21 +240,13 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
 
 
     def normalise_eno_column(df):
-#In the normalize_eno_column(df) logic:
-#Only classify columns named X, PD, ENO, ENOT, ENOP, or Suffix (if they exist in the input df).
-#Classify each column using regex based on:
-#PD: alphanumeric prefix starting with letters and ending with digits
-#ENO: integer > 0
-#Suffix: integer > 0 or empty
-#ENOT: PD-ENO
-#ENOP: PD-ENO.Suffix or PD-ENO/Suffix (with / normalized to .)
-#Rename columns according to classification only if classified as PD, ENO, or Suffix — and only if there is no existing PD, ENO, or Suffix column (i.e. these values are not present already).
-#If a column is classified as ENOT or ENOP, use it to derive PD, ENO, Suffix, ENOT, and ENOP.
-#Always normalize ENOP to use . instead of /.
-#Keep X column unless it is renamed due to classification.
+        """
+        Normalize and derive PD, ENO, Suffix, ENOT, and ENOP from potentially ambiguous columns.
+        Recognizes ENOS (ENO.Suffix or ENO/Suffix) and treats standalone ENO as ENOS with suffix 0.
+        """
         df = df.copy()
 
-        allowed_cols = {'X', 'PD', 'ENO', 'Suffix', 'ENOT', 'ENOP'}
+        allowed_cols = {'X', 'PD', 'ENO', 'Suffix', 'ENOT', 'ENOP', 'ENOS'}
         candidate_cols = [col for col in df.columns if col in allowed_cols]
 
         classification_map = {}
@@ -267,40 +255,49 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
             if label != 'Unknown':
                 classification_map[col] = label
 
-        # Rename columns based on classification (only if not already present)
+        # Rename columns only if not already present
         for col, label in classification_map.items():
             if label in {'PD', 'ENO', 'Suffix'} and label not in df.columns:
                 df.rename(columns={col: label}, inplace=True)
 
-        # Use ENOT/ENOP for parsing only if PD, ENO, and Suffix are not already present
-        if 'PD' not in df.columns or 'ENO' not in df.columns:
+        # Use ENOT/ENOP/ENOS to parse if PD or ENO missing
+        if 'ENO' not in df.columns or 'PD' not in df.columns:
             eno_source_col = None
+            source_label = None
             for col, label in classification_map.items():
-                if label in {'ENOT', 'ENOP'}:
+                if label in {'ENOT', 'ENOP', 'ENOS'}:
                     eno_source_col = col
+                    source_label = label
                     break
 
             if eno_source_col:
                 parse_series = df[eno_source_col].astype(str).str.strip().str.replace('/', '.', regex=False)
 
-                df['PD'] = parse_series.str.extract(r'^([A-Za-z]+[0-9]+)-')[0]
-                df['ENO'] = parse_series.str.extract(r'-([1-9][0-9]*)')[0]
-                df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
+                if source_label in {'ENOT', 'ENOP'}:
+                    df['PD'] = parse_series.str.extract(r'^([A-Za-z]+[0-9]+)-')[0]
+                    df['ENO'] = parse_series.str.extract(r'-([1-9][0-9]*)')[0]
+                    df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
 
-                # Clean types
+                elif source_label == 'ENOS':
+                    df['ENO'] = parse_series.str.extract(r'^(\d+)')[0]
+                    df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
+                    df['Suffix'] = df['Suffix'].fillna(0)
+
+                # Coerce numeric
                 df['ENO'] = pd.to_numeric(df['ENO'], errors='coerce')
-                df.loc[df['ENO'] <= 0, 'ENO'] = None
                 df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce')
-                df.loc[df['ENO'] <= 0, 'ENO'] = None
-                df.loc[df['Suffix'] == 0, 'Suffix'] = None
 
-        # Derive ENOT and ENOP if PD and ENO exist
+                df.loc[df['ENO'] <= 0, 'ENO'] = None
+                df.loc[df['Suffix'] < 0, 'Suffix'] = None
+
+        # Derive ENOT
         df['ENOT'] = None
         valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
         df.loc[valid_enot_mask, 'ENOT'] = (
             df.loc[valid_enot_mask, 'PD'] + '-' + df.loc[valid_enot_mask, 'ENO'].astype(int).astype(str)
         )
 
+        # Derive ENOP
         df['ENOP'] = df['ENOT']
         valid_enop_mask = valid_enot_mask & df['Suffix'].notna()
         df.loc[valid_enop_mask, 'ENOP'] = (
@@ -308,6 +305,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         )
 
         return df
+
 
 
 
@@ -573,7 +571,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     dfzmax = dfz.shape[0]
     print(dfz.columns," data rows: ", dfzmax )
 
-    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENO","ROLLNO":"ENO","ENO":"ENO",
+    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENOS","ROLLNO":"ENO","ENO":"ENO",
     "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
     "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDESCRIPTION" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","ELECTORNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 

@@ -19,6 +19,7 @@
       <th>Purpose</th>
       <th>Fixlevel</th>
       <th>Active</th>
+      <th>Live</th>
     </tr>
   </thead>
   <tbody id="file-info-tbody">
@@ -27,8 +28,8 @@
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
         <select class="editable stream">
-          {% for stream in streams %}
-          <option value="{{ stream }}" {% if row['stream'] == stream %}selected{% endif %}>{{ stream }}</option>
+          {% for key in streamrag.keys() %}
+            <option value="{{ key }}" {% if row.stream == key %}selected{% endif %}>{{ key }}</option>
           {% endfor %}
         </select>
       </td>
@@ -54,15 +55,37 @@
       </td>
       <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
       <td><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked {% endif %}></td>
+      <td><input type="checkbox" class="editable live" {% if row['live'] and row['live'].strip() != '' %}checked {% endif %}></td>
       <td><button class="delete-btn">Delete</button></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 <!-- Import Table -->
-<div id="importTable" class="section">
+<div id="streams" class="section">
     <h2>STREAM DATA QUALITY STATISTICS</h2>
+    <table id= id="streamtab">
+        <thead>
+          <tr>
+              <th>Stream</th>
+              <th>Alive</th>
+              <th>Loaded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, value in streamrag.items() %}
+              <tr>
+                  <td>{{ value['Stream'] }}</td>
+                  <td>{{ value['Alive'] }}</td>
+                  <td>{{ value['Loaded'] }}</td>
+              </tr>
+          {% endfor %}
+          </tbody>
+    </table
+  </div>
+<div id="importTable" class="section">
     <table id="DQ-table">
+
         <thead>
           <button id="process-btn">PROCESS</button>
             <tr>
@@ -197,7 +220,7 @@
 
         if (fileInput.files.length > 0) {
           const file = fileInput.files[0];
-          formData.append('files', file);  // upload if picked this session
+          formData.append(`files_${index}`, file);  // upload if picked this session
         } else if (filepath) {
           formData.append(`stored_path_${index}`, filepath);  // use stored safe path
 //          alert('Filepath found: '+`stored_path_${index}` + filepath);
@@ -205,25 +228,28 @@
           console.warn(`No file selected or stored path for stream '${stream}'`);
           return; // skip this row
         }
-
+        console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
+        console.log(`Row ${index} filepath: "${filepath}"`);
         // Append other metadata
         formData.append(`meta_${index}_order`, order);
         formData.append(`meta_${index}_type`, ftype);
         formData.append(`meta_${index}_purpose`, purpose);
         formData.append(`meta_${index}_fixlevel`, fixlevel);
         formData.append(`meta_${index}_stream`, stream);
+        // After metadata is appended
+
 
         found = true;
-      }
+      };
+      console.log(`Row stream: '${stream}', user input: '${normalizedInput}', active: ${active}`);
+
     });
 
     if (!found) {
       alert("No matching files found for stream: " + streamToProcess);
       return;
     }
-    for (let pair of formData.entries()) {
-      console.log(pair[0], pair[1]);
-    }
+
 
     fetch('/normalise', {
       method: 'POST',

@@ -37,6 +37,7 @@ from datetime import datetime, timedelta
 import geocoder
 from matplotlib.colors import to_hex, to_rgb
 import colorsys
+from collections import defaultdict
 
 
 
@@ -3241,6 +3242,20 @@ def normalise():
         'LatLong': {},
         'Elevation': {}
     }
+    # Collect unique streams for dropdowns
+    table_data = []
+    if os.path.exists(TABLE_FILE):
+        with open(TABLE_FILE) as f:
+            table_data = json.load(f)
+    else:
+        table_data = []
+
+    streamrag = defaultdict(dict)
+    for stream in sorted(set(row['stream'] for row in table_data)):
+        streamrag[stream]['Stream'] = stream.upper()
+        streamrag[stream]['Alive'] = False
+        streamrag[stream]['Loaded'] = 0
+        streamrag[stream]['RAG'] = 'red'
 
     dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
     Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
@@ -3264,22 +3279,35 @@ def normalise():
             field = '_'.join(parts[2:])
             meta_data.setdefault(index, {})[field] = request.form[key]
             print("___META:",field,"**", request.form[key])
-
+    # 2b. Extract stored file paths
+    for key in request.form:
+        if key.startswith('stored_path_'):
+            index = key.replace('stored_path_', '')
+            meta_data.setdefault(index, {})['stored_path'] = request.form[key]
+            print(f"📁 Stored path for index {index}: {request.form[key]}")
     # 3. Combine files with their order metadata
     # We assume the index of `files[i]` corresponds to `meta_data[str(i)]`
     indexed_files = []
 
-    for i, file in enumerate(files):
-        print(f"🔍 Looking up meta for index {i}")
+    for i in range(len(meta_data)):
         meta = meta_data.get(str(i), {})
-        print("____meta=:", meta)
-        if not meta:
-            print(f"⚠️ No metadata found for file index {i}")
+        file = files[i] if i < len(files) else None
+        path = meta.get('stored_path')
+
+        if not file and not path:
+            print(f"⚠️ No file or stored path for index {i}")
+            continue
+
         try:
             order = int(meta.get('order', 0))
         except (ValueError, TypeError):
-            order = 0  # fallback
-        indexed_files.append((order, file))
+            order = 0
+
+        if file:
+            indexed_files.append((order, file))
+        elif path:
+            indexed_files.append((order, path))  # Just store path for now
+
 
     # 4. Sort files by order
     sorted_files = [file for _, file in sorted(indexed_files, key=lambda x: x[0])]
@@ -3344,15 +3372,15 @@ def normalise():
                     print("readingEXCELfile outside normz")
                 else:
                     print("error-Unsupported file format")
-                    return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+                    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
             else:
                 flash("error - File path does not exist or is not provided")
                 print("error - File path does not exist or is not provided")
-                return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+                return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
         except Exception as e:
             flash("error-file access exception:"+str(e))
             print("error-file access exception:",str(e))
-            return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+            return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
         print("____entering normz:", file_path,dfx.columns)
     # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
@@ -3393,7 +3421,35 @@ def normalise():
     mainframe = mainframe.reset_index(drop=True)
     print(f"__concat of mainframe of length {len(mainframe)}")
     allelectors = mainframe
+    print("____Final Loadable mainframe columns:",allelectors.columns)
+# assemble data for the RAG status of Streams in allelectors
+    alldf = pd.DataFrame(allelectors,columns=['Stream', 'ENOP'])
+    # we group electors by Streams, calculating totals in each stream
+    g = {'ENOP':'count' }
+    streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
+    g = {'filename' : 'count', 'active' : 'count'}
+    table_df = pd.DataFrame(table_data)
+    streamtable = table_df.groupby(['stream']).agg(g).reset_index()
 
+    streamrag = defaultdict(dict)
+    for stream in sorted(set(row['stream'] for row in table_data)):
+# for each stream in the table
+        streamrag[stream]['Stream'] = stream.upper()
+        if  stream.upper()  in streamdash['Stream'].to_list(): # if used to load allelectors
+            streamrag[stream]['Alive'] = True
+        else:
+            streamrag[stream]['Alive'] = False
+        streamrag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
+# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
+        if streamrag[stream]['Alive'] and streamrag[stream]['Loaded'] == 1:
+            streamrag[stream]['RAG'] = 'green'
+        elif streamrag[stream]['Alive']:
+            streamrag[stream]['RAG'] = 'amber'
+        else:
+            streamrag[stream]['RAG'] = 'red'
+
+
+    print("__Streamrag2:",streamrag)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
     mainframe.to_csv(targetfile)
     allelectors.to_csv("ActiveElectoralRoll.csv")
@@ -3404,7 +3460,7 @@ def normalise():
 
 #        return render_template("Dash0.html", formdata=formdata,group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     print('_______ROUTE/normalise/exit:',ImportFilename)
-    return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 
 @app.route('/walks', methods=['POST','GET'])
@@ -3671,6 +3727,7 @@ file_info = [
 
 # Optional: Retire or Redirect `/get_import_table` route
 @app.route('/get_import_table')
+@login_required
 def get_import_table():
     # Redirect to the new combined page
     DQstats = pd.DataFrame()
@@ -3678,6 +3735,7 @@ def get_import_table():
 
 # Route to handle stream processing form submission
 @app.route('/process_stream', methods=['POST'])
+@login_required
 def process_stream():
     # Handle the form submission for stream processing
     stream_type = request.form.get('stream_type')
@@ -3695,25 +3753,50 @@ def process_stream():
     # Redirect back to the combined page
     return redirect(url_for('stream_processing_with_table', DQstats=DQstats))
 
-# Optional route for other functionality (e.g., handling other forms or pages)
-@app.route('/other_page')
-def other_page():
-    return render_template('other_page.html')
 
 @app.route('/stream_input')
+@login_required
 def stream_input():
+    global allelectors
     DQstats = pd.DataFrame()
     # Load table data
+    table_data = []
     if os.path.exists(TABLE_FILE):
         with open(TABLE_FILE) as f:
             table_data = json.load(f)
     else:
         table_data = []
 
+    alldf = pd.DataFrame(allelectors,columns=['Stream', 'ENOP'])
+    # we group electors by Streams, calculating totals in each stream
+    g = {'ENOP':'count' }
+    streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
+    g = {'filename' : 'count', 'active' : 'count'}
+    table_df = pd.DataFrame(table_data)
+    streamtable = table_df.groupby(['stream']).agg(g).reset_index()
+
+    streamrag = defaultdict(dict)
+    for stream in sorted(set(row['stream'] for row in table_data)):
+# for each stream in the table
+        streamrag[stream]['Stream'] = stream.upper()
+        if  stream.upper()  in streamdash['Stream'].to_list(): # if used to load allelectors
+            streamrag[stream]['Alive'] = True
+        else:
+            streamrag[stream]['Alive'] = False
+        streamrag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
+# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
+        if streamrag[stream]['Alive'] and streamrag[stream]['Loaded'] == 1:
+            streamrag[stream]['RAG'] = 'green'
+        elif streamrag[stream]['Alive']:
+            streamrag[stream]['RAG'] = 'amber'
+        else:
+            streamrag[stream]['RAG'] = 'red'
     # Collect unique streams for dropdowns
     streams = sorted(set(row['stream'] for row in table_data))
 
-    return render_template('stream_processing_input.html', table_data=table_data, streams=streams, DQstats = DQstats)
+    print("__Streamrag3",streamrag)
+
+    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 
 
