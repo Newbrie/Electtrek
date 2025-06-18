@@ -200,7 +200,9 @@
       streamChart.data.datasets[0].data = data;
       streamChart.data.datasets[0].backgroundColor = backgroundColors;
       streamChart.update();
+      alert("Chart update")
     } else {
+      alert("Chart creation")
       // First-time chart creation
       Chart.register(ChartDataLabels); // Only needed once
       streamChart = new Chart(ctx, {

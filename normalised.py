@@ -651,7 +651,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         print("____________MAIN file processing complete for : ",ImportFilename, electors2.columns )
     elif purpose == 'avi':
         # not processing addresses , just the elector identity and their AV
-        electors2 = pd.DataFrame(electors100, columns=['ENOP','ENOT','Suffix','ENO','AV'])
+        electors2 = pd.DataFrame(electors100, columns=['Stream', 'Purpose', 'RNO', 'PD', 'Firstname', 'Surname', 'ElectorName','ENOP','ENOT','Suffix','ENO','AV'])
         print("____________AVI file processing complete for : ",ImportFilename, electors2.columns )
     print("____________Normalisation_Complete________in ",ImportFilename )
 

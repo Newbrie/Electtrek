@@ -103,9 +103,9 @@ var showMore = function (msg,area, type) {
 
   function updateChart(newLabels, newData, newRags) {
   const ragColors = {
-    red: 'rgba(255, 99, 132, 0.8)',
-    amber: 'rgba(255, 159, 64, 0.8)',
-    green: 'rgba(75, 192, 192, 0.8)'
+    red: 'rgba(255, 99, 132, 0.2)',
+    amber: 'rgba(255, 159, 64, 0.2)',
+    green: 'rgba(75, 192, 192, 0.2)'
   };
   const Chart = parent.document.getElementById("streamChart");
   Chart.data.labels = newLabels;

@@ -1593,6 +1593,7 @@ def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
     return [nodestep,filtered,gdf]
 
 def getstreamrag(electorframe):
+    ef = electorframe
     table_data = []
     streamtable = []
     if os.path.exists(TABLE_FILE):
@@ -1604,17 +1605,18 @@ def getstreamrag(electorframe):
 
     streamdash = pd.DataFrame()
     activestreams = []
-    if len(electorframe) > 0:
-        alldf = pd.DataFrame(electorframe,columns=['Stream', 'ENOP'])
+    if len(ef) > 0:
+        ef = pd.DataFrame(ef,columns=['Stream', 'ENOP'])
         # we group electors by Streams, calculating totals in each stream
         g = {'ENOP':'count' }
-        streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
-        activestreams = streamdash['Stream'].to_list()
-
+        streamdash = ef.groupby(['Stream']).agg(g)
+        activestreams = list(set(ef['Stream'].values))
+        print("_____Activestreams1:",ef.head(), streamdash.head())
+    print("_____Activestreams2:",activestreams)
     if len(table_data) > 0:
         g = {'filename' : 'count', 'active' : 'count'}
         table_df = pd.DataFrame(table_data)
-        streamtable = table_df.groupby(['stream']).agg(g).reset_index()
+        streamtable = table_df.groupby(['stream']).agg(g)
         potentialstreams = sorted(set(row['stream'] for row in table_data))
     else:
         streamtable = pd.DataFrame()
@@ -1626,11 +1628,11 @@ def getstreamrag(electorframe):
         rag[stream]['Stream'] = stream.upper()
         if stream.upper() in activestreams: # if used to load allelectors
             rag[stream]['Alive'] = True
-            rag[stream]['Elect'] = int(streamdash[streamdash['Stream'] == stream.upper()]['ENOP'].values[0])
+            rag[stream]['Elect'] = int(streamdash.loc[stream.upper(),'ENOP']) # can do because its been groupby'ed
         else:
             rag[stream]['Alive'] = False
             rag[stream]['Elect'] = 1
-        rag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
+        rag[stream]['Loaded'] = float(int(streamtable.loc[stream.upper(),'active'])/int(streamtable.loc[stream.upper(),'filename']))
 # set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
         if rag[stream]['Alive'] and rag[stream]['Loaded'] == 1:
             rag[stream]['RAG'] = 'green'
@@ -1802,6 +1804,15 @@ def handle_exception(e):
     if current_node.level > 0:
         mapfile = current_node.parent.dir+"/"+current_node.parent.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
+@app.route('/api/streamrag')
+@login_required
+def get_streamrag():
+    global streamrag
+    global allelectors
+    streamrag = getstreamrag(allelectors)
+    print("___JSONIFYED streamrag:",jsonify(streamrag))
+    return jsonify(streamrag)
 
 @app.route("/get-constants", methods=["GET"])
 @login_required
@@ -2036,7 +2047,6 @@ def dashboard ():
     if 'username' in session:
         print('_______ROUTE/dashboard'+ session['username'] + ' is already logged in at ', current_node.value)
         formdata = {}
-        allelectors = []
 
         streamrag = getstreamrag(allelectors)
 
@@ -3302,8 +3312,6 @@ def normalise():
     else:
         table_data = []
 
-    streamrag = getstreamrag(allelectors)
-
     dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
     Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
     Lookups['LatLong'] = Lookups['LatLong'].rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
@@ -3451,7 +3459,7 @@ def normalise():
         print("__concat of DQstats", DQstats,results[1])
 # full stream now received - need to apply changes to main
     if len(mainframe) > 0:
-        print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe))
+        print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe), mainframe.columns)
         if len(deltaframes) > 0:
             Outcols = mainframe.columns.to_list()
             for deltaframe in deltaframes:
@@ -3462,25 +3470,17 @@ def normalise():
                 mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
                 print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
         if len(aviframe) > 0:
-            mainframe = mainframe.merge(aviframe, on='ENOP',how='left' )
-            print("__Processed aviframe:", len(aviframe))
+
+            mainframe = mainframe.merge(aviframe[['ENOP','AV']], on='ENOP',how='left' )
+            print("__Processed aviframe:", len(aviframe), aviframe.columns)
 
     mainframe = mainframe.reset_index(drop=True)
-    print(f"__concat of mainframe of length {len(mainframe)}")
+    print(f"__concat of mainframe of length {len(mainframe)}- columns:",mainframe.columns )
     allelectors = mainframe
-    print("____Final Loadable mainframe columns:",allelectors.columns)
+    print("____Final Loadable mainframe columns:",len(allelectors),allelectors.columns)
 # assemble data for the RAG status of Streams in allelectors
-    alldf = pd.DataFrame(allelectors,columns=['Stream', 'ENOP'])
-    # we group electors by Streams, calculating totals in each stream
-    g = {'ENOP':'count' }
-    streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
-    g = {'filename' : 'count', 'active' : 'count'}
-    table_df = pd.DataFrame(table_data)
-    streamtable = table_df.groupby(['stream']).agg(g).reset_index()
-
     streamrag = getstreamrag(allelectors)
-
-    print("__Streamrag2:",streamdash['Stream'].to_list(), streamrag)
+    print("__Streamrag2:", streamrag, allelectors.columns)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
     mainframe.to_csv(targetfile)
     allelectors.to_csv("ActiveElectoralRoll.csv")
@@ -3488,8 +3488,7 @@ def normalise():
     #    formdata['username'] = session['username']
     mapfile = current_node.dir+"/"+current_node.file
 
-
-    print('_______ROUTE/normalise/exit:',ImportFilename)
+    print('_______ROUTE/normalise/exit:',ImportFilename, allelectors.columns)
     return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 
