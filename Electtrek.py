@@ -1788,6 +1788,7 @@ def index():
 
     global MapRoot
     global current_node
+    global streamrag
 
 
     if 'username' in session:
@@ -1798,8 +1799,8 @@ def index():
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        DQstats = pd.DataFrame()
-        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+
+        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -1813,6 +1814,7 @@ def login():
     global areaelectors
     global Treepolys
     global Fullpolys
+    global streamrag
 
 
     global environment
@@ -1977,6 +1979,7 @@ def dashboard ():
     global areaelectors
     global Treepolys
     global Fullpolys
+    global streamrag
 
 
     global formdata
@@ -1988,11 +1991,10 @@ def dashboard ():
         formdata = {}
         allelectors = []
 
-        DQstats = pd.DataFrame()
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        return render_template("Dash0.html", context = {   "formdata" : formdata, "DQstats" : DQstats, "group" : allelectors , "mapfile" : mapfile})
+        return render_template("Dash0.html", context = {   "formdata" : formdata, "streamrag" : streamrag, "group" : allelectors , "mapfile" : mapfile})
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -3164,11 +3166,13 @@ def setgotv():
     global layeritems
     global allelectors
     global areaelectors
+    global streamrag
 
 
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
     selected = None
+    streamrag = defaultdict(dict)
     if request.method == 'POST':
 
         formdata = {}
@@ -3178,7 +3182,6 @@ def setgotv():
             if value.strip()  # Only keep non-empty inputs
             }
 
-        DQstats = pd.DataFrame()
         print("User submitted:", formdata)
         # Now `filled_data` contains only the meaningful inputs
 
@@ -3193,7 +3196,7 @@ def setgotv():
         print('_______ElectionSettings:',ElectionSettings)
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
-        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
     return ""
 
 @app.route('/filelist/<filetype>', methods=['POST','GET'])
@@ -3458,7 +3461,6 @@ def normalise():
     mapfile = current_node.dir+"/"+current_node.file
 
 
-#        return render_template("Dash0.html", formdata=formdata,group=allelectors ,DQstats=DQstats ,mapfile=mapfile)
     print('_______ROUTE/normalise/exit:',ImportFilename)
     return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
@@ -3472,11 +3474,12 @@ def walks():
     global areaelectors
     global Treepolys
     global Fullpolys
+    global streamrag
 
 
     global environment
     flash('_______ROUTE/walks',session)
-
+    streamrag = defaultdict(dict)
 
     if len(request.form) > 0:
         formdata = {}
@@ -3489,12 +3492,12 @@ def walks():
         print("_________Mapfile",electwalks[2])
         mapfile = electwalks[2]
         group = electwalks[0]
-        DQstats = pd.DataFrame()
+
 #    formdata['username'] = session['username']
         formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
-        return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+        return render_template('Dash0.html',  formdata=formdata, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -3556,6 +3559,8 @@ def firstpage():
     global Featurelayers
     global environment
     global layeritems
+    global streamrag
+
 
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
@@ -3592,6 +3597,7 @@ def firstpage():
         }
     # This section of code constructs the sourcepath to ping from a given lat long
         sourcepath = ""
+        streamrag = defaultdict(dict)
         step = ""
         [step,Treepolys['country'],Fullpolys['country']] = filterArea(config.workdirectories['bounddir']+"/"+"World_Countries_(Generalized)_9029012925078512962.geojson",'COUNTRY',here, config.workdirectories['bounddir']+"/"+"Country_Boundaries.geojson")
         sourcepath = step
@@ -3635,8 +3641,8 @@ def firstpage():
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
-        DQstats = pd.DataFrame()
-        return render_template("Dash0.html", VID_json=VID_json,  formdata=formdata,  group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+
+        return render_template("Dash0.html", VID_json=VID_json,  formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 
@@ -3653,11 +3659,13 @@ def cards():
     global areaelectors
     global Treepolys
     global Fullpolys
+    global streamrag
+
 
 
     global environment
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
-
+    streamrag = defaultdict(dict)
 
     if len(request.form) > 0:
         formdata = {}
@@ -3682,13 +3690,12 @@ def cards():
                 mapfile =  prodcards[2]
                 group = prodcards[0]
 
-                DQstats = pd.DataFrame()
         #    formdata['username'] = session['username']
                 formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
                 layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
 
-                return render_template('Dash0.html',  formdata=formdata, group=allelectors , DQstats=DQstats ,mapfile=mapfile)
+                return render_template('Dash0.html',  formdata=formdata, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

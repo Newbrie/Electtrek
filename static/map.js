@@ -117,44 +117,8 @@ var showMore = function (msg,area, type) {
       "PC": "darkred", "SD": "orange", "Z": "lightgray",
       "W": "white", "X": "darkgray"
   };
-  const ctx = document.getElementById('streamChart').getContext('2d');
 
-   const labels = {{ streamrag.keys() | list | tojson }};
-   const data = {{ streamrag.values() | map(attribute='Loaded') | list | tojson }};
-   const ragColors = {
-     red: 'rgba(255, 99, 132, 0.6)',
-     amber: 'rgba(255, 159, 64, 0.6)',
-     green: 'rgba(75, 192, 192, 0.6)'
-   };
-   const backgroundColors = {{ streamrag.values() | map(attribute='RAG') | list | tojson }}
-     .map(rag => ragColors[rag]);
 
-   new Chart(ctx, {
-     type: 'doughnut',
-     data: {
-       labels: labels,
-       datasets: [{
-         label: 'Loaded Files per Stream',
-         data: data,
-         backgroundColor: backgroundColors,
-         borderColor: '#fff',
-         borderWidth: 1
-       }]
-     },
-     options: {
-       responsive: true,
-       plugins: {
-         legend: {
-           position: 'right'
-         },
-         title: {
-           display: true,
-           text: 'Stream Loading Status'
-         }
-       }
-     }
-   });
-   
   fetch('/displayareas', {
       method: "GET",
       headers: { "Content-Type": "application/json" },
