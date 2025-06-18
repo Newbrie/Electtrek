@@ -3,7 +3,7 @@
 {% block map %}
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
-<h2>SELECT ELECTORAL ROLL FILE STREAMS FOR EACH ELECTION AREA</h2>
+<h1>SELECT ELECTORAL ROLL FILE STREAMS FOR EACH ELECTION AREA</h1>
 <h2>(if you want the electors to attempt a load, select fix level 3)</h2>
 <button id="add-row-btn">Add Row</button>
 <button id="add-stream-btn">Add Stream</button>
@@ -63,13 +63,14 @@
 </table>
 <!-- Import Table -->
 <div id="streams" class="section">
-    <h2>STREAM DATA QUALITY STATISTICS</h2>
+    <h1>STREAM DATA QUALITY STATISTICS</h1>
     <table id= id="streamtab">
         <thead>
           <tr>
               <th>Stream</th>
               <th>Alive</th>
               <th>Loaded</th>
+              <th>RAG</th>
           </tr>
         </thead>
         <tbody>
@@ -78,12 +79,15 @@
                   <td>{{ value['Stream'] }}</td>
                   <td>{{ value['Alive'] }}</td>
                   <td>{{ value['Loaded'] }}</td>
+                  <td>{{ value['RAG'] }}</td>
               </tr>
           {% endfor %}
           </tbody>
     </table>
-    <canvas id="streamChart" width="400" height="400"></canvas>
   </div>
+<div>
+<canvas id="#streamChart" width="300" height="300"></canvas>
+</div>
 <div id="importTable" class="section">
     <table id="DQ-table">
 

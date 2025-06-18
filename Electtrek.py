@@ -3338,7 +3338,7 @@ def normalise():
     for index, data in meta_data.items():
         print(f"\nRow index {index}")
         print(f"Stream: {data.get('stream')}")
-        stream = data.get('stream')
+        stream = str(data.get('stream')).upper()
         print(f"Order: {data.get('order')}")
         order = data.get('order')
         print(f"Type: {data.get('type')}")
@@ -3435,7 +3435,7 @@ def normalise():
     for stream in sorted(set(row['stream'] for row in table_data)):
 # for each stream in the table
         streamrag[stream]['Stream'] = stream.upper()
-        if  stream.upper()  in streamdash['Stream'].to_list(): # if used to load allelectors
+        if stream.upper() in streamdash['Stream'].to_list(): # if used to load allelectors
             streamrag[stream]['Alive'] = True
         else:
             streamrag[stream]['Alive'] = False
@@ -3449,7 +3449,7 @@ def normalise():
             streamrag[stream]['RAG'] = 'red'
 
 
-    print("__Streamrag2:",streamrag)
+    print("__Streamrag2:",streamdash['Stream'].to_list(), streamrag)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
     mainframe.to_csv(targetfile)
     allelectors.to_csv("ActiveElectoralRoll.csv")

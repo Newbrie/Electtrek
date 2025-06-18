@@ -33,6 +33,11 @@
     background-color: #f1f1f1;
 }
 
+#streamChart {
+    width: 200px;
+    height: 200px;
+  }
+
 #file-info-table .order {
     width: 60px;  /* Ensures only 2-digit integers fit */
 }
