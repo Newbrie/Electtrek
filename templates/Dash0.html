@@ -143,9 +143,9 @@
             </div>
 
           </div>
-        <div id="chartContainer" style="width: 200px; height: 200px;">
-          <canvas id="streamChart"></canvas>
-        </div>
+    <div id="chartContainer" style="width: 300px; height: 300px; position: relative;">
+      <canvas id="streamChart"></canvas>
+    </div>
   </div>
 {% endblock nav %}
 {% block captains %}
@@ -173,46 +173,68 @@
 	    </table>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 <script>
+  let streamChart = null;
+  function createOrUpdateChart(labels, data, rags) {
+    const ragColors = {
+      red: 'rgba(255, 99, 132, 0.8)',
+      amber: 'rgba(255, 159, 64, 0.8)',
+      green: 'rgba(75, 192, 192, 0.8)'
+    };
 
-  const ctx = document.getElementById('streamChart').getContext('2d');
+    const backgroundColors = rags.map(rag => ragColors[rag]);
 
-   const labels = {{ streamrag.keys() | list | tojson }};
-   const data = {{ streamrag.values() | map(attribute='Loaded') | list | tojson }};
-   const ragColors = {
-     red: 'rgba(255, 99, 132, 0.6)',
-     amber: 'rgba(255, 159, 64, 0.6)',
-     green: 'rgba(75, 192, 192, 0.6)'
-   };
-   const backgroundColors = {{ streamrag.values() | map(attribute='RAG') | list | tojson }}
-     .map(rag => ragColors[rag]);
+    // Get canvas element safely in case this is triggered late
+    const canvas = document.getElementById('streamChart');
+    if (!canvas) {
+      console.error('streamChart canvas not found.');
+      return;
+    }
 
-   new Chart(ctx, {
-     type: 'doughnut',
-     data: {
-       labels: labels,
-       datasets: [{
-         label: 'Loaded Files per Stream',
-         data: data,
-         backgroundColor: backgroundColors,
-         borderColor: '#fff',
-         borderWidth: 1
-       }]
-     },
-     options: {
-       responsive: true,
-       maintainAspectRatio: false,
-       plugins: {
-         legend: {
-           position: 'right'
-         },
-         title: {
-           display: true,
-           text: 'Stream Loading Status'
-         }
-       }
-     }
-   });
+    const ctx = canvas.getContext('2d');
+
+    if (streamChart) {
+      // Update existing chart
+      streamChart.data.labels = labels;
+      streamChart.data.datasets[0].data = data;
+      streamChart.data.datasets[0].backgroundColor = backgroundColors;
+      streamChart.update();
+    } else {
+      // First-time chart creation
+      Chart.register(ChartDataLabels); // Only needed once
+      streamChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Electors in Stream',
+            data: data,
+            backgroundColor: backgroundColors,
+            borderColor: '#fff',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Stream Loading Status'
+            },
+            datalabels: {
+              color: '#000',
+              font: { size: 14, weight: 'bold' },
+              formatter: (value) => value.toLocaleString()
+            }
+          }
+        },
+        plugins: [ChartDataLabels]
+      });
+    }
+  }
   function setActionForm(action,subject){
     let form = document.getElementById("normal-file");
     if (action === 'normalise') {

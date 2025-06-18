@@ -70,6 +70,7 @@
               <th>Stream</th>
               <th>Alive</th>
               <th>Loaded</th>
+              <th>Elect</th>
               <th>RAG</th>
           </tr>
         </thead>
@@ -79,15 +80,13 @@
                   <td>{{ value['Stream'] }}</td>
                   <td>{{ value['Alive'] }}</td>
                   <td>{{ value['Loaded'] }}</td>
+                  <td>{{ value['Elect'] }}</td>
                   <td>{{ value['RAG'] }}</td>
               </tr>
           {% endfor %}
           </tbody>
     </table>
   </div>
-<div>
-<canvas id="streamChart" width="300" height="300"></canvas>
-</div>
 <div id="importTable" class="section">
     <table id="DQ-table">
 

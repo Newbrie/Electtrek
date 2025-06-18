@@ -219,7 +219,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         patterns = {
             'ENOP': r'^[A-Za-z]+\d+-\d+[./]\d+$',  # e.g. PD123-456/7 or PD123-456.7
             'ENOT': r'^[A-Za-z]+\d+-\d+$',         # e.g. PD123-456
-            'ENOS': r'^\d+[./]\d+$',               # e.g. 1234/2 or 1234.2
+            'ENOS': r'^\d+(?:[./]\d+)?$',               # e.g. 1234/2 or 1234.2
             'ENO':  r'^[1-9]\d*$',                 # e.g. 1234
             'PD':   r'^[A-Za-z]+\d+$',             # e.g. PD123
             'Suffix': r'^[1-9]\d*$',               # e.g. 2

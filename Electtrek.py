@@ -1592,7 +1592,53 @@ def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
         print("No poly found to intersect with parent")
     return [nodestep,filtered,gdf]
 
+def getstreamrag(electorframe):
+    table_data = []
+    streamtable = []
+    if os.path.exists(TABLE_FILE):
+        with open(TABLE_FILE) as f:
+            table_data = json.load(f)
+        g = {'filename' : 'count', 'active' : 'count'}
+        table_df = pd.DataFrame(table_data)
+        streamtable = table_df.groupby(['stream']).agg(g).reset_index()
 
+    streamdash = pd.DataFrame()
+    activestreams = []
+    if len(electorframe) > 0:
+        alldf = pd.DataFrame(electorframe,columns=['Stream', 'ENOP'])
+        # we group electors by Streams, calculating totals in each stream
+        g = {'ENOP':'count' }
+        streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
+        activestreams = streamdash['Stream'].to_list()
+
+    if len(table_data) > 0:
+        g = {'filename' : 'count', 'active' : 'count'}
+        table_df = pd.DataFrame(table_data)
+        streamtable = table_df.groupby(['stream']).agg(g).reset_index()
+        potentialstreams = sorted(set(row['stream'] for row in table_data))
+    else:
+        streamtable = pd.DataFrame()
+        potentialstreams = []
+
+    rag = defaultdict(dict)
+    for stream in potentialstreams:
+# for each stream in the table
+        rag[stream]['Stream'] = stream.upper()
+        if stream.upper() in activestreams: # if used to load allelectors
+            rag[stream]['Alive'] = True
+            rag[stream]['Elect'] = int(streamdash[streamdash['Stream'] == stream.upper()]['ENOP'].values[0])
+        else:
+            rag[stream]['Alive'] = False
+            rag[stream]['Elect'] = 1
+        rag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
+# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
+        if rag[stream]['Alive'] and rag[stream]['Loaded'] == 1:
+            rag[stream]['RAG'] = 'green'
+        elif rag[stream]['Alive']:
+            rag[stream]['RAG'] = 'amber'
+        else:
+            rag[stream]['RAG'] = 'red'
+    return rag
 
 # create and configure the app
 app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
@@ -1796,6 +1842,7 @@ def index():
         print("__________Session Alive:"+ session['username'])
         formdata = {}
         allelectors = []
+        streamrag = getstreamrag(allelectors)
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -1991,6 +2038,7 @@ def dashboard ():
         formdata = {}
         allelectors = []
 
+        streamrag = getstreamrag(allelectors)
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -3172,7 +3220,8 @@ def setgotv():
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
     selected = None
-    streamrag = defaultdict(dict)
+    streamrag = getstreamrag(allelectors)
+
     if request.method == 'POST':
 
         formdata = {}
@@ -3253,12 +3302,7 @@ def normalise():
     else:
         table_data = []
 
-    streamrag = defaultdict(dict)
-    for stream in sorted(set(row['stream'] for row in table_data)):
-        streamrag[stream]['Stream'] = stream.upper()
-        streamrag[stream]['Alive'] = False
-        streamrag[stream]['Loaded'] = 0
-        streamrag[stream]['RAG'] = 'red'
+    streamrag = getstreamrag(allelectors)
 
     dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
     Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
@@ -3434,23 +3478,7 @@ def normalise():
     table_df = pd.DataFrame(table_data)
     streamtable = table_df.groupby(['stream']).agg(g).reset_index()
 
-    streamrag = defaultdict(dict)
-    for stream in sorted(set(row['stream'] for row in table_data)):
-# for each stream in the table
-        streamrag[stream]['Stream'] = stream.upper()
-        if stream.upper() in streamdash['Stream'].to_list(): # if used to load allelectors
-            streamrag[stream]['Alive'] = True
-        else:
-            streamrag[stream]['Alive'] = False
-        streamrag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
-# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
-        if streamrag[stream]['Alive'] and streamrag[stream]['Loaded'] == 1:
-            streamrag[stream]['RAG'] = 'green'
-        elif streamrag[stream]['Alive']:
-            streamrag[stream]['RAG'] = 'amber'
-        else:
-            streamrag[stream]['RAG'] = 'red'
-
+    streamrag = getstreamrag(allelectors)
 
     print("__Streamrag2:",streamdash['Stream'].to_list(), streamrag)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
@@ -3479,7 +3507,8 @@ def walks():
 
     global environment
     flash('_______ROUTE/walks',session)
-    streamrag = defaultdict(dict)
+    streamrag = getstreamrag(allelectors)
+
 
     if len(request.form) > 0:
         formdata = {}
@@ -3575,6 +3604,7 @@ def firstpage():
 #    lat = 53.2730 - Runcorn
 #    lon = -2.7694 - Runcorn
 
+
     if lat and lon:
         # Use lat/lon to filter data, e.g., find matching region in GeoJSON
         print(f"Using GPS: lat={lat}, lon={lon}")
@@ -3597,7 +3627,7 @@ def firstpage():
         }
     # This section of code constructs the sourcepath to ping from a given lat long
         sourcepath = ""
-        streamrag = defaultdict(dict)
+
         step = ""
         [step,Treepolys['country'],Fullpolys['country']] = filterArea(config.workdirectories['bounddir']+"/"+"World_Countries_(Generalized)_9029012925078512962.geojson",'COUNTRY',here, config.workdirectories['bounddir']+"/"+"Country_Boundaries.geojson")
         sourcepath = step
@@ -3636,6 +3666,7 @@ def firstpage():
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         newlayer = Featurelayers[atype].reset()
         newlayer.add_nodemaps(current_node, atype)
+        streamrag = getstreamrag(allelectors)
 
         current_node.create_area_map(current_node.getselectedlayers(session['next']))
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
@@ -3665,7 +3696,8 @@ def cards():
 
     global environment
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
-    streamrag = defaultdict(dict)
+    streamrag = getstreamrag(allelectors)
+
 
     if len(request.form) > 0:
         formdata = {}
@@ -3774,30 +3806,8 @@ def stream_input():
     else:
         table_data = []
 
-    alldf = pd.DataFrame(allelectors,columns=['Stream', 'ENOP'])
-    # we group electors by Streams, calculating totals in each stream
-    g = {'ENOP':'count' }
-    streamdash = alldf.groupby(['Stream']).agg(g).reset_index()
-    g = {'filename' : 'count', 'active' : 'count'}
-    table_df = pd.DataFrame(table_data)
-    streamtable = table_df.groupby(['stream']).agg(g).reset_index()
+    streamrag = getstreamrag(allelectors)
 
-    streamrag = defaultdict(dict)
-    for stream in sorted(set(row['stream'] for row in table_data)):
-# for each stream in the table
-        streamrag[stream]['Stream'] = stream.upper()
-        if  stream.upper()  in streamdash['Stream'].to_list(): # if used to load allelectors
-            streamrag[stream]['Alive'] = True
-        else:
-            streamrag[stream]['Alive'] = False
-        streamrag[stream]['Loaded'] = float(int(streamtable[streamtable["stream"] == stream.upper()]['active'].values[0])/int(streamtable[streamtable["stream"] == stream.upper()]['filename'].values[0]))
-# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
-        if streamrag[stream]['Alive'] and streamrag[stream]['Loaded'] == 1:
-            streamrag[stream]['RAG'] = 'green'
-        elif streamrag[stream]['Alive']:
-            streamrag[stream]['RAG'] = 'amber'
-        else:
-            streamrag[stream]['RAG'] = 'red'
     # Collect unique streams for dropdowns
     streams = sorted(set(row['stream'] for row in table_data))
 

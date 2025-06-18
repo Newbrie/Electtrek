@@ -101,6 +101,34 @@ var showMore = function (msg,area, type) {
       });
   };
 
+  function updateChart(newLabels, newData, newRags) {
+  const ragColors = {
+    red: 'rgba(255, 99, 132, 0.8)',
+    amber: 'rgba(255, 159, 64, 0.8)',
+    green: 'rgba(75, 192, 192, 0.8)'
+  };
+  const Chart = parent.document.getElementById("streamChart");
+  Chart.data.labels = newLabels;
+  Chart.data.datasets[0].data = newData;
+  Chart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag]);
+
+  streamChart.update();
+};
+async function fetchAndUpdateChart() {
+  try {
+    const response = await fetch('/api/streamrag');
+    const streamrag = await response.json();
+
+    const labels = Object.keys(streamrag);
+    const data = labels.map(label => streamrag[label].Elect);
+    const rags = labels.map(label => streamrag[label].RAG);
+
+    createOrUpdateChart(labels, data, rags);
+  } catch (error) {
+    console.error('Failed to fetch streamrag data:', error);
+  }
+}
+
   function updateMessages() {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
@@ -117,7 +145,7 @@ var showMore = function (msg,area, type) {
       "PC": "darkred", "SD": "orange", "Z": "lightgray",
       "W": "white", "X": "darkgray"
   };
-
+  fetchAndUpdateChart();
 
   fetch('/displayareas', {
       method: "GET",
