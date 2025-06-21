@@ -361,7 +361,7 @@ async function fetchAndUpdateChart() {
         window.parent.postMessage("Refreshing summary data set ", '*');
         };
 
-  function inputVI(VI,VID) {
+  function inputVI(VI) {
     let x = VI.value.toUpperCase();
     VI.value = x;
     const codes = Object.keys(VID_json);
@@ -376,7 +376,7 @@ async function fetchAndUpdateChart() {
     }
     };
 
-    function inputVR(VI) {
+    function inputVR(VR) {
       let x = VR.value.toUpperCase();
       VR.value = x;
       const codes = Object.keys(VID_json);
