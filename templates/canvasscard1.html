@@ -82,7 +82,8 @@
 	      <th class="c1" colspan='3' >Elector</th>
 				<th class="centred" colspan='3'>Address</th>
 				<th class="c8">A.V.</th>
-	      <th class="coded">V.I.</th>
+				<th class="coded">VR</th>
+	      <th class="coded">VI</th>
 	      <th class="c10">Notes</th>
 	    </tr>
 
@@ -106,7 +107,8 @@
 	        <td class="righted">{{ row['Postcode'] }}</td>
 					<td class="AV"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
 
-	       	<td class="VI"> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
+					<td class="VR"> <input type="text" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
+					<td class="VI"> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
 	        <td class="NS"><input type="text" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
 	      </tr>
 	      {% endfor %}

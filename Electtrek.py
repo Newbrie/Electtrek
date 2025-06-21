@@ -38,6 +38,7 @@ import geocoder
 from matplotlib.colors import to_hex, to_rgb
 import colorsys
 from collections import defaultdict
+import requests
 
 
 
@@ -202,6 +203,9 @@ data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
+# This prints a script tag you can paste into your HTML
+print(f'<script>const VID_json = {VID_json};</script>')
+
 class TreeNode:
     def __init__(self, value, fid, roid, lev):
         global levelcolours
@@ -219,6 +223,7 @@ class TreeNode:
         self.centroid = Point(roid.x,roid.y)
         self.bbox = []
         self.map = folium.Map(location=[roid.y, roid.x], trackResize = "false",tiles="OpenStreetMap", crs="EPSG3857",zoom_start=int((4+(min(lev,5)+0.75)*2)))
+        self.VR = VIC.copy()
         self.VI = VIC.copy()
         self.turnout = 0
         self.electorate = 0
@@ -583,6 +588,7 @@ class TreeNode:
 # if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
 # the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
 # if the electoral file hasn't been loaded yet then that needs to be done first.
+
         nodelist = []
 
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
@@ -1104,7 +1110,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         if type == 'polling_district':
             showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file +" street", herenode.value,'street')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
 #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,getchildtype('polling_district'))
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
 #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
@@ -1114,7 +1120,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
         elif type == 'walk':
             showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file+" walkleg", herenode.value,'walkleg')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
             limbX['UPDOWN'] =  uptag1 +"<br>"+ downtag+"<br>"
@@ -1238,7 +1244,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     mapfile = "/transfer/"+c.dir+"/"+c.file
 #                        self.children.append(c)
                 elif herenode.level == 3:
-                    upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+                    upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
 #                upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12, session.get('importfile'))
 
                     PDbtn = """
@@ -1334,6 +1340,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         global levelcolours
         global allelectors
         global areaelectors
+
+
         for c in [x for x in herenode.children if x.type == type]:
             print('_______MAP Markers')
 #            layerfids = [x.fid for x in self.children if x.type == type]
@@ -1345,6 +1353,28 @@ class ExtendedFeatureGroup(FeatureGroup):
             fill = herenode.col
             pathref = c.dir+"/"+c.file
             mapfile = '/transfer/'+pathref
+
+    #        query = f"""
+    #        [out:json][timeout:60];
+    #        rel(109202);
+    #        map_to_area -> .searchArea;
+    #        way["highway"]["name"=\'{str(c.value).title().replace("_"," ")}\']["highway"~"^(residential|unclassified|service|tertiary|motorway|trunk|primary|secondary)$"](area.searchArea);
+#
+    #        out geom;
+    #        """
+
+    #        response = requests.post(
+    #            "https://overpass-api.de/api/interpreter",
+    #            data=query.encode('utf-8'),
+    #            headers={"Content-Type": "text/plain"}
+    #        )
+
+    #        if response.status_code == 200:
+    #            with open("results.json", "wb") as f:
+    #                f.write(response.content)
+    #            print("Data retrieved as results.json : ", response.content)
+    #        else:
+    #            print(f"OpenStreet Map street vector Error:{query} gives: {response.status_code}")
 
             print("______Display childrenx:",c.value, c.level,type,c.centroid )
             tcol = get_text_color(to_hex(c.col))
@@ -2043,16 +2073,15 @@ def dashboard ():
     global formdata
     global ElectionSettings
 
-    mapfile  = current_node.dir+"/"+current_node.file
     if 'username' in session:
         print('_______ROUTE/dashboard'+ session['username'] + ' is already logged in at ', current_node.value)
         formdata = {}
 
         streamrag = getstreamrag(allelectors)
 
-        mapfile = current_node.dir+"/"+current_node.file
+        path = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
-        return render_template("Dash0.html", context = {   "formdata" : formdata, "streamrag" : streamrag, "group" : allelectors , "mapfile" : mapfile})
+        return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -2369,6 +2398,7 @@ def STupdate(path):
                 for item in VIdata["viData"]:  # Loop through each elector entry
                     electID = item.get("electorID","").strip()
                     ElectorName = item.get("ElectorName","").strip()
+                    VR_value = item.get("vrResponse", "").strip() # Extract vrResponse, "" if none
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
                     print("VIdata item:",item)  # Print each elector entry to see if duplicates exist
@@ -2872,6 +2902,17 @@ def WKdownST(path):
 
           print(f"________WalkMarker {walkleg_node.value} | electors {len(walklegelectors)}" )
 
+# overpass query to return A constituencies road geometry
+# Untested idea is that we can plot the actual street geometry in the maps rather than just convex hulls
+#[out:json][timeout:60];
+#rel(109202);
+#map_to_area -> .searchArea;
+#
+#way["highway"]["name"="Elmbridge Lane"](area.searchArea);
+
+#out geom;
+
+
           geometry = gpd.points_from_xy(walklegelectors.Long.values,walklegelectors.Lat.values, crs="EPSG:4326")
         # create a geo dataframe for the Walk Map
           geo_df1 = gpd.GeoDataFrame(
@@ -2930,8 +2971,7 @@ def WKdownST(path):
           canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
           prodstats = {}
           prodstats['ward'] = walk_node.parent.parent.value
-          prod
-          stats['polling_district'] = walk_node.parent.value
+          prodstats['polling_district'] = walk_node.parent.value
           prodstats['groupelectors'] = groupelectors
           prodstats['walk'] = walk_node.value
           prodstats['climb'] = climb
@@ -3323,36 +3363,30 @@ def normalise():
     print(f"📂 Files received: {len(files)}")
     for i, f in enumerate(files):
         print(f"  File[{i}]: {f.filename}")
-    # 2. Extract metadata
+
+    # 2. Extract metadata and stored paths
     meta_data = {}
-    for key in request.form:
+
+    for key, value in request.form.items():
         if key.startswith('meta_'):
             parts = key.split('_')
             if len(parts) < 3:
                 continue  # malformed key
             index = parts[1]
             field = '_'.join(parts[2:])
-            meta_data.setdefault(index, {})[field] = request.form[key]
-            print("___META:",field,"**", request.form[key])
-    # 2b. Extract stored file paths
-    for key in request.form:
-        if key.startswith('stored_path_'):
-            index = key.replace('stored_path_', '')
-            meta_data.setdefault(index, {})['stored_path'] = request.form[key]
-            print(f"📁 Stored path for index {index}: {request.form[key]}")
-    # 3. Combine files with their order metadata
-    # We assume the index of `files[i]` corresponds to `meta_data[str(i)]`
-    indexed_files = []
+            meta_data.setdefault(index, {})[field] = value
+            print("___META:", field, "**", value)
 
-    for i in range(len(meta_data)):
-        meta = meta_data.get(str(i), {})
+        elif key.startswith('stored_path_'):
+            index = key.replace('stored_path_', '')
+            meta_data.setdefault(index, {})['stored_path'] = value
+            print(f"📁 Stored path for index {index}: {value}")
+
+    # 3. Combine files/paths with order metadata
+    indexed_files = []
+    for i, (index, meta) in enumerate(sorted(meta_data.items(), key=lambda x: int(x[0]))):
         file = files[i] if i < len(files) else None
         path = meta.get('stored_path')
-
-        if not file and not path:
-            print(f"⚠️ No file or stored path for index {i}")
-            continue
-
         try:
             order = int(meta.get('order', 0))
         except (ValueError, TypeError):
@@ -3361,49 +3395,48 @@ def normalise():
         if file:
             indexed_files.append((order, file))
         elif path:
-            indexed_files.append((order, path))  # Just store path for now
-
+            indexed_files.append((order, path))
+        else:
+            print(f"⚠️ No file or stored path for index {i}")
 
     # 4. Sort files by order
     sorted_files = [file for _, file in sorted(indexed_files, key=lambda x: x[0])]
-    print("____indexed files:", indexed_files)
+    print("____Indexed files:", indexed_files)
     print("____Sorted files:", sorted_files)
 
-    # 5. Add file paths from stored paths
+    # 5. Save uploaded files and record paths
     stored_paths = []
-
     for i, file in enumerate(sorted_files):
-        filename = file.filename
-        if not filename:
-            continue
-        save_path = os.path.join(upload_dir, filename)
-        file.save(save_path)
-        stored_paths.append(save_path)
-        # Optional: Add to metadata for future use
-        meta_data[str(i)]['saved_path'] = save_path
+        if hasattr(file, 'filename') and file.filename:
+            save_path = os.path.join(upload_dir, file.filename)
+            file.save(save_path)
+            stored_paths.append(save_path)
+            meta_data[str(i)]['saved_path'] = save_path
 
-    # 6. Pair uploaded files with metadata (optional, depends on how many files you expect)
+    # 6. Process metadata (normalisation or routing)
     file_index = 0
     mainframe = pd.DataFrame()
     deltaframes = []
     aviframe = pd.DataFrame()
     DQstats = pd.DataFrame()
-    print("___Route/normalise")
 
+    print("___Route/normalise")
     for index, data in meta_data.items():
         print(f"\nRow index {index}")
-        print(f"Stream: {data.get('stream')}")
-        stream = str(data.get('stream')).upper()
-        print(f"Order: {data.get('order')}")
+        stream = str(data.get('stream', '')).upper()
         order = data.get('order')
-        print(f"Type: {data.get('type')}")
         filetype = data.get('type')
-        print(f"Purpose: {data.get('purpose')}")
         purpose = data.get('purpose')
-        print(f"Fixlevel: {data.get('fixlevel')}")
-        fixlevel = int(data.get('fixlevel'))
-        print(f"Stored Path: {data.get('stored_path', '')}")
+        fixlevel = int(data.get('fixlevel', 0))
         file_path = data.get('stored_path', '')
+
+        print(f"Stream: {stream}")
+        print(f"Order: {order}")
+        print(f"Type: {filetype}")
+        print(f"Purpose: {purpose}")
+        print(f"Fixlevel: {fixlevel}")
+        print(f"Stored Path: {file_path}")
+
         formdata = {}
         ImportFilename = str(file_path)
         print("_____ reading file outside normz",ImportFilename)
@@ -3476,7 +3509,7 @@ def normalise():
 
     mainframe = mainframe.reset_index(drop=True)
     print(f"__concat of mainframe of length {len(mainframe)}- columns:",mainframe.columns )
-    allelectors = mainframe
+    allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
     print("____Final Loadable mainframe columns:",len(allelectors),allelectors.columns)
 # assemble data for the RAG status of Streams in allelectors
     streamrag = getstreamrag(allelectors)

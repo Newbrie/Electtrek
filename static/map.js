@@ -1,5 +1,7 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
+const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
+
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -41,11 +43,14 @@ var showMore = function (msg,area, type) {
     rows.forEach(row => {
         let electorID = row.cells[1].innerText.trim(); // ENOP
         let ElectorName = row.cells[2].innerText.trim(); // Name
+        let vrInput = row.cells[7].querySelector('input');
+        let vrValue = vrInput ? vrInput.value.trim() : "";
 
-        let viInput = row.cells[7].querySelector('input');
+        let viInput = row.cells[8].querySelector('input');
+
         let viValue = viInput ? viInput.value.trim() : "";
 
-        let notesInput = row.cells[8].querySelector('input');
+        let notesInput = row.cells[9].querySelector('input');
         let notesValue = notesInput ? notesInput.value.trim() : "";
 
         console.log(`Row data: ${electorID} | ${viValue} | ${notesValue}`);
@@ -54,6 +59,7 @@ var showMore = function (msg,area, type) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
+                vrResponse: vrValue,
                 viResponse: viValue,
                 notesResponse: notesValue
             });
@@ -355,11 +361,10 @@ async function fetchAndUpdateChart() {
         window.parent.postMessage("Refreshing summary data set ", '*');
         };
 
-  function inputVI(VI) {
+  function inputVI(VI,VID) {
     let x = VI.value.toUpperCase();
-    const VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
     VI.value = x;
-    const codes = Object.keys(VID);
+    const codes = Object.keys(VID_json);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
       VI.style.color = 'darkgray';
@@ -370,6 +375,21 @@ async function fetchAndUpdateChart() {
   //    VI.innerHTML = x;
     }
     };
+
+    function inputVR(VI) {
+      let x = VR.value.toUpperCase();
+      VR.value = x;
+      const codes = Object.keys(VID_json);
+      if (codes.includes(x)) {
+    //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
+        VR.style.color = 'darkgray';
+    //    VR.innerHTML = x;
+          }
+      else {
+        VR.style.color = 'lightgray';
+    //    VR.innerHTML = x;
+      }
+      };
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
