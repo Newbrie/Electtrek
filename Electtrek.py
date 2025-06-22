@@ -369,7 +369,7 @@ class TreeNode:
 
     def updateVI(self,viValue):
         origin = self
-        if self.type == 'street' or self.type == 'walk':
+        if self.type == 'street' or self.type == 'walkleg':
             sumnode = origin
             for x in range(origin.level+1):
                 sumnode.VI[viValue] = sumnode.VI[viValue] + 1
@@ -377,6 +377,16 @@ class TreeNode:
                 sumnode = sumnode.parent
         self = origin
         print ("_____VIstatus:",self.value,self.type,self.VI)
+        return
+
+    def updateVR(self,vrValue):
+        origin = self
+        if self.type == 'street' or self.type == 'walkleg':
+            sumnode = origin
+            sumnode.VR[vrValue] = sumnode.VR[vrValue] + 1
+            print ("_____VRnode:",sumnode.value,sumnode.level,sumnode.VR)
+        self = origin
+        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
     def updateTurnout(self):
@@ -1477,8 +1487,11 @@ def importVI(electorsVI):
         if street_node:
             for index,entry in inDatadf.iterrows():
                 street_node.updateVI(entry['VI'])
+                street_node.updateVR(entry['VR'])
                 print("line VI update:",street_node.value,street_node.VI, entry['VI'])
+                print("line VR update:",street_node.value,street_node.VR, entry['VR'])
             print("file VI update:",street_node.value,street_node.VI, entry['VI'])
+            print("file VR update:",street_node.value,street_node.VR, entry['VI'])
             street_node.updateElectorate(street_node.electorate)
             street_node.updateTurnout()
         else:
@@ -2259,7 +2272,7 @@ def downPDbut(path):
 
 
             moredata = importVI(allelectors.copy())
-            if moredata != []:
+            if len(moredata) > 0:
                 allelectors = moredata
 
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
@@ -2327,7 +2340,7 @@ def downWKbut(path):
             print("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
 
     moredata = importVI(allelectors.copy())
-    if moredata != []:
+    if len(moredata) > 0:
         allelectors = moredata
 
     print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
@@ -2416,6 +2429,10 @@ def STupdate(path):
                     changefields.loc[i,'ElectorName'] = ElectorName
                     if not selected.empty:
                         # Update only if viResponse is non-empty
+                        if VR_value:
+                            allelectors.loc[selected.index, "VR"] = VR_value
+                            street_node.updateVR(VR_value)
+                            changefields.loc[i,'VR'] = VR_value
                         if VI_value:
                             allelectors.loc[selected.index, "VI"] = VI_value
                             street_node.updateVI(VI_value)
@@ -3847,6 +3864,29 @@ def stream_input():
 
     return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
+def get_tag_column(df, tag):
+    return df["tags"].apply(lambda tags: int(tag in tags))
+
+@app.route("/add_tag", methods=["POST"])
+def add_tag():
+    data = request.json
+    enop = data['enop']
+    tag = data['tag']
+    # Find row and append tag
+    row = allelectors.loc[allelectors['ENOP'] == enop].iloc[0]
+    if tag not in row['tags']:
+        row['tags'].append(tag)
+    return jsonify(success=True)
+
+@app.route("/remove_tag", methods=["POST"])
+def remove_tag():
+    data = request.json
+    enop = data['enop']
+    tag = data['tag']
+    row = allelectors.loc[allelectors['ENOP'] == enop].iloc[0]
+    if tag in row['tags']:
+        row['tags'].remove(tag)
+    return jsonify(success=True)
 
 
 if __name__ in '__main__':

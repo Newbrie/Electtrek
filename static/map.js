@@ -1,6 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
-const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
+//const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
 
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
@@ -397,6 +397,29 @@ async function fetchAndUpdateChart() {
     NS.value = x;
 
     };
+
+  function addTag(event, electorId) {
+    if (event.key === "Enter") {
+      const input = event.target;
+      const newTag = input.value.trim();
+      if (!newTag) return;
+
+      fetch("/add_tag", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enop: electorId, tag: newTag })
+      }).then(() => location.reload());
+    }
+  }
+
+  function removeTag(electorId, tag) {
+    fetch("/remove_tag", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enop: electorId, tag: tag })
+    }).then(() => location.reload());
+  }
+
 
   document.addEventListener("DOMContentLoaded", () => {
     fetch("/get-constants",
