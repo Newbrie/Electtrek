@@ -2713,6 +2713,7 @@ def STupdate(path):
 
     context = {
         "group": electorwalks,
+        "selected_tag" : selected_tag,
         "prodstats": prodstats,
         "mapfile": url_for('upbut',path=mapfile),
         "datafile": url_for('STupdate',path=datafile),

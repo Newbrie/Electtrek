@@ -152,8 +152,9 @@ async function fetchAndUpdateChart() {
       "W": "white", "X": "darkgray"
   };
   fetchAndUpdateChart();
+  const selectedTag = document.getElementById("selected-tag").value;
 
-  fetch(`/displayareas?selected_tag=${encodeURIComponent(yourSelectedTag)}`, {
+  fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin"
