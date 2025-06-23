@@ -113,6 +113,11 @@
           <input type="file" name="importfile" id="file-input" onchange="document.getElementById('upload-form').submit();">
       </form>
 
+      <div>
+        <label for="new-tag"><b>Add New Tag:</b></label>
+        <input type="text" id="new-tag" placeholder="e.g. T3">
+        <button onclick="addNewTag()">Add Tag</button>
+      </div>
 
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
@@ -274,6 +279,36 @@
         // Change the iframe src to the stream processing input page
         document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
     });
+
+    function addNewTag() {
+  const newTag = document.getElementById("new-tag").value.trim();
+  if (!newTag) return alert("Enter a valid tag");
+
+  // Add new tag to every tags dropdown
+  document.querySelectorAll(".tags select").forEach(select => {
+    // Avoid duplicates
+    if (![...select.options].some(opt => opt.value === newTag)) {
+      const option = document.createElement("option");
+      option.value = newTag;
+      option.text = newTag;
+      select.appendChild(option);
+    }
+  });
+
+  // Also add to the "Tag of Interest" select
+  const tagInterestSelect = document.getElementById("selectedTag");
+  if (![...tagInterestSelect.options].some(opt => opt.value === newTag)) {
+    const option = document.createElement("option");
+    option.value = newTag;
+    option.text = newTag;
+    tagInterestSelect.appendChild(option);
+  }
+
+  // Optionally auto-select the new tag
+  tagInterestSelect.value = newTag;
+  updateIsTagSetColumn();
+}
+
 
 </script>
 

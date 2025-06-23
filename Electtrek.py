@@ -196,7 +196,7 @@ SelectedTags = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 OPTIONS = {
     "elections": ElectionOptions,
     "yourparty": VID,
-    "selectedTag": SelectedTags,
+    "Tags": SelectedTags,
     "autofix" : onoff
     # Add more mappings here if needed
 }
@@ -1875,7 +1875,7 @@ ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
 ElectionSettings['teamsize'] = 5
 ElectionSettings['elections'] = "W"
-ElectionSettings['selectedTag'] = "M1"
+ElectionSettings['selectedTags'] = "M1"
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
 ElectionSettings['candfirst'] = ""
@@ -1998,6 +1998,24 @@ def handle_exception(e):
     if current_node.level > 0:
         mapfile = current_node.parent.dir+"/"+current_node.parent.file
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
+@app.route('/add_tag', methods=['POST'])
+@login_required
+def add_tag():
+    try:
+        data = request.get_json()
+        new_tag = data.get("tag", "").strip()
+        if new_tag and new_tag not in ElectionSettings['selectedTags']:
+            ElectionSettings['selectedTags'].append(new_tag)
+
+            # Optional: persist to file
+            with open("electionsettings.json", "w") as f:
+                json.dump(ElectionSettings, f, indent=2)
+
+        return jsonify({"success": True, "tags": ElectionSettings['selectedTags']})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/api/streamrag')
 @login_required
@@ -3241,7 +3259,7 @@ def displayareas():
         return jsonify([[], [], "No data"])
 
     # --- Handle selected tag from request or session
-    selected_tag = ElectionSettings['selectedTag']
+    selected_tag = ElectionSettings['selectedTags']
 
     # Unpack layeritems
     df = layeritems[1].copy()

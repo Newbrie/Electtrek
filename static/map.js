@@ -155,7 +155,7 @@ async function fetchAndUpdateChart() {
   };
   fetchAndUpdateChart();
 
-  const selectedTag = parent.document.getElementById("selectedTag").value;
+  const Tags = parent.document.getElementById("Tags").value;
 
   fetch(`/displayareas`, {
     method: "GET",
@@ -488,3 +488,43 @@ async function fetchAndUpdateChart() {
         });
       });
   });
+
+  function addNewTag() {
+  const newTag = document.getElementById("new-tag").value.trim();
+  if (!newTag || Tags.includes(newTag)) {
+    alert("Invalid or duplicate tag");
+    return;
+  }
+
+  // Update local Tags array
+  Tags.push(newTag);
+
+  // Add to all dropdowns
+  document.querySelectorAll(".tags select, #selected-tag").forEach(select => {
+    const option = document.createElement("option");
+    option.value = newTag;
+    option.text = newTag;
+    select.appendChild(option);
+  });
+
+  // Auto-select the new tag in dropdown of interest
+  document.getElementById("selected-tag").value = newTag;
+  updateIsTagSetColumn();
+
+  // OPTIONAL: sync with backend
+  fetch("/add_tag", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken") || ""  // optional
+    },
+    body: JSON.stringify({ tag: newTag })
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log("Backend tag sync success:", data);
+  })
+  .catch(error => {
+    console.error("Error syncing new tag with backend:", error);
+  });
+}
