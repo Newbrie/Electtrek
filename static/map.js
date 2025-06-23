@@ -155,12 +155,6 @@ async function fetchAndUpdateChart() {
   };
   fetchAndUpdateChart();
 
-  const selectedTagElement = parent.document.getElementById("selected-tag");
-  if (!selectedTagElement) {
-    console.error("❌ Cannot find element with id 'selected-tag'");
-    return;
-  }
-
   const selectedTag = document.getElementById("selected-tag").value;
 
   fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
