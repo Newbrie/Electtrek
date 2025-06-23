@@ -490,8 +490,7 @@ async function fetchAndUpdateChart() {
   });
 
   function updateIsTagSetColumn() {
-  const selectedTag = document.getElementById("selected-tag").value;
-
+  const selectedTag = document.getElementById("Tags").value;
   document.querySelectorAll(".tags").forEach(function(cell) {
     const select = cell.querySelector("select");
     const enop = select.id.split("-")[1];

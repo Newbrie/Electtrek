@@ -3260,7 +3260,6 @@ def displayareas():
 
     # --- Handle selected tag from request or session
     selected_tag = ElectionSettings['selectedTags']
-
     # Unpack layeritems
     df = layeritems[1].copy()
     column_headers = layeritems[0]
