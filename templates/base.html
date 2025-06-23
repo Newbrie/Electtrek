@@ -8,12 +8,19 @@
   <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
   <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
   <script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
-  
+
       {% block map %}
       {% endblock %}
 </head>
 <body>
-
+  <div style="margin-top: 10px;">
+    <label for="selected-tag"><b>Tag of Interest:</b></label>
+    <select id="selected-tag" onchange="updateIsTagSetColumn()">
+      {% for tag in tag_options %}
+        <option value="{{ tag }}" {% if tag == selected_tag %}selected{% endif %}>{{ tag }}</option>
+      {% endfor %}
+    </select>
+  </div>
   {% block body %}
 
   {% endblock %}

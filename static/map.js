@@ -135,6 +135,27 @@ async function fetchAndUpdateChart() {
   }
 }
 
+document.addEventListener("DOMContentLoaded", function () {
+  const selectedTagElement = document.getElementById("selected-tag");
+  if (!selectedTagElement) {
+    console.error("❌ Cannot find element with id 'selected-tag'");
+    return;
+  }
+
+  const selectedTag = selectedTagElement.value;
+
+  fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin"
+  })
+  .then(response => response.json())
+  .then(data => {
+    // ... your existing fetch success logic here ...
+  })
+  .catch(error => console.error("Fetch error:", error));
+});
+
   function updateMessages() {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
