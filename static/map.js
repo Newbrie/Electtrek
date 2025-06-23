@@ -154,6 +154,92 @@ async function fetchAndUpdateChart() {
       "W": "white", "X": "darkgray"
   };
   fetchAndUpdateChart();
+
+  const selectedTagElement = parent.document.getElementById("selected-tag");
+  if (!selectedTagElement) {
+    console.error("❌ Cannot find element with id 'selected-tag'");
+    return;
+  }
+
+  const selectedTag = document.getElementById("selected-tag").value;
+
+  fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin"
+  })
+  .then(response => response.json())
+  .then(data => {
+      console.log("Data received:", data);
+
+      if (!Array.isArray(data) || data.length < 3) {
+          console.error("Invalid or incomplete data:", data);
+          return;
+      }
+
+      if (!tabhead || !tabbody || !tabtitle) {
+          console.error("tabhead or tabbody not found");
+          return;
+      }
+
+
+      const columnHeaders = data[0];  // First element contains ordered column names
+      const rows = data[1];            // Second element contains data rows
+      const title = typeof data[2] === 'number' ? data[2].toString() : data[2]; // third element contains title
+      // Clear previous content
+      tabtitle.innerHTML = "";
+      tabhead.innerHTML = "";
+      tabbody.innerHTML = "";
+
+      // Build table head row
+
+      const headRow = document.createElement("tr");
+      const checkboxHeader = document.createElement("th");
+
+      tabtitle.innerHTML = title;
+      checkboxHeader.textContent = "?";
+      headRow.appendChild(checkboxHeader);
+
+      columnHeaders.forEach(header => {
+          const th = document.createElement("th");
+          th.textContent = header.toUpperCase();
+          headRow.appendChild(th);
+      });
+
+      tabhead.appendChild(headRow);
+
+      // Build table body
+      rows.forEach(record => {
+          const row = document.createElement("tr");
+
+          // Checkbox cell
+          const checkboxCell = document.createElement("td");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.name = "selectRow[]";
+          checkbox.classList.add("selectRow");
+          checkboxCell.appendChild(checkbox);
+          row.appendChild(checkboxCell);
+
+          // Data cells
+          columnHeaders.forEach(header => {
+            const cell = document.createElement("td");
+            const value = record[header] !== undefined ? record[header] : "";
+            cell.innerHTML = value;
+
+            // Highlight the column whose name matches `yourparty`
+            if (header === yourparty.value) {
+                const color = VCO[yourparty.value] || "inherit";
+                cell.style.backgroundColor = color;
+            }
+
+            row.appendChild(cell);
+            });
+            tabbody.appendChild(row);
+         });
+     })
+     .catch(error => console.error("Elector Table Fetch error:", error));
+
   li.appendChild(parent.document.createTextNode(old + ":completed"));
   ul.appendChild(li);
 };
