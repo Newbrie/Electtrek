@@ -599,6 +599,154 @@ class TreeNode:
 # the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
 # if the electoral file hasn't been loaded yet then that needs to be done first.
 
+
+
+        def fast_spatial_chunking(X, max_cluster_size=400, cell_size=0.008, label_prefix="G1_"):
+            """
+            Fast spatial partitioning by rounding Lat/Long into grid cells and grouping points.
+
+            Parameters:
+                X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
+                max_cluster_size (int): Maximum items per final cluster
+                cell_size (float): Grid resolution in degrees (smaller = finer)
+                label_prefix (str): Prefix for cluster labels
+
+            Returns:
+                np.ndarray: Cluster labels as strings
+            """
+            assert 'Lat' in X.columns and 'Long' in X.columns
+
+            df = X.copy()
+            df['lat_bin'] = (df['Lat'] / cell_size).astype(int)
+            df['lon_bin'] = (df['Long'] / cell_size).astype(int)
+
+            cluster_labels = [''] * len(df)
+            cluster_counter = 0
+
+            for (lat_bin, lon_bin), group in df.groupby(['lat_bin', 'lon_bin']):
+                group_size = len(group)
+                num_subclusters = int(np.ceil(group_size / max_cluster_size))
+
+                # Split the group into subclusters if needed
+                for i, chunk_idx in enumerate(np.array_split(group.index, num_subclusters)):
+                    label = f"{label_prefix}{cluster_counter}"
+                    for idx in chunk_idx:
+                        cluster_labels[idx] = label
+                    cluster_counter += 1
+
+            return np.array(cluster_labels)
+
+
+
+        def recursive_kmeans_latlon(X, max_cluster_size=400, depth=2, prefix='K'):
+            """
+            Recursively cluster a DataFrame with 'Lat' and 'Long' columns
+            so that no resulting cluster exceeds max_cluster_size.
+
+            Parameters:
+                X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
+                max_cluster_size (int): Maximum allowed number of points per cluster
+                depth (int): Used internally for recursion
+                prefix (str): Prefix for hierarchical cluster IDs
+
+            Returns:
+                dict: {index -> cluster_label}
+            """
+            if len(X) <= max_cluster_size:
+                return {i: f"{prefix}" for i in X.index}
+
+            # Number of clusters needed to keep all below threshold
+            k = int(np.ceil(len(X) / max_cluster_size))
+
+            # KMeans on Lat and Long
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+            coords = X[['Lat', 'Long']].values
+            labels = kmeans.fit_predict(coords)
+
+            label_map = {}
+            for i in range(1,k+1,1):
+                idx = X.index[labels == i]
+                sub_data = X.loc[idx]
+                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=f"{prefix}{i}")
+                label_map.update(sub_labels)
+
+            return label_map
+
+
+
+        from sklearn.cluster import MiniBatchKMeans
+
+
+        def greedy_balanced_kmeans_latlon(X, max_cluster_size, random_state=42, label_prefix=""):
+            """
+            Greedy approximation of balanced KMeans on 'Lat' and 'Long', ensuring no cluster exceeds size limit.
+
+            Parameters:
+                X (pd.DataFrame): DataFrame with 'Lat' and 'Long' columns
+                max_cluster_size (int): Maximum elements per cluster
+                random_state (int): Random seed
+                label_prefix (str): Prefix to apply to cluster labels (e.g. "G1_")
+
+            Returns:
+                np.ndarray: Cluster labels as strings with optional prefix
+            """
+            assert 'Lat' in X.columns and 'Long' in X.columns, "DataFrame must contain 'Lat' and 'Long' columns"
+
+            coords = X[['Lat', 'Long']].values
+            n_points = len(X)
+            initial_k = int(np.ceil(n_points / max_cluster_size))
+
+            # Step 1: Run initial clustering
+            kmeans = MiniBatchKMeans(n_clusters=initial_k, random_state=random_state, batch_size=1024)
+            initial_labels = kmeans.fit_predict(coords)
+            centers = kmeans.cluster_centers_
+
+            df = X.copy()
+            df['index'] = df.index
+            df['cluster'] = initial_labels
+            df['dist'] = np.linalg.norm(coords - centers[initial_labels], axis=1)
+
+            # Step 2: Greedy assignment
+            df = df.sort_values(by='dist')  # Assign closer points first
+            assignments = {}
+            cluster_bins = defaultdict(list)
+            cluster_counter = 0
+            cluster_id_map = {}
+
+            for _, row in df.iterrows():
+                orig_cluster = row['cluster']
+                assigned = False
+
+                # Check if original cluster can take more
+                if len(cluster_bins[orig_cluster]) < max_cluster_size:
+                    assigned = True
+                    bin_id = orig_cluster
+                else:
+                    # Try any other existing bin with space
+                    for cid, members in cluster_bins.items():
+                        if len(members) < max_cluster_size:
+                            bin_id = cid
+                            assigned = True
+                            break
+
+                if not assigned:
+                    # Make a new cluster ID
+                    bin_id = f"extra_{cluster_counter}"
+                    cluster_counter += 1
+
+                # Label string: prefix + unique ID
+                if bin_id not in cluster_id_map:
+                    cluster_id_map[bin_id] = f"{label_prefix}{len(cluster_id_map)}"
+
+                label = cluster_id_map[bin_id]
+                assignments[row['index']] = label
+                cluster_bins[bin_id].append(row['index'])
+
+            # Return as array in correct order
+            return np.array([assignments[i] for i in X.index])
+
+
+
         nodelist = []
 
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
@@ -644,23 +792,23 @@ class TreeNode:
 
             print("____lenallelectors+areaelectors:",Level4node.value,len(allelectors),len(areaelectors))
 
-            gdf = gpd.GeoDataFrame(areaelectors, geometry=gpd.points_from_xy(areaelectors.Long, areaelectors.Lat), crs="EPSG:4326")
+#            gdf = gpd.GeoDataFrame(areaelectors, geometry=gpd.points_from_xy(areaelectors.Long, areaelectors.Lat), crs="EPSG:4326")
 
             # Project to Web Mercator (meters)
-            gdf = gdf.to_crs(epsg=3857)
+#            gdf = gdf.to_crs(epsg=3857)
 
             # Use projected coordinates for clustering
-            kmeans_data = np.array(list(zip(gdf.geometry.x, gdf.geometry.y)))
+#            kmeans_data = np.array(list(zip(gdf.geometry.x, gdf.geometry.y)))
 
             # Define number of clusters (walkset)
-            walkset = min(math.ceil(ElectionSettings['teamsize']), 35)
+#            walkset = min(math.ceil(ElectionSettings['teamsize']), 35)
 
-            kmeans = KMeans(n_clusters=walkset, random_state=42)
-            kmeans.fit(kmeans_data)
-
+#            kmeans = KMeans(n_clusters=walkset, random_state=42)
+#            kmeans.fit(kmeans_data)
+            newlabels = recursive_kmeans_latlon(areaelectors,400)
             # Assign WalkName from labels
-            gdf["WalkName"] = np.char.mod('C%d', kmeans.labels_)
-            areaelectors["WalkName"] = gdf["WalkName"]
+#            gdf["WalkName"] = newlabels
+            areaelectors["WalkName"] = newlabels
             areaelectors.to_csv(config.workdirectories['workdir']+"/malcolmtest.csv", sep='\t', encoding='utf-8', index=False)
 
     # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
@@ -672,7 +820,7 @@ class TreeNode:
     # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-MAP") #creating PD_nodes with mean PD pos and elector counts
+                nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-PDS") #creating PD_nodes with mean PD pos and elector counts
             elif electtype == 'walk':
 #                walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
                 walkdf0 = pd.DataFrame(areaelectors, columns=['WalkName', 'ENOP','Long', 'Lat'])
@@ -680,7 +828,7 @@ class TreeNode:
     # we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for self.electorate
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
-                nodelist = self.create_name_nodes('walk',walkdfs.reset_index(),"-MAP") #creating walk_nodes with mean walk centroid and elector counts
+                nodelist = self.create_name_nodes('walk',walkdfs.reset_index(),"-WALKS") #creating walk_nodes with mean walk centroid and elector counts
             elif electtype == 'street':
                 PDelectors = getblock(areaelectors,'PD',self.value)
     #            StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
@@ -708,7 +856,7 @@ class TreeNode:
         Overlaps = {
         "country" : 1,
         "nation" : 0.1,
-        "county" : 0.01,
+        "county" : 0.009,
         "constituency" : 0.008,
         "ward" : 0.00005,
         "division" : 0.00005,
@@ -899,10 +1047,10 @@ class TreeNode:
             child_node.file = child_node.value+"-DIVS.html"
         elif etype == 'polling_district':
             child_node.dir = self.dir+"/PDS/"+child_node.value
-            child_node.file = child_node.value+"-MAP.html"
+            child_node.file = child_node.value+"-PDS.html"
         elif etype == 'walk':
             child_node.dir = self.dir+"/WALKS/"+child_node.value
-            child_node.file = child_node.value+"-MAP.html"
+            child_node.file = child_node.value+"-WALKS.html"
         elif etype == 'street':
             child_node.dir = self.dir
             child_node.file = self.value+"-"+child_node.value+"-PRINT.html"
@@ -2414,6 +2562,7 @@ def STupdate(path):
                     VR_value = item.get("vrResponse", "").strip() # Extract vrResponse, "" if none
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
+                    Tags_value = item.get("tags", [])  # 👈 Expect a list like ["D1", "M4"]
                     print("VIdata item:",item)  # Print each elector entry to see if duplicates exist
 
                     if not electID:  # Skip if electorID is missing
@@ -2442,7 +2591,8 @@ def STupdate(path):
                             changefields.loc[i,'Notes'] = Notes_value
                             print(f"Updated elector {electID} with VI = {VI_value} and Notes = {Notes_value}")
                             print("ElectorVI", allelectors.loc[selected.index, "ENOP"], allelectors.loc[selected.index, "VI"])
-
+                        if Tags_value:
+                            allelectors.at[selected.index[0], "tags"] = json.dumps(Tags_value)
                         else:
                             print(f"Skipping elector {electID}, empty viResponse")
 
@@ -3076,27 +3226,58 @@ def wardreport(path):
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
-@app.route('/displayareas',methods=['POST', 'GET'])
+@app.route('/displayareas', methods=['POST', 'GET'])
 @login_required
 def displayareas():
     global current_node
     global layeritems
     global formdata
-    python_data3 = {}
-    python_data2 = {}
-    python_data1 = {}
-    print('_______ROUTE/displayareas:', len(layeritems),str(layeritems[2]))
-    if layeritems != []:
-        json_data = layeritems[1].to_json(orient='records', lines=False)
-        json_cols = json.dumps(layeritems[0])
-        json_title = json.dumps(str(layeritems[2]))
-        # Convert JSON string to Python list
-        python_data3 = json.loads(json_title)
-        python_data2 = json.loads(json_data)
-        python_data1 = json.loads(json_cols)
-        # Return the Python list using jsonify
-    print('_______ROUTE/displayarea data', python_data1 ,python_data2, python_data3)
-    return  jsonify([python_data1, python_data2,python_data3])
+
+    if not layeritems or len(layeritems) < 3:
+        return jsonify([[], [], "No data"])
+
+    # --- Handle selected tag from request or session
+    selected_tag = request.args.get("selected_tag") or session.get("selected_tag")
+
+    # Unpack layeritems
+    df = layeritems[1].copy()
+    column_headers = layeritems[0]
+    title = str(layeritems[2])
+
+    # --- Ensure "tags" column exists and is parsed
+    if "tags" not in df.columns:
+        df["tags"] = [[] for _ in range(len(df))]
+
+    def parse_tags(val):
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except json.JSONDecodeError:
+                return []
+        elif isinstance(val, list):
+            return val
+        return []
+
+    df["tags"] = df["tags"].apply(parse_tags)
+
+    # --- Add 'is_tag_set' column
+    if selected_tag:
+        df["is_tag_set"] = df["tags"].apply(lambda tags: selected_tag in tags)
+    else:
+        df["is_tag_set"] = False
+
+    # --- Update layeritems for return
+    layeritems[1] = df  # Optional if you want to preserve state
+    data_json = df.to_json(orient='records', lines=False)
+    cols_json = json.dumps(column_headers)
+    title_json = json.dumps(title)
+
+    # Return as structured list
+    return jsonify([
+        json.loads(cols_json),       # Column headers
+        json.loads(data_json),       # Rows
+        json.loads(title_json)       # Title
+    ])
 #    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
 
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
@@ -3464,7 +3645,7 @@ def normalise():
             table_data = []
     # Collect unique streams for dropdowns
         streams = sorted(set(row['stream'] for row in table_data))
-
+        streamrag = {}
         dfx = pd.DataFrame()
 
         try:
@@ -3868,6 +4049,7 @@ def get_tag_column(df, tag):
     return df["tags"].apply(lambda tags: int(tag in tags))
 
 @app.route("/add_tag", methods=["POST"])
+@login_required
 def add_tag():
     data = request.json
     enop = data['enop']
@@ -3879,6 +4061,7 @@ def add_tag():
     return jsonify(success=True)
 
 @app.route("/remove_tag", methods=["POST"])
+@login_required
 def remove_tag():
     data = request.json
     enop = data['enop']

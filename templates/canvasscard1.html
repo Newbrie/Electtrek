@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
-
+<div style="margin-top: 10px;">
+  <label for="selected-tag"><b>Tag of Interest:</b></label>
+  <select id="selected-tag" onchange="updateIsTagSetColumn()">
+    {% for tag in tag_options %}
+      <option value="{{ tag }}" {% if tag == selected_tag %}selected{% endif %}>{{ tag }}</option>
+    {% endfor %}
+  </select>
+</div>
 		<title>V3.3 electtrek canvassing</title>
 
 	<div id="header">
@@ -74,15 +81,6 @@
 	<div id="main" style="page-break-before: always;">
 	    <table id="canvass-table">
 				<thead>
-					<form method="get" action="">
-  				<label for="highlight_tag">Highlight tag:</label>
-  				<select name="highlight_tag" onchange="this.form.submit()">
-    			<option value="">-- Select Tag --</option>
-    			{% for tag in available_tags %}
-      		<option value="{{ tag }}" {% if tag == request.args.get('highlight_tag') %}selected{% endif %}>{{ tag }}</option>
-    			{% endfor %}
-  				</select>
-					</form>
 
 					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
  			 		constituency by-election on {{ prodstats['electiondate'] }}. Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
@@ -95,12 +93,9 @@
 				<th class="coded">VR</th>
 	      <th class="coded">VI</th>
 	      <th class="c10">Notes</th>
-				<th class="coded">Tags</th>
-				{% if selected_tag %}
-  			<th>{{ selected_tag }}</th>
-				{% endif %}
-	    </tr>
-
+			<th class="tags-col">Tags</th>
+			<th class="istagset-col">Is Tag Set</th>
+    </tr>
 	      </thead>
 				<tbody>
 					{% for index,row in group.iterrows() %}
@@ -124,31 +119,48 @@
 					<td class="VR"> <input type="text" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
 					<td class="VI"> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
 	        <td class="NS"><input type="text" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
-					<td class="tags-cell">
-					  <div id="tags-{{ row['ENOP'] }}">
-					    {% for tag in row['tags'] %}
-					      <span class="tag">{{ tag }}
-					        <button onclick="removeTag('{{ row['ENOP'] }}', '{{ tag }}')" class="tag-remove">x</button>
-					      </span>
+					<td class="tags">
+					  <select multiple onchange="onRowTagsChanged(this, '{{ row['ENOP'] }}')" id="tags-{{ row['ENOP'] }}">
+					    {% for tag in tag_options %}
+					      <option value="{{ tag }}" {% if tag in row['tags'] %}selected{% endif %}>{{ tag }}</option>
 					    {% endfor %}
-					    <input type="text" placeholder="Add tag..." onkeydown="addTag(event, '{{ row['ENOP'] }}')" />
-					  </div>
+					  </select>
 					</td>
-					{% if selected_tag %}
-					  <td>{{ row[selected_tag] }}</td>
-					{% endif %}
+
+					<td class="istagset" id="istagset-{{ row['ENOP'] }}">
+					  {% if selected_tag in row['tags'] %}
+					    1
+					  {% else %}
+					    0
+					  {% endif %}
+					</td>
 	      </tr>
 	      {% endfor %}
 			</tbody>
 			<tfoot>
 						<tr>  <td colspan='10' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
 							Voter Intention Box:  R=Reform   |   Z=Maybe   I   C=Conservative  |  S=Labour (Socialists)  |  W=Won’t vote  |  X=Won’t say <br>
-							Voter Record Box:  How did they vote in the last election?   (cont.  LD=Lib Dems   |   G=Green   |   I=Independent) <br>
-							Notes Box:  House Boards etc <br>
+							Voter Record Box:  How did they vote in the last election?   (cont.  LD=Lib Dems   |   G=Green   |   I=Independent);Notes Box:  House Boards etc <br>
 							Promoted by Reform UK, 124 City Road, London, EC1V 2NX | For ReformUK authorised users only | Personal Data - Destroy after use</td>
 						</tr>
 			</tfoot>
 	    </table>
 </div>
+<script>
+function updateIsTagSetColumn() {
+  const selectedTag = document.getElementById("selected-tag").value;
+  document.querySelectorAll(".tags").forEach(function(cell) {
+    const select = cell.querySelector("select");
+    const enop = select.id.split("-")[1];
+    const values = Array.from(select.selectedOptions).map(opt => opt.value);
+    const isSet = values.includes(selectedTag) ? "1" : "0";
+    document.getElementById(`istagset-${enop}`).textContent = isSet;
+  });
+}
 
+function onRowTagsChanged(selectElement, enop) {
+  updateIsTagSetColumn(); // Optional: refresh "Is Tag Set" dynamically
+  // Optionally save via AJAX here if needed
+}
+</script>
 {% endblock %}

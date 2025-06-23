@@ -153,10 +153,10 @@ async function fetchAndUpdateChart() {
   };
   fetchAndUpdateChart();
 
-  fetch('/displayareas', {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-       credentials: 'same-origin'   // 👈 THIS IS CRITICAL
+  fetch(`/displayareas?selected_tag=${encodeURIComponent(yourSelectedTag)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin"
   })
   .then(response => response.json())
   .then(data => {
