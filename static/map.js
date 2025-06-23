@@ -489,6 +489,19 @@ async function fetchAndUpdateChart() {
       });
   });
 
+  function updateIsTagSetColumn() {
+  const selectedTag = document.getElementById("selected-tag").value;
+
+  document.querySelectorAll(".tags").forEach(function(cell) {
+    const select = cell.querySelector("select");
+    const enop = select.id.split("-")[1];
+    const values = Array.from(select.selectedOptions).map(opt => opt.value);
+    const isSet = values.includes(selectedTag) ? "1" : "0";
+    document.getElementById(`istagset-${enop}`).textContent = isSet;
+  });
+}
+
+
   function addNewTag() {
   const newTag = document.getElementById("new-tag").value.trim();
   if (!newTag || Tags.includes(newTag)) {
