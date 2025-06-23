@@ -2716,7 +2716,6 @@ def STupdate(path):
 
     context = {
         "group": electorwalks,
-        "selected_tag" : selected_tag,
         "prodstats": prodstats,
         "mapfile": url_for('upbut',path=mapfile),
         "datafile": url_for('STupdate',path=datafile),
@@ -2863,7 +2862,6 @@ def PDdownST(path):
 
               context = {
                 "group": electorwalks,
-                "selected_tag" : selected_tag,
                 "prodstats": prodstats,
                 "mapfile": url_for('upbut',path=mapfile),
                 "datafile": url_for('STupdate',path=datafile),
@@ -3009,7 +3007,6 @@ def LGdownST(path):
 
               context = {
                 "group": electorwalks,
-                "selected_tag" : selected_tag,
                 "prodstats": prodstats,
                 "mapfile": url_for('upbut',path=mapfile),
                 "datafile": url_for('STupdate',path=datafile),
@@ -3166,7 +3163,6 @@ def WKdownST(path):
 
           context = {
             "group": walklegelectors,
-            "selected_tag" : selected_tag,
             "prodstats": prodstats,
             "mapfile": url_for('upbut',path=mapfile),
             "datafile": url_for('STupdate',path=datafile),
@@ -3239,12 +3235,13 @@ def displayareas():
     global current_node
     global layeritems
     global formdata
+    global ElectionSettings
 
     if not layeritems or len(layeritems) < 3:
         return jsonify([[], [], "No data"])
 
     # --- Handle selected tag from request or session
-    selected_tag = request.args.get("selected_tag") or session.get("selected_tag")
+    selected_tag = ElectionSettings['selectedTag']
 
     # Unpack layeritems
     df = layeritems[1].copy()
