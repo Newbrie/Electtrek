@@ -95,8 +95,8 @@
       <label for="yourparty">Your Party:</label>
       <select name="yourparty" id="yourparty"></select><br>
 
-      <label for="selectedTag">Selected Tag:</label>
-      <select name="selectedTag" id="selectedTag"></select><br>
+      <label for="Tags">Selected Tag:</label>
+      <select name="Tags" id="Tags"></select><br>
 
       <label for="walksize">Walk Size:</label>
       <input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
@@ -296,7 +296,7 @@
   });
 
   // Also add to the "Tag of Interest" select
-  const tagInterestSelect = document.getElementById("selectedTag");
+  const tagInterestSelect = document.getElementById("Tags");
   if (![...tagInterestSelect.options].some(opt => opt.value === newTag)) {
     const option = document.createElement("option");
     option.value = newTag;

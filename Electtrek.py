@@ -4067,33 +4067,6 @@ def stream_input():
 
     return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
-def get_tag_column(df, tag):
-    return df["tags"].apply(lambda tags: int(tag in tags))
-
-@app.route("/add_tag", methods=["POST"])
-@login_required
-def add_tag():
-    data = request.json
-    enop = data['enop']
-    tag = data['tag']
-    # Find row and append tag
-    row = allelectors.loc[allelectors['ENOP'] == enop].iloc[0]
-    if tag not in row['tags']:
-        row['tags'].append(tag)
-    return jsonify(success=True)
-
-@app.route("/remove_tag", methods=["POST"])
-@login_required
-def remove_tag():
-    data = request.json
-    enop = data['enop']
-    tag = data['tag']
-    row = allelectors.loc[allelectors['ENOP'] == enop].iloc[0]
-    if tag in row['tags']:
-        row['tags'].remove(tag)
-    return jsonify(success=True)
-
-
 if __name__ in '__main__':
     with app.app_context():
         print("__________Starting up", os.getcwd())
