@@ -133,7 +133,7 @@ async function fetchAndUpdateChart() {
   } catch (error) {
     console.error('Failed to fetch streamrag data:', error);
   }
-}
+};
 
 document.addEventListener("DOMContentLoaded", function () {
   const selectedTagElement = document.getElementById("selected-tag");
@@ -142,37 +142,6 @@ document.addEventListener("DOMContentLoaded", function () {
     return;
   }
 
-  const selectedTag = selectedTagElement.value;
-
-  fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin"
-  })
-  .then(response => response.json())
-  .then(data => {
-    // ... your existing fetch success logic here ...
-  })
-  .catch(error => console.error("Fetch error:", error));
-});
-
-  function updateMessages() {
-  const old = pessages.pop();
-  const ul = parent.document.getElementById("logwin");
-  const li = parent.document.createElement("li");
-  const tabletitle = parent.document.getElementById("tabletitle");
-  const table = parent.document.getElementById("captains-table");
-  const tabtitle = tabletitle.querySelector("h2");
-  const tabhead = table.querySelector("thead");
-  const tabbody = table.querySelector("tbody");
-  // Define your party color lookup
-  const VCO = {
-      "O": "brown", "R": "cyan", "C": "blue", "S": "red",
-      "LD": "yellow", "G": "limegreen", "I": "indigo",
-      "PC": "darkred", "SD": "orange", "Z": "lightgray",
-      "W": "white", "X": "darkgray"
-  };
-  fetchAndUpdateChart();
   const selectedTag = document.getElementById("selected-tag").value;
 
   fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
@@ -250,7 +219,27 @@ document.addEventListener("DOMContentLoaded", function () {
             tabbody.appendChild(row);
          });
      })
-     .catch(error => console.error("Fetch error:", error));
+     .catch(error => console.error("Elector data Fetch error:", error));
+});
+
+  function updateMessages() {
+  const old = pessages.pop();
+  const ul = parent.document.getElementById("logwin");
+  const li = parent.document.createElement("li");
+  const tabletitle = parent.document.getElementById("tabletitle");
+  const table = parent.document.getElementById("captains-table");
+  const tabtitle = tabletitle.querySelector("h2");
+  const tabhead = table.querySelector("thead");
+  const tabbody = table.querySelector("tbody");
+  // Define your party color lookup
+  const VCO = {
+      "O": "brown", "R": "cyan", "C": "blue", "S": "red",
+      "LD": "yellow", "G": "limegreen", "I": "indigo",
+      "PC": "darkred", "SD": "orange", "Z": "lightgray",
+      "W": "white", "X": "darkgray"
+  };
+  fetchAndUpdateChart();
+
 
       li.appendChild(parent.document.createTextNode(old + ":completed"));
       ul.appendChild(li);
