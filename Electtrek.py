@@ -191,10 +191,12 @@ VNORM = {"O":"O","REFORM" : "R" , "REFORM DERBY" : "R" ,"REFORM UK" : "R" ,"REF"
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
 onoff = {"on" : 1, 'off': 0}
 
+SelectedTags = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
 OPTIONS = {
     "elections": ElectionOptions,
     "yourparty": VID,
+    "selectedTag": SelectedTags,
     "autofix" : onoff
     # Add more mappings here if needed
 }
@@ -1872,7 +1874,8 @@ ElectionSettings['GOTV'] = 0.50
 ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
 ElectionSettings['teamsize'] = 5
-ElectionSettings['elections'] = 'W'
+ElectionSettings['elections'] = "W"
+ElectionSettings['selectedTag'] = "M1"
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
 ElectionSettings['candfirst'] = ""
@@ -2860,6 +2863,7 @@ def PDdownST(path):
 
               context = {
                 "group": electorwalks,
+                "selected_tag" : selected_tag,
                 "prodstats": prodstats,
                 "mapfile": url_for('upbut',path=mapfile),
                 "datafile": url_for('STupdate',path=datafile),
@@ -3005,6 +3009,7 @@ def LGdownST(path):
 
               context = {
                 "group": electorwalks,
+                "selected_tag" : selected_tag,
                 "prodstats": prodstats,
                 "mapfile": url_for('upbut',path=mapfile),
                 "datafile": url_for('STupdate',path=datafile),
@@ -3161,6 +3166,7 @@ def WKdownST(path):
 
           context = {
             "group": walklegelectors,
+            "selected_tag" : selected_tag,
             "prodstats": prodstats,
             "mapfile": url_for('upbut',path=mapfile),
             "datafile": url_for('STupdate',path=datafile),

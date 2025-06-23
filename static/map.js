@@ -155,7 +155,7 @@ async function fetchAndUpdateChart() {
   };
   fetchAndUpdateChart();
 
-  const selectedTag = document.getElementById("selected-tag").value;
+  const selectedTag = parent.document.getElementById("selected-tag").value;
 
   fetch(`/displayareas?selected_tag=${encodeURIComponent(selectedTag)}`, {
     method: "GET",
