@@ -499,34 +499,3 @@ async function fetchAndUpdateChart() {
     document.getElementById(`istagset-${enop}`).textContent = isSet;
   });
 }
-
-
-function addTagOption(key, label) {
-const dropdown = document.getElementById("Tags");
-
-if (!key || !label) {
-  alert("Both key and label are required.");
-  return;
-}
-
-// Prevent duplicates
-const exists = Array.from(dropdown.options).some(opt => opt.value === key);
-if (exists) {
-  alert("Tag with this key already exists.");
-  return;
-}
-
-// Create the new option
-const option = document.createElement("option");
-option.value = key;
-option.textContent = `${key}: ${label}`;
-dropdown.appendChild(option);
-
-// Optionally select the new item
-dropdown.value = key;
-
-// Optionally update your OPTIONS object too (if kept in JS)
-if (!OPTIONS) window.OPTIONS = {};
-if (!OPTIONS.Tags) OPTIONS.Tags = {};
-OPTIONS.Tags[key] = label;
-}
