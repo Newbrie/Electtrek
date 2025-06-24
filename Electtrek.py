@@ -2583,7 +2583,7 @@ def STupdate(path):
                     VR_value = item.get("vrResponse", "").strip() # Extract vrResponse, "" if none
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
-                    Tags_value = item.get("tags", [])  # 👈 Expect a list like ["D1", "M4"]
+                    Tags_value = item.get("tagsResponse", "")  # 👈 Expect a string like "D1 M4"
                     print("VIdata item:",item)  # Print each elector entry to see if duplicates exist
 
                     if not electID:  # Skip if electorID is missing
@@ -2613,7 +2613,7 @@ def STupdate(path):
                             print(f"Updated elector {electID} with VI = {VI_value} and Notes = {Notes_value}")
                             print("ElectorVI", allelectors.loc[selected.index, "ENOP"], allelectors.loc[selected.index, "VI"])
                         if Tags_value:
-                            allelectors.at[selected.index[0], "tags"] = json.dumps(Tags_value)
+                            allelectors.loc[selected.index, "tags"] = Tags_value
                         else:
                             print(f"Skipping elector {electID}, empty viResponse")
 

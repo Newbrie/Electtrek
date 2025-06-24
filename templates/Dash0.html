@@ -95,7 +95,7 @@
       <label for="yourparty">Your Party:</label>
       <select name="yourparty" id="yourparty"></select><br>
 
-      <label for="Tags">Selected Tag:</label>
+      <label for="Tags">Tag of Interest:</label>
       <select name="Tags" id="Tags"></select><br>
 
 
@@ -117,7 +117,7 @@
       <div>
         <label for="new-tag"><b>Add New Tag:</b></label>
         <input type="text" id="new-tag" placeholder="e.g. T3">
-        <button onclick="addTagOption()">Add Tag</button>
+        <button onclick="handleAddTag()">Add Tag</button>
       </div>
 
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
@@ -280,36 +280,51 @@
         // Change the iframe src to the stream processing input page
         document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
     });
-    
-    function addTagOption(key, label) {
-    const dropdown = document.getElementById("Tags");
 
-    if (!key || !label) {
-      alert("Both key and label are required.");
-      return;
+    function addTagOption(key,value) {
+      const tagSelect = document.getElementById("Tags");
+      if (!tagSelect) {
+        console.error("Dropdown with id 'Tags' not found.");
+        return;
+      }
+
+
+      // Check if key already exists
+      const exists = Array.from(tagSelect.options).some(opt => opt.value === key);
+      if (exists) {
+        alert(`Tag with key '${key}' already exists.`);
+        return;
+      }
+
+      // Create and append new option
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = `${key}: ${value}`;
+      tagSelect.appendChild(option);
     }
 
-    // Prevent duplicates
-    const exists = Array.from(dropdown.options).some(opt => opt.value === key);
-    if (exists) {
-      alert("Tag with this key already exists.");
-      return;
-    }
 
-    // Create the new option
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = `${key}: ${label}`;
-    dropdown.appendChild(option);
+function handleAddTag() {
+  const input = document.getElementById("new-tag").value.trim();
 
-    // Optionally select the new item
-    dropdown.value = key;
+  // Expect format: "key: value"
+  const parts = input.split(":");
 
-    // Optionally update your OPTIONS object too (if kept in JS)
-    if (!OPTIONS) window.OPTIONS = {};
-    if (!OPTIONS.Tags) OPTIONS.Tags = {};
-    OPTIONS.Tags[key] = label;
-    }
+  if (parts.length < 2) {
+    alert("Please use the format 'key: value'");
+    return;
+  }
+
+  const key = parts[0].trim();
+  const label = parts.slice(1).join(":").trim();  // In case value has ":" in it
+
+  if (!key || !label) {
+    alert("Both key and value must be non-empty.");
+    return;
+  }
+
+  addTagOption(key, label);
+}
 
 </script>
 

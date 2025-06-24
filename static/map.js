@@ -8,7 +8,7 @@ var moveDown = function (msg, area, type) {
     const ul = parent.document.getElementById("logwin");
     if (ul) ul.scrollTop = ul.scrollHeight;
     window.location.assign(msg);
-    alert("Submitting to: " + msg);
+//    alert("Submitting to: " + msg);
 
 };
 
@@ -53,7 +53,9 @@ var showMore = function (msg,area, type) {
         let notesInput = row.cells[9].querySelector('input');
         let notesValue = notesInput ? notesInput.value.trim() : "";
 
-        console.log(`Row data: ${electorID} | ${viValue} | ${notesValue}`);
+        let tagsValue = row.cells[10].querySelector('input');
+
+        console.log(`Row data: ${electorID} | ${viValue} | ${notesValue} | ${tagsValue}`);
 
         if (viValue) {
             data.push({
@@ -61,7 +63,8 @@ var showMore = function (msg,area, type) {
                 ElectorName: ElectorName,
                 vrResponse: vrValue,
                 viResponse: viValue,
-                notesResponse: notesValue
+                notesResponse: notesValue,
+                tagsResponse: tagsValue
             });
         }
     });

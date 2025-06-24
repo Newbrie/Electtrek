@@ -76,8 +76,10 @@
 				<thead>
 
 					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
- 			 		constituency by-election on {{ prodstats['electiondate'] }}. Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
+ 			 		constituency by-election on {{ prodstats['electiondate'] }}. <br>
+					Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
  			 		PLEASE DO NOT SAY “I’m sorry to bother you”.</th>
+
 				 </tr>
 	      <tr>
 	      <th class="c1" colspan='3' >Elector</th>
@@ -112,17 +114,19 @@
 					<td class="VR"> <input type="text" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
 					<td class="VI"> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
 	        <td class="NS"><input type="text" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
-					<td class="tags">
-					  <select multiple onchange="onRowTagsChanged(this, '{{ row['ENOP'] }}')" id="tags-{{ row['ENOP'] }}">
-					    {% for tag in tag_options %}
-					      <option value="{{ tag }}" {% if tag in row['tags'] %}selected{% endif %}>{{ tag }}</option>
-					    {% endfor %}
-					  </select>
+					<td>
+					  <input
+					    type="text"
+					    class="taglist"
+					    data-enop="{{ row['ENOP'] }}"
+					    onkeydown="if (event.key === 'Enter') updateIsTagSetColumnForRow(this)"
+					    value="{{ row['taglist'] | default('') }}"
+					  />
+					</td>
+							<td class="istagset" id="istagset-{{ row['ENOP'] }}">
+					  {% if row['is_tag_set'] %}1{% else %}0{% endif %}
 					</td>
 
-					<td class="istagset" id="istagset-{{ row['ENOP'] }}">
-						    {{row["is_tag_set"]}}
-					</td>
 	      </tr>
 	      {% endfor %}
 			</tbody>
@@ -135,5 +139,78 @@
 			</tfoot>
 	    </table>
 </div>
+<script>
+
+function updateIsTagSet(enop) {
+  const selectedTag = parent.document.getElementById("Tags").value;
+  const tagInput = document.getElementById(`tags-${enop}`);
+  const tags = tagInput.value.trim().split(/\s+/);
+
+  const isSet = tags.includes(selectedTag) ? "1" : "0";
+	console.log(`Tag Test: ${selectedTag} | ${tagInput} | ${tags} | ${isSet}`);
+  document.getElementById(`istagset-${enop}`).textContent = isSet;
+}
+
+// Optionally update all rows at once
+function updateAllIsTagSet() {
+  const selectedTag = parent.document.getElementById("Tags").value;
+  document.querySelectorAll(".row-tags").forEach(input => {
+    const enop = input.id.split("-")[1];
+    updateIsTagSet(enop);
+  });
+}
+
+// Recalculate when the selected tag changes
+document.addEventListener("DOMContentLoaded", () => {
+  const tagDropdown = parent.document.getElementById("Tags");
+  if (tagDropdown) {
+    tagDropdown.addEventListener("change", updateAllIsTagSet);
+  }
+});
+
+
+function updateIsTagSetColumnForRow(inputEl) {
+  const enop = inputEl.dataset.enop;
+  const enteredTags = inputEl.value.trim().split(/\s+/);
+  const selectedTag = parent.document.getElementById("Tags").value;
+
+  // Get all valid tag keys from the dropdown
+  const validTags = Array.from(parent.document.getElementById("Tags").options).map(opt => opt.value);
+
+  // Filter invalid tags (optional visual feedback could be added)
+  const filteredTags = enteredTags.filter(tag => validTags.includes(tag));
+
+  // Optionally overwrite the input with only valid tags
+  inputEl.value = filteredTags.join(" ");
+
+  // Check if selected tag is in the valid tag list
+  const isSet = filteredTags.includes(selectedTag) ? "1" : "0";
+  const targetCell = document.getElementById(`istagset-${enop}`);
+  if (targetCell) {
+    targetCell.textContent = isSet;
+  }
+}
+
+
+function updateAllIsTagSetColumns() {
+  const selectedTag = parent.document.getElementById("Tags").value;
+
+  document.querySelectorAll(".taglist").forEach(inputEl => {
+    const enop = inputEl.dataset.enop;
+    const tagList = inputEl.value.trim().split(/\s+/);
+    const isSet = tagList.includes(selectedTag) ? "1" : "0";
+    const targetCell = document.getElementById(`istagset-${enop}`);
+    if (targetCell) {
+      targetCell.textContent = isSet;
+    }
+  });
+}
+
+// Hook this to dropdown change
+parent.document.getElementById("Tags").addEventListener("change", updateAllIsTagSetColumns);
+
+
+
+</script>
 
 {% endblock %}
