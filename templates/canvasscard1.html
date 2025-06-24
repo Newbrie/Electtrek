@@ -135,21 +135,5 @@
 			</tfoot>
 	    </table>
 </div>
-<script>
-function updateIsTagSetColumn() {
-  const Tags = document.getElementById("Tags").value;
-  document.querySelectorAll(".tags").forEach(function(cell) {
-    const select = cell.querySelector("select");
-    const enop = select.id.split("-")[1];
-    const values = Array.from(select.selectedOptions).map(opt => opt.value);
-    const isSet = values.includes(Tags) ? "1" : "0";
-    document.getElementById(`istagset-${enop}`).textContent = isSet;
-  });
-}
 
-function onRowTagsChanged(selectElement, enop) {
-  updateIsTagSetColumn(); // Optional: refresh "Is Tag Set" dynamically
-  // Optionally save via AJAX here if needed
-}
-</script>
 {% endblock %}
