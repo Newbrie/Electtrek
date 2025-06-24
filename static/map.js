@@ -55,12 +55,12 @@ var showMore = function (msg,area, type) {
 
         let tagsInput = row.cells[10].querySelector('input');
         let tagsValue = tagsInput ? tagsInput.value.trim() : "";
-        
+
         alert( 'Row data:'+electorID+tagsValue);
 
         console.log(`vr: '${vrValue}' vi: '${viValue}' notes: '${notesValue}' tags: '${tagsValue}'`);
 
-        if (vrValue || viValue || notesValue || tagsValue) {
+        if (electorID && (vrValue || viValue || notesValue || tagsValue)) {
           console.log("Pushing data for:", electorID);
             data.push({
                 electorID: electorID,
