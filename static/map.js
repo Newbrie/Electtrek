@@ -53,13 +53,9 @@ var showMore = function (msg,area, type) {
         let notesInput = row.cells[9].querySelector('input');
         let notesValue = notesInput ? notesInput.value.trim() : "";
 
-        let tagsSelect = row.cells[10].querySelector('select');
-        let tagsValue = "";
-
-        if (tagsSelect) {
-          tagsValue = Array.from(tagsSelect.selectedOptions).map(opt => opt.value).join(" ");
-        }
-
+        let tagsInput = row.cells[10].querySelector('input');
+        let tagsValue = tagsInput ? tagsInput.value.trim() : "";
+        
         alert( 'Row data:'+electorID+tagsValue);
 
         console.log(`vr: '${vrValue}' vi: '${viValue}' notes: '${notesValue}' tags: '${tagsValue}'`);
