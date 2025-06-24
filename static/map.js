@@ -1,6 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
-//const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
+const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
 
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
