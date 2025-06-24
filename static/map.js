@@ -53,13 +53,18 @@ var showMore = function (msg,area, type) {
         let notesInput = row.cells[9].querySelector('input');
         let notesValue = notesInput ? notesInput.value.trim() : "";
 
-        let tagsInput = row.cells[10].querySelector('input');
-        let tagsValue = tagsInput ? tagsInput.value.trim() : "";
+        let tagsSelect = row.cells[10].querySelector('select');
+        let tagsValue = "";
+
+        if (tagsSelect) {
+          tagsValue = Array.from(tagsSelect.selectedOptions).map(opt => opt.value).join(" ");
+        }
+
         alert( 'Row data:'+electorID+tagsValue);
 
         console.log(`Row data: ${electorID} | ${viValue} | ${notesValue} | ${tagsValue}`);
 
-        if (viValue || vrValue || notesValue || tagsValue) {
+        if (vrValue || viValue || notesValue || tagsValue) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
