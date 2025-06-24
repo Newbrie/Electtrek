@@ -669,7 +669,7 @@ class TreeNode:
             for i in range(1,k+1,1):
                 idx = X.index[labels == i]
                 sub_data = X.loc[idx]
-                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=f"{prefix}{i}")
+                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=f"{prefix}-{i}")
                 label_map.update(sub_labels)
 
             return label_map
@@ -2574,7 +2574,7 @@ def STupdate(path):
             path2 = headtail[0]
 
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
-                changefields = pd.DataFrame(columns=['ENOP','ElectorName','VI','Notes','cdate','Electrollfile'])
+                changefields = pd.DataFrame(columns=['ENOP','ElectorName','VR','VI','Notes','tags','cdate','Electrollfile'])
                 i = 0
 
                 for item in VIdata["viData"]:  # Loop through each elector entry
@@ -2583,15 +2583,15 @@ def STupdate(path):
                     VR_value = item.get("vrResponse", "").strip() # Extract vrResponse, "" if none
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
                     Notes_value = item.get("notesResponse", "").strip()  # Extract viResponse, "" if none
-                    Tags_value = item.get("tagsResponse", "")  # 👈 Expect a string like "D1 M4"
+                    Tags_value = item.get("tagsResponse", "").strip()  # 👈 Expect a string like "D1 M4"
                     print("VIdata item:",item)  # Print each elector entry to see if duplicates exist
 
                     if not electID:  # Skip if electorID is missing
                         print("Skipping entry with missing electorID")
                         continue
-                    print("_____columns:",allelectors.columns)
+                    print("_____columns:",areaelectors.columns)
                     # Find the row where ENO matches electID
-                    selected = allelectors.query("ENOP == @electID")
+                    selected = areaelectors.query("ENOP == @electID")
                     changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file
                     changefields.loc[i,'Lat'] = street_node.centroid.y
                     changefields.loc[i,'Long'] = street_node.centroid.x
@@ -2604,30 +2604,29 @@ def STupdate(path):
                             street_node.updateVR(VR_value)
                             changefields.loc[i,'VR'] = VR_value
                         if VI_value:
-                            allelectors.loc[selected.index, "VI"] = VI_value
+                            areaelectors.loc[selected.index, "VI"] = VI_value
                             street_node.updateVI(VI_value)
                             changefields.loc[i,'VI'] = VI_value
                         if Notes_value:
-                            allelectors.loc[selected.index, "Notes"] = Notes_value
+                            areaelectors.loc[selected.index, "Notes"] = Notes_value
                             changefields.loc[i,'Notes'] = Notes_value
-                            print(f"Updated elector {electID} with VI = {VI_value} and Notes = {Notes_value}")
-                            print("ElectorVI", allelectors.loc[selected.index, "ENOP"], allelectors.loc[selected.index, "VI"])
                         if Tags_value:
-                            allelectors.loc[selected.index, "tags"] = Tags_value
-                        else:
-                            print(f"Skipping elector {electID}, empty viResponse")
-
-                        changefields.loc[i,'cdate'] = get_creation_date("")
-                        changefields.loc[i,'Electrollfile'] = session.get('importfile')
-                        changefields.loc[i,'Username'] = session.get('username')
-
+                            areaelectors.loc[selected.index, "tags"] = Tags_value
+                            changefields.loc[i,'tags'] = Tags_value
+                        print(f"Updated elector {electID} with VI = {VI_value} and Tags = {Tags_value}")
+                        print("ElectorVI", areaelectors.loc[selected.index, "ENOP"], areaelectors.loc[selected.index, "tags"])
                     else:
-                        print(f"Warning: No match found for ENOP = {electID}")
+                        print(f"Skipping elector {electID}, empty viResponse")
+
+                    changefields.loc[i,'cdate'] = get_creation_date("")
+                    changefields.loc[i,'Electrollfile'] = session.get('importfile')
+                    changefields.loc[i,'Username'] = session.get('username')
+
                     i = i+1
 
                 base_path = path2+"/INDATA"
                 base_name = current_node.file.replace("-PRINT.html",fileending.replace(".html",""))
-                changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName', 'VI', 'Notes'])
+                changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName'])
 # Example Usage
 # base_path = "/your/output/directory"
 # base_name = "changefile"
@@ -2647,15 +2646,12 @@ def STupdate(path):
             return jsonify({"error": str(e)}), 500
 
 # this is for get and post calls
-    print("_____Where are we: ", current_node.value, current_node.type, allelectors.columns)
+    print("_____Where are we: ", current_node.value, current_node.type, areaelectors.columns)
 
     street = current_node.value
     electorwalks = pd.DataFrame()
 
-    if current_node.type == 'street':
-        electorwalks = getblock(allelectors, 'StreetName',current_node.value)
-    elif current_node.type == 'walk':
-        electorwalks = getblock(allelectors,'WalkName',current_node.value)
+    electorwalks = getblock(areaelectors, 'StreetName',current_node.value)
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)

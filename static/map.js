@@ -59,7 +59,7 @@ var showMore = function (msg,area, type) {
 
         console.log(`Row data: ${electorID} | ${viValue} | ${notesValue} | ${tagsValue}`);
 
-        if (viValue) {
+        if (viValue || vrValue || notesValue || tagsValue) {
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
