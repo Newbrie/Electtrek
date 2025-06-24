@@ -58,10 +58,10 @@ var showMore = function (msg,area, type) {
 
         alert( 'Row data:'+electorID+tagsValue);
 
-        console.log(`vr: '${vrValue}' vi: '${viValue}' notes: '${notesValue}' tags: '${tagsValue}'`);
+        console.log(`EID: ${electorID} vr: ${vrValue} vi: ${viValue} notes: ${notesValue} tags: ${tagsValue}`);
 
         if (electorID && (vrValue || viValue || notesValue || tagsValue)) {
-          console.log("Pushing data for:", electorID);
+          console.log('Pushing data for: ${electorID}');
             data.push({
                 electorID: electorID,
                 ElectorName: ElectorName,
