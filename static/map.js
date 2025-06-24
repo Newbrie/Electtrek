@@ -445,8 +445,8 @@ async function fetchAndUpdateChart() {
 
             Object.entries(opts).forEach(([optValue, optLabel]) => {
               const o = document.createElement("option");
-              o.value = optValue;
-              o.textContent = optLabel;
+              o.value = optValue;                               // Backend uses this
+              o.textContent = `${optValue}: ${optLabel}`;       // User sees this
               if (optValue === value) o.selected = true;
               el.appendChild(o);
             });
