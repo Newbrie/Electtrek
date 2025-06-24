@@ -2599,18 +2599,18 @@ def STupdate(path):
                     changefields.loc[i,'ElectorName'] = ElectorName
                     if not selected.empty:
                         # Update only if viResponse is non-empty
-                        if VR_value:
+                        if VR_value != "":
                             allelectors.loc[selected.index, "VR"] = VR_value
                             street_node.updateVR(VR_value)
                             changefields.loc[i,'VR'] = VR_value
-                        if VI_value:
+                        if VI_value != "":
                             areaelectors.loc[selected.index, "VI"] = VI_value
                             street_node.updateVI(VI_value)
                             changefields.loc[i,'VI'] = VI_value
-                        if Notes_value:
+                        if Notes_value != "":
                             areaelectors.loc[selected.index, "Notes"] = Notes_value
                             changefields.loc[i,'Notes'] = Notes_value
-                        if Tags_value:
+                        if Tags_value != "":
                             areaelectors.loc[selected.index, "tags"] = Tags_value
                             changefields.loc[i,'tags'] = Tags_value
                         print(f"Updated elector {electID} with VI = {VI_value} and Tags = {Tags_value}")
