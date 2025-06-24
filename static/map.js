@@ -54,6 +54,7 @@ var showMore = function (msg,area, type) {
         let notesValue = notesInput ? notesInput.value.trim() : "";
 
         let tagsValue = row.cells[10].querySelector('input');
+        alert( 'Row data:'+electorID+tagsValue);
 
         console.log(`Row data: ${electorID} | ${viValue} | ${notesValue} | ${tagsValue}`);
 
