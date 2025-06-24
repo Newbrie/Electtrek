@@ -501,42 +501,32 @@ async function fetchAndUpdateChart() {
 }
 
 
-  function addNewTag() {
-  const newTag = document.getElementById("new-tag").value.trim();
-  if (!newTag || Tags.includes(newTag)) {
-    alert("Invalid or duplicate tag");
-    return;
-  }
+function addTagOption(key, label) {
+const dropdown = document.getElementById("Tags");
 
-  // Update local Tags array
-  Tags.push(newTag);
+if (!key || !label) {
+  alert("Both key and label are required.");
+  return;
+}
 
-  // Add to all dropdowns
-  document.querySelectorAll(".tags select, #selected-tag").forEach(select => {
-    const option = document.createElement("option");
-    option.value = newTag;
-    option.text = newTag;
-    select.appendChild(option);
-  });
+// Prevent duplicates
+const exists = Array.from(dropdown.options).some(opt => opt.value === key);
+if (exists) {
+  alert("Tag with this key already exists.");
+  return;
+}
 
-  // Auto-select the new tag in dropdown of interest
-  document.getElementById("selected-tag").value = newTag;
-  updateIsTagSetColumn();
+// Create the new option
+const option = document.createElement("option");
+option.value = key;
+option.textContent = `${key}: ${label}`;
+dropdown.appendChild(option);
 
-  // OPTIONAL: sync with backend
-  fetch("/add_tag", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRFToken": getCookie("csrftoken") || ""  // optional
-    },
-    body: JSON.stringify({ tag: newTag })
-  })
-  .then(response => response.json())
-  .then(data => {
-    console.log("Backend tag sync success:", data);
-  })
-  .catch(error => {
-    console.error("Error syncing new tag with backend:", error);
-  });
+// Optionally select the new item
+dropdown.value = key;
+
+// Optionally update your OPTIONS object too (if kept in JS)
+if (!OPTIONS) window.OPTIONS = {};
+if (!OPTIONS.Tags) OPTIONS.Tags = {};
+OPTIONS.Tags[key] = label;
 }
