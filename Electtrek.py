@@ -191,15 +191,36 @@ VNORM = {"O":"O","REFORM" : "R" , "REFORM DERBY" : "R" ,"REFORM UK" : "R" ,"REF"
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
 onoff = {"on" : 1, 'off': 0}
 
-SelectedTags = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
+TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
 OPTIONS = {
     "elections": ElectionOptions,
     "yourparty": VID,
-    "Tags": SelectedTags,
+    "tags": TagOptions,
     "autofix" : onoff
     # Add more mappings here if needed
 }
+
+ElectionSettings = {}
+ElectionSettings['GOTV'] = 0.50
+ElectionSettings['yourparty'] = "R"
+ElectionSettings['walksize'] = 200
+ElectionSettings['teamsize'] = 5
+ElectionSettings['elections'] = "W"
+ElectionSettings['tags'] = "M1"
+ElectionSettings['importfile'] = ""
+ElectionSettings['autofix'] = 0
+ElectionSettings['candfirst'] = ""
+ElectionSettings['candsurn'] = ""
+ElectionSettings['electiondate'] = "01/01/2030"
+
+main_index = None # for file processing
+TABLE_FILE = os.path.join(config.workdirectories['workdir'],'stream_data.json')
+
+with open(config.workdirectories['workdir']+"/"+"options.json", "r") as f:
+    OPTIONS = json.load(f)
+with open(config.workdirectories['workdir']+"/"+"ElectionSettings.json", "r") as f:
+    ElectionSettings = json.load(f)
 
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
@@ -661,7 +682,7 @@ class TreeNode:
             k = int(np.ceil(len(X) / max_cluster_size))
 
             # KMeans on Lat and Long
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
             coords = X[['Lat', 'Long']].values
             labels = kmeans.fit_predict(coords)
 
@@ -1869,21 +1890,6 @@ login_manager.needs_refresh_message = "<h1>You really need to re-login to access
 login_manager.login_message_category = "info"
 
 
-ElectionSettings = {}
-ElectionSettings['GOTV'] = 0.50
-ElectionSettings['yourparty'] = "R"
-ElectionSettings['walksize'] = 200
-ElectionSettings['teamsize'] = 5
-ElectionSettings['elections'] = "W"
-ElectionSettings['selectedTags'] = "M1"
-ElectionSettings['importfile'] = ""
-ElectionSettings['autofix'] = 0
-ElectionSettings['candfirst'] = ""
-ElectionSettings['candsurn'] = ""
-ElectionSettings['electiondate'] = "01/01/2030"
-
-main_index = None # for file processing
-TABLE_FILE = os.path.join(config.workdirectories['workdir'],'stream_data.json')
 
 Featurelayers = {
 "country": ExtendedFeatureGroup(name='Country Boundaries', overlay=True, control=True, show=True),
@@ -2005,14 +2011,14 @@ def add_tag():
     try:
         data = request.get_json()
         new_tag = data.get("tag", "").strip()
-        if new_tag and new_tag not in ElectionSettings['selectedTags']:
-            ElectionSettings['selectedTags'].append(new_tag)
+        if new_tag and new_tag not in ElectionSettings['tags']:
+            ElectionSettings['tags'].append(new_tag)
 
             # Optional: persist to file
             with open("electionsettings.json", "w") as f:
                 json.dump(ElectionSettings, f, indent=2)
 
-        return jsonify({"success": True, "tags": ElectionSettings['selectedTags']})
+        return jsonify({"success": True, "tags": ElectionSettings['tags']})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -2039,6 +2045,7 @@ def get_constants():
 @login_required
 def set_constant():
     global ElectionSettings
+    global OPTIONS
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
@@ -2048,6 +2055,11 @@ def set_constant():
         ElectionSettings[name] = value
         print("____ElectionSettings:",ElectionSettings['elections'])
         return jsonify(success=True)
+    with open(config.workdirectories['workdir']+"/"+"options.json", "w") as f:
+        json.dump(OPTIONS, f, indent=4)
+    with open(config.workdirectories['workdir']+"/"+"ElectionSettings.json", "w") as f:
+            json.dump(ElectionSettings, f, indent=4)
+
     return jsonify(success=False, error="Invalid constant name"), 400
 
 @app.route("/", methods=['POST', 'GET'])
@@ -2619,7 +2631,7 @@ def STupdate(path):
                         print(f"Skipping elector {electID}, empty viResponse")
 
                     changefields.loc[i,'cdate'] = get_creation_date("")
-                    changefields.loc[i,'Electrollfile'] = session.get('importfile')
+                    changefields.loc[i,'Electrollfile'] = areaelectors.loc[0,'Source_ID']
                     changefields.loc[i,'Username'] = session.get('username')
 
                     i = i+1
@@ -3255,7 +3267,7 @@ def displayareas():
         return jsonify([[], [], "No data"])
 
     # --- Handle selected tag from request or session
-    selected_tag = ElectionSettings['selectedTags']
+    selected_tag = ElectionSettings['tags']
     # Unpack layeritems
     df = layeritems[1].copy()
     column_headers = layeritems[0]

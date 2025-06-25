@@ -146,7 +146,7 @@ async function fetchAndUpdateChart() {
 
   function updateMessages() {
   const old = pessages.pop();
-  const Tags = parent.document.getElementById("Tags").value;
+  const tags = parent.document.getElementById("tags").value;
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
   const tabletitle = parent.document.getElementById("tabletitle");
@@ -497,7 +497,7 @@ async function fetchAndUpdateChart() {
   });
 
   function updateIsTagSetColumn() {
-  const selectedTag = document.getElementById("Tags").value;
+  const selectedTag = document.getElementById("tags").value;
   document.querySelectorAll(".tags").forEach(function(cell) {
     const select = cell.querySelector("select");
     const enop = select.id.split("-")[1];

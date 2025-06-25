@@ -142,7 +142,7 @@
 <script>
 
 function updateIsTagSet(enop) {
-  const selectedTag = parent.document.getElementById("Tags").value;
+  const selectedTag = parent.document.getElementById("tags").value;
   const tagInput = document.getElementById(`tags-${enop}`);
   const tags = tagInput.value.trim().split(/\s+/);
 
@@ -153,7 +153,7 @@ function updateIsTagSet(enop) {
 
 // Optionally update all rows at once
 function updateAllIsTagSet() {
-  const selectedTag = parent.document.getElementById("Tags").value;
+  const selectedTag = parent.document.getElementById("tags").value;
   document.querySelectorAll(".row-tags").forEach(input => {
     const enop = input.id.split("-")[1];
     updateIsTagSet(enop);
@@ -162,7 +162,7 @@ function updateAllIsTagSet() {
 
 // Recalculate when the selected tag changes
 document.addEventListener("DOMContentLoaded", () => {
-  const tagDropdown = parent.document.getElementById("Tags");
+  const tagDropdown = parent.document.getElementById("tags");
   if (tagDropdown) {
     tagDropdown.addEventListener("change", updateAllIsTagSet);
   }
@@ -172,10 +172,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function updateIsTagSetColumnForRow(inputEl) {
   const enop = inputEl.dataset.enop;
   const enteredTags = inputEl.value.trim().split(/\s+/);
-  const selectedTag = parent.document.getElementById("Tags").value;
+  const selectedTag = parent.document.getElementById("tags").value;
 
   // Get all valid tag keys from the dropdown
-  const validTags = Array.from(parent.document.getElementById("Tags").options).map(opt => opt.value);
+  const validTags = Array.from(parent.document.getElementById("tags").options).map(opt => opt.value);
 
   // Filter invalid tags (optional visual feedback could be added)
   const filteredTags = enteredTags.filter(tag => validTags.includes(tag));
@@ -193,7 +193,7 @@ function updateIsTagSetColumnForRow(inputEl) {
 
 
 function updateAllIsTagSetColumns() {
-  const selectedTag = parent.document.getElementById("Tags").value;
+  const selectedTag = parent.document.getElementById("tags").value;
 
   document.querySelectorAll(".taglist").forEach(inputEl => {
     const enop = inputEl.dataset.enop;
@@ -207,7 +207,7 @@ function updateAllIsTagSetColumns() {
 }
 
 // Hook this to dropdown change
-parent.document.getElementById("Tags").addEventListener("change", updateAllIsTagSetColumns);
+parent.document.getElementById("tags").addEventListener("change", updateAllIsTagSetColumns);
 
 
 

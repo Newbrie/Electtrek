@@ -95,8 +95,8 @@
       <label for="yourparty">Your Party:</label>
       <select name="yourparty" id="yourparty"></select><br>
 
-      <label for="Tags">Tag of Interest:</label>
-      <select name="Tags" id="Tags"></select><br>
+      <label for="tags">Tag of Interest:</label>
+      <select name="tags" id="tags"></select><br>
 
 
       <label for="walksize">Walk Size:</label>
@@ -282,9 +282,9 @@
     });
 
     function addTagOption(key,value) {
-      const tagSelect = document.getElementById("Tags");
+      const tagSelect = document.getElementById("tags");
       if (!tagSelect) {
-        console.error("Dropdown with id 'Tags' not found.");
+        console.error("Dropdown with id 'tags' not found.");
         return;
       }
 
