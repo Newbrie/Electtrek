@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block map %}
+let constants = {};
+let options = {};
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
 <h1>SELECT ELECTORAL ROLL FILE STREAMS FOR EACH ELECTION AREA</h1>
@@ -375,8 +377,8 @@
     )
         .then(res => res.json())
         .then(data => {
-          const constants = data.constants;
-          const options = data.options;
+          constants = data.constants;
+          options = data.options;
 
           Object.entries(constants).forEach(([key, value]) => {
             const el = document.getElementById(key);

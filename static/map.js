@@ -1,5 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
+let constants = {};
 let options = {};
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
@@ -437,8 +438,8 @@ async function fetchAndUpdateChart() {
   )
       .then(res => res.json())
       .then(data => {
-        const constants = data.constants;
-        const options = data.options;
+        constants = data.constants;
+        options = data.options;
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
