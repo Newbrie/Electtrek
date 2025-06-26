@@ -1,7 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 const options = parent.document.getElementById("options");
-const VID_json = options['yourparty'];
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -374,8 +373,9 @@ async function fetchAndUpdateChart() {
 
   function inputVI(VI) {
     let x = VI.value.toUpperCase();
+    const VIDopt = document.getElementById("yourparty");
     VI.value = x;
-    const codes = Object.keys(VID_json);
+    const codes = Object.keys(VIDopt);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
       VI.style.color = 'darkgray';
@@ -390,7 +390,8 @@ async function fetchAndUpdateChart() {
     function inputVR(VR) {
       let x = VR.value.toUpperCase();
       VR.value = x;
-      const codes = Object.keys(VID_json);
+      const VIDopt = document.getElementById("yourparty");
+      const codes = Object.keys(VIDopt);
       if (codes.includes(x)) {
     //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
         VR.style.color = 'darkgray';
