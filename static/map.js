@@ -436,12 +436,12 @@ const iframe = document.getElementById("iframe1");
 
 
 function populateDropdowns(doc) {
-  for (const key in options.StreamOptions) {
+  for (const key in options.streams) {
     const dropdown = doc.getElementById(key);
     if (dropdown) {
       dropdown.innerHTML = ""; // Clear any existing options
 
-      const values = options.StreamOptions[key];
+      const values = options.streams[key];
       values.forEach(value => {
         const opt = document.createElement("option");
         opt.value = value;
