@@ -202,6 +202,7 @@ ElectionSettings['walksize'] = 200
 ElectionSettings['teamsize'] = 5
 ElectionSettings['elections'] = "W"
 ElectionSettings['tags'] = "M1"
+ElectionSettings['streams'] = "NO LIVE DATA"
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
 ElectionSettings['candfirst'] = ""

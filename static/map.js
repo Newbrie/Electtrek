@@ -444,6 +444,19 @@ async function fetchAndUpdateChart() {
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
+          if (!el) {
+            // Element not found in main document — try a child frame
+            const iframe = document.getElementById("iframe1");
+            if (iframe && iframe.contentDocument) {
+              el = iframe.contentDocument.getElementById(key);
+              alert("__foundiframe element"+el);
+              if (el) {
+                console.log("Element found inside iframe");
+              } else {
+                console.log("Element not found in iframe either");
+              }
+            }
+          }
 
           if (!el) return;
 
@@ -454,19 +467,6 @@ async function fetchAndUpdateChart() {
 
             Object.entries(opts).forEach(([optValue, optLabel]) => {
               const o = document.createElement("option");
-              if (!o) {
-                // Element not found in main document — try a child frame
-                const iframe = document.getElementById("iframe1");
-                if (iframe && iframe.contentDocument) {
-                  o = iframe.contentDocument.getElementById(key);
-                  alert("__foundiframe element"+o);
-                  if (o) {
-                    console.log("Element found inside iframe");
-                  } else {
-                    console.log("Element not found in iframe either");
-                  }
-                }
-              }
               o.value = optValue;                               // Backend uses this
               o.textContent = `${optValue}: ${optLabel}`;       // User sees this
               if (optValue === value) o.selected = true;
