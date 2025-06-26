@@ -14,6 +14,7 @@
     <tr>
       <th>Order</th>
       <th>Stream</th>
+      <th>Election</th>
       <th>Filename</th>
       <th>Type</th>
       <th>Purpose</th>
@@ -27,8 +28,11 @@
     <tr>
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
-        <label for="StreamOptions">Stream:</label>
-        <select name="StreamOptions" id="StreamOptions"></select><br>
+        <label for="streams">Stream:</label>
+        <select name="streams" id="streams"></select>
+      </td>
+      <td>
+        <select name="streams" id="streams"></select>
       </td>
       <td>
       <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
