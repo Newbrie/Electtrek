@@ -120,7 +120,7 @@
 					    class="taglist"
 					    data-enop="{{ row['ENOP'] }}"
 					    onkeydown="if (event.key === 'Enter') updateIsTagSetColumnForRow(this)"
-					    value="{{ row['taglist'] | default('') }}"
+					    value="{{ row['Tags'] | default('') }}"
 					  />
 					</td>
 							<td class="istagset" id="istagset-{{ row['ENOP'] }}">

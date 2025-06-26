@@ -600,7 +600,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     electors100['Source_ID'] = ImportFilename
     electors100['Stream'] = stream
     electors100['Purpose'] = purpose
-    electors100['tags'] = [[] for _ in range(len(electors100))]
+    electors100['Tags'] = [[] for _ in range(len(electors100))]
 
     print(f"___DQ Stats3",DQstats, electors100.columns)
 

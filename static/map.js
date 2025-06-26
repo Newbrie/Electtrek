@@ -1,7 +1,7 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
-const VID_json = {"R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green", "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"};
-
+const options = parent.document.getElementById("options");
+const VID_json = options['yourparty'];
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -443,6 +443,20 @@ async function fetchAndUpdateChart() {
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
+          if (!el) {
+            // Element not found in main document — try a child frame
+            const iframe = document.getElementById("iframe1");
+            if (iframe && iframe.contentDocument) {
+              el = iframe.contentDocument.getElementById(key);
+
+              if (el) {
+                console.log("Element found inside iframe");
+              } else {
+                console.log("Element not found in iframe either");
+              }
+            }
+          }
+          
           if (!el) return;
 
           if (el.tagName === "SELECT") {

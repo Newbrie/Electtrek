@@ -193,13 +193,7 @@ onoff = {"on" : 1, 'off': 0}
 
 TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
-OPTIONS = {
-    "elections": ElectionOptions,
-    "yourparty": VID,
-    "tags": TagOptions,
-    "autofix" : onoff
-    # Add more mappings here if needed
-}
+
 
 ElectionSettings = {}
 ElectionSettings['GOTV'] = 0.50
@@ -221,11 +215,29 @@ with open(config.workdirectories['workdir']+"/"+"options.json", "r") as f:
     OPTIONS = json.load(f)
 with open(config.workdirectories['workdir']+"/"+"ElectionSettings.json", "r") as f:
     ElectionSettings = json.load(f)
+with open(config.workdirectories['workdir']+"/"+"stream_data.json", "r") as f:
+    table_data = json.load(f)
 
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
+StreamOptions = list({entry['stream'] for entry in table_data if 'stream' in entry})
+
+
+OPTIONS = {
+    "elections": ElectionOptions,
+    "yourparty": VID,
+    "tags": TagOptions,
+    "autofix" : onoff,
+    "vnorm" : VNORM,
+    "vco" : VCO,
+    "streams" : StreamOptions,
+    "table_data": table_data
+    # Add more mappings here if needed
+}
+print("____TABLE FILE:", table_data)
+print("____StreamOptions:", StreamOptions)
 # This prints a script tag you can paste into your HTML
 print(f'<script>const VID_json = {VID_json};</script>')
 
@@ -362,6 +374,7 @@ class TreeNode:
                     break
                     #
         print("____ping end:", node.value, node.level,next, steps)
+
         return node
 
     def getselectedlayers(self,path):
@@ -615,7 +628,7 @@ class TreeNode:
     def create_data_branch(self, electtype):
         global allelectors00
         global allelectors
-        global areaelectors
+
         global workdirectories
 
 # if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
@@ -660,8 +673,8 @@ class TreeNode:
             return np.array(cluster_labels)
 
 
-
         def recursive_kmeans_latlon(X, max_cluster_size=400, depth=2, prefix='K'):
+            X = X.reset_index(drop=True)
             """
             Recursively cluster a DataFrame with 'Lat' and 'Long' columns
             so that no resulting cluster exceeds max_cluster_size.
@@ -681,20 +694,28 @@ class TreeNode:
             # Number of clusters needed to keep all below threshold
             k = int(np.ceil(len(X) / max_cluster_size))
 
+            # If k == 1, no need to append suffix — it's a single cluster
+            if k == 1:
+                return {i: f"{prefix}" for i in X.index}
+
             # KMeans on Lat and Long
+            print(f"___Xlen {len(X)}nclusters{k} max cluster size {max_cluster_size}")
             kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
             coords = X[['Lat', 'Long']].values
             labels = kmeans.fit_predict(coords)
 
             label_map = {}
-            for i in range(1,k+1,1):
+            for i in range(k):
                 idx = X.index[labels == i]
                 sub_data = X.loc[idx]
-                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=f"{prefix}-{i}")
+
+                # Add suffix only if we are splitting into multiple clusters
+                new_prefix = f"{prefix}-{i+1}" if k > 1 else prefix
+
+                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=new_prefix)
                 label_map.update(sub_labels)
 
             return label_map
-
 
 
         from sklearn.cluster import MiniBatchKMeans
@@ -772,7 +793,7 @@ class TreeNode:
 
         nodelist = []
 
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], "ActiveElectoralRoll.csv")
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], "allelectors.csv")
         if not file_path or not os.path.exists(file_path):
             print('_______Redirect to upload_form', file_path)
             flash("Please upload a file or provide the name of the electoral roll file.", "error")
@@ -781,7 +802,14 @@ class TreeNode:
 
 # ward/division level for first time in the loop so import data and calc populations in postcodes
 
-        allelectors0 = pd.read_csv(file_path, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+        allelectors0 = pd.read_csv(
+            file_path,
+            sep='\t',                        # Auto-detect delimiter
+            engine='python',                # Required for sep=None
+            encoding='utf-8',
+            keep_default_na=False,
+            na_values=['']
+        )
         alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
         alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
 # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
@@ -813,9 +841,9 @@ class TreeNode:
             allelectors = pd.concat(frames)
             areaelectors = getblock(allelectors,'Area',Level4node.value)
 
-            print("____lenallelectors+areaelectors:",Level4node.value,len(allelectors),len(areaelectors))
+            print("____lenallelectors+allelectors:",Level4node.value,len(allelectors),len(allelectors))
 
-#            gdf = gpd.GeoDataFrame(areaelectors, geometry=gpd.points_from_xy(areaelectors.Long, areaelectors.Lat), crs="EPSG:4326")
+#            gdf = gpd.GeoDataFrame(allelectors, geometry=gpd.points_from_xy(allelectors.Long, allelectors.Lat), crs="EPSG:4326")
 
             # Project to Web Mercator (meters)
 #            gdf = gdf.to_crs(epsg=3857)
@@ -832,7 +860,8 @@ class TreeNode:
             # Assign WalkName from labels
 #            gdf["WalkName"] = newlabels
             areaelectors["WalkName"] = newlabels
-            areaelectors.to_csv(config.workdirectories['workdir']+"/malcolmtest.csv", sep='\t', encoding='utf-8', index=False)
+
+            allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
 
     # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
 
@@ -845,7 +874,7 @@ class TreeNode:
                 PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
                 nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-PDS") #creating PD_nodes with mean PD pos and elector counts
             elif electtype == 'walk':
-#                walkPts = [(x[0],x[1],x[2], x[3]) for x in areaelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
+#                walkPts = [(x[0],x[1],x[2], x[3]) for x in allelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
                 walkdf0 = pd.DataFrame(areaelectors, columns=['WalkName', 'ENOP','Long', 'Lat'])
                 walkdf1 = walkdf0.rename(columns= {'WalkName': 'Name'})
     # we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for self.electorate
@@ -1264,8 +1293,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_walkshape (self,herenode,type,datablock):
         global levelcolours
-        global allelectors
-        global areaelectors
+
 
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
         print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
@@ -1375,8 +1403,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         global Fullpolys
 
         global levelcolours
-        global allelectors
-        global areaelectors
+
         global Con_Results_data
         print("_________Nodemap:",herenode.value,type, [x.type for x in herenode.children],len(herenode.children), len(herenode.childrenoftype(type)))
         for c in herenode.childrenoftype(type):
@@ -1519,9 +1546,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_nodemarks (self,herenode,type):
         global levelcolours
-        global allelectors
-        global areaelectors
-
 
         for c in [x for x in herenode.children if x.type == type]:
             print('_______MAP Markers')
@@ -1626,7 +1650,6 @@ def adjust_boundary_color(fill_hex, factor=0.7):
 
 
 def importVI(electorsVI):
-    global workdirectories
     allelectorscopy = electorsVI
     path = config.workdirectories['workdir']+"/INDATA"
     headtail = os.path.split(path)
@@ -1641,9 +1664,10 @@ def importVI(electorsVI):
     all_files = glob.glob(f'{path}/*DATA*.csv')
     print("all files",all_files)
     full_revamped = []
+    allelectorsX = pd.DataFrame()
 #upload street and walk VI and Notes saved updates
     for filename in all_files:
-        inDatadf = pd.read_csv(filename,sep="[,\t]")
+        inDatadf = pd.read_csv(filename,sep='\t', engine='python')
         print("____inDatadf:",inDatadf.head())
 
         full_revamped.append(inDatadf)
@@ -1653,35 +1677,28 @@ def importVI(electorsVI):
         roid = Point(Long,Lat)
         session['importfile'] = inDatadf['Electrollfile'][0]
         print("____pathval param:",pathval,Long,Lat,ElectionSettings['importfile'])
-#use ping to precisely locate the node for which this update appies
-        street_node = MapRoot.ping_node(pathval)
-        if street_node:
+#or just process the elector level updates
+        file_path = config.workdirectories['workdir']+"/"+"allelectors.csv"
+        if file_path and os.path.exists(file_path):
+            allelectorsX = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
             for index,entry in inDatadf.iterrows():
-                street_node.updateVI(entry['VI'])
-                street_node.updateVR(entry['VR'])
-                print("line VI update:",street_node.value,street_node.VI, entry['VI'])
-                print("line VR update:",street_node.value,street_node.VR, entry['VR'])
-            print("file VI update:",street_node.value,street_node.VI, entry['VI'])
-            print("file VR update:",street_node.value,street_node.VR, entry['VI'])
-            street_node.updateElectorate(street_node.electorate)
-            street_node.updateTurnout()
+                mask = allelectorsX["ENOP"] == entry['ENOP']
+                if mask.any():
+                    if not pd.isna(entry['VR']) and not str(entry['VR']).strip() == '':
+                        allelectorsX.loc[mask, 'VR'] = entry['VR']
+                        print(f"{entry['ENOP']} line VR update: {entry['VR']}")
+                    if not pd.isna(entry['VI']) and not str(entry['VI']).strip() == '':
+                        allelectorsX.loc[mask, 'VI'] = entry['VI']
+                        print(f"{entry['ENOP']} line VI update: {entry['VI']}")
+                    if not pd.isna(entry['Notes']) and not str(entry['Notes']).strip() == '':
+                        allelectorsX.loc[mask, 'Notes'] = entry['Notes']
+                        print(f"{entry['ENOP']} line Notes update: {entry['Notes']}")
+                    if not pd.isna(entry['Tags']) and not str(entry['Tags']).strip() == '':
+                        allelectorsX.loc[mask, 'Tags'] = entry['Tags']
+                        print(f"{entry['ENOP']} line Tags update: {entry['Tags']}")
+            print ("uploaded mergefile:",filename)
         else:
-            print("______No StreetNode found for this update:",nodeval)
-
-        print ("uploaded mergefile:",filename)
-
-    if len(full_revamped) > 0:
-        dfx = pd.concat(full_revamped,sort=False)
-        VIelectors = dfx[['Path','ENOP','VI','Notes','cdate']].sort_values(by='cdate', ascending=False).drop_duplicates(subset=['ENOP'],keep='last')
-        VIelectors.to_csv(path2+"/"+indatamerge, sep='\t', encoding='utf-8', index=False)
-        print("______original data",allelectors.columns, allelectors.head())
-        print("______unmerged imported data ",VIelectors.columns, VIelectors.head())
-        allelectorsX = allelectorscopy.merge(VIelectors, on='ENOP',how='left' )
-        print("______merged and imported data",allelectors.columns, allelectors.head())
-        allelectorsX.to_excel(path2+"/"+merge)
-    else:
-        allelectorsX = []
-        print("______NO Voter Intention Data found to be imported ",full_revamped)
+            print("______NO Voter Intention Data found to be imported ",full_revamped)
     return allelectorsX
 
 
@@ -1806,54 +1823,97 @@ def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
         print("No poly found to intersect with parent")
     return [nodestep,filtered,gdf]
 
-def getstreamrag(electorframe):
-    ef = electorframe
-    table_data = []
-    streamtable = []
-    if os.path.exists(TABLE_FILE):
-        with open(TABLE_FILE) as f:
-            table_data = json.load(f)
-        g = {'filename' : 'count', 'active' : 'count'}
-        table_df = pd.DataFrame(table_data)
-        streamtable = table_df.groupby(['stream']).agg(g).reset_index()
+def getstreamrag():
+# if allstreams.csv exists then we have a RAG dataframe, otherwise black - empty
 
-    streamdash = pd.DataFrame()
-    activestreams = []
-    if len(ef) > 0:
+    file_path = config.workdirectories['workdir']+"/"+"allelectors.csv"
+    print("____getstreamrag entered", file_path)
+    rag = {}
+    if file_path and os.path.exists(file_path):
+        # we have an active pre-loaded set electors, created by one or more streams
+        ef = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
+        table_data = []
+        streamtable = []
+        print("____we have allelectors, but streamtable file :", TABLE_FILE)
+        streamdash = pd.DataFrame()
+        activestreams = []
+    # a empty or missing allelectors.csv is a farm waiting to be harvested WHITE circle
+    # a empty or missing STREAMS TABLE is a dessert indicated by a BLACK circle
+    # deactivated streams are potential streams found in table but not in allelectors are AMBER
+    # active streams are streams found in both table AND allelectors indicated by LIMEGREEN
+    # deprecated streams are streams with no definition - RED
+    # a stream can be deactivated by marking a file and as inactive the set up page.
+
         ef = pd.DataFrame(ef,columns=['Stream', 'ENOP'])
         # we group electors by Streams, calculating totals in each stream
         g = {'ENOP':'count' }
         streamdash = ef.groupby(['Stream']).agg(g)
-        activestreams = list(set(ef['Stream'].values))
-        print("_____Activestreams1:",ef.head(), streamdash.head())
-    print("_____Activestreams2:",activestreams)
-    if len(table_data) > 0:
-        g = {'filename' : 'count', 'active' : 'count'}
-        table_df = pd.DataFrame(table_data)
-        streamtable = table_df.groupby(['stream']).agg(g)
-        potentialstreams = sorted(set(row['stream'] for row in table_data))
-    else:
-        streamtable = pd.DataFrame()
-        potentialstreams = []
+        livestreamlabels = list(set(ef['Stream'].values))
+        rag = defaultdict(dict)
+        if len(ef) > 0 and len(livestreamlabels) > 0:
+            if os.path.exists(TABLE_FILE):
+                with open(TABLE_FILE) as f:
+                    table_data = json.load(f)
+    # so we are in business with stream labels - but are they defined in the table?
+                g = {'filename' : 'count', 'active' : 'count'}
+                table_df = pd.DataFrame(table_data)
+                print("____we have allelectors and streamtable file :")
+                potential_streams = list({x['stream'] for x in table_data })
+                active_streams = list({x['stream'] for x in table_data if x['active']and x['stream'] in livestreamlabels })
+                depreciated_streams = [x for x in livestreamlabels if x not in potential_streams]
+                deactivated_streams = list({x['stream'] for x in table_data if not x['active']})
+                print(f"____actives:{active_streams}, deprec:{depreciated_streams}, deactiv: {deactivated_streams}")
 
-    rag = defaultdict(dict)
-    for stream in potentialstreams:
-# for each stream in the table
-        rag[stream]['Stream'] = stream.upper()
-        if stream.upper() in activestreams: # if used to load allelectors
-            rag[stream]['Alive'] = True
-            rag[stream]['Elect'] = int(streamdash.loc[stream.upper(),'ENOP']) # can do because its been groupby'ed
+                for stream in active_streams:
+                    stream_key = stream.upper()
+                    mask = table_df['stream'] == stream_key
+                    rag[stream] = {}
+                    rag[stream]['Alive'] = True
+                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
+                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['RAG'] = 'limegreen'
+                    print("_____Active Streams:",ef.head(), streamdash.head())
+                for stream in depreciated_streams:
+                    stream_key = stream.upper()
+                    mask = table_df['stream'] == stream_key
+                    rag[stream] = {}
+                    rag[stream]['Alive'] = False
+                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
+                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['RAG'] = 'red'
+                    print("_____Depreciated Streams:",ef.head(), streamdash.head())
+                for stream in deactivated_streams:
+                    stream_key = stream.upper()
+                    mask = table_df['stream'] == stream_key
+                    rag[stream] = {}
+                    rag[stream]['Alive'] = False
+                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
+                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['RAG'] = 'amber'
+                    print("_____Deactivated Streams:",ef.head(), streamdash.head())
+            else:
+                stream = 'NO DATA STREAMS'
+                rag[stream]['Alive'] = False
+                rag[stream]['Elect'] = 0
+                rag[stream]['Loaded'] = 0
+                rag[stream]['RAG'] = 'black'
+                print("_____No Streams defined yet!:", streamtable.head())
         else:
+            stream = 'NO LIVE DATA'
+            rag[stream] = {}
             rag[stream]['Alive'] = False
-            rag[stream]['Elect'] = 1
-        rag[stream]['Loaded'] = float(int(streamtable.loc[stream.upper(),'active'])/int(streamtable.loc[stream.upper(),'filename']))
-# set the RAG status Alive and 100% loaded = GREEN, Alive < 100% AMBER, else RED
-        if rag[stream]['Alive'] and rag[stream]['Loaded'] == 1:
-            rag[stream]['RAG'] = 'green'
-        elif rag[stream]['Alive']:
-            rag[stream]['RAG'] = 'amber'
-        else:
-            rag[stream]['RAG'] = 'red'
+            rag[stream]['Elect'] = 0
+            rag[stream]['Loaded'] = 0
+            rag[stream]['RAG'] = 'white'
+            print("_____No Active electors file:")
+    else:
+        stream = 'NO LIVE DATA'
+        rag[stream] = {}
+        rag[stream]['Alive'] = False
+        rag[stream]['Elect'] = 0
+        rag[stream]['Loaded'] = 0
+        rag[stream]['RAG'] = 'white'
+        print("_____No Active electors file:")
     return rag
 
 # create and configure the app
@@ -2028,7 +2088,7 @@ def add_tag():
 def get_streamrag():
     global streamrag
     global allelectors
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
     print("___JSONIFYED streamrag:",jsonify(streamrag))
     return jsonify(streamrag)
 
@@ -2036,6 +2096,9 @@ def get_streamrag():
 @login_required
 def get_constants():
     global ElectionSettings
+
+    print("____Route/get_constants" )
+
     return jsonify({
         "constants": ElectionSettings,
         "options": OPTIONS
@@ -2077,7 +2140,7 @@ def index():
         print("__________Session Alive:"+ session['username'])
         formdata = {}
         allelectors = []
-        streamrag = getstreamrag(allelectors)
+        streamrag = getstreamrag()
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -2092,8 +2155,7 @@ def index():
 def login():
     global MapRoot
     global current_node
-    global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global streamrag
@@ -2258,7 +2320,7 @@ def dashboard ():
     global MapRoot
     global current_node
     global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global streamrag
@@ -2271,7 +2333,7 @@ def dashboard ():
         print('_______ROUTE/dashboard'+ session['username'] + ' is already logged in at ', current_node.value)
         formdata = {}
 
-        streamrag = getstreamrag(allelectors)
+        streamrag = getstreamrag()
 
         path = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -2345,8 +2407,7 @@ def downbut(path):
 def transfer(path):
     global MapRoot
     global current_node
-    global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global Featurelayers
@@ -2409,7 +2470,7 @@ def downPDbut(path):
     global MapRoot
     global ElectionSettings
     global allelectors
-    global areaelectors
+
     global filename
     global layeritems
 
@@ -2417,6 +2478,7 @@ def downPDbut(path):
     if request.method == 'GET':
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
+
         previous_node = current_node
         current_node = previous_node.ping_node(path)
         current_node.file = subending(current_node.file,"-PDS")
@@ -2429,8 +2491,9 @@ def downPDbut(path):
 
         WardPDnodelist = current_node.childrenoftype('polling_district')
 # if there is a selected file , then allelectors will be full of records
+
         for PD_node in WardPDnodelist:
-            PDelectors = getblock(areaelectors,'PD',PD_node.value)
+            PDelectors = getblock(allelectors,'PD',PD_node.value)
             Streetsdf0 = pd.DataFrame(PDelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
             Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
@@ -2439,7 +2502,7 @@ def downPDbut(path):
             shapelayer.add_walkshape(PD_node, 'polling_district',Streetsdf)
             print("_______new PD Display node",PD_node,"|", Streetsdf, current_node.level, len(Featurelayers['polling_district']._children))
 
-#            areaelectors = getblock(allelectors,'Area',current_node.value)
+#            allelectors = getblock(allelectors,'Area',current_node.value)
 
         if len(WardPDnodelist) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2455,6 +2518,7 @@ def downPDbut(path):
             moredata = importVI(allelectors.copy())
             if len(moredata) > 0:
                 allelectors = moredata
+                allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
 
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
@@ -2476,7 +2540,7 @@ def downWKbut(path):
     global MapRoot
     global ElectionSettings
     global allelectors
-    global areaelectors
+
     global filename
     global layeritems
 
@@ -2485,6 +2549,7 @@ def downWKbut(path):
 
     if request.method == 'GET':
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
+
         previous_node = current_node
         current_node = previous_node.ping_node(path)
         current_node.file = subending(current_node.file,"-WALKS")
@@ -2497,9 +2562,9 @@ def downWKbut(path):
         print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
 
         WardWalknodelist = current_node.childrenoftype('walk')
-# if there is a selected file , then areaelectors will be full of records for the ward/div
+# if there is a selected file , then allelectors will be full of records for the ward/div
         for walk_node in WardWalknodelist:
-            walkelectors = getblock(areaelectors,'WalkName',walk_node.value)
+            walkelectors = getblock(allelectors,'WalkName',walk_node.value)
             walksdf0 = pd.DataFrame(walkelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
             walksdf1 = walksdf0.rename(columns= {'StreetName': 'Name'})
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
@@ -2509,7 +2574,7 @@ def downWKbut(path):
             shapelayer.add_walkshape(walk_node, 'walk',walksdf)
             print("_______new Walk Display node",walk_node.value,"|", walksdf)
 
-#            areaelectors = getblock(allelectors,'Area',current_node.value)
+#            allelectors = getblock(allelectors,'Area',current_node.value)
 
         if len(WardWalknodelist) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2542,7 +2607,7 @@ def STupdate(path):
 
 
     global allelectors
-    global areaelectors
+
     global environment
     global filename
     global layeritems
@@ -2585,12 +2650,13 @@ def STupdate(path):
             headtail = os.path.split(path)
             path2 = headtail[0]
 
+
             if "viData" in VIdata and isinstance(VIdata["viData"], list):  # Ensure viData is a list
-                changefields = pd.DataFrame(columns=['ENOP','ElectorName','VR','VI','Notes','tags','cdate','Electrollfile'])
+                changefields = pd.DataFrame(columns=['ENOP','ElectorName','VR','VI','Notes','Tags','cdate','Electrollfile'])
                 i = 0
 
                 for item in VIdata["viData"]:  # Loop through each elector entry
-                    electID = item.get("electorID","").strip()
+                    electID = str(item.get("electorID","")).strip()
                     ElectorName = item.get("ElectorName","").strip()
                     VR_value = item.get("vrResponse", "").strip() # Extract vrResponse, "" if none
                     VI_value = item.get("viResponse", "").strip()  # Extract viResponse, "" if none
@@ -2601,37 +2667,39 @@ def STupdate(path):
                     if not electID:  # Skip if electorID is missing
                         print("Skipping entry with missing electorID")
                         continue
-                    print("_____columns:",areaelectors.columns)
+                    print("_____columns:",allelectors.columns)
                     # Find the row where ENO matches electID
-                    selected = areaelectors.query("ENOP == @electID")
+                    allelectors["ENOP"] = allelectors["ENOP"].astype(str)
+                    mask = allelectors["ENOP"] == electID
                     changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file
                     changefields.loc[i,'Lat'] = street_node.centroid.y
                     changefields.loc[i,'Long'] = street_node.centroid.x
                     changefields.loc[i,'ENOP'] = electID
                     changefields.loc[i,'ElectorName'] = ElectorName
-                    if not selected.empty:
+
+                    if mask.any():
                         # Update only if viResponse is non-empty
                         if VR_value != "":
-                            allelectors.loc[selected.index, "VR"] = VR_value
+                            allelectors.loc[mask, "VR"] = VR_value
                             street_node.updateVR(VR_value)
                             changefields.loc[i,'VR'] = VR_value
                         if VI_value != "":
-                            areaelectors.loc[selected.index, "VI"] = VI_value
+                            allelectors.loc[mask, "VI"] = VI_value
                             street_node.updateVI(VI_value)
                             changefields.loc[i,'VI'] = VI_value
                         if Notes_value != "":
-                            areaelectors.loc[selected.index, "Notes"] = Notes_value
+                            allelectors.loc[mask, "Notes"] = Notes_value
                             changefields.loc[i,'Notes'] = Notes_value
                         if Tags_value != "":
-                            areaelectors.loc[selected.index, "tags"] = Tags_value
-                            changefields.loc[i,'tags'] = Tags_value
+                            allelectors.loc[mask, "Tags"] = Tags_value
+                            changefields.loc[i,'Tags'] = Tags_value
                         print(f"Updated elector {electID} with VI = {VI_value} and Tags = {Tags_value}")
-                        print("ElectorVI", areaelectors.loc[selected.index, "ENOP"], areaelectors.loc[selected.index, "tags"])
+                        print("ElectorVI", allelectors.loc[mask, "ENOP"], allelectors.loc[mask, "tags"])
                     else:
                         print(f"Skipping elector {electID}, empty viResponse")
 
                     changefields.loc[i,'cdate'] = get_creation_date("")
-                    changefields.loc[i,'Electrollfile'] = areaelectors.loc[0,'Source_ID']
+                    changefields.loc[i,'Electrollfile'] = allelectors.loc[0,'Source_ID']
                     changefields.loc[i,'Username'] = session.get('username')
 
                     i = i+1
@@ -2644,10 +2712,12 @@ def STupdate(path):
 # base_name = "changefile"
 # extension = ".csv"
 
+
                 versioned_filename = get_versioned_filename(base_path, base_name, ".csv")
 
                 # Save DataFrame to the new file
                 changefields.to_csv(versioned_filename, sep='\t', encoding='utf-8', index=False)
+                allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
 
                 print(f"✅ CSV saved as: {versioned_filename}")
             else:
@@ -2658,12 +2728,12 @@ def STupdate(path):
             return jsonify({"error": str(e)}), 500
 
 # this is for get and post calls
-    print("_____Where are we: ", current_node.value, current_node.type, areaelectors.columns)
+    print("_____Where are we: ", current_node.value, current_node.type, allelectors.columns)
 
     street = current_node.value
     electorwalks = pd.DataFrame()
 
-    electorwalks = getblock(areaelectors, 'StreetName',current_node.value)
+    electorwalks = getblock(allelectors, 'StreetName',current_node.value)
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
@@ -2688,15 +2758,6 @@ def STupdate(path):
     geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
     CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
 
-    electorwalks['Team'] = ""
-    electorwalks['M1'] = ""
-    electorwalks['M2'] = ""
-    electorwalks['M3'] = ""
-    electorwalks['M4'] = ""
-    electorwalks['M5'] = ""
-    electorwalks['M6'] = ""
-    electorwalks['M7'] = ""
-    electorwalks['Notes'] = ""
 
     groupelectors = electorwalks.shape[0]
     if math.isnan(float('%.6f'%(electorwalks.Elevation.max()))):
@@ -2741,7 +2802,7 @@ def STupdate(path):
 
 
     context = {
-        "group": electorwalks,
+        "group": allelectors,
         "prodstats": prodstats,
         "mapfile": url_for('upbut',path=mapfile),
         "datafile": url_for('STupdate',path=datafile),
@@ -2753,18 +2814,18 @@ def STupdate(path):
         results.write(results_template.render(context, url_for=url_for))
     #           only create a map if the branch does not already exist
 #    current_node = current_node.parent
-    mapfile = street_node.dir+"/"+street_node.file
-    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
+        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
     if current_node.type == 'street':
+        mapfile = url_for('PDdownST',street_node.dir+"/"+street_node.file)
         layeritems = getlayeritems(current_node.parent.childrenoftype('street'),formdata['tabledetails'])
         print('_______Street Data uploaded:-',url_for('map', path=mapfile))
     elif current_node.type == 'walk':
-        print('_______Walk Data uploaded:-',url_for('map', path=mapfile))
+        mapfile = url_for('WKdownST',street_node.dir+"/"+street_node.file)
+        print('_______Walkleg Data uploaded:-',url_for('map', path=mapfile))
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'),formdata['tabledetails'])
-    print('_______Success mapfile:-',url_for('map', path=mapfile))
 
 
-    return  jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
+    return  jsonify({"message": "Success", "file": mapfile})
 
 
 @app.route('/PDdownST/<path:path>', methods=['GET','POST'])
@@ -2778,7 +2839,7 @@ def PDdownST(path):
 
 
     global allelectors
-    global areaelectors
+
     global environment
     global filename
     global layeritems
@@ -2789,15 +2850,16 @@ def PDdownST(path):
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
     PD_node = current_node.ping_node(path)
+
 # now pointing at the STREETS.html node containing a map of street markers
-    PDelectors = getblock(areaelectors, 'PD',PD_node.value)
+    PDelectors = getblock(allelectors, 'PD',PD_node.value)
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
         focuslayer.add_nodemarks(PD_node, 'street')
         streetnodelist = PD_node.childrenoftype('street')
 
-        if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
+        if len(allelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.")
         else:
@@ -2807,7 +2869,7 @@ def PDdownST(path):
         for street_node in streetnodelist:
               street = street_node.value
 
-              electorwalks = getblock(areaelectors, 'StreetName',street_node.value)
+              electorwalks = getblock(allelectors, 'StreetName',street_node.value)
 
               STREET_ = street_node.value
 
@@ -2923,7 +2985,7 @@ def LGdownST(path):
 
 
     global allelectors
-    global areaelectors
+
     global environment
     global filename
     global layeritems
@@ -2935,13 +2997,13 @@ def LGdownST(path):
 
     PD_node = current_node.ping_node(path)
 # now pointing at the STREETS.html node containing a map of street markers
-    PDelectors = getblock(areaelectors, 'PD',PD_node.value)
+    PDelectors = getblock(allelectors, 'PD',PD_node.value)
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
         focuslayer.add_nodemarks(PD_node, 'street')
 
-        if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
+        if len(allelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.")
         else:
@@ -2952,7 +3014,7 @@ def LGdownST(path):
         for street_node in streetnodelist:
               street = street_node.value
 
-              electorwalks = getblock(areaelectors, 'StreetName',street_node.value)
+              electorwalks = getblock(allelectors, 'StreetName',street_node.value)
 
               STREET_ = street_node.value
 
@@ -3068,7 +3130,7 @@ def WKdownST(path):
 
     global current_node
     global allelectors
-    global areaelectors
+
     global environment
     global filename
     global layeritems
@@ -3078,8 +3140,8 @@ def WKdownST(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
     walk_node = current_node.ping_node(path)
-    walkelectors = getblock(areaelectors, 'WalkName',walk_node.value)
-    walks = areaelectors.WalkName.unique()
+    walkelectors = getblock(allelectors, 'WalkName',walk_node.value)
+    walks = allelectors.WalkName.unique()
     if request.method == 'GET':
 # if there is a selected file , then allelectors will be full of records
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
@@ -3206,7 +3268,7 @@ def WKdownST(path):
     layeritems = getlayeritems(walklegnodelist, formdata['tabledetails'])
 
 
-    if len(areaelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
+    if len(allelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
         flash("Can't find any elector data for this ward.")
         print("Can't find any elector data for this ward.")
     else:
@@ -3356,7 +3418,7 @@ def divreport(path):
 def upbut(path):
     global current_node
     global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global Featurelayers
@@ -3490,14 +3552,14 @@ def setgotv():
     global current_node
     global layeritems
     global allelectors
-    global areaelectors
+
     global streamrag
 
 
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
     selected = None
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
 
     if request.method == 'POST':
 
@@ -3534,7 +3596,7 @@ def filelist():
     global Treepolys
     global Fullpolys
 
-    global areaelectors
+
 
     global environment
     global ElectionSettings
@@ -3555,7 +3617,7 @@ def normalise():
     global Treepolys
     global Fullpolys
     global allelectors
-    global areaelectors
+
     global ElectionSettings
     global formdata
     global layeritems
@@ -3680,7 +3742,7 @@ def normalise():
         try:
             if file_path and os.path.exists(file_path):
                 if file_path.upper().endswith('.CSV'):
-                    dfx = pd.read_csv(file_path, encoding='ISO-8859-1')
+                    dfx = pd.read_csv(file_path,sep='\t',engine='python',encoding='ISO-8859-1')
                     print("readingCSVfile outside normz")
                 elif file_path.upper().endswith('.XLSX'):
                     dfx = pd.read_excel(file_path)
@@ -3739,11 +3801,11 @@ def normalise():
     allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
     print("____Final Loadable mainframe columns:",len(allelectors),allelectors.columns)
 # assemble data for the RAG status of Streams in allelectors
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
     print("__Streamrag2:", streamrag, allelectors.columns)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
-    mainframe.to_csv(targetfile)
-    allelectors.to_csv("ActiveElectoralRoll.csv")
+    mainframe.to_csv(targetfile,sep='\t', encoding='utf-8', index=False)
+    allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
     ElectionSettings['importfile'] = targetfile
     #    formdata['username'] = session['username']
     mapfile = current_node.dir+"/"+current_node.file
@@ -3758,7 +3820,7 @@ def walks():
     global MapRoot
     global current_node
     global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global streamrag
@@ -3766,7 +3828,7 @@ def walks():
 
     global environment
     flash('_______ROUTE/walks',session)
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
 
 
     if len(request.form) > 0:
@@ -3840,7 +3902,7 @@ def firstpage():
     global MapRoot
     global current_node
     global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global workdirectories
@@ -3925,7 +3987,7 @@ def firstpage():
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         newlayer = Featurelayers[atype].reset()
         newlayer.add_nodemaps(current_node, atype)
-        streamrag = getstreamrag(allelectors)
+        streamrag = getstreamrag()
 
         current_node.create_area_map(current_node.getselectedlayers(session['next']))
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
@@ -3946,7 +4008,7 @@ def cards():
     global MapRoot
     global current_node
     global allelectors
-    global areaelectors
+
     global Treepolys
     global Fullpolys
     global streamrag
@@ -3955,7 +4017,7 @@ def cards():
 
     global environment
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
 
 
     if len(request.form) > 0:
@@ -4065,7 +4127,7 @@ def stream_input():
     else:
         table_data = []
 
-    streamrag = getstreamrag(allelectors)
+    streamrag = getstreamrag()
 
     # Collect unique streams for dropdowns
     streams = sorted(set(row['stream'] for row in table_data))

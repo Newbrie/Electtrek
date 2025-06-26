@@ -27,11 +27,8 @@
     <tr>
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
-        <select class="editable stream">
-          {% for key in streamrag.keys() %}
-            <option value="{{ key }}" {% if row.stream == key %}selected{% endif %}>{{ key }}</option>
-          {% endfor %}
-        </select>
+        <label for="StreamOptions">Stream:</label>
+        <select name="StreamOptions" id="StreamOptions"></select><br>
       </td>
       <td>
       <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
