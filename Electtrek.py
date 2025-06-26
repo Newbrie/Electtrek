@@ -223,7 +223,7 @@ data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
-StreamOptions = dict({entry['stream'] for entry in table_data if 'stream' in entry})
+StreamOptions = dict(zip({entry['stream'] for entry in table_data if 'stream' in entry},{entry['stream'] for entry in table_data if 'stream' in entry}))
 
 
 OPTIONS = {
