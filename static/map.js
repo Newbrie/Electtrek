@@ -432,7 +432,6 @@ async function fetchAndUpdateChart() {
     }).then(() => location.reload());
   }
 
-const iframe = document.getElementById("iframe1");
 
 
 function populateDropdowns(doc) {
@@ -452,13 +451,6 @@ function populateDropdowns(doc) {
   }
 }
 
-// Call once for the main document
-
-// Later, after iframe loads
-iframe.addEventListener("load", () => {
-  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-  populateDropdowns(iframeDoc);
-});
 
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -520,6 +512,15 @@ iframe.addEventListener("load", () => {
               }
             });
           });
+
+          const iframe = document.getElementById("iframe1");
+
+          // Later, after iframe loads
+          iframe.addEventListener("load", () => {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            populateDropdowns(iframeDoc);
+          });
+
 
         });
       });
