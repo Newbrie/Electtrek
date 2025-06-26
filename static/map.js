@@ -440,7 +440,7 @@ function populateDropdowns(doc) {
     const dropdown = doc.getElementById(key);
     if (dropdown) {
       dropdown.innerHTML = ""; // Clear any existing options
-
+      console.log("Options:",options.streams);
       const values = options.streams[key];
       values.forEach(value => {
         const opt = document.createElement("option");
