@@ -1,5 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
+
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -139,8 +140,6 @@ async function fetchAndUpdateChart() {
     console.error('Failed to fetch streamrag data:', error);
   }
 };
-
-
 
   function updateMessages() {
   const old = pessages.pop();
@@ -454,6 +453,7 @@ async function fetchAndUpdateChart() {
               const o = document.createElement("option");
               o.value = optValue;                               // Backend uses this
               o.textContent = `${optValue}: ${optLabel}`;       // User sees this
+              console.log("Added option:", o.textContent);
               if (optValue === value) o.selected = true;
               el.appendChild(o);
             });
