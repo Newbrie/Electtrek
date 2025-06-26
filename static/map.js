@@ -448,6 +448,8 @@ async function fetchAndUpdateChart() {
             // Populate dropdown
             const opts = options[key] || [];
             el.innerHTML = "";
+            console.log("Constant:"+key, el.value);
+
 
             Object.entries(opts).forEach(([optValue, optLabel]) => {
               const o = document.createElement("option");
