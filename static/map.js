@@ -448,7 +448,7 @@ async function fetchAndUpdateChart() {
             const iframe = document.getElementById("iframe1");
             if (iframe && iframe.contentDocument) {
               el = iframe.contentDocument.getElementById(key);
-
+              alert("__foundiframe element"+el);
               if (el) {
                 console.log("Element found inside iframe");
               } else {
@@ -456,7 +456,7 @@ async function fetchAndUpdateChart() {
               }
             }
           }
-          
+
           if (!el) return;
 
           if (el.tagName === "SELECT") {
