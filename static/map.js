@@ -436,7 +436,7 @@ async function fetchAndUpdateChart() {
 
 function populateDropdowns(doc) {
   if (!options || !options.streams) {
-    console.error("options or options.streams is not defined.");
+    console.log("options or options.streams is not defined.");
     return;
   }
   for (const key in options.streams) {
