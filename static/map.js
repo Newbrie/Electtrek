@@ -432,6 +432,35 @@ async function fetchAndUpdateChart() {
     }).then(() => location.reload());
   }
 
+const iframe = document.getElementById("iframe1");
+
+
+function populateDropdowns(doc) {
+  for (const key in options.StreamOptions) {
+    const dropdown = doc.getElementById(key);
+    if (dropdown) {
+      dropdown.innerHTML = ""; // Clear any existing options
+
+      const values = options.StreamOptions[key];
+      values.forEach(value => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        dropdown.appendChild(opt);
+      });
+    }
+  }
+}
+
+// Call once for the main document
+populateDropdowns(document);
+
+// Later, after iframe loads
+iframe.addEventListener("load", () => {
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  populateDropdowns(iframeDoc);
+});
+
 
   document.addEventListener("DOMContentLoaded", () => {
     fetch("/get-constants",
@@ -444,20 +473,6 @@ async function fetchAndUpdateChart() {
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
-          if (!el) {
-            // Element not found in main document — try a child frame
-            const iframe = document.getElementById("iframe1");
-            if (iframe && iframe.contentDocument) {
-              el = iframe.contentDocument.getElementById(key);
-              alert("__foundiframe element"+el);
-              if (el) {
-                console.log("Element found inside iframe");
-              } else {
-                console.log("Element not found in iframe either");
-              }
-            }
-          }
-
           if (!el) return;
 
           if (el.tagName === "SELECT") {
