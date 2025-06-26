@@ -433,30 +433,6 @@ async function fetchAndUpdateChart() {
   }
 
 
-
-function populateDropdowns(doc) {
-  if (!options || !options.streams) {
-    console.log("options or options.streams is not defined.");
-    return;
-  }
-  for (const key in options.streams) {
-    const dropdown = doc.getElementById(key);
-    if (dropdown) {
-      dropdown.innerHTML = ""; // Clear any existing options
-      console.log("Options:",options.streams);
-      const values = options.streams[key];
-      values.forEach(value => {
-        const opt = document.createElement("option");
-        opt.value = value;
-        opt.textContent = value;
-        dropdown.appendChild(opt);
-      });
-    }
-  }
-}
-
-
-
   document.addEventListener("DOMContentLoaded", () => {
     fetch("/get-constants",
     { credentials: 'same-origin' }  // 👈 THIS IS CRITICAL
@@ -516,15 +492,6 @@ function populateDropdowns(doc) {
               }
             });
           });
-
-          const iframe = document.getElementById("iframe1");
-
-          // Later, after iframe loads
-          iframe.addEventListener("load", () => {
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            populateDropdowns(iframeDoc);
-          });
-
 
         });
       });
