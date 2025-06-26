@@ -453,7 +453,6 @@ function populateDropdowns(doc) {
 }
 
 // Call once for the main document
-populateDropdowns(document);
 
 // Later, after iframe loads
 iframe.addEventListener("load", () => {
