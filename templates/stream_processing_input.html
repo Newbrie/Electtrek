@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 
 {% block map %}
-let constants = {};
-let options = {};
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
 <h1>SELECT ELECTORAL ROLL FILE STREAMS FOR EACH ELECTION AREA</h1>
@@ -137,7 +135,8 @@ let options = {};
 </div>
 <script>
 
-
+frameconstants = parent.document.constants
+frameoptions = parent.document.options
 
     document.getElementById('add-row-btn').addEventListener('click', function () {
       const tbody = document.getElementById('file-info-tbody');
@@ -377,16 +376,16 @@ let options = {};
     )
         .then(res => res.json())
         .then(data => {
-          constants = data.constants;
-          options = data.options;
+          frameconstants = data.constants;
+          frameoptions = data.options;
 
-          Object.entries(constants).forEach(([key, value]) => {
+          Object.entries(frameconstants).forEach(([key, value]) => {
             const el = document.getElementById(key);
             if (!el) return;
 
             if (el.tagName === "SELECT") {
               // Populate dropdown
-              const opts = options[key] || [];
+              const opts = frameoptions[key] || [];
               el.innerHTML = "";
               console.log("Constant:"+key, el.value);
 
