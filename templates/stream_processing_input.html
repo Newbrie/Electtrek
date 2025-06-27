@@ -368,24 +368,19 @@
       }
     });
 
+    document.addEventListener("DOMContentLoaded", () => {
+  fetch("/get-constants", { credentials: "same-origin" })
+    .then(res => res.json())
+    .then(data => {
+      const constants = data.constants;
+      const options = data.options;
 
-
-    window.addEventListener("message", (event) => {
-    // Optionally verify origin:
-    // if (event.origin !== "https://yourdomain.com") return;
-
-    if (event.data.type === "constants-ready") {
-      const frameconstants = event.data.constants;
-      const frameoptions = event.data.options;
-
-      console.log("Received from parent:", frameconstants, frameoptions);
-
-      Object.entries(frameconstants).forEach(([key, value]) => {
+      Object.entries(constants).forEach(([key, value]) => {
         const el = document.getElementById(key);
         if (!el) return;
 
         if (el.tagName === "SELECT") {
-          const opts = frameoptions[key] || [];
+          const opts = options[key] || [];
           el.innerHTML = "";
 
           Object.entries(opts).forEach(([optValue, optLabel]) => {
@@ -399,8 +394,11 @@
           el.value = value;
         }
       });
-    }
-  });
+    })
+    .catch(err => {
+      console.error("Failed to fetch constants:", err);
+    });
+});
 
 
 

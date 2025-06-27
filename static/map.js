@@ -440,12 +440,6 @@ async function fetchAndUpdateChart() {
       .then(data => {
         constants = data.constants;
         options = data.options;
-        const iframe = document.getElementById("iframe1");
-        iframe.contentWindow.postMessage({
-              type: "constants-ready",
-              constants: data.constants,
-              options: data.options
-            }, "*");  // Replace * with exact origin if security is a concern
 
         Object.entries(constants).forEach(([key, value]) => {
           const el = document.getElementById(key);
