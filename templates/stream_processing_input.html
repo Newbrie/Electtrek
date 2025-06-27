@@ -135,8 +135,6 @@
 </div>
 <script>
 
-frameconstants = parent.document.constants
-frameoptions = parent.document.options
 
     document.getElementById('add-row-btn').addEventListener('click', function () {
       const tbody = document.getElementById('file-info-tbody');
@@ -370,72 +368,39 @@ frameoptions = parent.document.options
       }
     });
 
-    document.addEventListener("DOMContentLoaded", () => {
-      fetch("/get-constants",
-      { credentials: 'same-origin' }  // 👈 THIS IS CRITICAL
-    )
-        .then(res => res.json())
-        .then(data => {
-          frameconstants = data.constants;
-          frameoptions = data.options;
-
-          Object.entries(frameconstants).forEach(([key, value]) => {
-            const el = document.getElementById(key);
-            if (!el) return;
-
-            if (el.tagName === "SELECT") {
-              // Populate dropdown
-              const opts = frameoptions[key] || [];
-              el.innerHTML = "";
-              console.log("Constant:"+key, el.value);
 
 
-              Object.entries(opts).forEach(([optValue, optLabel]) => {
-                const o = document.createElement("option");
-                o.value = optValue;                               // Backend uses this
-                o.textContent = `${optValue}: ${optLabel}`;       // User sees this
-                console.log("Added option:", o.textContent);
-                if (optValue === value) o.selected = true;
-                el.appendChild(o);
-              });
+    window.addEventListener("message", (event) => {
+    // Optionally verify origin:
+    // if (event.origin !== "https://yourdomain.com") return;
 
-            } else {
-              // Input field
-              el.value = value;
-            };
+    if (event.data.type === "constants-ready") {
+      const frameconstants = event.data.constants;
+      const frameoptions = event.data.options;
 
-            // Add change listener
-            el.addEventListener("input", () => {
-              let newVal = el.value;
-              if (el.type === "number") {
-                newVal = parseFloat(newVal);
-              };
-              if (el.type === "checkbox") {
-                newVal = int(newVal);
-              };
+      console.log("Received from parent:", frameconstants, frameoptions);
 
-              fetch("/set-constant", {
-                method: "POST",
-                credentials: 'same-origin' ,  // 👈 THIS IS CRITICAL
-                headers: {
-                  "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ name: key, value: newVal })
-              })
-              .then(res => res.json())
-              .then(resp => {
-                if (resp.success) {
-                  alert("confirmed:"+key+" --"+ newVal);
-                  updateMessages();  // ✅ Trigger only after backend update
-                } else {
-                  alert("Failed to update constant: " + resp.error);
-                }
-              });
-            });
+      Object.entries(frameconstants).forEach(([key, value]) => {
+        const el = document.getElementById(key);
+        if (!el) return;
 
+        if (el.tagName === "SELECT") {
+          const opts = frameoptions[key] || [];
+          el.innerHTML = "";
+
+          Object.entries(opts).forEach(([optValue, optLabel]) => {
+            const o = document.createElement("option");
+            o.value = optValue;
+            o.textContent = `${optValue}: ${optLabel}`;
+            if (optValue === value) o.selected = true;
+            el.appendChild(o);
           });
-        });
-    });
+        } else {
+          el.value = value;
+        }
+      });
+    }
+  });
 
 
 
