@@ -1,0 +1,9 @@
+{% for key, value in streamrag.items() %}
+  <tr>
+      <td>{{ key }}</td>
+      <td>{{ value['Alive'] }}</td>
+      <td>{{ value['Loaded'] }}</td>
+      <td>{{ value['Elect'] }}</td>
+      <td>{{ value['RAG'] }}</td>
+  </tr>
+{% endfor %}

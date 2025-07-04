@@ -290,19 +290,23 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
                 df.loc[df['ENO'] <= 0, 'ENO'] = None
                 df.loc[df['Suffix'] < 0, 'Suffix'] = None
 
+        # Ensure suffix is numeric and default to 0 if missing
+        df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce').fillna(0).astype(int)
+
         # Derive ENOT
         df['ENOT'] = None
         valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
         df.loc[valid_enot_mask, 'ENOT'] = (
-            df.loc[valid_enot_mask, 'PD'] + '-' + df.loc[valid_enot_mask, 'ENO'].astype(int).astype(str)
+            df.loc[valid_enot_mask, 'PD'].astype(str) + '-' + df.loc[valid_enot_mask, 'ENO'].astype(int).astype(str)
         )
 
-        # Derive ENOP
+        # Derive ENOP (always include suffix, default 0)
         df['ENOP'] = df['ENOT']
-        valid_enop_mask = valid_enot_mask & df['Suffix'].notna()
+        valid_enop_mask = valid_enot_mask
         df.loc[valid_enop_mask, 'ENOP'] = (
-            df.loc[valid_enop_mask, 'ENOT'] + '.' + df.loc[valid_enop_mask, 'Suffix'].astype(int).astype(str)
+            df.loc[valid_enop_mask, 'ENOT'] + '.' + df.loc[valid_enop_mask, 'Suffix'].astype(str)
         )
+
 
         return df
 
@@ -475,7 +479,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
                         print ("len111:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
                     Addnolen1 = len(Addno1.group())
                     Addno1 = str(Addno1.group())
-                    Addno = str(Addno1)+","+str(Addno3)
+                    Addno = str(Addno1)+"/"+str(Addno3)
                     print ("len11:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             electors2.loc[index,'StreetName'] = street.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
             electors2.loc[index,'AddressNumber'] = Addno

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+<script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 
 {% block map %}
 <!-- Editable File Information Table -->
@@ -28,10 +29,18 @@
     <tr>
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
-        <select name="streams" id="streams"></select>
+        <select class="editable stream">
+          {% for stream in streams %}
+            <option value="{{ stream }}"{% if row['stream'] == stream %} selected{% endif %}>{{ stream }}</option>
+          {% endfor %}
+      </select>
       </td>
       <td>
-        <select name="streams" id="streams"></select>
+        <select class="editable stream">
+          {% for stream in streams %}
+            <option value="{{ stream }}"{% if row['stream'] == stream %} selected{% endif %}>{{ stream }}</option>
+          {% endfor %}
+      </select>
       </td>
       <td>
       <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
@@ -64,12 +73,12 @@
 <!-- Import Table -->
 <div id="streams" class="section">
     <h1>STREAM DATA QUALITY STATISTICS</h1>
-    <table id= id="streamtab">
+    <table id="streamtab">
         <thead>
           <tr>
               <th>Stream</th>
               <th>Alive</th>
-              <th>Loaded</th>
+              <th>Files</th>
               <th>Elect</th>
               <th>RAG</th>
           </tr>
@@ -77,9 +86,9 @@
         <tbody>
           {% for key, value in streamrag.items() %}
               <tr>
-                  <td>{{ value['Stream'] }}</td>
+                  <td>{{ key }}</td>
                   <td>{{ value['Alive'] }}</td>
-                  <td>{{ value['Loaded'] }}</td>
+                  <td>{{ value['Files'] }}</td>
                   <td>{{ value['Elect'] }}</td>
                   <td>{{ value['RAG'] }}</td>
               </tr>
@@ -91,7 +100,8 @@
     <table id="DQ-table">
 
         <thead>
-          <button id="process-btn">PROCESS</button>
+          <button id="process-btn">ADD STREAM</button>
+          <button id="reset-btn">RESET</button>
             <tr>
                 <th>Stream</th>
                 <th>Filename</th>
@@ -134,7 +144,6 @@
     </table>
 </div>
 <script>
-
 
     document.getElementById('add-row-btn').addEventListener('click', function () {
       const tbody = document.getElementById('file-info-tbody');
@@ -218,8 +227,9 @@
       const filepathEl = row.querySelector('.file-path');
       const filepath = filepathEl ? filepathEl.value : '';
 
+//      alert('inside active and stream: '+ stream+active );
+
       if (active && stream === normalizedInput) {
-//        alert('inside active and stream: '+ filepath );
 
         if (fileInput.files.length > 0) {
           const file = fileInput.files[0];
@@ -260,9 +270,16 @@
     })
       .then(response => response.text())
       .then(html => {
+  //      location.reload(); // Refresh current page
         document.open();
         document.write(html);
         document.close();
+        // Then reload the streamtab
+      fetch('/get_streamtab')
+        .then(res => res.text())
+        .then(html => {
+          document.querySelector('#streamtab tbody').innerHTML = html;
+        });
       })
       .catch(error => {
         console.error('Error:', error);
@@ -289,6 +306,19 @@
 
       return data;
     };
+
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      if (!confirm("Are you sure you want to reset Elections?")) return;
+
+      fetch('/reset_Elections', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message);
+          location.reload(); // Refresh current page
+        })
+        .catch(err => alert("Error resetting elections."));
+    });
+
 
     document.getElementById('save-btn').addEventListener('click', function () {
       const tableData = collectTableData();
@@ -368,37 +398,6 @@
       }
     });
 
-    document.addEventListener("DOMContentLoaded", () => {
-  fetch("/get-constants", { credentials: "same-origin" })
-    .then(res => res.json())
-    .then(data => {
-      const constants = data.constants;
-      const options = data.options;
-
-      Object.entries(constants).forEach(([key, value]) => {
-        const el = document.getElementById(key);
-        if (!el) return;
-
-        if (el.tagName === "SELECT") {
-          const opts = options[key] || [];
-          el.innerHTML = "";
-
-          Object.entries(opts).forEach(([optValue, optLabel]) => {
-            const o = document.createElement("option");
-            o.value = optValue;
-            o.textContent = `${optValue}: ${optLabel}`;
-            if (optValue === value) o.selected = true;
-            el.appendChild(o);
-          });
-        } else {
-          el.value = value;
-        }
-      });
-    })
-    .catch(err => {
-      console.error("Failed to fetch constants:", err);
-    });
-});
 
 
 

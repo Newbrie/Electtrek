@@ -1,4 +1,4 @@
-from canvasscards import prodcards, getblock, find_boundary
+from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
@@ -39,6 +39,10 @@ from matplotlib.colors import to_hex, to_rgb
 import colorsys
 from collections import defaultdict
 import requests
+import pickle
+from k_means_constrained import KMeansConstrained
+
+
 
 
 
@@ -78,13 +82,13 @@ def normalname(name):
     return name
 
 def stepify(path):
-
-    route = subending(path, "").replace(".html","")
+    route = subending(path, "")
     parts = route.split("/")
     last = parts.pop() #eg KA-SMITH_STREET or BAGSHOT-MAP
-    if last.find("-") > 0:
-        parts.append(last.split("-").pop()) #eg SMITH_STREET
+    if last.find("-") > 0 and last.find(".html"):
+        parts.append(last.replace(".html","").split("-").pop()) #eg SMITH_STREET
     return parts
+
 
 
 def getchildtype(parent):
@@ -163,8 +167,12 @@ def getlayeritems(nodelist,title):
             options = x.VI
             for party in options:
                 dfy.loc[i,party] = x.VI[party]
-
-            dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+            if x.type == 'polling_district':
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+            elif x.type == 'walk':
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+            else:
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
             dfy.loc[i,x.parent.type] =  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.parent.dir}/{x.parent.file}&#39;); return false;">{x.parent.value}</a>'
             dfy.loc[i,'elect'] = x.electorate
             dfy.loc[i,'hous'] = x.houses
@@ -178,8 +186,21 @@ def getlayeritems(nodelist,title):
 
 def subending(filename, ending):
   stem = filename.replace("-WDATA", "@@@").replace("-SDATA", "@@@").replace("-MAP", "@@@").replace("-PRINT", "@@@").replace("-WALKS", "@@@").replace("-PDS", "@@@").replace("-DIVS", "@@@").replace("-WARDS", "@@@")
+  print(f"____Subending test: from {filename} to {stem.replace('@@@', ending)}")
   return stem.replace("@@@", ending)
 
+def restore_fullpolys(node_type):
+    global Fullpolys
+    global Treepolys
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+        Treepolys = pickle.load(f)
+    with open(config.workdirectories['workcdir']+'/static/data/Fullpolys.pkl', 'rb') as f:
+        Fullpolys = pickle.load(f)
+    Treepolys[node_type] = Fullpolys[node_type]
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'wb') as f:
+        pickle.dump(Treepolys, f)
+
+    return
 
 Historynodelist = []
 Historytitle = ""
@@ -196,13 +217,13 @@ TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
 
 ElectionSettings = {}
+ElectionSettings['streams'] = "A"
 ElectionSettings['GOTV'] = 0.50
 ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
 ElectionSettings['teamsize'] = 5
 ElectionSettings['elections'] = "W"
 ElectionSettings['tags'] = "M1"
-ElectionSettings['streams'] = "NO LIVE DATA"
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
 ElectionSettings['candfirst'] = ""
@@ -238,9 +259,12 @@ OPTIONS = {
     # Add more mappings here if needed
 }
 print("____TABLE FILE:", table_data)
+print("____ElectionSettings:", ElectionSettings)
+print("____ElectionOPTIONS:", OPTIONS)
 print("____StreamOptions:", StreamOptions)
 # This prints a script tag you can paste into your HTML
 print(f'<script>const VID_json = {VID_json};</script>')
+
 
 class TreeNode:
     def __init__(self, value, fid, roid, lev):
@@ -279,10 +303,11 @@ class TreeNode:
         global Treepolys
         global Fullpolys
         global levels
-        global current_node
+        global TREK_NODES
 # used to grab the node in the node tree at which an operation is to be conducted
 # the dest_path provides the steps to get from the top to the destination leaf
 #  in dest_path the moretype values -  ward, etc if you want to create nodes of certain type at the end of the search
+        print("_____Treepolys in ping:",os.path.exists(config.workdirectories['workdir']+'/static/data/Treepolys.pkl'))
         moretype = ""
         dest = dest_path
         if dest_path.find(" ") > -1:
@@ -332,7 +357,7 @@ class TreeNode:
                         print(f"____ Creating new nodes at {node.value} / {catch[0].value} lev {node.level} of type: {ntype}")
                         if node.level < 4:
 # set the next level type according to the path OR if specified the moretype parameter
-                            Treepolys[ntype] = Fullpolys[ntype]
+                            restore_fullpolys(ntype)
                             newnodes = node.create_map_branch(ntype)
                             if len(newnodes) == 0:
                                 print(f"____ Error1 - cant find any map children {newnodes} in {node.value} of type {ntype} ")
@@ -361,6 +386,7 @@ class TreeNode:
                     if len(newnodes) == 0:
                         print(f"____ Error - cant find any data children {newnodes}  in {node.value} of type {ntype} ")
                         node = self
+                        return node
                 elif node.level == 5:
                     ntype = gettypeoflevel(dest_path, node.level+1)
                     print(f"____ TRYING NEW DATA L5 NODES AT {node.value} ",node.level,ntype,dest_path)
@@ -369,23 +395,29 @@ class TreeNode:
                     if len(newnodes) == 0:
                         print(f"____ cant find any data children {newnodes}  in {node.value} of type {ntype} ")
                         node = self
+                        return node
     #this is the walk/PD level - add 'next' back into the queue after lower (street/walkleg) nodes have been added
                 else :
     #this is base/street/walkleg level so child type is the actual elector for which there are no lower nodes
                     break
                     #
         print("____ping end:", node.value, node.level,next, steps)
+        session['current_node_id'] = node.fid
 
         return node
 
     def getselectedlayers(self,path):
         global Featurelayers
         #add children, eg wards,constituencies, counties
+        selected = []
         ctype = gettypeoflevel(path,self.level+1)
-        selectc = Featurelayers[ctype]
-        selected = [selectc]
-        print(f"_____layerstest0 type:{ctype}",list(reversed(selected)), len(selected[0]._children))
-        if self.level > 0:
+        if ctype == 'elector':
+            selected = []
+        else:
+            selectc = Featurelayers[ctype]
+            selected = [selectc]
+            print(f"_____layerstest2 type:{self.parent.type} layers: {list(reversed(selected))}")
+        if self.level > 0 :
             #add siblings
             selects = Featurelayers[self.type]
             if len(selects._children) == 0:
@@ -393,7 +425,7 @@ class TreeNode:
                  selects.reset()
                  selects.add_nodemaps(self.parent, self.type)
             selected.append(selects)
-            print(f"_____layerstest1 type:{self.type}",list(reversed(selected)), len(selected[0]._children), len(selected[1]._children))
+            print(f"_____layerstest2 type:{self.parent.type} layers: {list(reversed(selected))}")
         if self.level > 1:
             #add parents, eg counties, nations, country
             selectp = Featurelayers[self.parent.type]
@@ -401,7 +433,7 @@ class TreeNode:
                  selectp.reset()
                  selectp.add_nodemaps(self.parent.parent, self.parent.type)
             selected.append(selectp)
-            print(f"_____layerstest2 type:{self.parent.type}",list(reversed(selected)), len(selected[0]._children), len(selected[1]._children), len(selected[2]._children))
+            print(f"_____layerstest2 type:{self.parent.type} layers: {list(reversed(selected))}")
         return list(reversed(selected))
 
     def updateVI(self,viValue):
@@ -590,7 +622,7 @@ class TreeNode:
 
     def create_name_nodes(self,nodetype,namepoints,ending):
         fam_nodes = []
-        print(f"____Namepoints nodes:{namepoints}")
+        print(f"____Namepoints nodes: at {self.value} of type:{nodetype} there are {len(namepoints)} in fileending{ending}")
         geometry = gpd.points_from_xy(namepoints.Long.values,namepoints.Lat.values, crs="EPSG:4326")
         block = gpd.GeoDataFrame(
             namepoints, geometry=geometry
@@ -627,169 +659,14 @@ class TreeNode:
         return node
 
     def create_data_branch(self, electtype):
-        global allelectors00
         global allelectors
-
+        global areaelectors
         global workdirectories
+        global Treepolys
 
 # if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
 # the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
 # if the electoral file hasn't been loaded yet then that needs to be done first.
-
-
-
-        def fast_spatial_chunking(X, max_cluster_size=400, cell_size=0.008, label_prefix="G1_"):
-            """
-            Fast spatial partitioning by rounding Lat/Long into grid cells and grouping points.
-
-            Parameters:
-                X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
-                max_cluster_size (int): Maximum items per final cluster
-                cell_size (float): Grid resolution in degrees (smaller = finer)
-                label_prefix (str): Prefix for cluster labels
-
-            Returns:
-                np.ndarray: Cluster labels as strings
-            """
-            assert 'Lat' in X.columns and 'Long' in X.columns
-
-            df = X.copy()
-            df['lat_bin'] = (df['Lat'] / cell_size).astype(int)
-            df['lon_bin'] = (df['Long'] / cell_size).astype(int)
-
-            cluster_labels = [''] * len(df)
-            cluster_counter = 0
-
-            for (lat_bin, lon_bin), group in df.groupby(['lat_bin', 'lon_bin']):
-                group_size = len(group)
-                num_subclusters = int(np.ceil(group_size / max_cluster_size))
-
-                # Split the group into subclusters if needed
-                for i, chunk_idx in enumerate(np.array_split(group.index, num_subclusters)):
-                    label = f"{label_prefix}{cluster_counter}"
-                    for idx in chunk_idx:
-                        cluster_labels[idx] = label
-                    cluster_counter += 1
-
-            return np.array(cluster_labels)
-
-
-        def recursive_kmeans_latlon(X, max_cluster_size=400, depth=2, prefix='K'):
-            X = X.reset_index(drop=True)
-            """
-            Recursively cluster a DataFrame with 'Lat' and 'Long' columns
-            so that no resulting cluster exceeds max_cluster_size.
-
-            Parameters:
-                X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
-                max_cluster_size (int): Maximum allowed number of points per cluster
-                depth (int): Used internally for recursion
-                prefix (str): Prefix for hierarchical cluster IDs
-
-            Returns:
-                dict: {index -> cluster_label}
-            """
-            if len(X) <= max_cluster_size:
-                return {i: f"{prefix}" for i in X.index}
-
-            # Number of clusters needed to keep all below threshold
-            k = int(np.ceil(len(X) / max_cluster_size))
-
-            # If k == 1, no need to append suffix — it's a single cluster
-            if k == 1:
-                return {i: f"{prefix}" for i in X.index}
-
-            # KMeans on Lat and Long
-            print(f"___Xlen {len(X)}nclusters{k} max cluster size {max_cluster_size}")
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-            coords = X[['Lat', 'Long']].values
-            labels = kmeans.fit_predict(coords)
-
-            label_map = {}
-            for i in range(k):
-                idx = X.index[labels == i]
-                sub_data = X.loc[idx]
-
-                # Add suffix only if we are splitting into multiple clusters
-                new_prefix = f"{prefix}-{i+1}" if k > 1 else prefix
-
-                sub_labels = recursive_kmeans_latlon(sub_data, max_cluster_size, depth + 1, prefix=new_prefix)
-                label_map.update(sub_labels)
-
-            return label_map
-
-
-        from sklearn.cluster import MiniBatchKMeans
-
-
-        def greedy_balanced_kmeans_latlon(X, max_cluster_size, random_state=42, label_prefix=""):
-            """
-            Greedy approximation of balanced KMeans on 'Lat' and 'Long', ensuring no cluster exceeds size limit.
-
-            Parameters:
-                X (pd.DataFrame): DataFrame with 'Lat' and 'Long' columns
-                max_cluster_size (int): Maximum elements per cluster
-                random_state (int): Random seed
-                label_prefix (str): Prefix to apply to cluster labels (e.g. "G1_")
-
-            Returns:
-                np.ndarray: Cluster labels as strings with optional prefix
-            """
-            assert 'Lat' in X.columns and 'Long' in X.columns, "DataFrame must contain 'Lat' and 'Long' columns"
-
-            coords = X[['Lat', 'Long']].values
-            n_points = len(X)
-            initial_k = int(np.ceil(n_points / max_cluster_size))
-
-            # Step 1: Run initial clustering
-            kmeans = MiniBatchKMeans(n_clusters=initial_k, random_state=random_state, batch_size=1024)
-            initial_labels = kmeans.fit_predict(coords)
-            centers = kmeans.cluster_centers_
-
-            df = X.copy()
-            df['index'] = df.index
-            df['cluster'] = initial_labels
-            df['dist'] = np.linalg.norm(coords - centers[initial_labels], axis=1)
-
-            # Step 2: Greedy assignment
-            df = df.sort_values(by='dist')  # Assign closer points first
-            assignments = {}
-            cluster_bins = defaultdict(list)
-            cluster_counter = 0
-            cluster_id_map = {}
-
-            for _, row in df.iterrows():
-                orig_cluster = row['cluster']
-                assigned = False
-
-                # Check if original cluster can take more
-                if len(cluster_bins[orig_cluster]) < max_cluster_size:
-                    assigned = True
-                    bin_id = orig_cluster
-                else:
-                    # Try any other existing bin with space
-                    for cid, members in cluster_bins.items():
-                        if len(members) < max_cluster_size:
-                            bin_id = cid
-                            assigned = True
-                            break
-
-                if not assigned:
-                    # Make a new cluster ID
-                    bin_id = f"extra_{cluster_counter}"
-                    cluster_counter += 1
-
-                # Label string: prefix + unique ID
-                if bin_id not in cluster_id_map:
-                    cluster_id_map[bin_id] = f"{label_prefix}{len(cluster_id_map)}"
-
-                label = cluster_id_map[bin_id]
-                assignments[row['index']] = label
-                cluster_bins[bin_id].append(row['index'])
-
-            # Return as array in correct order
-            return np.array([assignments[i] for i in X.index])
-
 
 
         nodelist = []
@@ -803,65 +680,54 @@ class TreeNode:
 
 # ward/division level for first time in the loop so import data and calc populations in postcodes
 
-        allelectors0 = pd.read_csv(
+        allelectors = pd.read_csv(
             file_path,
-            sep='\t',                        # Auto-detect delimiter
+            sep='\t',                        # tab delimiter
             engine='python',                # Required for sep=None
             encoding='utf-8',
             keep_default_na=False,
             na_values=['']
         )
-        alldf0 = pd.DataFrame(allelectors0, columns=['Postcode', 'ENOP','Long', 'Lat'])
-        alldf1 = alldf0.rename(columns= {'ENOP': 'Popz'})
+        alldf0 = pd.DataFrame(allelectors, columns=['Postcode', 'ENOP','Long', 'Lat'])
+        alldf0 = alldf0.rename(columns= {'ENOP': 'Popz'})
 # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for node.electorate
         g = {'Popz':'count'}
-        alldf = alldf1.groupby(['Postcode']).agg(g).reset_index()
+        alldf = alldf0.groupby(['Postcode']).agg(g).reset_index()
         alldf['Popz'] = alldf['Popz'].rdiv(1)
+        Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+        Outcols = Outcomes.columns.to_list()
+#        print("____post merge for population at postcodes",allelectors0.columns, alldf.columns)
+        allelectors = pd.DataFrame(allelectors, columns=Outcols)
 
-        allelectors00 = allelectors0.merge(alldf, on='Postcode',how='left' )
+        allelectors = allelectors.merge(alldf, on='Postcode',how='left' )
+
+        allelectors = pd.DataFrame(allelectors, columns=Outcols)
 
 # this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
 
         pfile = Treepolys[gettypeoflevel(self.dir,4)]
         Level4node = self.find_Level4()
         Level4boundary = pfile[pfile['FID']== Level4node.fid]
-        PDs = set(allelectors00.PD.values)
+        PDs = set(allelectors.PD.values)
         frames = []
         for PD in PDs:
-            PDelectors = getblock(allelectors00,'PD',PD)
-            maplongx = PDelectors.Long.values[0]
-            maplaty = PDelectors.Lat.values[0]
-            print(f"____PD: {PD} Postcode: {PDelectors.loc[1,'Postcode']} lat: {maplaty}, long: {maplongx} at node:",Level4node.value, Level4node.fid)
-        # for all PDs - pull together all PDs which are within the Conboundary constituency boundary
+            mask = allelectors['PD'] == PD
+            PDelectors = allelectors[mask]
+            maplongx = PDelectors.Long.mean()
+            maplaty = PDelectors.Lat.mean()
+            print(f"____PD: {PD} Postcode: {PDelectors['Postcode'].values[0]} lat: {maplaty}, long: {maplongx} at node:",Level4node.value, Level4node.fid)
+# for all PDs - pull together all PDs which are within the area(ward or division) boundary
             if Level4boundary.geometry.contains(Point(float('%.6f'%(maplongx)),float('%.6f'%(maplaty)))).item():
                 Area = normalname(Level4boundary['NAME'].values[0])
                 PDelectors['Area'] = Area
                 frames.append(PDelectors)
 
+# so if there are electors within the area(ward or division) then the Area name needs to be updated
         if len(frames) > 0:
-            allelectors = pd.concat(frames)
-            areaelectors = getblock(allelectors,'Area',Level4node.value)
+            areaelectors = pd.concat(frames)
+            allelectors.loc[areaelectors.index, "Area"] = areaelectors["Area"]
 
-            print("____lenallelectors+allelectors:",Level4node.value,len(allelectors),len(allelectors))
-
-#            gdf = gpd.GeoDataFrame(allelectors, geometry=gpd.points_from_xy(allelectors.Long, allelectors.Lat), crs="EPSG:4326")
-
-            # Project to Web Mercator (meters)
-#            gdf = gdf.to_crs(epsg=3857)
-
-            # Use projected coordinates for clustering
-#            kmeans_data = np.array(list(zip(gdf.geometry.x, gdf.geometry.y)))
-
-            # Define number of clusters (walkset)
-#            walkset = min(math.ceil(ElectionSettings['teamsize']), 35)
-
-#            kmeans = KMeans(n_clusters=walkset, random_state=42)
-#            kmeans.fit(kmeans_data)
-            newlabels = recursive_kmeans_latlon(areaelectors,400)
-            # Assign WalkName from labels
-#            gdf["WalkName"] = newlabels
-            areaelectors["WalkName"] = newlabels
-
+            print(f"____at L4: {Level4node.value} area of len {len(areaelectors)} with stream of len {len(allelectors)}")
             allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
 
     # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
@@ -873,7 +739,7 @@ class TreeNode:
     # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                nodelist = self.create_name_nodes('polling_district',PDPtsdf.reset_index(),"-PDS") #creating PD_nodes with mean PD pos and elector counts
+                nodelist = self.create_name_nodes('polling_district',PDPtsdf,"-PDS") #creating PD_nodes with mean PD pos and elector counts
             elif electtype == 'walk':
 #                walkPts = [(x[0],x[1],x[2], x[3]) for x in allelectors[['WalkName','Long','Lat', 'ENOP']].drop_duplicates().values]
                 walkdf0 = pd.DataFrame(areaelectors, columns=['WalkName', 'ENOP','Long', 'Lat'])
@@ -881,17 +747,19 @@ class TreeNode:
     # we group electors by each walk, calculating mean lat , long for walk centroids and population of each walk for self.electorate
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 walkdfs = walkdf1.groupby(['Name']).agg(g).reset_index()
-                nodelist = self.create_name_nodes('walk',walkdfs.reset_index(),"-WALKS") #creating walk_nodes with mean walk centroid and elector counts
+                nodelist = self.create_name_nodes('walk',walkdfs,"-WALKS") #creating walk_nodes with mean walk centroid and elector counts
             elif electtype == 'street':
-                PDelectors = getblock(areaelectors,'PD',self.value)
+                mask = areaelectors['PD'] == self.value
+                PDelectors = areaelectors[mask]
     #            StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
                 streetdf0 = pd.DataFrame(PDelectors, columns=['StreetName','ENOP', 'Long', 'Lat'])
                 streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
-                nodelist = self.create_name_nodes('street',streetdf.reset_index(),"-PRINT") #creating street_nodes with mean street pos and elector counts
+                nodelist = self.create_name_nodes('street',streetdf,"-PRINT") #creating street_nodes with mean street pos and elector counts
             elif electtype == 'walkleg':
-                walkelectors = getblock(areaelectors,'WalkName',self.value)
+                mask = areaelectors['WalkName'] == self.value
+                walkelectors = areaelectors[mask]
 #                WalklegPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
                 walklegdf0 = pd.DataFrame(walkelectors, columns=['StreetName','ENOP', 'Long', 'Lat'])
                 walklegdf1 = walklegdf0.rename(columns= {'StreetName': 'Name'})
@@ -929,7 +797,7 @@ class TreeNode:
         # If no matching geometry is found, handle the case where parent_geom is empty
         if parent_geom.empty:
             print(f"Adding back in Full {self.type} boundaries for {self.value} FID {self.fid}")
-            Treepolys[self.type] = Fullpolys[self.type]
+            restore_fullpolys(self.type)
             parent_poly = Treepolys[self.type]
             parent_geom = parent_poly[parent_poly["FID"] == self.fid]
             # Ensure that parent_geom has the desired geometry after the update
@@ -1022,7 +890,7 @@ class TreeNode:
 
     def get_bounding_box(self, block):
       global Treepolys
-      global Fullpolys
+
 
 # for level = 0 use present
 # for level < 5 use geometry
@@ -1114,6 +982,8 @@ class TreeNode:
         child_node.davail = False
 
         print("_________new child node dir:  ",child_node.dir)
+        register_node(child_node)
+
         return child_node
 
     def add_parent(self, parent_node):
@@ -1185,7 +1055,7 @@ class TreeNode:
     # Run path directed establishment of node 'A'
 
     def create_enclosing_gdf(self, gdf, buffer_size=0.0001):
-        global current_node
+        global TREK_NODES
         """
         Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
 
@@ -1401,9 +1271,12 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_nodemaps (self,herenode,type):
         global Treepolys
-        global Fullpolys
-
         global levelcolours
+        with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+            Treepolys = pickle.load(f)
+        print("_____Treepolys map standaard:",Treepolys[type].crs)
+
+
 
         global Con_Results_data
         print("_________Nodemap:",herenode.value,type, [x.type for x in herenode.children],len(herenode.children), len(herenode.childrenoftype(type)))
@@ -1834,9 +1707,7 @@ def getstreamrag():
         # we have an active pre-loaded set electors, created by one or more streams
         ef = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
         table_data = []
-        streamtable = []
-        print("____we have allelectors, but streamtable file :", TABLE_FILE)
-        streamdash = pd.DataFrame()
+        livestreamdash = pd.DataFrame()
         activestreams = []
     # a empty or missing allelectors.csv is a farm waiting to be harvested WHITE circle
     # a empty or missing STREAMS TABLE is a dessert indicated by a BLACK circle
@@ -1848,21 +1719,22 @@ def getstreamrag():
         ef = pd.DataFrame(ef,columns=['Stream', 'ENOP'])
         # we group electors by Streams, calculating totals in each stream
         g = {'ENOP':'count' }
-        streamdash = ef.groupby(['Stream']).agg(g)
+        livestreamdash = ef.groupby(['Stream']).agg(g)
         livestreamlabels = list(set(ef['Stream'].values))
+        print("__LIVESTREAMLABELS: ", livestreamlabels)
         rag = defaultdict(dict)
         if len(ef) > 0 and len(livestreamlabels) > 0:
             if os.path.exists(TABLE_FILE):
                 with open(TABLE_FILE) as f:
                     table_data = json.load(f)
     # so we are in business with stream labels - but are they defined in the table?
-                g = {'filename' : 'count', 'active' : 'count'}
+                g = {'filename' : 'count', 'loaded' : 'count'}
                 table_df = pd.DataFrame(table_data)
                 print("____we have allelectors and streamtable file :")
-                potential_streams = list({x['stream'] for x in table_data })
-                active_streams = list({x['stream'] for x in table_data if x['active']and x['stream'] in livestreamlabels })
-                depreciated_streams = [x for x in livestreamlabels if x not in potential_streams]
-                deactivated_streams = list({x['stream'] for x in table_data if not x['active']})
+                defined_streamlabels = table_df['stream'].to_list() # streams are defined but not live
+                active_streams = list({x for x in defined_streamlabels if x in livestreamlabels }) # streams are defined and live
+                depreciated_streams = [x for x in livestreamlabels if x not in defined_streamlabels] # streams are live but not defined
+                deactivated_streams = list({x for x in defined_streamlabels if x not in livestreamlabels}) # streams are defined but not live
                 print(f"____actives:{active_streams}, deprec:{depreciated_streams}, deactiv: {deactivated_streams}")
 
                 for stream in active_streams:
@@ -1870,52 +1742,56 @@ def getstreamrag():
                     mask = table_df['stream'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = True
-                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
-                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['Elect'] = int(livestreamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
+                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
                     rag[stream]['RAG'] = 'limegreen'
-                    print("_____Active Streams:",ef.head(), streamdash.head())
+                    print("_____Active Streams:",ef.head(), livestreamdash.head())
                 for stream in depreciated_streams:
                     stream_key = stream.upper()
                     mask = table_df['stream'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = False
-                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
-                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['Elect'] = 0
+                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
                     rag[stream]['RAG'] = 'red'
-                    print("_____Depreciated Streams:",ef.head(), streamdash.head())
+                    print("_____Depreciated Streams:",ef.head(), livestreamdash.head())
                 for stream in deactivated_streams:
                     stream_key = stream.upper()
                     mask = table_df['stream'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = False
-                    rag[stream]['Elect'] = int(streamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
-                    rag[stream]['Loaded'] = ', '.join(table_df.loc[mask, 'filename'].dropna().unique())
+                    rag[stream]['Elect'] = 0
+                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
                     rag[stream]['RAG'] = 'amber'
-                    print("_____Deactivated Streams:",ef.head(), streamdash.head())
+                    print("_____Deactivated Streams:",ef.head(), livestreamdash.head())
             else:
                 stream = 'NO DATA STREAMS'
                 rag[stream]['Alive'] = False
                 rag[stream]['Elect'] = 0
-                rag[stream]['Loaded'] = 0
-                rag[stream]['RAG'] = 'black'
-                print("_____No Streams defined yet!:", streamtable.head())
+                rag[stream]['Files'] = 0
+                rag[stream]['RAG'] = 'gray'
+                print("_____No Streams defined yet!:", livestreamdash.head())
         else:
             stream = 'NO LIVE DATA'
             rag[stream] = {}
             rag[stream]['Alive'] = False
             rag[stream]['Elect'] = 0
-            rag[stream]['Loaded'] = 0
+            rag[stream]['Files'] = 0
             rag[stream]['RAG'] = 'white'
-            print("_____No Active electors file:")
+            print("_____No Active electors file:", livestreamdash.head())
     else:
         stream = 'NO LIVE DATA'
         rag[stream] = {}
         rag[stream]['Alive'] = False
         rag[stream]['Elect'] = 0
-        rag[stream]['Loaded'] = 0
+        rag[stream]['Files'] = 0
         rag[stream]['RAG'] = 'white'
         print("_____No Active electors file:")
     return rag
+
+def register_node(node: TreeNode):
+    TREK_NODES[node.fid] = node
+
 
 # create and configure the app
 app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
@@ -2001,14 +1877,18 @@ Ward_Results_data['FIRST'] = normalname(Ward_Results_data['PARTYNAME'])
 print("_________HoC Results data: ",Con_Results_data.columns)
 print("_________HoC Results data: ",Ward_Results_data.columns)
 
-
+TREK_NODES = {}
 longmean = statistics.mean([-7.57216793459,  1.68153079591])
 latmean = statistics.mean([ 49.959999905, 58.6350001085])
 roid = Point(longmean,latmean)
 MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0)
 MapRoot.dir = "UNITED_KINGDOM"
 MapRoot.file = "UNITED_KINGDOM-MAP.html"
+
+register_node(MapRoot)
 current_node = MapRoot
+
+
 from jinja2 import Environment, FileSystemLoader
 templateLoader = jinja2.FileSystemLoader(searchpath=config.workdirectories['templdir'])
 environment = jinja2.Environment(loader=templateLoader,auto_reload=True)
@@ -2039,18 +1919,23 @@ def unauthorized_callback():            # In call back url we can specify where 
 
 
 @app.route('/location')
+@login_required
 def location():
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
     long = 1.6178
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     current_node.centroid = Point(lon,lat)
     print(f"Received location: Latitude={lat}, Longitude={lon}")
     return f"Received location: Latitude={lat}, Longitude={lon}"
 
 @app.errorhandler(HTTPException)
+@login_required
 def handle_exception(e):
-    global current_node
+    global TREK_NODES
     """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
     response = e.get_response()
@@ -2061,6 +1946,8 @@ def handle_exception(e):
         "description": e.description,
     })
     response.content_type = "application/json"
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     mapfile = current_node.dir+"/"+current_node.file
     if current_node.level > 0:
         mapfile = current_node.parent.dir+"/"+current_node.parent.file
@@ -2092,6 +1979,40 @@ def get_streamrag():
     streamrag = getstreamrag()
     print("___JSONIFYED streamrag:",jsonify(streamrag))
     return jsonify(streamrag)
+
+from flask import render_template
+
+@app.route('/get_streamtab')
+@login_required
+def get_streamtab():
+    streamrag = getstreamrag()
+    return render_template('partials/streamtab_rows.html', streamrag=streamrag)
+
+
+@app.route('/reset_Elections', methods=['POST'])
+@login_required
+def reset_Elections():
+    global streamrag
+    global allelectors
+
+    fixed_path = config.workdirectories['workdir']+"/"+"allelectors.csv"  # Set your path
+
+    if not os.path.exists(fixed_path):
+        return jsonify({'message': 'Elections reset unsuccessful.'}), 404
+
+    try:
+        arch_path = fixed_path.replace(".csv", "-ARCHIVE.csv")
+        allelectors.to_csv(arch_path,sep='\t', encoding='utf-8', index=False)
+        os.remove(fixed_path)
+        print("___Elections Reset- New streamrag:",jsonify(streamrag))
+        formdata = {}
+        allelectors = pd.DataFrame()
+        streamrag = getstreamrag()
+#        return render_template("Dash0.html",  message='Elections reset successfully.',formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        return jsonify({'message': 'Elections reset successfully.'})
+    except Exception as e:
+        return jsonify({'message': f'Elections reset unsuccessful: {e}'}), 500
+
 
 @app.route("/get-constants", methods=["GET"])
 @login_required
@@ -2128,12 +2049,10 @@ def set_constant():
 
 @app.route("/", methods=['POST', 'GET'])
 def index():
-    global Treepolys
-    global Fullpolys
-
     global MapRoot
-    global current_node
+    global TREK_NODES
     global streamrag
+
 
 
     if 'username' in session:
@@ -2142,6 +2061,8 @@ def index():
         formdata = {}
         allelectors = []
         streamrag = getstreamrag()
+
+        current_node = TREK_NODES.get(session.get('current_node_id'))
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -2155,16 +2076,12 @@ def index():
 @app.route('/login', methods=['POST', 'GET'])
 def login():
     global MapRoot
-    global current_node
-
-    global Treepolys
-    global Fullpolys
+    global TREK_NODES
     global streamrag
-
-
     global environment
     global layeritems
     global ElectionSettings
+
 
     if 'username' in session:
         flash("User already logged in:", session['username'], " at ", current_node.value)
@@ -2194,6 +2111,8 @@ def login():
         # Debugging: Check the session and cookies
         print("Session after login:", dict(session))  # Print session content
 
+
+        session['current_node_id'] = current_node.fid
         if 'next' in session:
             next = session['next']
             print("_______ROUTE/login next found", next)
@@ -2214,8 +2133,12 @@ def login():
         return render_template("index.html")
 
 @app.route('/get_location')
+@login_required
 def get_location():
-   return render_template_string("""
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    return render_template_string("""
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -2301,6 +2224,9 @@ navigator.geolocation.getCurrentPosition(
 @app.route('/logout', methods=['POST', 'GET'])
 @login_required
 def logout():
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
     flash("🔓 Logging out user:"+ current_user.get_id())
     print("🔓 Logging out user:", current_user.get_id())
 
@@ -2316,29 +2242,33 @@ def logout():
 
 @app.route('/dashboard', methods=['GET','POST'])
 @login_required
-def dashboard ():
-    #formdata['username'] = session["username"]
+def dashboard():
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
-
-    global Treepolys
-    global Fullpolys
     global streamrag
-
-
     global formdata
     global ElectionSettings
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+        Treepolys = pickle.load(f)
+
 
     if 'username' in session:
-        print('_______ROUTE/dashboard'+ session['username'] + ' is already logged in at ', current_node.value)
+        print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id')}")
         formdata = {}
+        current_node = TREK_NODES.get(session.get('current_node_id'))
 
         streamrag = getstreamrag()
 
         path = current_node.dir+"/"+current_node.file
+        previous_node = current_node
+
+        # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
+        current_node = previous_node.ping_node(path)
+        mapfile = current_node.dir+"/"+current_node.file
+
 #        redirect(url_for('captains'))
-        return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
+    return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -2348,20 +2278,24 @@ def dashboard ():
 @app.route('/downbut/<path:path>', methods=['GET','POST'])
 @login_required
 def downbut(path):
-    global current_node
+    global TREK_NODES
     global ElectionSettings
     global formdata
     global Treepolys
     global Fullpolys
     global Featurelayers
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
     formdata = {}
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
 
     if current_node.level < 4:
-        Treepolys[gettypeoflevel(path,current_node.level+1)] = Fullpolys[gettypeoflevel(path,current_node.level+1)]
+        restore_fullpolys(gettypeoflevel(path,current_node.level+1))
         print(f"____Maxing up Treepoly to Fullpolys for :{gettypeoflevel(path,current_node.level+1)}")
     previous_node = current_node
 
@@ -2369,26 +2303,19 @@ def downbut(path):
     current_node = previous_node.ping_node(path)
     print("____Route/downbut:",previous_node.value,current_node.value, path)
     atype = gettypeoflevel(path,current_node.level+1)
-
+    FILEENDING = {'street' : "-PRINT",'walkleg' : "-PRINT", 'polling_district' : "-PDS", 'walk' :"-WALKS",'ward' : "-WARDS", 'division' :"-DIVS", 'constituency' :"-MAP", 'county' : "-MAP", 'nation' : "-MAP", 'country' : "-MAP" }
+    current_node.file = subending(current_node.file,FILEENDING[atype])
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level+1)+" details"
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     layeritems = getlayeritems(current_node.childrenoftype(atype),formdata['tabledetails'] )
     mapfile = current_node.dir+"/"+current_node.file
-    if atype == 'ward':
-        current_node.file = subending(current_node.file,"-WARDS")
-        mapfile = current_node.dir+"/"+current_node.file
-        print("_____ward map test:",mapfile)
-        focuslayer = Featurelayers[atype].reset()
-        focuslayer.add_nodemaps(current_node, atype)
-        current_node.create_area_map(current_node.getselectedlayers(path))
-    elif atype == 'division':
-        current_node.file = subending(current_node.file,"-DIVS")
-        mapfile = current_node.dir+"/"+current_node.file
-        print("_____division map test:",mapfile)
-        focuslayer = Featurelayers[atype].reset()
-        focuslayer.add_nodemaps(current_node, atype)
+    print(f"_____Directory Test for {atype} map file path :{mapfile}" )
+    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+        print(f"_____creating mapfile for {atype} map file path :{mapfile}" )
+        wardlayer = Featurelayers[atype].reset()
+        wardlayer.add_nodemaps(current_node, atype)
         current_node.create_area_map(current_node.getselectedlayers(path))
 
     #formdata['username'] = session["username"]
@@ -2401,13 +2328,14 @@ def downbut(path):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
 
+    session['current_node_id'] = current_node.fid
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
 def transfer(path):
     global MapRoot
-    global current_node
+    global TREK_NODES
 
     global Treepolys
     global Fullpolys
@@ -2419,10 +2347,14 @@ def transfer(path):
     global layeritems
     global ElectionSettings
     global formdata
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
 
 
 
     formdata = {}
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
 # transfering to another any other node with siblings listed below
     previous_node = current_node
 
@@ -2458,7 +2390,9 @@ def transfer(path):
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.parent.children,formdata['tabledetails'] )
 
-    return redirect(url_for('map',path=mapfile))
+    session['current_node_id'] = current_node.fid
+#    return redirect(url_for('map',path=mapfile))
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
@@ -2467,13 +2401,17 @@ def downPDbut(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global current_node
+    global TREK_NODES
     global MapRoot
     global ElectionSettings
-    global allelectors
+    global areaelectors
 
     global filename
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     print ("_________ROUTE/downPDbut/",path, request.method)
     if request.method == 'GET':
@@ -2494,7 +2432,8 @@ def downPDbut(path):
 # if there is a selected file , then allelectors will be full of records
 
         for PD_node in WardPDnodelist:
-            PDelectors = getblock(allelectors,'PD',PD_node.value)
+            mask = areaelectors['PD'] == PD_node.value
+            PDelectors = areaelectors[mask]
             Streetsdf0 = pd.DataFrame(PDelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
             Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
@@ -2503,7 +2442,6 @@ def downPDbut(path):
             shapelayer.add_walkshape(PD_node, 'polling_district',Streetsdf)
             print("_______new PD Display node",PD_node,"|", Streetsdf, current_node.level, len(Featurelayers['polling_district']._children))
 
-#            allelectors = getblock(allelectors,'Area',current_node.value)
 
         if len(WardPDnodelist) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2516,16 +2454,17 @@ def downPDbut(path):
             print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
 
-            moredata = importVI(allelectors.copy())
-            if len(moredata) > 0:
-                allelectors = moredata
-                allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+#        moredata = importVI(allelectors.copy())
+#        if len(moredata) > 0:
+#            allelectors = moredata
+#            allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
 
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
     formdata['tabledetails'] = "Click for "+current_node.value + "\'s polling_district details"
     layeritems = getlayeritems(current_node.childrenoftype('polling_district'),formdata['tabledetails'] )
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -2536,14 +2475,18 @@ def downWKbut(path):
     global Fullpolys
     global Featurelayers
 
-    global current_node
+    global TREK_NODES
 
     global MapRoot
     global ElectionSettings
-    global allelectors
+    global areaelectors
 
     global filename
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     print ("_________ROUTE/downWKbut Requestformfile")
     flash ("_________ROUTE/downWKbut Requestformfile")
@@ -2565,7 +2508,8 @@ def downWKbut(path):
         WardWalknodelist = current_node.childrenoftype('walk')
 # if there is a selected file , then allelectors will be full of records for the ward/div
         for walk_node in WardWalknodelist:
-            walkelectors = getblock(allelectors,'WalkName',walk_node.value)
+            mask = areaelectors['WalkName'] == walk_node.value
+            walkelectors = areaelectors[mask]
             walksdf0 = pd.DataFrame(walkelectors, columns=['StreetName', 'ENOP','Long', 'Lat'])
             walksdf1 = walksdf0.rename(columns= {'StreetName': 'Name'})
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
@@ -2586,15 +2530,18 @@ def downWKbut(path):
             flash("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
             print("________Walks added  :  "+str(len(Featurelayers['walk']._children)))
 
-    moredata = importVI(allelectors.copy())
-    if len(moredata) > 0:
-        allelectors = moredata
+#    moredata = importVI(allelectors.copy())
+#    if len(moredata) > 0:
+#        allelectors = moredata
 
     print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
     formdata['tabledetails'] = "Click for "+current_node.value+ "\'s walk details"
     layeritems = getlayeritems(current_node.childrenoftype('walk'),formdata['tabledetails'] )
 
     print("_______writing to file:", mapfile)
+
+    session['current_node_id'] = current_node.fid
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -2603,16 +2550,16 @@ def downWKbut(path):
 def STupdate(path):
     global Treepolys
     global Fullpolys
-
-    global current_node
-
-
+    global TREK_NODES
     global allelectors
-
     global environment
     global filename
     global layeritems
     global ElectionSettings
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
 #    steps = path.split("/")
 #    filename = steps.pop()
@@ -2734,7 +2681,8 @@ def STupdate(path):
     street = current_node.value
     electorwalks = pd.DataFrame()
 
-    electorwalks = getblock(allelectors, 'StreetName',current_node.value)
+    mask = allelectors['StreetName'] == current_node.value
+    electorwalks = allelectors[mask]
 
     if electorwalks.empty:
         print("⚠️ Error: electorwalks DataFrame is empty!", current_node.value)
@@ -2742,7 +2690,7 @@ def STupdate(path):
 
     STREET_ = current_node.value
 
-    Postcode = electorwalks.loc[0].Postcode
+    Postcode = electorwalks.Postcode.values[0]
 
     walk_name = current_node.value
     type_colour = "indigo"
@@ -2769,7 +2717,7 @@ def STupdate(path):
     x = electorwalks.AddressNumber.values
     y = electorwalks.StreetName
     z = electorwalks.AddressPrefix.values
-    houses = len(list(set(zip(x,y,z))))+1
+    houses = max(len(list(set(zip(x,y,z)))),1)
     streets = len(electorwalks.StreetName.unique())
     areamsq = 34*21.2*20*21.2
     avstrlen = 200
@@ -2826,6 +2774,7 @@ def STupdate(path):
         layeritems = getlayeritems(current_node.parent.childrenoftype('walk'),formdata['tabledetails'])
 
 
+    session['current_node_id'] = current_node.fid
     return  jsonify({"message": "Success", "file": mapfile})
 
 
@@ -2835,46 +2784,47 @@ def PDdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-
-    global current_node
-
-
-    global allelectors
-
+    global TREK_NODES
+    global areaelectors
     global environment
     global filename
     global layeritems
-
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
     def firstnameinlist(name,list):
         posn = list.index(name)
         return list[posn]
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     PD_node = current_node.ping_node(path)
 
 # now pointing at the STREETS.html node containing a map of street markers
-    PDelectors = getblock(allelectors, 'PD',PD_node.value)
+    mask = areaelectors['PD'] == PD_node.value
+    PDelectors = areaelectors[mask]
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
         focuslayer.add_nodemarks(PD_node, 'street')
         streetnodelist = PD_node.childrenoftype('street')
 
-        if len(allelectors) == 0 or len(Featurelayers['street']._children) == 0:
+        if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.")
         else:
-            flash("________streets added  :  "+str(Featurelayers['street']._children))
+            flash(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added = {len(Featurelayers['street']._children)}")
             print(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added = {len(Featurelayers['street']._children)}")
 
         for street_node in streetnodelist:
               street = street_node.value
 
-              electorwalks = getblock(allelectors, 'StreetName',street_node.value)
+              mask = areaelectors['StreetName'] == street_node.value
+              electorwalks = areaelectors[mask]
 
               STREET_ = street_node.value
 
-              Postcode = electorwalks.loc[0].Postcode
+              Postcode = electorwalks.Postcode.values[0]
 
               streetfile_name = street_node.parent.value+"-"+street_node.value
               type_colour = "indigo"
@@ -2973,6 +2923,7 @@ def PDdownST(path):
     else:
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])
@@ -2981,30 +2932,31 @@ def LGdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-
-    global current_node
-
-
-    global allelectors
-
+    global TREK_NODES
+    global areaelectors
     global environment
     global filename
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
 
     def firstnameinlist(name,list):
         posn = list.index(name)
         return list[posn]
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     PD_node = current_node.ping_node(path)
 # now pointing at the STREETS.html node containing a map of street markers
-    PDelectors = getblock(allelectors, 'PD',PD_node.value)
+    mask = areaelectors['PD'] == PD_node.value
+    PDelectors = areaelectors[mask]
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
         focuslayer.add_nodemarks(PD_node, 'street')
 
-        if len(allelectors) == 0 or len(Featurelayers['street']._children) == 0:
+        if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.")
         else:
@@ -3015,11 +2967,13 @@ def LGdownST(path):
         for street_node in streetnodelist:
               street = street_node.value
 
-              electorwalks = getblock(allelectors, 'StreetName',street_node.value)
+              mask = areaelectors['StreetName'] == street_node.value
+              electorwalks = areaelectors[mask]
+
 
               STREET_ = street_node.value
 
-              Postcode = electorwalks.loc[0].Postcode
+              Postcode = electorwalks.Postcode.values[0]
 
               streetfile_name = street_node.parent.value+"-"+street_node.value
               type_colour = "indigo"
@@ -3118,6 +3072,7 @@ def LGdownST(path):
     else:
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -3129,22 +3084,28 @@ def WKdownST(path):
     global Fullpolys
     global Featurelayers
 
-    global current_node
-    global allelectors
+    global TREK_NODES
+    global areaelectors
 
     global environment
     global filename
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
     walk_node = current_node.ping_node(path)
-    walkelectors = getblock(allelectors, 'WalkName',walk_node.value)
-    walks = allelectors.WalkName.unique()
+    mask = areaelectors['WalkName'] == walk_node.value
+    walkelectors = areaelectors[mask]
+
+    walks = areaelectors.WalkName.unique()
     if request.method == 'GET':
-# if there is a selected file , then allelectors will be full of records
+# if there is a selected file , then areaelectors will be full of records
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
 
         focuslayer = Featurelayers['walkleg'].reset()
@@ -3156,8 +3117,8 @@ def WKdownST(path):
 
           walkleg = walkleg_node.value
           walklegstreets = walkelectors.StreetName.unique()
-          walklegelectors = getblock(walkelectors, 'StreetName',walkleg_node.value)
-
+          mask = areaelectors['StreetName'] == walkleg_node.value
+          walklegelectors = walkelectors[mask]
 
           print(f"________WalkMarker {walkleg_node.value} | electors {len(walklegelectors)}" )
 
@@ -3269,24 +3230,29 @@ def WKdownST(path):
     layeritems = getlayeritems(walklegnodelist, formdata['tabledetails'])
 
 
-    if len(allelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
+    if len(areaelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
         flash("Can't find any elector data for this ward.")
         print("Can't find any elector data for this ward.")
     else:
         flash("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
         print("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route('/wardreport/<path:path>',methods=['GET','POST'])
 @login_required
 def wardreport(path):
-    global current_node
+    global TREK_NODES
     global layeritems
     global formdata
 
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     current_node = current_node.ping_node(path)
 
@@ -3316,15 +3282,20 @@ def wardreport(path):
         layeritems = [list(temp.columns.values), temp,formdata['tabledetails'] ]
 
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/displayareas', methods=['POST', 'GET'])
 @login_required
 def displayareas():
-    global current_node
+    global TREK_NODES
     global layeritems
     global formdata
     global ElectionSettings
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     if not layeritems or len(layeritems) < 3:
         return jsonify([[], [], "No data"])
@@ -3365,20 +3336,25 @@ def displayareas():
     title_json = json.dumps(title)
 
     # Return as structured list
+    session['current_node_id'] = current_node.fid
     return jsonify([
         json.loads(cols_json),       # Column headers
         json.loads(data_json),       # Rows
         json.loads(title_json)       # Title
     ])
-#    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "allelectors" : allelectors , "mapfile" : mapfile})
+#    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "areaelectors" : areaelectors , "mapfile" : mapfile})
 
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
 @login_required
 def divreport(path):
-    global current_node
+    global TREK_NODES
     global layeritems
     global formdata
     global Featurelayers
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
@@ -3412,22 +3388,24 @@ def divreport(path):
         layeritems = [list(temp.columns.values), temp, formdata['tabledetails']]
 
 
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
 @login_required
 def upbut(path):
-    global current_node
+    global TREK_NODES
     global allelectors
-
     global Treepolys
     global Fullpolys
     global Featurelayers
-
     global environment
     global layeritems
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
 
 
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     flash('_______ROUTE/upbut',path)
     print('_______ROUTE/upbut',path, current_node.value)
@@ -3440,7 +3418,7 @@ def upbut(path):
     current_node = current_node.ping_node(path)
 
     if current_node.level < 3:
-        Treepolys[current_node.type] = Fullpolys[current_node.type]
+        restore_fullpolys(current_node.type)
 
     mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
@@ -3460,6 +3438,7 @@ def upbut(path):
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
+    session['current_node_id'] = current_node.fid
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -3472,10 +3451,13 @@ def register():
     username = request.form['username']
     password = request.form['password']
     print("Register", username)
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
 
     user = User.query.filter_by(username=username).first()
     if user:
         print("existinuser", user)
+        session['current_node_id'] = current_node.fid
         return render_template("index.html",error="User already exists")
     else:
         new_user = User(username=username)
@@ -3488,35 +3470,45 @@ def register():
         flash('Logged in successfully.')
 
         next = request.args.get('next')
+        session['current_node_id'] = current_node.fid
         return redirect(url_for('get_location'))
 
 @app.route('/map/<path:path>', methods=['GET','POST'])
 @login_required
 def map(path):
-    global current_node
+    global TREK_NODES
 #    steps = path.split("/")
 #    last = steps.pop()
 #    current_node = selected_childnode(current_node,last)
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
 
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(path,current_node.level+1)),formdata['tabledetails'])
+    session['current_node_id'] = current_node.fid
 
     if os.path.isfile(path):
         flash(f"Using existing file: {path}", "info")
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
     else:
-        flash(f"Could not find the mapfile:{path}", "warning")
-        MapRoot.create_area_map(MapRoot.getselectedlayers(path))
+        flash(f"Creating new mapfile:{path}", "info")
+        current_node.create_area_map(current_node.getselectedlayers(path))
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
-
 
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required
 def showmore(path):
-    global current_node
+    global TREK_NODES
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+      Treepolys = pickle.load(f)
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     steps = path.split("/")
     last = steps.pop().split("-")
@@ -3528,6 +3520,7 @@ def showmore(path):
 
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
+    session['current_node_id'] = current_node.fid
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -3543,6 +3536,7 @@ def upload_file():
     print("_______After Secure filename check: ",file.filename)
     save_path = os.path.join(config.workdirectories['workdir'], filename)
     file.save(save_path)
+    session['current_node_id'] = current_node.fid
 
     return jsonify({'message': 'File uploaded', 'path': save_path})
 
@@ -3550,12 +3544,14 @@ def upload_file():
 @login_required
 def setgotv():
     global ElectionSettings
-    global current_node
+    global TREK_NODES
     global layeritems
     global allelectors
 
     global streamrag
 
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
@@ -3584,6 +3580,7 @@ def setgotv():
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         print('_______ElectionSettings:',ElectionSettings)
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
+        session['current_node_id'] = current_node.fid
 
         return render_template("Dash0.html",  formdata=formdata, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
     return ""
@@ -3592,13 +3589,10 @@ def setgotv():
 @login_required
 def filelist():
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
     global Treepolys
     global Fullpolys
-
-
-
     global environment
     global ElectionSettings
     global formdata
@@ -3606,14 +3600,17 @@ def filelist():
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
 
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
+
 
 @app.route('/normalise', methods=['POST'])
 @login_required
 def normalise():
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
     global Treepolys
     global Fullpolys
@@ -3622,6 +3619,8 @@ def normalise():
     global ElectionSettings
     global formdata
     global layeritems
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
     RunningVals = {
     'Mean_Lat' : 51.240299,
@@ -3634,6 +3633,168 @@ def normalise():
         'LatLong': {},
         'Elevation': {}
     }
+
+    def fast_spatial_chunking(X, max_cluster_size=400, cell_size=0.008, label_prefix="G1_"):
+        """
+        Fast spatial partitioning by rounding Lat/Long into grid cells and grouping points.
+
+        Parameters:
+            X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
+            max_cluster_size (int): Maximum items per final cluster
+            cell_size (float): Grid resolution in degrees (smaller = finer)
+            label_prefix (str): Prefix for cluster labels
+
+        Returns:
+            np.ndarray: Cluster labels as strings
+        """
+        assert 'Lat' in X.columns and 'Long' in X.columns
+
+        df = X.copy()
+        df['lat_bin'] = (df['Lat'] / cell_size).astype(int)
+        df['lon_bin'] = (df['Long'] / cell_size).astype(int)
+
+        cluster_labels = [''] * len(df)
+        cluster_counter = 0
+
+        for (lat_bin, lon_bin), group in df.groupby(['lat_bin', 'lon_bin']):
+            group_size = len(group)
+            num_subclusters = int(np.ceil(group_size / max_cluster_size))
+
+            # Split the group into subclusters if needed
+            for i, chunk_idx in enumerate(np.array_split(group.index, num_subclusters)):
+                label = f"{label_prefix}{cluster_counter}"
+                for idx in chunk_idx:
+                    cluster_labels[idx] = label
+                cluster_counter += 1
+
+        return np.array(cluster_labels)
+
+
+
+    def recursive_kmeans_latlon(X, max_cluster_size=400, size_min=10, depth=2, prefix='K'):
+        """
+        Recursively cluster a DataFrame with 'Lat' and 'Long' columns
+        so that no resulting cluster exceeds max_cluster_size,
+        and all clusters are larger than size_min.
+        """
+        X = X.copy()
+        if len(X) <= max_cluster_size:
+            return {i: f"{prefix}" for i in X.index}
+
+        # Calculate safe number of clusters
+        k = int(np.ceil(len(X) / max_cluster_size))
+        max_k = len(X) // size_min
+        k = min(k, max_k) if max_k > 0 else 1
+
+        if k == 1:
+            return {i: f"{prefix}" for i in X.index}
+
+        print(f"___Xlen {len(X)} nclusters {k} max_cluster_size {max_cluster_size} size_min {size_min}")
+
+        kmeans = KMeansConstrained(
+            n_clusters=k,
+            size_min=size_min,
+            size_max=max_cluster_size,
+            random_state=42
+        )
+        coords = X[['Lat', 'Long']].values
+        labels = kmeans.fit_predict(coords)
+
+        label_map = {}
+        for i in range(k):
+            idx = X.index[labels == i]
+            sub_data = X.loc[idx]
+
+            # New cluster prefix
+            new_prefix = f"{prefix}-{i+1}" if k > 1 else prefix
+
+            # Recurse on subcluster
+            sub_labels = recursive_kmeans_latlon(
+                sub_data,
+                max_cluster_size=max_cluster_size,
+                size_min=size_min,
+                depth=depth + 1,
+                prefix=new_prefix
+            )
+            label_map.update(sub_labels)
+
+        return label_map
+
+
+
+    from sklearn.cluster import MiniBatchKMeans
+
+
+    def greedy_balanced_kmeans_latlon(X, max_cluster_size, random_state=42, label_prefix=""):
+        """
+        Greedy approximation of balanced KMeans on 'Lat' and 'Long', ensuring no cluster exceeds size limit.
+
+        Parameters:
+            X (pd.DataFrame): DataFrame with 'Lat' and 'Long' columns
+            max_cluster_size (int): Maximum elements per cluster
+            random_state (int): Random seed
+            label_prefix (str): Prefix to apply to cluster labels (e.g. "G1_")
+
+        Returns:
+            np.ndarray: Cluster labels as strings with optional prefix
+        """
+        assert 'Lat' in X.columns and 'Long' in X.columns, "DataFrame must contain 'Lat' and 'Long' columns"
+
+        coords = X[['Lat', 'Long']].values
+        n_points = len(X)
+        initial_k = int(np.ceil(n_points / max_cluster_size))
+
+        # Step 1: Run initial clustering
+        kmeans = MiniBatchKMeans(n_clusters=initial_k, random_state=random_state, batch_size=1024)
+        initial_labels = kmeans.fit_predict(coords)
+        centers = kmeans.cluster_centers_
+
+        df = X.copy()
+        df['index'] = df.index
+        df['cluster'] = initial_labels
+        df['dist'] = np.linalg.norm(coords - centers[initial_labels], axis=1)
+
+        # Step 2: Greedy assignment
+        df = df.sort_values(by='dist')  # Assign closer points first
+        assignments = {}
+        cluster_bins = defaultdict(list)
+        cluster_counter = 0
+        cluster_id_map = {}
+
+        for _, row in df.iterrows():
+            orig_cluster = row['cluster']
+            assigned = False
+
+            # Check if original cluster can take more
+            if len(cluster_bins[orig_cluster]) < max_cluster_size:
+                assigned = True
+                bin_id = orig_cluster
+            else:
+                # Try any other existing bin with space
+                for cid, members in cluster_bins.items():
+                    if len(members) < max_cluster_size:
+                        bin_id = cid
+                        assigned = True
+                        break
+
+            if not assigned:
+                # Make a new cluster ID
+                bin_id = f"extra_{cluster_counter}"
+                cluster_counter += 1
+
+            # Label string: prefix + unique ID
+            if bin_id not in cluster_id_map:
+                cluster_id_map[bin_id] = f"{label_prefix}{len(cluster_id_map)}"
+
+            label = cluster_id_map[bin_id]
+            assignments[row['index']] = label
+            cluster_bins[bin_id].append(row['index'])
+
+        # Return as array in correct order
+        return np.array([assignments[i] for i in X.index])
+
+
+
     # Collect unique streams for dropdowns
     table_data = []
     if os.path.exists(TABLE_FILE):
@@ -3750,23 +3911,24 @@ def normalise():
                     print("readingEXCELfile outside normz")
                 else:
                     print("error-Unsupported file format")
-                    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+                    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
             else:
                 flash("error - File path does not exist or is not provided")
                 print("error - File path does not exist or is not provided")
-                return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+                return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
         except Exception as e:
             flash("error-file access exception:"+str(e))
             print("error-file access exception:",str(e))
-            return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+            return render_template('stream_processing_input.html', streams=streams, table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
-        print("____entering normz:", file_path,dfx.columns)
     # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
-
+        Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+        Outcols = Outcomes.columns.to_list()
         if purpose == "main":
         # this is the main index
             results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
             mainframe = results[0]
+            mainframe = pd.DataFrame(mainframe,columns=Outcols)
         elif purpose == 'delta':
         # this is one of many changes that needs to be applied to the main index
             dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # filter out all records with no Postcode
@@ -3776,6 +3938,7 @@ def normalise():
         # this is an addition of columns to the main index
             results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
             aviframe =  results[0]
+            aviframe = aviframe[['ENOP','AV']]
         DQstats = pd.concat([DQstats,results[1]])
         formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
         layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
@@ -3783,6 +3946,7 @@ def normalise():
 # full stream now received - need to apply changes to main
     if len(mainframe) > 0:
         print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe), mainframe.columns)
+        len1 = len(mainframe)
         if len(deltaframes) > 0:
             Outcols = mainframe.columns.to_list()
             for deltaframe in deltaframes:
@@ -3790,18 +3954,31 @@ def normalise():
                 print("_____Deltaframe Details:", deltaframe)
                 for index, change in deltaframe.iterrows():
                     print("_____Delta Change Details:", change)
-                mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
+                    mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
                 print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
         if len(aviframe) > 0:
+            print(f"____compare merge length before: {len1} after {len(mainframe)}")
+            mainframe = mainframe.merge(aviframe, on='ENOP',how='left', indicator=True )
+            mainframe = mainframe.rename(columns= {'AV_y': 'AV'})
 
-            mainframe = mainframe.merge(aviframe[['ENOP','AV']], on='ENOP',how='left' )
+            aviframe.to_csv("avitest.csv",sep='\t', encoding='utf-8', index=False)
+
             print("__Processed aviframe:", len(aviframe), aviframe.columns)
-
+    mainframe = pd.DataFrame(mainframe,columns=Outcols)
     mainframe = mainframe.reset_index(drop=True)
     print(f"__concat of mainframe of length {len(mainframe)}- columns:",mainframe.columns )
+    mainframe = mainframe.reset_index(drop=True)
+    print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
+# now generate walkname labels according to a max zone size (electors) defined for the stream(election)
+    label_dict = recursive_kmeans_latlon(mainframe, 400)
+    newlabels = pd.Series(label_dict)
+    mainframe["WalkName"] = mainframe.index.map(newlabels)
     allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
-    print("____Final Loadable mainframe columns:",len(allelectors),allelectors.columns)
+    allelectors = allelectors.reset_index(drop=True)
+
+#    allelectors.loc[allelectors.index, 'WalkName'] = areaelectors['WalkName']
 # assemble data for the RAG status of Streams in allelectors
+
     streamrag = getstreamrag()
     print("__Streamrag2:", streamrag, allelectors.columns)
     targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
@@ -3812,14 +3989,15 @@ def normalise():
     mapfile = current_node.dir+"/"+current_node.file
 
     print('_______ROUTE/normalise/exit:',ImportFilename, allelectors.columns)
-    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+    session['current_node_id'] = current_node.fid
+    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required
 def walks():
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
 
     global Treepolys
@@ -3828,6 +4006,9 @@ def walks():
 
 
     global environment
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
 
@@ -3847,6 +4028,7 @@ def walks():
 #    formdata['username'] = session['username']
         formdata['tabledetails'] = getchildtype(current_node.type).upper()+ " Details"
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
+        session['current_node_id'] = current_node.fid
 
         return render_template('Dash0.html',  formdata=formdata, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
@@ -3854,12 +4036,15 @@ def walks():
 @app.route('/postcode', methods=['POST','GET'])
 @login_required
 def postcode():
-    global current_node
+    global TREK_NODES
     global Treepolys
-    global Fullpolys
     global Featurelayers
+    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+        Treepolys = pickle.load(f)
 
 
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
 
 
     flash('_______ROUTE/postcode')
@@ -3894,6 +4079,7 @@ def postcode():
     nodemapfile = current_node.dir+"/"+current_node.file
     target = current_node.locmappath("")
     current_node.map.save(target)
+    session['current_node_id'] = current_node.fid
     return redirect(url_for('dashboard'))
 
 
@@ -3901,7 +4087,7 @@ def postcode():
 @login_required
 def firstpage():
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
 
     global Treepolys
@@ -3916,7 +4102,6 @@ def firstpage():
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
     print("🧪 current_user:", current_user)
-    print("🧪 current_node:", current_node.value)
     print("🧪 session keys:", list(session.keys()))
     print("🧪 full session content:", dict(session))
 
@@ -3963,9 +4148,15 @@ def firstpage():
         sourcepath = sourcepath+"/"+step+"-MAP.html"
         [step,Treepolys['division'],Fullpolys['division']] = intersectingArea(config.workdirectories['bounddir']+"/"+"County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",'CED23NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Division_Boundaries.geojson")
 
+        with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'wb') as f:
+            pickle.dump(Treepolys, f)
+        with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'wb') as f:
+            pickle.dump(Fullpolys, f)
         session['next'] = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = MapRoot.ping_node(sourcepath)
+        print("🧪 current_node:", current_node.value)
+
         print("____Firstpage Sourcepath",sourcepath, current_node.value)
 
     if current_user.is_authenticated:
@@ -3994,7 +4185,7 @@ def firstpage():
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
-
+        session['current_node_id'] = current_node.fid
         return render_template("Dash0.html", VID_json=VID_json,  formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
@@ -4007,16 +4198,16 @@ def cards():
 
 
     global MapRoot
-    global current_node
+    global TREK_NODES
     global allelectors
 
     global Treepolys
     global Fullpolys
     global streamrag
-
-
-
     global environment
+
+    current_node = TREK_NODES.get(session.get('current_node_id'))
+
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
     streamrag = getstreamrag()
 
@@ -4056,6 +4247,7 @@ def cards():
         else:
             flash ( "Data file does not match selected area!")
             print ( "Data file does not match selected area!")
+    session['current_node_id'] = current_node.fid
     return redirect(url_for('dashboard'))
 
 @app.route('/save_table_data', methods=['POST'])
@@ -4135,7 +4327,7 @@ def stream_input():
 
     print("__Streamrag3",streamrag)
 
-    return render_template('stream_processing_input.html', table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 if __name__ in '__main__':
     with app.app_context():

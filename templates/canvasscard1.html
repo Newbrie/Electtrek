@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
+<script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 
 		<title>V3.3 electtrek canvassing</title>
 
@@ -72,58 +73,73 @@
 
 	</div>
 	<div id="main" style="page-break-before: always;">
-	    <table id="canvass-table">
+	    <table id="canvass-table" style="table-layout: fixed; width: 100%;">
+				<colgroup>
+				  <col style="width: 5%">
+				  <col style="width: 7%">
+				  <col style="width: 15%">
+				  <col style="width: 3%">
+				  <col style="width: 20%">
+				  <col style="width: 8%">
+				  <col style="width: 4%">
+				  <col style="width: 4%">
+				  <col style="width: 4%">
+				  <col style="width: 12%">
+				  <col style="width: 12%">
+				  <col style="width: 4%">
+				</colgroup>
 				<thead>
 
-					<tr><th colspan='10' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
+					<tr><th colspan='12' style='font-weight: bold;font-size: 9pt;text-align: center;border-left: 0px;border-right: 0px;border-top: 0px;'> I am calling on behalf of {{ prodstats['candfirst'] }} {{ prodstats['candsurn'] }}, your Reform candidate in the {{ prodstats['constituency'] }}
  			 		constituency by-election on {{ prodstats['electiondate'] }}. <br>
 					Did you support Reform in the General Election, and will you support {{ prodstats['candfirst'] }}? <br>
  			 		PLEASE DO NOT SAY “I’m sorry to bother you”.</th>
 
 				 </tr>
-	      <tr>
-	      <th class="c1" colspan='3' >Elector</th>
-				<th class="centred" colspan='3'>Address</th>
-				<th class="c8">A.V.</th>
-				<th class="coded">VR</th>
-	      <th class="coded">VI</th>
-	      <th class="c10">Notes</th>
-			<th class="tags-col">Tags</th>
-			<th class="istagset-col">Is Tag Set</th>
-    </tr>
+				 <tr>
+				      <th colspan='3' style="width: 7%;">Elector ID</th>
+				      <th colspan='3' style="width: 5%;text-align: center;">Address</th>
+				      <th style="width: 5%;">AV</th>
+				      <th style="width: 5%;">VR</th>
+				      <th style="width: 5%;">VI</th>
+				      <th style="width: 15%;">Notes</th>
+				      <th style="width: 15%;">Tags</th>
+				      <th style="width: 4%;">Is Tag Set</th>
+				    </tr>
 	      </thead>
 				<tbody>
 					{% for index,row in group.iterrows() %}
 	      <tr>
-	        <td class="c0">{{ row['WalkName'] }}</td>
-	        <td class="c1">{{ row['ENOP'] }}</td>
-					<td class="c2">{{ row['ElectorName'] }}</td>
+	        <td class="c0" style="width: 7%;">{{ row['WalkName'] }}</td>
+	        <td class="c1" style="width: 7%;">{{ row['ENOP'] }}</td>
+					<td class="c2" style="width: 7%;text-align: left;">{{ row['ElectorName'] }}</td>
 					{% if row['AddressPrefix'] |string != "nan" and row['AddressNumber'] |string|length  %}
-	           <td class="righted">{{ row['AddressPrefix'] | replace('nan', '') }}, {{row['AddressNumber'] | int }}</td>
+	           <td class="righted" style="width: 10%;">{{ row['AddressPrefix'] | replace('nan', '') }}, {{row['AddressNumber'] | int }}</td>
 	        {% else %}
 	          {% if row['AddressNumber'] |string|length %}
-	            <td class="righted">{{ row['AddressNumber'] |string }}</td>
+	            <td class="righted" style="width: 5%;">{{ row['AddressNumber'] |string }}</td>
 	          {% else %}
-	            <td class="righted">{{ row['AddressPrefix'] }}</td>
+	            <td class="righted" style="width: 5%;">{{ row['AddressPrefix'] }}</td>
 	          {% endif %}
 	        {% endif %}
-	        <td class="righted">{{ row['StreetName'] }}</td>
-	        <td class="righted">{{ row['Postcode'] }}</td>
-					<td class="AV"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
+	        <td class="righted"style="width: 10%;text-align: left;">{{ row['StreetName'] }}</td>
+	        <td class="righted" style="width: 5%;">{{ row['Postcode'] }}</td>
+					<td class="AV" style="width: 5%;"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
 
-					<td class="VR"> <input type="text" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
-					<td class="VI"> <input type="text" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
-	        <td class="NS"><input type="text" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
-					<td>
+					<td class="VR" > <input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
+					<td class="VI" > <input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
+	        <td class="NS" ><input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
+					<td style="width: 15%;">
 					  <input
 					    type="text"
+							style="width: 100%; box-sizing: border-box;"
 					    class="taglist"
 					    data-enop="{{ row['ENOP'] }}"
 					    onkeydown="if (event.key === 'Enter') updateIsTagSetColumnForRow(this)"
 					    value="{{ row['Tags'] | default('') }}"
 					  />
 					</td>
-							<td class="istagset" id="istagset-{{ row['ENOP'] }}">
+							<td class="istagset" style="width: 100%; box-sizing: border-box;" id="istagset-{{ row['ENOP'] }}">
 					  {% if row['is_tag_set'] %}1{% else %}0{% endif %}
 					</td>
 
@@ -131,7 +147,7 @@
 	      {% endfor %}
 			</tbody>
 			<tfoot>
-						<tr>  <td colspan='10' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
+						<tr>  <td colspan='12' style="font-weight: bold;font-size: 9pt;text-align: center; border-left: 0px;border-right: 0px;border-bottom: 0px;">
 							Voter Intention Box:  R=Reform   |   Z=Maybe   I   C=Conservative  |  S=Labour (Socialists)  |  W=Won’t vote  |  X=Won’t say <br>
 							Voter Record Box:  How did they vote in the last election?   (cont.  LD=Lib Dems   |   G=Green   |   I=Independent);Notes Box:  House Boards etc <br>
 							Promoted by Reform UK, 124 City Road, London, EC1V 2NX | For ReformUK authorised users only | Personal Data - Destroy after use</td>

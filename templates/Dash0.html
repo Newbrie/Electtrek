@@ -3,9 +3,9 @@
 <div id="mapwin" class="innertube">
     <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
 </div>
+<script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 <script >
   // Listen to message from child window
-
   const pessages = [];
   var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
 
@@ -65,8 +65,19 @@
 {% endblock map %}
 
 {% block log %}
+
 <div id="logwin" class="innertube">
-		<h1>elecTrek Status Reports: </h1>
+  <h1>elecTrek flash messages: </h1>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+		<h1>elecTrek status messages: </h1>
       <ul class="flashes" >
       {% for pessage in pessages %}
         <li> {{ pessage  }}</li>
@@ -133,22 +144,25 @@
               <button type = "button" id = "b2" class = "small_btn" onclick="setActionForm('filelist',filelist='results')">Election<br>Results</button>
             </div>
             <div class="grid-item">
-              <button type="button" id="b3" class="small_btn" >Electoral Rolls</button>
+              <button type="button" id="b3" class="small_btn" >ELECTORAL ROLLS</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b4" class = "small_btn">Voter<br>Intention</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b5" class = "big_btn">Telling</button>
+              <button type = "button" id = "b5" class = "small_btn">Telling</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b6" class = "big_btn">Delivery<br>Network</button>
+              <button type = "button" id = "b6" class = "small_btn">Delivery<br>Network</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b7" class = "small_btn" >Search</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b8" class = "small_btn" >DASHBOARD</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "logout-button" class = "small_btn" >LOGOUT</button>
             </div>
 
           </div>
@@ -188,9 +202,9 @@
   let streamChart = null;
   function createOrUpdateChart(labels, data, rags) {
     const ragColors = {
-      red: 'rgba(255, 99, 132, 0.8)',
-      amber: 'rgba(255, 159, 64, 0.8)',
-      green: 'rgba(75, 192, 192, 0.8)'
+      red: 'rgba(255, 99, 132, 0.9)',
+      amber: 'rgba(255, 159, 64, 0.9)',
+      limegreen: 'rgba(50, 205, 50, 0.9)'
     };
 
     const backgroundColors = rags.map(rag => ragColors[rag]);
@@ -250,25 +264,34 @@
     if (action === 'normalise') {
         form.action = "{{url_for('normalise')}}";
         form.method = 'POST';
-        document.body.style.cursor = 'wait'
+        document.body.style.cursor = 'wait';
         form.submit();
     } else if (action === 'produce') {
         form.action = "{{url_for('walks')}}";
         form.method = 'POST';
-        document.body.style.cursor = 'wait'
+        document.body.style.cursor = 'wait';
         form.submit();
 		} else if (action === 'canvass') {
 				form.action = "{{url_for('cards')}}";
 				form.method = 'POST';
-				document.body.style.cursor = 'wait'
+				document.body.style.cursor = 'wait';
 				form.submit();
 		} else if (action === 'postcode') {
 					form.action = "{{url_for('postcode')}}";
 					form.method = 'POST';
-					document.body.style.cursor = 'wait'
+					document.body.style.cursor = 'wait';
+					form.submit();
+    } else if (action === 'logout') {
+					form.action = "{{url_for('logout')}}";
+					form.method = 'POST';
 					form.submit();
           };
   };
+
+  document.getElementById("logout-button").addEventListener("click", function() {
+  window.location.href = "/logout";
+  });
+
   // Handle the "Back to Main" button click
   document.getElementById("b8").addEventListener("click", function() {
       // Change the iframe src to the stream processing input page
