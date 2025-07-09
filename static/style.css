@@ -25,6 +25,19 @@
   cursor: pointer;
   border: 2px solid #444;
 }
+
+.tag-existing {
+  border: 2px solid indigo;
+  background-color: #E0D4F7;
+  color: indigo;
+}
+
+.tag-new {
+  border: 2px solid #007BFF;
+  background-color: #D6E9FF;
+  color: #004085;
+}
+
 #streamProcessing {
     background-color: #f9f9f9;
 }

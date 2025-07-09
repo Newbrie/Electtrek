@@ -126,9 +126,9 @@
 	        <td class="righted" style="width: 5%;">{{ row['Postcode'] }}</td>
 					<td class="AV" style="width: 5%;"><span>{{ row['AV'] | replace('nan', '') }}  </span></td>
 
-					<td class="VR" > <input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
-					<td class="VI" > <input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
-	        <td class="NS" ><input type="text" style="width: 100%; box-sizing: border-box;" placeholder= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
+					<td class="VR" > <input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
+					<td class="VI" > <input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
+	        <td class="NS" ><input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
 					<td style="width: 15%;">
 					  <input
 					    type="text"

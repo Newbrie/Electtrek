@@ -375,7 +375,7 @@ async function fetchAndUpdateChart() {
     const codes = Object.keys(VIDopt);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-      VI.style.color = 'darkgray';
+      VI.style.color = 'indigo';
   //    VI.innerHTML = x;
         }
     else {
@@ -391,7 +391,7 @@ async function fetchAndUpdateChart() {
       const codes = Object.keys(VIDopt);
       if (codes.includes(x)) {
     //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-        VR.style.color = 'darkgray';
+        VR.style.color = 'indigo';
     //    VR.innerHTML = x;
           }
       else {
@@ -402,7 +402,7 @@ async function fetchAndUpdateChart() {
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
-    NS.style.color = 'darkgray';
+    NS.style.color = 'indigo';
     NS.value = x;
 
     };
@@ -417,9 +417,30 @@ async function fetchAndUpdateChart() {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enop: electorId, tag: newTag })
-      }).then(() => location.reload());
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (!data.success) {
+          console.error("Tag submission failed:", data.error);
+          return;
+        }
+
+        // Clear existing color classes
+        input.classList.remove("tag-new", "tag-existing");
+
+        if (data.exists) {
+          input.classList.add("tag-existing"); // Indigo for existing tag
+        } else {
+          input.classList.add("tag-new"); // Blue for new tag
+        }
+
+        // Optional: keep the value or clear input
+        // input.value = "";
+      });
     }
   }
+
+
 
   function removeTag(electorId, tag) {
     fetch("/remove_tag", {

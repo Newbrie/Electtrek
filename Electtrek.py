@@ -203,7 +203,7 @@ def restore_fullpolys(node_type):
     global Fullpolys
     global Treepolys
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
     Treepolys[node_type] = Fullpolys[node_type]
     persist(current_node)
 
@@ -442,12 +442,7 @@ class TreeNode:
     #        if len(selects._children) == 0:
             # parent children = siblings, eg constituencies, counties, nations
             selects.reset()
-            if self.type == 'street' or self.type == 'walkleg':
-                selects.add_nodemarkers(self.parent,self.type)
-            elif self.type == 'polling_district' or self.type == 'walk':
-                selects.add_walkshapes(self.parent,self.type)
-            else:
-                selects.add_nodemaps(self.parent, self.type)
+            selects.create_layer(self.parent)
             selected.append(selects)
             print(f"_____layerstest2 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
         if self.level > 1:
@@ -455,12 +450,7 @@ class TreeNode:
             selectp = Featurelayers[self.parent.type]
 #            if len(selectp._children) == 0:
             selectp.reset()
-            if self.parent.type == 'street' or self.parent.type == 'walkleg':
-                selectp.add_nodemarkers(self.parent.parent,self.parent.type)
-            elif self.parent.type == 'polling_district' or self.parent.type == 'walk':
-                selectp.add_walkshapes(self.parent.parent,self.parent.type)
-            else:
-                selectp.add_nodemaps(self.parent.parent.parent, self.parent.type)
+            selectp.create_layer(self.parent.parent)
             selected.append(selectp)
             print(f"_____layerstest3 {self.parent.parent.value} type:{self.parent.type} layers: {list(reversed(selected))}")
         return list(reversed(selected))
@@ -1345,6 +1335,17 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
+    def create_layer(self,node):
+        mapfile = node.dir+"/"+node.file
+        intention_type = gettypeoflevel(mapfile,node.level+1)
+        if intention_type == 'street' or intention_type == 'walkleg':
+            self.add_nodemarks(node,intention_type)
+        elif intention_type == 'polling_district' or intention_type == 'walk':
+            self.add_walkshapes(node,intention_type)
+        else:
+            self.add_nodemaps(node, intention_type)
+        return
+
 
     def add_nodemaps (self,herenode,type):
         global Treepolys
@@ -1876,7 +1877,8 @@ def reset_nodes():
         pickle.dump(TREK_NODES, f)
     return
 
-def restore_from_persist(node):
+def restore_from_persist():
+    global MapRoot
     global TREK_NODES
     global Treepolys
     global Fullpolys
@@ -1902,11 +1904,13 @@ def restore_from_persist(node):
             keep_default_na=False,
             na_values=['']
         )
+
+    node = MapRoot
     if 'current_node_id' in session:
         print('current_node_id is a key in session', 'current_node_id')
         node = TREK_NODES.get(session.get('current_node_id'))
 
-    return
+    return node
 
 def persist(node):
     global TREK_NODES
@@ -1957,7 +1961,7 @@ login_manager.refresh_view = "index"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
 login_manager.login_message_category = "info"
 
-
+TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPD', 'walk' : 'downWK', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 Featurelayers = {
 "country": ExtendedFeatureGroup(name='Country Boundaries', overlay=True, control=True, show=True),
@@ -2054,7 +2058,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 @login_required
 def location():
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
@@ -2069,7 +2073,7 @@ def location():
 def handle_exception(e):
     global current_node
     global TREK_NODES
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
     """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
     response = e.get_response()
@@ -2092,14 +2096,23 @@ def add_tag():
     try:
         data = request.get_json()
         new_tag = data.get("tag", "").strip()
-        if new_tag and new_tag not in ElectionSettings['tags']:
-            ElectionSettings['tags'].append(new_tag)
 
-            # Optional: persist to file
+        if not new_tag:
+            return jsonify({"success": False, "error": "Empty tag"}), 400
+
+        tag_exists = new_tag in ElectionSettings['tags']
+
+        if not tag_exists:
+            ElectionSettings['tags'].append(new_tag)
             with open("electionsettings.json", "w") as f:
                 json.dump(ElectionSettings, f, indent=2)
 
-        return jsonify({"success": True, "tags": ElectionSettings['tags']})
+        return jsonify({
+            "success": True,
+            "exists": tag_exists,
+            "tag": new_tag
+        })
+
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -2195,7 +2208,7 @@ def index():
         print("__________Session Alive:"+ session['username'])
         formdata = {}
         streamrag = getstreamrag()
-        restore_from_persist(current_node)
+        current_node = restore_from_persist()
 
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
@@ -2214,6 +2227,7 @@ def login():
     global environment
     global layeritems
     global ElectionSettings
+    global current_node
 
     if 'username' in session:
         flash("User already logged in:", session['username'], " at ", current_node.value)
@@ -2224,6 +2238,7 @@ def login():
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
+    current_node = restore_from_persist()
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
     # Check if it exists
@@ -2377,7 +2392,7 @@ def dashboard():
     global streamrag
     global formdata
     global ElectionSettings
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id')}")
@@ -2414,7 +2429,7 @@ def downbut(path):
     global Featurelayers
     global layeritems
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
     formdata = {}
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
@@ -2441,7 +2456,7 @@ def downbut(path):
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         print(f"_____creating mapfile for {atype} map file path :{mapfile}" )
         wardlayer = Featurelayers[atype].reset()
-        wardlayer.add_nodemaps(current_node, atype)
+        wardlayer.create_layer(current_node)
         current_node.create_area_map(current_node.getselectedlayers(path))
 
     #formdata['username'] = session["username"]
@@ -2463,19 +2478,16 @@ def downbut(path):
 def transfer(path):
     global current_node
     global TREK_NODES
-
     global Treepolys
     global Fullpolys
     global Featurelayers
-
-
     global environment
     global levels
     global layeritems
     global ElectionSettings
     global formdata
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     formdata = {}
 # transfering to another any other node with siblings listed below
@@ -2487,32 +2499,9 @@ def transfer(path):
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
     layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
-        if current_node.type != 'polling_district' and current_node.type != 'walk':
-            formdata = {}
-            atype = gettypeoflevel(path,current_node.level+1)
-        # the map under the selected node map needs to be configured
-            print("_________selected node",atype,current_node.value, current_node.level,current_node.file)
-        # the selected  boundary options need to be added to the layer
-            focuslayer = Featurelayers[atype].reset()
-            focuslayer.add_nodemaps(current_node, atype)
-            current_node.create_area_map(current_node.getselectedlayers(path))
-            #formdata['username'] = session["username"]
-            formdata['country'] = "UNITED_KINGDOM"
-            formdata['GOTV'] = ElectionSettings['GOTV']
-            formdata['walksize'] = ElectionSettings['walksize']
-            formdata['teamsize'] = ElectionSettings['teamsize']
-            formdata['candfirst'] = "Firstname"
-            formdata['candsurn'] = "Surname"
-            formdata['electiondate'] = "DD-MMM-YY"
-            formdata['importfile'] = ""
-            mapfile = current_node.dir +"/"+ current_node.file
-        else:
-            if current_node.type == 'polling_district':
-                return redirect(url_for('PDdownST',path=mapfile))
-            elif current_node.type == 'walk':
-                return redirect(url_for('WKdownST',path=mapfile))
-    persist(current_node)
+        return redirect(url_for(TypeMaker[atype],path=mapfile))
 
+    persist(current_node)
 #    return redirect(url_for('map',path=mapfile))
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2531,7 +2520,7 @@ def downPDbut(path):
     global filename
     global layeritems
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     print ("_________ROUTE/downPDbut/",path, request.method)
     if request.method == 'GET':
@@ -2550,7 +2539,7 @@ def downPDbut(path):
 
         shapelayer = Featurelayers['polling_district'].reset()
         print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-        shapelayer.add_walkshapes(current_node,'polling_district')
+        shapelayer.create_layer(current_node)
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2585,14 +2574,13 @@ def downWKbut(path):
     global Featurelayers
     global current_node
     global TREK_NODES
-
     global MapRoot
     global ElectionSettings
     global areaelectors
 
     global filename
     global layeritems
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     print ("_________ROUTE/downWKbut Requestformfile")
     flash ("_________ROUTE/downWKbut Requestformfile")
@@ -2612,7 +2600,7 @@ def downWKbut(path):
         areaelectors = allelectors[mask]
 
         print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
-        shapelayer.add_walkshapes(current_node,'walk')
+        shapelayer.create_layer(current_node)
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2652,7 +2640,7 @@ def STupdate(path):
     global layeritems
     global ElectionSettings
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
 #    steps = path.split("/")
 #    filename = steps.pop()
@@ -2735,7 +2723,7 @@ def STupdate(path):
                             allelectors.loc[mask, "Tags"] = Tags_value
                             changefields.loc[i,'Tags'] = Tags_value
                         print(f"Updated elector {electID} with VI = {VI_value} and Tags = {Tags_value}")
-                        print("ElectorVI", allelectors.loc[mask, "ENOP"], allelectors.loc[mask, "tags"])
+                        print("ElectorVI", allelectors.loc[mask, "ENOP"], allelectors.loc[mask, "Tags"])
                     else:
                         print(f"Skipping elector {electID}, empty viResponse")
 
@@ -2852,24 +2840,19 @@ def STupdate(path):
         }
     results_template = environment.get_template('canvasscard1.html')
 
-    with open(results_filename, mode="w", encoding="utf-8") as results:
-        results.write(results_template.render(context, url_for=url_for))
+
     #           only create a map if the branch does not already exist
 #    current_node = current_node.parent
-        formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
-    if current_node.type == 'street':
-        mapfile = url_for('PDdownST',street_node.dir+"/"+street_node.file)
-        layeritems = getlayeritems(current_node.parent.childrenoftype('street'),formdata['tabledetails'])
-        print('_______Street Data uploaded:-',url_for('map', path=mapfile))
-    elif current_node.type == 'walk':
-        mapfile = url_for('WKdownST',street_node.dir+"/"+street_node.file)
-        print('_______Walkleg Data uploaded:-',url_for('map', path=mapfile))
-        layeritems = getlayeritems(current_node.parent.childrenoftype('walk'),formdata['tabledetails'])
+    formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
 
+
+    url = url_for('map',path=mapfile)
+    layeritems = getlayeritems(current_node.parent.childrenoftype(current_node.type),formdata['tabledetails'])
+    print('_______Street Data uploaded:-',url)
 
     persist(current_node)
 
-    return  jsonify({"message": "Success", "file": mapfile})
+    return  jsonify({"message": "Success", "file": url})
 
 
 @app.route('/PDdownST/<path:path>', methods=['GET','POST'])
@@ -2885,7 +2868,7 @@ def PDdownST(path):
     global layeritems
     global current_node
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     def firstnameinlist(name,list):
         posn = list.index(name)
@@ -2904,7 +2887,7 @@ def PDdownST(path):
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
-        focuslayer.add_nodemarks(PD_node, 'street')
+        focuslayer.create_layer(PD_node)
         streetnodelist = PD_node.childrenoftype('street')
 
         if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
@@ -3012,7 +2995,7 @@ def PDdownST(path):
 
         PD_node.create_area_map(PD_node.getselectedlayers(path))
     mapfile = PD_node.dir+"/"+PD_node.file
-    formdata['tabledetails'] = "Click for "+current_node.value+  "\'s street details"
+    formdata['tabledetails'] = "Click for "+PD_node.value+  "\'s street details"
     layeritems = getlayeritems(streetnodelist,formdata['tabledetails'])
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -3038,7 +3021,7 @@ def LGdownST(path):
     global layeritems
     global current_node
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     def firstnameinlist(name,list):
         posn = list.index(name)
@@ -3054,7 +3037,7 @@ def LGdownST(path):
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         focuslayer = Featurelayers['street'].reset()
-        focuslayer.add_nodemarks(PD_node, 'street')
+        focuslayer.create_layer(PD_node)
 
         if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
@@ -3191,7 +3174,7 @@ def WKdownST(path):
     global environment
     global filename
     global layeritems
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
@@ -3212,7 +3195,7 @@ def WKdownST(path):
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
 
         focuslayer = Featurelayers['walkleg'].reset()
-        focuslayer.add_nodemarks(walk_node, 'walkleg')
+        focuslayer.create_Layer(walk_node)
         walklegnodelist = walk_node.childrenoftype('walkleg')
         print ("________Walklegs",walk_node.value,len(walklegnodelist))
 # for each walkleg node(partial street), add a walkleg node marker to the walk_node parent layer (ie PD_node.level+1)
@@ -3352,7 +3335,7 @@ def wardreport(path):
     global formdata
     global current_node
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     current_node = current_node.ping_node(path)
 
@@ -3393,7 +3376,7 @@ def displayareas():
     global formdata
     global ElectionSettings
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     if not layeritems or len(layeritems) < 3:
         return jsonify([[], [], "No data"])
@@ -3451,7 +3434,7 @@ def divreport(path):
     global Featurelayers
     global current_node
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
@@ -3500,7 +3483,7 @@ def upbut(path):
     global layeritems
     global current_node
 
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     flash('_______ROUTE/upbut',path)
     print('_______ROUTE/upbut',path, current_node.value)
@@ -3529,12 +3512,7 @@ def upbut(path):
 
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         focuslayer = Featurelayers[atype].reset()
-        if atype == 'street' or atype == 'walkleg':
-            focuslayer.add_nodemarkers(current_node,atype)
-        elif atype == 'polling_district' or atype == 'walk':
-            focuslayer.add_walkshapes(current_node,atype)
-        else:
-            focuslayer.add_nodemaps(current_node, atype)
+        focuslayer.create_layer(current_node)
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
@@ -3551,7 +3529,7 @@ def register():
     username = request.form['username']
     password = request.form['password']
     print("Register", username)
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     user = User.query.filter_by(username=username).first()
     if user:
@@ -3580,7 +3558,7 @@ def map(path):
 #    steps = path.split("/")
 #    last = steps.pop()
 #    current_node = selected_childnode(current_node,last)
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
@@ -3604,7 +3582,7 @@ def map(path):
 def showmore(path):
     global TREK_NODES
     global current_node
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     steps = path.split("/")
     last = steps.pop().split(":")
@@ -3645,7 +3623,7 @@ def setgotv():
     global allelectors
     global current_node
     global streamrag
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     flash('_______ROUTE/setgotv',session)
     print('_______ROUTE/setgotv',session)
@@ -3694,7 +3672,7 @@ def filelist():
     global current_node
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
@@ -4103,7 +4081,7 @@ def walks():
 
 
     global environment
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
@@ -4138,13 +4116,13 @@ def postcode():
     global Treepolys
     global current_node
     global Featurelayers
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
 
     flash('__ROUTE/Findpostcode')
 
     pthref = current_node.dir+"/"+current_node.file
-    mapfile = url_for('downbut',path=pathref)
+    mapfile = url_for(downtoType[current_node.type],path=pathref)
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
         postcodeentry = str(postcodeentry).replace(" ","")
@@ -4234,7 +4212,7 @@ def firstpage():
         with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'wb') as f:
             pickle.dump(Fullpolys, f)
 
-        restore_from_persist(current_node)
+        current_node = restore_from_persist()
         session['next'] = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = MapRoot.ping_node(sourcepath)
@@ -4261,7 +4239,7 @@ def firstpage():
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         newlayer = Featurelayers[atype].reset()
-        newlayer.add_nodemaps(current_node, atype)
+        newlayer.create_layer(current_node)
         streamrag = getstreamrag()
 
         current_node.create_area_map(current_node.getselectedlayers(session['next']))
@@ -4288,7 +4266,7 @@ def cards():
     global Fullpolys
     global streamrag
     global environment
-    restore_from_persist(current_node)
+    current_node = restore_from_persist()
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
     streamrag = getstreamrag()
