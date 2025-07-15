@@ -114,12 +114,12 @@
 	        <td class="c1" style="width: 7%;">{{ row['ENOP'] }}</td>
 					<td class="c2" style="width: 7%;text-align: left;">{{ row['ElectorName'] }}</td>
 					{% if row['AddressPrefix'] |string != "nan" and row['AddressNumber'] |string|length  %}
-	           <td class="righted" style="width: 10%;">{{ row['AddressPrefix'] | replace('nan', '') }}, {{row['AddressNumber'] | int }}</td>
+	           <td class="lefted" style="width: 10%;">{{ row['AddressPrefix'] | replace('nan', '') }}, {{row['AddressNumber'] | int }}</td>
 	        {% else %}
 	          {% if row['AddressNumber'] |string|length %}
-	            <td class="righted" style="width: 5%;">{{ row['AddressNumber'] |string }}</td>
+	            <td class="lefted" style="width: 5%;">{{ row['AddressNumber'] |string }}</td>
 	          {% else %}
-	            <td class="righted" style="width: 5%;">{{ row['AddressPrefix'] }}</td>
+	            <td class="lefted" style="width: 5%;">{{ row['AddressPrefix'] }}</td>
 	          {% endif %}
 	        {% endif %}
 	        <td class="righted"style="width: 10%;text-align: left;">{{ row['StreetName'] }}</td>

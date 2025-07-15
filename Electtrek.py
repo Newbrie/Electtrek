@@ -2346,22 +2346,15 @@ def location():
 @app.errorhandler(HTTPException)
 @login_required
 def handle_exception(e):
-
-
     """Return JSON instead of HTML for HTTP errors."""
-    # start with the correct headers and status code from the error
-    response = e.get_response()
-    # replace the body with JSON
-    response.data = json.dumps({
+    response = {
         "code": e.code,
         "name": e.name,
         "description": e.description,
-    })
-    response.content_type = "application/json"
+    }
+    return jsonify(response), e.code
 
-
-    return redirect(url_for('logout'))
-
+    
 @app.route('/add_tag', methods=['POST'])
 @login_required
 def add_tag():
