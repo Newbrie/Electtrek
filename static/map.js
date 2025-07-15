@@ -372,34 +372,39 @@ async function fetchAndUpdateChart() {
     let x = VI.value.toUpperCase();
     const VIDopt = parent.document.getElementById("yourparty");
     VI.value = x;
-    const codes = Object.keys(VIDopt);
+    const codes = Array.from(VIDopt.options).map(opt => opt.value.toUpperCase());
     alert("VI Options:"+codes);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
+    console.log(`Valid VI code: ${x}`);
       VI.style.color = 'blue';
   //    VI.innerHTML = x;
         }
     else {
       VI.style.color = 'grey';
+      console.warn(`Invalid VI code: ${x}`);
   //    VI.innerHTML = x;
     }
     };
 
-    function inputVR(VR) {
-      let x = VR.value.toUpperCase();
-      VR.value = x;
-      const VIDopt = parent.document.getElementById("yourparty");
-      const codes = Object.keys(VIDopt);
-      if (codes.includes(x)) {
-    //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-        VR.style.color = 'blue';
-    //    VR.innerHTML = x;
-          }
-      else {
-        VR.style.color = 'grey';
-    //    VR.innerHTML = x;
+      function inputVR(VR) {
+        let x = VR.value.toUpperCase();
+        VR.value = x;
+
+        const VIDopt = parent.document.getElementById("yourparty");
+        const codes = Array.from(VIDopt.options).map(opt => opt.value.toUpperCase());
+
+        if (codes.includes(x)) {
+          // Valid code, do something
+          VR.style.color = 'blue';
+          console.log(`Valid VR code: ${x}`);
+        } else {
+          // Invalid code, optionally warn or clear input
+          VR.style.color = 'grey';
+          console.warn(`Invalid VR code: ${x}`);
+        }
       }
-      };
+
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
