@@ -1,0 +1,27 @@
+{% for index, row in DQstats.iterrows() %}
+<tr>
+    <td>{{ row['Stream'] }}</td>
+    <td>{{ row['File'] }}</td>
+    <td>{{ row['Field'] }}</td>
+    <td>
+        <label class="maximpact-label">
+        <input type="checkbox" class="maximpact-checkbox"{% if row['P0'] == 1 %}checked{% endif %} disabled>
+        </label>
+    </td>
+    <td>
+        <label class="maximpact-label">
+        <input type="checkbox" class="maximpact-checkbox"{% if row['P1'] == 1 %}checked{% endif %} disabled>
+        </label>
+    </td>
+    <td>
+        <label class="maximpact-label">
+        <input type="checkbox" class="maximpact-checkbox"{% if row['P2'] == 1 %}checked{% endif %} disabled>
+        </label>
+    </td>
+    <td>
+        <label class="maximpact-label">
+        <input type="checkbox" class="maximpact-checkbox"{% if row['P3'] == 1 %}checked{% endif %} disabled>
+        </label>
+    </td>
+</tr>
+{% endfor %}

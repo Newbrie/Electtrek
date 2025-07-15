@@ -102,6 +102,11 @@
         <thead>
           <button id="process-btn">ADD STREAM</button>
           <button id="reset-btn">RESET</button>
+          <div id="progress-container" style="margin-top: 20px; display: none;">
+            <label for="progress-bar">Normalization Progress:</label>
+            <progress id="progress-bar" value="0" max="100" style="width: 300px;"></progress>
+            <span id="progress-text">0%</span>
+          </div>
             <tr>
                 <th>Stream</th>
                 <th>Filename</th>
@@ -145,43 +150,53 @@
 </div>
 <script>
 
-    document.getElementById('add-row-btn').addEventListener('click', function () {
-      const tbody = document.getElementById('file-info-tbody');
-      const newRow = document.createElement('tr');
-      newRow.innerHTML = `
-        <td><input type="number" class="editable order" value="1" style="width: 50px;"></td>
-        <td>
-          <select class="editable stream">
-            {% for stream in streams %}
+  document.getElementById('add-row-btn').addEventListener('click', function () {
+    const tbody = document.getElementById('file-info-tbody');
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+      <td><input type="number" class="editable order" value="1" style="width: 60px;"></td>
+      <td>
+        <select class="editable stream">
+          {% for stream in streams %}
             <option value="{{ stream }}">{{ stream }}</option>
-            {% endfor %}
-          </select>
-        </td>
-        <td>
-          <input type="text" class="editable filename">
-          <input type="file" class="file-picker" style="display: none;">
-          <button type="button" class="file-btn">📂</button>
-        </td>
-        <td>
-          <select class="editable type" style="width: 60px;">
-            <option value="csv" selected>csv</option>
-            <option value="xlsx" selected>xlsx</option>
-            <option value="json" selected>json</option>
-          </select>
-        </td>
-        <td>
-          <select class="editable purpose" style="width: 60px;">
-            <option value="main" selected>main</option>
-            <option value="delta" selected>delta</option>
-            <option value="avi" selected>avi</option>
-          </select>
-        </td>
-        <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
-        <td><input type="checkbox" class="editable active"></td>
-        <td><button class="delete-btn">Delete</button></td>
-      `;
-        tbody.appendChild(newRow);
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <select class="editable election">
+          {% for stream in streams %}
+            <option value="{{ stream }}">{{ stream }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <input type="text" class="editable filename" style="width: 300px;" readonly>
+        <input type="hidden" class="file-path" value="">
+        <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
+        <button type="button" class="file-btn">📂</button>
+      </td>
+      <td>
+        <select class="editable type" style="width: 60px;">
+          <option value="csv">csv</option>
+          <option value="xlsx">xlsx</option>
+          <option value="json">json</option>
+        </select>
+      </td>
+      <td>
+        <select class="editable purpose" style="width: 60px;">
+          <option value="main">main</option>
+          <option value="delta">delta</option>
+          <option value="avi">avi</option>
+        </select>
+      </td>
+      <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
+      <td><input type="checkbox" class="editable active"></td>
+      <td><input type="checkbox" class="editable live"></td>
+      <td><button class="delete-btn">Delete</button></td>
+    `;
+    tbody.appendChild(newRow);
     });
+
 
     document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.filename').forEach(input => {
@@ -208,6 +223,7 @@
     });
 
     document.getElementById('process-btn').addEventListener('click', function () {
+
     const streamToProcess = prompt("Enter the stream name you wish to process:");
     if (!streamToProcess) return;
 
@@ -398,6 +414,65 @@
       }
     });
 
+  document.addEventListener('DOMContentLoaded', function () {
+    // Show progress bar
+    document.getElementById("progress-container").style.display = "block";
+    document.getElementById("progress-bar").value = 0;
+    document.getElementById("progress-text").innerText = "0%";
+
+    // Start polling progress
+    function pollProgress() {
+    fetch("/progress")
+      .then(res => {
+          return res.json();
+      })
+      .then(data => {
+
+        const bar = document.getElementById("progress-bar");
+        const text = document.getElementById("progress-text");
+        bar.value = data.percent || 0;
+        text.innerText = (data.percent || 0) + "% — " + (data.message || "");
+
+        if (data.status === "complete") {
+          console.log("Normalization is complete. Injecting DQstats HTML if available.");
+          text.innerText = "✅ Complete";
+
+          if (data.dqstats_html) {
+            const tbody = document.querySelector("#DQ-table tbody");
+            if (tbody) {
+              tbody.innerHTML = data.dqstats_html;
+              console.log("DQstats updated successfully.");
+            } else {
+              console.warn("DQ-table tbody not found in DOM.");
+            }
+          }
+
+          // 🔄 Inject refreshed streamrag table
+           fetch('/get_streamtab')
+             .then(res => res.text())
+             .then(html => {
+               const streamTbody = document.querySelector('#streamtab tbody');
+               if (streamTbody) {
+                 streamTbody.innerHTML = html;
+               }
+             });
+
+          // Stop here; ❌ no further polling
+        } else if (data.status === "error") {
+          console.error("Error in normalization:", data.message);
+          text.innerText = "⚠️ " + (data.message || "Error");
+        } else {
+          // Continue polling after 500ms
+          setTimeout(pollProgress, 500);
+        }
+      })
+      .catch(err => {
+        console.error("Polling error:", err);
+      });
+  }
+
+    pollProgress();
+  });
 
 
 

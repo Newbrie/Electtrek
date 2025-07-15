@@ -40,7 +40,8 @@ import colorsys
 from collections import defaultdict
 import requests
 import pickle
-from k_means_constrained import KMeansConstrained
+import threading
+import traceback
 
 
 
@@ -87,7 +88,7 @@ def stepify(path):
     parts = route.split("/")
     last = parts.pop() #eg KA>SMITH_STREET or BAGSHOT-MAP
     if last.find("-PRINT.html"):#only works for street-leaf nodes, not -WALKS etc nodes
-        leaf = subending(last,"").split(":").pop()
+        leaf = subending(last,"").split("--").pop()
         parts.append(leaf) #eg SMITH_STREET
         print("____LEAFNODE:", parts)
     return parts
@@ -119,7 +120,10 @@ def gettypeoflevel(path,level):
         dest = dest_path[0]
     deststeps = list(stepify(dest)) # lowest left - UK right
 
+    if level > 6:
+        level = 6
     type = levels[level] # could have type options that need to be resolved
+
     if type == 'ward/division':
         if path.find("/WARDS/") >= 0:
             type = 'ward'
@@ -195,7 +199,7 @@ def getlayeritems(nodelist,title):
     return [list(dfy.columns.values),dfy, title]
 
 def subending(filename, ending):
-  stem = filename.replace("-PRINT.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
+  stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
   print(f"____Subending test: from {filename} to {stem.replace('@@@', ending)}")
   return stem.replace("@@@", ending)
 
@@ -365,24 +369,23 @@ class TreeNode:
                     node = catch[0]
                     print("____ EXISTING NODE FOUND  ",node.value,catch[0].value, moretype)
                     if steps == []:
+# caught node but no more in tree so either create new map nodes (level < 4) or create new data nodes (>=4)
                         ntype = gettypeoflevel(dest_path,node.level+1)
-                        if moretype != "":
-                            ntype = moretype
-        # ping also used to retrieve children of destination node of dest_path type
+# ping also used to retrieve children of destination node in dest_path
                         print(f"____ Creating new nodes at {node.value} / {catch[0].value} lev {node.level} of type: {ntype}")
                         if node.level < 4:
-# set the next level type according to the path OR if specified the moretype parameter
-                            restore_fullpolys(ntype)
+# catch but another map layer poss so create map children
                             newnodes = node.create_map_branch(ntype)
                             if len(newnodes) == 0:
                                 print(f"____ Error1 - cant find any map children {newnodes} in {node.value} of type {ntype} ")
-                        else:
+                        elif node.level < 6:
+# catch but beyond map level, and within data level so create data children
                             newnodes = node.create_data_branch(ntype)
                             if len(newnodes) == 0:
                                 print(f"____ Data Leaf - no data children {newnodes}  in {node.value} of type {ntype} ")
                 elif node.level < 4:
-    # No catch so add new map branch nodes and add next back to the queue
                     steps.append(next)
+# No catch at ward/div level < 4 so back next node so add branch to tree from map
                     ntype = gettypeoflevel(dest_path, node.level+1)
                     print("____ TRYING NEW MAP NODES AT ", node.value,node.level,ntype,dest_path)
                     newnodes = node.create_map_branch(ntype)
@@ -391,9 +394,8 @@ class TreeNode:
                         print(f"____ Error2 - cant find any map children {newnodes}  in {node.value} of type {ntype} ")
                         node = self
                 elif node.level == 4:
-    #No catch under ward/div level so add 'next' back into the queue after the following data nodes have been added to tree
                     steps.append(next)
-    # This is ward/division level - lower data nodes will be both PDs(polling_districts) or Walks (from kmeans)
+# No catch at PD/Walk level so add a data branch of type PDs(polling_districts) or Walks (from kmeans)
                     ntype = gettypeoflevel(dest_path, node.level+1)
                     print(f"____ TRYING NEW DATA L4 NODES AT {node.value} ",node.level,ntype,dest_path)
                     newnodes = node.create_data_branch(ntype)
@@ -404,6 +406,7 @@ class TreeNode:
                         return node
                 elif node.level == 5:
                     steps.append(next)
+# No catch at street level so add a data branch - lower data nodes will be streets or walklegs
                     ntype = gettypeoflevel(dest_path, node.level+1)
                     print(f"____ TRYING NEW DATA L5 NODES AT {node.value} ",node.level,ntype,dest_path)
                     newnodes = node.create_data_branch(ntype)
@@ -412,9 +415,8 @@ class TreeNode:
                         print(f"____ cant find any data children {newnodes}  in {node.value} of type {ntype} ")
                         node = self
                         return node
-    #this is the walk/PD level - add 'next' back into the queue after lower (street/walkleg) nodes have been added
                 else :
-    #this is base/street/walkleg level so child type is the actual elector for which there are no lower nodes
+#No catch at elector level so exit
                     break
                     #
         session['current_node_id'] = node.fid
@@ -442,7 +444,7 @@ class TreeNode:
     #        if len(selects._children) == 0:
             # parent children = siblings, eg constituencies, counties, nations
             selects.reset()
-            selects.create_layer(self.parent)
+            selects.create_layer(self.parent,self.type)
             selected.append(selects)
             print(f"_____layerstest2 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
         if self.level > 1:
@@ -450,7 +452,7 @@ class TreeNode:
             selectp = Featurelayers[self.parent.type]
 #            if len(selectp._children) == 0:
             selectp.reset()
-            selectp.create_layer(self.parent.parent)
+            selectp.create_layer(self.parent.parent,self.parent.type)
             selected.append(selectp)
             print(f"_____layerstest3 {self.parent.parent.value} type:{self.parent.type} layers: {list(reversed(selected))}")
         return list(reversed(selected))
@@ -1025,10 +1027,10 @@ class TreeNode:
             child_node.file = child_node.value+"-WALKS.html"
         elif etype == 'street':
             child_node.dir = self.dir
-            child_node.file = self.value+":"+child_node.value+"-PRINT.html"
+            child_node.file = self.value+"--"+child_node.value+"-PRINT.html"
         elif etype == 'walkleg':
             child_node.dir = self.dir
-            child_node.file = self.value+":"+child_node.value+"-PRINT.html"
+            child_node.file = self.value+"--"+child_node.value+"-PRINT.html"
 
         child_node.davail = False
 
@@ -1092,7 +1094,7 @@ class TreeNode:
             if node not in visited:
                 visited.add(node)  # Mark node as visited
                 if node.type == 'street' or node.type == 'walk':
-                    PDstreet = node.parent.value+":"+node.value
+                    PDstreet = node.parent.value+"--"+node.value
                     print("_____find visited node:",PDstreet, target)        # Print the current node (for illustration)
                     if PDstreet == target:
                         return node
@@ -1206,10 +1208,11 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("____reset the layer",len(self._children), self)
         return self
 
-    def add_walkshapes (self,herenode,stype):
+    def add_shapenodes (self,herenode,stype):
         shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' }
         shapenodelist = herenode.childrenoftype(stype)
 # if there is a selected file , then allelectors will be full of records
+        print (f"______shapenodeparent:{herenode.value} and child type : {stype}")
 
         for shape_node in shapenodelist:
             mask = areaelectors[shapecolumn[stype]] == shape_node.value
@@ -1219,15 +1222,13 @@ class ExtendedFeatureGroup(FeatureGroup):
             g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
             Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
             print ("______Streetsdf:",Streetsdf)
-            self.add_walkshape(shape_node, stype,Streetsdf)
+            self.add_shapenode(shape_node, stype,Streetsdf)
             print("_______new shape node ",shape_node,"|", Streetsdf, len(Featurelayers[stype]._children))
-        return
+        return self._children
 
 
-    def add_walkshape (self,herenode,type,datablock):
+    def add_shapenode (self,herenode,type,datablock):
         global levelcolours
-
-
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
         print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
 
@@ -1335,16 +1336,14 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def create_layer(self,node):
-        mapfile = node.dir+"/"+node.file
-        intention_type = gettypeoflevel(mapfile,node.level+1)
+    def create_layer(self, node, intention_type):
         if intention_type == 'street' or intention_type == 'walkleg':
             self.add_nodemarks(node,intention_type)
         elif intention_type == 'polling_district' or intention_type == 'walk':
-            self.add_walkshapes(node,intention_type)
+            self.add_shapenodes(node,intention_type)
         else:
             self.add_nodemaps(node, intention_type)
-        return
+        return self._children
 
 
     def add_nodemaps (self,herenode,type):
@@ -1492,7 +1491,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print("________Layer map polys",herenode.value,herenode.level, len(Featurelayers[gettypeoflevel(herenode.dir,herenode.level+1)]._children))
 
-        return
+        return self._children
 
     def add_nodemarks (self,herenode,type):
         global levelcolours
@@ -1558,7 +1557,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print("________Layer map points",herenode.value,herenode.level,self._children)
 
-        return herenode
+        return self._children
 
 def get_text_color(fill_hex):
     # Convert hex to RGB
@@ -1883,6 +1882,29 @@ def restore_from_persist():
     global Treepolys
     global Fullpolys
 
+    def get_current_node(session=None, session_data=None):
+        """
+        Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
+        """
+        current_node_id = MapRoot.fid
+
+        if session and 'current_node_id' in session:
+            current_node_id = session.get('current_node_id')
+            print("[Main Thread] current_node_id from session:", current_node_id)
+
+        elif session_data and 'current_node_id' in session_data:
+            current_node_id = session_data.get('current_node_id')
+            print("[Background Thread] current_node_id from session_data:", current_node_id)
+
+        else:
+            print("⚠️ current_node_id not found in session or session_data")
+
+        node = TREK_NODES.get(current_node_id)
+        if not node:
+            print("⚠️ current_node not found in stored TREK_NODES")
+
+        return node
+
     with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
         Treepolys = pickle.load(f)
     with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'rb') as f:
@@ -1904,11 +1926,7 @@ def restore_from_persist():
             keep_default_na=False,
             na_values=['']
         )
-
-    node = MapRoot
-    if 'current_node_id' in session:
-        print('current_node_id is a key in session', 'current_node_id')
-        node = TREK_NODES.get(session.get('current_node_id'))
+    node = get_current_node(session=session)
 
     return node
 
@@ -1927,8 +1945,254 @@ def persist(node):
     session['current_node_id'] = node.fid
     return
 
+def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data):
+    global  MapRoot, TREK_NODES, allelectors, Treepolys, Fullpolys, current_node
+    global ElectionSettings, formdata, layeritems
 
-# create and configure the app
+    def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=2, depth=0, prefix='K'):
+        """
+        Recursively cluster a DataFrame with 'Lat' and 'Long' columns using standard KMeans,
+        splitting any clusters larger than max_cluster_size.
+        """
+        if depth >= MAX_DEPTH:
+            logger.info(f"Max depth {MAX_DEPTH} reached at cluster {prefix}, size {len(X)}")
+            return {i: f"{prefix}" for i in X.index}
+
+        if len(X) <= max_cluster_size:
+            logger.debug(f"Cluster {prefix} is within size limit. Size: {len(X)}")
+            return {i: f"{prefix}" for i in X.index}
+
+        # Estimate number of clusters needed to stay under max_cluster_size
+        k = int(np.ceil(len(X) / max_cluster_size))
+        coords = X[['Lat', 'Long']].values
+
+        logger.info(f"[Depth {depth}] Splitting {len(X)} points into {k} clusters (prefix: {prefix})")
+
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+        labels = kmeans.fit_predict(coords)
+
+        label_map = {}
+        for i in range(k):
+            idx = X.index[labels == i]
+            sub_data = X.loc[idx]
+            new_prefix = f"{prefix}-{i+1}"
+
+            logger.debug(f"Cluster {new_prefix} | Size: {len(sub_data)}")
+
+            # Recurse on this subcluster if it's still too big
+            sub_labels = recursive_kmeans_latlon(
+                sub_data,
+                max_cluster_size=max_cluster_size,
+                MAX_DEPTH=MAX_DEPTH,
+                depth=depth + 1,
+                prefix=new_prefix
+            )
+            label_map.update(sub_labels)
+
+        return label_map
+
+
+    current_node = restore_from_persist()
+    # Simulate step progress throughout your pipeline
+    # All your existing code from the route goes here, replacing request.form/files/session
+
+    # ⚠️ Use `request_form`, `request_files`, and `session_data` instead of Flask globals
+    # e.g. replace `request.form` → `request_form`
+    # e.g. replace `session['current_node_id']` → `session_data['current_node_id']`
+
+    import logging
+
+    # Setup logger
+    logging.basicConfig(
+        level=logging.DEBUG,  # or INFO
+        format='%(asctime)s [%(levelname)s] %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    # 6. Process metadata (normalisation or routing)
+    file_index = 0
+    mainframe = pd.DataFrame()
+    deltaframes = []
+    aviframe = pd.DataFrame()
+    DQstats = pd.DataFrame()
+
+    progress["percent"] = 1
+    progress["status"] = "sourcing"
+    progress["message"] = "Sourcing data from files ..."
+
+    try:
+        print("___Route/normalise")
+        for index, data in meta_data.items():
+            progress["percent"] = int(10*float('%.6f'%(int(index)/len(meta_data.items()))))
+            progress["status"] = "sorting"
+            progress["message"] = "Processing sourced data . . ."
+
+            print(f"\nRow index {index}")
+            stream = str(data.get('stream', '')).upper()
+            order = data.get('order')
+            filetype = data.get('type')
+            purpose = data.get('purpose')
+            fixlevel = int(data.get('fixlevel', 0))
+            file_path = data.get('stored_path', '')
+
+            print(f"Stream: {stream}")
+            print(f"Order: {order}")
+            print(f"Type: {filetype}")
+            print(f"Purpose: {purpose}")
+            print(f"Fixlevel: {fixlevel}")
+            print(f"Stored Path: {file_path}")
+
+            formdata = {}
+            ImportFilename = str(file_path)
+            print("_____ reading file outside normz",ImportFilename)
+            if os.path.exists(TABLE_FILE):
+                with open(TABLE_FILE) as f:
+                    table_data = json.load(f)
+            else:
+                table_data = []
+        # Collect unique streams for dropdowns
+            streams = sorted(set(row['stream'] for row in table_data))
+            streamrag = {}
+            dfx = pd.DataFrame()
+
+            try:
+                if file_path and os.path.exists(file_path):
+                    if file_path.upper().endswith('.CSV'):
+                        print("readingCSVfile outside normz", file_path)
+                        dfx = pd.read_csv(file_path,sep='\t',engine='python',encoding='ISO-8859-1')
+                    elif file_path.upper().endswith('.XLSX'):
+                        print("readingEXCELfile outside normz", file_path)
+                        dfx = pd.read_excel(file_path, engine='openpyxl')
+                    else:
+                        e="error-Unsupported file format"
+                        print(e)
+                        progress["percent"] = 100
+                        progress["status"] = "error"
+                        progress["message"] = f"Error: {str(e)}"
+                        return
+                else:
+                    print("error - File path does not exist or is not provided: ", file_path)
+                    return
+            except Exception as e:
+                print("error-file access exception:",str(e))
+                tb = traceback.format_exc()
+                print("❌ Exception in background_normalise:", e)
+                print(tb)
+                progress["percent"] = 100
+                progress["status"] = "error"
+                progress["message"] = f"Error: {str(e)}"
+                return
+
+            progress["stream"] = stream
+            progress["status"] = "running"
+            progress["percent"] = 0
+            progress["message"] = "Starting normalisation..."
+
+        # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
+            Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+            Outcols = Outcomes.columns.to_list()
+            if purpose == "main":
+            # this is the main index
+                progress["percent"] = 25
+                progress["status"] = "running"
+                progress["message"] = "Normalising main file ..."
+                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                mainframe = results[0]
+                mainframe = pd.DataFrame(mainframe,columns=Outcols)
+            elif purpose == 'delta':
+            # this is one of many changes that needs to be applied to the main index
+                progress["percent"] = 40
+                progress["status"] = "running"
+                progress["message"] = "Normalising delta files ..."
+                dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # filter out all records with no Postcode
+                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                deltaframes.append(results[0])
+            elif purpose == 'avi':
+            # this is an addition of columns to the main index
+                progress["percent"] = 60
+                progress["status"] = "running"
+                progress["message"] = "Normalising avi file ..."
+                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                aviframe =  results[0]
+                aviframe = aviframe[['ENOP','AV']]
+            DQstats = pd.concat([DQstats,results[1]])
+            formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
+            layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
+            print("__concat of DQstats", DQstats)
+            DQstats.to_csv(subending(ImportFilename,"DQ.csv"),sep='\t', encoding='utf-8', index=False)
+
+    # full stream now received - need to apply changes to main
+
+        fullsum = len(mainframe)+len(deltaframes)+len(aviframe)
+        if len(mainframe) > 0:
+            print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe), mainframe.columns)
+            len1 = len(mainframe)
+            if len(deltaframes) > 0:
+                progress["percent"] = 75
+                progress["status"] = "running"
+                progress["message"] = "Pipelining normalised main file ..."
+
+                Outcols = mainframe.columns.to_list()
+                for deltaframe in deltaframes:
+                    progress["percent"] = 80
+                    progress["status"] = "running"
+                    progress["message"] = "Pipelining normalised delta files ..."
+
+                    deltaframe = pd.DataFrame(deltaframe,columns=Outcols)
+                    print("_____Deltaframe Details:", deltaframe)
+                    for index, change in deltaframe.iterrows():
+                        print("_____Delta Change Details:", change)
+                        mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
+                    print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
+            if len(aviframe) > 0:
+                progress["percent"] = 85
+                progress["status"] = "running"
+                progress["message"] = "Pipelining normalised avi file ..."
+
+                print(f"____compare merge length before: {len1} after {len(mainframe)}")
+                mainframe = mainframe.merge(aviframe, on='ENOP',how='left', indicator=True )
+                mainframe = mainframe.rename(columns= {'AV_y': 'AV'})
+
+                aviframe.to_csv("avitest.csv",sep='\t', encoding='utf-8', index=False)
+
+                print("__Processed aviframe:", len(aviframe), aviframe.columns)
+
+        progress["percent"] = 90
+        progress["status"] = "running"
+        progress["message"] = "Normalised all source files now clustering ..."
+
+        mainframe = pd.DataFrame(mainframe,columns=Outcols)
+        mainframe = mainframe.reset_index(drop=True)
+        print(f"__concat of mainframe of length {len(mainframe)}- columns:",mainframe.columns )
+        mainframe = mainframe.reset_index(drop=True)
+        print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
+    # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
+
+        label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=350, MAX_DEPTH=4)
+        newlabels = pd.Series(label_dict)
+        mainframe["WalkName"] = mainframe.index.map(newlabels)
+        allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
+        allelectors = allelectors.reset_index(drop=True)
+        allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+
+        print('_______ROUTE/normalise/exit:',ImportFilename, allelectors.columns)
+        progress["percent"] = 100
+        progress["status"] = "complete"
+        progress["targetfile"] = ImportFilename
+        progress["message"] = "Normalisation complete."
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print("❌ Exception in background_normalise:", e)
+        print(tb)
+        progress["percent"] = 100
+        progress["status"] = "complete"
+        progress["message"] = f"Error: {str(e)}"
+
+
+
+
+# ____XXXXX create and configure the app
 app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
 
 sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
@@ -1961,7 +2225,7 @@ login_manager.refresh_view = "index"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
 login_manager.login_message_category = "info"
 
-TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPD', 'walk' : 'downWK', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
+TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 Featurelayers = {
 "country": ExtendedFeatureGroup(name='Country Boundaries', overlay=True, control=True, show=True),
@@ -1986,7 +2250,18 @@ Featurelayers = {
 #        'country','nation', 'county', 'constituency', 'ward', 'division', 'polling_district',
 #        'walk', 'walkleg', 'street', 'result', 'target', 'data', 'special'
 #    ][i - 1]
+progress = {
+    "stream": "",
+    "status": "idle",       # Can be 'idle', 'running', 'complete', 'error'
+    "percent": 0,           # Integer from 0 to 100
+    "targetfile": "",
+    "message": "Waiting...", # Optional string
+    "dqstats_html": ""
+    }
 
+DQ_DATA = {
+"df": pd.DataFrame(),  # initially empty
+}
 
 formdata = {}
 allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
@@ -2071,9 +2346,8 @@ def location():
 @app.errorhandler(HTTPException)
 @login_required
 def handle_exception(e):
-    global current_node
-    global TREK_NODES
-    current_node = restore_from_persist()
+
+
     """Return JSON instead of HTML for HTTP errors."""
     # start with the correct headers and status code from the error
     response = e.get_response()
@@ -2085,10 +2359,8 @@ def handle_exception(e):
     })
     response.content_type = "application/json"
 
-    mapfile = current_node.dir+"/"+current_node.file
-    if current_node.level > 0:
-        mapfile = current_node.parent.dir+"/"+current_node.parent.file
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
+    return redirect(url_for('logout'))
 
 @app.route('/add_tag', methods=['POST'])
 @login_required
@@ -2141,11 +2413,15 @@ def reset_Elections():
     global streamrag
     global allelectors
     global current_node
+    global layeritems
+    global DQstats
+    global progress
 
     fixed_path = config.workdirectories['workdir']+"/"+"allelectors.csv"  # Set your path
 
+
     if not os.path.exists(fixed_path):
-        return jsonify({'message': 'Elections reset unsuccessful.'}), 404
+        return jsonify({'message': 'Elections reset unnessary - no live data '}), 404
 
     try:
         arch_path = fixed_path.replace(".csv", "-ARCHIVE.csv")
@@ -2156,11 +2432,18 @@ def reset_Elections():
         allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
         allelectors.drop(allelectors.index, inplace=True)
         streamrag = getstreamrag()
-        persist(current_node)
+        DQstats = pd.DataFrame()
+        progress["percent"] = 0
+        progress["status"] =  "idle"
+        progress["message"] = "no data yet selected for processing"
+        progress['dqstats_html'] = render_template('partials/dqstats_rows.html', DQstats=DQstats)
+        text = "NO DATA - please select an electoral roll data stream to load"
+        layeritems = getlayeritems(pd.DataFrame(),text )
+
 #        return render_template("Dash0.html",  message='Elections reset successfully.',formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
-        return jsonify({'message': 'Elections reset successfully.'})
+        return jsonify({'message': 'Election data archived and reset successfully.'})
     except Exception as e:
-        return jsonify({'message': f'Elections reset unsuccessful: {e}'}), 500
+        return jsonify({'message': f'Election data reset unsuccessful: {e}'}), 500
 
 
 @app.route("/get-constants", methods=["GET"])
@@ -2239,6 +2522,8 @@ def login():
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
     current_node = restore_from_persist()
+    if not current_node:
+        current_node = MapRoot
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
     # Check if it exists
@@ -2444,7 +2729,7 @@ def downbut(path):
     current_node = previous_node.ping_node(path)
     print("____Route/downbut:",previous_node.value,current_node.value, path)
     atype = gettypeoflevel(path,current_node.level+1)
-    FILEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html", 'polling_district.html' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country.html' : "-MAP.html" }
+    FILEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
     current_node.file = subending(current_node.file,FILEENDING[atype])
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
@@ -2456,7 +2741,7 @@ def downbut(path):
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         print(f"_____creating mapfile for {atype} map file path :{mapfile}" )
         wardlayer = Featurelayers[atype].reset()
-        wardlayer.create_layer(current_node)
+        wardlayer.create_layer(current_node,atype)
         current_node.create_area_map(current_node.getselectedlayers(path))
 
     #formdata['username'] = session["username"]
@@ -2494,16 +2779,21 @@ def transfer(path):
     previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = previous_node.ping_node(path)
+    atype = gettypeoflevel(path, current_node.level)
+
     mapfile = current_node.dir +"/"+ current_node.file
     print("____Route/transfer:",previous_node.value,current_node.value,current_node.type, path)
-    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
-    layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+        formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
+        layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
+        session['current_node_id'] = current_node.fid
         return redirect(url_for(TypeMaker[atype],path=mapfile))
-
-    persist(current_node)
+    else:
+        formdata['tabledetails'] = "Click for "+current_node.parent.value +  "\'s "+current_node.type+" details"
+        layeritems = getlayeritems(current_node.parent.children,formdata['tabledetails'] )
+        session['current_node_id'] = current_node.fid
 #    return redirect(url_for('map',path=mapfile))
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
@@ -2538,8 +2828,9 @@ def downPDbut(path):
         print(f"__downPD- l4area-{Level4node.value}, lenAll {len(allelectors)}, len area {len(areaelectors)}")
 
         shapelayer = Featurelayers['polling_district'].reset()
+
         print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-        shapelayer.create_layer(current_node)
+        shapelayer.create_layer(current_node, 'polling_district')
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2561,7 +2852,7 @@ def downPDbut(path):
     formdata['tabledetails'] = "Click for "+current_node.value + "\'s polling_district details"
     layeritems = getlayeritems(current_node.childrenoftype('polling_district'),formdata['tabledetails'] )
 
-    persist(current_node)
+    session['current_node_id'] = current_node.fid
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2600,7 +2891,7 @@ def downWKbut(path):
         areaelectors = allelectors[mask]
 
         print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
-        shapelayer.create_layer(current_node)
+        shapelayer.create_layer(current_node,'walk')
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
@@ -2623,7 +2914,7 @@ def downWKbut(path):
 
     print("_______writing to file:", mapfile)
 
-    persist(current_node)
+    session['current_node_id'] = current_node.fid
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -2652,7 +2943,7 @@ def STupdate(path):
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
     current_node = current_node.ping_node(path)
-    print(f"passed target path to: {path}")
+    print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
@@ -2844,14 +3135,10 @@ def STupdate(path):
     #           only create a map if the branch does not already exist
 #    current_node = current_node.parent
     formdata['tabledetails'] = "Click for "+getchildtype(current_node.type)+ "\'s details"
-
-
     url = url_for('map',path=mapfile)
     layeritems = getlayeritems(current_node.parent.childrenoftype(current_node.type),formdata['tabledetails'])
     print('_______Street Data uploaded:-',url)
-
     persist(current_node)
-
     return  jsonify({"message": "Success", "file": url})
 
 
@@ -2886,8 +3173,9 @@ def PDdownST(path):
     print(f"__PDdownST- lenAll {len(allelectors)}, len area {len(areaelectors)} lenPD {len(PDelectors)}")
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
+        atype = gettypeoflevel(path, current_node.level)
         focuslayer = Featurelayers['street'].reset()
-        focuslayer.create_layer(PD_node)
+        focuslayer.create_layer(PD_node,'street')
         streetnodelist = PD_node.childrenoftype('street')
 
         if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
@@ -2907,7 +3195,7 @@ def PDdownST(path):
 
               Postcode = electorwalks.Postcode.values[0]
 
-              streetfile_name = street_node.parent.value+":"+street_node.value
+              streetfile_name = street_node.parent.value+"--"+street_node.value
               type_colour = "indigo"
         #      BMapImg = walk_name+"-MAP.png"
 
@@ -3036,8 +3324,9 @@ def LGdownST(path):
     PDelectors = areaelectors[mask]
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
+        atype = gettypeoflevel(path, current_node.level)
         focuslayer = Featurelayers['street'].reset()
-        focuslayer.create_layer(PD_node)
+        focuslayer.create_layer(PD_node,'street')
 
         if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
             flash("Can't find any elector data for this Polling District.")
@@ -3058,7 +3347,7 @@ def LGdownST(path):
 
               Postcode = electorwalks.Postcode.values[0]
 
-              streetfile_name = street_node.parent.value+":"+street_node.value
+              streetfile_name = street_node.parent.value+"--"+street_node.value
               type_colour = "indigo"
         #      BMapImg = walk_name+"-MAP.png"
 
@@ -3195,7 +3484,7 @@ def WKdownST(path):
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
 
         focuslayer = Featurelayers['walkleg'].reset()
-        focuslayer.create_Layer(walk_node)
+        focuslayer.create_layer(walk_node,'walkleg')
         walklegnodelist = walk_node.childrenoftype('walkleg')
         print ("________Walklegs",walk_node.value,len(walklegnodelist))
 # for each walkleg node(partial street), add a walkleg node marker to the walk_node parent layer (ie PD_node.level+1)
@@ -3237,7 +3526,7 @@ def WKdownST(path):
 
           print("_______new walkleg Display node",walkleg_node.value,"|", len(Featurelayers['walkleg']._children))
 
-          walk_name = walk_node.value+":"+walkleg_node.value
+          walk_name = walk_node.value+"--"+walkleg_node.value
           type_colour = "indigo"
 
           walklegelectors['Team'] = ""
@@ -3375,8 +3664,7 @@ def displayareas():
     global layeritems
     global formdata
     global ElectionSettings
-    global current_node
-    current_node = restore_from_persist()
+
 
     if not layeritems or len(layeritems) < 3:
         return jsonify([[], [], "No data"])
@@ -3417,7 +3705,7 @@ def displayareas():
     title_json = json.dumps(title)
 
     # Return as structured list
-    session['current_node_id'] = current_node.fid
+
     return jsonify([
         json.loads(cols_json),       # Column headers
         json.loads(data_json),       # Rows
@@ -3498,9 +3786,8 @@ def upbut(path):
     if current_node.level < 3:
         restore_fullpolys(current_node.type)
 
-    mapfile = current_node.dir+"/"+current_node.file
 # the selected node boundary options need to be added to the layer
-    atype = gettypeoflevel(mapfile,current_node.level+1)
+    atype = gettypeoflevel(path,current_node.level+1)
     #formdata['username'] = session["username"]
     formdata['country'] = 'UNITED_KINGDOM'
     formdata['candfirst'] = "Firstname"
@@ -3510,9 +3797,10 @@ def upbut(path):
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(atype),formdata['tabledetails'] )
 
+    mapfile = current_node.dir+"/"+current_node.file
     if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         focuslayer = Featurelayers[atype].reset()
-        focuslayer.create_layer(current_node)
+        focuslayer.create_layer(current_node,atype)
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
@@ -3567,12 +3855,14 @@ def map(path):
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(path,current_node.level+1)),formdata['tabledetails'])
     session['current_node_id'] = current_node.fid
-
-    if os.path.isfile(path):
+    mapfile = current_node.dir+"/"+ current_node.file
+    if os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
         flash(f"Using existing file: {path}", "info")
+        print(f"Using existing file: {path}")
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
     else:
         flash(f"Creating new mapfile:{path}", "info")
+        print(f"Creating new mapfile:{path}")
         current_node.create_area_map(current_node.getselectedlayers(path))
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -3585,7 +3875,7 @@ def showmore(path):
     current_node = restore_from_persist()
 
     steps = path.split("/")
-    last = steps.pop().split(":")
+    last = steps.pop().split("--")
     current_node = selected_childnode(current_node,last[1])
 
 
@@ -3678,394 +3968,40 @@ def filelist():
         return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
 
 
-@app.route('/normalise', methods=['POST'])
+
+from flask import jsonify, render_template
+import os
+import pandas as pd
+
+@app.route('/progress')
 @login_required
-def normalise():
-    global MapRoot
-    global TREK_NODES
-    global allelectors
-    global Treepolys
-    global Fullpolys
-    global allelectors
-    global current_node
-    global ElectionSettings
-    global formdata
-    global layeritems
+def get_progress():
+    global DQstats, progress
+
+    if progress['status'] != 'complete':
+        return jsonify({
+            'stream' : progress['stream'],
+            'percent': progress['percent'],
+            'status': progress['status'],
+            'message': progress['message'],
+            'dqstats_html': progress['dqstats_html']
+        })
+
+    # Normalisation complete
+    dq_file_path = os.path.join(config.workdirectories['workdir'], subending(progress['targetfile'], "DQ.csv"))
+    DQstats = pd.read_csv(dq_file_path, sep='\t', engine='python', encoding='utf-8', keep_default_na=False, na_values=[''])
+    formdata['tabledetails'] = "Electoral Roll Top 20 records "
+    layeritems = getlayeritems(allelectors.head(),formdata['tabledetails'])
+
+    # Update progress object with HTML
+    progress['dqstats_html'] = render_template('partials/dqstats_rows.html', DQstats=DQstats)
+    progress['percent'] = 100
+    progress['status'] = 'complete'
+    progress['message'] = 'Normalization complete'
+    progress['stream'] = progress['stream']
+
+    return jsonify(progress)  # Send whole object as JSON
 
-
-    RunningVals = {
-    'Mean_Lat' : 51.240299,
-    'Mean_Long' : -0.562301,
-    'Last_Lat'  : 51.240299,
-    'Last_Long' : -0.562301
-    }
-
-    Lookups = {
-        'LatLong': {},
-        'Elevation': {}
-    }
-
-    import logging
-
-    # Setup logger
-    logging.basicConfig(
-        level=logging.DEBUG,  # or INFO
-        format='%(asctime)s [%(levelname)s] %(message)s'
-    )
-    logger = logging.getLogger(__name__)
-
-
-    def fast_spatial_chunking(X, max_cluster_size=400, cell_size=0.008, label_prefix="G1_"):
-        """
-        Fast spatial partitioning by rounding Lat/Long into grid cells and grouping points.
-
-        Parameters:
-            X (pd.DataFrame): Must contain 'Lat' and 'Long' columns
-            max_cluster_size (int): Maximum items per final cluster
-            cell_size (float): Grid resolution in degrees (smaller = finer)
-            label_prefix (str): Prefix for cluster labels
-
-        Returns:
-            np.ndarray: Cluster labels as strings
-        """
-        assert 'Lat' in X.columns and 'Long' in X.columns
-
-        df = X.copy()
-        df['lat_bin'] = (df['Lat'] / cell_size).astype(int)
-        df['lon_bin'] = (df['Long'] / cell_size).astype(int)
-
-        cluster_labels = [''] * len(df)
-        cluster_counter = 0
-
-        for (lat_bin, lon_bin), group in df.groupby(['lat_bin', 'lon_bin']):
-            group_size = len(group)
-            num_subclusters = int(np.ceil(group_size / max_cluster_size))
-
-            # Split the group into subclusters if needed
-            for i, chunk_idx in enumerate(np.array_split(group.index, num_subclusters)):
-                label = f"{label_prefix}{cluster_counter}"
-                for idx in chunk_idx:
-                    cluster_labels[idx] = label
-                cluster_counter += 1
-
-        return np.array(cluster_labels)
-
-
-    def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=2, depth=0, prefix='K'):
-        """
-        Recursively cluster a DataFrame with 'Lat' and 'Long' columns using standard KMeans,
-        splitting any clusters larger than max_cluster_size.
-        """
-        if depth >= MAX_DEPTH:
-            logger.info(f"Max depth {MAX_DEPTH} reached at cluster {prefix}, size {len(X)}")
-            return {i: f"{prefix}" for i in X.index}
-
-        if len(X) <= max_cluster_size:
-            logger.debug(f"Cluster {prefix} is within size limit. Size: {len(X)}")
-            return {i: f"{prefix}" for i in X.index}
-
-        # Estimate number of clusters needed to stay under max_cluster_size
-        k = int(np.ceil(len(X) / max_cluster_size))
-        coords = X[['Lat', 'Long']].values
-
-        logger.info(f"[Depth {depth}] Splitting {len(X)} points into {k} clusters (prefix: {prefix})")
-
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
-        labels = kmeans.fit_predict(coords)
-
-        label_map = {}
-        for i in range(k):
-            idx = X.index[labels == i]
-            sub_data = X.loc[idx]
-            new_prefix = f"{prefix}-{i+1}"
-
-            logger.debug(f"Cluster {new_prefix} | Size: {len(sub_data)}")
-
-            # Recurse on this subcluster if it's still too big
-            sub_labels = recursive_kmeans_latlon(
-                sub_data,
-                max_cluster_size=max_cluster_size,
-                MAX_DEPTH=MAX_DEPTH,
-                depth=depth + 1,
-                prefix=new_prefix
-            )
-            label_map.update(sub_labels)
-
-        return label_map
-
-
-
-    from sklearn.cluster import MiniBatchKMeans
-
-
-    def greedy_balanced_kmeans_latlon(X, max_cluster_size, random_state=42, label_prefix=""):
-        """
-        Greedy approximation of balanced KMeans on 'Lat' and 'Long', ensuring no cluster exceeds size limit.
-
-        Parameters:
-            X (pd.DataFrame): DataFrame with 'Lat' and 'Long' columns
-            max_cluster_size (int): Maximum elements per cluster
-            random_state (int): Random seed
-            label_prefix (str): Prefix to apply to cluster labels (e.g. "G1_")
-
-        Returns:
-            np.ndarray: Cluster labels as strings with optional prefix
-        """
-        assert 'Lat' in X.columns and 'Long' in X.columns, "DataFrame must contain 'Lat' and 'Long' columns"
-
-        coords = X[['Lat', 'Long']].values
-        n_points = len(X)
-        initial_k = int(np.ceil(n_points / max_cluster_size))
-
-        # Step 1: Run initial clustering
-        kmeans = MiniBatchKMeans(n_clusters=initial_k, random_state=random_state, batch_size=1024)
-        initial_labels = kmeans.fit_predict(coords)
-        centers = kmeans.cluster_centers_
-
-        df = X.copy()
-        df['index'] = df.index
-        df['cluster'] = initial_labels
-        df['dist'] = np.linalg.norm(coords - centers[initial_labels], axis=1)
-
-        # Step 2: Greedy assignment
-        df = df.sort_values(by='dist')  # Assign closer points first
-        assignments = {}
-        cluster_bins = defaultdict(list)
-        cluster_counter = 0
-        cluster_id_map = {}
-
-        for _, row in df.iterrows():
-            orig_cluster = row['cluster']
-            assigned = False
-
-            # Check if original cluster can take more
-            if len(cluster_bins[orig_cluster]) < max_cluster_size:
-                assigned = True
-                bin_id = orig_cluster
-            else:
-                # Try any other existing bin with space
-                for cid, members in cluster_bins.items():
-                    if len(members) < max_cluster_size:
-                        bin_id = cid
-                        assigned = True
-                        break
-
-            if not assigned:
-                # Make a new cluster ID
-                bin_id = f"extra_{cluster_counter}"
-                cluster_counter += 1
-
-            # Label string: prefix + unique ID
-            if bin_id not in cluster_id_map:
-                cluster_id_map[bin_id] = f"{label_prefix}{len(cluster_id_map)}"
-
-            label = cluster_id_map[bin_id]
-            assignments[row['index']] = label
-            cluster_bins[bin_id].append(row['index'])
-
-        # Return as array in correct order
-        return np.array([assignments[i] for i in X.index])
-
-
-
-    # Collect unique streams for dropdowns
-    table_data = []
-    if os.path.exists(TABLE_FILE):
-        with open(TABLE_FILE) as f:
-            table_data = json.load(f)
-    else:
-        table_data = []
-
-    dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
-    Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
-    Lookups['LatLong'] = Lookups['LatLong'].rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
-    Lookups['Elevation'] = pd.read_csv(config.workdirectories['bounddir']+"/open_postcode_elevation.csv")
-    Lookups['Elevation'].columns = ["Postcode","Elevation"]
-
-    # 1. Get uploaded files
-    files = request.files.getlist('files')
-    print(f"📂 Files received: {len(files)}")
-    for i, f in enumerate(files):
-        print(f"  File[{i}]: {f.filename}")
-
-    # 2. Extract metadata and stored paths
-    meta_data = {}
-
-    for key, value in request.form.items():
-        if key.startswith('meta_'):
-            parts = key.split('_')
-            if len(parts) < 3:
-                continue  # malformed key
-            index = parts[1]
-            field = '_'.join(parts[2:])
-            meta_data.setdefault(index, {})[field] = value
-            print("___META:", field, "**", value)
-
-        elif key.startswith('stored_path_'):
-            index = key.replace('stored_path_', '')
-            meta_data.setdefault(index, {})['stored_path'] = value
-            print(f"📁 Stored path for index {index}: {value}")
-
-    # 3. Combine files/paths with order metadata
-    indexed_files = []
-    for i, (index, meta) in enumerate(sorted(meta_data.items(), key=lambda x: int(x[0]))):
-        file = files[i] if i < len(files) else None
-        path = meta.get('stored_path')
-        try:
-            order = int(meta.get('order', 0))
-        except (ValueError, TypeError):
-            order = 0
-
-        if file:
-            indexed_files.append((order, file))
-        elif path:
-            indexed_files.append((order, path))
-        else:
-            print(f"⚠️ No file or stored path for index {i}")
-
-    # 4. Sort files by order
-    sorted_files = [file for _, file in sorted(indexed_files, key=lambda x: x[0])]
-    print("____Indexed files:", indexed_files)
-    print("____Sorted files:", sorted_files)
-
-    # 5. Save uploaded files and record paths
-    stored_paths = []
-    for i, file in enumerate(sorted_files):
-        if hasattr(file, 'filename') and file.filename:
-            save_path = os.path.join(upload_dir, file.filename)
-            file.save(save_path)
-            stored_paths.append(save_path)
-            meta_data[str(i)]['saved_path'] = save_path
-
-    # 6. Process metadata (normalisation or routing)
-    file_index = 0
-    mainframe = pd.DataFrame()
-    deltaframes = []
-    aviframe = pd.DataFrame()
-    DQstats = pd.DataFrame()
-
-    print("___Route/normalise")
-    for index, data in meta_data.items():
-        print(f"\nRow index {index}")
-        stream = str(data.get('stream', '')).upper()
-        order = data.get('order')
-        filetype = data.get('type')
-        purpose = data.get('purpose')
-        fixlevel = int(data.get('fixlevel', 0))
-        file_path = data.get('stored_path', '')
-
-        print(f"Stream: {stream}")
-        print(f"Order: {order}")
-        print(f"Type: {filetype}")
-        print(f"Purpose: {purpose}")
-        print(f"Fixlevel: {fixlevel}")
-        print(f"Stored Path: {file_path}")
-
-        formdata = {}
-        ImportFilename = str(file_path)
-        print("_____ reading file outside normz",ImportFilename)
-        if os.path.exists(TABLE_FILE):
-            with open(TABLE_FILE) as f:
-                table_data = json.load(f)
-        else:
-            table_data = []
-    # Collect unique streams for dropdowns
-        streams = sorted(set(row['stream'] for row in table_data))
-        streamrag = {}
-        dfx = pd.DataFrame()
-
-        try:
-            if file_path and os.path.exists(file_path):
-                if file_path.upper().endswith('.CSV'):
-                    dfx = pd.read_csv(file_path,sep='\t',engine='python',encoding='ISO-8859-1')
-                    print("readingCSVfile outside normz")
-                elif file_path.upper().endswith('.XLSX'):
-                    dfx = pd.read_excel(file_path)
-                    print("readingEXCELfile outside normz")
-                else:
-                    print("error-Unsupported file format")
-                    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
-            else:
-                flash("error - File path does not exist or is not provided")
-                print("error - File path does not exist or is not provided")
-                return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
-        except Exception as e:
-            flash("error-file access exception:"+str(e))
-            print("error-file access exception:",str(e))
-            return render_template('stream_processing_input.html', streams=streams, table_data=table_data, streamrag=streamrag, DQstats = DQstats)
-
-    # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
-        Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
-        Outcols = Outcomes.columns.to_list()
-        if purpose == "main":
-        # this is the main index
-            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-            mainframe = results[0]
-            mainframe = pd.DataFrame(mainframe,columns=Outcols)
-        elif purpose == 'delta':
-        # this is one of many changes that needs to be applied to the main index
-            dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # filter out all records with no Postcode
-            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-            deltaframes.append(results[0])
-        elif purpose == 'avi':
-        # this is an addition of columns to the main index
-            results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-            aviframe =  results[0]
-            aviframe = aviframe[['ENOP','AV']]
-        DQstats = pd.concat([DQstats,results[1]])
-        formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
-        layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
-        print("__concat of DQstats", DQstats,results[1])
-# full stream now received - need to apply changes to main
-    if len(mainframe) > 0:
-        print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe), mainframe.columns)
-        len1 = len(mainframe)
-        if len(deltaframes) > 0:
-            Outcols = mainframe.columns.to_list()
-            for deltaframe in deltaframes:
-                deltaframe = pd.DataFrame(deltaframe,columns=Outcols)
-                print("_____Deltaframe Details:", deltaframe)
-                for index, change in deltaframe.iterrows():
-                    print("_____Delta Change Details:", change)
-                    mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
-                print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
-        if len(aviframe) > 0:
-            print(f"____compare merge length before: {len1} after {len(mainframe)}")
-            mainframe = mainframe.merge(aviframe, on='ENOP',how='left', indicator=True )
-            mainframe = mainframe.rename(columns= {'AV_y': 'AV'})
-
-            aviframe.to_csv("avitest.csv",sep='\t', encoding='utf-8', index=False)
-
-            print("__Processed aviframe:", len(aviframe), aviframe.columns)
-    mainframe = pd.DataFrame(mainframe,columns=Outcols)
-    mainframe = mainframe.reset_index(drop=True)
-    print(f"__concat of mainframe of length {len(mainframe)}- columns:",mainframe.columns )
-    mainframe = mainframe.reset_index(drop=True)
-    print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
-# now generate walkname labels according to a max zone size (electors) defined for the stream(election)
-    os.environ["JOBLIB_START_METHOD"] = "fork"
-    os.environ["OMP_NUM_THREADS"] = "1"
-    label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=350, MAX_DEPTH=4)
-    newlabels = pd.Series(label_dict)
-    mainframe["WalkName"] = mainframe.index.map(newlabels)
-    allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
-    allelectors = allelectors.reset_index(drop=True)
-
-#    allelectors.loc[allelectors.index, 'WalkName'] = areaelectors['WalkName']
-# assemble data for the RAG status of Streams in allelectors
-
-    streamrag = getstreamrag()
-    print("__Streamrag2:", streamrag, allelectors.columns)
-    targetfile = str(ImportFilename).upper().replace(".CSV","-NORMZ.csv").replace(".XLSX","-NORMZ.csv")
-    mainframe.to_csv(targetfile,sep='\t', encoding='utf-8', index=False)
-    allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
-    ElectionSettings['importfile'] = targetfile
-    #    formdata['username'] = session['username']
-    mapfile = current_node.dir+"/"+current_node.file
-
-    print('_______ROUTE/normalise/exit:',ImportFilename, allelectors.columns)
-    session['current_node_id'] = current_node.fid
-    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 
 
 @app.route('/walks', methods=['POST','GET'])
@@ -4239,7 +4175,7 @@ def firstpage():
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         newlayer = Featurelayers[atype].reset()
-        newlayer.create_layer(current_node)
+        newlayer.create_layer(current_node,atype)
         streamrag = getstreamrag()
 
         current_node.create_area_map(current_node.getselectedlayers(session['next']))
@@ -4346,6 +4282,110 @@ def get_import_table():
     DQstats = pd.DataFrame()
     return redirect(url_for('stream_processing_with_table', DQstats=DQstats))
 
+@app.route('/normalise', methods=['POST'])
+@login_required
+def normalise():
+    # Save request/form/session to avoid issues inside thread
+    request_form = request.form.to_dict(flat=True)
+    request_files = request.files.to_dict(flat=False)  # Getlist-style access
+    current_node = restore_from_persist()
+    session_data = dict(session)
+
+    RunningVals = {
+    'Mean_Lat' : 51.240299,
+    'Mean_Long' : -0.562301,
+    'Last_Lat'  : 51.240299,
+    'Last_Long' : -0.562301
+    }
+
+    Lookups = {
+        'LatLong': {},
+        'Elevation': {}
+    }
+
+    dfw = pd.read_csv(config.workdirectories['bounddir']+"/National_Statistics_Postcode_Lookup_UK_20250612.csv")
+    Lookups['LatLong'] = dfw[['Postcode 1','Latitude','Longitude']]
+    Lookups['LatLong'] = Lookups['LatLong'].rename(columns= {'Postcode 1': 'Postcode', 'Latitude': 'Lat','Longitude': 'Long'})
+    Lookups['Elevation'] = pd.read_csv(config.workdirectories['bounddir']+"/open_postcode_elevation.csv")
+    Lookups['Elevation'].columns = ["Postcode","Elevation"]
+
+    DQstats = pd.DataFrame()
+    streamrag = getstreamrag()
+    # Collect unique streams for dropdowns
+    table_data = []
+    if os.path.exists(TABLE_FILE):
+        with open(TABLE_FILE) as f:
+            table_data = json.load(f)
+    else:
+        table_data = []
+    streams = sorted(set(row['stream'] for row in table_data))
+
+# 1. Get uploaded files
+    files = request.files.getlist('files')
+    print(f"📂 Files received: {len(files)}")
+    for i, f in enumerate(files):
+        print(f"  File[{i}]: {f.filename}")
+
+    # 2. Extract metadata and stored paths
+    meta_data = {}
+
+    for key, value in request_form.items():
+        if key.startswith('meta_'):
+            parts = key.split('_')
+            if len(parts) < 3:
+                continue  # malformed key
+            index = parts[1]
+            field = '_'.join(parts[2:])
+            meta_data.setdefault(index, {})[field] = value
+            print("___META:", field, "**", value)
+
+        elif key.startswith('stored_path_'):
+            index = key.replace('stored_path_', '')
+            meta_data.setdefault(index, {})['stored_path'] = value
+            print(f"📁 Stored path for index {index}: {value}")
+
+    # 3. Combine files/paths with order metadata
+    indexed_files = []
+    for i, (index, meta) in enumerate(sorted(meta_data.items(), key=lambda x: int(x[0]))):
+        file = files[i] if i < len(files) else None
+        path = meta.get('stored_path')
+        try:
+            order = int(meta.get('order', 0))
+        except (ValueError, TypeError):
+            order = 0
+
+        if file:
+            indexed_files.append((order, file))
+        elif path:
+            indexed_files.append((order, path))
+        else:
+            print(f"⚠️ No file or stored path for index {i}")
+
+    # 4. Sort files by order
+    sorted_files = [file for _, file in sorted(indexed_files, key=lambda x: x[0])]
+    print("____Indexed files:", indexed_files)
+    print("____Sorted files:", sorted_files)
+
+    # 5. Save uploaded files and record paths
+    stored_paths = []
+    for i, file in enumerate(sorted_files):
+        if hasattr(file, 'filename') and file.filename:
+            save_path = os.path.join(upload_dir, file.filename)
+            file.save(save_path)
+            stored_paths.append(save_path)
+            meta_data[str(i)]['saved_path'] = save_path
+
+
+    # Start background thread
+    threading.Thread(
+        target=background_normalise,
+        args=(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data)
+    ).start()
+
+    # Immediately show progress page
+    return render_template("stream_processing_input.html", streams=streams, table_data=table_data, streamrag=streamrag, DQstats=DQstats)
+
+
 # Route to handle stream processing form submission
 @app.route('/process_stream', methods=['POST'])
 @login_required
@@ -4371,7 +4411,9 @@ def process_stream():
 @login_required
 def stream_input():
     global allelectors
+    global table_data
     DQstats = pd.DataFrame()
+
     # Load table data
     table_data = []
     if os.path.exists(TABLE_FILE):
