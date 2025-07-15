@@ -373,6 +373,7 @@ async function fetchAndUpdateChart() {
     const VIDopt = parent.document.getElementById("yourparty");
     VI.value = x;
     const codes = Object.keys(VIDopt);
+    alert("VI Options:"+codes);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
       VI.style.color = 'blue';
@@ -429,9 +430,9 @@ async function fetchAndUpdateChart() {
         input.classList.remove("tag-new", "tag-existing");
 
         if (data.exists) {
-          input.classList.add("tag-existing"); // Indigo for existing tag
+          input.classList.add("tag-existing"); // Blue for existing tag
         } else {
-          input.classList.add("tag-new"); // Blue for new tag
+          input.classList.add("tag-new"); // Red for new tag
         }
 
         // Optional: keep the value or clear input
