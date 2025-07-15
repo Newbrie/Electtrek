@@ -375,11 +375,11 @@ async function fetchAndUpdateChart() {
     const codes = Object.keys(VIDopt);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-      VI.style.color = 'indigo';
+      VI.style.color = 'blue';
   //    VI.innerHTML = x;
         }
     else {
-      VI.style.color = 'lightgray';
+      VI.style.color = 'grey';
   //    VI.innerHTML = x;
     }
     };
@@ -391,18 +391,18 @@ async function fetchAndUpdateChart() {
       const codes = Object.keys(VIDopt);
       if (codes.includes(x)) {
     //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
-        VR.style.color = 'indigo';
+        VR.style.color = 'blue';
     //    VR.innerHTML = x;
           }
       else {
-        VR.style.color = 'lightgray';
+        VR.style.color = 'grey';
     //    VR.innerHTML = x;
       }
       };
 
   function inputNS(NS) {
     let x = NS.value.toUpperCase();
-    NS.style.color = 'indigo';
+    NS.style.color = 'blue';
     NS.value = x;
 
     };
