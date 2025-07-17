@@ -136,9 +136,9 @@ def gettypeoflevel(path,level):
         else:
             type = 'ward' # default
     elif type == 'polling_district/walk':
-        if path.find("/PDS/") >= 0:
+        if path.find("/PDS/") >= 0 or path.find("-PDS.html") >=0:
             type = 'polling_district'
-        elif path.find("/WALKS/") >= 0:
+        elif path.find("/WALKS/") >= 0 or path.find("-WALKS.html") >=0:
             type = 'walk'
         elif level+1 >= len(deststeps) and moretype != "":
             print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
@@ -427,19 +427,19 @@ class TreeNode:
 
     def getselectedlayers(self,path):
         global Featurelayers
-        #add children, eg wards,constituencies, counties
+#add children layer(level+1), eg wards,constituencies, counties
         print(f"_____layerstest0 type:{self.value},{self.type} path: {path}")
 
         selected = []
-        ctype = gettypeoflevel(path,self.level+1)
-        if ctype == 'elector':
+        childtype = gettypeoflevel(path,self.level+1)
+        if childtype == 'elector':
             selected = []
         else:
-            selectc = Featurelayers[ctype]
+            selectc = Featurelayers[childtype]
             selected = [selectc]
-            print(f"_____layerstest1 {self.value} type:{ctype} layers: {list(reversed(selected))}")
+            print(f"_____layerstest1 {self.value} type:{childtype} layers: {list(reversed(selected))}")
         if self.level > 0 :
-            #add siblings
+#add siblings layer = self.level eg constituencies
             selects = Featurelayers[self.type]
     #        if len(selects._children) == 0:
             # parent children = siblings, eg constituencies, counties, nations
@@ -448,7 +448,7 @@ class TreeNode:
             selected.append(selects)
             print(f"_____layerstest2 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
         if self.level > 1:
-            #add parents, eg counties, nations, country
+#add parents layer, eg counties, nations, country
             selectp = Featurelayers[self.parent.type]
 #            if len(selectp._children) == 0:
             selectp.reset()
@@ -1028,10 +1028,10 @@ class TreeNode:
             child_node.file = child_node.value+"-DIVS.html"
         elif etype == 'polling_district':
             child_node.dir = child_node.parent.dir+"/PDS/"+child_node.value
-            child_node.file = child_node.value+"-PDS.html"
+            child_node.file = child_node.value+"-MAP.html"
         elif etype == 'walk':
             child_node.dir = child_node.parent.dir+"/WALKS/"+child_node.value
-            child_node.file = child_node.value+"-WALKS.html"
+            child_node.file = child_node.value+"-MAP.html"
         elif etype == 'street':
             child_node.dir = child_node.parent.dir
             child_node.file = child_node.parent.value+"--"+child_node.value+"-PRINT.html"
@@ -1108,9 +1108,9 @@ class TreeNode:
         #                  electorwalks['ENOP'] =  electorwalks['PD']+"-"+electorwalks['ENO']+ electorwalks['Suffix']*0.1
         target = self.locmappath("")
         results_filename = streetfile_name+"-PRINT.html"
-        datafile = self.dir+"/"+streetfile_name+"-SDATA.csv"
+        datafile = "/STupdate/" + self.dir+"/"+streetfile_name+"-SDATA.csv"
         # mapfile is used for the up link to the PD streets list
-        mapfile = self.parent.dir+"/"+ self.parent.file
+        mapfile = "/upbut/" + self.parent.dir+"/"+ self.parent.file
         electorwalks = electorwalks.fillna("")
 
         #              These are the street nodes which are the street data collection pages
@@ -1119,8 +1119,8 @@ class TreeNode:
         context = {
         "group": electorwalks,
         "prodstats": prodstats,
-        "mapfile": url_for('upbut',path=mapfile),
-        "datafile": url_for('STupdate',path=datafile),
+        "mapfile": mapfile,
+        "datafile": datafile,
         "walkname": streetfile_name,
         }
         results_template = environment.get_template('canvasscard1.html')
@@ -1429,6 +1429,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self._children
 
     def create_layer(self, node, intention_type):
+    # create the content for an existing layer derived from the node children and required type
         if intention_type == 'street' or intention_type == 'walkleg':
             self.add_nodemarks(node,intention_type)
         elif intention_type == 'polling_district' or intention_type == 'walk':
@@ -2817,6 +2818,7 @@ def downbut(path):
     atype = gettypeoflevel(path,current_node.level+1)
     FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
     current_node.file = subending(current_node.file,FACEENDING[atype]) # face is driven by intention type
+    print(f" target type: {atype} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[atype]}")
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level+1)+" details"
@@ -2923,7 +2925,7 @@ def downPDbut(path):
             print("Can't find any elector data for this Area.",current_node.type,Featurelayers['polling_district']._children )
         else:
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children))
-            current_node.create_area_map(current_node.getselectedlayers(path))
+            current_node.create_area_map(current_node.getselectedlayers(mapfile))
             flash("________PDs added:  "+str(len(shapelayer._children)))
             print("________After map created PDs added  :  ",current_node.level, len(shapelayer._children))
 
@@ -2985,7 +2987,7 @@ def downWKbut(path):
             print("Can't find any elector data for this Area.",current_node.type,Featurelayers['walk']._children )
         else:
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-            current_node.create_area_map(current_node.getselectedlayers(path))
+            current_node.create_area_map(current_node.getselectedlayers(mapfile))
             flash("________Walks added:  "+str(len(shapelayer._children)))
             print("________After map created Walks added  :  ",current_node.level, len(shapelayer._children))
 
@@ -3179,7 +3181,8 @@ def PDdownST(path):
     Level4node = current_node.find_Level4()
     mask = allelectors['Area'] == Level4node.value
     areaelectors = allelectors[mask]
-    PD_node = current_node.ping_node(path)
+    current_node = current_node.ping_node(path)
+    PD_node = current_node
 
 # now pointing at the STREETS.html node containing a map of street markers
     mask = areaelectors['PD'] == PD_node.value
@@ -3241,7 +3244,8 @@ def LGdownST(path):
     Level4node = current_node.find_Level4()
     mask = allelectors['Area'] == Level4node.value
     areaelectors = allelectors[mask]
-    PD_node = current_node.ping_node(path)
+    current_node = current_node.ping_node(path)
+    PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
     mask = areaelectors['PD'] == PD_node.value
     PDelectors = areaelectors[mask]
@@ -3303,7 +3307,8 @@ def WKdownST(path):
     mask = allelectors['Area'] == Level4node.value
     areaelectors = allelectors[mask]
 
-    walk_node = current_node.ping_node(path)
+    current_node = current_node.ping_node(path)
+    walk_node = current_node
     mask = areaelectors['WalkName'] == walk_node.value
     walkelectors = areaelectors[mask]
 
@@ -3493,8 +3498,6 @@ def upbut(path):
     global layeritems
     global current_node
 
-
-
     current_node = restore_from_persist()
 
     flash('_______ROUTE/upbut',path)
@@ -3523,12 +3526,13 @@ def upbut(path):
 
     FACEENDING = {'street' : "-MAP.html",'walkleg' : "-MAP.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
     face_file = subending(current_node.file,FACEENDING[previous_node.type])
-    print(f" previous: {previous_node.value} type: {previous_node.type} FILEND:{FACEENDING[previous_node.type]}")
+    print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
     mapfile = current_node.dir+"/"+face_file
     if not os.path.exists(config.workdirectories['workdir']+"/"+face_file):
-        focuslayer = Featurelayers[atype].reset()
-        focuslayer.create_layer(current_node,atype)
+        focuslayer = Featurelayers[previous_node.type].reset()
+        focuslayer.create_layer(current_node,previous_node.type) #from upnode children type of prev node
+        current_node.file = face_file
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
