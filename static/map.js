@@ -115,7 +115,7 @@ var showMore = function (msg,area, type) {
 
   function displayMap (url) {
   		window.location.href = url;
-  	});
+  	};
 
   function updateChart(newLabels, newData, newRags) {
   const ragColors = {
