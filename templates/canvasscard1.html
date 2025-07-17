@@ -47,12 +47,8 @@
     <b>Please collect the data below and upload data for area overview.</b>
     </span>
 
-		<button type="button" id="save-btn" onclick="layerUpdate('{{ datafile }}');" style="font-size: 12pt;color: blue;">SAVE</button>
-      <button id="Show_the_Walk_Map" style="font-size: 12pt;color: red;">
-        <label class="guil-action_button" for="Show_the_Walk_Map"  >
-          <a href= {{ mapfile }} >WALKMAP</a>
-        </label>
-      </button>
+		<button id="save-btn" onclick="layerUpdate('{{ datafile }}');" style="font-size: 12pt;color: blue;">SAVE</button>
+    <button id="Walk_Map-btn" onclick="displayMap('{{ mapfile }}');" style="font-size: 12pt;color: blue;">WALKMAP</button>
 
 		</div>
 
@@ -135,7 +131,16 @@
 
 					<td class="VR" > <input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['VR'] | replace('nan', '') }}" onchange="inputVR(this)" maxlength="2" size="3" name= '{{"example-unique-id-A" ~ row['ENOP']}}' id='{{"example-unique-id-E" ~ row['ENOP']}}' /></td>
 					<td class="VI" > <input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['VI'] | replace('nan', '') }}" onchange="inputVI(this)" maxlength="2" size="3" name= '{{"example-unique-id-B" ~ row['ENOP']}}' id='{{"example-unique-id-F" ~ row['ENOP']}}' /></td>
-	        <td class="NS" ><input type="text" style="width: 100%; box-sizing: border-box;" value= "{{ row['Notes'] | replace('nan', '') }}" onchange="inputNS(this)" name='{{"example-unique-id-C" ~ row['ENOP']}}' id='{{"example-unique-id-G" ~ row['ENOP']}}' /></td>
+					{% set notes = row['Notes'] | string | trim %}
+					<td class="NS">
+					  <input type="text"
+					         style="width: 100%; box-sizing: border-box;"
+					         value="{{ '' if notes in ['nan', 'None', '[]'] else notes | e }}"
+					         onchange="inputNS(this)"
+					         name="{{ 'example-unique-id-C' ~ row['ENOP'] }}"
+					         id="{{ 'example-unique-id-G' ~ row['ENOP'] }}" />
+					</td>
+
 					<td style="width: 15%;">
 						{% set tags = row['Tags'] | string | trim %}
 						<input
@@ -164,6 +169,7 @@
 	    </table>
 </div>
 <script>
+
 
 function updateIsTagSet(enop) {
   const selectedTag = parent.document.getElementById("tags").value;
