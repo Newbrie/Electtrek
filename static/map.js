@@ -114,6 +114,7 @@ var showMore = function (msg,area, type) {
   };
 
   function displayMap (url) {
+    alert("walkmap:"+url);
   		window.location.href = url;
   	};
 
