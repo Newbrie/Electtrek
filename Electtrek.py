@@ -226,6 +226,8 @@ onoff = {"on" : 1, 'off': 0}
 
 TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
+KanbanOptions = {"M":"MemberTested","B":"Bundled","L":"Leafletted","C":"Canvassed","R":"Reminded","T":"Telled"}
+
 
 
 ElectionSettings = {}
@@ -2420,6 +2422,52 @@ def load_user(user_id):
 @login_manager.unauthorized_handler     # In unauthorized_handler we have a callback URL
 def unauthorized_callback():            # In call back url we can specify where we want to
     return render_template("index.html") # redirect the user in my case it is login page!
+
+
+# Flask route
+from flask import render_template
+import pandas as pd
+
+@app.route('/')
+@login_required
+def kanban():
+    current_node = restore_from_persist()
+    Level4node = current_node.find_Level4()
+    mask = allelectors['Area'] == Level4node.value
+    areaelectors = allelectors[mask]
+
+    # Example DataFrame
+    df = areaelectors
+
+    # Group WalkNames by their first KanBan status (or use mode logic)
+    grouped = df.groupby('WalkName').first().reset_index()
+
+    return render_template('kanban.html',
+                           grouped_walks=grouped.to_dict(orient='records'),
+                           kanban_options={
+                               "M": "MemberTested",
+                               "B": "Bundled",
+                               "L": "Leafletted",
+                               "C": "Canvassed",
+                               "R": "Reminded",
+                               "T": "Telled"
+                           })
+
+from flask import request, jsonify
+
+@app.route('/update-walk-kanban', methods=['POST'])
+@login_required
+def update_walk_kanban():
+    data = request.get_json()
+    walk_name = data.get('walk_name')
+    new_kanban = data.get('kanban')
+
+    # Now update the DataFrame, database, or session
+    # For now, just logging:
+    print(f"Updating WalkName {walk_name} to KanBan {new_kanban}")
+
+    # TODO: Update your real data source here
+    return jsonify(success=True)
 
 
 @app.route('/location')

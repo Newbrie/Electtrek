@@ -292,6 +292,12 @@
   window.location.href = "/logout";
   });
 
+
+  document.getElementById("b5").addEventListener("click", function() {
+    document.getElementById("iframe1").src = "{{ url_for('kanban') }}";
+  });
+
+
   // Handle the "Back to Main" button click
   document.getElementById("b8").addEventListener("click", function() {
       // Change the iframe src to the stream processing input page
@@ -348,6 +354,8 @@ function handleAddTag() {
 
   addTagOption(key, label);
 }
+
+
 
 </script>
 

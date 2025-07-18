@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <style>
+    .kanban-board { display: flex; gap: 20px; }
+    .kanban-column { flex: 1; padding: 10px; background: #eee; border-radius: 6px; min-height: 300px; }
+    .kanban-header { font-weight: bold; margin-bottom: 10px; }
+    .circle {
+      width: 40px; height: 40px; border-radius: 50%;
+      background-color: #3498db; color: white; display: flex;
+      align-items: center; justify-content: center;
+      margin: 5px; cursor: grab;
+    }
+  </style>
+</head>
+<body>
+
+<div class="kanban-board" id="kanbanBoard"></div>
+
+<script>
+const kanbanOptions = {{ kanban_options|tojson }};
+const groupedWalks = {{ grouped_walks|tojson }};
+const updateUrl = "{{ url_for('update_walk_kanban') }}";  // See next step
+
+// Render columns
+const board = document.getElementById('kanbanBoard');
+Object.entries(kanbanOptions).forEach(([code, label]) => {
+  const column = document.createElement('div');
+  column.className = 'kanban-column';
+  column.id = `column-${code}`;
+  column.innerHTML = `<div class="kanban-header">${label}</div>`;
+  board.appendChild(column);
+
+  Sortable.create(column, {
+    group: 'shared',
+    animation: 150,
+    onEnd: async (evt) => {
+      const movedEl = evt.item;
+      const newKanBan = evt.to.id.replace('column-', '');
+      const walkName = movedEl.innerText;
+
+      // Update circle in-place visually
+      console.log(`Updating WalkName ${walkName} to ${newKanBan}`);
+
+      // Send AJAX to server to update backend
+      const res = await fetch(updateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walk_name: walkName, kanban: newKanBan })
+      });
+
+      if (!res.ok) {
+        alert("Failed to update server.");
+      }
+    }
+  });
+});
+
+// Render walk circles
+groupedWalks.forEach(group => {
+  const el = document.createElement('div');
+  el.className = 'circle';
+  el.innerText = group.WalkName;
+  const col = document.getElementById(`column-${group.KanBan}`);
+  if (col) col.appendChild(el);
+});
+</script>
+</body>
+</html>
