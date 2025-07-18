@@ -226,8 +226,14 @@ onoff = {"on" : 1, 'off': 0}
 
 TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
 
-KanbanOptions = {"M":"MemberTested","B":"Bundled","L":"Leafletted","C":"Canvassed","R":"Reminded","T":"Telled"}
-
+kanban_options = [
+    {"code": "M", "label": "MemberTested"},
+    {"code": "B", "label": "Bundled"},
+    {"code": "L", "label": "Leafletted"},
+    {"code": "C", "label": "Canvassed"},
+    {"code": "R", "label": "Reminded"},
+    {"code": "T", "label": "Telled"},
+]
 
 
 ElectionSettings = {}
@@ -2441,33 +2447,48 @@ def kanban():
 
     # Group WalkNames by their first KanBan status (or use mode logic)
     grouped = df.groupby('WalkName').first().reset_index()
-
+    print("Grouped Walks data:", len(grouped), grouped.head());
     return render_template('kanban.html',
-                           grouped_walks=grouped.to_dict(orient='records'),
-                           kanban_options={
-                               "M": "MemberTested",
-                               "B": "Bundled",
-                               "L": "Leafletted",
-                               "C": "Canvassed",
-                               "R": "Reminded",
-                               "T": "Telled"
-                           })
+                       grouped_walks=grouped.to_dict(orient='records'),
+                       kanban_options=kanban_options)
 
-from flask import request, jsonify
 
 @app.route('/update-walk-kanban', methods=['POST'])
 @login_required
 def update_walk_kanban():
+    global allelectors
+    global current_node
+
     data = request.get_json()
     walk_name = data.get('walk_name')
     new_kanban = data.get('kanban')
 
-    # Now update the DataFrame, database, or session
-    # For now, just logging:
-    print(f"Updating WalkName {walk_name} to KanBan {new_kanban}")
+    # Check if inputs are valid
+    if not walk_name or not new_kanban:
+        return jsonify(success=False, error="Missing data"), 400
 
-    # TODO: Update your real data source here
+    # Restore context
+    current_node = restore_from_persist()
+    Level4node = current_node.find_Level4()
+    area_mask = allelectors['Area'] == Level4node.value
+
+    # Find electors in the area and matching WalkName
+    mask = (allelectors['WalkName'] == walk_name) & area_mask
+
+    if not mask.any():
+        print(f"WalkName '{walk_name}' not found in area '{Level4node.value}'")
+        return jsonify(success=False, error="WalkName not found"), 404
+
+    # Update Kanban status
+    allelectors.loc[mask, 'Kanban'] = new_kanban
+    print(f"Updated WalkName '{walk_name}' to KanBan '{new_kanban}' for {mask.sum()} rows.")
+
+    # Optional: persist update (adapt to your node system)
+    current_node.data = allelectors
+    persist(current_node)
+
     return jsonify(success=True)
+
 
 
 @app.route('/location')
@@ -2827,7 +2848,7 @@ def dashboard():
         # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = previous_node.ping_node(path)
         mapfile = current_node.dir+"/"+current_node.file
-
+        print ("___Dashboard persisted filename: ",mapfile)
         persist(current_node)
 
 #        redirect(url_for('captains'))

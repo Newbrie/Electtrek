@@ -361,6 +361,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         electors2['Address_5'] = ""
         electors2['Address_6'] = ""
 
+
         #  set up the council attribute
         RunningVals2.setdefault('Last_Lat', 51.240299)   # Fallback Lat
         RunningVals2.setdefault('Last_Long', -0.562301)  # Fallback Long
@@ -605,6 +606,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     electors100['Stream'] = stream
     electors100['Purpose'] = purpose
     electors100['Tags'] = [[] for _ in range(len(electors100))]
+    electors100['Kanban'] = "M"
 
     print(f"___DQ Stats3",DQstats, electors100.columns)
 

@@ -19,52 +19,58 @@
 <div class="kanban-board" id="kanbanBoard"></div>
 
 <script>
-const kanbanOptions = {{ kanban_options|tojson }};
-const groupedWalks = {{ grouped_walks|tojson }};
-const updateUrl = "{{ url_for('update_walk_kanban') }}";  // See next step
+  // Data injected from backend (Flask/Jinja)
+  const kanbanOptions = {{ kanban_options | tojson }};
+  const groupedWalks = {{ grouped_walks | tojson }};
+  const updateUrl = "{{ url_for('update_walk_kanban') }}";
 
-// Render columns
-const board = document.getElementById('kanbanBoard');
-Object.entries(kanbanOptions).forEach(([code, label]) => {
-  const column = document.createElement('div');
-  column.className = 'kanban-column';
-  column.id = `column-${code}`;
-  column.innerHTML = `<div class="kanban-header">${label}</div>`;
-  board.appendChild(column);
+  const board = document.getElementById('kanbanBoard');
+  console.log("Grouped Walks data:", groupedWalks);
+  // Render Kanban columns in the order given
+  kanbanOptions.forEach(({ code, label }) => {
+    const column = document.createElement('div');
+    column.className = 'kanban-column';
+    column.id = `column-${code}`;
+    column.innerHTML = `<div class="kanban-header">${label}</div>`;
+    board.appendChild(column);
 
-  Sortable.create(column, {
-    group: 'shared',
-    animation: 150,
-    onEnd: async (evt) => {
-      const movedEl = evt.item;
-      const newKanBan = evt.to.id.replace('column-', '');
-      const walkName = movedEl.innerText;
+    Sortable.create(column, {
+      group: 'shared',
+      animation: 150,
+      onEnd: async (evt) => {
+        const movedEl = evt.item;
+        const newKanban = evt.to.id.replace('column-', '');
+        const walkName = movedEl.innerText;
 
-      // Update circle in-place visually
-      console.log(`Updating WalkName ${walkName} to ${newKanBan}`);
+        console.log(`Updating WalkName ${walkName} to ${newKanban}`);
 
-      // Send AJAX to server to update backend
-      const res = await fetch(updateUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walk_name: walkName, kanban: newKanBan })
-      });
+        const res = await fetch(updateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walk_name: walkName, kanban: newKanban })
+        });
 
-      if (!res.ok) {
-        alert("Failed to update server.");
+        if (!res.ok) {
+          alert("Failed to update server.");
+        }
       }
+    });
+  });
+
+  // Render the walk circles inside their correct columns
+  groupedWalks.forEach(group => {
+    const el = document.createElement('div');
+    el.className = 'circle';
+    el.innerText = group.WalkName;
+
+    const col = document.getElementById(`column-${group.Kanban}`);
+    if (col) {
+      col.appendChild(el);
+    } else {
+      console.warn(`No column found for Kanban "${group.Kanban}" - WalkName: "${group.WalkName}"`);
     }
   });
-});
-
-// Render walk circles
-groupedWalks.forEach(group => {
-  const el = document.createElement('div');
-  el.className = 'circle';
-  el.innerText = group.WalkName;
-  const col = document.getElementById(`column-${group.KanBan}`);
-  if (col) col.appendChild(el);
-});
 </script>
+
 </body>
 </html>
