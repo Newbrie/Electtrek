@@ -377,7 +377,7 @@ async function fetchAndUpdateChart() {
     const VIDopt = parent.document.getElementById("yourparty");
     VI.value = x;
     const codes = Array.from(VIDopt.options).map(opt => opt.value.toUpperCase());
-    alert("VI Options:"+codes);
+//    alert("VI Options:"+codes);
     if (codes.includes(x)) {
   //  let y = "<span> <input type=\"text\" onchange=\"copyinput(this)\" maclength=\"2\" size=\"2\" name=\"example-unique-id-A3078.0\" id=\"example-unique-id-E3078.0\" placeholder=\"{0}\"></span>".format(x);
     console.log(`Valid VI code: ${x}`);
@@ -518,7 +518,7 @@ async function fetchAndUpdateChart() {
             .then(res => res.json())
             .then(resp => {
               if (resp.success) {
-                alert("confirmed:"+key+" --"+ newVal);
+//                alert("confirmed:"+key+" --"+ newVal);
                 updateMessages();  // ✅ Trigger only after backend update
               } else {
                 alert("Failed to update constant: " + resp.error);

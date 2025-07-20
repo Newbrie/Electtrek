@@ -150,10 +150,10 @@
               <button type = "button" id = "b4" class = "small_btn">Voter<br>Intention</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b5" class = "small_btn">Telling</button>
+              <button type = "button" id = "b5" class = "small_btn">Run<br>Campaign</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b6" class = "small_btn">Delivery<br>Network</button>
+              <button type = "button" id = "b6" class = "small_btn">Telling</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b7" class = "small_btn" >Search</button>
@@ -296,6 +296,10 @@
   document.getElementById("b5").addEventListener("click", function() {
     document.getElementById("iframe1").src = "{{ url_for('kanban') }}";
   });
+
+  document.getElementById("b6").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('telling') }}";
+});
 
 
   // Handle the "Back to Main" button click

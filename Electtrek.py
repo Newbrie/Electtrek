@@ -688,10 +688,12 @@ class TreeNode:
 
     def find_Level4(self):
         node = self
-        while True:
-            if node.level == 4:
-                break
-            node = node.parent
+        if node.level >= 4:
+            while True:
+                if node.level == 4:
+                    break
+                node = node.parent
+
         return node
 
     def create_data_branch(self, electtype):
@@ -2434,7 +2436,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 from flask import render_template
 import pandas as pd
 
-@app.route('/')
+@app.route('/kanban')
 @login_required
 def kanban():
     current_node = restore_from_persist()
@@ -2444,10 +2446,25 @@ def kanban():
 
     # Example DataFrame
     df = areaelectors
+    gotv = float(ElectionSettings['GOTV'])
+    turnout = 0.3  # assuming this is between 0–1
 
-    # Group WalkNames by their first KanBan status (or use mode logic)
-    grouped = df.groupby('WalkName').first().reset_index()
-    print("Grouped Walks data:", len(grouped), grouped.head());
+    df['VI_Party'] = df['VI'].apply(lambda vi: 1 if vi == ElectionSettings['yourparty'] else 0)
+    df['VI_Voted'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "M1" in tags.split() else 0)
+    g = {'ENOP': 'count', 'Kanban': 'first', 'VI_Party': 'sum', 'VI_Voted': 'sum'}
+    grouped = df.groupby('WalkName').agg(g).reset_index()
+
+    # Compute dynamic GOTV target per group
+    grouped['VI_Target'] = (((grouped['ENOP'] * turnout) / 2 + 1) / gotv).round().astype(int)
+    grouped['VI_Pledged'] = (grouped['VI_Party'] - grouped['VI_Voted']).clip(lower=0)
+    grouped['VI_ToGet_Pos'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(lower=0)
+    grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
+    print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg' ]].head());
+    mapfile = Level4node.dir+"/"+Level4node.file
+    formdata['tabledetails'] = "Click for "+Level4node.value +  "\'s "+gettypeoflevel(mapfile,Level4node.level+1)+" details"
+    layeritems = getlayeritems(Level4node.childrenoftype('walk'),formdata['tabledetails'] )
+
+
     return render_template('kanban.html',
                        grouped_walks=grouped.to_dict(orient='records'),
                        kanban_options=kanban_options)
@@ -2489,7 +2506,30 @@ def update_walk_kanban():
 
     return jsonify(success=True)
 
+@app.route('/telling')
+@login_required
+def telling():
+    # Render the telling.html page inside the iframe
+    return render_template('telling.html')
 
+@app.route('/check_enop/<enop>', methods=['GET'])
+@login_required
+def check_enop(enop):
+    global current_node
+    current_node = restore_from_persist()
+    # Check if ENOP exists in the DataFrame
+    if enop in allelectors['ENOP'].values:
+        # Get the current Tags for the ENOP
+        current_tags = allelectors.loc[allelectors['ENOP'] == enop, 'Tags'].iloc[0]
+
+        # If "M1" is not in the current Tags, add it
+        if "M1" not in current_tags.split():
+            current_tags = f"{current_tags} M1".strip()
+            allelectors.loc[allelectors['ENOP'] == enop, 'Tags'] = current_tags
+            persist(current_node)
+        return jsonify({'exists': True, 'message': f'ENOP found, M1 tag added. Current Tags: {current_tags}'})
+    else:
+        return jsonify({'exists': False, 'message': 'ENOP not found in electors.'})
 
 @app.route('/location')
 @login_required

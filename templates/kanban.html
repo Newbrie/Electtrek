@@ -1,76 +1,295 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <title>Kanban Board</title>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <style>
-    .kanban-board { display: flex; gap: 20px; }
-    .kanban-column { flex: 1; padding: 10px; background: #eee; border-radius: 6px; min-height: 300px; }
-    .kanban-header { font-weight: bold; margin-bottom: 10px; }
-    .circle {
-      width: 40px; height: 40px; border-radius: 50%;
-      background-color: #3498db; color: white; display: flex;
-      align-items: center; justify-content: center;
-      margin: 5px; cursor: grab;
-    }
+
+  .dot.plus {
+    background: #333;
+    color: white;
+  }
+  body {
+    font-family: sans-serif;
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 0;
+  }
+
+  .kanban-board {
+    display: flex;
+    gap: 0;
+    border-top: 2px solid #ccc;
+    border-left: 2px solid #ccc;
+  }
+
+  .kanban-column {
+    flex: 1;
+    border-right: 2px solid #ccc;
+    border-bottom: 2px solid #ccc;
+    background-color: #00bed6;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kanban-header {
+    background-color: #e0e0e0;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1em;
+    border-bottom: 2px solid #ccc;
+  }
+
+  .circle-container {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .circle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    cursor: grab;
+    box-sizing: border-box;
+  }
+
+
+  /* Default dot color */
+.dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: white; /* Default dot color */
+  border-radius: 50%;
+  pointer-events: none;
+  color: black;
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Specific dot color for 'plus' type */
+.dot.plus {
+  background: #3498db;  /* Blue */
+  color: white;
+}
+
+/* Specific dot color for 'cross' type */
+.dot.cross {
+  background: yellow;  /* Red */
+  color: white;
+}
+
+/* Specific dot color for 'tick' type */
+.dot.tick {
+  background: green;  /* Green */
+  color: white;
+}
+
+/* Specific dot color for 'empty' type */
+.dot.empty {
+  background: red;  /* Transparent for empty dots */
+  border: 2px solid #ccc;   /* Light grey border */
+  color: white;
+}
+
+
+  .circle div {
+    font-size: 0.9em;
+    line-height: 1.2;
+    padding: 4px;
+  }
+
+  .circle:hover {
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+    transform: scale(1.05);
+  }
+
+  /* Kanban status colors */
+  .kanban-M { background-color: #1abc9c; }
+  .kanban-B { background-color: #e67e22; }
+  .kanban-L { background-color: #9b59b6; }
+  .kanban-C { background-color: #e74c3c; }
+  .kanban-R { background-color: #f1c40f; color: #333; }
+  .kanban-T { background-color: #34495e; }
   </style>
 </head>
 <body>
 
-<div class="kanban-board" id="kanbanBoard"></div>
+  <div class="kanban-board" id="kanbanBoard"></div>
 
-<script>
-  // Data injected from backend (Flask/Jinja)
-  const kanbanOptions = {{ kanban_options | tojson }};
-  const groupedWalks = {{ grouped_walks | tojson }};
-  const updateUrl = "{{ url_for('update_walk_kanban') }}";
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const kanbanOptions = {{ kanban_options|tojson }};
+    const groupedWalks = {{ grouped_walks|tojson }};
+    const updateUrl = "{{ url_for('update_walk_kanban') }}";
+    const board = document.getElementById('kanbanBoard');
 
-  const board = document.getElementById('kanbanBoard');
-  console.log("Grouped Walks data:", groupedWalks);
-  // Render Kanban columns in the order given
-  kanbanOptions.forEach(({ code, label }) => {
-    const column = document.createElement('div');
-    column.className = 'kanban-column';
-    column.id = `column-${code}`;
-    column.innerHTML = `<div class="kanban-header">${label}</div>`;
-    board.appendChild(column);
+    // Build Kanban columns
+    kanbanOptions.forEach(({code, label}) => {
+      const column = document.createElement('div');
+      column.className = 'kanban-column';
+      column.innerHTML = `
+        <div class="kanban-header">${label}</div>
+        <div class="circle-container" id="container-${code}"></div>
+      `;
+      board.appendChild(column);
 
-    Sortable.create(column, {
-      group: 'shared',
-      animation: 150,
-      onEnd: async (evt) => {
-        const movedEl = evt.item;
-        const newKanban = evt.to.id.replace('column-', '');
-        const walkName = movedEl.innerText;
+      const container = column.querySelector(`#container-${code}`);
+      Sortable.create(container, {
+        group: 'shared',
+        animation: 150,
+        onEnd: async (evt) => {
+          const movedEl = evt.item;
+          const newKanban = evt.to.id.replace('container-', '');
+          const walkName = movedEl.dataset.walkName;
 
-        console.log(`Updating WalkName ${walkName} to ${newKanban}`);
+          const res = await fetch(updateUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ walk_name: walkName, kanban: newKanban })
+          });
 
-        const res = await fetch(updateUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ walk_name: walkName, kanban: newKanban })
-        });
-
-        if (!res.ok) {
-          alert("Failed to update server.");
+          if (!res.ok) {
+            alert("Failed to update server.");
+          } else {
+            // Update the circle's class to new Kanban color
+            movedEl.className = 'circle';
+            movedEl.classList.add(`kanban-${newKanban}`);
+          }
         }
+      });
+    });
+
+    // Create and place circles
+    groupedWalks.forEach(group => {
+      const walkName = group.WalkName;
+      const kanbanKey = group.Kanban || 'U';
+      const container = document.getElementById(`container-${kanbanKey}`);
+      if (!container) {
+        console.warn(`No container for Kanban "${kanbanKey}" - WalkName: ${walkName}`);
+        return;
       }
+
+      const el = document.createElement('div');
+      el.className = 'circle';
+      el.dataset.walkName = walkName;
+      el.classList.add(`kanban-${kanbanKey}`);
+
+      // ENOP-based size
+      const enop = parseFloat(group.ENOP) || 1;
+      const baseSize = 60;
+      const size = Math.max(baseSize, Math.log(enop + 1) * 15);
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.style.borderRadius = '50%';
+
+      // Text in center
+      const centerText = document.createElement('div');
+      centerText.textContent = walkName;
+      centerText.title = `ENOP: ${enop}, VI_Party: ${group.VI_Party}`;
+      el.appendChild(centerText);
+
+      // Add dots around perimeter
+
+      const pledged = parseInt(group.VI_Pledged) || 0;
+      const voted = parseInt(group.VI_Voted) || 0;
+      const toGetPos = parseInt(group.VI_ToGet_Pos) || 0;
+      const toGetNeg = parseInt(group.VI_ToGet_Neg) || 0;
+
+      let dotTypes = [
+        ...Array(pledged).fill('cross'),
+        ...Array(voted).fill('tick'),
+        ...Array(toGetPos).fill('empty'),
+        ...Array(toGetNeg).fill('plus')
+      ];
+
+      // Adjust maximum number of dots per ring
+      const totalDots = dotTypes.length;
+      const rings = [];
+      let remainingDots = totalDots;
+
+      // Start with the first ring
+      let ringIndex = 0;
+      let radius = (size - 12) / 2;
+
+      while (remainingDots > 0) {
+        // The number of dots for the current ring is determined by the circumference and remaining dots
+        let dotsInThisRing = Math.min(remainingDots, Math.floor(2 * Math.PI * radius / 12));
+
+        // Slice the dots for the current ring
+        rings.push(dotTypes.slice(totalDots - remainingDots, totalDots - remainingDots + dotsInThisRing));
+
+        // Update the remaining dots
+        remainingDots -= dotsInThisRing;
+
+        // Increase radius for the next ring
+        radius += 10;  // Increase radius to form the next ring
+        ringIndex++;
+      }
+
+      // Create dots for each ring
+      // Create dots for each ring
+  rings.forEach((ring, ringIndex) => {
+    radius = (size - 12) / 2 + ringIndex * 20;  // Increase radius for each subsequent ring
+
+    ring.forEach((type, i) => {
+      const totalDots = ring.length;
+      const angle = (2 * Math.PI * i) / totalDots - Math.PI / 2;  // Start at top
+
+      const x = size / 2 + radius * Math.cos(angle) - 6;  // Adjust for dot size
+      const y = size / 2 + radius * Math.sin(angle) - 6;
+
+      const dot = document.createElement('div');
+      dot.className = `dot ${type}`;
+      dot.style.left = `${Math.round(x)}px`;
+      dot.style.top = `${Math.round(y)}px`;
+
+      // Fixed dot size
+      const dotSize = 12;  // Keep all dots the same size
+      dot.style.width = `${dotSize}px`;
+      dot.style.height = `${dotSize}px`;
+
+      // Set the size of the symbol inside the dot (tick, cross, etc.)
+      const symbolSize = 8;  // Fixed size for the symbol
+      const symbol = document.createElement('div');
+      symbol.style.width = `${symbolSize}px`;
+      symbol.style.height = `${symbolSize}px`;
+      symbol.style.display = 'flex';
+      symbol.style.justifyContent = 'center';
+      symbol.style.alignItems = 'center';
+      symbol.style.transform = 'translate(-50%, -50%)'; // Center it inside the dot
+
+      // Assign the symbol (cross, tick, plus, empty)
+      if (type === 'tick') symbol.textContent = '✓';
+      else if (type === 'cross') symbol.textContent = '✗';
+      else if (type === 'plus') symbol.textContent = '+';
+      else symbol.textContent = '';
+
+      dot.appendChild(symbol);
+      el.appendChild(dot);
     });
   });
 
-  // Render the walk circles inside their correct columns
-  groupedWalks.forEach(group => {
-    const el = document.createElement('div');
-    el.className = 'circle';
-    el.innerText = group.WalkName;
 
-    const col = document.getElementById(`column-${group.Kanban}`);
-    if (col) {
-      col.appendChild(el);
-    } else {
-      console.warn(`No column found for Kanban "${group.Kanban}" - WalkName: "${group.WalkName}"`);
-    }
+      container.appendChild(el);  // Add the circle to the container
+    });
   });
-</script>
-
+  </script>
 </body>
 </html>

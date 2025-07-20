@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telling</title>
+    <style>
+        #enop-results {
+            max-height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        #enop-results li {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div id="telling-container">
+        <h2>Enter ENOP to check:</h2>
+        <input type="text" id="enop-input" placeholder="Enter ENOP" style="width: 200px; padding: 5px;">
+        <button type="button" id="b6" class="small_btn" style="padding: 5px 10px;">Telling</button>
+
+        <ul id="enop-results"></ul> <!-- Display results here -->
+    </div>
+
+    <script>
+        // Event Listener for the "Telling" button
+        document.getElementById("b6").addEventListener("click", function() {
+            const enopValue = document.getElementById("enop-input").value.trim();
+
+            if (!enopValue) {
+                alert("Please enter an ENOP value.");
+                return;
+            }
+
+            // Call the backend to check if ENOP exists
+            fetch(`/check_enop/${enopValue}`, {
+                method: 'GET',
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultContainer = document.getElementById('enop-results');
+
+                // Create a new list item for the result
+                const li = document.createElement("li");
+                if (data.exists) {
+                    li.textContent = `${enopValue}: ✅ Found in electors. ${data.message}`;
+                    li.style.color = 'green';
+                } else {
+                    li.textContent = `${enopValue}: ❌ Not found in electors`;
+                    li.style.color = 'red';
+                }
+
+                // Append the result to the list without clearing it
+                resultContainer.appendChild(li);
+
+                // Scroll to the bottom of the list to show the latest result
+                resultContainer.scrollTop = resultContainer.scrollHeight;
+
+                // Clear the input field after entering the value into the list
+                document.getElementById("enop-input").value = '';
+            })
+            .catch(error => {
+                console.error("Error checking ENOP:", error);
+            });
+        });
+    </script>
+</body>
+</html>
