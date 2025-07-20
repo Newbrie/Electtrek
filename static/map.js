@@ -55,7 +55,7 @@ var showMore = function (msg,area, type) {
         let tagsInput = row.cells[10].querySelector('input');
         let tagsValue = tagsInput ? tagsInput.value.trim() : "";
 
-        alert( 'Row data:'+electorID+tagsValue);
+//        alert( 'Row data:'+electorID+tagsValue);
 
         console.log(`EID: ${electorID} vr: ${vrValue} vi: ${viValue} notes: ${notesValue} tags: ${tagsValue}`);
 
@@ -95,7 +95,7 @@ var showMore = function (msg,area, type) {
 
           // Check if `file` is present and a valid URL
           if (data && data.file) {
-              alert("Loading: " + data.file);
+//              alert("Loading: " + data.file);
               window.location.assign(data.file);  // Redirect using the file URL
           } else {
               console.error("Error: 'file' is missing or invalid");
