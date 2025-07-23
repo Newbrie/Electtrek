@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Kanban Board with Doughnut Chart</title>
+  <title>Kanban Board with Pie Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -24,7 +23,7 @@
       flex: 1;
       border-right: 2px solid #ccc;
       border-bottom: 2px solid #ccc;
-      background-color: #ffffff;
+      background-color: #00bed6;
       display: flex;
       flex-direction: column;
     }
@@ -46,7 +45,6 @@
       align-content: flex-start;
       padding: 10px;
       gap: 10px;
-      overflow: visible;
     }
 
     .circle {
@@ -59,11 +57,9 @@
       font-weight: bold;
       cursor: grab;
       box-sizing: border-box;
-      width: 150px;  /* Default size */
-      height: 150px; /* Default size */
-      padding: 10px;
+      width: 100px;  /* Default size */
+      height: 100px; /* Default size */
       border-radius: 50%;
-      overflow: visible; /* Important */
     }
 
     .circle div {
@@ -72,30 +68,12 @@
       padding: 4px;
     }
 
-    /* Outer and inner doughnut container */
-    .doughnut-container {
-      position: relative;
+    /* Pie chart segments colors */
+    .pie-segment {
       width: 100%;
       height: 100%;
       border-radius: 50%;
-    }
-
-    /* Outer doughnut (the "ring" around the center) */
-    .outer-doughnut {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      z-index: 1;
-    }
-
-    /* Inner doughnut (the smaller ring inside) */
-    .inner-doughnut {
-      position: absolute;
-      width: 80%;   /* Inner doughnut is smaller */
-      height: 80%;
-      border-radius: 50%;
-      z-index: 2;
+      background: conic-gradient;
     }
 
     .circle:hover {
@@ -104,11 +82,12 @@
     }
 
     /* Kanban status colors */
-    .kanban-R { background-color: #1abc9c; }
-    .kanban-P { background-color: #e67e22; }
+    .kanban-M { background-color: #1abc9c; }
+    .kanban-B { background-color: #e67e22; }
     .kanban-L { background-color: #9b59b6; }
     .kanban-C { background-color: #e74c3c; }
-    .kanban-T { background-color: #f1c40f; color: #333; }
+    .kanban-R { background-color: #f1c40f; color: #333; }
+    .kanban-T { background-color: #34495e; }
   </style>
 </head>
 <body>
@@ -116,17 +95,6 @@
 <div class="kanban-board" id="kanbanBoard"></div>
 
 <script>
-  function stringToColor(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const color = '#' + ((hash >> 24) & 0xFF).toString(16).padStart(2, '0') +
-                        ((hash >> 16) & 0xFF).toString(16).padStart(2, '0') +
-                        ((hash >> 8) & 0xFF).toString(16).padStart(2, '0');
-    return color;
-  }
-
   document.addEventListener("DOMContentLoaded", () => {
     const walkTagCounts = {{ walk_tag_counts|tojson }};
     const tagLabels = {{ tag_labels|tojson }};
@@ -163,6 +131,7 @@
           if (!res.ok) {
             alert("Failed to update server.");
           } else {
+            // Update the circle's class to new Kanban color
             movedEl.className = 'circle';
             movedEl.classList.add(`kanban-${newKanban}`);
           }
@@ -170,7 +139,7 @@
       });
     });
 
-    // Create and place circles with doughnut charts
+    // Create and place circles with pie charts
     groupedWalks.forEach(group => {
       const walkName = group.WalkName;
       const kanbanKey = group.Kanban || 'U';
@@ -185,7 +154,7 @@
       wrapper.style.width = '130px';
       wrapper.style.height = '130px';
       wrapper.style.padding = '5px';
-//      wrapper.style.backgroundColor = 'white';
+      wrapper.style.backgroundColor = 'white';
 
       const canvas = document.createElement('canvas');
       canvas.width = 120;
@@ -197,22 +166,19 @@
 
       // === Base Inputs and Outputs ===
       const baseInputs = [
-        parseInt(group.VI_Canvassed) || 0
+        parseInt(group.VI_Canvassed) || 0,
+        parseInt(group.VI_L1Done) || 0
       ];
       const baseOutputs = [
         parseInt(group.VI_Pledged) || 0,
+        parseInt(group.VI_Voted) || 0,
         parseInt(group.VI_ToGet_Pos) || 0
       ];
       const inputColors = ['#3498db', '#2ecc71']; // e.g. blue, green
       const outputColors = ['#000000', '#9b59b6', '#f1c40f'];
 
-
-      // === Combine and Build Datasets ===
-      const tagCounts = walkTagCounts[walkName] || {};;
-      const baseInputLabels = ['Canvassed'];
-      const baseOutputLabels = ['Pledged','ToGet_Pos'];
-      const dynamicInputLabels = [];
-      const dynamicOutputLabels = [];
+      // === Dynamic Tag Rings ===
+      const tagCounts = walkTagCounts[walkName] || {};
       const dynamicInputs = [];
       const dynamicInputColors = [];
       const dynamicOutputs = [];
@@ -225,55 +191,51 @@
         if (tag.startsWith('L')) {
           dynamicInputs.push(count);
           dynamicInputColors.push(color);
-          dynamicInputLabels.push(label);
         }
-
         if (tag.startsWith('M')) {
           dynamicOutputs.push(count);
           dynamicOutputColors.push(color);
-          dynamicOutputLabels.push(label);
         }
       });
 
+      // === Combine and Build Datasets ===
       const datasets = [];
 
       // Inner outputs (base + dynamic)
       datasets.push({
-        label: '',
+        label: 'Outputs',
         data: [...baseOutputs, ...dynamicOutputs],
         backgroundColor: [...outputColors, ...dynamicOutputColors],
-        labels: [...baseOutputLabels, ...dynamicOutputLabels], // 👈 this is KEY
         borderWidth: 1,
-        radius: '60%',
-        cutout: '40%'
+        weight: 0.6,
+        radius: '65%',     // was 60%
+        cutout: '45%'      // was 40%
       });
 
+      // Outer inputs (base + dynamic)
       datasets.push({
-        label: '',
+        label: 'Inputs',
         data: [...baseInputs, ...dynamicInputs],
         backgroundColor: [...inputColors, ...dynamicInputColors],
-        labels: [...baseInputLabels, ...dynamicInputLabels], // 👈 this is KEY
         borderWidth: 1,
-        radius: '100%',
-        cutout: '60%'
+        weight: 0.6,
+        radius: '100%',    // keep as is
+        cutout: '75%'      // was 60%
       });
+
 
       new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
-        data: {
-          datasets
-        },
+        data: { datasets },
         options: {
           responsive: false,
           plugins: {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: function (context) {
-                  const index = context.dataIndex;
-                  const dataset = context.dataset;
-                  const label = dataset.labels?.[index] || 'Unknown';
-                  return `${dataset.label}: ${label} – ${context.parsed}`;
+                label: function(context) {
+                  const label = context.chart.data.labels?.[context.dataIndex] || '';
+                  return `${context.dataset.label}: ${label} – ${context.parsed}`;
                 }
               }
             },
@@ -292,13 +254,12 @@
             ctx.font = 'bold 12px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#333';
             ctx.fillText(options.text, width / 2, height / 2);
             ctx.restore();
           }
         }]
       });
-
     });
 
   });

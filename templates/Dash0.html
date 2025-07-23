@@ -106,10 +106,6 @@
       <label for="yourparty">Your Party:</label>
       <select name="yourparty" id="yourparty"></select><br>
 
-      <label for="tags">Tag of Interest:</label>
-      <select name="tags" id="tags"></select><br>
-
-
       <label for="walksize">Walk Size:</label>
       <input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
 
@@ -119,17 +115,6 @@
       <label for="GOTV">GOTV:</label>
       <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       <br>
-
-      <form id="upload-form" action="/upload" method="POST" enctype="multipart/form-data">
-          <input type="hidden" name="placement" value="{{ session['importfile'] }}">
-          <input type="file" name="importfile" id="file-input" onchange="document.getElementById('upload-form').submit();">
-      </form>
-
-      <div>
-        <label for="new-tag"><b>Add New Tag:</b></label>
-        <input type="text" id="new-tag" placeholder="e.g. T3">
-        <button onclick="handleAddTag()">Add Tag</button>
-      </div>
 
       Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
       Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
@@ -144,22 +129,25 @@
               <button type = "button" id = "b2" class = "small_btn" onclick="setActionForm('filelist',filelist='results')">Election<br>Results</button>
             </div>
             <div class="grid-item">
-              <button type="button" id="b3" class="small_btn" >ELECTORAL ROLLS</button>
+              <button type="button" id="b3" class="small_btn" >ELECTORAL<br>REGISTERS</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b4" class = "small_btn">Voter<br>Intention</button>
+              <button type = "button" id = "b4" class = "small_btn">LEAFLET<br>DELIVERY</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b5" class = "small_btn">Run<br>Campaign</button>
+              <button type = "button" id = "b5" class = "small_btn">CAMPAIGN PLAN</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b6" class = "small_btn">Telling</button>
+              <button type = "button" id = "b9" class = "small_btn">RESOURCING</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b7" class = "small_btn" >Search</button>
+              <button type = "button" id = "b6" class = "small_btn">VOTER<br>TELLING</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b8" class = "small_btn" >DASHBOARD</button>
+              <button type = "button" id = "b7" class = "small_btn" >DONOR<br>SEARCH</button>
+            </div>
+            <div class="grid-item">
+              <button type = "button" id = "b8" class = "small_btn" >AREA<br>SURVEYS</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "logout-button" class = "small_btn" >LOGOUT</button>
@@ -259,37 +247,23 @@
       });
     }
   }
-  function setActionForm(action,subject){
-    let form = document.getElementById("normal-file");
-    if (action === 'normalise') {
-        form.action = "{{url_for('normalise')}}";
-        form.method = 'POST';
-        document.body.style.cursor = 'wait';
-        form.submit();
-    } else if (action === 'produce') {
-        form.action = "{{url_for('walks')}}";
-        form.method = 'POST';
-        document.body.style.cursor = 'wait';
-        form.submit();
-		} else if (action === 'canvass') {
-				form.action = "{{url_for('cards')}}";
-				form.method = 'POST';
-				document.body.style.cursor = 'wait';
-				form.submit();
-		} else if (action === 'postcode') {
-					form.action = "{{url_for('postcode')}}";
-					form.method = 'POST';
-					document.body.style.cursor = 'wait';
-					form.submit();
-    } else if (action === 'logout') {
-					form.action = "{{url_for('logout')}}";
-					form.method = 'POST';
-					form.submit();
-          };
-  };
+
 
   document.getElementById("logout-button").addEventListener("click", function() {
   window.location.href = "/logout";
+  });
+
+  document.getElementById("b4").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('leafletting') }}";
+  });
+
+  document.getElementById("b9").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('resourcing') }}";
+  });
+
+
+  document.getElementById("b7").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('search') }}";
   });
 
 
@@ -314,50 +288,7 @@
         document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
     });
 
-    function addTagOption(key,value) {
-      const tagSelect = document.getElementById("tags");
-      if (!tagSelect) {
-        console.error("Dropdown with id 'tags' not found.");
-        return;
-      }
 
-
-      // Check if key already exists
-      const exists = Array.from(tagSelect.options).some(opt => opt.value === key);
-      if (exists) {
-        alert(`Tag with key '${key}' already exists.`);
-        return;
-      }
-
-      // Create and append new option
-      const option = document.createElement("option");
-      option.value = key;
-      option.textContent = `${key}: ${value}`;
-      tagSelect.appendChild(option);
-    }
-
-
-function handleAddTag() {
-  const input = document.getElementById("new-tag").value.trim();
-
-  // Expect format: "key: value"
-  const parts = input.split(":");
-
-  if (parts.length < 2) {
-    alert("Please use the format 'key: value'");
-    return;
-  }
-
-  const key = parts[0].trim();
-  const label = parts.slice(1).join(":").trim();  // In case value has ":" in it
-
-  if (!key || !label) {
-    alert("Both key and value must be non-empty.");
-    return;
-  }
-
-  addTagOption(key, label);
-}
 
 
 

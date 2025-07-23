@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Elector Search</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    #results { max-height: 300px; overflow-y: auto; margin-top: 10px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 5px; border: 1px solid #ddd; text-align: left; }
+  </style>
+</head>
+<body>
+
+  <h1>Search Electors</h1>
+  <input type="text" id="search-input" placeholder="Type name or street..." style="width: 400px; padding: 8px;">
+
+  <div id="results"></div>
+
+  <script>
+    const input = document.getElementById('search-input');
+    const resultsDiv = document.getElementById('results');
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      if (!q) {
+        resultsDiv.innerHTML = '';
+        return;
+      }
+
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.length === 0) {
+            resultsDiv.innerHTML = '<p>No results found.</p>';
+            return;
+          }
+
+          const cols = Object.keys(data[0]);
+          const headers = cols.map(c => `<th>${c}</th>`).join('');
+          const rows = data.map(r => `<tr>${cols.map(c => `<td>${r[c] || ''}</td>`).join('')}</tr>`).join('');
+          resultsDiv.innerHTML = `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+          console.log(`Search: ${cols} - ${ headers} - ${ rows} - ${resultsDiv}`);
+        })
+        .catch(err => console.error('Search error:', err));
+    });
+  </script>
+
+</body>
+</html>

@@ -42,9 +42,8 @@ import requests
 import pickle
 import threading
 import traceback
-
-
-
+import unidecode
+from flask import Response
 
 
 sys.path
@@ -224,15 +223,12 @@ VNORM = {"O":"O","REFORM" : "R" , "REFORM DERBY" : "R" ,"REFORM UK" : "R" ,"REF"
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
 onoff = {"on" : 1, 'off': 0}
 
-TagOptions = {"M1":"FirstLeaflet","M2":"SecondLeaflet"}
-
 kanban_options = [
-    {"code": "M", "label": "MemberTested"},
-    {"code": "B", "label": "Bundled"},
-    {"code": "L", "label": "Leafletted"},
-    {"code": "C", "label": "Canvassed"},
-    {"code": "R", "label": "Reminded"},
-    {"code": "T", "label": "Telled"},
+    {"code": "R", "label": "Resourcing"},
+    {"code": "P", "label": "Posting"},
+    {"code": "L", "label": "Leafleting"},
+    {"code": "C", "label": "Canvassing"},
+    {"code": "T", "label": "Telling"}
 ]
 
 
@@ -243,7 +239,7 @@ ElectionSettings['yourparty'] = "R"
 ElectionSettings['walksize'] = 200
 ElectionSettings['teamsize'] = 5
 ElectionSettings['elections'] = "W"
-ElectionSettings['tags'] = "M1"
+ElectionSettings['tags'] = {"R0":"Unallocated","M1":"Voted","L1":"FirstLeaflet","L2":"2ndLeaflet"}
 ElectionSettings['importfile'] = ""
 ElectionSettings['autofix'] = 0
 ElectionSettings['candfirst'] = ""
@@ -270,7 +266,7 @@ StreamOptions = dict(zip({entry['stream'] for entry in table_data if 'stream' in
 OPTIONS = {
     "elections": ElectionOptions,
     "yourparty": VID,
-    "tags": TagOptions,
+    "tags": ElectionSettings['tags'],
     "autofix" : onoff,
     "vnorm" : VNORM,
     "vco" : VCO,
@@ -1984,6 +1980,7 @@ def restore_from_persist():
     global TREK_NODES
     global Treepolys
     global Fullpolys
+    global allelectors
 
     def get_current_node(session=None, session_data=None):
         """
@@ -2021,6 +2018,7 @@ def restore_from_persist():
         allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
         allelectors.drop(allelectors.index, inplace=True)
     else:
+        print('_______allelectors file exists so reading in ', file_path)
         allelectors = pd.read_csv(
             file_path,
             sep='\t',                        # tab delimiter
@@ -2431,15 +2429,60 @@ def load_user(user_id):
 def unauthorized_callback():            # In call back url we can specify where we want to
     return render_template("index.html") # redirect the user in my case it is login page!
 
+@app.route('/resourcing')
+@login_required
+def resourcing():
+    global current_node
+    global allelectors
+    global layeritems
+    global ElectionSettings
+    global TREK_NODES
+    current_node = restore_from_persist()
+    # Group walk names by resource tag
+    resource_tags = {k: v for k, v in ElectionSettings['tags'].items() if k.startswith('R')}
+    walks_by_tag = {tag: [] for tag in resource_tags}
+    for _, row in allelectors.iterrows():
+        tag = row['Resource']
+        if tag in walks_by_tag:
+            walks_by_tag[tag].append(row['walkName'])
 
-# Flask route
-from flask import render_template
-import pandas as pd
+    return render_template('resourcing.html', tags=resource_tags, walks=walks_by_tag)
+
+
+@app.route('/updateResourcing', methods=['POST'])
+@login_required
+def update_walk():
+    global current_node
+    global allelectors
+    global layeritems
+    global ElectionSettings
+    global TREK_NODES
+    current_node = restore_from_persist()
+    data = request.json
+    walk_name = data.get('walkName')
+    new_resource = data.get('newResource')
+
+    idx = allelectors[allelectors['walkName'] == walk_name].index
+    if not idx.empty:
+        allelectors.at[idx[0], 'Resource'] = new_resource
+        persist(current_node)
+        return jsonify(success=True)
+    else:
+        return jsonify(success=False, error="Walk not found"), 404
 
 @app.route('/kanban')
 @login_required
 def kanban():
+    global current_node
+    global allelectors
+    global layeritems
+    global ElectionSettings
+    global TREK_NODES
+
     current_node = restore_from_persist()
+    if current_node.level < 4:
+        return jsonify(success=False, error="Missing Elector data"), 400
+
     Level4node = current_node.find_Level4()
     mask = allelectors['Area'] == Level4node.value
     areaelectors = allelectors[mask]
@@ -2450,8 +2493,10 @@ def kanban():
     turnout = 0.3  # assuming this is between 0–1
 
     df['VI_Party'] = df['VI'].apply(lambda vi: 1 if vi == ElectionSettings['yourparty'] else 0)
+    df['VI_Canvassed'] = df['VI'].apply(lambda vi: 1 if isinstance(vi, str) else 0)
+    df['VI_L1Done'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "L1" in tags.split() else 0)
     df['VI_Voted'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "M1" in tags.split() else 0)
-    g = {'ENOP': 'count', 'Kanban': 'first', 'VI_Party': 'sum', 'VI_Voted': 'sum'}
+    g = {'ENOP': 'count', 'Kanban': 'first', 'VI_Party': 'sum', 'VI_Voted': 'sum', 'VI_L1Done': 'sum','VI_Canvassed': 'sum'}
     grouped = df.groupby('WalkName').agg(g).reset_index()
 
     # Compute dynamic GOTV target per group
@@ -2459,15 +2504,34 @@ def kanban():
     grouped['VI_Pledged'] = (grouped['VI_Party'] - grouped['VI_Voted']).clip(lower=0)
     grouped['VI_ToGet_Pos'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(lower=0)
     grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
-    print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg' ]].head());
+    print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg','VI_L1Done','VI_Canvassed' ]].head());
     mapfile = Level4node.dir+"/"+Level4node.file
     formdata['tabledetails'] = "Click for "+Level4node.value +  "\'s "+gettypeoflevel(mapfile,Level4node.level+1)+" details"
-    layeritems = getlayeritems(Level4node.childrenoftype('walk'),formdata['tabledetails'] )
+    items = Level4node.childrenoftype('walk')
+    layeritems = getlayeritems(items,formdata['tabledetails'] )
+    print("___Layeritems: ",[x.value for x in items] )
 
+    # Build per-walk tag counts
+    input_tags = [t for t in ElectionSettings['tags'] if t.startswith('L')]
+    output_tags = [t for t in ElectionSettings['tags'] if t.startswith('M')]
 
+    all_tags = input_tags + output_tags
+
+    # Then use the combined list in the query
+    walk_tag_counts = (
+        areaelectors.assign(Tags_list=lambda df: df['Tags'].str.split())
+        .explode('Tags_list')
+        .query("Tags_list in @all_tags")
+        .groupby(['WalkName', 'Tags_list']).size()
+        .unstack(fill_value=0)
+        .to_dict(orient='index')
+    )
     return render_template('kanban.html',
-                       grouped_walks=grouped.to_dict(orient='records'),
-                       kanban_options=kanban_options)
+        grouped_walks=grouped.to_dict('records'),
+        kanban_options=kanban_options,
+        walk_tag_counts=walk_tag_counts,
+        tag_labels=ElectionSettings['tags']
+    )
 
 
 @app.route('/update-walk-kanban', methods=['POST'])
@@ -2509,8 +2573,40 @@ def update_walk_kanban():
 @app.route('/telling')
 @login_required
 def telling():
-    # Render the telling.html page inside the iframe
-    return render_template('telling.html')
+    valid_tags = ElectionSettings.get('tags', {})
+    leaflet_tags = {}
+    marked_tags = {}
+
+    for tag, description in valid_tags.items():
+        if tag.startswith('L'):
+            leaflet_tags[tag] = description
+        elif tag.startswith('M'):
+            marked_tags[tag] = description
+
+    return render_template(
+        'telling.html',
+        leaflet_tags=leaflet_tags,
+        marked_tags=marked_tags
+    )
+
+@app.route('/leafletting')
+@login_required
+def leafletting():
+    valid_tags = ElectionSettings.get('tags', {})
+    leaflet_tags = {}
+    marked_tags = {}
+
+    for tag, description in valid_tags.items():
+        if tag.startswith('L'):
+            leaflet_tags[tag] = description
+        elif tag.startswith('M'):
+            marked_tags[tag] = description
+
+    return render_template(
+        'leafletting.html',
+        leaflet_tags=leaflet_tags,
+        marked_tags=marked_tags
+    )
 
 @app.route('/check_enop/<enop>', methods=['GET'])
 @login_required
@@ -2530,6 +2626,128 @@ def check_enop(enop):
         return jsonify({'exists': True, 'message': f'ENOP found, M1 tag added. Current Tags: {current_tags}'})
     else:
         return jsonify({'exists': False, 'message': 'ENOP not found in electors.'})
+
+# Backend route to search for street names (filter on frontend for faster search)
+
+@app.route('/streetsearch', methods=['GET'])
+@login_required
+def street_search():
+    global current_node
+    global allelectors
+
+    # Extract unique street names and their indices from the allelectors DataFrame
+    street_data = allelectors[['StreetName']].drop_duplicates()
+    street_data['index'] = street_data.index
+    street_list = street_data.to_dict(orient='records')  # Convert to a list of dictionaries
+
+    # Get the search query from the request arguments
+    query = request.args.get('query', '').strip()
+
+    # Filter streets based on the search query (case-insensitive search)
+    if query:
+        filtered_streets = [street for street in street_list if query.lower() in street['StreetName'].lower()]
+    else:
+        filtered_streets = street_list
+
+    return jsonify(filtered_streets)  # Return the filtered street list as JSON
+
+
+@app.route('/update_street_tags', methods=['POST'])
+@login_required
+def update_street_tags():
+    global current_node
+    current_node = restore_from_persist()  # Load the current state of the electors data
+    data = request.get_json()
+    street_index = data.get('street_index')
+    delivery_tag = data.get('tag')
+
+    # Ensure street_index is valid
+    if street_index is None or street_index < 0 or street_index >= len(allelectors):
+        return jsonify({'error': 'Invalid street index'}), 400
+
+    # Find all electors with the selected street
+    selected_street = allelectors.iloc[street_index]['StreetName']
+    electors_to_update = allelectors[allelectors['StreetName'] == selected_street]
+
+    # Update tags for all electors in the street
+    for idx, row in electors_to_update.iterrows():
+        current_tags = row['Tags']
+        if delivery_tag not in current_tags.split():
+            current_tags = f"{current_tags} {delivery_tag}".strip()
+            allelectors.at[idx, 'Tags'] = current_tags
+
+    persist(current_node)  # Persist the changes after updating electors' tags
+
+    return jsonify({'message': f'Electors in "{selected_street}" updated with {delivery_tag} tag.'})
+
+
+def textnorm(s):
+    return ''.join(c.lower() for c in s if c.isalnum() or c.isspace())
+
+
+def search_electors(df, query):
+    """Search elector dataframe for matches in Surname, Firstname, or StreetName."""
+    norm_query = textnorm(query)
+
+    def row_matches(row):
+        return (
+            norm_query in textnorm(row['Surname']) or
+            norm_query in textnorm(row['Firstname']) or
+            norm_query in textnorm(row['StreetName'])
+        )
+
+    mask = df.apply(row_matches, axis=1)
+    return df[mask]
+
+@app.route('/api/search', methods=['GET'])
+@login_required
+def search_api():
+    global current_node
+    global allelectors
+
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify([])
+
+    norm_query = textnorm(query)
+    norm_parts = norm_query.split()
+
+    def row_matches(row):
+        haystack = ' '.join([
+            textnorm(str(row.Surname)),
+            textnorm(str(row.Firstname)),
+            textnorm(str(row.StreetName))
+        ])
+        return all(part in haystack for part in norm_parts)
+
+    # Apply search and select relevant columns only
+    matches = allelectors[allelectors.apply(row_matches, axis=1)]
+    trimmed = matches[['Surname', 'Firstname', 'StreetName', 'Postcode', 'Tags', 'ENOP']].copy()
+
+    results = trimmed.to_dict(orient='records')
+    return jsonify(results)
+
+
+
+@app.route('/search', methods=['GET', 'POST'])
+@login_required
+def search():
+    global current_node
+    global allelectors
+    results = []
+    query = request.form.get('query', '')
+
+    if request.method == 'POST' and query:
+        norm_query = textnorm(query)
+        norm_parts = norm_query.split()
+        mask = allelectors.apply(lambda row: all(
+            any(p in textnorm(str(row[field])) for field in ['Surname', 'Firstname', 'StreetName'])
+            for p in norm_parts
+        ), axis=1)
+        results = allelectors[mask].to_dict(orient='records')
+
+    return render_template('search.html', query=query, results=results)
+
 
 @app.route('/location')
 @login_required
@@ -2563,22 +2781,24 @@ def handle_exception(e):
 def add_tag():
     try:
         data = request.get_json()
-        new_tag = data.get("tag", "").strip()
+        tag = data.get("tag", "").strip()
+        label = data.get("label", "").strip()
 
-        if not new_tag:
-            return jsonify({"success": False, "error": "Empty tag"}), 400
+        if not tag or not label:
+            return jsonify({"success": False, "error": "Missing tag or label"}), 400
 
-        tag_exists = new_tag in ElectionSettings['tags']
+        tag_exists = tag in ElectionSettings['tags']
 
         if not tag_exists:
-            ElectionSettings['tags'].append(new_tag)
+            ElectionSettings['tags'][tag] = label
             with open("electionsettings.json", "w") as f:
                 json.dump(ElectionSettings, f, indent=2)
 
         return jsonify({
             "success": True,
             "exists": tag_exists,
-            "tag": new_tag
+            "tag": tag,
+            "label": label
         })
 
     except Exception as e:
@@ -3050,7 +3270,7 @@ def downPDbut(path):
     layeritems = getlayeritems(current_node.childrenoftype('polling_district'),formdata['tabledetails'] )
 
     session['current_node_id'] = current_node.fid
-
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -3113,6 +3333,7 @@ def downWKbut(path):
     print("_______writing to file:", mapfile)
 
     session['current_node_id'] = current_node.fid
+    persist(current_node)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 

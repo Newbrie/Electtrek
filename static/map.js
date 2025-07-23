@@ -147,7 +147,6 @@ async function fetchAndUpdateChart() {
 
   function updateMessages() {
   const old = pessages.pop();
-  const tags = parent.document.getElementById("tags").value;
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
   const tabletitle = parent.document.getElementById("tabletitle");
@@ -417,38 +416,50 @@ async function fetchAndUpdateChart() {
 
     };
 
-  function addTag(event, electorId) {
-    if (event.key === "Enter") {
-      const input = event.target;
-      const newTag = input.value.trim();
-      if (!newTag) return;
+    function addTag(event, electorId) {
+      if (event.key === "Enter") {
+        const input = event.target;
+        const raw = input.value.trim();
+        if (!raw.includes(':')) return;
 
-      fetch("/add_tag", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enop: electorId, tag: newTag })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (!data.success) {
-          console.error("Tag submission failed:", data.error);
+        // Split at the first colon
+        const [tagPart, ...labelParts] = raw.split(':');
+        const tag = tagPart.trim();
+        const label = labelParts.join(':').trim();  // Handles extra colons in label
+
+        if (!tag || !label) {
+          input.classList.add("tag-error");
+          console.error("Invalid format. Use: TAGCODE: Label");
           return;
         }
 
-        // Clear existing color classes
-        input.classList.remove("tag-new", "tag-existing");
+        fetch("/add_tag", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enop: electorId,
+            tag: tag,
+            label: label
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          input.classList.remove("tag-new", "tag-existing", "tag-error");
 
-        if (data.exists) {
-          input.classList.add("tag-existing"); // Blue for existing tag
-        } else {
-          input.classList.add("tag-new"); // Red for new tag
-        }
+          if (!data.success) {
+            console.error("Tag submission failed:", data.error);
+            input.classList.add("tag-error");
+            return;
+          }
 
-        // Optional: keep the value or clear input
-        // input.value = "";
-      });
+          input.classList.add(data.exists ? "tag-existing" : "tag-new");
+        })
+        .catch(error => {
+          console.error("Request failed:", error);
+          input.classList.add("tag-error");
+        });
+      }
     }
-  }
 
 
 
@@ -529,14 +540,3 @@ async function fetchAndUpdateChart() {
         });
       });
   });
-
-  function updateIsTagSetColumn() {
-  const selectedTag = document.getElementById("tags").value;
-  document.querySelectorAll(".tags").forEach(function(cell) {
-    const select = cell.querySelector("select");
-    const enop = select.id.split("-")[1];
-    const values = Array.from(select.selectedOptions).map(opt => opt.value);
-    const isSet = values.includes(selectedTag) ? "1" : "0";
-    document.getElementById(`istagset-${enop}`).textContent = isSet;
-  });
-}

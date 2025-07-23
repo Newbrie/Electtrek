@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kanban Board</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        .kanban-board { display: flex; gap: 10px; }
+        .lane {
+            flex: 1;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+        }
+        .lane h3 {
+            text-align: center;
+        }
+        .card {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #999;
+            cursor: grab;
+        }
+        .columns {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      }
+
+      .column {
+      flex: 1;
+      min-width: 300px;
+      max-width: 500px;
+      }
+
+      .column input {
+      width: 100%;
+      padding: 6px;
+      margin: 5px 0;
+      }
+
+      .column button {
+      padding: 5px 10px;
+      margin-bottom: 10px;
+      }
+
+      .results {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      background: #fff;
+      padding: 5px;
+      margin-bottom: 20px;
+      }
+
+      .results li {
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+      font-size: 0.9em;
+      word-wrap: break-word;
+      }
+    </style>
+</head>
+<body>
+
+  <div id="telling-container">
+    <div class="columns">
+
+      <!-- ENOP Check Column -->
+      <div class="column">
+
+        <div>
+          <label for="new-tag"><b>Add Resource Tag:</b></label>
+          <input type="text" id="new-tag" placeholder="e.g. R1: Joe_Bloggs(use_underscore)">
+          <button onclick="handleAddTag()">Add Tag</button>
+        </div>
+
+      </div>
+
+      <!-- Street Search Column -->
+      <div class="column">
+        <h2>Captains Board (SortableJS)</h2>
+        <div class="kanban-board">
+            {% for tag_code, tag_name in tags.items() %}
+            <div class="lane" id="{{ tag_code }}">
+                <h3>{{ tag_name }}</h3>
+                <div class="card-list" data-tag="{{ tag_code }}">
+                    {% for walk in walks[tag_code] %}
+                    <div class="card" data-walk="{{ walk }}">{{ walk }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script src="/static/kanban.js"></script>
+
+  <script>
+    function checkEnop(tag) {
+      const input = document.getElementById(`enop-input-${tag}`);
+      const resultContainer = document.getElementById(`enop-results-${tag}`);
+      const enopValue = input.value.trim();
+      const combinedLog = document.getElementById('elector-tagging-log');
+
+      if (!enopValue) {
+        alert("Please enter an ENOP value.");
+        return;
+      }
+
+      fetch(`/check_enop/${enopValue}`)
+        .then(response => response.json())
+        .then(data => {
+          const li = document.createElement("li");
+          li.textContent = data.exists
+            ? `${enopValue}: ✅ Found in electors. ${data.message}`
+            : `${enopValue}: ❌ Not found in electors`;
+          li.style.color = data.exists ? 'green' : 'red';
+
+          combinedLog.appendChild(li);
+          combinedLog.scrollTop = combinedLog.scrollHeight;
+
+          input.value = '';
+        })
+        .catch(error => console.error("Error checking ENOP:", error));
+    }
+
+    function filterStreets(tag) {
+      const input = document.getElementById(`street-input-${tag}`);
+      const query = input.value.trim();
+      const resultContainer = document.getElementById(`street-results-${tag}`);
+
+      if (!query) {
+        resultContainer.innerHTML = '';
+        return;
+      }
+
+      fetch(`/streetsearch?query=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(filteredStreets => {
+          resultContainer.innerHTML = '';
+          filteredStreets.forEach(street => {
+            const li = document.createElement('li');
+            li.textContent = street.StreetName;
+            li.onclick = () => selectStreet(street, tag);
+            resultContainer.appendChild(li);
+          });
+        })
+        .catch(error => console.error('Error fetching street names:', error));
+    }
+
+    function selectStreet(street, tag) {
+      const input = document.getElementById(`street-input-${tag}`);
+      const resultContainer = document.getElementById(`street-results-${tag}`);
+      const combinedLog = document.getElementById('street-tagging-log');
+
+      input.value = street.StreetName;
+      resultContainer.innerHTML = '';
+
+      fetch('/update_street_tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ street_index: street.index, tag: tag })
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Show confirmation as an alert
+        alert(data.message);
+
+        // Add to the shared log
+        const li = document.createElement("li");
+        li.textContent = `🏷️ ${street.StreetName} tagged with ${tag}`;
+        li.style.color = 'blue';
+        combinedLog.appendChild(li);
+        combinedLog.scrollTop = combinedLog.scrollHeight;
+      })
+      .catch(error => console.error('Error updating street tags:', error));
+    }
+
+  function handleAddTag() {
+    const input = document.getElementById("new-tag");
+    const value = input.value.trim();
+
+    if (!value || !value.includes(":")) {
+      alert("Please enter a tag in the format CODE: Description (e.g. L1: FirstLeaflet)");
+      return;
+    }
+
+    const [code, ...descParts] = value.split(":");
+    const description = descParts.join(":").trim();
+    const tagCode = code.trim();
+
+    fetch('/add_tag', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ tag: tagCode, label: description })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error("Failed to add tag");
+      return response.json();
+    })
+    .then(data => {
+      alert(data.message || "Tag added successfully.");
+      input.value = '';
+    })
+    .catch(err => {
+      alert("Error adding tag: " + err.message);
+    });
+  };
+  document.querySelectorAll('.card-list').forEach(lane => {
+      new Sortable(lane, {
+          group: 'kanban',
+          animation: 150,
+          onAdd: function (evt) {
+              const walkName = evt.item.dataset.walk;
+              const newResource = evt.to.dataset.tag;
+
+              fetch('/updateResourcing', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                      walkName: walkName,
+                      newResource: newResource
+                  })
+              })
+              .then(res => res.json())
+              .then(data => {
+                  if (!data.success) {
+                      alert("Update failed: " + data.error);
+                  }
+              });
+          }
+      });
+  });
+
+  </script>
+
+</body>
+</html>
