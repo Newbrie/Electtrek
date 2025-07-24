@@ -148,7 +148,7 @@
 						  style="width: 100%; box-sizing: border-box;"
 						  class="taglist"
 						  data-enop="{{ row['ENOP'] }}"
-						  onkeydown="if (event.key === 'Enter') updateIsTagSetColumnForRow(this)"
+						  onkeydown="if (event.key === 'Enter') checkTag(this)"
 						  value="{% if tags and tags not in ['[]', 'nan'] %}{{ tags }}{% else %}{% endif %}"
 						/>
 					</td>
@@ -170,74 +170,49 @@
 </div>
 <script>
 
-
-function updateIsTagSet(enop) {
-  const selectedTag = parent.document.getElementById("tags").value;
-  const tagInput = document.getElementById(`tags-${enop}`);
-  const tags = tagInput.value.trim().split(/\s+/);
-
-  const isSet = tags.includes(selectedTag) ? "1" : "0";
-	console.log(`Tag Test: ${selectedTag} | ${tagInput} | ${tags} | ${isSet}`);
-  document.getElementById(`istagset-${enop}`).textContent = isSet;
-}
-
-// Optionally update all rows at once
-function updateAllIsTagSet() {
-  const selectedTag = parent.document.getElementById("tags").value;
-  document.querySelectorAll(".row-tags").forEach(input => {
-    const enop = input.id.split("-")[1];
-    updateIsTagSet(enop);
-  });
-}
-
-// Recalculate when the selected tag changes
-document.addEventListener("DOMContentLoaded", () => {
-  const tagDropdown = parent.document.getElementById("tags");
-  if (tagDropdown) {
-    tagDropdown.addEventListener("change", updateAllIsTagSet);
-  }
-});
-
-
-function updateIsTagSetColumnForRow(inputEl) {
+	function checkTag(inputEl) {
+  const newTags = inputEl.value.trim();
   const enop = inputEl.dataset.enop;
-  const enteredTags = inputEl.value.trim().split(/\s+/);
-  const selectedTag = parent.document.getElementById("tags").value;
+  const original = inputEl.defaultValue.trim();  // original value from server
 
-  // Get all valid tag keys from the dropdown
-  const validTags = Array.from(parent.document.getElementById("tags").options).map(opt => opt.value);
+  fetch('/validate_tags', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      tags: newTags,
+      original: original
+    })
+  })
+    .then(res => res.json())
+    .then(data => {
+      const tagSetCell = document.getElementById(`istagset-${enop}`);
 
-  // Filter invalid tags (optional visual feedback could be added)
-  const filteredTags = enteredTags.filter(tag => validTags.includes(tag));
-
-  // Optionally overwrite the input with only valid tags
-  inputEl.value = filteredTags.join(" ");
-
-  // Check if selected tag is in the valid tag list
-  const isSet = filteredTags.includes(selectedTag) ? "1" : "0";
-  const targetCell = document.getElementById(`istagset-${enop}`);
-  if (targetCell) {
-    targetCell.textContent = isSet;
-  }
+      if (data.valid) {
+        tagSetCell.textContent = '1';
+        tagSetCell.style.color = 'green';
+        // Update the defaultValue so next time it can revert to this one
+        inputEl.defaultValue = newTags;
+      } else {
+        inputEl.value = data.original;
+        tagSetCell.textContent = '0';
+        tagSetCell.style.color = 'red';
+        alert(`❌ Invalid tag(s): ${data.invalid_tags.join(", ")}. Change rejected.`);
+      }
+    })
+    .catch(err => {
+      console.error("Error validating tags:", err);
+      alert("Tag validation failed due to a system error.");
+    });
 }
 
 
-function updateAllIsTagSetColumns() {
-  const selectedTag = parent.document.getElementById("tags").value;
 
-  document.querySelectorAll(".taglist").forEach(inputEl => {
-    const enop = inputEl.dataset.enop;
-    const tagList = inputEl.value.trim().split(/\s+/);
-    const isSet = tagList.includes(selectedTag) ? "1" : "0";
-    const targetCell = document.getElementById(`istagset-${enop}`);
-    if (targetCell) {
-      targetCell.textContent = isSet;
-    }
-  });
-}
 
-// Hook this to dropdown change
-parent.document.getElementById("tags").addEventListener("change", updateAllIsTagSetColumns);
+
+
+
 
 
 

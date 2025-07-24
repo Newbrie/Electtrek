@@ -306,7 +306,8 @@
     function collectTableData() {
       const rows = document.querySelectorAll('#file-info-tbody tr');
       const data = [];
-
+      const test = row.querySelector('.file-path')?.value || "";
+      alert ("test filepath:"+test);
       rows.forEach(row => {
         data.push({
           order: parseInt(row.querySelector('.order').value),

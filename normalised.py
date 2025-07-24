@@ -85,24 +85,27 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         # Return full enriched DataFrame
         return df
 
-    def DFpostcodetoDF (df):
-        vars = []
-        vars_ = []
-        varvalues = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-        for d in df.columns:
-          vars.append(d)
-          vars_.append(d.replace(" ","_"))
+    def DFpostcodetoDF(df):
+        vars = list(df.columns)
+        vars_ = [d.replace(" ", "_") for d in vars]
+        varvalues = [[] for _ in vars]
+
         DF = pd.DataFrame()
-        i = 0
-        for varb in vars:
-        # for every elector in the block extract the variable values into a DF dataframe
-          for index, elector in df.iterrows():
-            if varb == 'Postcode' and len(str(elector[varb])) == 8:
-              varvalues[i].append(str(elector[varb]).replace(" ",""))
-            else:
-              varvalues[i].append(str(elector[varb]))
-          DF.insert(i, vars_[i], varvalues[i])
-          i=i+1
+
+        for i, varb in enumerate(vars):
+            for index, elector in df.iterrows():
+                value = str(elector[varb])
+                if varb == 'Postcode' and len(value) == 8:
+                    value = value.replace(" ", "")
+                varvalues[i].append(value)
+
+        for i, (colname, values) in enumerate(zip(vars_, varvalues)):
+            insert_pos = min(i, DF.shape[1])
+            if colname in DF.columns:
+                print(f"⚠️ Column '{colname}' already exists. Skipping insert.")
+                continue
+            DF.insert(insert_pos, colname, values)
+
         return DF
 
     def TabletoDF (T, compress):

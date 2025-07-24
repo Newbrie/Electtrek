@@ -135,9 +135,9 @@ def gettypeoflevel(path,level):
         else:
             type = 'ward' # default
     elif type == 'polling_district/walk':
-        if path.find("/PDS/") >= 0 or path.find("-PDS.html") >=0:
+        if path.find("/PDS/") >= 0 or path.endswith("-PDS.html"):
             type = 'polling_district'
-        elif path.find("/WALKS/") >= 0 or path.find("-WALKS.html") >=0:
+        elif path.find("/WALKS/") >= 0 or path.endswith("-WALKS.html"):
             type = 'walk'
         elif level+1 >= len(deststeps) and moretype != "":
             print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
@@ -790,6 +790,7 @@ class TreeNode:
                 streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count'}
                 streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
+                print("____Street df: ",streetdf)
                 nodelist = self.create_name_nodes('street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
             elif electtype == 'walkleg':
                 mask = areaelectors['WalkName'] == self.value
@@ -799,6 +800,7 @@ class TreeNode:
                 walklegdf1 = walklegdf0.rename(columns= {'StreetName': 'Name'})
                 g = {'Lat':'mean','Long':'mean','ENOP':'count'}
                 walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
+                print("____Walkleg df: ",walklegdf)
                 nodelist = self.create_name_nodes('walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
         else:
             print("_____ Electoral file contains no relevant data for this area - Please load correct file")
@@ -1310,7 +1312,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' }
         shapenodelist = herenode.childrenoftype(stype)
 # if there is a selected file , then allelectors will be full of records
-        print (f"______shapenodeparent:{herenode.value} and child type : {stype}")
+        print (f"______shapenodeparent:{herenode.value} child type : {stype}  col {shapecolumn[stype]} num {len(shapenodelist)}")
 
         for shape_node in shapenodelist:
             mask = areaelectors[shapecolumn[stype]] == shape_node.value
@@ -1321,7 +1323,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
             print ("______Streetsdf:",Streetsdf)
             self.add_shapenode(shape_node, stype,Streetsdf)
-            print("_______new shape node ",shape_node,"|", Streetsdf, len(Featurelayers[stype]._children))
+            print("_______new shape node ",shape_node.value,"|", Streetsdf, len(Featurelayers[stype]._children))
         return self._children
 
 
@@ -2050,7 +2052,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     global  MapRoot, TREK_NODES, allelectors, Treepolys, Fullpolys, current_node
     global ElectionSettings, formdata, layeritems
 
-    def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=2, depth=0, prefix='K'):
+    def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
         """
         Recursively cluster a DataFrame with 'Lat' and 'Long' columns using standard KMeans,
         splitting any clusters larger than max_cluster_size.
@@ -2269,7 +2271,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
     # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
 
-        label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=350, MAX_DEPTH=4)
+        label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=ElectionSettings['walksize'], MAX_DEPTH=5)
         newlabels = pd.Series(label_dict)
         mainframe["WalkName"] = mainframe.index.map(newlabels)
         allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
@@ -2917,6 +2919,26 @@ def index():
     return render_template("index.html")
 
 
+@app.route('/validate_tags', methods=['POST'])
+@login_required
+def validate_tags():
+    global ElectionSettings
+    valid_tags = set(ElectionSettings.get('tags', {}).keys())
+
+    data = request.get_json()
+    current_tags = data.get('tags', '')
+    original = data.get('original', '')
+
+    tag_list = current_tags.strip().split()
+
+    invalid_tags = [tag for tag in tag_list if tag not in valid_tags]
+
+    if invalid_tags:
+        return jsonify(valid=False, invalid_tags=invalid_tags, original=original)
+    else:
+        return jsonify(valid=True)
+
+
 #login
 @app.route('/login', methods=['POST', 'GET'])
 def login():
@@ -3088,6 +3110,7 @@ def logout():
 @login_required
 def dashboard():
     global current_node
+    global MapRoot
     global TREK_NODES
     global allelectors
     global streamrag
@@ -3099,7 +3122,8 @@ def dashboard():
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id')}")
         formdata = {}
         current_node = TREK_NODES.get(session.get('current_node_id'))
-
+        if not current_node:
+            current_node = MapRoot
         streamrag = getstreamrag()
 
         path = current_node.dir+"/"+current_node.file
@@ -3246,17 +3270,17 @@ def downPDbut(path):
 
         shapelayer = Featurelayers['polling_district'].reset()
 
-        print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-        shapelayer.create_layer(current_node, 'polling_district')
+        print("_____ Before creation - PD display markers ", Level4node.level, len(Featurelayers['polling_district']._children))
+        shapelayer.create_layer(Level4node, 'polling_district')
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
-            print("Can't find any elector data for this Area.",current_node.type,Featurelayers['polling_district']._children )
+            print("Can't find any elector data for this Area.",Level4node.type,Featurelayers['polling_district']._children )
         else:
-            print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children))
-            current_node.create_area_map(current_node.getselectedlayers(mapfile))
+            print("_______just before create_area_map call:",Level4node.level, len(Featurelayers['polling_district']._children))
+            Level4node.create_area_map(Level4node.getselectedlayers(mapfile))
             flash("________PDs added:  "+str(len(shapelayer._children)))
-            print("________After map created PDs added  :  ",current_node.level, len(shapelayer._children))
+            print("________After map created PDs added  :  ",Level4node.level, len(shapelayer._children))
 
 
 #        moredata = importVI(allelectors.copy())
@@ -3309,16 +3333,16 @@ def downWKbut(path):
         areaelectors = allelectors[mask]
 
         print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
-        shapelayer.create_layer(current_node,'walk')
+        shapelayer.create_layer(Level4node,'walk')
 
         if len(shapelayer._children) == 0:
             flash("Can't find any elector data for this Area.")
-            print("Can't find any elector data for this Area.",current_node.type,Featurelayers['walk']._children )
+            print("Can't find any elector data for this Area.",Level4node.type,Featurelayers['walk']._children )
         else:
-            print("_______just before create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-            current_node.create_area_map(current_node.getselectedlayers(mapfile))
+            print("_______just before create_area_map call:",Level4node.level, len(Featurelayers['walk']._children))
+            Level4node.create_area_map(Level4node.getselectedlayers(mapfile))
             flash("________Walks added:  "+str(len(shapelayer._children)))
-            print("________After map created Walks added  :  ",current_node.level, len(shapelayer._children))
+            print("________After map created Walks added  :  ",Level4node.level, len(shapelayer._children))
 
 #            allelectors = getblock(allelectors,'Area',current_node.value)
 
@@ -4190,7 +4214,7 @@ def firstpage():
 #    lat = 53.2730 - Runcorn
 #    lon = -2.7694 - Runcorn
 
-
+    sourcepath = MapRoot.dir+"/"+MapRoot.file
     if lat and lon:
         # Use lat/lon to filter data, e.g., find matching region in GeoJSON
         print(f"Using GPS: lat={lat}, lon={lon}")
@@ -4212,7 +4236,6 @@ def firstpage():
             'division': {}
         }
     # This section of code constructs the sourcepath to ping from a given lat long
-        sourcepath = ""
 
         step = ""
         [step,Treepolys['country'],Fullpolys['country']] = filterArea(config.workdirectories['bounddir']+"/"+"World_Countries_(Generalized)_9029012925078512962.geojson",'COUNTRY',here, config.workdirectories['bounddir']+"/"+"Country_Boundaries.geojson")
@@ -4252,7 +4275,7 @@ def firstpage():
 #        formdata['tabledetails'] = "Candidates File "+formdata['importfile']+" Details"
 #        layeritems =[list(df1.columns.values),df1, formdata['tabledetails']]
 
-        atype = gettypeoflevel(session['next'],current_node.level+1)
+        atype = gettypeoflevel(sourcepath,current_node.level+1)
     # the map under the selected node map needs to be configured
     # the selected  boundary options need to be added to the layer
 
@@ -4262,7 +4285,7 @@ def firstpage():
         newlayer.create_layer(current_node,atype)
         streamrag = getstreamrag()
 
-        current_node.create_area_map(current_node.getselectedlayers(session['next']))
+        current_node.create_area_map(current_node.getselectedlayers(sourcepath))
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
@@ -4375,6 +4398,7 @@ def normalise():
     current_node = restore_from_persist()
     session_data = dict(session)
 
+
     RunningVals = {
     'Mean_Lat' : 51.240299,
     'Mean_Long' : -0.562301,
@@ -4403,7 +4427,8 @@ def normalise():
     else:
         table_data = []
     streams = sorted(set(row['stream'] for row in table_data))
-
+    print("Form Data:",request_form)
+    print("Form Files:",request_files)
 # 1. Get uploaded files
     files = request.files.getlist('files')
     print(f"📂 Files received: {len(files)}")
@@ -4519,6 +4544,7 @@ if __name__ in '__main__':
     with app.app_context():
         print("__________Starting up", os.getcwd())
         db.create_all()
+#        app.run(host='0.0.0.0', port=5000)
         app.run(debug=True)
 
 
