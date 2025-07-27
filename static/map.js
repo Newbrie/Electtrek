@@ -473,70 +473,64 @@ async function fetchAndUpdateChart() {
 
 
   document.addEventListener("DOMContentLoaded", () => {
-    fetch("/get-constants",
-    { credentials: 'same-origin' }  // 👈 THIS IS CRITICAL
-  )
-      .then(res => res.json())
-      .then(data => {
-        let constants = {};
-        let options = {};
-        constants = data.constants;
-        options = data.options;
+  fetch("/get-constants", { credentials: 'same-origin' })
+    .then(res => res.json())
+    .then(data => {
+      const constants = data.constants;
+      const options = data.options;
+      const electionName = data.election_name;  // NEW: backend sends current election name
 
-        Object.entries(constants).forEach(([key, value]) => {
-          const el = document.getElementById(key);
-          if (!el) return;
+      Object.entries(constants).forEach(([key, value]) => {
+        const el = document.getElementById(key);
+        if (!el) return;
 
-          if (el.tagName === "SELECT") {
-            // Populate dropdown
-            const opts = options[key] || [];
-            el.innerHTML = "";
-            console.log("Constant:"+key, el.value);
+        if (el.tagName === "SELECT") {
+          const opts = options[key] || [];
+          el.innerHTML = "";
 
-
-            Object.entries(opts).forEach(([optValue, optLabel]) => {
-              const o = document.createElement("option");
-              o.value = optValue;                               // Backend uses this
-              o.textContent = `${optValue}: ${optLabel}`;       // User sees this
-              console.log("Added option:", o.textContent);
-              if (optValue === value) o.selected = true;
-              el.appendChild(o);
-            });
-
-          } else {
-            // Input field
-            el.value = value;
-          };
-
-          // Add change listener
-          el.addEventListener("input", () => {
-            let newVal = el.value;
-            if (el.type === "number") {
-              newVal = parseFloat(newVal);
-            };
-            if (el.type === "checkbox") {
-              newVal = int(newVal);
-            };
-
-            fetch("/set-constant", {
-              method: "POST",
-              credentials: 'same-origin' ,  // 👈 THIS IS CRITICAL
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ name: key, value: newVal })
-            })
-            .then(res => res.json())
-            .then(resp => {
-              if (resp.success) {
-//                alert("confirmed:"+key+" --"+ newVal);
-                updateMessages();  // ✅ Trigger only after backend update
-              } else {
-                alert("Failed to update constant: " + resp.error);
-              }
-            });
+          Object.entries(opts).forEach(([optValue, optLabel]) => {
+            const o = document.createElement("option");
+            o.value = optValue;
+            o.textContent = `${optValue}: ${optLabel}`;
+            if (optValue === value) o.selected = true;
+            el.appendChild(o);
           });
 
+        } else {
+          el.value = value;
+        }
+
+        // Change listener to update backend
+        el.addEventListener("input", () => {
+          let newVal = el.value;
+          if (el.type === "number") newVal = parseFloat(newVal);
+          if (el.type === "checkbox") newVal = el.checked;
+
+          fetch("/set-constant", {
+            method: "POST",
+            credentials: 'same-origin',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              election: electionName,  // Include current election
+              name: key,
+              value: newVal
+            })
+          })
+          .then(res => res.json())
+          .then(resp => {
+            if (resp.success) {
+              updateMessages();
+            } else {
+              alert("Failed to update: " + resp.error);
+            }
+          });
         });
       });
-  });
+
+      // Optional: update election name dropdown if you include it
+      const edrop = document.getElementById("election-selector");
+      if (edrop) {
+        edrop.value = electionName;
+      }
+    });
+});

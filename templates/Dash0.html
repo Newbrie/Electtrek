@@ -91,13 +91,16 @@
 {% block nav %}
 <div id="nav" >
   <h1>Welcome to your elecTrek dashboard, {{ session['username'] }}</h1>
-
-        <h1>Form Data </h1>
-        {% for x, y in (formdata or {}).items() %}
-        		<ul> {{ x }} : {{ y }} </ul>
-        {% endfor %}
-
-			<h2>Application Preferences</h2>
+  <ul class="nav nav-tabs" id="election-tabs">
+    {% for election_name in ELECTIONS %}
+      <li class="nav-item">
+        <button class="nav-link election-tab {% if election_name == CurrentElection %}active{% endif %}"
+                data-election="{{ election_name }}">
+          {{ election_name }}
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
       <div id="constants-container">
 
       <label for="elections">Type of Election:</label>
@@ -135,7 +138,7 @@
               <button type = "button" id = "b4" class = "small_btn">LEAFLET<br>DELIVERY</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b5" class = "small_btn">CAMPAIGN PLAN</button>
+              <button type = "button" id = "b5" class = "small_btn">CAMPAIGN PROGRESS</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b9" class = "small_btn">RESOURCING</button>
@@ -144,10 +147,10 @@
               <button type = "button" id = "b6" class = "small_btn">VOTER<br>TELLING</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b7" class = "small_btn" >DONOR<br>SEARCH</button>
+              <button type = "button" id = "b7" class = "small_btn" >ELECTOR<br>SEARCH</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b8" class = "small_btn" >AREA<br>SURVEYS</button>
+              <button type = "button" id = "b8" class = "small_btn" >BROWSE<br>TERRITORY</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "logout-button" class = "small_btn" >LOGOUT</button>
@@ -186,6 +189,86 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+<script>
+  document.querySelectorAll(".election-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      // Remove active class from all tabs
+      document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
+
+      // Add active to clicked tab
+      tab.classList.add("active");
+
+      // Get the selected election
+      const selectedElection = tab.dataset.election;
+
+      // Send to backend (if needed)
+      fetch("/set-current-election", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ election: selectedElection })
+      })
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.success) {
+          location.reload(); // 🔄 reload or repopulate form if needed
+        } else {
+          alert("Failed to switch election.");
+        }
+      });
+    });
+  });
+</script>
+<script>
+document.querySelectorAll('#election-tabs .nav-link').forEach(button => {
+  button.addEventListener('click', () => {
+    const electionName = button.dataset.election;
+
+    fetch("/set-election", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ election_name: electionName })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        // Fetch updated constants from backend
+        fetch("/get-constants", { credentials: 'same-origin' })
+          .then(res => res.json())
+          .then(data => {
+            const constants = data.constants;
+            const options = data.options;
+
+            Object.entries(constants).forEach(([key, value]) => {
+              const el = document.getElementById(key);
+              if (!el) return;
+
+              if (el.tagName === "SELECT") {
+                el.innerHTML = "";
+                const opts = Object.entries(options[key] || {});
+                opts.forEach(([optValue, optLabel]) => {
+                  const o = document.createElement("option");
+                  o.value = optValue;
+                  o.textContent = `${optValue}: ${optLabel}`;
+                  if (optValue === value) o.selected = true;
+                  el.appendChild(o);
+                });
+
+              } else {
+                el.value = value;
+              }
+            });
+          });
+      } else {
+        alert("Error switching election: " + data.error);
+      }
+    });
+  });
+});
+</script>
 <script>
   let streamChart = null;
   function createOrUpdateChart(labels, data, rags) {

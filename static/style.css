@@ -211,6 +211,23 @@ font-size: 1.5em;
 	text-align: left;
 }
 
+.tab-button {
+  padding: 10px 20px;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  background-color: #f0f0f0;
+  cursor: pointer;
+}
+
+.tab-button.active-tab {
+  border: 2px solid #007bff;
+  border-bottom: none;
+  background-color: #ffffff;
+  font-weight: bold;
+  color: #007bff;
+}
+
+
 .text-wrapper {
     width: 200px; /* set a width for the wrapping container */
     word-wrap: normal; /* ensures the text wraps to the next line if it overflows the container */
