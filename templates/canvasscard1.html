@@ -109,7 +109,7 @@
 	        <td class="c0" style="width: 7%;">{{ row['WalkName'] }}</td>
 	        <td class="c1" style="width: 7%;">{{ row['ENOP'] }}</td>
 					<td class="c2" style="width: 7%;text-align: left;">{{ row['ElectorName'] }}</td>
-					<td class="lefted" style="width: 10%;">
+					<td class="lefted" style="width: 10%; text-wrap :no-wrap;">
 				  {% set prefix = row['AddressPrefix'] | replace('nan', '') | trim %}
 				  {% set number = row['AddressNumber'] | string | trim %}
 

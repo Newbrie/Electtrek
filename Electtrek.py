@@ -676,6 +676,7 @@ class TreeNode:
                 egg.updateTurnout()
                 egg.updateElectorate(limb['ENOP'])
                 print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
+
                 fam_nodes.append(egg)
 
     #    self.aggTarget()
@@ -801,6 +802,7 @@ class TreeNode:
                 g = {'Lat':'mean','Long':'mean','ENOP':'count'}
                 walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
                 print("____Walkleg df: ",walklegdf)
+                print("____Walkleg elector df: ",walklegdf1)
                 nodelist = self.create_name_nodes('walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
         else:
             print("_____ Electoral file contains no relevant data for this area - Please load correct file")
@@ -1058,9 +1060,12 @@ class TreeNode:
         global allelectors
         mask = allelectors['Area'] == self.parent.parent.value
         areaelectors = allelectors[mask]
+        shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' }
+        mask = areaelectors[shapecolumn[self.parent.type]] == self.parent.value
+        shapeelectors = areaelectors[mask]
         street = self.value
         mask = areaelectors['StreetName'] == self.value
-        electorwalks = areaelectors[mask]
+        electorwalks = shapeelectors[mask]
         Postcode = electorwalks.Postcode.values[0]
         streetfile_name = self.parent.value+"--"+self.value
         type_colour = "indigo"
@@ -2054,8 +2059,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
     def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
         """
-        Recursively cluster a DataFrame with 'Lat' and 'Long' columns using standard KMeans,
-        splitting any clusters larger than max_cluster_size.
+        Recursively cluster a DataFrame with 'Lat' and 'Long' columns using KMeans,
+        splitting any clusters larger than max_cluster_size. Skips empty clusters.
         """
         if depth >= MAX_DEPTH:
             logger.info(f"Max depth {MAX_DEPTH} reached at cluster {prefix}, size {len(X)}")
@@ -2066,7 +2071,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             return {i: f"{prefix}" for i in X.index}
 
         # Estimate number of clusters needed to stay under max_cluster_size
-        k = int(np.ceil(len(X) / max_cluster_size))
+        k = min(int(np.ceil(len(X) / max_cluster_size)), len(X))  # Prevent over-splitting
         coords = X[['Lat', 'Long']].values
 
         logger.info(f"[Depth {depth}] Splitting {len(X)} points into {k} clusters (prefix: {prefix})")
@@ -2077,12 +2082,17 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         label_map = {}
         for i in range(k):
             idx = X.index[labels == i]
+
+            # ✅ Skip clusters with no members
+            if len(idx) == 0:
+                logger.warning(f"Cluster {prefix}-{i+1} is empty. Skipping.")
+                continue
+
             sub_data = X.loc[idx]
             new_prefix = f"{prefix}-{i+1}"
 
             logger.debug(f"Cluster {new_prefix} | Size: {len(sub_data)}")
 
-            # Recurse on this subcluster if it's still too big
             sub_labels = recursive_kmeans_latlon(
                 sub_data,
                 max_cluster_size=max_cluster_size,
@@ -2093,6 +2103,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             label_map.update(sub_labels)
 
         return label_map
+
 
 
     current_node = restore_from_persist()
@@ -2328,7 +2339,6 @@ login_manager.refresh_view = "index"
 login_manager.needs_refresh_message = "<h1>You really need to re-login to access this page</h1>"
 login_manager.login_message_category = "info"
 
-TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 Featurelayers = {
 "country": ExtendedFeatureGroup(name='Country Boundaries', overlay=True, control=True, show=True),
@@ -3212,6 +3222,7 @@ def transfer(path):
     global layeritems
     global ElectionSettings
     global formdata
+    TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
     current_node = restore_from_persist()
 
@@ -3228,6 +3239,7 @@ def transfer(path):
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         session['current_node_id'] = current_node.fid
+        print("___Typemaker:",atype, TypeMaker[atype] )
         return redirect(url_for(TypeMaker[atype],path=mapfile))
     else:
         formdata['tabledetails'] = "Click for "+current_node.parent.value +  "\'s "+current_node.type+" details"
