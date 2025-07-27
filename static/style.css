@@ -713,7 +713,7 @@ h1, h2, h3, h4, h5, h6 {
 
 ol, ul {
     list-style:none;
-    line-height: 0.7;
+    margin-bottom: 2px;
 }
 
 a {
