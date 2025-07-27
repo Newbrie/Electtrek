@@ -90,7 +90,7 @@
 
 {% block nav %}
 <div id="nav" >
-  <h1>Welcome to your elecTrek dashboard, {{ session['username'] }}</h1>
+  <h1>elecTrek dashboard, user: {{ session['username'] }}</h1>
   <ul class="nav nav-tabs" id="election-tabs">
     {% for election_name in ELECTIONS %}
       <li class="nav-item">
@@ -103,26 +103,33 @@
   </ul>
       <div id="constants-container">
 
-      <label for="elections">Type of Election:</label>
-      <select name="elections" id="elections"></select><br>
+      <ul class="righted">
+        Type of Election:<select name="elections" id="elections"></select><br>
+      </ul>
 
-      <label for="yourparty">Your Party:</label>
-      <select name="yourparty" id="yourparty"></select><br>
-
-      <label for="walksize">Walk Size:</label>
-      <input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
-
-      <label for="teamsize">Team Size:</label>
-      <input type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
-
-      <label for="GOTV">GOTV:</label>
-      <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
+      <ul class="righted">
+      Party selected: <select name="yourparty" id="yourparty"></select><br>
+      </ul>
+      <ul class="righted">
+      Walk Size:<input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
+      </ul>
+      <ul class="righted">
+      Team Size:<input type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
+      </ul>
+      <ul class="righted">
+      GOTV: <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
+      </ul>
       <br>
 
-      Firstname: <input type="text" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
-      Surname: <input type="text" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
-      Date of election: <input type="text" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
-
+      <ul class="righted">
+          Firstname: <input type="text" id="candfirst" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
+      </ul>
+      <ul class="righted">
+          Surname: <input type="text" id="candsurn" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
+      </ul>
+      <ul class="righted">
+          Date of election: <input type="text" id="electiondate" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
+      </ul>
 </div>
         <div class = "grid-container">
             <div class="grid-item">
@@ -202,7 +209,7 @@
       const selectedElection = tab.dataset.election;
 
       // Send to backend (if needed)
-      fetch("/set-current-election", {
+      fetch("/set-election", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -211,65 +218,47 @@
       .then(res => res.json())
       .then(resp => {
         if (resp.success) {
-          location.reload(); // 🔄 reload or repopulate form if needed
-        } else {
+          fetch("/get-constants", { credentials: 'same-origin' })
+               .then(res => res.json())
+               .then(data => {
+                 const constants = data.constants;
+                 const options = data.options;
+
+                 Object.entries(constants).forEach(([key, value]) => {
+                   const el = document.getElementById(key);
+                   if (!el) return;
+
+                   if (el.tagName === "SELECT") {
+                     const optsObj = options[key] || {};
+                     const opts = Object.entries(optsObj);  // ✅ Converts to [ [key, label], ... ]
+                     el.innerHTML = "";
+                     console.log(`Opts:`, opts);
+
+                     opts.forEach(([optValue, optLabel]) => {
+
+                       const o = document.createElement("option");
+                       o.value = optValue;
+                       o.textContent = `${optValue}: ${optLabel}`;
+                       console.log(`${o}:${optValue}: ${optLabel}`);
+
+                       if (optValue === value) o.selected = true;
+                       el.appendChild(o);
+                     });
+                   } else {
+                     el.value = value;
+                   }
+
+                 });
+                 updateMessages();
+               })
+              }
+        else {
           alert("Failed to switch election.");
         }
       });
     });
   });
-</script>
-<script>
-document.querySelectorAll('#election-tabs .nav-link').forEach(button => {
-  button.addEventListener('click', () => {
-    const electionName = button.dataset.election;
 
-    fetch("/set-election", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ election_name: electionName })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        // Fetch updated constants from backend
-        fetch("/get-constants", { credentials: 'same-origin' })
-          .then(res => res.json())
-          .then(data => {
-            const constants = data.constants;
-            const options = data.options;
-
-            Object.entries(constants).forEach(([key, value]) => {
-              const el = document.getElementById(key);
-              if (!el) return;
-
-              if (el.tagName === "SELECT") {
-                el.innerHTML = "";
-                const opts = Object.entries(options[key] || {});
-                opts.forEach(([optValue, optLabel]) => {
-                  const o = document.createElement("option");
-                  o.value = optValue;
-                  o.textContent = `${optValue}: ${optLabel}`;
-                  if (optValue === value) o.selected = true;
-                  el.appendChild(o);
-                });
-
-              } else {
-                el.value = value;
-              }
-            });
-          });
-      } else {
-        alert("Error switching election: " + data.error);
-      }
-    });
-  });
-});
-</script>
-<script>
   let streamChart = null;
   function createOrUpdateChart(labels, data, rags) {
     const ragColors = {

@@ -232,7 +232,7 @@ kanban_options = [
 ]
 
 # All Election Settings
-Elections = {
+ELECTIONS = {
     "demo": {
         'name': "demo",
         'streams': "B",
@@ -266,7 +266,7 @@ Elections = {
 }
 
 CurrentElectionName = "HoeValleyWard2025"
-CurrentElection = Elections[CurrentElectionName]
+CurrentElection = ELECTIONS[CurrentElectionName]
 
 
 main_index = None # for file processing
@@ -275,7 +275,7 @@ TABLE_FILE = os.path.join(config.workdirectories['workdir'],'stream_data.json')
 with open(config.workdirectories['workdir']+"/"+"options.json", "r") as f:
     OPTIONS = json.load(f)
 with open(config.workdirectories['workdir']+"/static/data/Elections.json", "r") as f:
-    Elections = json.load(f)
+    ELECTIONS = json.load(f)
 with open(config.workdirectories['workdir']+"/"+"stream_data.json", "r") as f:
     table_data = json.load(f)
 
@@ -298,7 +298,7 @@ OPTIONS = {
     # Add more mappings here if needed
 }
 print("____TABLE FILE:", table_data)
-print("____Elections:", Elections)
+print("____Elections:", ELECTIONS)
 print("____AllOPTIONS:", OPTIONS)
 print("____StreamOptions:", StreamOptions)
 # This prints a script tag you can paste into your HTML
@@ -2855,7 +2855,7 @@ def add_tag():
         if not tag_exists:
             CurrentElection['tags'][tag] = label
             with open("electionsettings.json", "w") as f:
-                json.dump(Elections, f, indent=2)
+                json.dump(ELECTIONS, f, indent=2)
 
         return jsonify({
             "success": True,
@@ -2927,7 +2927,7 @@ def reset_Elections():
 @login_required
 def switch_election():
     election_name = request.args.get('election')
-    if election_name in Elections:
+    if election_name in ELECTIONS:
         session['CurrentElectionName'] = election_name
     return redirect(url_for('dashboard'))  # or your current dashboard route
 
@@ -2935,13 +2935,18 @@ def switch_election():
 @login_required
 def set_election():
     data = request.get_json()
-    election_name = data.get("election_name")
+    election_name = data.get("election")
     with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
         ELECTIONS = json.load(f)
-
-    if election_name in ELECTIONS:
+    CurrentElection = ELECTIONS.get(election_name)
+    if CurrentElection:
+        print("____Route/set_election/success" , election_name, CurrentElection, ELECTIONS)
         session["current_election"] = election_name
+        with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+            json.dump(ELECTIONS, f, indent=2)
         return jsonify(success=True)
+    print("____Route/set_election/failure" , election_name, CurrentElection, ELECTIONS)
+
     return jsonify(success=False, error="Election not found")
 
 @app.route('/get-constants', methods=["GET"])
@@ -2951,11 +2956,11 @@ def get_constants():
     global OPTIONS
     print("____Route/get_constants" )
     current = session.get('current_election')
-    if not current or current not in Elections:
+    if not current or current not in ELECTIONS:
         return jsonify({'error': 'Invalid election'}), 400
     print('__OPTIONS: ', OPTIONS)
     return jsonify({
-        'constants': Elections[current],
+        'constants': ELECTIONS[current],
         'options': OPTIONS,
         'election_name': current
     })
