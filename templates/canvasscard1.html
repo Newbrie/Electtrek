@@ -44,7 +44,7 @@
     		<b>{{ prodstats['canvasshrs'] | round | int }}hrs {{ (prodstats['leafhrs']%1*60) | round | int }}mins.</b>
     </span>
     <span>
-    <b>Please collect the data below and upload data for area overview.</b>
+    <b>Please capture and upload data for area overview.</b>
     </span>
 
 		<button id="save-btn" onclick="layerUpdate('{{ datafile }}');" style="font-size: 12pt;color: blue;">SAVE</button>
@@ -109,7 +109,7 @@
 	        <td class="c0" style="width: 7%;">{{ row['WalkName'] }}</td>
 	        <td class="c1" style="width: 7%;">{{ row['ENOP'] }}</td>
 					<td class="c2" style="width: 7%;text-align: left;">{{ row['ElectorName'] }}</td>
-					<td class="lefted" style="width: 10%; text-wrap :no-wrap;">
+					<td class="leftedmerge" style="width: 10%; ">
 				  {% set prefix = row['AddressPrefix'] | replace('nan', '') | trim %}
 				  {% set number = row['AddressNumber'] | string | trim %}
 
@@ -123,7 +123,7 @@
 				    <!-- Optional: fallback text or leave empty -->
 				  {%- endif -%}
 				</td>
-					<td class="righted" style="width: 10%;">
+					<td class="rightedmerge" style="width: 10%;">
 						{{ row['StreetName'] | replace('_', ' ') | title | trim }}
 					</td>
 	        <td class="righted" style="width: 5%;">{{ row['Postcode'] }}</td>
