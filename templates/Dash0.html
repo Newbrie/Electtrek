@@ -102,33 +102,35 @@
     {% endfor %}
   </ul>
       <div id="constants-container">
+      <ul>
 
-      <ul class="righted">
+      <li class="righted">
         Type of Election:<select name="elections" id="elections"></select><br>
-      </ul>
+      </li>
 
-      <ul class="righted">
+      <li class="righted">
       Party selected: <select name="yourparty" id="yourparty"></select><br>
-      </ul>
-      <ul class="righted">
+      </li>
+      <li class="righted">
       Walk Size:<input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
-      </ul>
-      <ul class="righted">
+      </li>
+      <li class="righted">
       Team Size:<input type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
-      </ul>
-      <ul class="righted">
+      </li>
+      <li class="righted">
       GOTV: <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
-      </ul>
+      </li>
       <br>
 
-      <ul class="righted">
+      <li class="righted">
           Firstname: <input type="text" id="candfirst" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
-      </ul>
-      <ul class="righted">
+      </li>
+      <li class="righted">
           Surname: <input type="text" id="candsurn" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
-      </ul>
-      <ul class="righted">
+      </li>
+      <li class="righted">
           Date of election: <input type="text" id="electiondate" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
+      </li>
       </ul>
 </div>
         <div class = "grid-container">
