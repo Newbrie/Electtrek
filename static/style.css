@@ -226,7 +226,27 @@ font-size: 1.5em;
   font-weight: bold;
   color: #007bff;
 }
+.election-tab {
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  background-color: #f1f1f1;
+  cursor: pointer;
+  margin-right: 4px;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  font-weight: bold;
+}
 
+.election-tab:hover {
+  background-color: #e7e7e7;
+}
+
+.election-tab.active {
+  background-color: #ffffff;
+  border-bottom: 2px solid white;
+  border-color: #ccc #ccc white;
+}
 
 .text-wrapper {
     width: 200px; /* set a width for the wrapping container */

@@ -44,6 +44,7 @@ import threading
 import traceback
 import unidecode
 from flask import Response
+import copy
 
 
 sys.path
@@ -2994,6 +2995,64 @@ def set_constant():
 
     return jsonify(success=False, error="Invalid constant name"), 400
 
+@app.route("/add-election", methods=["POST"])
+@login_required
+def add_election():
+    global ELECTIONS
+    global OPTIONS
+    current_election = session.get('current_election')
+    elections_path = os.path.join(config.workdirectories['workdir'], 'static', 'data', 'Elections.json')
+
+    # Load existing elections
+    if os.path.exists(elections_path):
+        with open(elections_path, 'r') as f:
+            try:
+                ELECTIONS = json.load(f)
+            except json.JSONDecodeError:
+                return jsonify(success=False, error="Could not parse Elections.json")
+    else:
+        ELECTIONS = {}
+
+    # Get name for new election
+    data = request.get_json()
+    new_election = data.get("election")
+
+    if not new_election or new_election in ELECTIONS:
+        return jsonify(success=False, error="Invalid or duplicate election name.")
+
+    # Clone existing election or use default
+    ELECTIONS[new_election] = copy.deepcopy(ELECTIONS.get(current_election, {})) or {
+        "streams": "A",
+        "GOTV": 0.5,
+        "yourparty": "R",
+        "walksize": 200,
+        "teamsize": 5,
+        "elections": "W",
+        "tags": {"R0": "Unallocated"},
+        "importfile": "",
+        "autofix": 0,
+        "candfirst": "",
+        "candsurn": "",
+        "electiondate": "01-Jan-2030",
+        "name": new_election
+    }
+
+    # Write updated elections back
+    with open(elections_path, 'w') as f:
+        json.dump(ELECTIONS, f, indent=2)
+
+    formdata['electiontabs_html'] = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS)
+
+    # Optional: set session to the new election
+    session['current_election'] = new_election
+
+    return jsonify({'success': True,
+        'constants': ELECTIONS[new_election],
+        'options': OPTIONS,
+        'election_name': new_election
+    })
+
+
 
 @app.route("/", methods=['POST', 'GET'])
 def index():
@@ -3013,7 +3072,7 @@ def index():
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
 
-        return render_template("Dash0.html",  formdata=formdata, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata,current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -4135,7 +4194,7 @@ def setgotv():
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
         session['current_node_id'] = current_node.fid
 
-        return render_template("Dash0.html",  formdata=formdata, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata,current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
     return ""
 
 @app.route('/filelist/<filetype>', methods=['POST','GET'])
@@ -4230,7 +4289,7 @@ def walks():
         layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
         session['current_node_id'] = current_node.fid
 
-        return render_template('Dash0.html',  formdata=formdata, ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        return render_template('Dash0.html',  formdata=formdata, current_election=CurrentElection['name'],ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -4370,7 +4429,7 @@ def firstpage():
 
         mapfile = current_node.dir+"/"+current_node.file
         persist(current_node,CurrentElection)
-        return render_template("Dash0.html", VID_json=VID_json,  ELECTIONS=ELECTIONS, formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        return render_template("Dash0.html", VID_json=VID_json, current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 
@@ -4422,7 +4481,7 @@ def cards():
                 layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
 
 
-                return render_template('Dash0.html',  formdata=formdata, ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+                return render_template('Dash0.html',  formdata=formdata,current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

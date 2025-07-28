@@ -67,7 +67,7 @@
 {% block log %}
 
 <div id="logwin" class="innertube">
-  <h1>elecTrek flash messages: </h1>
+  <h3>elecTrek flash messages: </h3>
   {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class="flashes">
@@ -77,7 +77,7 @@
     </ul>
   {% endif %}
 {% endwith %}
-		<h1>elecTrek status messages: </h1>
+		<h3>elecTrek status messages: </h3>
       <ul class="flashes" >
       {% for pessage in pessages %}
         <li> {{ pessage  }}</li>
@@ -90,46 +90,63 @@
 
 {% block nav %}
 <div id="nav" >
-  <h1>elecTrek dashboard, user: {{ session['username'] }}</h1>
+  <h3>Election Dashboard</h3>
+  <ul>user: {{ session['username'] }}</ul>
   <ul class="nav nav-tabs" id="election-tabs">
     {% for election_name in ELECTIONS %}
       <li class="nav-item">
-        <button class="nav-link election-tab {% if election_name == CurrentElection %}active{% endif %}"
+        <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
                 data-election="{{ election_name }}">
           {{ election_name }}
         </button>
       </li>
     {% endfor %}
+    <!-- Add New Tab Button -->
+  <li class="nav-item">
+    <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
+  </li>
   </ul>
       <div id="constants-container">
       <ul>
-
       <li class="righted">
-        Type of Election:<select name="elections" id="elections"></select><br>
+        Type of Election:<select class="righted"name="elections" id="elections"></select><br>
       </li>
 
       <li class="righted">
-      Party selected: <select name="yourparty" id="yourparty"></select><br>
+      Party selected: <select class="righted"name="yourparty" id="yourparty"></select><br>
       </li>
       <li class="righted">
-      Walk Size:<input type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
+      Walk Size:<input class="righted" type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
       </li>
       <li class="righted">
-      Team Size:<input type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
+      Team Size:<input class="righted" type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
       </li>
       <li class="righted">
-      GOTV: <input type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
+      GOTV: <input class="righted" type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       </li>
-      <br>
 
-      <li class="righted">
-          Firstname: <input type="text" id="candfirst" name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
+      <li class="righted" >
+          Candidate Firstname: <input class="righted" type="text" id="candfirst"
+                    style="width: 100px;  white-space: nowrap;overflow-x: auto;"
+                     name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
+      </li>
+      <li class="righted" >
+          Candidate Surname: <input class="righted" type="text" id="candsurn"
+          style="width: 100px;  white-space: nowrap;overflow-x: auto;"
+name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       </li>
       <li class="righted">
-          Surname: <input type="text" id="candsurn" name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
-      </li>
-      <li class="righted">
-          Date of election: <input type="text" id="electiondate" name="electiondate" placeholder=" {{ (formdata or {}).get('electiondate', '') }} "/><br>
+          Date of election:
+     <input type="text"
+            class="righted"
+            id="electiondate"
+            name="electiondate"
+            placeholder=" {{ (formdata or {}).get('electiondate', '') }} "
+            maxlength="11"
+            size="11"
+            pattern="^(0[1-9]|[12][0-9]|3[01])-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}$"
+            title="Use format dd-MMM-yyyy (e.g. 05-Mar-2025)"
+            required>
       </li>
       </ul>
 </div>
@@ -360,6 +377,57 @@
     document.getElementById("b3").addEventListener("click", function() {
         // Change the iframe src to the stream processing input page
         document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
+    });
+
+
+    document.getElementById("add-election-tab").addEventListener("click", () => {
+      const newName = prompt("Enter name for new election:");
+      if (!newName) return;
+
+      fetch("/add-election", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ election: newName })
+      })
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.success) {
+          // Reload the page or re-render the tabs
+          const constants = resp.constants;
+          const options = resp.options;
+
+          Object.entries(constants).forEach(([key, value]) => {
+            const el = document.getElementById(key);
+            if (!el) return;
+
+            if (el.tagName === "SELECT") {
+              const optsObj = options[key] || {};
+              const opts = Object.entries(optsObj);  // ✅ Converts to [ [key, label], ... ]
+              el.innerHTML = "";
+              console.log(`Opts:`, opts);
+
+              opts.forEach(([optValue, optLabel]) => {
+
+                const o = document.createElement("option");
+                o.value = optValue;
+                o.textContent = `${optValue}: ${optLabel}`;
+                console.log(`${o}:${optValue}: ${optLabel}`);
+
+                if (optValue === value) o.selected = true;
+                el.appendChild(o);
+              });
+            } else {
+              el.value = value;
+            }
+
+          });
+          updateMessages();
+
+        } else {
+          alert("Error adding election: " + resp.error);
+        }
+      });
     });
 
 
