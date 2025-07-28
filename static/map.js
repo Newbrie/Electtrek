@@ -461,8 +461,6 @@ async function fetchAndUpdateChart() {
       }
     }
 
-
-
   function removeTag(electorId, tag) {
     fetch("/remove_tag", {
       method: "POST",
@@ -470,74 +468,3 @@ async function fetchAndUpdateChart() {
       body: JSON.stringify({ enop: electorId, tag: tag })
     }).then(() => location.reload());
   }
-
-
-  document.addEventListener("DOMContentLoaded", () => {
-  fetch("/get-constants", { credentials: 'same-origin' })
-    .then(res => res.json())
-    .then(data => {
-      const test = data.current_election
-
-      // ✅ Skip if there's no current election
-      if (!test) {
-        const electionName = "demo";
-      } else {
-        const electionName = data.current_election;
-      }
-      const constants = data.constants;
-      const options = data.options;
-
-      Object.entries(constants).forEach(([key, value]) => {
-        const el = document.getElementById(key);
-        if (!el) return;
-
-        if (el.tagName === "SELECT") {
-          const opts = options[key] || [];
-          el.innerHTML = "";
-
-          Object.entries(opts).forEach(([optValue, optLabel]) => {
-            const o = document.createElement("option");
-            o.value = optValue;
-            o.textContent = `${optValue}: ${optLabel}`;
-            if (optValue === value) o.selected = true;
-            el.appendChild(o);
-          });
-
-        } else {
-          el.value = value;
-        }
-
-        // Change listener to update backend
-        el.addEventListener("input", () => {
-          let newVal = el.value;
-          if (el.type === "number") newVal = parseFloat(newVal);
-          if (el.type === "checkbox") newVal = el.checked;
-
-          fetch("/set-constant", {
-            method: "POST",
-            credentials: 'same-origin',
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              election: electionName,  // Include current election
-              name: key,
-              value: newVal
-            })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (resp.success) {
-              updateMessages();
-            } else {
-              alert("Failed to update: " + resp.error);
-            }
-          });
-        });
-      });
-
-      // Optional: update election name dropdown if you include it
-      const edrop = document.getElementById("election-selector");
-      if (edrop) {
-        edrop.value = electionName;
-      }
-    });
-});

@@ -2946,7 +2946,7 @@ def set_election():
         session["current_election"] = election_name
         with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
             json.dump(ELECTIONS, f, indent=2)
-        return jsonify(success=True)
+        return jsonify(success=True, current_election=election_name)
     print("____Route/set_election/failure" , election_name, CurrentElection, ELECTIONS)
 
     return jsonify(success=False, error="Election not found")
