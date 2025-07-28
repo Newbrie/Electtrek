@@ -476,10 +476,10 @@ async function fetchAndUpdateChart() {
   fetch("/get-constants", { credentials: 'same-origin' })
     .then(res => res.json())
     .then(data => {
-
+      const test = data.current_election
 
       // ✅ Skip if there's no current election
-      if (!electionName) {
+      if (!test) {
         const electionName = "demo";
       } else {
         const electionName = data.current_election;
