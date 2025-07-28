@@ -477,16 +477,16 @@ async function fetchAndUpdateChart() {
     .then(res => res.json())
     .then(data => {
 
-      const electionName = data.current_election;
 
       // ✅ Skip if there's no current election
       if (!electionName) {
-        console.warn("No current election selected.");
-        return;
+        const electionName = "demo";
+      } else {
+        const electionName = data.current_election;
       }
       const constants = data.constants;
       const options = data.options;
-      
+
       Object.entries(constants).forEach(([key, value]) => {
         const el = document.getElementById(key);
         if (!el) return;
