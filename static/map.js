@@ -478,7 +478,7 @@ async function fetchAndUpdateChart() {
     .then(data => {
       const constants = data.constants;
       const options = data.options;
-      const electionName = data.election_name;  // NEW: backend sends current election name
+      const electionName = data.current_election;  // NEW: backend sends current election name
 
       Object.entries(constants).forEach(([key, value]) => {
         const el = document.getElementById(key);

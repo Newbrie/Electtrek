@@ -209,7 +209,7 @@ def restore_fullpolys(node_type):
     global current_node
     current_node, CurrentElection = restore_from_persist()
     Treepolys[node_type] = Fullpolys[node_type]
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return
 
@@ -2039,7 +2039,7 @@ def restore_from_persist():
 
     def get_current_election(session=None, session_data=None):
         """
-        Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
+        Returns the current election from ELECTIONS indicate by the Flask session or passed-in session_data.
         """
         current_election = "demo"
 
@@ -2054,7 +2054,10 @@ def restore_from_persist():
         else:
             print("⚠️ current_election not found in session or session_data")
 
-        current = ELECTIONS.get(current_election)
+        if not session.get('current_election'):
+            session['current_election'] = next(iter(ELECTIONS), None)
+
+        current = ELECTIONS.get(session.get('current_election'))
         if not current:
             print("⚠️ current_election not found in stored ELECTIONS")
 
@@ -2087,10 +2090,9 @@ def restore_from_persist():
         )
     node = get_current_node(session=session)
     currente = get_current_election(session=session)
-
     return node,currente
 
-def persist(node,currente):
+def persist(node):
     global TREK_NODES
     global ELECTIONS
     global Treepolys
@@ -2105,7 +2107,6 @@ def persist(node,currente):
 
     allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
     session['current_node_id'] = node.fid
-    session['current_election'] = currente['name']
     return
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data):
@@ -2532,7 +2533,7 @@ def update_walk():
     idx = allelectors[allelectors['walkName'] == walk_name].index
     if not idx.empty:
         allelectors.at[idx[0], 'Resource'] = new_resource
-        persist(current_node,CurrentElection)
+        persist(current_node)
         return jsonify(success=True)
     else:
         return jsonify(success=False, error="Walk not found"), 404
@@ -2632,7 +2633,7 @@ def update_walk_kanban():
 
     # Optional: persist update (adapt to your node system)
     current_node.data = allelectors
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return jsonify(success=True)
 
@@ -2688,7 +2689,7 @@ def check_enop(enop):
         if "M1" not in current_tags.split():
             current_tags = f"{current_tags} M1".strip()
             allelectors.loc[allelectors['ENOP'] == enop, 'Tags'] = current_tags
-            persist(current_node,CurrentElection)
+            persist(current_node)
         return jsonify({'exists': True, 'message': f'ENOP found, M1 tag added. Current Tags: {current_tags}'})
     else:
         return jsonify({'exists': False, 'message': 'ENOP not found in electors.'})
@@ -2741,7 +2742,7 @@ def update_street_tags():
             current_tags = f"{current_tags} {delivery_tag}".strip()
             allelectors.at[idx, 'Tags'] = current_tags
 
-    persist(current_node,CurrentElection)  # Persist the changes after updating electors' tags
+    persist(current_node)  # Persist the changes after updating electors' tags
 
     return jsonify({'message': f'Electors in "{selected_street}" updated with {delivery_tag} tag.'})
 
@@ -2963,7 +2964,7 @@ def get_constants():
     return jsonify({
         'constants': ELECTIONS[current],
         'options': OPTIONS,
-        'election_name': current
+        'current_election': current
     })
 
 
@@ -2986,14 +2987,48 @@ def set_constant():
     if name in CurrentElection:
         print("____Back End2:",name,"-",value)
         CurrentElection[name] = value
+        ELECTIONS[current_election] = CurrentElection
+        with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+            json.dump(ELECTIONS, f, indent=2)
         print("____CurrentElection:",CurrentElection['name'])
         return jsonify(success=True)
 
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+    return jsonify(success=False, error="Invalid constant name"), 400
+
+
+@app.route("/delete-election", methods=["POST"])
+@login_required
+def delete_election():
+    global ELECTIONS
+    global formdata
+    data = request.get_json()
+    election_to_delete = data.get("election")
+
+    if not election_to_delete or election_to_delete not in ELECTIONS:
+        return jsonify(success=False, error="Election not found")
+
+    # Remove from dict
+    ELECTIONS.pop(election_to_delete)
+
+    # Update current election if needed
+    if session.get('current_election') == election_to_delete:
+        session['current_election'] = next(iter(ELECTIONS), None)
+        current_election = session['current_election']
+
+    # Save back to file
+    path = os.path.join(config.workdirectories['workdir'], 'static', 'data', 'Elections.json')
+    with open(path, 'w') as f:
         json.dump(ELECTIONS, f, indent=2)
 
+    # Re-render tabs
+    electiontabs_html = render_template("partials/election_tabs.html",
+                                        ELECTIONS=ELECTIONS,
+                                        current_election=session.get('current_election'))
 
-    return jsonify(success=False, error="Invalid constant name"), 400
+    return jsonify(success=True, electiontabs_html=electiontabs_html)
+
+
+
 
 @app.route("/add-election", methods=["POST"])
 @login_required
@@ -3041,15 +3076,20 @@ def add_election():
     with open(elections_path, 'w') as f:
         json.dump(ELECTIONS, f, indent=2)
 
-    formdata['electiontabs_html'] = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS)
+    session['current_election'] = new_election
+    current_election = new_election
+    formdata['electiontabs_html'] = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
 
     # Optional: set session to the new election
-    session['current_election'] = new_election
+
+
+    print("election-tabs:",formdata['electiontabs_html'])
 
     return jsonify({'success': True,
         'constants': ELECTIONS[new_election],
         'options': OPTIONS,
-        'election_name': new_election
+        'election_name': new_election,
+        'electiontabs_html':formdata['electiontabs_html']
     })
 
 
@@ -3287,7 +3327,7 @@ def dashboard():
         current_node = previous_node.ping_node(path)
         mapfile = current_node.dir+"/"+current_node.file
         print ("___Dashboard persisted filename: ",mapfile)
-        persist(current_node,CurrentElection)
+        persist(current_node)
 
 #        redirect(url_for('captains'))
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -3348,7 +3388,7 @@ def downbut(path):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -3445,7 +3485,7 @@ def downPDbut(path):
     layeritems = getlayeritems(current_node.childrenoftype('polling_district'),formdata['tabledetails'] )
 
     session['current_node_id'] = current_node.fid
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -3506,7 +3546,7 @@ def downWKbut(path):
     print("_______writing to file:", mapfile)
 
     session['current_node_id'] = current_node.fid
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -3656,7 +3696,7 @@ def STupdate(path):
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return  jsonify({"message": "Success", "file": sheetfile})
 
 
@@ -3719,7 +3759,7 @@ def PDdownST(path):
     else:
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -3777,7 +3817,7 @@ def LGdownST(path):
     else:
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
@@ -3839,7 +3879,7 @@ def WKdownST(path):
         flash("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
         print("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -3880,7 +3920,7 @@ def wardreport(path):
         layeritems = [list(temp.columns.values), temp,formdata['tabledetails'] ]
 
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/displayareas', methods=['POST', 'GET'])
@@ -3981,7 +4021,7 @@ def divreport(path):
         layeritems = [list(temp.columns.values), temp, formdata['tabledetails']]
 
 
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
@@ -4033,7 +4073,7 @@ def upbut(path):
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
     print("________chosen node url",mapfile)
-    persist(current_node,CurrentElection)
+    persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -4395,6 +4435,7 @@ def firstpage():
             pickle.dump(Fullpolys, f)
 
         current_node, CurrentElection = restore_from_persist()
+        current_election = session['current_election']
         session['next'] = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = MapRoot.ping_node(sourcepath)
@@ -4428,8 +4469,8 @@ def firstpage():
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
-        persist(current_node,CurrentElection)
-        return render_template("Dash0.html", VID_json=VID_json, current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        persist(current_node)
+        return render_template("Dash0.html", VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     else:
         return redirect(url_for('login'))
 

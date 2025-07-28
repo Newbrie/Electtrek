@@ -93,19 +93,19 @@
   <h3>Election Dashboard</h3>
   <ul>user: {{ session['username'] }}</ul>
   <ul class="nav nav-tabs" id="election-tabs">
-    {% for election_name in ELECTIONS %}
-      <li class="nav-item">
-        <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
-                data-election="{{ election_name }}">
-          {{ election_name }}
-        </button>
-      </li>
-    {% endfor %}
-    <!-- Add New Tab Button -->
+  {% for election_name in ELECTIONS %}
+    <li class="nav-item position-relative tab-item">
+      <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
+              data-election="{{ election_name }}">
+        {{ election_name }}
+      </button>
+      <span class="delete-tab-btn" data-election="{{ election_name }}">×</span>
+    </li>
+  {% endfor %}
   <li class="nav-item">
     <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
   </li>
-  </ul>
+</ul>
       <div id="constants-container">
       <ul>
       <li class="righted">
@@ -216,66 +216,67 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 <script>
-  document.querySelectorAll(".election-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      // Remove active class from all tabs
-      document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
+  function bindElectionTabListeners() {
+    document.querySelectorAll(".election-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        // Remove active class from all tabs
+        document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
 
-      // Add active to clicked tab
-      tab.classList.add("active");
+        // Add active to clicked tab
+        tab.classList.add("active");
 
-      // Get the selected election
-      const selectedElection = tab.dataset.election;
+        // Get the selected election
+        const selectedElection = tab.dataset.election;
 
-      // Send to backend (if needed)
-      fetch("/set-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: selectedElection })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-          fetch("/get-constants", { credentials: 'same-origin' })
-               .then(res => res.json())
-               .then(data => {
-                 const constants = data.constants;
-                 const options = data.options;
+        // Send to backend (if needed)
+        fetch("/set-election", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ election: selectedElection })
+        })
+        .then(res => res.json())
+        .then(resp => {
+          if (resp.success) {
+            fetch("/get-constants", { credentials: 'same-origin' })
+              .then(res => res.json())
+              .then(data => {
+                const constants = data.constants;
+                const options = data.options;
 
-                 Object.entries(constants).forEach(([key, value]) => {
-                   const el = document.getElementById(key);
-                   if (!el) return;
+                Object.entries(constants).forEach(([key, value]) => {
+                  const el = document.getElementById(key);
+                  if (!el) return;
 
-                   if (el.tagName === "SELECT") {
-                     const optsObj = options[key] || {};
-                     const opts = Object.entries(optsObj);  // ✅ Converts to [ [key, label], ... ]
-                     el.innerHTML = "";
-                     console.log(`Opts:`, opts);
+                  if (el.tagName === "SELECT") {
+                    const optsObj = options[key] || {};
+                    const opts = Object.entries(optsObj);
+                    el.innerHTML = "";
 
-                     opts.forEach(([optValue, optLabel]) => {
+                    opts.forEach(([optValue, optLabel]) => {
+                      const o = document.createElement("option");
+                      o.value = optValue;
+                      o.textContent = `${optValue}: ${optLabel}`;
+                      if (optValue === value) o.selected = true;
+                      el.appendChild(o);
+                    });
+                  } else {
+                    el.value = value;
+                  }
+                });
 
-                       const o = document.createElement("option");
-                       o.value = optValue;
-                       o.textContent = `${optValue}: ${optLabel}`;
-                       console.log(`${o}:${optValue}: ${optLabel}`);
-
-                       if (optValue === value) o.selected = true;
-                       el.appendChild(o);
-                     });
-                   } else {
-                     el.value = value;
-                   }
-
-                 });
-                 updateMessages();
-               })
-              }
-        else {
-          alert("Failed to switch election.");
-        }
+                updateMessages();
+              });
+          } else {
+            alert("Failed to switch election.");
+          }
+        });
       });
     });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindElectionTabListeners(); // Initial binding
   });
 
   let streamChart = null;
@@ -422,6 +423,16 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
             }
 
           });
+          console.log(`Electiontab:${resp.electiontabs_html}`);
+          if (resp.electiontabs_html) {
+            const tbody = document.querySelector("#election-tabs");
+            if (tbody) {
+              tbody.innerHTML = resp.electiontabs_html;
+              console.log("Election tabs updated successfully.");
+            } else {
+              console.warn("Election tabs not found in DOM.");
+            }
+          };
           updateMessages();
 
         } else {
@@ -430,9 +441,33 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       });
     });
 
-
-
-
+    document.addEventListener("click", (e) => {
+      if (e.target.classList.contains("delete-tab-btn")) {
+        const election = e.target.dataset.election;
+        console.log("Election to be deleted."+election);
+        if (confirm(`Delete the election "${election}"? This cannot be undone.`)) {
+          fetch("/delete-election", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ election })
+          })
+          .then(res => res.json())
+          .then(resp => {
+            if (resp.success) {
+              // Update tabs
+              const tabContainer = document.querySelector("#election-tabs");
+              if (tabContainer && resp.electiontabs_html) {
+                tabContainer.innerHTML = resp.electiontabs_html;
+                console.log("Election deleted and tabs refreshed.");
+              }
+            } else {
+              alert("Could not delete election: " + (resp.error || "Unknown error"));
+            }
+          });
+        }
+      }
+    });
 
 </script>
 

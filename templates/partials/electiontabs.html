@@ -1,14 +1,14 @@
 <ul class="nav nav-tabs" id="election-tabs">
   {% for election_name in ELECTIONS %}
-    <li class="nav-item">
-      <button class="nav-link election-tab {% if election_name == CurrentElection %}active{% endif %}"
+    <li class="nav-item position-relative tab-item">
+      <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
               data-election="{{ election_name }}">
         {{ election_name }}
       </button>
+      <span class="delete-tab-btn" data-election="{{ election_name }}">×</span>
     </li>
   {% endfor %}
-  <!-- Add New Tab Button -->
-<li class="nav-item">
-  <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
-</li>
+  <li class="nav-item">
+    <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
+  </li>
 </ul>

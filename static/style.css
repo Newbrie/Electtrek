@@ -248,6 +248,24 @@ font-size: 1.5em;
   border-color: #ccc #ccc white;
 }
 
+.tab-item {
+  position: relative;
+}
+
+.delete-tab-btn {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  color: red;
+  font-weight: bold;
+  cursor: pointer;
+  display: none; /* hidden by default */
+}
+
+.tab-item:hover .delete-tab-btn {
+  display: inline; /* only show on hover */
+}
+
 .text-wrapper {
     width: 200px; /* set a width for the wrapping container */
     word-wrap: normal; /* ensures the text wraps to the next line if it overflows the container */
