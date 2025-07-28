@@ -476,9 +476,16 @@ async function fetchAndUpdateChart() {
   fetch("/get-constants", { credentials: 'same-origin' })
     .then(res => res.json())
     .then(data => {
+      const electionName = data.current_election;
+
+      // ✅ Skip if there's no current election
+      if (!electionName) {
+        console.warn("No current election selected.");
+        return;
+      }
+
       const constants = data.constants;
       const options = data.options;
-      const electionName = data.current_election;  // NEW: backend sends current election name
 
       Object.entries(constants).forEach(([key, value]) => {
         const el = document.getElementById(key);
@@ -500,7 +507,7 @@ async function fetchAndUpdateChart() {
           el.value = value;
         }
 
-        // Change listener to update backend
+        // Add change listener
         el.addEventListener("input", () => {
           let newVal = el.value;
           if (el.type === "number") newVal = parseFloat(newVal);
@@ -526,6 +533,12 @@ async function fetchAndUpdateChart() {
           });
         });
       });
+    })
+    .catch(error => {
+      console.error("Failed to fetch constants:", error);
+    });
+});
+
 
       // Optional: update election name dropdown if you include it
       const edrop = document.getElementById("election-selector");
