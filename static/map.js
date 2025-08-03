@@ -132,7 +132,7 @@ var showMore = function (msg,area, type) {
 };
 async function fetchAndUpdateChart() {
   try {
-    const response = await fetch('/api/streamrag');
+    const response = await fetch('/streamrag_api');
     const streamrag = await response.json();
 
     const labels = Object.keys(streamrag);

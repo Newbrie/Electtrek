@@ -4,17 +4,15 @@
 {% block map %}
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
-<h1>SELECT ELECTORAL ROLL FILE STREAMS FOR EACH ELECTION AREA</h1>
-<h2>(if you want the electors to attempt a load, select fix level 3)</h2>
+<h1>Select ordered listof files to be uploaded for each Election</h1>
+<h2>(if you want to try to load electors , select fix level 3)</h2>
 <button id="add-row-btn">Add Row</button>
-<button id="add-stream-btn">Add Stream</button>
 <button id="save-btn">Save</button>
 
 <table id="stream-table" border="1">
   <thead>
     <tr>
       <th>Order</th>
-      <th>Stream</th>
       <th>Election</th>
       <th>Filename</th>
       <th>Type</th>
@@ -30,15 +28,8 @@
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
         <select class="editable stream">
-          {% for stream in streams %}
-            <option value="{{ stream }}"{% if row['stream'] == stream %} selected{% endif %}>{{ stream }}</option>
-          {% endfor %}
-      </select>
-      </td>
-      <td>
-        <select class="editable stream">
-          {% for stream in streams %}
-            <option value="{{ stream }}"{% if row['stream'] == stream %} selected{% endif %}>{{ stream }}</option>
+          {% for election in streams %}
+            <option value="{{ election }}"{% if row['election'] == election %} selected{% endif %}>{{ election }}</option>
           {% endfor %}
       </select>
       </td>
@@ -72,11 +63,11 @@
 </table>
 <!-- Import Table -->
 <div id="streams" class="section">
-    <h1>STREAM DATA QUALITY STATISTICS</h1>
+    <h1 class="centred">DATA QUALITY DASHBOARD</h1>
     <table id="streamtab">
         <thead>
           <tr>
-              <th>Stream</th>
+              <th>Election</th>
               <th>Alive</th>
               <th>Files</th>
               <th>Elect</th>
@@ -100,7 +91,7 @@
     <table id="DQ-table">
 
         <thead>
-          <button id="process-btn">ADD STREAM</button>
+          <button id="process-btn">LOAD ELECTION</button>
           <button id="reset-btn">RESET</button>
           <div id="progress-container" style="margin-top: 20px; display: none;">
             <label for="progress-bar">Normalization Progress:</label>
@@ -108,7 +99,7 @@
             <span id="progress-text">0%</span>
           </div>
             <tr>
-                <th>Stream</th>
+                <th>Election</th>
                 <th>Filename</th>
                 <th>Field</th>
                 <th>P0</th>
@@ -120,7 +111,7 @@
         <tbody>
             {% for index, row in DQstats.iterrows() %}
                 <tr>
-                    <td>{{ row['Stream'] }}</td>
+                    <td>{{ row['Election'] }}</td>
                     <td>{{ row['File'] }}</td>
                     <td>{{ row['Field'] }}</td>
                     <td>
@@ -157,15 +148,8 @@
       <td><input type="number" class="editable order" value="1" style="width: 60px;"></td>
       <td>
         <select class="editable stream">
-          {% for stream in streams %}
-            <option value="{{ stream }}">{{ stream }}</option>
-          {% endfor %}
-        </select>
-      </td>
-      <td>
-        <select class="editable election">
-          {% for stream in streams %}
-            <option value="{{ stream }}">{{ stream }}</option>
+          {% for election in streams %}
+            <option value="{{ election }}">{{ election }}</option>
           {% endfor %}
         </select>
       </td>
@@ -210,30 +194,89 @@
       });
     });
 
-    document.getElementById('add-stream-btn').addEventListener('click', function () {
-      let newStream = prompt("Enter the new stream name:");
-      if (newStream) {
-        document.querySelectorAll('.editable.stream').forEach(select => {
-          const option = document.createElement('option');
-          option.value = newStream;
-          option.textContent = newStream;
-          select.appendChild(option);
-        });
-      }
-    });
+
+
+
 
     document.getElementById('process-btn').addEventListener('click', function () {
 
-    const streamToProcess = prompt("Enter the stream name you wish to process:");
+      // Show progress bar
+    document.getElementById("progress-container").style.display = "block";
+    document.getElementById("progress-bar").value = 0;
+    document.getElementById("progress-text").innerText = "0%";
+    let progressTimeoutId = null;
+
+    // Start polling progress
+    function pollProgress() {
+      fetch("/progress")
+        .then(res => {
+            return res.json();
+        })
+        .then(data => {
+
+          const bar = document.getElementById("progress-bar");
+          const text = document.getElementById("progress-text");
+          bar.value = data.percent || 0;
+          text.innerText = (data.percent || 0) + "% — " + (data.message || "");
+
+          if (data.status === "complete") {
+            console.log("Normalization is complete. Injecting DQstats HTML if available.");
+            text.innerText = "✅ Complete";
+
+            if (data.dqstats_html) {
+              const tbody = document.querySelector("#DQ-table tbody");
+              if (tbody) {
+                tbody.innerHTML = data.dqstats_html;
+                console.log("DQstats updated successfully.");
+              } else {
+                console.warn("DQ-table tbody not found in DOM.");
+              }
+            }
+
+            // 🔄 Inject refreshed streamrag table
+             fetch('/streamrag_api')
+               .then(res => res.text())
+               .then(html => {
+                 const streamTbody = document.querySelector('#streamtab tbody');
+                 console.log("streamtabhtml:", html);
+                 if (streamTbody) {
+                   streamTbody.innerHTML = html;
+                 }
+               .then(streamrag => {
+                 const labels = Object.keys(streamrag);
+                 const data = labels.map(label => streamrag[label].Elect);
+                 const rags = labels.map(label => streamrag[label].RAG);
+                 console.log("streamtablabels:", labels);
+                 console.log("streamtabdata:", data);
+                 console.log("streamtabrags:", rags);
+                 createOrUpdateChart(labels, data, rags);
+               });
+
+            // Stop here; ❌ no further polling
+          } else if (data.status === "error") {
+            console.error("Error in normalization:", data.message);
+            text.innerText = "⚠️ " + (data.message || "Error");
+          } else {
+            // Continue polling after 500ms
+            progressTimeoutId = setTimeout(pollProgress, 500);
+          }
+        })
+        .catch(err => {
+          console.error("Polling error:", err);
+        });
+    }
+
+    const streamToProcess = prompt("Enter the election name for which you want to import data:");
     if (!streamToProcess) return;
 
     const normalizedInput = streamToProcess.trim().toLowerCase();
     const rows = document.querySelectorAll('#file-info-tbody tr');
     const formData = new FormData();
     let found = false;
+    console.log(`streamtoProcess ${rows}`);
 
     rows.forEach((row, index) => {
-      const stream = row.querySelector('.stream').value.trim().toLowerCase();
+      const election = row.querySelector('.stream').value.trim().toLowerCase();
       const active = row.querySelector('.active').checked;
       const order = row.querySelector('.order').value;
       const ftype = row.querySelector('.type').value;
@@ -245,7 +288,7 @@
 
 //      alert('inside active and stream: '+ stream+active );
 
-      if (active && stream === normalizedInput) {
+      if (active && election === normalizedInput) {
 
         if (fileInput.files.length > 0) {
           const file = fileInput.files[0];
@@ -254,7 +297,7 @@
           formData.append(`stored_path_${index}`, filepath);  // use stored safe path
 //          alert('Filepath found: '+`stored_path_${index}` + filepath);
         } else {
-          console.warn(`No file selected or stored path for stream '${stream}'`);
+          console.warn(`No file selected or stored path for stream '${election}'`);
           return; // skip this row
         }
         console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
@@ -264,21 +307,22 @@
         formData.append(`meta_${index}_type`, ftype);
         formData.append(`meta_${index}_purpose`, purpose);
         formData.append(`meta_${index}_fixlevel`, fixlevel);
-        formData.append(`meta_${index}_stream`, stream);
+        formData.append(`meta_${index}_election`, election);
         // After metadata is appended
 
 
         found = true;
       };
-      console.log(`Row stream: '${stream}', user input: '${normalizedInput}', active: ${active}`);
+      console.log(`Row election: '${election}', user input: '${normalizedInput}', active: ${active}`);
 
     });
 
     if (!found) {
-      alert("No matching files found for stream: " + streamToProcess);
+      alert("No matching files found for election: " + streamToProcess);
       return;
     }
 
+    pollProgress();
 
     fetch('/normalise', {
       method: 'POST',
@@ -286,43 +330,52 @@
     })
       .then(response => response.text())
       .then(html => {
-  //      location.reload(); // Refresh current page
-        document.open();
-        document.write(html);
-        document.close();
-        // Then reload the streamtab
-      fetch('/get_streamtab')
-        .then(res => res.text())
-        .then(html => {
-          document.querySelector('#streamtab tbody').innerHTML = html;
-        });
-      })
+        const dqTableBody = document.querySelector('#DQ-table tbody');
+        if (dqTableBody) {
+          dqTableBody.innerHTML = html;
+        }
+
+        // Optionally reload streamtab again after update
+        fetch('/get_streamtab')
+          .then(res => res.text())
+          .then(html => {
+            const streamTbody = document.querySelector('#streamtab tbody');
+            if (streamTbody) {
+              streamTbody.innerHTML = html;
+            }
+          });
+        })
       .catch(error => {
+        clearTimeout(progressTimeoutId);
+        progressTimeoutId = null;
         console.error('Error:', error);
         alert("Processing error: " + error);
       });
   });
 
-    function collectTableData() {
-      const rows = document.querySelectorAll('#file-info-tbody tr');
-      const data = [];
-      const test = row.querySelector('.file-path')?.value || "";
-      alert ("test filepath:"+test);
-      rows.forEach(row => {
-        data.push({
-          order: parseInt(row.querySelector('.order').value),
-          stream: row.querySelector('.stream').value,
-          filename: row.querySelector('.filename').value,
-          type: row.querySelector('.type').value,
-          purpose: row.querySelector('.purpose').value,
-          fixlevel: parseInt(row.querySelector('.fixlevel').value),
-          active: row.querySelector('.active').checked,
-          file_path: row.querySelector('.file-path')?.value || ""
-        });
-      });
+  function collectTableData() {
+    const rows = document.querySelectorAll('#file-info-tbody tr');
+    const data = [];
 
-      return data;
-    };
+    rows.forEach(row => {
+      const rowData = {
+        order: parseInt(row.querySelector('.order')?.value || "0"),
+        election: row.querySelector('.election')?.value || "",
+        filename: row.querySelector('.filename')?.value || "",
+        type: row.querySelector('.type')?.value || "",
+        purpose: row.querySelector('.purpose')?.value || "",
+        fixlevel: parseInt(row.querySelector('.fixlevel')?.value || "0"),
+        active: row.querySelector('.active')?.checked || false,
+        file_path: row.querySelector('.file-path')?.value || ""
+      };
+
+      console.log("Row Data:", rowData);  // ✅ Log to console
+      data.push(rowData);
+    });
+
+    return data;
+    }
+
 
     document.getElementById('reset-btn').addEventListener('click', () => {
       if (!confirm("Are you sure you want to reset Elections?")) return;
@@ -331,7 +384,7 @@
         .then(res => res.json())
         .then(data => {
           alert(data.message);
-          location.reload(); // Refresh current page
+          window.top.location.reload(); // Refresh current page
         })
         .catch(err => alert("Error resetting elections."));
     });
@@ -415,65 +468,7 @@
       }
     });
 
-  document.addEventListener('DOMContentLoaded', function () {
-    // Show progress bar
-    document.getElementById("progress-container").style.display = "block";
-    document.getElementById("progress-bar").value = 0;
-    document.getElementById("progress-text").innerText = "0%";
 
-    // Start polling progress
-    function pollProgress() {
-    fetch("/progress")
-      .then(res => {
-          return res.json();
-      })
-      .then(data => {
-
-        const bar = document.getElementById("progress-bar");
-        const text = document.getElementById("progress-text");
-        bar.value = data.percent || 0;
-        text.innerText = (data.percent || 0) + "% — " + (data.message || "");
-
-        if (data.status === "complete") {
-          console.log("Normalization is complete. Injecting DQstats HTML if available.");
-          text.innerText = "✅ Complete";
-
-          if (data.dqstats_html) {
-            const tbody = document.querySelector("#DQ-table tbody");
-            if (tbody) {
-              tbody.innerHTML = data.dqstats_html;
-              console.log("DQstats updated successfully.");
-            } else {
-              console.warn("DQ-table tbody not found in DOM.");
-            }
-          }
-
-          // 🔄 Inject refreshed streamrag table
-           fetch('/get_streamtab')
-             .then(res => res.text())
-             .then(html => {
-               const streamTbody = document.querySelector('#streamtab tbody');
-               if (streamTbody) {
-                 streamTbody.innerHTML = html;
-               }
-             });
-
-          // Stop here; ❌ no further polling
-        } else if (data.status === "error") {
-          console.error("Error in normalization:", data.message);
-          text.innerText = "⚠️ " + (data.message || "Error");
-        } else {
-          // Continue polling after 500ms
-          setTimeout(pollProgress, 500);
-        }
-      })
-      .catch(err => {
-        console.error("Polling error:", err);
-      });
-  }
-
-    pollProgress();
-  });
 
 
 

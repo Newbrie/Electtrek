@@ -207,7 +207,12 @@ def restore_fullpolys(node_type):
     global Fullpolys
     global Treepolys
     global current_node
-    current_node, CurrentElection = restore_from_persist()
+
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+
     Treepolys[node_type] = Fullpolys[node_type]
     persist(current_node)
 
@@ -284,7 +289,7 @@ data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
-StreamOptions = dict(zip({entry['stream'] for entry in table_data if 'stream' in entry},{entry['stream'] for entry in table_data if 'stream' in entry}))
+StreamOptions = dict(zip({entry['election'] for entry in table_data if 'election' in entry},{entry['election'] for entry in table_data if 'election' in entry}))
 
 
 OPTIONS = {
@@ -508,7 +513,6 @@ class TreeNode:
         return
 
     def updateTurnout(self):
-        global MapRoot
         global ELECTIONS
         global VNORM
         global VCO
@@ -558,7 +562,6 @@ class TreeNode:
         return
 
     def updateParty(self):
-        global MapRoot
         global ELECTIONS
         global VNORM
         global VCO
@@ -581,7 +584,6 @@ class TreeNode:
         return
 
     def updateElectorate(self,pop):
-        global MapRoot
         global ELECTIONS
         global VNORM
         global VCO
@@ -611,11 +613,10 @@ class TreeNode:
                 self.electorate = int(selected['ELECT'].values[0])
             print ("___Results:",self.value,self.electorate)
 
-        print ("_____OriginElectorate:",MapRoot.electorate,self.value,self.type,self.electorate)
+        print ("_____OriginElectorate:",self.findnodeat_Level(0).electorate,self.value,self.type,self.electorate)
         return
 
     def updateHouses(self,pop):
-        global MapRoot
         global ELECTIONS
         global VNORM
         global VCO
@@ -637,7 +638,7 @@ class TreeNode:
             sumnode = sumnode.parent
             self = origin
 
-        print ("_____OriginHouses:",MapRoot.houses,self.value,self.type,self.houses)
+        print ("_____OriginHouses:",self.findnodeat_Level(0).houses,self.value,self.type,self.houses)
         return
 
     def childrenoftype(self,electtype):
@@ -707,15 +708,16 @@ class TreeNode:
         print('______Data frame:',namepoints, fam_nodes)
         return fam_nodes
 
-    def find_Level4(self):
+    def findnodeat_Level(self,target_level):
         node = self
-        if node.level >= 4:
+        if node.level >= target_level:
             while True:
-                if node.level == 4:
+                if node.level == target_level:
                     break
                 node = node.parent
 
         return node
+
 
     def create_data_branch(self, electtype):
         global allelectors
@@ -765,7 +767,7 @@ class TreeNode:
 # this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
 
         pfile = Treepolys[gettypeoflevel(self.dir,4)]
-        Level4node = self.find_Level4()
+        Level4node = self.findnodeat_Level(4)
         Level4boundary = pfile[pfile['FID']== Level4node.fid]
         PDs = set(allelectors.PD.values)
         frames = []
@@ -1038,6 +1040,7 @@ class TreeNode:
         return d
 
     def add_Tchild(self, child_node, etype):
+        global TREK_NODES
         # creates parent-child relationship
         self.child = child_node
         self.davail = True
@@ -1921,11 +1924,11 @@ def getstreamrag():
     # deprecated streams are streams with no definition - RED
     # a stream can be deactivated by marking a file and as inactive the set up page.
 
-        ef = pd.DataFrame(ef,columns=['Stream', 'ENOP'])
-        # we group electors by Streams, calculating totals in each stream
+        ef = pd.DataFrame(ef,columns=['Election', 'ENOP'])
+        # we group electors by Election, calculating totals in each election list
         g = {'ENOP':'count' }
-        livestreamdash = ef.groupby(['Stream']).agg(g)
-        livestreamlabels = list(set(ef['Stream'].values))
+        livestreamdash = ef.groupby(['Election']).agg(g)
+        livestreamlabels = list(set(ef['Election'].values))
         print("__LIVESTREAMLABELS: ", livestreamlabels)
         rag = defaultdict(dict)
         if len(ef) > 0 and len(livestreamlabels) > 0:
@@ -1936,15 +1939,15 @@ def getstreamrag():
                 g = {'filename' : 'count', 'loaded' : 'count'}
                 table_df = pd.DataFrame(table_data)
                 print("____we have allelectors and streamtable file :")
-                defined_streamlabels = table_df['stream'].to_list() # streams are defined but not live
-                active_streams = list({x for x in defined_streamlabels if x in livestreamlabels }) # streams are defined and live
-                depreciated_streams = [x for x in livestreamlabels if x not in defined_streamlabels] # streams are live but not defined
-                deactivated_streams = list({x for x in defined_streamlabels if x not in livestreamlabels}) # streams are defined but not live
+                defined_streamlabels = table_df['election'].to_list() #elections are defined but not live
+                active_streams = list({x for x in defined_streamlabels if x in livestreamlabels }) # elections are defined and live
+                depreciated_streams = [x for x in livestreamlabels if x not in defined_streamlabels] # elections are live but not defined
+                deactivated_streams = list({x for x in defined_streamlabels if x not in livestreamlabels}) #elections are defined but not live
                 print(f"____actives:{active_streams}, deprec:{depreciated_streams}, deactiv: {deactivated_streams}")
 
                 for stream in active_streams:
                     stream_key = stream.upper()
-                    mask = table_df['stream'] == stream_key
+                    mask = table_df['election'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = True
                     rag[stream]['Elect'] = int(livestreamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
@@ -1953,7 +1956,7 @@ def getstreamrag():
                     print("_____Active Streams:",ef.head(), livestreamdash.head())
                 for stream in depreciated_streams:
                     stream_key = stream.upper()
-                    mask = table_df['stream'] == stream_key
+                    mask = table_df['election'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = False
                     rag[stream]['Elect'] = 0
@@ -1962,7 +1965,7 @@ def getstreamrag():
                     print("_____Depreciated Streams:",ef.head(), livestreamdash.head())
                 for stream in deactivated_streams:
                     stream_key = stream.upper()
-                    mask = table_df['stream'] == stream_key
+                    mask = table_df['election'] == stream_key
                     rag[stream] = {}
                     rag[stream]['Alive'] = False
                     rag[stream]['Elect'] = 0
@@ -1997,6 +2000,7 @@ def getstreamrag():
 def register_node(node: TreeNode):
     global TREK_NODES
     TREK_NODES[node.fid] = node
+    print("Trek Nodes:",TREK_NODES)
     return
 
 def reset_nodes():
@@ -2006,72 +2010,76 @@ def reset_nodes():
         pickle.dump(TREK_NODES, f)
     return
 
+
+def get_current_node(session=None, session_data=None):
+    global TREK_NODES
+
+    """
+    Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
+    """
+
+    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'rb') as f:
+        TREK_NODES = pickle.load(f)
+
+    if session and 'current_node_id' in session:
+        current_node_id = session.get('current_node_id')
+        print("[Main Thread] current_node_id from session:", current_node_id)
+    elif session_data and 'current_node_id' in session_data:
+        current_node_id = session_data.get('current_node_id')
+        print("[Background Thread] current_node_id from session_data:", current_node_id)
+    else:
+        session['current_node_id'] = 238
+        print("⚠️ current_node_id not found in session or session_data:so id = ",238 )
+
+    node = TREK_NODES.get(session.get('current_node_id'))
+    if not node:
+        MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0)
+        MapRoot.dir = "UNITED_KINGDOM"
+        MapRoot.file = "UNITED_KINGDOM-MAP.html"
+
+        register_node(MapRoot)
+        node = MapRoot
+        print("⚠️ current_node not found in stored TREK_NODES, so starting new MapRoot")
+
+    return node
+
+
+def get_current_election(session=None, session_data=None):
+    global ELECTIONS
+
+    """
+    Returns the current election from ELECTIONS indicate by the Flask session or passed-in session_data.
+    """
+
+    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+        ELECTIONS = json.load(f)
+
+
+    if session and 'current_election' in session:
+        current_election = session.get('current_election')
+        print("[Main Thread] current_election from session:", current_election)
+
+    elif session_data and 'current_election' in session_data:
+        current_election = session_data.get('current_election')
+        print("[Background Thread] current_election from session_data:", current_election)
+    else:
+        current_election = "DEMO"
+        print("⚠️ current_election not found in session so using DEMO")
+
+
+    return current_election
+
 def restore_from_persist():
-    global MapRoot
     global TREK_NODES
     global ELECTIONS
     global Treepolys
     global Fullpolys
     global allelectors
 
-    def get_current_node(session=None, session_data=None):
-        """
-        Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
-        """
-        current_node_id = MapRoot.fid
-
-        if session and 'current_node_id' in session:
-            current_node_id = session.get('current_node_id')
-            print("[Main Thread] current_node_id from session:", current_node_id)
-
-        elif session_data and 'current_node_id' in session_data:
-            current_node_id = session_data.get('current_node_id')
-            print("[Background Thread] current_node_id from session_data:", current_node_id)
-
-        else:
-            print("⚠️ current_node_id not found in session or session_data")
-
-        node = TREK_NODES.get(current_node_id)
-        if not node:
-            print("⚠️ current_node not found in stored TREK_NODES")
-
-        return node
-
-    def get_current_election(session=None, session_data=None):
-        """
-        Returns the current election from ELECTIONS indicate by the Flask session or passed-in session_data.
-        """
-        current_election = "demo"
-
-        if session and 'current_election' in session:
-            current_election = session.get('current_election')
-            print("[Main Thread] current_election from session:", current_election)
-
-        elif session_data and 'current_election' in session_data:
-            current_election = session_data.get('current_election')
-            print("[Background Thread] current_election from session_data:", current_election)
-
-        else:
-            print("⚠️ current_election not found in session or session_data")
-
-        if not session.get('current_election'):
-            session['current_election'] = next(iter(ELECTIONS), None)
-
-        current = ELECTIONS.get(session.get('current_election'))
-        if not current:
-            print("⚠️ current_election not found in stored ELECTIONS")
-
-        return current
-
-
     with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
         Treepolys = pickle.load(f)
     with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'rb') as f:
         Fullpolys = pickle.load(f)
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
-        ELECTIONS = json.load(f)
-    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'rb') as f:
-        TREK_NODES = pickle.load(f)
 
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], "allelectors.csv")
     if not file_path or not os.path.exists(file_path):
@@ -2088,9 +2096,7 @@ def restore_from_persist():
             keep_default_na=False,
             na_values=['']
         )
-    node = get_current_node(session=session)
-    currente = get_current_election(session=session)
-    return node,currente
+    return
 
 def persist(node):
     global TREK_NODES
@@ -2110,7 +2116,7 @@ def persist(node):
     return
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data):
-    global  MapRoot, TREK_NODES, allelectors, Treepolys, Fullpolys, current_node
+    global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node
     global ELECTIONS, formdata, layeritems
 
     def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
@@ -2162,7 +2168,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
 
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session_data)
+    current_election = get_current_election(session_data)
+    SelectedElection = ELECTIONS.get(current_election)
+
+
     # Simulate step progress throughout your pipeline
     # All your existing code from the route goes here, replacing request.form/files/session
 
@@ -2179,7 +2190,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     )
     logger = logging.getLogger(__name__)
 
-    # 6. Process metadata (normalisation or routing)
+    # 6. Process metadata for all files in selected stream( does not have to be current election)
     file_index = 0
     mainframe = pd.DataFrame()
     deltaframes = []
@@ -2188,7 +2199,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
     progress["percent"] = 1
     progress["status"] = "sourcing"
-    progress["message"] = "Sourcing data from files ..."
+    progress["message"] = "Sourcing data from instruction files ..."
 
     try:
         print("___Route/normalise")
@@ -2198,14 +2209,15 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress["message"] = "Processing sourced data . . ."
 
             print(f"\nRow index {index}")
-            stream = str(data.get('stream', '')).upper()
+            stream = str(data.get('election', '')).upper()
+            SelectedElection = ELECTIONS[stream] # essential for election specific kmeans processing
             order = data.get('order')
             filetype = data.get('type')
             purpose = data.get('purpose')
             fixlevel = int(data.get('fixlevel', 0))
             file_path = data.get('stored_path', '')
 
-            print(f"Stream: {stream}")
+            print(f"Election: {stream}")
             print(f"Order: {order}")
             print(f"Type: {filetype}")
             print(f"Purpose: {purpose}")
@@ -2220,8 +2232,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                     table_data = json.load(f)
             else:
                 table_data = []
-        # Collect unique streams for dropdowns
-            streams = sorted(set(row['stream'] for row in table_data))
+        # Collect all possible unique stream names for dropdowns
+            streams = sorted(set(row['election'] for row in table_data))
             streamrag = {}
             dfx = pd.DataFrame()
 
@@ -2252,13 +2264,13 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 progress["status"] = "error"
                 progress["message"] = f"Error: {str(e)}"
                 return
-
-            progress["stream"] = stream
+# progress update finished sorting through instructions,  now starting normalisation stream data
+            progress["election"] = stream
             progress["status"] = "running"
             progress["percent"] = 0
             progress["message"] = "Starting normalisation..."
 
-        # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
+# normz delivers [normalised elector data df,stats dict,original data quality stats in df]
             Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
             Outcols = Outcomes.columns.to_list()
             if purpose == "main":
@@ -2338,7 +2350,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
     # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
 
-        label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=CurrentElection['walksize'], MAX_DEPTH=5)
+        label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=SelectedElection['walksize'], MAX_DEPTH=5)
         newlabels = pd.Series(label_dict)
         mainframe["WalkName"] = mainframe.index.map(newlabels)
         allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
@@ -2420,10 +2432,10 @@ Featurelayers = {
 #        'walk', 'walkleg', 'street', 'result', 'target', 'data', 'special'
 #    ][i - 1]
 progress = {
-    "stream": "",
+    "election": "",
     "status": "idle",       # Can be 'idle', 'running', 'complete', 'error'
     "percent": 0,           # Integer from 0 to 100
-    "targetfile": "",
+    "targetfile": "test.csv",
     "message": "Waiting...", # Optional string
     "dqstats_html": ""
     }
@@ -2505,7 +2517,12 @@ def resourcing():
     global layeritems
     global ELECTIONS
     global TREK_NODES
-    current_node, CurrentElection = restore_from_persist()
+
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+
     # Group walk names by resource tag
     resource_tags = {k: v for k, v in CurrentElection['tags'].items() if k.startswith('R')}
     walks_by_tag = {tag: [] for tag in resource_tags}
@@ -2525,7 +2542,11 @@ def update_walk():
     global layeritems
     global ELECTIONS
     global TREK_NODES
-    current_node, CurrentElection = restore_from_persist()
+
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     data = request.json
     walk_name = data.get('walkName')
     new_resource = data.get('newResource')
@@ -2546,14 +2567,17 @@ def kanban():
     global ELECTIONS
     global TREK_NODES
 
-    current_node, CurrentElection = restore_from_persist()
-    if current_node.level < 4:
-        return jsonify(success=False, error="Missing Elector data"), 400
-
-    Level4node = current_node.find_Level4()
-    mask = allelectors['Area'] == Level4node.value
+# campaign plan is only available to westminster elections at level 3 and others at level 4.
+# every election should acquire an election node(ping to its mapfile) to which this route should take you
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+    current_node = current_node.ping_node(CurrentElection['mapfile'])
+    mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
-
+    print("AreaElectors shape:", areaelectors.shape)
+    print("Sample of areaelectors:", areaelectors.head())
     # Example DataFrame
     df = areaelectors
     gotv = float(CurrentElection['GOTV'])
@@ -2565,16 +2589,16 @@ def kanban():
     df['VI_Voted'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "M1" in tags.split() else 0)
     g = {'ENOP': 'count', 'Kanban': 'first', 'VI_Party': 'sum', 'VI_Voted': 'sum', 'VI_L1Done': 'sum','VI_Canvassed': 'sum'}
     grouped = df.groupby('WalkName').agg(g).reset_index()
-
+    print("Unique WalkNames:", df['WalkName'].dropna().unique())
     # Compute dynamic GOTV target per group
     grouped['VI_Target'] = (((grouped['ENOP'] * turnout) / 2 + 1) / gotv).round().astype(int)
     grouped['VI_Pledged'] = (grouped['VI_Party'] - grouped['VI_Voted']).clip(lower=0)
     grouped['VI_ToGet_Pos'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(lower=0)
     grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
     print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg','VI_L1Done','VI_Canvassed' ]].head());
-    mapfile = Level4node.dir+"/"+Level4node.file
-    formdata['tabledetails'] = "Click for "+Level4node.value +  "\'s "+gettypeoflevel(mapfile,Level4node.level+1)+" details"
-    items = Level4node.childrenoftype('walk')
+    mapfile = current_node.dir+"/"+current_node.file
+    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(mapfile,current_node.level+1)+" details"
+    items = current_node.childrenoftype('walk')
     layeritems = getlayeritems(items,formdata['tabledetails'] )
     print("___Layeritems: ",[x.value for x in items] )
 
@@ -2616,8 +2640,11 @@ def update_walk_kanban():
         return jsonify(success=False, error="Missing data"), 400
 
     # Restore context
-    current_node, CurrentElection = restore_from_persist()
-    Level4node = current_node.find_Level4()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+    Level4node = current_node.findnodeat_Level(4)
     area_mask = allelectors['Area'] == Level4node.value
 
     # Find electors in the area and matching WalkName
@@ -2679,7 +2706,10 @@ def leafletting():
 @login_required
 def check_enop(enop):
     global ELECTIONS
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     # Check if ENOP exists in the DataFrame
     if enop in allelectors['ENOP'].values:
         # Get the current Tags for the ENOP
@@ -2722,7 +2752,10 @@ def street_search():
 @app.route('/update_street_tags', methods=['POST'])
 @login_required
 def update_street_tags():
-    current_node, CurrentElection = restore_from_persist()  # Load the current state of the electors data
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     data = request.get_json()
     street_index = data.get('street_index')
     delivery_tag = data.get('tag')
@@ -2818,7 +2851,10 @@ def search():
 @app.route('/location')
 @login_required
 def location():
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
@@ -2870,22 +2906,23 @@ def add_tag():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/streamrag')
+@app.route('/streamrag_api')
 @login_required
-def get_streamrag():
+def streamrag_api():
     global streamrag
     global allelectors
     streamrag = getstreamrag()
+    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
     print("___JSONIFYED streamrag:",jsonify(streamrag))
-    return jsonify(streamrag)
+    return jsonify({streamrag:streamrag,html:html})
 
-from flask import render_template
 
-@app.route('/get_streamtab')
-@login_required
-def get_streamtab():
-    streamrag = getstreamrag()
-    return render_template('partials/streamtab_rows.html', streamrag=streamrag)
+#@app.route('/get_streamtab')
+#@login_required
+#def get_streamtab():
+# this refreshes the table in stream_processing html
+#    streamrag = getstreamrag()
+#    return render_template('partials/streamtab_rows.html', streamrag=streamrag)
 
 
 @app.route('/reset_Elections', methods=['POST'])
@@ -2957,14 +2994,16 @@ def get_constants():
     global ELECTIONS
     global OPTIONS
     print("____Route/get_constants" )
-    current = session.get('current_election')
-    if not current or current not in ELECTIONS:
+    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+        ELECTIONS = json.load(f)
+    current_election = get_current_election(session)
+    if not current_election or current_election not in ELECTIONS:
         return jsonify({'error': 'Invalid election'}), 400
     print('__OPTIONS: ', OPTIONS)
     return jsonify({
-        'constants': ELECTIONS[current],
+        'constants': ELECTIONS.get(current_election),
         'options': OPTIONS,
-        'current_election': current
+        'current_election': current_election
     })
 
 
@@ -2977,8 +3016,10 @@ def set_constant():
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
-    print("____Back End1:",name,"-",value)
-    current_election = session['current_election']
+    current_election = data.get("election")
+
+    print("____Back End1 election constants update:",current_election,":",name,"-",value)
+
     with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
         ELECTIONS = json.load(f)
 
@@ -3004,7 +3045,9 @@ def delete_election():
     data = request.get_json()
     election_to_delete = data.get("election")
 
-    if not election_to_delete or election_to_delete not in ELECTIONS:
+    print("Received delete-election request:", election_to_delete)
+
+    if election_to_delete == "DEMO" or not election_to_delete or election_to_delete not in ELECTIONS:
         return jsonify(success=False, error="Election not found")
 
     # Remove from dict
@@ -3021,7 +3064,7 @@ def delete_election():
         json.dump(ELECTIONS, f, indent=2)
 
     # Re-render tabs
-    electiontabs_html = render_template("partials/election_tabs.html",
+    electiontabs_html = render_template("partials/electiontabs.html",
                                         ELECTIONS=ELECTIONS,
                                         current_election=session.get('current_election'))
 
@@ -3092,11 +3135,35 @@ def add_election():
         'electiontabs_html':formdata['electiontabs_html']
     })
 
+@app.route("/update-territory", methods=["POST"])
+@login_required
+def update_territory():
+    global TREK_NODES
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+
+    data = request.get_json()
+    election = data.get("election")
+    if not election:
+        return jsonify(success=False, error="No election provided.")
+
+    # Assume current_node is globally available or session-scoped
+    mapfile = current_node.dir+"/"+current_node.file
+    if not mapfile:
+        return jsonify(success=False, error="Current node has no mapfile.")
+
+    ELECTIONS[election]["mapfile"] = mapfile
+    print("______Update-territory:"+ mapfile)
+
+    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+        json.dump(ELECTIONS, f, indent=2)
+    return jsonify(success=True, mapfile=mapfile)
 
 
 @app.route("/", methods=['POST', 'GET'])
 def index():
-    global MapRoot
     global TREK_NODES
     global streamrag
 
@@ -3107,8 +3174,10 @@ def index():
         print("__________Session Alive:"+ session['username'])
         formdata = {}
         streamrag = getstreamrag()
-        current_node, CurrentElection = restore_from_persist()
-
+        restore_from_persist()
+        current_node = get_current_node(session)
+        current_election = get_current_election(session)
+        CurrentElection = ELECTIONS.get(current_election)
         mapfile = current_node.dir+"/"+current_node.file
 #        redirect(url_for('captains'))
 
@@ -3140,7 +3209,6 @@ def validate_tags():
 #login
 @app.route('/login', methods=['POST', 'GET'])
 def login():
-    global MapRoot
     global TREK_NODES
     global streamrag
     global environment
@@ -3155,9 +3223,10 @@ def login():
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
-    current_node, CurrentElection = restore_from_persist()
-    if not current_node:
-        current_node = MapRoot
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
     # Check if it exists
@@ -3305,19 +3374,22 @@ def logout():
 @app.route('/dashboard', methods=['GET','POST'])
 @login_required
 def dashboard():
-    global MapRoot
     global TREK_NODES
     global allelectors
     global streamrag
     global formdata
-    current_node, CurrentElection = restore_from_persist()
+
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id')}")
         formdata = {}
         current_node = TREK_NODES.get(session.get('current_node_id'))
         if not current_node:
-            current_node = MapRoot
+            current_node = next(iter(TREK_NODES), None).findnodeat_Level(0)
         streamrag = getstreamrag()
 
         path = current_node.dir+"/"+current_node.file
@@ -3347,7 +3419,10 @@ def downbut(path):
     global Featurelayers
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
     formdata = {}
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
@@ -3405,7 +3480,10 @@ def transfer(path):
     global formdata
     TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     formdata = {}
 # transfering to another any other node with siblings listed below
@@ -3437,12 +3515,14 @@ def downPDbut(path):
     global Fullpolys
     global Featurelayers
     global TREK_NODES
-    global MapRoot
     global areaelectors
     global filename
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     print ("_________ROUTE/downPDbut/",path, request.method)
     if request.method == 'GET':
@@ -3454,8 +3534,8 @@ def downPDbut(path):
         current_node.file = subending(current_node.file,"-PDS.html")
         mapfile = current_node.dir+"/"+current_node.file
 
-        Level4node = current_node.find_Level4()
-        mask = allelectors['Area'] == Level4node.value
+        Level4node = current_node.findnodeat_Level(4)
+        mask = allelectors['Election'] == current_election
         areaelectors = allelectors[mask]
         print(f"__downPD- l4area-{Level4node.value}, lenAll {len(allelectors)}, len area {len(areaelectors)}")
 
@@ -3496,12 +3576,14 @@ def downWKbut(path):
     global Fullpolys
     global Featurelayers
     global TREK_NODES
-    global MapRoot
     global areaelectors
 
     global filename
     global layeritems
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     print ("_________ROUTE/downWKbut Requestformfile")
     flash ("_________ROUTE/downWKbut Requestformfile")
@@ -3517,8 +3599,8 @@ def downWKbut(path):
 
         shapelayer = Featurelayers['walk'].reset()
 
-        Level4node = current_node.find_Level4()
-        mask = allelectors['Area'] == Level4node.value
+        Level4node = current_node.findnodeat_Level(4)
+        mask = allelectors['Election'] == current_election
         areaelectors = allelectors[mask]
 
         print("_______already displayed WALK markers",str(len(Featurelayers['walk']._children)))
@@ -3562,7 +3644,10 @@ def STupdate(path):
     global filename
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
 #    steps = path.split("/")
 #    filename = steps.pop()
@@ -3712,15 +3797,18 @@ def PDdownST(path):
     global filename
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     def firstnameinlist(name,list):
         posn = list.index(name)
         return list[posn]
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-    Level4node = current_node.find_Level4()
-    mask = allelectors['Area'] == Level4node.value
+    Level4node = current_node.findnodeat_Level(4)
+    mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
     current_node = current_node.ping_node(path)
     PD_node = current_node
@@ -3775,14 +3863,17 @@ def LGdownST(path):
     global filename
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     def firstnameinlist(name,list):
         posn = list.index(name)
         return list[posn]
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
-    Level4node = current_node.find_Level4()
-    mask = allelectors['Area'] == Level4node.value
+    Level4node = current_node.findnodeat_Level(4)
+    mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
     current_node = current_node.ping_node(path)
     PD_node = current_node
@@ -3836,15 +3927,18 @@ def WKdownST(path):
     global environment
     global filename
     global layeritems
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
 
-    Level4node = current_node.find_Level4()
-    mask = allelectors['Area'] == Level4node.value
+    Level4node = current_node.findnodeat_Level(4)
+    mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
     current_node = current_node.ping_node(path)
@@ -3890,7 +3984,10 @@ def wardreport(path):
     global layeritems
     global formdata
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     current_node = current_node.ping_node(path)
 
@@ -3987,7 +4084,10 @@ def divreport(path):
     global formdata
     global Featurelayers
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
@@ -4035,7 +4135,10 @@ def upbut(path):
     global environment
     global layeritems
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     flash('_______ROUTE/upbut',path)
     print('_______ROUTE/upbut',path, current_node.value)
@@ -4085,7 +4188,10 @@ def register():
     username = request.form['username']
     password = request.form['password']
     print("Register", username)
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     user = User.query.filter_by(username=username).first()
     if user:
@@ -4114,7 +4220,10 @@ def map(path):
 #    steps = path.split("/")
 #    last = steps.pop()
 #    current_node = selected_childnode(current_node,last)
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
@@ -4142,7 +4251,10 @@ def newstreet(path):
 #    steps = path.split("/")
 #    last = steps.pop()
 #    current_node = selected_childnode(current_node,last)
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     flash ("_________ROUTE/map:"+path)
     print ("_________ROUTE/map:",path, current_node.dir)
@@ -4162,7 +4274,10 @@ def newstreet(path):
 def showmore(path):
     global TREK_NODES
 
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     steps = path.split("/")
     last = steps.pop().split("--")
@@ -4194,53 +4309,10 @@ def upload_file():
 
     return jsonify({'message': 'File uploaded', 'path': save_path})
 
-@app.route('/setgotv', methods=['POST'])
-@login_required
-def setgotv():
-    global ELECTIONS
-    global TREK_NODES
-    global layeritems
-    global allelectors
-
-    global streamrag
-    current_node, CurrentElection = restore_from_persist()
-
-    flash('_______ROUTE/setgotv',session)
-    print('_______ROUTE/setgotv',session)
-    selected = None
-    streamrag = getstreamrag()
-
-    if request.method == 'POST':
-
-        formdata = {}
-        formdata = {
-        key: value
-        for key, value in request.form.items()
-            if value.strip()  # Only keep non-empty inputs
-            }
-
-        print("User submitted:", formdata)
-        # Now `filled_data` contains only the meaningful inputs
-
-        # You can now process only what's been entered
-        for field,value in formdata.items():
-            CurrentElection['field'] =  value
-
-        GOTV = CurrentElection['GOTV']
-        autofix = CurrentElection['autofix']
-        mapfile = current_node.dir+"/"+current_node.file
-        formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
-        print('_______CurrentElection:',CurrentElection)
-        layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(current_node.dir,current_node.level+1)),formdata['tabledetails'])
-        session['current_node_id'] = current_node.fid
-
-        return render_template("Dash0.html",  formdata=formdata,current_election=CurrentElection['name'], ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
-    return ""
 
 @app.route('/filelist/<filetype>', methods=['POST','GET'])
 @login_required
 def filelist():
-    global MapRoot
     global TREK_NODES
     global allelectors
     global Treepolys
@@ -4252,7 +4324,10 @@ def filelist():
 
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
@@ -4270,7 +4345,7 @@ def get_progress():
 
     if progress['status'] != 'complete':
         return jsonify({
-            'stream' : progress['stream'],
+            'election' : progress['election'],
             'percent': progress['percent'],
             'status': progress['status'],
             'message': progress['message'],
@@ -4288,7 +4363,7 @@ def get_progress():
     progress['percent'] = 100
     progress['status'] = 'complete'
     progress['message'] = 'Normalization complete'
-    progress['stream'] = progress['stream']
+    progress['election'] = progress['election']
 
     return jsonify(progress)  # Send whole object as JSON
 
@@ -4297,7 +4372,6 @@ def get_progress():
 @app.route('/walks', methods=['POST','GET'])
 @login_required
 def walks():
-    global MapRoot
     global TREK_NODES
     global allelectors
     global Treepolys
@@ -4306,7 +4380,10 @@ def walks():
 
 
     global environment
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
@@ -4340,7 +4417,10 @@ def postcode():
     global TREK_NODES
     global Treepolys
     global Featurelayers
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
 
     flash('__ROUTE/Findpostcode')
@@ -4367,7 +4447,6 @@ def postcode():
 @app.route('/firstpage', methods=['GET', 'POST'])
 @login_required
 def firstpage():
-    global MapRoot
     global TREK_NODES
     global allelectors
     global Treepolys
@@ -4378,8 +4457,10 @@ def firstpage():
     global layeritems
     global streamrag
 
-    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'rb') as f:
-      TREK_NODES = pickle.load(f)
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
 
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
@@ -4392,7 +4473,7 @@ def firstpage():
 
 #    lat = 53.2730 - Runcorn
 #    lon = -2.7694 - Runcorn
-
+    MapRoot = current_node.findnodeat_Level(0)
     sourcepath = MapRoot.dir+"/"+MapRoot.file
     if lat and lon:
         # Use lat/lon to filter data, e.g., find matching region in GeoJSON
@@ -4434,8 +4515,11 @@ def firstpage():
         with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'wb') as f:
             pickle.dump(Fullpolys, f)
 
-        current_node, CurrentElection = restore_from_persist()
-        current_election = session['current_election']
+        restore_from_persist()
+        current_node = get_current_node(session)
+        current_election = get_current_election(session)
+        CurrentElection = ELECTIONS.get(current_election)
+
         session['next'] = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = MapRoot.ping_node(sourcepath)
@@ -4469,6 +4553,7 @@ def firstpage():
         print("______First selected node",atype,len(current_node.children),len(current_node.getselectedlayers(session['next'])[0]._children),current_node.value, current_node.level,current_node.file)
 
         mapfile = current_node.dir+"/"+current_node.file
+
         persist(current_node)
         return render_template("Dash0.html", VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,  group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     else:
@@ -4479,16 +4564,13 @@ def firstpage():
 @app.route('/cards', methods=['POST','GET'])
 @login_required
 def cards():
-
-
-    global MapRoot
     global TREK_NODES
     global allelectors
     global Treepolys
     global Fullpolys
     global streamrag
     global environment
-    current_node, CurrentElection = restore_from_persist()
+
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
     streamrag = getstreamrag()
@@ -4553,20 +4635,13 @@ def save_table_data():
 
 # Sample file info data (replace with your actual data)
 file_info = [
-    {'Order': 1, 'Stream': 'A', 'Filename': 'BEEP_ElectoralRoll.xlsx', 'Type': 'xlsx', 'Purpose': 'main', 'Fixlevel': '1'},
-    {'Order': 2, 'Stream': 'A', 'Filename': 'BEEP_AbsentVoters.csv', 'Type': 'csv', 'Purpose': 'avi', 'Fixlevel': '2'},
-    {'Order': 1, 'Stream': 'B', 'Filename': 'WokingRegister.xlsx', 'Type': 'xlsx', 'Purpose': 'main', 'Fixlevel': '3'},
-    {'Order': 2, 'Stream': 'B', 'Filename': 'WokingAVlist.csv', 'Type': 'csv', 'Purpose': 'avi', 'Fixlevel': '1'},
+    {'Order': 1, 'Election': 'A', 'Filename': 'BEEP_ElectoralRoll.xlsx', 'Type': 'xlsx', 'Purpose': 'main', 'Fixlevel': '1'},
+    {'Order': 2, 'Election': 'A', 'Filename': 'BEEP_AbsentVoters.csv', 'Type': 'csv', 'Purpose': 'avi', 'Fixlevel': '2'},
+    {'Order': 1, 'Election': 'B', 'Filename': 'WokingRegister.xlsx', 'Type': 'xlsx', 'Purpose': 'main', 'Fixlevel': '3'},
+    {'Order': 2, 'Election': 'B', 'Filename': 'WokingAVlist.csv', 'Type': 'csv', 'Purpose': 'avi', 'Fixlevel': '1'},
     # Add more file data as needed
 ]
 
-# Optional: Retire or Redirect `/get_import_table` route
-@app.route('/get_import_table')
-@login_required
-def get_import_table():
-    # Redirect to the new combined page
-    DQstats = pd.DataFrame()
-    return redirect(url_for('stream_processing_with_table', DQstats=DQstats))
 
 @app.route('/normalise', methods=['POST'])
 @login_required
@@ -4574,7 +4649,12 @@ def normalise():
     # Save request/form/session to avoid issues inside thread
     request_form = request.form.to_dict(flat=True)
     request_files = request.files.to_dict(flat=False)  # Getlist-style access
-    current_node, CurrentElection = restore_from_persist()
+    restore_from_persist()
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = ELECTIONS.get(current_election)
+
+
     session_data = dict(session)
 
 
@@ -4605,7 +4685,7 @@ def normalise():
             table_data = json.load(f)
     else:
         table_data = []
-    streams = sorted(set(row['stream'] for row in table_data))
+    streams = sorted(set(row['election'] for row in table_data))
     print("Form Data:",request_form)
     print("Form Files:",request_files)
 # 1. Get uploaded files
@@ -4699,6 +4779,7 @@ def process_stream():
 @login_required
 def stream_input():
     global allelectors
+    global ELECTIONS
     global table_data
     DQstats = pd.DataFrame()
 
@@ -4713,9 +4794,9 @@ def stream_input():
     streamrag = getstreamrag()
 
     # Collect unique streams for dropdowns
-    streams = sorted(set(row['stream'] for row in table_data))
+    streams = list(ELECTIONS.keys())
 
-    print("__Streamrag3",streamrag)
+    print("__Streamrag3",streams, streamrag)
 
     return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
 

@@ -552,7 +552,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
 
 
     electors10 = pd.DataFrame()
-    DQstats = pd.DataFrame(columns=['Stream','File','Field','P0', 'P1', 'P2', 'P3'])
+    DQstats = pd.DataFrame(columns=['Election','File','Field','P0', 'P1', 'P2', 'P3'])
 
 
 #AUTO DATA IMPORT
@@ -594,7 +594,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     print(f"___DQ Stats1",DQstats, Outcols)
 
     for z in Outcols :
-        DQstats.loc[Outcols.index(z),'Stream'] = stream.upper()
+        DQstats.loc[Outcols.index(z),'Election'] = stream.upper()
         DQstats.loc[Outcols.index(z),'File'] = ImportFilename
         DQstats.loc[Outcols.index(z),'Field'] = z
     print(f"___DQ Stats2",DQstats, Outcols)
@@ -606,10 +606,10 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     for y in list(set(Outcols) & set(electors100.columns)):
         DQstats.loc[Outcols.index(y),'P0'] = 1
     electors100['Source_ID'] = ImportFilename
-    electors100['Stream'] = stream
+    electors100['Election'] = stream
     electors100['Purpose'] = purpose
     electors100['Tags'] = [[] for _ in range(len(electors100))]
-    electors100['Kanban'] = "M"
+    electors100['Kanban'] = "R"
 
     print(f"___DQ Stats3",DQstats, electors100.columns)
 
@@ -662,7 +662,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         print("____________MAIN file processing complete for : ",ImportFilename, electors2.columns )
     elif purpose == 'avi':
         # not processing addresses , just the elector identity and their AV
-        electors2 = pd.DataFrame(electors100, columns=['Stream', 'Purpose', 'RNO', 'Tags','PD', 'Firstname', 'Surname', 'ElectorName','ENOP','ENOT','Suffix','ENO','AV'])
+        electors2 = pd.DataFrame(electors100, columns=['Election', 'Purpose', 'RNO', 'Tags','PD', 'Firstname', 'Surname', 'ElectorName','ENOP','ENOT','Suffix','ENO','AV'])
         print("____________AVI file processing complete for : ",ImportFilename, electors2.columns )
     print("____________Normalisation_Complete________in ",ImportFilename )
 

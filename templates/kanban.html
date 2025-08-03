@@ -112,7 +112,6 @@
   </style>
 </head>
 <body>
-
 <div class="kanban-board" id="kanbanBoard"></div>
 
 <script>
@@ -169,7 +168,8 @@
         }
       });
     });
-
+    console.log("Grouped Walks:", groupedWalks.map(w => w.Kanban));
+    console.log("Kanban Option Codes:", kanbanOptions.map(o => o.code));
     // Create and place circles with doughnut charts
     groupedWalks.forEach(group => {
       const walkName = group.WalkName;
