@@ -161,7 +161,7 @@ async function fetchAndUpdateChart() {
       "PC": "darkred", "SD": "orange", "Z": "lightgray",
       "W": "white", "X": "darkgray"
   };
-  fetchAndUpdateChart();
+//  fetchAndUpdateChart();
 
   fetch(`/displayareas`, {
     method: "GET",

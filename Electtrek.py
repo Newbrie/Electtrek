@@ -2914,7 +2914,7 @@ def streamrag_api():
     streamrag = getstreamrag()
     html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
     print("___JSONIFYED streamrag:",jsonify(streamrag))
-    return jsonify({streamrag:streamrag,html:html})
+    return jsonify({'streamrag':streamrag,'html':html})
 
 
 #@app.route('/get_streamtab')
