@@ -27,7 +27,7 @@
     <tr>
       <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
       <td>
-        <select class="editable stream">
+        <select class="editable election">
           {% for election in streams %}
             <option value="{{ election }}"{% if row['election'] == election %} selected{% endif %}>{{ election }}</option>
           {% endfor %}
@@ -147,7 +147,7 @@
     newRow.innerHTML = `
       <td><input type="number" class="editable order" value="1" style="width: 60px;"></td>
       <td>
-        <select class="editable stream">
+        <select class="editable election">
           {% for election in streams %}
             <option value="{{ election }}">{{ election }}</option>
           {% endfor %}
@@ -257,7 +257,7 @@
                 console.log("streamtabrags:", rags);
 
                 // Update the chart
-                createOrUpdateChart(labels, dataPoints, rags);
+                window.parent.createOrUpdateChart(labels, dataPoints, rags);
               })
               .catch(error => {
                 console.error('Error:', error);
@@ -288,7 +288,7 @@
     console.log(`streamtoProcess ${rows}`);
 
     rows.forEach((row, index) => {
-      const election = row.querySelector('.stream').value.trim().toLowerCase();
+      const election = row.querySelector('.election').value.trim().toLowerCase();
       const active = row.querySelector('.active').checked;
       const order = row.querySelector('.order').value;
       const ftype = row.querySelector('.type').value;
@@ -309,7 +309,7 @@
           formData.append(`stored_path_${index}`, filepath);  // use stored safe path
 //          alert('Filepath found: '+`stored_path_${index}` + filepath);
         } else {
-          console.warn(`No file selected or stored path for stream '${election}'`);
+          console.warn(`No file selected or stored path for election '${election}'`);
           return; // skip this row
         }
         console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
@@ -348,13 +348,33 @@
         }
 
         // Optionally reload streamtab again after update
-        fetch('/get_streamtab')
-          .then(res => res.text())
-          .then(html => {
+        fetch('/streamrag_api')
+          .then(res => res.json())  // Parse the JSON response
+          .then(data => {
+            // Extract the 'html' and 'streamrag' from the response
+            const html = data.html;
+            const streamrag = data.streamrag;
+
+            // Insert the HTML into the table
             const streamTbody = document.querySelector('#streamtab tbody');
             if (streamTbody) {
               streamTbody.innerHTML = html;
             }
+
+            // Now handle the 'streamrag' data (which is likely an object)
+            const labels = Object.keys(streamrag);
+            const dataPoints = labels.map(label => streamrag[label].Elect);
+            const rags = labels.map(label => streamrag[label].RAG);
+
+            console.log("streamtablabels:", labels);
+            console.log("streamtabdata:", dataPoints);
+            console.log("streamtabrags:", rags);
+
+            // Update the chart
+            createOrUpdateChart(labels, dataPoints, rags);
+          })
+          .catch(error => {
+            console.error('Error:', error);
           });
         })
       .catch(error => {

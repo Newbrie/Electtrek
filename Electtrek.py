@@ -2,6 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
+from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE
 from normalised import normz
 #import normz
 import folium
@@ -276,13 +277,12 @@ CurrentElection = ELECTIONS[CurrentElectionName]
 
 
 main_index = None # for file processing
-TABLE_FILE = os.path.join(config.workdirectories['workdir'],'stream_data.json')
 
-with open(config.workdirectories['workdir']+"/"+"options.json", "r") as f:
+with open(OPTIONS_FILE, "r") as f:
     OPTIONS = json.load(f)
-with open(config.workdirectories['workdir']+"/static/data/Elections.json", "r") as f:
+with open(ELECTIONS_FILE, "r") as f:
     ELECTIONS = json.load(f)
-with open(config.workdirectories['workdir']+"/"+"stream_data.json", "r") as f:
+with open(TABLE_FILE, "r") as f:
     table_data = json.load(f)
 
 data = [0] * len(VID)
@@ -359,7 +359,7 @@ class TreeNode:
 # the dest_path provides the steps to get from the top to the destination leaf
 #  in dest_path the moretype values -  ward, etc if you want to create nodes of certain type at the end of the search
 
-        print("_____Treepolys in ping:",os.path.exists(config.workdirectories['workdir']+'/static/data/Treepolys.pkl'))
+        print("_____Treepolys in ping:",TREEPOLY_FILE)
         moretype = ""
         dest = dest_path
         if dest_path.find(" ") > -1:
@@ -755,7 +755,7 @@ class TreeNode:
         g = {'Popz':'count'}
         alldf = alldf0.groupby(['Postcode']).agg(g).reset_index()
         alldf['Popz'] = alldf['Popz'].rdiv(1)
-        Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+        Outcomes = pd.read_excel(GENESYS_FILE)
         Outcols = Outcomes.columns.to_list()
 #        print("____post merge for population at postcodes",allelectors0.columns, alldf.columns)
         allelectors = pd.DataFrame(allelectors, columns=Outcols)
@@ -789,7 +789,7 @@ class TreeNode:
             allelectors.loc[areaelectors.index, "Area"] = areaelectors["Area"]
 
             print(f"____at L4: {Level4node.value} area of len {len(areaelectors)} with stream of len {len(allelectors)}")
-            allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+            allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
     # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
 
@@ -1760,7 +1760,7 @@ def importVI(electorsVI):
         session['importfile'] = inDatadf['Electrollfile'][0]
         print("____pathval param:",pathval,Long,Lat,CurrentElection['importfile'])
 #or just process the elector level updates
-        file_path = config.workdirectories['workdir']+"/"+"allelectors.csv"
+        file_path = ELECTOR_FILE
         if file_path and os.path.exists(file_path):
             allelectorsX = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
             for index,entry in inDatadf.iterrows():
@@ -1908,7 +1908,7 @@ def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
 def getstreamrag():
 # if allstreams.csv exists then we have a RAG dataframe, otherwise black - empty
 
-    file_path = config.workdirectories['workdir']+"/"+"allelectors.csv"
+    file_path = ELECTOR_FILE
     print("____getstreamrag entered", file_path)
     rag = {}
     if file_path and os.path.exists(file_path):
@@ -1945,55 +1945,55 @@ def getstreamrag():
                 deactivated_streams = list({x for x in defined_streamlabels if x not in livestreamlabels}) #elections are defined but not live
                 print(f"____actives:{active_streams}, deprec:{depreciated_streams}, deactiv: {deactivated_streams}")
 
-                for stream in active_streams:
-                    stream_key = stream.upper()
+                for election in active_streams:
+                    stream_key = election.upper()
                     mask = table_df['election'] == stream_key
-                    rag[stream] = {}
-                    rag[stream]['Alive'] = True
-                    rag[stream]['Elect'] = int(livestreamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
-                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[stream]['RAG'] = 'limegreen'
+                    rag[election] = {}
+                    rag[election]['Alive'] = True
+                    rag[election]['Elect'] = int(livestreamdash.loc[stream_key,'ENOP']) # can do because its been groupby'ed
+                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
+                    rag[election]['RAG'] = 'limegreen'
                     print("_____Active Streams:",ef.head(), livestreamdash.head())
-                for stream in depreciated_streams:
-                    stream_key = stream.upper()
+                for election in depreciated_streams:
+                    stream_key = election.upper()
                     mask = table_df['election'] == stream_key
-                    rag[stream] = {}
-                    rag[stream]['Alive'] = False
-                    rag[stream]['Elect'] = 0
-                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[stream]['RAG'] = 'red'
+                    rag[election] = {}
+                    rag[election]['Alive'] = False
+                    rag[election]['Elect'] = 0
+                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
+                    rag[election]['RAG'] = 'red'
                     print("_____Depreciated Streams:",ef.head(), livestreamdash.head())
-                for stream in deactivated_streams:
-                    stream_key = stream.upper()
+                for election in deactivated_streams:
+                    stream_key = election.upper()
                     mask = table_df['election'] == stream_key
-                    rag[stream] = {}
-                    rag[stream]['Alive'] = False
-                    rag[stream]['Elect'] = 0
-                    rag[stream]['Files'] = rag[stream]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[stream]['RAG'] = 'amber'
+                    rag[election] = {}
+                    rag[election]['Alive'] = False
+                    rag[election]['Elect'] = 0
+                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
+                    rag[election]['RAG'] = 'amber'
                     print("_____Deactivated Streams:",ef.head(), livestreamdash.head())
             else:
-                stream = 'NO DATA STREAMS'
-                rag[stream]['Alive'] = False
-                rag[stream]['Elect'] = 0
-                rag[stream]['Files'] = 0
-                rag[stream]['RAG'] = 'gray'
+                election = 'NO DATA STREAMS'
+                rag[election]['Alive'] = False
+                rag[election]['Elect'] = 0
+                rag[election]['Files'] = 0
+                rag[election]['RAG'] = 'gray'
                 print("_____No Streams defined yet!:", livestreamdash.head())
         else:
-            stream = 'NO LIVE DATA'
-            rag[stream] = {}
-            rag[stream]['Alive'] = False
-            rag[stream]['Elect'] = 0
-            rag[stream]['Files'] = 0
-            rag[stream]['RAG'] = 'white'
+            election = 'NO LIVE DATA'
+            rag[election] = {}
+            rag[election]['Alive'] = False
+            rag[election]['Elect'] = 0
+            rag[election]['Files'] = 0
+            rag[election]['RAG'] = 'white'
             print("_____No Active electors file:", livestreamdash.head())
     else:
-        stream = 'NO LIVE DATA'
-        rag[stream] = {}
-        rag[stream]['Alive'] = False
-        rag[stream]['Elect'] = 0
-        rag[stream]['Files'] = 0
-        rag[stream]['RAG'] = 'white'
+        election = 'NO LIVE DATA'
+        rag[election] = {}
+        rag[election]['Alive'] = False
+        rag[election]['Elect'] = 0
+        rag[election]['Files'] = 0
+        rag[election]['RAG'] = 'white'
         print("_____No Active electors file:")
     return rag
 
@@ -2006,7 +2006,7 @@ def register_node(node: TreeNode):
 def reset_nodes():
     global TREK_NODES
     TREK_NODES = {}
-    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'wb') as f:
+    with open(TREKNODE_FILE, 'wb') as f:
         pickle.dump(TREK_NODES, f)
     return
 
@@ -2018,7 +2018,7 @@ def get_current_node(session=None, session_data=None):
     Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
     """
 
-    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'rb') as f:
+    with open(TREKNODE_FILE, 'rb') as f:
         TREK_NODES = pickle.load(f)
 
     if session and 'current_node_id' in session:
@@ -2051,7 +2051,7 @@ def get_current_election(session=None, session_data=None):
     Returns the current election from ELECTIONS indicate by the Flask session or passed-in session_data.
     """
 
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+    with open(ELECTIONS_FILE, 'r') as f:
         ELECTIONS = json.load(f)
 
 
@@ -2076,15 +2076,15 @@ def restore_from_persist():
     global Fullpolys
     global allelectors
 
-    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'rb') as f:
+    with open(TREEPOLY_FILE, 'rb') as f:
         Treepolys = pickle.load(f)
-    with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'rb') as f:
+    with open(FULLPOLY_FILE, 'rb') as f:
         Fullpolys = pickle.load(f)
 
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], "allelectors.csv")
     if not file_path or not os.path.exists(file_path):
         print('_______no elector data so creating blank', file_path)
-        allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+        allelectors = pd.read_excel(ELECTOR_FILE)
         allelectors.drop(allelectors.index, inplace=True)
     else:
         print('_______allelectors file exists so reading in ', file_path)
@@ -2104,20 +2104,20 @@ def persist(node):
     global Treepolys
     global Fullpolys
 
-    with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'wb') as f:
+    with open(TREEPOLY_FILE, 'wb') as f:
         pickle.dump(Treepolys, f)
-    with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'wb') as f:
+    with open(FULLPOLY_FILE, 'wb') as f:
         pickle.dump(Fullpolys, f)
-    with open(config.workdirectories['workdir']+'/static/data/Treknodes.pkl', 'wb') as f:
+    with open(TREKNODE_FILE, 'wb') as f:
         pickle.dump(TREK_NODES, f)
 
-    allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+    allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
     session['current_node_id'] = node.fid
     return
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data):
     global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node
-    global ELECTIONS, formdata, layeritems
+    global ELECTIONS, formdata, layeritems, progress
 
     def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
         """
@@ -2271,14 +2271,14 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress["message"] = "Starting normalisation..."
 
 # normz delivers [normalised elector data df,stats dict,original data quality stats in df]
-            Outcomes = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+            Outcomes = pd.read_excel(GENESYS_FILE)
             Outcols = Outcomes.columns.to_list()
             if purpose == "main":
             # this is the main index
                 progress["percent"] = 25
                 progress["status"] = "running"
                 progress["message"] = "Normalising main file ..."
-                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
                 mainframe = results[0]
                 mainframe = pd.DataFrame(mainframe,columns=Outcols)
             elif purpose == 'delta':
@@ -2287,21 +2287,17 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 progress["status"] = "running"
                 progress["message"] = "Normalising delta files ..."
                 dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # filter out all records with no Postcode
-                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
                 deltaframes.append(results[0])
             elif purpose == 'avi':
             # this is an addition of columns to the main index
                 progress["percent"] = 60
                 progress["status"] = "running"
                 progress["message"] = "Normalising avi file ..."
-                results = normz(RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
                 aviframe =  results[0]
                 aviframe = aviframe[['ENOP','AV']]
             DQstats = pd.concat([DQstats,results[1]])
-            formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
-            layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
-            print("__concat of DQstats", DQstats)
-            DQstats.to_csv(subending(ImportFilename,"DQ.csv"),sep='\t', encoding='utf-8', index=False)
 
     # full stream now received - need to apply changes to main
 
@@ -2353,9 +2349,15 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=SelectedElection['walksize'], MAX_DEPTH=5)
         newlabels = pd.Series(label_dict)
         mainframe["WalkName"] = mainframe.index.map(newlabels)
+        DQstats.loc[Outcols.index('WalkName'),'P3'] = 1
+        formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
+        layeritems = getlayeritems(results[0].head(), formdata['tabledetails'])
+        print("__concat of DQstats", DQstats)
+        DQstats.to_csv(subending(ImportFilename,"DQ.csv"),sep='\t', encoding='utf-8', index=False)
+
         allelectors = pd.concat([allelectors, pd.DataFrame(mainframe)], ignore_index=True)
         allelectors = allelectors.reset_index(drop=True)
-        allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+        allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
         print('_______ROUTE/normalise/exit:',ImportFilename, allelectors.columns)
         progress["percent"] = 100
@@ -2445,7 +2447,7 @@ DQ_DATA = {
 }
 
 formdata = {}
-allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+allelectors = pd.read_excel(GENESYS_FILE)
 allelectors.drop(allelectors.index, inplace=True)
 
 layeritems = []
@@ -2935,7 +2937,7 @@ def reset_Elections():
     global DQstats
     global progress
 
-    fixed_path = config.workdirectories['workdir']+"/"+"allelectors.csv"  # Set your path
+    fixed_path = ELECTOR_FILE  # Set your path
 
 
     if not os.path.exists(fixed_path):
@@ -2947,7 +2949,7 @@ def reset_Elections():
         os.remove(fixed_path)
         print("___Elections Reset- New streamrag:",jsonify(streamrag))
         formdata = {}
-        allelectors = pd.read_excel(config.workdirectories['workdir']+"/"+"RuncornRegister.xlsx")
+        allelectors = pd.read_excel(GENESYS_FILE)
         allelectors.drop(allelectors.index, inplace=True)
         streamrag = getstreamrag()
         DQstats = pd.DataFrame()
@@ -2973,19 +2975,33 @@ def switch_election():
 @app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
+    TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
     data = request.get_json()
     election_name = data.get("election")
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+    session['current_election'] = election_name
+    with open(ELECTIONS_FILE, 'r') as f:
         ELECTIONS = json.load(f)
     CurrentElection = ELECTIONS.get(election_name)
     if CurrentElection:
-        print("____Route/set_election/success" , election_name, CurrentElection, ELECTIONS)
-        session["current_election"] = election_name
-        with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
-            json.dump(ELECTIONS, f, indent=2)
+        current_node = get_current_node(session=session)
+        mapfile = os.path.join(config.workdirectories['workdir'],CurrentElection['mapfile'])
+        if not os.path.exists(mapfile):
+            # problem - election mapfile does not exist - best to point error out and stop
+            formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
+            layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
+            session['current_node_id'] = current_node.fid
+            print("___Election mapfile missing for :",current_election )
+            return jsonify(success=False, error="Election not found")
+        else:
+            current_node = current_node.ping_node(mapfile)
+            session['current_node_id'] = current_node.fid
+            formdata['tabledetails'] = "Click for "+current_node.parent.value +  "\'s "+current_node.type+" details"
+            layeritems = getlayeritems(current_node.parent.children,formdata['tabledetails'] )
+    #    CurrentElection['mapfile'] is auto loaded by front end
+
+        print("____Route/set_election/success" , election_name, CurrentElection, mapfile)
         return jsonify(success=True, current_election=election_name)
     print("____Route/set_election/failure" , election_name, CurrentElection, ELECTIONS)
-
     return jsonify(success=False, error="Election not found")
 
 @app.route('/get-constants', methods=["GET"])
@@ -2994,9 +3010,9 @@ def get_constants():
     global ELECTIONS
     global OPTIONS
     print("____Route/get_constants" )
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+    with open(ELECTIONS_FILE, 'r') as f:
         ELECTIONS = json.load(f)
-    current_election = get_current_election(session)
+    current_election = get_current_election(session=session)
     if not current_election or current_election not in ELECTIONS:
         return jsonify({'error': 'Invalid election'}), 400
     print('__OPTIONS: ', OPTIONS)
@@ -3020,7 +3036,7 @@ def set_constant():
 
     print("____Back End1 election constants update:",current_election,":",name,"-",value)
 
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'r') as f:
+    with open(ELECTIONS_FILE, 'r') as f:
         ELECTIONS = json.load(f)
 
     CurrentElection = ELECTIONS.get(current_election)
@@ -3029,7 +3045,7 @@ def set_constant():
         print("____Back End2:",name,"-",value)
         CurrentElection[name] = value
         ELECTIONS[current_election] = CurrentElection
-        with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+        with open(ELECTIONS_FILE, 'w') as f:
             json.dump(ELECTIONS, f, indent=2)
         print("____CurrentElection:",CurrentElection['name'])
         return jsonify(success=True)
@@ -3059,7 +3075,7 @@ def delete_election():
         current_election = session['current_election']
 
     # Save back to file
-    path = os.path.join(config.workdirectories['workdir'], 'static', 'data', 'Elections.json')
+    path = ELECTIONS_FILE
     with open(path, 'w') as f:
         json.dump(ELECTIONS, f, indent=2)
 
@@ -3079,7 +3095,7 @@ def add_election():
     global ELECTIONS
     global OPTIONS
     current_election = session.get('current_election')
-    elections_path = os.path.join(config.workdirectories['workdir'], 'static', 'data', 'Elections.json')
+    elections_path = ELECTIONS_FILE
 
     # Load existing elections
     if os.path.exists(elections_path):
@@ -3157,7 +3173,7 @@ def update_territory():
     ELECTIONS[election]["mapfile"] = mapfile
     print("______Update-territory:"+ mapfile)
 
-    with open(config.workdirectories['workdir'] + '/static/data/Elections.json', 'w') as f:
+    with open(ELECTIONS_FILE, 'w') as f:
         json.dump(ELECTIONS, f, indent=2)
     return jsonify(success=True, mapfile=mapfile)
 
@@ -3389,7 +3405,7 @@ def dashboard():
         formdata = {}
         current_node = TREK_NODES.get(session.get('current_node_id'))
         if not current_node:
-            current_node = next(iter(TREK_NODES), None).findnodeat_Level(0)
+            current_node = TREK_NODES.get(next(iter(TREK_NODES), None)).findnodeat_Level(0)
         streamrag = getstreamrag()
 
         path = current_node.dir+"/"+current_node.file
@@ -3494,7 +3510,7 @@ def transfer(path):
 
     mapfile = current_node.dir +"/"+ current_node.file
     print("____Route/transfer:",previous_node.value,current_node.value,current_node.type, path)
-    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
         layeritems = getlayeritems(current_node.children,formdata['tabledetails'] )
         session['current_node_id'] = current_node.fid
@@ -3753,7 +3769,7 @@ def STupdate(path):
 
                 # Save DataFrame to the new file
                 changefields.to_csv(versioned_filename, sep='\t', encoding='utf-8', index=False)
-                allelectors.to_csv(config.workdirectories['workdir']+"/"+"allelectors.csv",sep='\t', encoding='utf-8', index=False)
+                allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
                 print(f"✅ CSV saved as: {versioned_filename}")
             else:
@@ -4169,7 +4185,7 @@ def upbut(path):
     print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
     mapfile = current_node.dir+"/"+face_file
-    if not os.path.exists(config.workdirectories['workdir']+"/"+face_file):
+    if not os.path.exists(os.path.join(config.workdirectories['workdir'],face_file)):
         focuslayer = Featurelayers[previous_node.type].reset()
         focuslayer.create_layer(current_node,previous_node.type) #from upnode children type of prev node
         current_node.file = face_file
@@ -4231,9 +4247,8 @@ def map(path):
 
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+gettypeoflevel(path,current_node.level)+" details"
     layeritems = getlayeritems(current_node.childrenoftype(gettypeoflevel(path,current_node.level+1)),formdata['tabledetails'])
-    session['current_node_id'] = current_node.fid
     mapfile = current_node.dir+"/"+ current_node.file
-    if os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
+    if os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         flash(f"Using existing file: {path}", "info")
         print(f"Using existing file: {path}")
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
@@ -4353,13 +4368,17 @@ def get_progress():
         })
 
     # Normalisation complete
+
     dq_file_path = os.path.join(config.workdirectories['workdir'], subending(progress['targetfile'], "DQ.csv"))
-    DQstats = pd.read_csv(dq_file_path, sep='\t', engine='python', encoding='utf-8', keep_default_na=False, na_values=[''])
+    if os.path.exists(dq_file_path):
+        DQstats = pd.read_csv(dq_file_path, sep='\t', engine='python', encoding='utf-8', keep_default_na=False, na_values=[''])
+        progress['dqstats_html'] = render_template('partials/dqstats_rows.html', DQstats=DQstats)
+    else:
+        progress['dqstats_html'] = ""
     formdata['tabledetails'] = "Electoral Roll Top 20 records "
     layeritems = getlayeritems(allelectors.head(),formdata['tabledetails'])
 
     # Update progress object with HTML
-    progress['dqstats_html'] = render_template('partials/dqstats_rows.html', DQstats=DQstats)
     progress['percent'] = 100
     progress['status'] = 'complete'
     progress['message'] = 'Normalization complete'
@@ -4510,9 +4529,9 @@ def firstpage():
         sourcepath = sourcepath+"/"+step+"-MAP.html"
         [step,Treepolys['division'],Fullpolys['division']] = intersectingArea(config.workdirectories['bounddir']+"/"+"County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",'CED23NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Division_Boundaries.geojson")
 
-        with open(config.workdirectories['workdir']+'/static/data/Treepolys.pkl', 'wb') as f:
+        with open(TREEPOLY_FILE, 'wb') as f:
             pickle.dump(Treepolys, f)
-        with open(config.workdirectories['workdir']+'/static/data/Fullpolys.pkl', 'wb') as f:
+        with open(FULLPOLY_FILE, 'wb') as f:
             pickle.dump(Fullpolys, f)
 
         restore_from_persist()

@@ -587,11 +587,14 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
           .then(res => res.json())
           .then(resp => {
             if (resp.success) {
+              console.log("Election to be selected."+resp.current_election);
+  // so get-constants should retrieve most recent values of current_election and mapfile
               fetch("/get-constants", { credentials: 'same-origin' })
                 .then(res => res.json())
                 .then(data => {
                   updateConstantsUI(data.constants, data.options);
                   const mapfile = data.constants?.mapfile;
+                  console.log("mapfile :"+mapfile);
                   if (mapfile) {
                     const newMapUrl = `/map/${mapfile}`;
                     changeIframeSrc(newMapUrl);

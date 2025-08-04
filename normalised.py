@@ -6,12 +6,14 @@ import os, sys, math, stat, json, statistics
 import requests
 from requests.auth import HTTPDigestAuth
 import config
+from config import GENESYS_FILE
 from datetime import datetime
+
 
 
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
-def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
+def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
     workdir = config.workdirectories['workdir']
@@ -371,6 +373,10 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
         RunningVals2.setdefault('Mean_Lat', 51.240299)
         RunningVals2.setdefault('Mean_Long', 51.240299)
         for index, elector in electors2.iterrows():
+            progress['percent'] = round((index/len(electors2)),2)
+            progress['status'] = 'running'
+            progress['message'] = 'norming addresses'
+
         #            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
         #                enot = elector['ENOT'].split("-")
         #                electors2.loc[index,'PD'] =  enot[0]
@@ -584,7 +590,7 @@ def normz(RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDESCRIPTION" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","ELECTORNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
 
-    Outcomes = pd.read_excel(workdir+"/"+"RuncornRegister.xlsx")
+    Outcomes = pd.read_excel(GENESYS_FILE)
     Outcols = Outcomes.columns.to_list()
     for i in range(len(Outcols)):
         DQstats.loc[i,'P0'] = 0
