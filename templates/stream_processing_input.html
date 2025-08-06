@@ -51,6 +51,7 @@
           <option value="main" {% if row['purpose'] == 'main' %}selected{% endif %}>main</option>
           <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
           <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
+          <option value="mark" {% if row['purpose'] == 'mark' %}selected{% endif %}>mark</option>
         </select>
       </td>
       <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
@@ -171,7 +172,8 @@
           <option value="main">main</option>
           <option value="delta">delta</option>
           <option value="avi">avi</option>
-        </select>
+          <option value="mark">mark</option>
+          </select>
       </td>
       <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
       <td><input type="checkbox" class="editable active"></td>
@@ -371,7 +373,7 @@
             console.log("streamtabrags:", rags);
 
             // Update the chart
-            createOrUpdateChart(labels, dataPoints, rags);
+            window.parent.createOrUpdateChart(labels, dataPoints, rags);
           })
           .catch(error => {
             console.error('Error:', error);

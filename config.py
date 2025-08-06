@@ -15,3 +15,4 @@ GENESYS_FILE =  os.path.join(workdirectories['workdir'],'static','data','Runcorn
 ELECTOR_FILE = os.path.join(workdirectories['workdir'],'static','data','allelectors.csv')
 TREKNODE_FILE = os.path.join(workdirectories['workdir'],'static','data','Treknodes.pkl')
 FULLPOLY_FILE = os.path.join(workdirectories['workdir']+'static','data','Fullpolys.pkl')
+MARKER_FILE = os.path.join(workdirectories['workdir']+'static','data','Markers.pkl')

@@ -84,19 +84,20 @@
   <h3>Election Dashboard</h3>
   <ul class="centred" >user: {{ session['username'] }}</ul>
   <ul class="nav nav-tabs" id="election-tabs">
-  {% for election_name in ELECTIONS %}
-    <li class="nav-item position-relative tab-item">
-      <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
-              data-election="{{ election_name }}">
-        {{ election_name }}
-      </button>
-      <span class="delete-tab-btn" data-election="{{ election_name }}">×</span>
+    {% for election_name in ELECTIONS %}
+      <li class="nav-item position-relative tab-item">
+        <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
+                data-election="{{ election_name }}">
+          {{ election_name }}
+        </button>
+        <span class="delete-tab-btn" data-election="{{ election_name }}">×</span>
+      </li>
+    {% endfor %}
+    <li class="nav-item">
+      <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
     </li>
-  {% endfor %}
-  <li class="nav-item">
-    <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
-  </li>
-</ul>
+  </ul>
+
       <div id="constants-container">
       <ul>
       <li class="righted">
@@ -211,118 +212,122 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-  bindElectionTabListeners();  // for clicks
+  const tabContainer = document.getElementById("election-tabs");
 
-  // ✅ Initial fetch of constants for current_election
-  fetch("/get-constants", { credentials: 'same-origin' })
-    .then(res => res.json())
-    .then(data => {
-      updateConstantsUI(data.constants, data.options);
-      updateMessages();
+  // 🔹 Load constants for the active election tab at startup
+  const activeTab = tabContainer.querySelector(".election-tab.active");
+  if (activeTab) {
+    const selectedElection = activeTab.dataset.election;
+    console.log("___activetab:",selectedElection);
+    fetch("/set-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: selectedElection })
     })
-    .catch(err => console.error("Failed to fetch constants on load:", err));
-});
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.success) {
+          fetch("/get-constants", { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+              updateConstantsUI(data.constants, data.options);
+              const mapfile = data.constants?.mapfile;
+              if (mapfile) {
+                changeIframeSrc(`/map/${mapfile}`);
+              }
+              updateMessages();
+            });
+        }
+      });
+  };
 
-  function bindElectionTabListeners() {
-    document.querySelectorAll(".election-tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        // Remove active class from all tabs
-        document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
 
-        // Add active to clicked tab
-        tab.classList.add("active");
+  tabContainer.addEventListener("click", (e) => {
+    const deleteBtn = e.target.closest(".delete-tab-btn");
+    const tabBtn = e.target.closest(".election-tab");
 
-        // Get the selected election
-        const selectedElection = tab.dataset.election;
+    // Handle delete
+    if (deleteBtn) {
+      const election = deleteBtn.dataset.election;
+      if (!confirm(`Delete "${election}"? This cannot be undone.`)) return;
 
-        // Send to backend (if needed)
-        fetch("/set-election", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ election: selectedElection })
-        })
+      fetch("/delete-election", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ election })
+      })
+        .then(res => res.json())
+        .then(resp => {
+          if (resp.success && resp.electiontabs_html) {
+            tabContainer.innerHTML = resp.electiontabs_html;
+            updateMessages();
+            // No need to rebind anything!
+          } else {
+            alert("Could not delete election: " + (resp.error || "Unknown error"));
+          }
+        });
+      return;
+    }
+
+    // Handle tab click
+    if (tabBtn) {
+      document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
+      tabBtn.classList.add("active");
+
+      const selectedElection = tabBtn.dataset.election;
+
+      fetch("/set-election", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ election: selectedElection })
+      })
         .then(res => res.json())
         .then(resp => {
           if (resp.success) {
             fetch("/get-constants", { credentials: 'same-origin' })
               .then(res => res.json())
               .then(data => {
-                const test = data.current_election
-
-                // ✅ Skip if there's no current election
-                if (!test) {
-                  const electionName = "demo";
-                } else {
-                  const electionName = data.current_election;
+                updateConstantsUI(data.constants, data.options);
+                const mapfile = data.constants?.mapfile;
+                if (mapfile) {
+                  changeIframeSrc(`/map/${mapfile}`);
                 }
-                const constants = data.constants;
-                const options = data.options;
-
-                Object.entries(constants).forEach(([key, value]) => {
-                  const el = document.getElementById(key);
-                  if (!el) return;
-
-                  if (el.tagName === "SELECT") {
-                    const opts = options[key] || [];
-                    el.innerHTML = "";
-
-                    Object.entries(opts).forEach(([optValue, optLabel]) => {
-                      const o = document.createElement("option");
-                      o.value = optValue;
-                      o.textContent = `${optValue}: ${optLabel}`;
-                      if (optValue === value) o.selected = true;
-                      el.appendChild(o);
-                    });
-
-                  } else {
-                    el.value = value;
-                  }
-
-                  // Change listener to update backend
-                  el.addEventListener("input", () => {
-                    let newVal = el.value;
-                    if (el.type === "number") newVal = parseFloat(newVal);
-                    if (el.type === "checkbox") newVal = el.checked;
-
-                    fetch("/set-constant", {
-                      method: "POST",
-                      credentials: 'same-origin',
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        election: electionName,  // Include current election
-                        name: key,
-                        value: newVal
-                      })
-                    })
-                    .then(res => res.json())
-                    .then(resp => {
-                      if (resp.success) {
-                        updateMessages();
-                      } else {
-                        alert("Failed to update: " + resp.error);
-                      }
-                    });
-                  });
-                });
-
-                // Optional: update election name dropdown if you include it
-                const edrop = document.getElementById("election-selector");
-                if (edrop) {
-                  edrop.value = electionName;
-                }
+                updateMessages();
               });
           } else {
             alert("Failed to switch election.");
           }
         });
-      });
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    bindElectionTabListeners(); // Initial binding
+    }
   });
+
+  // Handle Add Election Tab button
+  document.getElementById("add-election-tab").addEventListener("click", () => {
+    const newName = prompt("Enter name for new election:");
+    if (!newName) return;
+
+    fetch("/add-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: newName })
+    })
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.success && resp.electiontabs_html) {
+          tabContainer.innerHTML = resp.electiontabs_html;
+          updateConstantsUI(resp.constants, resp.options);
+          updateMessages();
+          // No re-binding needed!
+        } else {
+          alert("Error adding election: " + resp.error);
+        }
+      });
+  });
+});
 
   let streamChart = null;
   function createOrUpdateChart(labels, data, rags) {
@@ -452,40 +457,6 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
       });
     });
 
-    document.getElementById("add-election-tab").addEventListener("click", () => {
-      const newName = prompt("Enter name for new election:");
-      if (!newName) return;
-
-      fetch("/add-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: newName })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-          // Reload the page or re-render the tabs
-
-          updateConstantsUI(resp.constants, resp.options);
-
-          if (resp.electiontabs_html) {
-            const tbody = document.querySelector("#election-tabs");
-            if (tbody) {
-              tbody.innerHTML = resp.electiontabs_html;
-              console.log("Election tabs updated successfully.");
-              bindElectionTabListeners();
-            } else {
-              console.warn("Election tabs not found in DOM.");
-            }
-          };
-          updateMessages();
-
-        } else {
-          alert("Error adding election: " + resp.error);
-        }
-      });
-    });
 
     function updateConstantsUI(constants, options) {
       Object.entries(constants).forEach(([key, value]) => {
@@ -534,105 +505,6 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
           });
         };
       });
-    }
-
-
-
-    document.addEventListener("click", (e) => {
-      if (e.target.classList.contains("delete-tab-btn")) {
-        const election = e.target.dataset.election;
-        console.log("Election to be deleted."+election);
-        if (confirm(`Delete the election "${election}"? This cannot be undone.`)) {
-          fetch("/delete-election", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ election })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (resp.success) {
-              // Update tabs
-              const tabContainer = document.querySelector("#election-tabs");
-              if (tabContainer && resp.electiontabs_html) {
-                tabContainer.innerHTML = resp.electiontabs_html;
-                console.log("Election deleted and tabs refreshed.");
-                 bindElectionTabListeners();
-              }
-            } else {
-              alert("Could not delete election: " + (resp.error || "Unknown error"));
-            }
-          });
-        }
-      }
-    });
-
-    function bindElectionTabListeners() {
-      // Re-bind election tab clicks
-      document.querySelectorAll(".election-tab").forEach((tab) => {
-        tab.addEventListener("click", () => {
-          const selectedElection = tab.dataset.election;
-
-          // Highlight selected
-          document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
-          tab.classList.add("active");
-
-          // Notify backend
-          fetch("/set-election", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ election: selectedElection })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (resp.success) {
-              console.log("Election to be selected."+resp.current_election);
-  // so get-constants should retrieve most recent values of current_election and mapfile
-              fetch("/get-constants", { credentials: 'same-origin' })
-                .then(res => res.json())
-                .then(data => {
-                  updateConstantsUI(data.constants, data.options);
-                  const mapfile = data.constants?.mapfile;
-                  console.log("mapfile :"+mapfile);
-                  if (mapfile) {
-                    const newMapUrl = `/map/${mapfile}`;
-                    changeIframeSrc(newMapUrl);
-                  }
-                  updateMessages();
-                });
-            } else {
-              alert("Failed to switch election.");
-            }
-          });
-        });
-      });
-
-      // Re-bind the add-election tab
-      const addBtn = document.getElementById("add-election-tab");
-      if (addBtn) {
-        addBtn.addEventListener("click", () => {
-          const name = prompt("Enter new election name:");
-          if (!name) return;
-
-          fetch("/add-election", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ election: name })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (resp.success) {
-              document.querySelector("#election-tabs").innerHTML = resp.electiontabs_html;
-              bindElectionTabListeners(); // ✅ Re-bind again after tabs update
-              updateConstantsUI(resp.constants, resp.options);
-            } else {
-              alert("Failed to add election: " + resp.error);
-            }
-          });
-        });
-      }
     }
 
 

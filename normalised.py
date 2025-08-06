@@ -341,6 +341,11 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         print("__200RunningVals2 values before ")
         print("__200RunningVals2 values", RunningVals2)
         print("__200RunningVals2 values after ")
+
+        for col in ['Address2', 'Address3', 'Address4', 'Address5', 'Address6']:
+            if col not in df.columns:
+                df[col] = ""
+
         # STEP 1: Clean up the column
         df['Postcode'] = df['Postcode'].astype(str).str.strip()
 
@@ -357,7 +362,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         electors2['Lat'] = electors1['Lat'].astype(float)
         electors2['Long'] = electors1['Long'].astype(float)
         electors2['AddressNumber'] = ""
-        electors2['AddressPrefix'] = ""
+        electors2['AddressPrefix'].replace(['', 'nan', 'NaN', 'None'], np.nan, inplace=True)
         electors2['StreetName'] = ""
         electors2['Address_1'] = ""
         electors2['Address_2'] = ""
@@ -493,7 +498,8 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                     print ("len11:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             electors2.loc[index,'StreetName'] = street.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
             electors2.loc[index,'AddressNumber'] = Addno
-            electors2.loc[index,'AddressPrefix'] = prefix
+            if np.isnan(electors2['AddressPrefix']):
+                electors2.loc[index,'AddressPrefix'] = prefix
             print("__200RunningVals2CALL values", RunningVals2)
             if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
                 electors2.loc[index,'Elevation'] = float(0.0)
@@ -642,13 +648,14 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         print(f"____Autofix = 1 , DQstats:{DQstats} at : {datetime.now()}")
         return [electors100,DQstats]
 
+    if purpose != 'mark':
 #pass 2 - how many required required identity columns and name columns can be derived from existing columns, eg ENOP  etc
-    print ("_____ENO & NAME RECLASSIFICATION start: ", electors100.columns)
-    electors100 = normalise_eno_column(electors100)
-    electors100 = NormaliseName(electors100)
-    electors100 = electors100.reset_index(drop=True)
+        print ("_____ENO & PERSONAL NAME RECLASSIFICATION start: ", electors100.columns)
+        electors100 = normalise_eno_column(electors100)
+        electors100 = NormaliseName(electors100)
+        electors100 = electors100.reset_index(drop=True)
+        print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
 
-    print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
     for y in list(set(Outcols) & set(electors100.columns)):
         DQstats.loc[Outcols.index(y), 'P2'] = 1
     if autofix == 2:
@@ -656,8 +663,10 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         return [electors100,DQstats]
 
 #pass 3 - how many required 'purpose-related columns can be calculated from existing columns, ie avi - AV, adds - new ID, Streetname,AddrNo, & main - Lat Long, StreetName, AddressPrefix, AddressNumber  etc
-
-    if purpose == 'delta':
+    if purpose == 'mark':
+        electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
+        print(f"____________MARKER file {ImportFilename} contains {len(electors2)} records: " )
+    elif purpose == 'delta':
         electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
         print(f"____________DELTA file {ImportFilename} contains {len(electors2)} records: " )
     elif purpose == 'main':
