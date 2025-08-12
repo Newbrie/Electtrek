@@ -2187,6 +2187,7 @@ def get_current_node(session=None, session_data=None):
         MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0, "DEMO")
         MapRoot.dir = "UNITED_KINGDOM"
         MapRoot.file = "UNITED_KINGDOM-MAP.html"
+        TREK_NODES = {}
 
         register_node(MapRoot)
         node = MapRoot
