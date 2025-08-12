@@ -361,15 +361,13 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         print("____Lat Long and Elevation merged")
         electors2['Lat'] = electors1['Lat'].astype(float)
         electors2['Long'] = electors1['Long'].astype(float)
-        electors2['AddressNumber'] = ""
-        electors2['AddressPrefix'].replace(['', 'nan', 'NaN', 'None'], np.nan, inplace=True)
-        electors2['StreetName'] = ""
-        electors2['Address_1'] = ""
-        electors2['Address_2'] = ""
-        electors2['Address_3'] = ""
-        electors2['Address_4'] = ""
-        electors2['Address_5'] = ""
-        electors2['Address_6'] = ""
+        # List of desired columns
+        required_columns = ['AddressPrefix', 'StreetName', 'AddressNumber', 'Address_1', 'Address_2', 'Address_3', 'Address_4', 'Address_5', 'Address_6']
+        # Ensure each column exists in the DataFrame
+        for col in required_columns:
+            if col not in electors2.columns:
+                electors2[col] = np.nan  # or np.nan, or "" depending on your use case
+
 
 
         #  set up the council attribute
@@ -498,7 +496,8 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                     print ("len11:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             electors2.loc[index,'StreetName'] = street.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
             electors2.loc[index,'AddressNumber'] = Addno
-            if np.isnan(electors2['AddressPrefix']):
+            print("__AddressPrefix", electors2.loc[index,'AddressPrefix'])
+            if pd.isna(electors2.loc[index,'AddressPrefix']) or str(electors2.loc[index,'AddressPrefix']).strip() == "":
                 electors2.loc[index,'AddressPrefix'] = prefix
             print("__200RunningVals2CALL values", RunningVals2)
             if math.isnan(elector['Elevation'] or elector['Elevation'] is None):

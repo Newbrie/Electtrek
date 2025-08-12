@@ -418,7 +418,35 @@
         .then(res => res.json())
         .then(data => {
           alert(data.message);
-          window.top.location.reload(); // Refresh current page
+// 🔄 Inject refreshed streamrag table
+        fetch('/streamrag_api')
+          .then(res => res.json())  // Parse the JSON response
+          .then(data => {
+            // Extract the 'html' and 'streamrag' from the response
+            const html = data.html;
+            const streamrag = data.streamrag;
+
+            // Insert the HTML into the table
+            const streamTbody = document.querySelector('#streamtab tbody');
+            if (streamTbody) {
+              streamTbody.innerHTML = html;
+            }
+            window.parent.updateMessages();
+            // Now handle the 'streamrag' data (which is likely an object)
+            const labels = Object.keys(streamrag);
+            const dataPoints = labels.map(label => streamrag[label].Elect);
+            const rags = labels.map(label => streamrag[label].RAG);
+
+            console.log("streamtablabels:", labels);
+            console.log("streamtabdata:", dataPoints);
+            console.log("streamtabrags:", rags);
+
+            // Update the chart
+            window.parent.createOrUpdateChart(labels, dataPoints, rags);
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
         })
         .catch(err => alert("Error resetting elections."));
     });

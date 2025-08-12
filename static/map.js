@@ -133,7 +133,9 @@ var showMore = function (msg,area, type) {
 async function fetchAndUpdateChart() {
   try {
     const response = await fetch('/streamrag_api');
-    const streamrag = await response.json();
+    const data = await response.json();
+    const streamrag = data.streamrag
+    const html = data.html
 
     const labels = Object.keys(streamrag);
     const data = labels.map(label => streamrag[label].Elect);

@@ -451,6 +451,7 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
           const newMapUrl = `/map/${resp.mapfile}`;  // or url_for('map', path=resp.mapfile)
           changeIframeSrc(newMapUrl);
           updateMessages();
+          fetchAndUpdateChart();
         } else {
           alert("Failed to update territory: " + resp.error);
         }
