@@ -60,6 +60,8 @@ word-wrap: break-word;
           <input type="text" id="new-tag" placeholder="e.g. L1: FirstLeaflet">
           <button onclick="handleAddTag()">Add Tag</button>
         </div>
+        <h3>Elector Telling Log</h3>
+        <ul id="elector-tagging-log" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></ul>
 
       </div>
 
@@ -72,8 +74,6 @@ word-wrap: break-word;
           <button type="button" onclick="checkEnop('{{ tag }}')">Telling</button>
           <ul id="enop-results-{{ tag }}" class="results"></ul>
         {% endfor %}
-        <h3>Elector Telling Log</h3>
-        <ul id="elector-tagging-log" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></ul>
 
       </div>
     </div>
@@ -162,38 +162,40 @@ word-wrap: break-word;
   .catch(error => console.error('Error updating street tags:', error));
 }
 
-  function handleAddTag() {
-    const input = document.getElementById("new-tag");
-    const value = input.value.trim();
 
-    if (!value || !value.includes(":")) {
-      alert("Please enter a tag in the format CODE: Description (e.g. L1: FirstLeaflet)");
-      return;
-    }
+function handleAddTag() {
+  const input = document.getElementById("new-tag");
+  const value = input.value.trim();
 
-    const [code, ...descParts] = value.split(":");
-    const description = descParts.join(":").trim();
-    const tagCode = code.trim();
-
-    fetch('/add_tag', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ tag: tagCode, label: description })
-    })
-    .then(response => {
-      if (!response.ok) throw new Error("Failed to add tag");
-      return response.json();
-    })
-    .then(data => {
-      alert(data.message || "Tag added successfully.");
-      input.value = '';
-    })
-    .catch(err => {
-      alert("Error adding tag: " + err.message);
-    });
+  if (!value || !value.includes(":")) {
+    alert("Please enter a tag in the format CODE: Description (e.g. L1: FirstLeaflet)");
+    return;
   }
+
+  const [code, ...descParts] = value.split(":");
+  const description = descParts.join(":").trim();
+  const tagCode = code.trim();
+
+  fetch('/add_tag', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ tag: tagCode, label: description })
+  })
+  .then(response => {
+    if (!response.ok) throw new Error("Failed to add tag");
+    return response.json();
+  })
+  .then(data => {
+    alert(data.message || "Tag added successfully.");
+    input.value = '';
+    window.location.reload();  // <-- Refresh tag list in the UI
+  })
+  .catch(err => {
+    alert("Error adding tag: " + err.message);
+  });
+}
 
 
   </script>

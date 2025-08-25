@@ -1,245 +1,373 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Kanban Board</title>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-    <style>
-        .kanban-board { display: flex; gap: 10px; }
-        .lane {
-            flex: 1;
-            padding: 10px;
-            background: #f9f9f9;
-            border: 1px solid #ccc;
-        }
-        .lane h3 {
-            text-align: center;
-        }
-        .card {
-            padding: 8px;
-            margin: 5px 0;
-            background: white;
-            border: 1px solid #999;
-            cursor: grab;
-        }
-        .columns {
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <meta charset="UTF-8">
+  <title>35-Day Calendar (Aligned Weeks)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+
+    resource-item {
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-weight: bold;
+  color: #0050b3;
+  cursor: grab;
+}
+
+.palette-header {
+  background-color: #ddd;
+  padding: 6px 10px;
+  font-weight: bold;
+  cursor: move;
+  border-bottom: 1px solid #aaa;
+  user-select: none;
+}
+
+
+.floating-palette {
+  position: absolute;
+  top: 100px;
+  right: 50px;
+  width: 200px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border: 2px solid #aaa;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  cursor: move;
+  z-index: 999;
+}
+
+
+    .calendar-grid {
       display: flex;
-      gap: 40px;
-      align-items: flex-start;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      }
+      flex-direction: column;
+      gap: 10px;
+    }
 
-      .column {
+
+
+    .today-cell {
+  border: 4px double #007BFF; /* Adjust color & thickness as you want */
+}
+
+    .slot:hover {
+  background-color: #cce5ff;
+  cursor: pointer;
+}
+
+    .week-row {
+      display: flex;
+      gap: 2px;
+    }
+
+    .day-column, .empty-day {
+      width: 120px;
+      height: 300px;
+      border: 1px solid #ddd;
+      background-color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .day-column.today-cell {
+  border: 4px double #007BFF !important;
+}
+
+    .empty-day {
+      background-color: #fff;
+      border: none;
+    }
+
+    .day-header {
+      background-color: #e0e0e0;
+      padding: 4px;
+      text-align: center;
+      font-weight: bold;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .slot {
       flex: 1;
-      min-width: 300px;
-      max-width: 500px;
-      }
+      border-top: 1px solid #ccc;
+      padding: 4px;
+      font-size: 11px;
+      font-weight: 300;
+      color: #333;
+    }
 
-      .column input {
-      width: 100%;
-      padding: 6px;
-      margin: 5px 0;
-      }
+    .slot {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  min-height: 30px; /* Enough to hold a row of codes */
+}
 
-      .column button {
-      padding: 5px 10px;
-      margin-bottom: 10px;
-      }
+.walk-lozenge,
+.tag-lozenge,
+.resource-lozenge {
+  background-color: #e0f0ff;
+  border-radius: 15px;
+  padding: 4px 8px; /* Smaller padding */
+  font-weight: bold;
+  font-size: 13px;
+  cursor: grab;
+  display: inline-block; /* Ensures width fits text */
+  margin: 2px;
+  white-space: nowrap; /* Prevent text wrapping */
+}
 
-      .results {
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid #ccc;
-      background: #fff;
-      padding: 5px;
-      margin-bottom: 20px;
-      }
 
-      .results li {
-      padding: 5px;
-      border-bottom: 1px solid #eee;
-      font-size: 0.9em;
-      word-wrap: break-word;
-      }
-    </style>
+/* Compact style when dropped */
+.walk-lozenge.dropped,
+.tag-lozenge.dropped,
+.resource-lozenge.dropped {
+  font-size: 11px;
+  padding: 2px 6px;
+  margin: 2px;
+  cursor: pointer;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+
+
+
+  </style>
 </head>
 <body>
 
-  <div id="telling-container">
-    <div class="columns">
-
-      <!-- ENOP Check Column -->
-      <div class="column">
-
-        <div>
-          <label for="new-tag"><b>Add Resource Tag:</b></label>
-          <input type="text" id="new-tag" placeholder="e.g. R1: Joe_Bloggs(use_underscore)">
-          <button onclick="handleAddTag()">Add Tag</button>
-        </div>
-
-      </div>
-
-      <!-- Street Search Column -->
-      <div class="column">
-        <h2>Captains Board (SortableJS)</h2>
-        <div class="kanban-board">
-            {% for tag_code, tag_name in tags.items() %}
-            <div class="lane" id="{{ tag_code }}">
-                <h3>{{ tag_name }}</h3>
-                <div class="card-list" data-tag="{{ tag_code }}">
-                    {% for walk in walks[tag_code] %}
-                    <div class="card" data-walk="{{ walk }}">{{ walk }}</div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-      </div>
+  <h2>Election Work Calendar </h2>
+  <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
+  <!-- Resource -->
+  <!-- Existing Resource Palette -->
+  <div id="resource-palette" class="floating-palette">
+    <div id="resource-handle" class="palette-header">Resources</div>
+    <div id="resource-content">
+      {% for res in resources %}
+      <div class="resource-lozenge" data-id="{{ loop.index0 }}" data-type="resource" data-info="{{ res.Firstname }} {{ res.Surname }} {{ res.Status }}" draggable="true">{{ res.Code }}</div>
+      {% endfor %}
     </div>
-
   </div>
 
+  <!-- New Walks Palette -->
+  <div id="walks-palette" class="floating-palette">
+    <div id="walks-handle" class="palette-header">Walks</div>
+    <div id="walks-content">
+      {% for w in walks %}
+      <div class="walk-lozenge" data-id="{{ loop.index0 }}" data-type="walk" data-info="{{ w }}" draggable="true">{{ w }}</div>
+      {% endfor %}
+    </div>
+  </div>
 
-  <script>
-    function checkEnop(tag) {
-      const input = document.getElementById(`enop-input-${tag}`);
-      const resultContainer = document.getElementById(`enop-results-${tag}`);
-      const enopValue = input.value.trim();
-      const combinedLog = document.getElementById('elector-tagging-log');
+  <!-- New Task Tags Palette -->
+  <div id="tags-palette" class="floating-palette">
+    <div id="tags-handle" class="palette-header">Task Tags</div>
+    <div id="tags-content">
+      {% for code,desc in task_tags.items() %}
+      <div class="tag-lozenge" data-id="{{ loop.index0 }}" data-type="task" data-info="{{ desc }}" draggable="true">{{ code }}</div>
+      {% endfor %}
+    </div>
+  </div>
 
-      if (!enopValue) {
-        alert("Please enter an ENOP value.");
-        return;
+  <!-- Your calendar grid -->
+  <div class="calendar-grid" id="calendar-grid"></div>
+</body>
+<script>
+    const tooltip = document.getElementById('tooltip');
+
+    document.body.addEventListener('mouseover', function (e) {
+      const target = e.target;
+
+      if (target.classList.contains('walk-lozenge') ||
+          target.classList.contains('tag-lozenge') ||
+          target.classList.contains('resource-lozenge')) {
+
+        const info = target.getAttribute('data-info') || 'No details';
+
+        tooltip.textContent = info;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${e.pageX + 10}px`;
+        tooltip.style.top = `${e.pageY + 10}px`;
       }
-
-      fetch(`/check_enop/${enopValue}`)
-        .then(response => response.json())
-        .then(data => {
-          const li = document.createElement("li");
-          li.textContent = data.exists
-            ? `${enopValue}: ✅ Found in electors. ${data.message}`
-            : `${enopValue}: ❌ Not found in electors`;
-          li.style.color = data.exists ? 'green' : 'red';
-
-          combinedLog.appendChild(li);
-          combinedLog.scrollTop = combinedLog.scrollHeight;
-
-          input.value = '';
-        })
-        .catch(error => console.error("Error checking ENOP:", error));
-    }
-
-    function filterStreets(tag) {
-      const input = document.getElementById(`street-input-${tag}`);
-      const query = input.value.trim();
-      const resultContainer = document.getElementById(`street-results-${tag}`);
-
-      if (!query) {
-        resultContainer.innerHTML = '';
-        return;
-      }
-
-      fetch(`/streetsearch?query=${encodeURIComponent(query)}`)
-        .then(response => response.json())
-        .then(filteredStreets => {
-          resultContainer.innerHTML = '';
-          filteredStreets.forEach(street => {
-            const li = document.createElement('li');
-            li.textContent = street.StreetName;
-            li.onclick = () => selectStreet(street, tag);
-            resultContainer.appendChild(li);
-          });
-        })
-        .catch(error => console.error('Error fetching street names:', error));
-    }
-
-    function selectStreet(street, tag) {
-      const input = document.getElementById(`street-input-${tag}`);
-      const resultContainer = document.getElementById(`street-results-${tag}`);
-      const combinedLog = document.getElementById('street-tagging-log');
-
-      input.value = street.StreetName;
-      resultContainer.innerHTML = '';
-
-      fetch('/update_street_tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ street_index: street.index, tag: tag })
-      })
-      .then(response => response.json())
-      .then(data => {
-        // Show confirmation as an alert
-        alert(data.message);
-
-        // Add to the shared log
-        const li = document.createElement("li");
-        li.textContent = `🏷️ ${street.StreetName} tagged with ${tag}`;
-        li.style.color = 'blue';
-        combinedLog.appendChild(li);
-        combinedLog.scrollTop = combinedLog.scrollHeight;
-      })
-      .catch(error => console.error('Error updating street tags:', error));
-    }
-
-  function handleAddTag() {
-    const input = document.getElementById("new-tag");
-    const value = input.value.trim();
-
-    if (!value || !value.includes(":")) {
-      alert("Please enter a tag in the format CODE: Description (e.g. L1: FirstLeaflet)");
-      return;
-    }
-
-    const [code, ...descParts] = value.split(":");
-    const description = descParts.join(":").trim();
-    const tagCode = code.trim();
-
-    fetch('/add_tag', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ tag: tagCode, label: description })
-    })
-    .then(response => {
-      if (!response.ok) throw new Error("Failed to add tag");
-      return response.json();
-    })
-    .then(data => {
-      alert(data.message || "Tag added successfully.");
-      input.value = '';
-    })
-    .catch(err => {
-      alert("Error adding tag: " + err.message);
     });
-  };
-  document.querySelectorAll('.card-list').forEach(lane => {
-      new Sortable(lane, {
-          group: 'kanban',
-          animation: 150,
-          onAdd: function (evt) {
-              const walkName = evt.item.dataset.walk;
-              const newResource = evt.to.dataset.tag;
 
-              fetch('/updateResourcing', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                      walkName: walkName,
-                      newResource: newResource
-                  })
-              })
-              .then(res => res.json())
-              .then(data => {
-                  if (!data.success) {
-                      alert("Update failed: " + data.error);
-                  }
-              });
-          }
-      });
+    document.body.addEventListener('mousemove', function (e) {
+      if (tooltip.style.display === 'block') {
+        tooltip.style.left = `${e.pageX + 10}px`;
+        tooltip.style.top = `${e.pageY + 10}px`;
+      }
+    });
+
+    document.body.addEventListener('mouseout', function (e) {
+      const target = e.target;
+
+      if (target.classList.contains('walk-lozenge') ||
+          target.classList.contains('tag-lozenge') ||
+          target.classList.contains('resource-lozenge')) {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    function makePaletteDraggable(paletteId, handleId) {
+    const palette = document.getElementById(paletteId);
+    const handle = document.getElementById(handleId);
+    let isDragging = false, offsetX = 0, offsetY = 0;
+
+    handle.addEventListener("mousedown", e => {
+      isDragging = true;
+      offsetX = e.clientX - palette.offsetLeft;
+      offsetY = e.clientY - palette.offsetTop;
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (isDragging) {
+        palette.style.left = `${e.clientX - offsetX}px`;
+        palette.style.top = `${e.clientY - offsetY}px`;
+      }
+    });
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+      document.body.style.userSelect = "auto";
+    });
+  }
+
+  // Enable draggable behavior on all three palettes
+  makePaletteDraggable("resource-palette", "resource-handle");
+  makePaletteDraggable("walks-palette", "walks-handle");
+  makePaletteDraggable("tags-palette", "tags-handle");
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const container = document.getElementById("calendar-grid");
+    const daysToShow = 35;
+    const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM"];
+
+    // ✅ Use election date from parent window
+    function parseDDMMYYYY(str) {
+      const [day, month, year] = str.split("-");
+      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    }
+
+
+    const electionDateStr = window.parent.document.getElementById('electiondate')?.value;
+    const endDate = parseDDMMYYYY(electionDateStr);
+
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (daysToShow - 1));
+
+    let weekRow = document.createElement("div");
+    weekRow.className = "week-row";
+
+    // Align first row (starting from Monday)
+    const startDayOfWeek = startDate.getDay();
+    const offset = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
+
+    // Add blanks before the first real day if start isn't Monday
+    for (let i = 0; i < offset; i++) {
+    const empty = document.createElement("div");
+    empty.className = "empty-day";
+    weekRow.appendChild(empty);
+    }
+
+    for (let i = 0; i < daysToShow; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+
+    const dayNumber = date.getDate();
+    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+    const dayOfWeek = date.getDay(); // 0 = Sunday
+
+    const dayDiv = document.createElement("div");
+    dayDiv.className = "day-column";
+
+    const header = document.createElement("div");
+    header.className = "day-header";
+    header.textContent = `${weekday} ${dayNumber}`;
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const cellDate = new Date(date);
+    cellDate.setHours(0,0,0,0);
+
+    if (cellDate.getTime() === today.getTime()) {
+      dayDiv.classList.add("today-cell");
+    }
+
+    dayDiv.appendChild(header);
+
+    for (const slot of slots) {
+      const slotDiv = document.createElement("div");
+      slotDiv.className = "slot";
+      slotDiv.textContent = slot;
+      dayDiv.appendChild(slotDiv);
+    }
+
+    weekRow.appendChild(dayDiv);
+
+
+    // Wrap row on Sundays
+    if (dayOfWeek === 0 || i === daysToShow - 1) {
+      container.appendChild(weekRow);
+      weekRow = document.createElement("div");
+      weekRow.className = "week-row";
+    }
+    }
+      // Make each slot droppable
+      // Setup Sortable group behavior
+      // Palettes: distinct groups with clone pull, no put
+  ["resource-content", "walks-content", "tags-content"].forEach((id, i) => {
+    const groupName = id.split("-")[0]; // 'resource', 'walks', or 'tags'
+    Sortable.create(document.getElementById(id), {
+      group: { name: groupName, pull: "clone", put: false },
+      sort: false,
+      animation: 150,
+    });
   });
+
+  // Slots: accept all groups
+  document.querySelectorAll(".slot").forEach(slot => {
+    Sortable.create(slot, {
+      group: {
+        name: "calendar",     // name doesn't matter here
+        put: ["resource", "walks", "tags"]  // Accept items from these palettes
+      },
+      animation: 150,
+      onAdd: evt => {
+      const el = evt.item;
+
+      const alreadyExists = [...evt.to.children].some(child =>
+        child !== el && child.textContent === el.textContent
+      );
+
+      if (alreadyExists) {
+        el.remove();
+        return;
+      }
+
+      el.classList.add('dropped');
+      el.setAttribute('draggable', false);
+
+      el.addEventListener('click', () => el.remove());
+    }
+
+
+    });
+
+  });
+
+  });
+
 
   </script>
 

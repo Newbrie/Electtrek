@@ -5,6 +5,7 @@
   <title>Kanban Board with Doughnut Chart</title>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -12,6 +13,48 @@
       margin: 0;
       padding: 0;
     }
+
+    .chartjs-tooltip {
+  z-index: 9999 !important;
+}
+
+
+.kanban-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ccc;
+  padding: 10px;
+  max-width: 250px;
+  font-size: 12px;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  border-radius: 5px;
+}
+
+
+.kanban-legend h4 {
+  margin: 0 0 5px 0;
+  font-size: 13px;
+}
+
+.kanban-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.kanban-legend .legend-color {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #333;
+  background-color: #000; /* optional fallback */
+}
+
+
 
     .kanban-board {
       display: flex;
@@ -64,12 +107,33 @@
       padding: 10px;
       border-radius: 50%;
       overflow: visible; /* Important */
+      z-index: 1;
     }
 
+    .circle-label {
+      position: absolute;
+      top: -1.4em;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: #333;
+      font-weight: bold;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+
     .circle div {
-      font-size: 0.9em;
+      font-size: 0.2em;
       line-height: 1.2;
       padding: 4px;
+       overflow: visible;
+    }
+
+    .circle-container,
+    .circle {
+      overflow: visible !important;
+      z-index: 1;
     }
 
     /* Outer and inner doughnut container */
@@ -112,27 +176,80 @@
   </style>
 </head>
 <body>
-<div class="kanban-board" id="kanbanBoard"></div>
+<div id="log-timeline" style="margin-top: 20px;"></div>
+<div class="kanban-board" id="kanbanBoard">
+<div id="customLegend" class="kanban-legend"></div>
+<!-- Add a container for the axis -->
+</div>
+
 
 <script>
-  function stringToColor(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const color = '#' + ((hash >> 24) & 0xFF).toString(16).padStart(2, '0') +
-                        ((hash >> 16) & 0xFF).toString(16).padStart(2, '0') +
-                        ((hash >> 8) & 0xFF).toString(16).padStart(2, '0');
-    return color;
+const tagColorMap = {
+L1: '#3498db',
+L2: '#9b59b6',
+L3: '#2ecc71',
+M1: '#e67e22',
+M2: '#e74c3c',
+M3: '#f1c40f',
+M4: '#1abc9c',
+M5: '#34495e',
+R0: '#95a5a6',
+R1: '#16a085',
+R2: '#2980b9'
+};
+
+function stringToColor(tag) {
+return tagColorMap[tag] || '#777'; // fallback gray
+}
+
+
+
+  function scaleSize(count, min = 50, max = 180) {
+  const maxCount = 100; // adjust based on your expected upper limit
+  const normalized = Math.min(count, maxCount) / maxCount;
+  return min + (max - min) * normalized;
   }
+
 
   document.addEventListener("DOMContentLoaded", () => {
     const walkTagCounts = {{ walk_tag_counts|tojson }};
-    const tagLabels = {{ tag_labels|tojson }};
+    const tagLabels = {{ tag_labels|tojson | default('{}') }};
+    console.log("tagLabels =", tagLabels);
     const kanbanOptions = {{ kanban_options|tojson }};
     const groupedWalks = {{ grouped_walks|tojson }};
     const updateUrl = "{{ url_for('update_walk_kanban') }}";
     const board = document.getElementById('kanbanBoard');
+
+
+      // ... your Kanban and chart creation code ...
+
+      // === LEGEND CREATION ===
+      const legendContainer = document.getElementById("customLegend");
+      legendContainer.innerHTML = "<h4>Tag Legend</h4>";
+
+      const legendList = document.createElement("div");
+      legendContainer.appendChild(legendList);
+
+      const uniqueTags = Object.keys(tagLabels);
+      console.log("Legend Tags:", uniqueTags);
+
+      uniqueTags.sort(); // optional
+
+      uniqueTags.forEach(tag => {
+        const color = stringToColor(tag);
+        const label = tagLabels[tag];
+        console.log(`Tag: ${tag}, Label: ${label}, Color: ${color}`);
+        const item = document.createElement("div");
+        item.className = "legend-item";
+
+        item.innerHTML = `
+          <div class="legend-color" style="background-color: ${color};"></div>
+          <span><strong>${tag}</strong>: ${label}</span>
+        `;
+
+        legendList.appendChild(item);
+      });
+
 
     // Build Kanban columns
     kanbanOptions.forEach(({ code, label }) => {
@@ -187,13 +304,8 @@
       wrapper.style.padding = '5px';
 //      wrapper.style.backgroundColor = 'white';
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 120;
-      canvas.height = 120;
-      wrapper.appendChild(canvas);
-      container.appendChild(wrapper);
-
       const enop = parseFloat(group.ENOP) || 0;
+
 
       // === Base Inputs and Outputs ===
       const baseInputs = [
@@ -218,7 +330,13 @@
       const dynamicOutputs = [];
       const dynamicOutputColors = [];
 
+      const outputTagCount = Object.entries(tagCounts)
+      .filter(([tag]) => tag.startsWith('M'))
+      .reduce((sum, [, count]) => sum + count, 0);
+
+
       Object.entries(tagCounts).forEach(([tag, count]) => {
+
         const label = tagLabels[tag] || tag;
         const color = stringToColor(tag);
 
@@ -232,77 +350,159 @@
           dynamicOutputs.push(count);
           dynamicOutputColors.push(color);
           dynamicOutputLabels.push(label);
+
         }
       });
+      const radius = scaleSize(outputTagCount); // e.g., 80–180px
 
-      const datasets = [];
+      wrapper.style.width = `${radius}px`;
+      wrapper.style.height = `${radius}px`;
 
-      // Inner outputs (base + dynamic)
-      datasets.push({
-        label: '',
-        data: [...baseOutputs, ...dynamicOutputs],
-        backgroundColor: [...outputColors, ...dynamicOutputColors],
-        labels: [...baseOutputLabels, ...dynamicOutputLabels], // 👈 this is KEY
-        borderWidth: 1,
-        radius: '60%',
-        cutout: '40%'
-      });
+      const label = document.createElement('div');
+      label.textContent = walkName;
+      label.style.position = 'absolute';
+      label.style.top = '-1.2em';
+      label.style.left = '50%';
+      label.style.transform = 'translateX(-50%)';
+      label.style.fontSize = '12px';
+      label.style.color = '#333';
+      label.style.fontWeight = 'bold';
 
-      datasets.push({
+      const canvas = document.createElement('canvas');
+      canvas.width = radius;
+      canvas.height = radius;
+
+
+      wrapper.title = `Output tag count: ${outputTagCount}`;
+      wrapper.appendChild(label);
+      wrapper.appendChild(canvas);
+      container.appendChild(wrapper);
+
+
+
+
+      label.className = 'circle-label';
+
+      new Chart(canvas.getContext('2d'), {
+  type: 'doughnut',
+  data: {
+    datasets: [
+      {
         label: '',
         data: [...baseInputs, ...dynamicInputs],
         backgroundColor: [...inputColors, ...dynamicInputColors],
-        labels: [...baseInputLabels, ...dynamicInputLabels], // 👈 this is KEY
+        labels: [...baseInputLabels, ...dynamicInputLabels],
         borderWidth: 1,
-        radius: '100%',
-        cutout: '60%'
-      });
+        radius: '95%',  // outer ring, 45% of canvas radius
+        cutout: '0%' // size of the hole
+      },
+      {
+        label: '',
+        data: [...baseOutputs, ...dynamicOutputs],
+        backgroundColor: [...outputColors, ...dynamicOutputColors],
+        labels: [...baseOutputLabels, ...dynamicOutputLabels],
+        borderWidth: 1,
+        radius: '95%',  // outer ring, 45% of canvas radius
+        cutout: '0%' // size of the hole
+      }
 
-      new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-          datasets
+    ]
+  },
+  options: {
+    responsive: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        bodyFont: {
+          size: 10  // Smaller font size for tooltip body
         },
-        options: {
-          responsive: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function (context) {
-                  const index = context.dataIndex;
-                  const dataset = context.dataset;
-                  const label = dataset.labels?.[index] || 'Unknown';
-                  return `${dataset.label}: ${label} – ${context.parsed}`;
-                }
-              }
-            },
-            centerText: {
-              display: true,
-              text: walkName
-            }
-          }
+        titleFont: {
+          size: 11  // Smaller font size for tooltip title (optional)
         },
-        plugins: [{
-          id: 'centerText',
-          beforeDraw(chart, args, options) {
-            if (!options.display) return;
-            const { ctx, chartArea: { width, height } } = chart;
-            ctx.save();
-            ctx.font = 'bold 12px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(options.text, width / 2, height / 2);
-            ctx.restore();
+        callbacks: {
+          label: function (context) {
+            const index = context.dataIndex;
+            const dataset = context.dataset;
+            const label = dataset.labels?.[index] || 'Unknown';
+            return `${label}: ${context.parsed}`;
           }
-        }]
-      });
+        }
+      }
 
-    });
+    }
+  }
+});
+});
+});
 
-  });
 </script>
 
 </body>
+
+<script>
+  const today = new Date();
+  const electionDate = window.parent.electiondate;
+
+  const maxDays = 36;  // days before election
+  const width = document.getElementById("kanbanBoard").offsetWidth;
+  const height = 70;
+  const margin = { left: 40, right: 40 };
+
+  const svg = d3.select("#log-timeline")
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+  // Logarithmic scale (increasing leftward): domain from 1 to 35 (log scale can't start at 0)
+  const xScale = d3.scaleLog()
+    .domain([1, maxDays])
+    .range([width - margin.right, margin.left]);  // 1 = right (election), 35 = left
+
+  // Custom ticks in log-like spacing
+  const tickValues = [1, 2, 3, 5, 7, 10, 14, 20, 28, 35];
+
+  const xAxis = d3.axisBottom(xScale)
+    .tickValues(tickValues)
+    .tickFormat(d => `${d-1}`)  // so 35 → 0
+    .tickSizeOuter(0);
+
+  // Draw the axis
+  svg.append("g")
+    .attr("transform", `translate(0, ${height - 30})`)
+    .call(xAxis)
+    .selectAll("text")
+    .attr("dy", "-1.2em")
+    .style("font-size", "14px")
+    .style("font-weight", "bold");
+
+  // Axis label
+  svg.append("text")
+    .attr("x", width / 2)
+    .attr("y", height - 5)
+    .attr("text-anchor", "middle")
+    .style("font-size", "16px")
+    .style("font-weight", "bold")
+    .text("Days to Election (log scale)");
+
+  // Vertical line: Today (35 days before election)
+  svg.append("line")
+    .attr("x1", xScale(maxDays))
+    .attr("x2", xScale(maxDays))
+    .attr("y1", 0)
+    .attr("y2", height)
+    .attr("stroke", "#333")
+    .attr("stroke-dasharray", "4,2");
+
+  // Vertical line: Election Day (0)
+  svg.append("line")
+    .attr("x1", xScale(1))
+    .attr("x2", xScale(1))
+    .attr("y1", 0)
+    .attr("y2", height)
+    .attr("stroke", "red")
+    .attr("stroke-dasharray", "4,2");
+</script>
+
+
+
 </html>

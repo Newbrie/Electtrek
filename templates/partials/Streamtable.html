@@ -1,0 +1,54 @@
+<table id="stream-table" border="1">
+  <thead>
+    <tr>
+      <th>Order</th>
+      <th>Election</th>
+      <th>Filename</th>
+      <th>Type</th>
+      <th>Purpose</th>
+      <th>Fixlevel</th>
+      <th>Active</th>
+      <th>Live</th>
+    </tr>
+  </thead>
+  <tbody id="file-info-tbody">
+    {% for row in table_data %}
+    <tr>
+      <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;"></td>
+      <td>
+        <select class="editable election">
+          {% for election in streams %}
+            <option value="{{ election }}"{% if row['election'] == election %} selected{% endif %}>{{ election }}</option>
+          {% endfor %}
+      </select>
+      </td>
+      <td>
+      <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
+      <input type="hidden" class="file-path" value="{{ row['file_path'] }}">
+      <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
+      <button type="button" class="file-btn">📂</button>
+      </td>
+      <td>
+        <select class="editable type" style="width: 60px;">
+          <option value="csv" {% if row['type'] == 'csv' %}selected{% endif %}>csv</option>
+          <option value="xlsx" {% if row['type'] == 'xlsx' %}selected{% endif %}>xlsx</option>
+          <option value="json" {% if row['type'] == 'json' %}selected{% endif %}>json</option>
+        </select>
+      </td>
+      <td>
+        <select class="editable purpose" style="width: 60px;">
+          <option value="main" {% if row['purpose'] == 'main' %}selected{% endif %}>main</option>
+          <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
+          <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
+          <option value="mark" {% if row['purpose'] == 'mark' %}selected{% endif %}>mark</option>
+          <option value="resource" {% if row['purpose'] == 'resource' %}selected{% endif %}>resource</option>
+        </select>
+      </td>
+      <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
+      <td><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked {% endif %}></td>
+      <td><input type="checkbox" class="editable live" {% if row['live'] and row['live'].strip() != '' %}checked {% endif %}></td>
+      <td><button class="delete-btn">Delete</button></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -31,8 +31,7 @@
     li.appendChild(document.createTextNode(e.data));
     logWindow.appendChild(li);
     logWindow.scrollTop = logWindow.scrollHeight;
-
-  });
+      });
 
   function changeIframeSrc(newurl) {
     var msg = "Retrieving area "+newurl;
@@ -50,7 +49,6 @@
       text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
     );
   };
-
 
 </script>
 {% endblock map %}
@@ -87,21 +85,25 @@
     {% for election_name in ELECTIONS %}
       <li class="nav-item position-relative tab-item">
         <button class="nav-link election-tab {% if election_name == current_election %}active{% endif %}"
-                data-election="{{ election_name }}">
+                data-election="{{ election_name }}"
+                onclick="selectElection('{{ election_name }}')">
           {{ election_name }}
         </button>
-        <span class="delete-tab-btn" data-election="{{ election_name }}">×</span>
+        <span class="delete-tab-btn"
+              data-election="{{ election_name }}"
+              onclick="deleteElection('{{ election_name }}')">×</span>
       </li>
     {% endfor %}
     <li class="nav-item">
-      <button class="nav-link" id="add-election-tab" style="font-weight: bold;">＋NEW</button>
+      <button class="nav-link" id="add-election-tab" style="font-weight: bold;" onclick="addElection()">＋NEW</button>
     </li>
   </ul>
+
 
       <div id="constants-container">
       <ul>
       <li class="righted">
-        Type of Election:<select class="righted"name="elections" id="elections"></select><br>
+        Type of Election:<select class="righted"name="territories" id="territories"></select><br>
       </li>
 
       <li class="righted">
@@ -116,29 +118,34 @@
       <li class="righted">
       GOTV: <input class="righted" type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
       </li>
-
-      <li class="righted" >
-          Candidate Firstname: <input class="righted" type="text" id="candfirst"
-                    style="width: 100px;  white-space: nowrap;overflow-x: auto;"
-                     name="candfirst" placeholder=" {{ (formdata or {}).get('candfirst', '') }} "/><br>
+      <li class="righted">
+      Bookmarks: <select class="righted" name="mapfiles" id="mapfiles" ></select><br>
+      </li>
+      <li class="righted">
+        <label id="resources-toggle" style="cursor: pointer;">Resources ⬇</label>
+        <div id="resources-container" style="display: none; position: absolute; background: white; border: 1px solid #ccc; padding: 5px;">
+          <select name="resources" id="resources" multiple size="5"></select>
+        </div>
       </li>
       <li class="righted" >
-          Candidate Surname: <input class="righted" type="text" id="candsurn"
-          style="width: 100px;  white-space: nowrap;overflow-x: auto;"
-name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
+      Candidate: <select class="righted" name="candidate" id="candidate" ></select><br>
+        </li>
+      <li class="righted" >
+      Chair: <select class="righted" name="chair" id="chair" ></select><br>
       </li>
       <li class="righted">
           Date of election:
-     <input type="text"
-            class="righted"
-            id="electiondate"
-            name="electiondate"
-            placeholder=" {{ (formdata or {}).get('electiondate', '') }} "
-            maxlength="11"
-            size="11"
-            pattern="^(0[1-9]|[12][0-9]|3[01])-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}$"
-            title="Use format dd-MMM-yyyy (e.g. 05-Mar-2025)"
-            required>
+          <input
+          class="righted"
+          type="text"
+          id="electiondate"
+          name="electiondate"
+          maxlength="10"
+          size="11"
+          pattern="^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$"
+          title="Enter date as DD-MM-YYYY, e.g. 21-08-2025"
+          placeholder="DD-MM-YYYY"
+        />
       </li>
       </ul>
 </div>
@@ -211,125 +218,48 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-  const tabContainer = document.getElementById("election-tabs");
 
-  // 🔹 Load constants for the active election tab at startup
-  const activeTab = tabContainer.querySelector(".election-tab.active");
-  if (activeTab) {
-    const selectedElection = activeTab.dataset.election;
-    console.log("___activetab:",selectedElection);
-    fetch("/set-election", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ election: selectedElection })
-    })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-          fetch("/get-constants", { credentials: 'same-origin' })
-            .then(res => res.json())
-            .then(data => {
-              updateConstantsUI(data.constants, data.options);
-              const mapfile = data.constants?.mapfile;
-              if (mapfile) {
-                changeIframeSrc(`/map/${mapfile}`);
-              }
-              updateMessages();
-            });
-        }
-      });
-  };
-
-
-  tabContainer.addEventListener("click", (e) => {
-    const deleteBtn = e.target.closest(".delete-tab-btn");
-    const tabBtn = e.target.closest(".election-tab");
-
-    // Handle delete
-    if (deleteBtn) {
-      const election = deleteBtn.dataset.election;
-      if (!confirm(`Delete "${election}"? This cannot be undone.`)) return;
-
-      fetch("/delete-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election })
-      })
-        .then(res => res.json())
-        .then(resp => {
-          if (resp.success && resp.electiontabs_html) {
-            tabContainer.innerHTML = resp.electiontabs_html;
-            updateMessages();
-            // No need to rebind anything!
-          } else {
-            alert("Could not delete election: " + (resp.error || "Unknown error"));
-          }
-        });
-      return;
-    }
-
-    // Handle tab click
-    if (tabBtn) {
-      document.querySelectorAll(".election-tab").forEach(t => t.classList.remove("active"));
-      tabBtn.classList.add("active");
-
-      const selectedElection = tabBtn.dataset.election;
-
-      fetch("/set-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: selectedElection })
-      })
-        .then(res => res.json())
-        .then(resp => {
-          if (resp.success) {
-            fetch("/get-constants", { credentials: 'same-origin' })
-              .then(res => res.json())
-              .then(data => {
-                updateConstantsUI(data.constants, data.options);
-                const mapfile = data.constants?.mapfile;
-                if (mapfile) {
-                  changeIframeSrc(`/map/${mapfile}`);
-                }
-                updateMessages();
-              });
-          } else {
-            alert("Failed to switch election.");
-          }
-        });
-    }
+  document.getElementById("logout-button").addEventListener("click", function() {
+  window.location.href = "/logout";
   });
 
-  // Handle Add Election Tab button
-  document.getElementById("add-election-tab").addEventListener("click", () => {
-    const newName = prompt("Enter name for new election:");
-    if (!newName) return;
-
-    fetch("/add-election", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ election: newName })
-    })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success && resp.electiontabs_html) {
-          tabContainer.innerHTML = resp.electiontabs_html;
-          updateConstantsUI(resp.constants, resp.options);
-          updateMessages();
-          // No re-binding needed!
-        } else {
-          alert("Error adding election: " + resp.error);
-        }
-      });
+  document.getElementById("b4").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('leafletting') }}";
   });
+
+  document.getElementById("b9").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('resourcing') }}";
+  });
+
+
+  document.getElementById("b7").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('search') }}";
+  });
+
+
+  document.getElementById("b5").addEventListener("click", function() {
+    document.getElementById("iframe1").src = "{{ url_for('kanban') }}";
+  });
+
+  document.getElementById("b6").addEventListener("click", function() {
+  document.getElementById("iframe1").src = "{{ url_for('telling') }}";
 });
 
+
+  // Handle the "Back to Main" button click
+  document.getElementById("b8").addEventListener("click", function() {
+      // Change the iframe src to the stream processing input page
+      document.getElementById("iframe1").src = "{{ url_for('dashboard') }}";
+  });
+
+  // Handle the "Electoral Roll" button click
+  document.getElementById("b3").addEventListener("click", function() {
+      // Change the iframe src to the stream processing input page
+      document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
+  });
+
   let streamChart = null;
+
   function createOrUpdateChart(labels, data, rags) {
     const ragColors = {
       red: 'rgba(255, 99, 132, 0.9)',
@@ -388,86 +318,99 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
         plugins: [ChartDataLabels]
       });
     }
+  };
+
+  function updateChart(newLabels, newData, newRags) {
+  const ragColors = {
+    red: 'rgba(255, 99, 132, 0.2)',
+    amber: 'rgba(255, 159, 64, 0.2)',
+    green: 'rgba(75, 192, 192, 0.2)'
+  };
+  const Chart = parent.document.getElementById("streamChart");
+  Chart.data.labels = newLabels;
+  Chart.data.datasets[0].data = newData;
+  Chart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag]);
+
+  streamChart.update();
+};
+async function fetchAndUpdateChart() {
+  try {
+    const response = await fetch('/streamrag_api');
+    const receiveddata = await response.json();
+    const streamrag = receiveddata.streamrag
+    const html = receiveddata.html
+
+    const labels = Object.keys(streamrag);
+    const data = labels.map(label => streamrag[label].Elect);
+    const rags = labels.map(label => streamrag[label].RAG);
+
+    createOrUpdateChart(labels, data, rags);
+  } catch (error) {
+    console.error('Failed to fetch streamrag data:', error);
   }
+};
 
-  document.getElementById("logout-button").addEventListener("click", function() {
-  window.location.href = "/logout";
-  });
+  function updateConstantsUI(constants, options) {
+    Object.entries(constants).forEach(([key, value]) => {
+      const el = document.getElementById(key);
+      if (!el) return;
 
-  document.getElementById("b4").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('leafletting') }}";
-  });
+      const optsObj = options[key] || {};
+      el.innerHTML = ""; // Clear current options
 
-  document.getElementById("b9").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('resourcing') }}";
-  });
+      if (el.tagName === "SELECT") {
 
+        if (key === "resources") {
+          // Multi-select for resources
+          Object.entries(options.resources || {}).forEach(([code, person]) => {
+            const option = document.createElement("option");
+            option.value = code;
+            option.textContent = `${person.Firstname} ${person.Surname}`;
+            if (Array.isArray(value) && value.includes(code)) {
+              option.selected = true;
+            }
+            el.appendChild(option);
+          });
 
-  document.getElementById("b7").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('search') }}";
-  });
+        } else if (key === "candidate" || key === "chair") {
+          // Candidate/chair filtered by selected resources
+          const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
+          selectedResources.forEach(code => {
+            const person = options.resources?.[code];
+            if (person) {
+              const option = document.createElement("option");
+              option.value = code;
+              option.textContent = `${person.Firstname} ${person.Surname}`;
+              if (value === code) option.selected = true;
+              el.appendChild(option);
+            }
+          });
 
+        } else if (key === "mapfiles") {
+          // ✔ Correct mapfiles handling
+          if (Array.isArray(value)) {
+            value.forEach((mapPath, index) => {
+              const o = document.createElement("option");
+              o.value = mapPath;
+              o.textContent = `Map ${index + 1}: ${mapPath.split("/").pop()}`;
+              if (index === value.length - 1) {
+                o.selected = true;
+              }
+              el.appendChild(o);
+            });
+          }
 
-  document.getElementById("b5").addEventListener("click", function() {
-    document.getElementById("iframe1").src = "{{ url_for('kanban') }}";
-  });
+          // Add listener to change iframe when user selects
+          el.onchange = () => {
+            const selectedMap = el.value;
+            console.log("🗺️ Selected map:", selectedMap);
+            if (selectedMap) {
+              changeIframeSrc(`/map/${selectedMap}`);
+            }
+          };
 
-  document.getElementById("b6").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('telling') }}";
-});
-
-
-  // Handle the "Back to Main" button click
-  document.getElementById("b8").addEventListener("click", function() {
-      // Change the iframe src to the stream processing input page
-      document.getElementById("iframe1").src = "{{ url_for('dashboard') }}";
-  });
-
-    // Handle the "Electoral Roll" button click
-    document.getElementById("b3").addEventListener("click", function() {
-        // Change the iframe src to the stream processing input page
-        document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
-    });
-
-    document.getElementById("update-territory-btn").addEventListener("click", () => {
-      const activeTab = document.querySelector(".election-tab.active");
-      if (!activeTab) {
-        alert("No election selected.");
-        return;
-      }
-
-      const election = activeTab.dataset.election;
-
-      fetch("/update-territory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-          // Refresh iframe with updated territory map
-          const newMapUrl = `/map/${resp.mapfile}`;  // or url_for('map', path=resp.mapfile)
-          changeIframeSrc(newMapUrl);
-          updateMessages();
-          fetchAndUpdateChart();
         } else {
-          alert("Failed to update territory: " + resp.error);
-        }
-      });
-    });
-
-
-    function updateConstantsUI(constants, options) {
-      Object.entries(constants).forEach(([key, value]) => {
-        const el = document.getElementById(key);
-        if (!el) return;
-
-        if (el.tagName === "SELECT") {
-          const optsObj = options[key] || {};
-          el.innerHTML = "";
-
+          // Generic SELECT fields
           Object.entries(optsObj).forEach(([optValue, optLabel]) => {
             const o = document.createElement("option");
             o.value = optValue;
@@ -475,38 +418,277 @@ name="candsurn" placeholder=" {{ (formdata or {}).get('candsurn', '') }} "/><br>
             if (optValue === value) o.selected = true;
             el.appendChild(o);
           });
+        }
+      } else {
+        // Non-SELECT elements
+        el.value = value;
+      }
 
-        } else {
-          el.value = value;
+      // General input handler (select, input, etc.)
+      el.oninput = () => {
+        let newVal = el.value;
+        if (el.type === "number") newVal = parseFloat(newVal);
+        if (el.type === "checkbox") newVal = el.checked;
+        if (el.multiple) newVal = Array.from(el.selectedOptions).map(opt => opt.value);
+
+        fetch("/set-constant", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            election: document.querySelector(".election-tab.active")?.dataset.election || "",
+            name: key,
+            value: newVal
+          })
+        })
+        .then(res => res.json())
+        .then(resp => {
+          if (resp.success) {
+            updateMessages();
+          } else {
+            alert("Failed to update: " + resp.error);
+          }
+        });
+      };
+    });
+  }
+
+
+  function selectElection(electionName) {
+    // Remove 'active' from all tabs
+    document.querySelectorAll(".election-tab").forEach(tab => {
+      tab.classList.remove("active");
+    });
+
+    // Add 'active' to the clicked tab
+    const clickedTab = Array.from(document.querySelectorAll(".election-tab"))
+      .find(tab => tab.dataset.election === electionName);
+
+    if (clickedTab) {
+      clickedTab.classList.add("active");
+      clickedTab.classList.add("nav-link.active");
+    }
+
+    // Proceed with backend election switch
+    fetch("/set-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: electionName })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.constants || !data.options) {
+        console.warn("Missing constants or options from response");
+        return;
+      }
+
+      // Update constants UI
+      updateConstantsUI(data.constants, data.options);
+
+      // Extract mapfile from the list
+      const mapfiles = data.constants.mapfiles;
+      const mapfile = Array.isArray(mapfiles) ? mapfiles[mapfiles.length - 1] : null;
+
+      if (mapfile) {
+        changeIframeSrc(`/map/${mapfile}`);
+        console.log(`New mapfile loaded: /map/${mapfile}`);
+      }
+
+      updateMessages();
+    });
+  }
+
+
+  function deleteElection(electionName) {
+    if (!confirm(`Delete "${electionName}"? This cannot be undone.`)) return;
+
+    fetch("/delete-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: electionName })
+    })
+    .then(res => res.json())
+    .then(resp => {
+      if (resp.success && resp.electiontabs_html) {
+        document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
+        updateMessages();
+        // ✅ All onclick bindings are preserved because they come from server-rendered HTML
+      } else {
+        alert("Could not delete election: " + (resp.error || "Unknown error"));
+      }
+    });
+  }
+
+  function addElection() {
+    const newName = prompt("Enter name for new election:");
+    if (!newName) return;
+
+    fetch("/add-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: newName })
+    })
+    .then(res => res.json())
+    .then(resp => {
+      if (resp.success && resp.electiontabs_html) {
+        document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
+        updateConstantsUI(resp.constants, resp.options);
+        updateMessages();
+        // ✅ Onclick handlers already embedded
+      } else {
+        alert("Error adding election: " + resp.error);
+      }
+    });
+  }
+
+
+const toggle = document.getElementById("resources-toggle");
+const container = document.getElementById("resources-container");
+
+toggle.addEventListener("click", () => {
+const isVisible = container.style.display === "block";
+container.style.display = isVisible ? "none" : "block";
+toggle.textContent = isVisible ? "Resources ⬇" : "Resources ⬆";
+});
+
+fetch("/get-constants", { credentials: 'same-origin' })
+  .then(res => res.json())
+  .then(data => {
+    updateConstantsUI(data.constants, data.options);
+      const mapfile = data.constants?.mapfiles[mapfiles.length -1];
+    if (mapfile) {
+      changeIframeSrc(`/map/${mapfile}`);
+    }
+    updateMessages();
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+
+    // your code here
+  const tabContainer = document.getElementById("election-tabs");
+
+  // 🔹 Load constants for the active election tab at startup
+  const activeTab = tabContainer.querySelector(".election-tab.active");
+  if (activeTab) {
+    const selectedElection = activeTab.dataset.election;
+    console.log("___activetab:",selectedElection);
+    fetch("/set-election", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ election: selectedElection })
+    })
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.success) {
+          fetch("/get-constants", { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(data => {
+              updateConstantsUI(data.constants, data.options);
+                const mapfile = data.constants?.mapfiles[mapfiles.length -1];
+              if (mapfile) {
+                changeIframeSrc(`/map/${mapfile}`);
+              }
+              updateMessages();
+            });
+        }
+      });
+  };
+
+  document.getElementById("update-territory-btn").addEventListener("click", () => {
+    const activeTab = document.querySelector(".election-tab.active");
+    if (!activeTab) {
+      alert("No election selected.");
+      return;
+    }
+
+
+
+  const election = activeTab.dataset.election;
+
+  });
+
+    function updateDependentSelects(constants, options) {
+    if (
+      typeof constants !== "object" || constants === null ||
+      typeof options !== "object" || options === null ||
+      typeof options.resources !== "object" || options.resources === null
+    ) {
+      console.warn("updateDependentSelects: Missing or invalid constants/options/resources");
+      return;
+    }
+
+    const dependentKeys = ["candidate", "chair"];
+    const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
+
+    dependentKeys.forEach(key => {
+      const el = document.getElementById(key);
+      if (!el) {
+        console.warn(`updateDependentSelects: Element with id "${key}" not found`);
+        return;
+      }
+
+      el.innerHTML = ""; // Clear existing options
+
+      selectedResources.forEach(code => {
+        const person = options.resources[code];
+        if (!person || typeof person !== "object") {
+          console.warn(`updateDependentSelects: No valid person found for code "${code}"`);
+          return;
         }
 
-        // ✅ Always rebind input listener
-        el.oninput = () => {
-          let newVal = el.value;
-          if (el.type === "number") newVal = parseFloat(newVal);
-          if (el.type === "checkbox") newVal = el.checked;
+        const option = document.createElement("option");
+        option.value = code;
+        option.textContent = `${person.Firstname ?? "?"} ${person.Surname ?? "?"}`.trim();
+        if (constants[key] === code) option.selected = true;
 
-          fetch("/set-constant", {
-            method: "POST",
-            credentials: 'same-origin',
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              election: document.querySelector(".election-tab.active")?.dataset.election || "",  // safer fallback
-              name: key,
-              value: newVal
-            })
-          })
-          .then(res => res.json())
-          .then(resp => {
-            if (resp.success) {
-              updateMessages();
-            } else {
-              alert("Failed to update: " + resp.error);
-            }
-          });
-        };
+        el.appendChild(option);
       });
-    }
+
+      // Optional: If no resources matched, insert a placeholder
+      if (el.options.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No available options";
+        el.appendChild(option);
+      }
+    });
+  };
+
+
+    document.getElementById('resources').addEventListener('blur', () => {
+      console.log('Resources dropdown closed or lost focus');
+      const el = document.getElementById('resources');
+        const selected = Array.from(el.selectedOptions).map(opt => opt.value);
+
+        fetch("/set-constant", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            election: document.querySelector(".election-tab.active")?.dataset.election || "",
+            name: "resources",
+            value: selected
+          })
+        })
+        .then(res => res.json())
+        .then(resp => {
+          if (resp.success) {
+            // After setting, fetch latest constants and options
+            fetch("/get-constants")
+              .then(res => res.json())
+              .then(({ constants, options }) => {
+                updateDependentSelects(constants, options);  // Now safely updated
+              });
+          } else {
+            alert("Failed to update resources: " + resp.error);
+          }
+        });
+      });
+});
 
 
 </script>

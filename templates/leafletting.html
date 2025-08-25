@@ -61,19 +61,21 @@ word-wrap: break-word;
           <button onclick="handleAddTag()">Add Tag</button>
         </div>
 
+        <h3>Street Delivery Telling Log</h3>
+        <ul id="street-tagging-log" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></ul>
+
       </div>
 
       <!-- Street Search Column -->
       <div class="column">
-        <h2>Register Leaflet Tag (L*) coverage complete for streets:</h2>
+        <h2>Register Leaflet Tag (L*) coverage done for streetnames:</h2>
+        <p>Leaflet delivery is categorised as an 'input' for campaign informing purposes</p>
         {% for tag, desc in leaflet_tags.items() %}
           <label for="street-input-{{ tag }}"><strong>{{ tag }}</strong>: {{ desc }}</label>
           <input type="text" id="street-input-{{ tag }}" placeholder="Search Street Name for {{ tag }}" oninput="filterStreets('{{ tag }}')">
           <ul id="street-results-{{ tag }}" class="results"></ul>
         {% endfor %}
 
-        <h3>Street Delivery Telling Log</h3>
-        <ul id="street-tagging-log" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></ul>
 
       </div>
     </div>
@@ -189,6 +191,7 @@ word-wrap: break-word;
     .then(data => {
       alert(data.message || "Tag added successfully.");
       input.value = '';
+      window.location.reload();
     })
     .catch(err => {
       alert("Error adding tag: " + err.message);

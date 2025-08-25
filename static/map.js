@@ -117,35 +117,7 @@ var showMore = function (msg,area, type) {
   		window.location.href = url;
   	};
 
-  function updateChart(newLabels, newData, newRags) {
-  const ragColors = {
-    red: 'rgba(255, 99, 132, 0.2)',
-    amber: 'rgba(255, 159, 64, 0.2)',
-    green: 'rgba(75, 192, 192, 0.2)'
-  };
-  const Chart = parent.document.getElementById("streamChart");
-  Chart.data.labels = newLabels;
-  Chart.data.datasets[0].data = newData;
-  Chart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag]);
 
-  streamChart.update();
-};
-async function fetchAndUpdateChart() {
-  try {
-    const response = await fetch('/streamrag_api');
-    const receiveddata = await response.json();
-    const streamrag = receiveddata.streamrag
-    const html = receiveddata.html
-
-    const labels = Object.keys(streamrag);
-    const data = labels.map(label => streamrag[label].Elect);
-    const rags = labels.map(label => streamrag[label].RAG);
-
-    createOrUpdateChart(labels, data, rags);
-  } catch (error) {
-    console.error('Failed to fetch streamrag data:', error);
-  }
-};
 
   function updateMessages() {
   const old = pessages.pop();

@@ -11,6 +11,8 @@ from datetime import datetime
 
 
 
+
+
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
 def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
@@ -315,7 +317,49 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
 
         return df
 
+    def contactDetails(df):
+        # Allowed statuses
+        VALID_STATUSES = {"member", "volunteer", "houseboarder", "captain"}
 
+        # Sample DataFrame
+        # df = pd.read_csv("your_file.csv")
+
+        def validate_email(email):
+            if pd.isna(email):
+                return None
+            email = email.strip().lower()
+            pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+            return email if re.match(pattern, email) else None
+
+        def normalize_uk_mobile(mobile):
+            if pd.isna(mobile):
+                return None
+            mobile = re.sub(r'\D', '', str(mobile))  # Remove non-digit chars
+            if mobile.startswith("00447"):
+                return "+44" + mobile[4:]
+            elif mobile.startswith("447"):
+                return "+44" + mobile[2:]
+            elif mobile.startswith("07") and len(mobile) == 11:
+                return "+44" + mobile[1:]
+            elif mobile.startswith("+447") and len(mobile) == 13:
+                return mobile
+            else:
+                return None
+
+        def clean_status(status):
+            if pd.isna(status):
+                return None
+            status_clean = str(status).strip().lower()
+            return status_clean if status_clean in VALID_STATUSES else None
+
+        # Apply to DataFrame
+        df['Email'] = df['Email'].apply(validate_email)
+        df['Mobile'] = df['Mobile'].apply(normalize_uk_mobile)
+        df['Status'] = df['Status'].apply(clean_status)
+
+        # Optional: Filter out invalid entries
+        df_valid = df.dropna(subset=['email_clean', 'mobile_clean', 'status_clean'])
+        return df_valid
 
 
 
@@ -374,9 +418,9 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         RunningVals2.setdefault('Last_Lat', 51.240299)   # Fallback Lat
         RunningVals2.setdefault('Last_Long', -0.562301)  # Fallback Long
         RunningVals2.setdefault('Mean_Lat', 51.240299)
-        RunningVals2.setdefault('Mean_Long', 51.240299)
+        RunningVals2.setdefault('Mean_Lon', 51.240299)
         for index, elector in electors2.iterrows():
-            progress['percent'] = round((index/len(electors2)),2)
+            progress['percent'] = round(100*(index/len(electors2)),2)
             progress['status'] = 'running'
             progress['message'] = 'norming addresses'
 
@@ -590,7 +634,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
     dfzmax = dfz.shape[0]
     print(dfz.columns," data rows: ", dfzmax )
 
-    COLNORM = { "FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENOS","ROLLNO":"ENO","ENO":"ENO",
+    COLNORM = { "CREATEDMONTH" : "EventDate","FIRSTNAME" : "Firstname" , "FORENAME" : "Firstname" ,"FIRST" : "Firstname" , "SURNAME" : "Surname", "SECONDNAME" : "Surname","INITS" :"Initials","INITIALS" : "Initials","MIDDLENAME" :"Initials","POSTCODE" : "Postcode", "NUMBERPREFIX" : "PD","PD" : "PD", "NUMBER":"X","SHORTNUMBER":"ENOS","ROLLNO":"ENO","ENO":"ENO",
     "ADDRESS1":"Address1","ADDRESS2":"Address2","ADDRESS3":"Address3","ADDRESS4":"Address4","ADDRESS5":"Address5","ADDRESS6":"Address6","MARKERS":"Markers","DOB":"DOB",
     "NUMBERSUFFIX" : "Suffix","SUFFIX" : "Suffix","DISTRICTREF" : "PD", "TITLE" :"Title" , "ADDRESSNUMBER" :"AddressNumber","AVDESCRIPTION" : "AV", "AV" : "AV" ,"ELEVATION" : "Elevation" ,"ADDRESSPREFIX":"AddressPrefix", "LAT" : "Lat", "LONG" : "Long" ,"RNO" : "RNO" ,"ENOP" : "ENOP" ,"ENOT" : "ENOT" , "FULLNAME" :"ElectorName","ELECTORNAME" :"ElectorName","NAME" :"ElectorName", "STREETNAME" :"StreetName" }
 
@@ -619,7 +663,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
     electors100['Source_ID'] = ImportFilename
     electors100['Election'] = stream
     electors100['Purpose'] = purpose
-    electors100['Tags'] = [[] for _ in range(len(electors100))]
+    electors100['Tags'] = ""
     electors100['Kanban'] = "R"
 
     print(f"___DQ Stats3",DQstats, electors100.columns)
@@ -647,13 +691,12 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         print(f"____Autofix = 1 , DQstats:{DQstats} at : {datetime.now()}")
         return [electors100,DQstats]
 
-    if purpose != 'mark':
-#pass 2 - how many required required identity columns and name columns can be derived from existing columns, eg ENOP  etc
-        print ("_____ENO & PERSONAL NAME RECLASSIFICATION start: ", electors100.columns)
-        electors100 = normalise_eno_column(electors100)
-        electors100 = NormaliseName(electors100)
-        electors100 = electors100.reset_index(drop=True)
-        print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
+    print ("_____ENO & PERSONAL NAME RECLASSIFICATION start: ", electors100.columns)
+    electors100 = normalise_eno_column(electors100)
+    electors100 = NormaliseName(electors100)
+    electors100 = electors100.reset_index(drop=True)
+    print ("_____ENO & NAME RECLASSIFICATION end: ", electors100.columns)
+
 
     for y in list(set(Outcols) & set(electors100.columns)):
         DQstats.loc[Outcols.index(y), 'P2'] = 1
@@ -662,15 +705,10 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         return [electors100,DQstats]
 
 #pass 3 - how many required 'purpose-related columns can be calculated from existing columns, ie avi - AV, adds - new ID, Streetname,AddrNo, & main - Lat Long, StreetName, AddressPrefix, AddressNumber  etc
-    if purpose == 'mark':
-        electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
-        print(f"____________MARKER file {ImportFilename} contains {len(electors2)} records: " )
-    elif purpose == 'delta':
+    if purpose == 'delta':
         electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
         print(f"____________DELTA file {ImportFilename} contains {len(electors2)} records: " )
     elif purpose == 'main':
-        print("__200RunningVals1 values before ")
-        print("__200RunningVals1 values", RunningVals1)
         print("__200RunningVals1 values after ")
         electors2 = NormaliseAddress(RunningVals1,Lookups,ImportFilename,electors100)
         print("____________MAIN file processing complete for : ",ImportFilename, electors2.columns )
@@ -678,6 +716,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         # not processing addresses , just the elector identity and their AV
         electors2 = pd.DataFrame(electors100, columns=['Election', 'Purpose', 'RNO', 'Tags','PD', 'Firstname', 'Surname', 'ElectorName','ENOP','ENOT','Suffix','ENO','AV'])
         print("____________AVI file processing complete for : ",ImportFilename, electors2.columns )
+
     print("____________Normalisation_Complete________in ",ImportFilename )
 
     for y in list(set(Outcols) & set(electors2.columns)):
@@ -685,6 +724,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
     if autofix == 3:
         print(f"____Autofix = 3 , DQstats:{DQstats} at : {datetime.now()}")
         return [electors2,DQstats]
+    electors2['Tags'] = electors2['Tags'].fillna("").astype(str)
     electors2 = pd.DataFrame(electors2,columns=Outcols)
     return [electors2,DQstats]
 

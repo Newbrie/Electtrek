@@ -52,6 +52,7 @@
           <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
           <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
           <option value="mark" {% if row['purpose'] == 'mark' %}selected{% endif %}>mark</option>
+          <option value="resource" {% if row['purpose'] == 'resource' %}selected{% endif %}>resource</option>
         </select>
       </td>
       <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
@@ -303,6 +304,7 @@
 //      alert('inside active and stream: '+ stream+active );
 
       if (active && election === normalizedInput) {
+        formData.append('election', normalizedInput);
 
         if (fileInput.files.length > 0) {
           const file = fileInput.files[0];
@@ -354,6 +356,7 @@
           .then(res => res.json())  // Parse the JSON response
           .then(data => {
             // Extract the 'html' and 'streamrag' from the response
+
             const html = data.html;
             const streamrag = data.streamrag;
 
