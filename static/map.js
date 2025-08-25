@@ -8,8 +8,12 @@ var moveDown = function (msg, area, type) {
     if (ul) ul.scrollTop = ul.scrollHeight;
     window.location.assign(msg);
 //    alert("Submitting to: " + msg);
-
-};
+    fetch("/get-constants", { credentials: 'same-origin' })
+      .then(res => res.json())
+      .then(data => {
+        updateConstantsUI(data.constants, data.options);
+      };
+    };
 
 
 var moveUp = function (msg,area, type) {
@@ -18,7 +22,11 @@ var moveUp = function (msg,area, type) {
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
-
+      fetch("/get-constants", { credentials: 'same-origin' })
+        .then(res => res.json())
+        .then(data => {
+          updateConstantsUI(data.constants, data.options);
+        };
       };
 var showMore = function (msg,area, type) {
   // Send a message to the parent
@@ -26,6 +34,11 @@ var showMore = function (msg,area, type) {
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
+      fetch("/get-constants", { credentials: 'same-origin' })
+        .then(res => res.json())
+        .then(data => {
+          updateConstantsUI(data.constants, data.options);
+        };
       };
 
       /* When the user clicks on the button,
