@@ -12,7 +12,8 @@ var moveDown = function (msg, area, type) {
       .then(res => res.json())
       .then(data => {
         updateConstantsUI(data.constants, data.options);
-      };
+        updateMessages();
+      });
     };
 
 
@@ -26,7 +27,8 @@ var moveUp = function (msg,area, type) {
         .then(res => res.json())
         .then(data => {
           updateConstantsUI(data.constants, data.options);
-        };
+          updateMessages();
+        });
       };
 var showMore = function (msg,area, type) {
   // Send a message to the parent
@@ -38,7 +40,8 @@ var showMore = function (msg,area, type) {
         .then(res => res.json())
         .then(data => {
           updateConstantsUI(data.constants, data.options);
-        };
+          updateMessages();
+        });
       };
 
       /* When the user clicks on the button,
