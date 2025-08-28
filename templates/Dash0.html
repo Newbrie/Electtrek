@@ -194,24 +194,17 @@
 
 <div id="tabletitle" >
 <h2>Details for : {{ (formdata or {}).get('tabledetails', '')}} </h2>
+<select id="tableSelector">
+  <option value="resources">Resources</option>
+  <option value="markerframe">Markers</option>
+  <option value="ELECTIONS">Elections</option>
+</select>
 </div>
 
 <div id="datawin" class="innertube">
 
 	    <table id="captains-table">
 
-      <thead>
-      <tr>
-      <th class="c1" >?</th>
-      <th class="c1" >CC</th>
-      <th class="c1">Areaname</th>
-      <th class="c1" >Constituency</th>
-      <th class="c1">Candidate</th>
-      </tr>
-      </thead>
-      <tbody style="height: 70px">
-
-      </tbody>
 
 	    </table>
 </div>

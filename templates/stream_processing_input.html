@@ -4,8 +4,8 @@
 {% block map %}
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
-<h1>Select ordered listof files to be uploaded for each Election</h1>
-<h2>(if you want to try to load electors , select fix level 3)</h2>
+<h1>Electoral registers, changes and postal voter files</h1>
+<h2>(Select fix level 3 to upload)</h2>
 <button id="add-row-btn">Add Row</button>
 <button id="save-btn">Save</button>
 
@@ -271,6 +271,15 @@
           } else if (data.status === "error") {
             console.error("Error in normalization:", data.message);
             text.innerText = "⚠️ " + (data.message || "Error");
+          } else if (data.status === "error") {
+            console.error("Error in normalization:", data.message);
+            text.innerText = "⚠️ " + (data.message || "Error");
+
+            // Stop polling
+            if (progressTimeoutId) {
+                clearTimeout(progressTimeoutId);
+            }
+
           } else {
             // Continue polling after 500ms
             progressTimeoutId = setTimeout(pollProgress, 500);

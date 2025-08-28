@@ -117,6 +117,77 @@ var showMore = function (msg,area, type) {
   		window.location.href = url;
   	};
 
+    function fetchTableData(tableName) {
+      fetch(`/get_table/${tableName}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin"
+      })
+      .then(response => {
+          if (!response.ok) throw new Error("Network response was not ok");
+          return response.json();
+      })
+      .then(data => {
+          if (!Array.isArray(data) || data.length < 3) {
+              console.error("Invalid or incomplete data:", data);
+              return;
+          }
+
+          const columnHeaders = data[0];
+          const rows = data[1];
+          const title = data[2];
+
+          tabtitle.innerHTML = title;
+          tabhead.innerHTML = "";
+          tabbody.innerHTML = "";
+
+          const headRow = document.createElement("tr");
+          const checkboxHeader = document.createElement("th");
+          checkboxHeader.textContent = "?";
+          headRow.appendChild(checkboxHeader);
+
+          columnHeaders.forEach(header => {
+              const th = document.createElement("th");
+              th.textContent = header.toUpperCase();
+              headRow.appendChild(th);
+          });
+
+          tabhead.appendChild(headRow);
+
+          rows.forEach(record => {
+              const row = document.createElement("tr");
+              const checkboxCell = document.createElement("td");
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.name = "selectRow[]";
+              checkbox.classList.add("selectRow");
+              checkboxCell.appendChild(checkbox);
+              row.appendChild(checkboxCell);
+
+              columnHeaders.forEach(header => {
+                  const cell = document.createElement("td");
+                  const value = record[header] !== undefined ? record[header] : "";
+                  cell.innerHTML = value;
+
+                  if (header === yourparty.value) {
+                      const color = VCO[yourparty.value] || "inherit";
+                      cell.style.backgroundColor = color;
+                  }
+
+                  row.appendChild(cell);
+              });
+
+              tabbody.appendChild(row);
+          });
+      })
+      .catch(error => console.error("Table fetch error:", error));
+    }
+
+    parent.document.getElementById("tableSelector").addEventListener("change", function () {
+        const selectedTable = this.value;
+        fetchTableData(selectedTable);
+    });
+
 
   function updateMessages() {
   const old = pessages.pop();
