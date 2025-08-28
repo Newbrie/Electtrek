@@ -183,10 +183,6 @@ var showMore = function (msg,area, type) {
       .catch(error => console.error("Table fetch error:", error));
     }
 
-    parent.document.getElementById("tableSelector").addEventListener("change", function () {
-        const selectedTable = this.value;
-        fetchTableData(selectedTable);
-    });
 
 
   function updateMessages() {
