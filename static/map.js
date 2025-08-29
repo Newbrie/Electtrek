@@ -183,7 +183,7 @@ var showMore = function (msg,area, type) {
       .catch(error => console.error("Table fetch error:", error));
     }
 
-    
+
   function updateMessages() {
     const old = pessages.pop();
     const ul = parent.document.getElementById("logwin");
@@ -255,7 +255,7 @@ var showMore = function (msg,area, type) {
       });
 
       tabhead.appendChild(headRow);
-
+      console.log("🗺️ received json table details:", tabtitle+tabhead+tabbody);
       // Build table body
       rows.forEach(record => {
           const row = document.createElement("tr");

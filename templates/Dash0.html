@@ -609,10 +609,6 @@ fetch("/get-constants", { credentials: 'same-origin' })
       });
   };
 
-  document.getElementById("tableSelector").addEventListener("change", function () {
-    const selectedText = this.options[this.selectedIndex].text;
-    document.getElementById("selectedTitle").textContent = `Details for: ${selectedText}`;
-  });
 
   document.getElementById("update-territory-btn").addEventListener("click", () => {
     const activeTab = document.querySelector(".election-tab.active");
