@@ -1,8 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-window.addEventListener("DOMContentLoaded", function () {
-    // your code here
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -522,6 +520,3 @@ var showMore = function (msg,area, type) {
       body: JSON.stringify({ enop: electorId, tag: tag })
     }).then(() => location.reload());
   }
-
-
-});
