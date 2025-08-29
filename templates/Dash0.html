@@ -576,6 +576,9 @@ fetch("/get-constants", { credentials: 'same-origin' })
   document.addEventListener("DOMContentLoaded", () => {
 
     // your code here
+
+
+
   const tabContainer = document.getElementById("election-tabs");
 
   // 🔹 Load constants for the active election tab at startup
@@ -605,6 +608,11 @@ fetch("/get-constants", { credentials: 'same-origin' })
         }
       });
   };
+
+  document.getElementById("tableSelector").addEventListener("change", function () {
+    const selectedText = this.options[this.selectedIndex].text;
+    document.getElementById("selectedTitle").textContent = `Details for: ${selectedText}`;
+  });
 
   document.getElementById("update-territory-btn").addEventListener("click", () => {
     const activeTab = document.querySelector(".election-tab.active");
