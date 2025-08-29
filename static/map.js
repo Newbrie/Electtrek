@@ -1,6 +1,8 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
+window.addEventListener("DOMContentLoaded", function () {
+    // your code here
 var moveDown = function (msg, area, type) {
     window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
 
@@ -183,19 +185,29 @@ var showMore = function (msg,area, type) {
       .catch(error => console.error("Table fetch error:", error));
     }
 
-
+    document.getElementById("tableSelector").addEventListener("change", function () {
+      const selectedText = this.options[this.selectedIndex].text;
+      document.getElementById("selectedTitle").textContent = `Details for: ${selectedText}`;
+    });
 
   function updateMessages() {
-  const old = pessages.pop();
-  const ul = parent.document.getElementById("logwin");
-  const li = parent.document.createElement("li");
-  document.getElementById("tableSelector").addEventListener("change", function () {
-      const selectedText = this.options[this.selectedIndex].text;
-      document.querySelector("#tabletitle h2").textContent = `Details for: ${selectedText}`;
-  });
-  const table = parent.document.getElementById("captains-table");
-  const tabhead = table.querySelector("thead");
-  const tabbody = table.querySelector("tbody");
+    const old = pessages.pop();
+    const ul = parent.document.getElementById("logwin");
+    const li = parent.document.createElement("li");
+
+    const tabletitle = parent.document.getElementById("tabletitle");
+    const table = parent.document.getElementById("captains-table");
+
+    const tabtitle = tabletitle.querySelector("h2");  // <h2 id="selectedTitle">
+    const tabhead = table.querySelector("thead");
+    const tabbody = table.querySelector("tbody");
+
+    // Update the <h2> to match the current selection
+    const tableSelector = tabletitle.querySelector("#tableSelector");
+    const selectedText = tableSelector.options[tableSelector.selectedIndex].text;
+    tabtitle.textContent = `Details for: ${selectedText}`;
+
+
   // Define your party color lookup
   const VCO = {
       "O": "brown", "R": "cyan", "C": "blue", "S": "red",
@@ -510,3 +522,6 @@ var showMore = function (msg,area, type) {
       body: JSON.stringify({ enop: electorId, tag: tag })
     }).then(() => location.reload());
   }
+
+
+});
