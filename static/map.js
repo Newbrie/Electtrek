@@ -183,7 +183,7 @@ var showMore = function (msg,area, type) {
       .catch(error => console.error("Table fetch error:", error));
     }
 
-    .parent.document.getElementById("tableSelector").addEventListener("change", function () {
+    parent.document.getElementById("tableSelector").addEventListener("change", function () {
       const selectedText = this.options[this.selectedIndex].text;
       document.getElementById("selectedTitle").textContent = `Details for: ${selectedText}`;
     });
