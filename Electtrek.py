@@ -496,13 +496,13 @@ main_index = None # for file processing
 #    OPTIONS = json.load(f)
 print("🔍 type of json5:", type(json))
 with open(TABLE_FILE, "r") as f:
-    table_data = json.load(f)
+    stream_table = json.load(f)
 
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
-ElectionOptions = dict(zip({entry['election'] for entry in table_data if 'election' in entry},{entry['election'] for entry in table_data if 'election' in entry}))
+ElectionOptions = dict(zip({entry['election'] for entry in stream_table if 'election' in entry},{entry['election'] for entry in stream_table if 'election' in entry}))
 
 with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
     resources = json.load(f)
@@ -519,7 +519,7 @@ OPTIONS = {
     "vnorm" : VNORM,
     "vco" : VCO,
     "streams" : ElectionOptions,
-    "table_data": table_data
+    "stream_table": stream_table
     # Add more mappings here if needed
 }
 
@@ -528,7 +528,7 @@ with open(OPTIONS_FILE, 'w') as f:
     json.dump(OPTIONS, f, indent=2)
 
 
-print("____TABLE FILE:", table_data)
+print("____TABLE FILE:", stream_table)
 print("____Elections:", ELECTIONS)
 print("____AllOPTIONS:", OPTIONS)
 print("____ElectionOptions:", ElectionOptions)
@@ -2363,7 +2363,7 @@ def getstreamrag():
     if file_path and os.path.exists(file_path):
         # we have an active pre-loaded set electors, created by one or more streams
         ef = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
-        table_data = []
+        stream_table = []
         livestreamdash = pd.DataFrame()
         activestreams = []
     # a empty or missing allelectors.csv is a farm waiting to be harvested WHITE circle
@@ -2385,10 +2385,10 @@ def getstreamrag():
             print(json)
             if os.path.exists(TABLE_FILE):
                 with open(TABLE_FILE) as f:
-                    table_data = json.load(f)
+                    stream_table = json.load(f)
     # so we are in business with stream labels - if they are defined as streams in the table and used in elector file
                 g = {'filename' : 'count', 'loaded' : 'count'}
-                table_df = pd.DataFrame(table_data)
+                table_df = pd.DataFrame(stream_table)
                 print("____we have allelectors and streamtable file :")
                 defined_streamlabels = table_df['election'].to_list() #elections are defined
                 active_streams = list({x for x in defined_streamlabels if x in livestreamlabels }) # elections are defined and live
@@ -2474,7 +2474,7 @@ def reset_nodes():
 
 
 
-def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data):
+def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress, markerframe
 
     def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
@@ -2593,11 +2593,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             print("🔍 type of json2:", type(json))
             if os.path.exists(TABLE_FILE):
                 with open(TABLE_FILE) as f:
-                    table_data = json.load(f)
+                    stream_table = json.load(f)
             else:
-                table_data = []
+                stream_table = []
         # Collect all possible unique stream names for dropdowns
-            streams = sorted(set(row['election'] for row in table_data))
+            streams = sorted(set(row['election'] for row in stream_table))
             streamrag = {}
             dfx = pd.DataFrame()
 
@@ -4627,22 +4627,29 @@ def wardreport(path):
 def get_table(table_name):
     global resources
     global markerframe
-    global ELECTIONS
+    global stream_table
     global layertable
 
     def get_resources_table():
-        return pd.DataFrame(resources)
+        if isinstance(resources, dict):
+            return pd.DataFrame.from_dict(resources, orient='index')
+        else:
+            return pd.DataFrame(resources)
     def get_markers_table():
-        return pd.DataFrame(markerframe)
+        return pd.DataFrame(markerframe)  # markerframe is a list of dicts or records
     def get_stream_table():
-        return pd.DataFrame(TABLE_DATA)
+        if isinstance(resources, dict):
+            return pd.DataFrame.from_dict(stream_table, orient='index')
+        else:
+            return pd.DataFrame(stream_table)
+
     def get_layer_table():
         return pd.DataFrame(layer_table)
     # Check if table exists or needs to be created
     table_map = {
         "resources": get_resources_table,
         "markerframe": get_markers_table,
-        "stream_data": get_stream_table,
+        "stream_table": get_stream_table,
         "layer_table" : get_layer_table
     }
 
@@ -4675,7 +4682,7 @@ def displayareas():
     if current_election == "DEMO":
         if len(markerframe) > 0:
             formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
-            layeritems = get_table(pd.DataFrame(markerframe) ,formdata['tabledetails'])
+            layeritems = create_layeritems(pd.DataFrame(markerframe) ,formdata['tabledetails'])
             print(f" Number of displayed markframe items - {len(markerframe)} ")
         else:
             formdata['tabledetails'] = "No data to display - please upload"
@@ -5264,9 +5271,9 @@ def cards():
     session['current_node_id'] = current_node.fid
     return redirect(url_for('dashboard'))
 
-@app.route('/save_table_data', methods=['POST'])
+@app.route('/save_stream_table', methods=['POST'])
 @login_required
-def save_table_data():
+def save_stream_table():
     data = request.get_json().get('data', [])
 
     try:
@@ -5340,16 +5347,16 @@ def normalise():
     DQstats = pd.DataFrame()
     streamrag = getstreamrag()
     # Collect unique streams for dropdowns
-    table_data = []
+    stream_table = []
     print("🔍 type of json3:", type(json))
     if os.path.exists(TABLE_FILE):
         with open(TABLE_FILE) as f:
-            table_data = json.load(f)
+            stream_table = json.load(f)
     else:
-        table_data = []
-    streams = sorted(set(row['election'] for row in table_data))
+        stream_table = []
+    streams = sorted(set(row['election'] for row in stream_table))
 
-    streamtablehtml =  render_template('partials/streamtable.html', table_data=table_data)
+    streamtablehtml =  render_template('partials/streamtable.html', stream_table=stream_table)
 
 
     print("Form Data:", request_form)
@@ -5460,12 +5467,12 @@ def normalise():
     # Start background thread
     threading.Thread(
         target=background_normalise,
-        args=(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, table_data)
+        args=(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table)
     ).start()
 
     dqstats_html = render_template('partials/dqstats_rows.html', DQstats=DQstats)
 
-#    return render_template("stream_processing_input.html", streams=streams, table_data=table_data, streamrag=streamrag, DQstats=DQstats)
+#    return render_template("stream_processing_input.html", streams=streams, stream_table=stream_table, streamrag=streamrag, DQstats=DQstats)
     return jsonify({"message": "Success", "html": dqstats_html })
 
 
@@ -5475,20 +5482,20 @@ def stream_input():
     global allelectors
 
     global allelectors
-    global table_data
+    global stream_table
 
     restore_from_persist(session=session)
 
     DQstats = pd.DataFrame()
 
     # Load table data
-    table_data = []
+    stream_table = []
     print("🔍 type of json4:", type(json))
     if os.path.exists(TABLE_FILE):
         with open(TABLE_FILE) as f:
-            table_data = json.load(f)
+            stream_table = json.load(f)
     else:
-        table_data = []
+        stream_table = []
 
     streamrag = getstreamrag()
 
@@ -5498,7 +5505,7 @@ def stream_input():
 
     print("__Streamrag3",streams, streamrag)
 
-    return render_template('stream_processing_input.html', streams=streams,table_data=table_data, streamrag=streamrag, DQstats = DQstats)
+    return render_template('stream_processing_input.html', streams=streams,stream_table=stream_table, streamrag=streamrag, DQstats = DQstats)
 
 if __name__ in '__main__':
     with app.app_context():

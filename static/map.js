@@ -189,9 +189,11 @@ var showMore = function (msg,area, type) {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
-  const tabletitle = parent.document.getElementById("tabletitle");
+  document.getElementById("tableSelector").addEventListener("change", function () {
+      const selectedText = this.options[this.selectedIndex].text;
+      document.querySelector("#tabletitle h2").textContent = `Details for: ${selectedText}`;
+  });
   const table = parent.document.getElementById("captains-table");
-  const tabtitle = tabletitle.querySelector("h2");
   const tabhead = table.querySelector("thead");
   const tabbody = table.querySelector("tbody");
   // Define your party color lookup
