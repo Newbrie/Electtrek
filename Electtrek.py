@@ -4631,27 +4631,28 @@ def get_table(table_name):
     global layertable
 
     def get_resources_table():
-        if isinstance(resources, dict):
-            return pd.DataFrame.from_dict(resources, orient='index')
-        else:
-            return pd.DataFrame(resources)
+        return pd.DataFrame(resources)
+
     def get_markers_table():
-        return pd.DataFrame(markerframe)  # markerframe is a list of dicts or records
+        return pd.DataFrame(markerframe)  # assuming this is a list of dicts (records)
+
     def get_stream_table():
-        if isinstance(resources, dict):
+        if isinstance(stream_table, dict):  # You mistakenly checked `resources` again
             return pd.DataFrame.from_dict(stream_table, orient='index')
         else:
             return pd.DataFrame(stream_table)
 
     def get_layer_table():
         return pd.DataFrame(layer_table)
-    # Check if table exists or needs to be created
+
+    # Table mapping
     table_map = {
         "resources": get_resources_table,
         "markerframe": get_markers_table,
         "stream_table": get_stream_table,
-        "layer_table" : get_layer_table
+        "layer_table": get_layer_table
     }
+
 
     if table_name not in table_map:
         return jsonify(["", "", f"Table '{table_name}' not found"]), 404

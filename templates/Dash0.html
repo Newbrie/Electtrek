@@ -192,14 +192,14 @@
 {% endblock nav %}
 {% block captains %}
 
-<div id="tabletitle" >
+<div id="tabletitle">
   <select id="tableSelector">
     <option value="resources">ResourcesTable</option>
     <option value="markerframe">Markertable</option>
     <option value="stream_table">Streamtable</option>
   </select>
-<h2>Details for : {{ (formdata or {}).get('tabledetails', '')}} </h2>
 
+  <h2 id="selectedTitle">Details for: {{ (formdata or {}).get('tabledetails', '') }}</h2>
 </div>
 
 <div id="datawin" class="innertube">

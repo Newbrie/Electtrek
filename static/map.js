@@ -189,10 +189,9 @@ var showMore = function (msg,area, type) {
     const ul = parent.document.getElementById("logwin");
     const li = parent.document.createElement("li");
 
-    const tabletitle = parent.document.getElementById("tabletitle");
     const table = parent.document.getElementById("captains-table");
 
-    const tabtitle = tabletitle.querySelector("h2");  // <h2 id="selectedTitle">
+    const tabtitle = document.getElementById("selectedTitle");
     const tabhead = table.querySelector("thead");
     const tabbody = table.querySelector("tbody");
 
