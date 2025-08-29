@@ -182,16 +182,17 @@ var showMore = function (msg,area, type) {
       })
       .catch(error => console.error("Table fetch error:", error));
     }
-
+  let tabtitle = "";
 
   function updateMessages() {
     const old = pessages.pop();
     const ul = parent.document.getElementById("logwin");
     const li = parent.document.createElement("li");
 
+    const tabletitle = parent.document.getElementById("tabletitle");
     const table = parent.document.getElementById("captains-table");
 
-    const tabtitle = parent.document.getElementById("selectedTitle");
+    tabtitle = parent.document.getElementById("selectedTitle");
     const tabhead = table.querySelector("thead");
     const tabbody = table.querySelector("tbody");
 
