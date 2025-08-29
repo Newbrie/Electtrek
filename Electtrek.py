@@ -4657,14 +4657,16 @@ def get_table(table_name):
     if table_name not in table_map:
         return jsonify(["", "", f"Table '{table_name}' not found"]), 404
 
-    df = table_map[table_name]()  # Call the appropriate function
-
-    # Prepare headers and rows
-    column_headers = list(df.columns)
-    rows = df.to_dict(orient="records")
-    title = table_name.replace("_", " ").title()
-
-    return jsonify([column_headers, rows, title])
+    try:
+        df = table_map[table_name]()
+        column_headers = list(df.columns)
+        rows = df.to_dict(orient="records")
+        title = table_name.replace("_", " ").title()
+        print(f"____TABLENAME {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
+        return jsonify([column_headers, rows, title])
+    except Exception as e:
+        print(f"[ERROR] Failed to generate table '{table_name}': {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 

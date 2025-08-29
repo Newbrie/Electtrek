@@ -191,7 +191,7 @@ var showMore = function (msg,area, type) {
 
     const table = parent.document.getElementById("captains-table");
 
-    const tabtitle = document.getElementById("selectedTitle");
+    const tabtitle = parent.document.getElementById("selectedTitle");
     const tabhead = table.querySelector("thead");
     const tabbody = table.querySelector("tbody");
 
