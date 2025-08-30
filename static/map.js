@@ -255,7 +255,7 @@ var showMore = function (msg,area, type) {
       });
 
       tabhead.appendChild(headRow);
-      console.log("🗺️ received json table details:", tabtitle+tabhead+tabbody);
+      console.log(`🗺️ received json table ${tabtitle.innerHTML} details:${tabhead.innerHTML} body: ${tabbody.innerHTML}`);
       // Build table body
       rows.forEach(record => {
           const row = document.createElement("tr");
