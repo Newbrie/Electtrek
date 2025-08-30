@@ -128,6 +128,7 @@ var showMore = function (msg,area, type) {
           return response.json();
       })
       .then(data => {
+        console.log("Get_table data received:", data);
           if (!Array.isArray(data) || data.length < 3) {
               console.error("Invalid or incomplete data:", data);
               return;
@@ -180,7 +181,7 @@ var showMore = function (msg,area, type) {
               tabbody.appendChild(row);
           });
       })
-      .catch(error => console.error("Table fetch error:", error));
+      .catch(error => console.error("Get_table fetch error:", error));
     }
 
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block map %}
 <div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="updateMessages()"> </iframe>
+    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="//updateMessages()"> </iframe>
 </div>
 <script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 <script >
@@ -451,7 +451,7 @@ async function fetchAndUpdateChart() {
         .then(res => res.json())
         .then(resp => {
           if (resp.success) {
-            updateMessages();
+            //updateMessages();
           } else {
             alert("Failed to update: " + resp.error);
           }
@@ -502,7 +502,7 @@ async function fetchAndUpdateChart() {
         console.log(`New mapfile loaded: /map/${mapfile}`);
       }
 
-      updateMessages();
+      //updateMessages();
     });
   }
 
@@ -520,7 +520,7 @@ async function fetchAndUpdateChart() {
     .then(resp => {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-        updateMessages();
+        //updateMessages();
         // ✅ All onclick bindings are preserved because they come from server-rendered HTML
       } else {
         alert("Could not delete election: " + (resp.error || "Unknown error"));
@@ -543,7 +543,7 @@ async function fetchAndUpdateChart() {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
         updateConstantsUI(resp.constants, resp.options);
-        updateMessages();
+        //updateMessages();
         // ✅ Onclick handlers already embedded
       } else {
         alert("Error adding election: " + resp.error);
@@ -569,7 +569,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
     if (mapfile) {
       changeIframeSrc(`/map/${mapfile}`);
     }
-    updateMessages();
+    //updateMessages();
   });
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -602,7 +602,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
               if (mapfile) {
                 changeIframeSrc(`/map/${mapfile}`);
               }
-              updateMessages();
+              //updateMessages();
             });
         }
       });
