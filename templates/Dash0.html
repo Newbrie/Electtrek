@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block map %}
 <div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="//updateMessages()"> </iframe>
+    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload=""> </iframe>
 </div>
 <script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 <script >
@@ -220,10 +220,10 @@
 
   document.getElementById("tableSelector").addEventListener("change", function () {
       const selectedTable = this.value;
-      const iframe1 = document.getElementById("iframe1");
-      const iframeWindow = iframe1.contentWindow;
+//      const iframe1 = document.getElementById("iframe1");
+//      const iframeWindow = iframe1.contentWindow;
 // Access something in the iframe:
-      iframeWindow.fetchTableData(selectedTable);
+      fetchTableData(selectedTable);
   });
 
   document.getElementById("logout-button").addEventListener("click", function() {

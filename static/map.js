@@ -118,6 +118,12 @@ var showMore = function (msg,area, type) {
   	};
 
     function fetchTableData(tableName) {
+      const tabletitle = parent.document.getElementById("tabletitle");
+      const table = parent.document.getElementById("captains-table");
+
+      const tabtitle = parent.document.getElementById("selectedTitle");
+      const tabhead = table.querySelector("thead");
+      const tabbody = table.querySelector("tbody");
       fetch(`/get_table/${tableName}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
