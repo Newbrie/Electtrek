@@ -58,6 +58,12 @@ levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "
 
 levels = ['country','nation','county','constituency','ward/division','polling_district/walk','street/walkleg','elector']
 
+def find_level_containing(word):
+    word = word.lower()
+    for i, level in enumerate(levels):
+        if word in level.lower():
+            return i
+    return -1  # Not found
 
 # want to equate levels with certain types, eg 4 is ward and div
 # want to look up the level of a type ,and the types in a level
@@ -195,7 +201,9 @@ def is_safe_url(target):
     return test_url.scheme in ('http', 'https') and \
             ref_url.netloc == test_url.netloc
 
-def create_layeritems(nodelist,title):
+def get_layer_table(nodelist,title):
+    global VCO
+    global VNORM
     dfy = pd.DataFrame()
     if isinstance(nodelist, pd.DataFrame):
         dfy = nodelist
@@ -227,7 +235,7 @@ def create_layeritems(nodelist,title):
             dfy.loc[i,'toget'] = int(((x.electorate*x.turnout)/2+1)/float(CurrentElection['GOTV']))-int(x.VI[CurrentElection['yourparty']])
             i = i + 1
 
-    print("___existing create_layeritems",list(dfy.columns.values), dfy, title)
+    print("___existing get_layer_table",list(dfy.columns.values), dfy, title)
     return [list(dfy.columns.values),dfy, title]
 
 
@@ -516,8 +524,8 @@ OPTIONS = {
     "chair" : resources,
     "tags": CurrentElection['tags'],
     "autofix" : onoff,
-    "vnorm" : VNORM,
-    "vco" : VCO,
+    "VNORM" : VNORM,
+    "VCO" : VCO,
     "streams" : ElectionOptions,
     "stream_table": stream_table
     # Add more mappings here if needed
@@ -2776,7 +2784,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
             DQstats.loc[Outcols.index('WalkName'),'P3'] = 1
             formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
-            layeritems = create_layeritems(results[0].head(), formdata['tabledetails'])
+            layeritems = get_layer_table(results[0].head(), formdata['tabledetails'])
             print("__concat of DQstats", DQstats)
             DQstats.to_csv(subending(ImportFilename,"DQ.csv"),sep='\t', encoding='utf-8', index=False)
 
@@ -3059,7 +3067,7 @@ def kanban():
     mapfile = current_node.mapfile()
     formdata['tabledetails'] = current_node.value+" details"
     items = current_node.childrenoftype('walk')
-    layeritems = create_layeritems(items,formdata['tabledetails'] )
+    layeritems = get_layer_table(items,formdata['tabledetails'] )
     print("___Layeritems: ",[x.value for x in items] )
 
 
@@ -3507,7 +3515,7 @@ def reset_Elections():
     progress['dqstats_html'] = render_template('partials/dqstats_rows.html', DQstats=DQstats)
     print(" new DQstats displayed:",progress['dqstats_html'])
     text = "NO DATA - please select an electoral roll data stream to load"
-    layeritems = create_layeritems(pd.DataFrame(),text )
+    layeritems = get_layer_table(pd.DataFrame(),text )
 
     return jsonify({'message': 'Election data archived and reset successfully.'}), 200
 
@@ -4596,10 +4604,10 @@ def wardreport(path):
     i = 0
     alreadylisted = []
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
-    layeritems = create_layeritems(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
+    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
     for group_node in current_node.childrenoftype('constituency'):
 
-        layeritems = create_layeritems(group_node.create_map_branch(session,'ward'))
+        layeritems = get_layer_table(group_node.create_map_branch(session,'ward'))
 
         for temp in group_node.childrenoftype('ward'):
             if temp.value not in alreadylisted:
@@ -4624,35 +4632,61 @@ def get_table(table_name):
     global markerframe
     global stream_table
     global layertable
+    global VCO
+    global VNORM
 
     def get_resources_table():
         return pd.DataFrame(resources)
 
     def get_markers_table():
-        return pd.DataFrame(markerframe)  # assuming this is a list of dicts (records)
+        print(f"Markerframe type: {type(markerframe)}")
+        print(f"Markerframe content: {markerframe}")
+        print(f"pd.DataFrame: {pd.DataFrame}, type: {type(pd.DataFrame)}")
+        if markerframe is None or not markerframe:
+            raise ValueError("markerframe is not defined")
+
+        # Check if markerframe is a dictionary or a list
+        if isinstance(markerframe, dict):
+            return pd.DataFrame.from_dict(markerframe, orient='index')
+
+        elif isinstance(markerframe, list):
+            # Ensure each item in the list is a dictionary (if it's a list of dicts)
+            if all(isinstance(item, dict) for item in markerframe):
+                return pd.DataFrame(markerframe)
+            else:
+                raise ValueError("Each item in markerframe list must be a dictionary.")
+
+        else:
+            raise TypeError("markerframe must be either a dictionary or a list.")
 
     def get_stream_table():
-        if isinstance(stream_table, dict):  # You mistakenly checked `resources` again
+        print(f"Markerframe type: {type(stream_table)}")
+        print(f"Markerframe content: {stream_table}")
+        if isinstance(stream_table, dict):
             return pd.DataFrame.from_dict(stream_table, orient='index')
         else:
             return pd.DataFrame(stream_table)
 
-    def get_layer_table():
-        return pd.DataFrame(layer_table)
+    current_node = get_current_node(session)
 
     # Table mapping
     table_map = {
-        "resources": get_resources_table,
-        "markerframe": get_markers_table,
-        "stream_table": get_stream_table,
-        "layer_table": get_layer_table
+        "resources" : get_resources_table,
+        "markerframe" : get_markers_table,
+        "stream_table" : get_stream_table
     }
 
-
-    if table_name not in table_map:
-        return jsonify(["", "", f"Table '{table_name}' not found"]), 404
-
     try:
+        if table_name.endswith("_layer"):
+            tabtype = table_name.split("_")[0]
+            lev = find_level_containing(tabtype)-1
+            print(f"____NODELOOKUP {table_name} type {tabtype} level {lev} ")
+            [column_headers,rows, title] = get_layer_table(current_node.findnodeat_Level(lev).childrenoftype(tabtype), str(tabtype)+"s")
+            print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
+            return jsonify([column_headers, rows.to_dict(orient="records"), title])
+        elif table_name is None or table_name not in table_map:
+            print(f"____BAD TABLE {table_name} None or not in list ")
+            return jsonify(["", "", f"Table '{table_name}' not found"]), 404
         df = table_map[table_name]()
         column_headers = list(df.columns)
         rows = df.to_dict(orient="records")
@@ -4680,11 +4714,11 @@ def displayareas():
     if current_election == "DEMO":
         if len(markerframe) > 0:
             formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
-            layeritems = create_layeritems(pd.DataFrame(markerframe) ,formdata['tabledetails'])
+            layeritems = get_layer_table(pd.DataFrame(markerframe) ,formdata['tabledetails'])
             print(f" Number of displayed markframe items - {len(markerframe)} ")
         else:
             formdata['tabledetails'] = "No data to display - please upload"
-            layeritems = create_layeritems(pd.DataFrame(markerframe),formdata['tabledetails'])
+            layeritems = get_layer_table(pd.DataFrame(markerframe),formdata['tabledetails'])
     else:
         path = current_node.dir+"/"+current_node.file
         ctype = gettypeoflevel(path, current_node.level+1)
@@ -4697,7 +4731,7 @@ def displayareas():
                 tablenodes = current_node.parent.childrenoftype(ctype)
             else:
                 return jsonify([[], [], "No data"])
-        layeritems = create_layeritems(tablenodes ,formdata['tabledetails'])
+        layeritems = get_layer_table(tablenodes ,formdata['tabledetails'])
         print(f"Display layeritems area {current_node.value} - {ctype} - {len(tablenodes)}")
 
     if not layeritems or len(layeritems) < 3:
@@ -4785,11 +4819,11 @@ def divreport(path):
     layeritems = pd.DataFrame()
     alreadylisted = []
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+getchildtype(current_node.type)+" details"
-    layeritems = create_layeritems(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
+    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
 
     for group_node in current_node.childrenoftype('division'):
 
-        layeritems = create_layeritems(group_node.create_map_branch(session,'division'),formdata['tabledetails'])
+        layeritems = get_layer_table(group_node.create_map_branch(session,'division'),formdata['tabledetails'])
 
         for item in Featurelayers['division']._children:
             if item.value not in alreadylisted:

@@ -118,6 +118,14 @@ var showMore = function (msg,area, type) {
   	};
 
     function fetchTableData(tableName) {
+
+      const VCO = {
+          "O": "brown", "R": "cyan", "C": "blue", "S": "red",
+          "LD": "yellow", "G": "limegreen", "I": "indigo",
+          "PC": "darkred", "SD": "orange", "Z": "lightgray",
+          "W": "white", "X": "darkgray"
+      };
+
       const tabletitle = parent.document.getElementById("tabletitle");
       const table = parent.document.getElementById("captains-table");
 

@@ -193,12 +193,21 @@
 {% block captains %}
 
 <div id="tabletitle">
-  <select id="tableSelector">
-    <option value="resources">ResourcesTable</option>
-    <option value="markerframe">Markertable</option>
-    <option value="stream_table">Streamtable</option>
+  Details for: <select id="tableSelector">
+    <option value="resources">Resources</option>
+    <option value="markerframe">Event Markers</option>
+    <option value="stream_table">Import Data Streams</option>
+    <option value="nation_layer">Nations</option>
+    <option value="county_layer">Counties</option>
+    <option value="constituency_layer">Constituencies</option>
+    <option value="ward_layer">Wards</option>
+    <option value="division_layer">Divisions</option>
+    <option value="polling_district_layer">Polling Districts</option>
+    <option value="walks_layer">Walks</option>
+    <option value="street_layer">Streets</option>
+    <option value="walkleg_layer">Walklegs</option>
   </select>
-  <ul id="selectedTitle">Details for: {{ (formdata or {}).get('tabledetails', '') }}</ul>
+  <li id="selectedTitle"> Table Details</li>
 </div>
 
 <div id="datawin" class="innertube">
