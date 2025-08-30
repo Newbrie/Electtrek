@@ -528,13 +528,8 @@ with open(OPTIONS_FILE, 'w') as f:
     json.dump(OPTIONS, f, indent=2)
 
 
-print("____TABLE FILE:", stream_table)
-print("____Elections:", ELECTIONS)
-print("____AllOPTIONS:", OPTIONS)
-print("____ElectionOptions:", ElectionOptions)
-# This prints a script tag you can paste into your HTML
-print(f'<script>const VID_json = {VID_json};</script>')
 
+# This prints a script tag you can paste into your HTML
 
 class TreeNode:
     def __init__(self, value, fid, roid, lev, elect):
@@ -741,9 +736,9 @@ class TreeNode:
         if self.type == 'street' or self.type == 'walkleg':
             sumnode = origin
             sumnode.VR[vrValue] = sumnode.VR[vrValue] + 1
-            print ("_____VRnode:",sumnode.value,sumnode.level,sumnode.VR)
+#            print ("_____VRnode:",sumnode.value,sumnode.level,sumnode.VR)
         self = origin
-        print ("_____VRstatus:",self.value,self.type,self.VR)
+#        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
     def updateTurnout(self):
@@ -755,7 +750,7 @@ class TreeNode:
         origin = self
         casnode = origin
         current_election = session.get('current_election')
-        print(f"____Turnout in {current_election} with Election data {CurrentElection}" )
+#        print(f"____Turnout in {current_election} with Election data {CurrentElection}" )
         if CurrentElection['territories'] == 'W':
 #cascade last constituency turnout figure to all wards(children) and streets(children)
 
@@ -776,7 +771,7 @@ class TreeNode:
                 casnode.turnout = casnode.parent.turnout
 
             self = origin
-            print ("___Nat Turnout:",self.value,self.level,self.turnout)
+#            print ("___Nat Turnout:",self.value,self.level,self.turnout)
         else:
 #cascade last council ward turnout figure to all streets(children)
             if self.level == 4:
@@ -790,14 +785,14 @@ class TreeNode:
                     i=1
                     for x in casnode.parent.childrenoftype(gettypeoflevel(casnode.dir,casnode.level)):
                         casnode.parent.turnout = (casnode.parent.turnout + x.turnout)/i
-                        print ("_____LGTurnoutlevel:",casnode.level,casnode.value,casnode.turnout)
+#                        print ("_____LGTurnoutlevel:",casnode.level,casnode.value,casnode.turnout)
                         i = i+1
                     casnode = casnode.parent
             elif self.level > 4:
                 casnode.turnout = casnode.parent.turnout
 
             self = origin
-            print ("___LG Turnout:",self.value,self.turnout)
+#            print ("___LG Turnout:",self.value,self.turnout)
         return
 
     def updateParty(self):
@@ -2950,7 +2945,7 @@ class User(db.Model, UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = User.query.get(int(user_id))
+    user = db.session.get(User, int(user_id))
     return user
 
 @login_manager.unauthorized_handler     # In unauthorized_handler we have a callback URL

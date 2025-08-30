@@ -218,7 +218,7 @@ var showMore = function (msg,area, type) {
   })
   .then(response => response.json())
   .then(data => {
-      console.log("Data received:", data);
+      console.log("Display Data received:", data);
 
       if (!Array.isArray(data) || data.length < 3) {
           console.error("Invalid or incomplete data:", data);
