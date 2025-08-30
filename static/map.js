@@ -182,7 +182,7 @@ var showMore = function (msg,area, type) {
       })
       .catch(error => console.error("Table fetch error:", error));
     }
-  let tabtitle = "";
+
 
   function updateMessages() {
     const old = pessages.pop();
@@ -192,7 +192,7 @@ var showMore = function (msg,area, type) {
     const tabletitle = parent.document.getElementById("tabletitle");
     const table = parent.document.getElementById("captains-table");
 
-    tabtitle = parent.document.getElementById("selectedTitle");
+    const tabtitle = parent.document.getElementById("selectedTitle");
     const tabhead = table.querySelector("thead");
     const tabbody = table.querySelector("tbody");
 
