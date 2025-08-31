@@ -136,7 +136,7 @@ var showMore = function (msg,area, type) {
               // Running in the parent window
               console.log("✅ Running in parent document");
 
-              const iframe = document.getElementById("my-iframe");
+              const iframe = document.getElementById("iframe1");
               if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
                   console.error("❌ Iframe or its content is not accessible");
                   return;
