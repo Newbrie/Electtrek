@@ -126,10 +126,17 @@ var showMore = function (msg,area, type) {
           "W": "white", "X": "darkgray"
       };
 
-      const tabletitle = document.getElementById("tabletitle");
-      const table = document.getElementById("captains-table");
 
-      const tabtitle = document.getElementById("selectedTitle");
+      if (document.getElementById("tabletitle") === null) {
+          console.log("tabletitle is null (not found) so looking at parent");
+          const tabletitle = parent.document.getElementById("tabletitle");
+          const table = parent.document.getElementById("captains-table");
+          const tabtitle = parent.document.getElementById("selectedTitle");
+      } else {
+        const tabletitle = document.getElementById("tabletitle");
+        const table = document.getElementById("captains-table");
+        const tabtitle = document.getElementById("selectedTitle");
+      }
       const tabhead = table.querySelector("thead");
       const tabbody = table.querySelector("tbody");
       fetch(`/get_table/${tableName}`, {
