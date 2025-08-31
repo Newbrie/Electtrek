@@ -2767,20 +2767,28 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
 
             label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=SelectedElection['walksize'], MAX_DEPTH=5)
+
+
             newlabels = pd.Series(label_dict)
-    # now create Zone labels by grouping into labels and mean positions, then sorting into N Zones
-            mainframe["WalkName"] = mainframe.index.map(newlabels)
-    # convert to clean serial labels K01, K02 etc
-#            unique_label_map = {}
-#            serial_labels = []
-#
-#            for raw_label in newlabels:
-#                if raw_label not in unique_label_map:
-#                    unique_label_map[raw_label] = f"K{len(unique_label_map)+1:02}"
-#                serial_labels.append(unique_label_map[raw_label])
-# Convert to Series, matching newlabels index
-#            serial_label_series = pd.Series(serial_labels, index=newlabels.index)
-# selecting old method(newlabels) of walk labelling
+
+            unique_label_map = {}
+            serial_labels = []
+
+            for raw_label in newlabels:
+                # Convert to string and remove all hyphens
+                clean_label = str(raw_label).replace('-', '')
+
+                if clean_label not in unique_label_map:
+                    unique_label_map[clean_label] = f"K{len(unique_label_map)+1:02}"
+
+                serial_labels.append(unique_label_map[clean_label])
+
+            # Convert to Series, matching newlabels index
+            serial_label_series = pd.Series(serial_labels, index=newlabels.index)
+            print("___Serial_labels:",serial_label_series)
+            # Apply to mainframe
+            mainframe["WalkName"] = mainframe.index.map(serial_label_series)
+
 
             DQstats.loc[Outcols.index('WalkName'),'P3'] = 1
             formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
@@ -3079,10 +3087,10 @@ def kanban():
     print("Known tags:", all_tags[:10])  # Sanity check
 
     # ✅ Step 2: Explode Tags column into rows
-    exploded_tags = (
+    clean_tags_df = (
         areaelectors.assign(
             Tags_list=lambda df: df['Tags']
-                .fillna('')  # Fill NaN with empty string
+                .fillna('')  # ✅ Ensures str operations won't fail
                 .astype(str)
                 .str.replace(r'[;,]', ' ', regex=True)
                 .str.split()
@@ -3090,15 +3098,20 @@ def kanban():
         .explode('Tags_list')
     )
 
-    print("Exploded sample:")
-    print(exploded_tags[['WalkName', 'Tags', 'Tags_list']].head(10))  # Debug output
-
-    # ✅ Step 3: Filter to valid tags and non-null WalkName
-
-    filtered = exploded_tags[
-        exploded_tags['Tags_list'].isin(all_tags) &
-        exploded_tags['WalkName'].notna()
+    # Filter known tags
+    filtered = clean_tags_df[
+        clean_tags_df['Tags_list'].isin(all_tags) &
+        clean_tags_df['WalkName'].notna()
     ]
+
+    # Group/tag counts
+    walk_tag_counts = (
+        filtered
+        .groupby(['WalkName', 'Tags_list'])
+        .size()
+        .unstack(fill_value=0)
+        .to_dict(orient='index')
+    )
 
     print("Filtered sample:")
     print(filtered[['WalkName', 'Tags_list']].head(10))  # Debug output
@@ -4659,6 +4672,8 @@ def get_table(table_name):
         else:
             raise TypeError("markerframe must be either a dictionary or a list.")
 
+
+
     def get_stream_table():
         print(f"Markerframe type: {type(stream_table)}")
         print(f"Markerframe content: {stream_table}")
@@ -4675,6 +4690,7 @@ def get_table(table_name):
         "markerframe" : get_markers_table,
         "stream_table" : get_stream_table
     }
+    print(f"____Get Table {table_name}")
 
     try:
         if table_name.endswith("_layer"):
@@ -4683,6 +4699,14 @@ def get_table(table_name):
             print(f"____NODELOOKUP {table_name} type {tabtype} level {lev} ")
             [column_headers,rows, title] = get_layer_table(current_node.findnodeat_Level(lev).childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
+            return jsonify([column_headers, rows.to_dict(orient="records"), title])
+        elif table_name.endswith("_xref"):
+            lev = current_node.level+1
+            path = current_node.dir+"/"+current_node.file
+            tabtype = gettypeoflevel(path,current_node.level+1)
+            print(f"____NODEXREF type {tabtype} level {lev} ")
+            [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s")
+            print(f"____NODEXREF -COLS {column_headers} ROWS {rows} TITLE {title}")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
         elif table_name is None or table_name not in table_map:
             print(f"____BAD TABLE {table_name} None or not in list ")
@@ -5527,6 +5551,7 @@ def stream_input():
         with open(TABLE_FILE) as f:
             stream_table = json.load(f)
     else:
+        print("🔍 Cant open stream_table file:", TABLE_FILE)
         stream_table = []
 
     streamrag = getstreamrag()

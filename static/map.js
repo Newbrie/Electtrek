@@ -126,10 +126,10 @@ var showMore = function (msg,area, type) {
           "W": "white", "X": "darkgray"
       };
 
-      const tabletitle = parent.document.getElementById("tabletitle");
-      const table = parent.document.getElementById("captains-table");
+      const tabletitle = document.getElementById("tabletitle");
+      const table = document.getElementById("captains-table");
 
-      const tabtitle = parent.document.getElementById("selectedTitle");
+      const tabtitle = document.getElementById("selectedTitle");
       const tabhead = table.querySelector("thead");
       const tabbody = table.querySelector("tbody");
       fetch(`/get_table/${tableName}`, {

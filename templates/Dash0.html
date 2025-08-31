@@ -197,6 +197,7 @@
     <option value="resources">Resources</option>
     <option value="markerframe">Event Markers</option>
     <option value="stream_table">Import Data Streams</option>
+    <option value="nodelist_xref">Nodelist xref</option>
     <option value="nation_layer">Nations</option>
     <option value="county_layer">Counties</option>
     <option value="constituency_layer">Constituencies</option>
@@ -460,7 +461,7 @@ async function fetchAndUpdateChart() {
         .then(res => res.json())
         .then(resp => {
           if (resp.success) {
-            //updateMessages();
+            fetchTableData('nodelist_xref');
           } else {
             alert("Failed to update: " + resp.error);
           }
@@ -511,7 +512,7 @@ async function fetchAndUpdateChart() {
         console.log(`New mapfile loaded: /map/${mapfile}`);
       }
 
-      //updateMessages();
+      fetchTableData('nodelist_xref');
     });
   }
 
@@ -529,7 +530,7 @@ async function fetchAndUpdateChart() {
     .then(resp => {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-        //updateMessages();
+        fetchTableData('nodelist_xref');
         // ✅ All onclick bindings are preserved because they come from server-rendered HTML
       } else {
         alert("Could not delete election: " + (resp.error || "Unknown error"));
@@ -552,7 +553,7 @@ async function fetchAndUpdateChart() {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
         updateConstantsUI(resp.constants, resp.options);
-        //updateMessages();
+        fetchTableData('nodelist_xref');
         // ✅ Onclick handlers already embedded
       } else {
         alert("Error adding election: " + resp.error);
@@ -578,7 +579,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
     if (mapfile) {
       changeIframeSrc(`/map/${mapfile}`);
     }
-    //updateMessages();
+    fetchTableData('nodelist_xref');
   });
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -611,7 +612,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
               if (mapfile) {
                 changeIframeSrc(`/map/${mapfile}`);
               }
-              //updateMessages();
+              fetchTableData('nodelist_xref');
             });
         }
       });
