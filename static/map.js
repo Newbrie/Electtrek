@@ -126,9 +126,29 @@ var showMore = function (msg,area, type) {
           "W": "white", "X": "darkgray"
       };
 
-      const tabletitle = document.getElementById("tabletitle");
-      const table = document.getElementById("captains-table");
-      const tabtitle = document.getElementById("selectedTitle");
+          let docContext;
+
+          if (window.self !== window.top) {
+              // Running inside an iframe
+              console.log("✅ Running inside iframe");
+              docContext = document;
+          } else {
+              // Running in the parent window
+              console.log("✅ Running in parent document");
+
+              const iframe = document.getElementById("my-iframe");
+              if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+                  console.error("❌ Iframe or its content is not accessible");
+                  return;
+              }
+
+              docContext = iframe.contentDocument || iframe.contentWindow.document;
+          }
+
+          // Now safely use docContext to query elements
+          const tabletitle = docContext.getElementById("tabletitle");
+          const table = docContext.getElementById("captains-table");
+          const tabtitle = docContext.getElementById("selectedTitle");
       const tabhead = table.querySelector("thead");
       const tabbody = table.querySelector("tbody");
       fetch(`/get_table/${tableName}`, {
