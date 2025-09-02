@@ -125,19 +125,19 @@ var showMore = function (msg,area, type) {
           "PC": "darkred", "SD": "orange", "Z": "lightgray",
           "W": "white", "X": "darkgray"
       };
-
+      let tabletitle, table, tabtitle;
       if (window.self !== window.top) {
           // Running inside an iframe
-          const tabletitle = parent.document.getElementById("tabletitle");
-          const table = parent.document.getElementById("captains-table");
-          const tabtitle = parent.document.getElementById("selectedTitle");
+          tabletitle = parent.document.getElementById("tabletitle");
+          table = parent.document.getElementById("captains-table");
+          tabtitle = parent.document.getElementById("selectedTitle");
           console.log("✅ Running inside iframe", );
           docContext = document;
       } else {
           // Running in the parent window
-          const tabletitle = document.getElementById("tabletitle");
-          const table = document.getElementById("captains-table");
-          const tabtitle = document.getElementById("selectedTitle");
+          tabletitle = document.getElementById("tabletitle");
+          table = document.getElementById("captains-table");
+          tabtitle = document.getElementById("selectedTitle");
           console.log("✅ Running in parent document");
 
           const iframe = document.getElementById("iframe1");
