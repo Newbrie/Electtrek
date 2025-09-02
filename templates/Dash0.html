@@ -191,8 +191,9 @@
 {% endblock nav %}
 {% block captains %}
 
-<div id="tabletitle">
-  Details for: <select id="tableSelector">
+<div id="tabletitle" class="innertube">
+  <li id="selectedTitle"> Table Details
+ <select id="tableSelector">
     <option value="resources">Resources</option>
     <option value="markerframe">Event Markers</option>
     <option value="stream_table">Import Data Streams</option>
@@ -207,7 +208,8 @@
     <option value="street_layer">Streets</option>
     <option value="walkleg_layer">Walklegs</option>
   </select>
-  <li id="selectedTitle"> Table Details</li>
+  </li>
+  
 </div>
 
 <div id="datawin" class="innertube">

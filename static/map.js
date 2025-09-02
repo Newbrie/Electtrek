@@ -126,29 +126,29 @@ var showMore = function (msg,area, type) {
           "W": "white", "X": "darkgray"
       };
 
-          let docContext;
+      if (window.self !== window.top) {
+          // Running inside an iframe
+          const tabletitle = parent.getElementById("tabletitle");
+          const table = parent.getElementById("captains-table");
+          const tabtitle = parent.getElementById("selectedTitle");
+          console.log("✅ Running inside iframe", );
+          docContext = document;
+      } else {
+          // Running in the parent window
+          const tabletitle = getElementById("tabletitle");
+          const table = getElementById("captains-table");
+          const tabtitle = getElementById("selectedTitle");
+          console.log("✅ Running in parent document");
 
-          if (window.self !== window.top) {
-              // Running inside an iframe
-              console.log("✅ Running inside iframe");
-              docContext = document;
-          } else {
-              // Running in the parent window
-              console.log("✅ Running in parent document");
-
-              const iframe = document.getElementById("iframe1");
-              if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
-                  console.error("❌ Iframe or its content is not accessible");
-                  return;
-              }
-
-              docContext = iframe.contentDocument || iframe.contentWindow.document;
+          const iframe = document.getElementById("iframe1");
+          if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+              console.error("❌ Iframe or its content is not accessible");
+              return;
           }
+      }
 
           // Now safely use docContext to query elements
-          const tabletitle = docContext.getElementById("tabletitle");
-          const table = docContext.getElementById("captains-table");
-          const tabtitle = docContext.getElementById("selectedTitle");
+
       const tabhead = table.querySelector("thead");
       const tabbody = table.querySelector("tbody");
       fetch(`/get_table/${tableName}`, {
