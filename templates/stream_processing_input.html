@@ -545,6 +545,33 @@ document.querySelectorAll('.filename').forEach(input => {
     });
 });
 
+document.getElementById('file-info-tbody').addEventListener('click', function (e) {
+  if (e.target.classList.contains('file-btn')) {
+    const row = e.target.closest('tr');
+    const fileInput = row.querySelector('.file-picker');
+    fileInput.click();
+  }
+});
+
+document.getElementById('file-info-tbody').addEventListener('change', function (e) {
+  if (e.target.classList.contains('file-picker')) {
+    const row = e.target.closest('tr');
+    const fileInput = e.target;
+    const file = fileInput.files[0];
+
+    if (file) {
+      const filenameField = row.querySelector('.filename');
+      const filePathField = row.querySelector('.file-path');
+
+      filenameField.value = file.name;
+      filePathField.value = file.name;  // Simulated; browsers don’t give real paths
+
+      // Optionally mark as active
+      const activeCheckbox = row.querySelector('.active');
+      if (activeCheckbox) activeCheckbox.checked = true;
+    }
+  }
+});
 
 
 </script>
