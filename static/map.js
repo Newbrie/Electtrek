@@ -128,16 +128,16 @@ var showMore = function (msg,area, type) {
 
       if (window.self !== window.top) {
           // Running inside an iframe
-          const tabletitle = parent.getElementById("tabletitle");
-          const table = parent.getElementById("captains-table");
-          const tabtitle = parent.getElementById("selectedTitle");
+          const tabletitle = parent.document.getElementById("tabletitle");
+          const table = parent.document.getElementById("captains-table");
+          const tabtitle = parent.document.getElementById("selectedTitle");
           console.log("✅ Running inside iframe", );
           docContext = document;
       } else {
           // Running in the parent window
-          const tabletitle = getElementById("tabletitle");
-          const table = getElementById("captains-table");
-          const tabtitle = getElementById("selectedTitle");
+          const tabletitle = document.getElementById("tabletitle");
+          const table = document.getElementById("captains-table");
+          const tabtitle = document.getElementById("selectedTitle");
           console.log("✅ Running in parent document");
 
           const iframe = document.getElementById("iframe1");
