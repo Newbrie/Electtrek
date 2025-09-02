@@ -113,14 +113,18 @@ body {
 }
 
 #tabletitle {
-position: absolute;
-height: 14px;
-width: 1200px;
-background: white;
-left: 0;
-bottom: 230px;
-font-weight: bold;
-font-size: 1.5em;
+  display: flex;
+  align-items: left; /* vertically align items */
+  gap: 1rem;            /* spacing between the elements */
+}
+
+#selectedTitle {
+  font-weight: bold;
+}
+
+#tableSelector {
+  padding: 0.3rem;
+  font-size: 1rem;
 }
 
 #datawin {
