@@ -213,7 +213,7 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     document.getElementById('save-btn').addEventListener('click', function () {
       const tableData = collectTableData();
       console.log(tableData);
-      fetch('/save_table_data', {
+      fetch('/save_stream_table', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: tableData })
