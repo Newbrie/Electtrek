@@ -143,406 +143,407 @@
 </div>
 <script>
 
-  document.getElementById('add-row-btn').addEventListener('click', function () {
-    const tbody = document.getElementById('file-info-tbody');
-    const newRow = document.createElement('tr');
-    newRow.innerHTML = `
-      <td><input type="number" class="editable order" value="1" style="width: 60px;"></td>
-      <td>
-        <select class="editable election">
-          {% for election in streams %}
-            <option value="{{ election }}">{{ election }}</option>
-          {% endfor %}
-        </select>
-      </td>
-      <td>
-        <input type="text" class="editable filename" style="width: 300px;" readonly>
-        <input type="hidden" class="file-path" value="">
-        <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
-        <button type="button" class="file-btn">📂</button>
-      </td>
-      <td>
-        <select class="editable type" style="width: 60px;">
-          <option value="csv">csv</option>
-          <option value="xlsx">xlsx</option>
-          <option value="json">json</option>
-        </select>
-      </td>
-      <td>
-        <select class="editable purpose" style="width: 60px;">
-          <option value="main">main</option>
-          <option value="delta">delta</option>
-          <option value="avi">avi</option>
-          <option value="mark">mark</option>
-          </select>
-      </td>
-      <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
-      <td><input type="checkbox" class="editable active"></td>
-      <td><input type="checkbox" class="editable live"></td>
-      <td><button class="delete-btn">Delete</button></td>
-    `;
-    tbody.appendChild(newRow);
-    });
 
 
-    document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.filename').forEach(input => {
-        input.addEventListener('input', function () {
-            const row = input.closest('tr');
-            const activeCheckbox = row.querySelector('.active');
-            if (input.value.trim() === '') {
-                activeCheckbox.checked = false;
-            }
-        });
-      });
-    });
+function collectTableData() {
+  const rows = document.querySelectorAll('#file-info-tbody tr');
+  const data = [];
 
+  rows.forEach(row => {
+    const rowData = {
+      order: parseInt(row.querySelector('.order')?.value || "0"),
+      election: row.querySelector('.election')?.value || "",
+      filename: row.querySelector('.filename')?.value || "",
+      type: row.querySelector('.type')?.value || "",
+      purpose: row.querySelector('.purpose')?.value || "",
+      fixlevel: parseInt(row.querySelector('.fixlevel')?.value || "0"),
+      active: row.querySelector('.active')?.checked || false,
+      file_path: row.querySelector('.file-path')?.value || ""
+    };
 
-
-
-
-    document.getElementById('process-btn').addEventListener('click', function () {
-
-      // Show progress bar
-    document.getElementById("progress-container").style.display = "block";
-    document.getElementById("progress-bar").value = 0;
-    document.getElementById("progress-text").innerText = "0%";
-    let progressTimeoutId = null;
-
-    // Start polling progress
-    function pollProgress() {
-      fetch("/progress")
-        .then(res => {
-            return res.json();
-        })
-        .then(data => {
-
-          const bar = document.getElementById("progress-bar");
-          const text = document.getElementById("progress-text");
-          bar.value = data.percent || 0;
-          text.innerText = (data.percent || 0) + "% — " + (data.message || "");
-
-          if (data.status === "complete") {
-            console.log("Normalization is complete. Injecting DQstats HTML if available.");
-            text.innerText = "✅ Complete";
-
-            if (data.dqstats_html) {
-              const tbody = document.querySelector("#DQ-table tbody");
-              if (tbody) {
-                tbody.innerHTML = data.dqstats_html;
-                console.log("DQstats updated successfully.");
-              } else {
-                console.warn("DQ-table tbody not found in DOM.");
-              }
-            }
-
-            // 🔄 Inject refreshed streamrag table
-            fetch('/streamrag_api')
-              .then(res => res.json())  // Parse the JSON response
-              .then(data => {
-                // Extract the 'html' and 'streamrag' from the response
-                const html = data.html;
-                const streamrag = data.streamrag;
-
-                // Insert the HTML into the table
-                const streamTbody = document.querySelector('#streamtab tbody');
-                if (streamTbody) {
-                  streamTbody.innerHTML = html;
-                }
-
-                // Now handle the 'streamrag' data (which is likely an object)
-                const labels = Object.keys(streamrag);
-                const dataPoints = labels.map(label => streamrag[label].Elect);
-                const rags = labels.map(label => streamrag[label].RAG);
-
-                console.log("streamtablabels:", labels);
-                console.log("streamtabdata:", dataPoints);
-                console.log("streamtabrags:", rags);
-
-                // Update the chart
-                window.parent.createOrUpdateChart(labels, dataPoints, rags);
-              })
-              .catch(error => {
-                console.error('Error:', error);
-              });
-
-
-            // Stop here; ❌ no further polling
-          } else if (data.status === "error") {
-            console.error("Error in normalization:", data.message);
-            text.innerText = "⚠️ " + (data.message || "Error");
-          } else if (data.status === "error") {
-            console.error("Error in normalization:", data.message);
-            text.innerText = "⚠️ " + (data.message || "Error");
-
-            // Stop polling
-            if (progressTimeoutId) {
-                clearTimeout(progressTimeoutId);
-            }
-
-          } else {
-            // Continue polling after 500ms
-            progressTimeoutId = setTimeout(pollProgress, 500);
-          }
-        })
-        .catch(err => {
-          console.error("Polling error:", err);
-        });
-    }
-
-    const streamToProcess = prompt("Enter the election name for which you want to import data:");
-    if (!streamToProcess) return;
-
-    const normalizedInput = streamToProcess.trim().toLowerCase();
-    const rows = document.querySelectorAll('#file-info-tbody tr');
-    const formData = new FormData();
-    let found = false;
-    console.log(`streamtoProcess ${rows}`);
-
-    rows.forEach((row, index) => {
-      const election = row.querySelector('.election').value.trim().toLowerCase();
-      const active = row.querySelector('.active').checked;
-      const order = row.querySelector('.order').value;
-      const ftype = row.querySelector('.type').value;
-      const purpose = row.querySelector('.purpose').value;
-      const fixlevel = row.querySelector('.fixlevel').value;
-      const fileInput = row.querySelector('.file-picker');
-      const filepathEl = row.querySelector('.file-path');
-      const filepath = filepathEl ? filepathEl.value : '';
-
-//      alert('inside active and stream: '+ stream+active );
-
-      if (active && election === normalizedInput) {
-        formData.append('election', normalizedInput);
-
-        if (fileInput.files.length > 0) {
-          const file = fileInput.files[0];
-          formData.append(`files_${index}`, file);  // upload if picked this session
-        } else if (filepath) {
-          formData.append(`stored_path_${index}`, filepath);  // use stored safe path
-//          alert('Filepath found: '+`stored_path_${index}` + filepath);
-        } else {
-          console.warn(`No file selected or stored path for election '${election}'`);
-          return; // skip this row
-        }
-        console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
-        console.log(`Row ${index} filepath: "${filepath}"`);
-        // Append other metadata
-        formData.append(`meta_${index}_order`, order);
-        formData.append(`meta_${index}_type`, ftype);
-        formData.append(`meta_${index}_purpose`, purpose);
-        formData.append(`meta_${index}_fixlevel`, fixlevel);
-        formData.append(`meta_${index}_election`, election);
-        // After metadata is appended
-
-
-        found = true;
-      };
-      console.log(`Row election: '${election}', user input: '${normalizedInput}', active: ${active}`);
-
-    });
-
-    if (!found) {
-      alert("No matching files found for election: " + streamToProcess);
-      return;
-    }
-
-    pollProgress();
-
-    fetch('/normalise', {
-      method: 'POST',
-      body: formData
-    })
-      .then(response => response.text())
-      .then(html => {
-        const dqTableBody = document.querySelector('#DQ-table tbody');
-        if (dqTableBody) {
-          dqTableBody.innerHTML = html;
-        }
-
-        // Optionally reload streamtab again after update
-        fetch('/streamrag_api')
-          .then(res => res.json())  // Parse the JSON response
-          .then(data => {
-            // Extract the 'html' and 'streamrag' from the response
-
-            const html = data.html;
-            const streamrag = data.streamrag;
-
-            // Insert the HTML into the table
-            const streamTbody = document.querySelector('#streamtab tbody');
-            if (streamTbody) {
-              streamTbody.innerHTML = html;
-            }
-
-            // Now handle the 'streamrag' data (which is likely an object)
-            const labels = Object.keys(streamrag);
-            const dataPoints = labels.map(label => streamrag[label].Elect);
-            const rags = labels.map(label => streamrag[label].RAG);
-
-            console.log("streamtablabels:", labels);
-            console.log("streamtabdata:", dataPoints);
-            console.log("streamtabrags:", rags);
-
-            // Update the chart
-            window.parent.createOrUpdateChart(labels, dataPoints, rags);
-          })
-          .catch(error => {
-            console.error('Error:', error);
-          });
-        })
-      .catch(error => {
-        clearTimeout(progressTimeoutId);
-        progressTimeoutId = null;
-        console.error('Error:', error);
-        alert("Processing error: " + error);
-      });
+    console.log("Row Data:", rowData);  // ✅ Log to console
+    data.push(rowData);
   });
 
-  function collectTableData() {
-    const rows = document.querySelectorAll('#file-info-tbody tr');
-    const data = [];
-
-    rows.forEach(row => {
-      const rowData = {
-        order: parseInt(row.querySelector('.order')?.value || "0"),
-        election: row.querySelector('.election')?.value || "",
-        filename: row.querySelector('.filename')?.value || "",
-        type: row.querySelector('.type')?.value || "",
-        purpose: row.querySelector('.purpose')?.value || "",
-        fixlevel: parseInt(row.querySelector('.fixlevel')?.value || "0"),
-        active: row.querySelector('.active')?.checked || false,
-        file_path: row.querySelector('.file-path')?.value || ""
-      };
-
-      console.log("Row Data:", rowData);  // ✅ Log to console
-      data.push(rowData);
-    });
-
-    return data;
-    }
+  return data;
+  }
 
 
-    document.getElementById('reset-btn').addEventListener('click', () => {
-      if (!confirm("Are you sure you want to reset Elections?")) return;
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (!confirm("Are you sure you want to reset Elections?")) return;
 
-      fetch('/reset_Elections', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
-          alert(data.message);
+  fetch('/reset_Elections', { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+      alert(data.message);
 // 🔄 Inject refreshed streamrag table
-        fetch('/streamrag_api')
-          .then(res => res.json())  // Parse the JSON response
-          .then(data => {
-            // Extract the 'html' and 'streamrag' from the response
-            const html = data.html;
-            const streamrag = data.streamrag;
+    fetch('/streamrag_api')
+      .then(res => res.json())  // Parse the JSON response
+      .then(data => {
+        // Extract the 'html' and 'streamrag' from the response
+        const html = data.html;
+        const streamrag = data.streamrag;
 
-            // Insert the HTML into the table
-            const streamTbody = document.querySelector('#streamtab tbody');
-            if (streamTbody) {
-              streamTbody.innerHTML = html;
-            }
-            window.parent.updateMessages();
-            // Now handle the 'streamrag' data (which is likely an object)
-            const labels = Object.keys(streamrag);
-            const dataPoints = labels.map(label => streamrag[label].Elect);
-            const rags = labels.map(label => streamrag[label].RAG);
+        // Insert the HTML into the table
+        const streamTbody = document.querySelector('#streamtab tbody');
+        if (streamTbody) {
+          streamTbody.innerHTML = html;
+        }
+        window.parent.updateMessages();
+        // Now handle the 'streamrag' data (which is likely an object)
+        const labels = Object.keys(streamrag);
+        const dataPoints = labels.map(label => streamrag[label].Elect);
+        const rags = labels.map(label => streamrag[label].RAG);
 
-            console.log("streamtablabels:", labels);
-            console.log("streamtabdata:", dataPoints);
-            console.log("streamtabrags:", rags);
+        console.log("streamtablabels:", labels);
+        console.log("streamtabdata:", dataPoints);
+        console.log("streamtabrags:", rags);
 
-            // Update the chart
-            window.parent.createOrUpdateChart(labels, dataPoints, rags);
-          })
-          .catch(error => {
-            console.error('Error:', error);
-          });
-        })
-        .catch(err => alert("Error resetting elections."));
-    });
+        // Update the chart
+        window.parent.createOrUpdateChart(labels, dataPoints, rags);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+    })
+    .catch(err => alert("Error resetting elections."));
+});
 
 
     document.getElementById('save-btn').addEventListener('click', function () {
       const tableData = collectTableData();
+      console.log(tableData);
       fetch('/save_table_data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: tableData })
       })
       .then(res => res.json())
-      .then(data => alert(data.message))
+      .then(data => alert("Saving tableData:"+data.message))
       .catch(err => alert("Error saving: " + err));
     });
 
-    document.getElementById('file-info-tbody').addEventListener('click', function (e) {
-      if (e.target.classList.contains('file-btn')) {
-             const td = e.target.closest('td');
-             const row = td.closest('tr');
-             const fileInput = td.querySelector('.file-picker');
-             const activeCheckbox = row.querySelector('.active');
-             const filenameField = td.querySelector('.filename');
-             const filePathField = td.querySelector('.file-path');
+document.getElementById('file-info-tbody').addEventListener('click', function (e) {
+  if (e.target.classList.contains('file-btn')) {
+         const td = e.target.closest('td');
+         const row = td.closest('tr');
+         const fileInput = td.querySelector('.file-picker');
+         const activeCheckbox = row.querySelector('.active');
+         const filenameField = td.querySelector('.filename');
+         const filePathField = td.querySelector('.file-path');
 
-             fileInput.click();
+         fileInput.click();
 
-             fileInput.onchange = async function () {
-                 if (fileInput.files.length > 0) {
-                     const file = fileInput.files[0];
-                     const formData = new FormData();
-                     formData.append('file', file);
+         fileInput.onchange = async function () {
+             if (fileInput.files.length > 0) {
+                 const file = fileInput.files[0];
+                 const formData = new FormData();
+                 formData.append('file', file);
 
-                     try {
-                         const res = await fetch('/upload_file', {
-                             method: 'POST',
-                             body: formData
-                         });
-                         const result = await res.json();
+                 try {
+                     const res = await fetch('/upload_file', {
+                         method: 'POST',
+                         body: formData
+                     });
+                     const result = await res.json();
 
-                         if (result.error) {
-                             alert("Upload error: " + result.error);
-                             return;
-                         }
-                         filenameField.value = file.name;
-                         filePathField.value = result.path;
-
-
-                         filenameField.value = file.name;
-                         filePathField.value = result.path;  // backend returns full saved path
-                         // Auto-check active if filename is set
-                           if (file.name.trim() == '') {
-                             activeCheckbox.checked = false;
-                           }
-                     } catch (err) {
-                         alert("Failed to upload file: " + err);
+                     if (result.error) {
+                         alert("Upload error: " + result.error);
+                         return;
                      }
+                     filenameField.value = file.name;
+                     filePathField.value = result.path;
+
+
+                     filenameField.value = file.name;
+                     filePathField.value = result.path;  // backend returns full saved path
+                     // Auto-check active if filename is set
+                       if (file.name.trim() == '') {
+                         activeCheckbox.checked = false;
+                       }
+                 } catch (err) {
+                     alert("Failed to upload file: " + err);
                  }
-             };
-         }
-
-         // Unchecking active flag resets the row
-         if (e.target.classList.contains('active')) {
-             const checkbox = e.target;
-             const row = checkbox.closest('tr');
-
-             if (!checkbox.checked) {
-                 const filenameField = row.querySelector('.filename');
-                 const filePathField = row.querySelector('.file-path');
-                 const fileInput = row.querySelector('.file-picker');
-
-                 filenameField.value = '';
-                 filePathField.value = '';
-                 if (fileInput) fileInput.value = '';  // reset input so onchange re-triggers
              }
+         };
+     }
+
+     // Unchecking active flag resets the row
+     if (e.target.classList.contains('active')) {
+         const checkbox = e.target;
+         const row = checkbox.closest('tr');
+
+         if (!checkbox.checked) {
+             const filenameField = row.querySelector('.filename');
+             const filePathField = row.querySelector('.file-path');
+             const fileInput = row.querySelector('.file-picker');
+
+             filenameField.value = '';
+             filePathField.value = '';
+             if (fileInput) fileInput.value = '';  // reset input so onchange re-triggers
          }
+     }
 
-      if (e.target.classList.contains('delete-btn')) {
-        e.target.closest('tr').remove();
-      }
+  if (e.target.classList.contains('delete-btn')) {
+    e.target.closest('tr').remove();
+  }
+});
+
+document.getElementById('add-row-btn').addEventListener('click', function () {
+const tbody = document.getElementById('file-info-tbody');
+const newRow = document.createElement('tr');
+newRow.innerHTML = `
+  <td><input type="number" class="editable order" value="1" style="width: 60px;"></td>
+  <td>
+    <select class="editable election">
+      {% for election in streams %}
+        <option value="{{ election }}">{{ election }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td>
+    <input type="text" class="editable filename" style="width: 300px;" readonly>
+    <input type="hidden" class="file-path" value="">
+    <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
+    <button type="button" class="file-btn">📂</button>
+  </td>
+  <td>
+    <select class="editable type" style="width: 60px;">
+      <option value="csv">csv</option>
+      <option value="xlsx">xlsx</option>
+      <option value="json">json</option>
+    </select>
+  </td>
+  <td>
+    <select class="editable purpose" style="width: 60px;">
+      <option value="main">main</option>
+      <option value="delta">delta</option>
+      <option value="avi">avi</option>
+      <option value="mark">mark</option>
+      </select>
+  </td>
+  <td><input type="number" class="editable fixlevel" value="0" style="width: 60px;"></td>
+  <td><input type="checkbox" class="editable active"></td>
+  <td><input type="checkbox" class="editable live"></td>
+  <td><button class="delete-btn">Delete</button></td>
+`;
+tbody.appendChild(newRow);
+});
+
+
+document.addEventListener('DOMContentLoaded', function () {
+document.querySelectorAll('.filename').forEach(input => {
+    input.addEventListener('input', function () {
+        const row = input.closest('tr');
+        const activeCheckbox = row.querySelector('.active');
+        if (input.value.trim() === '') {
+            activeCheckbox.checked = false;
+        }
     });
+  });
+});
 
 
+
+
+
+  document.getElementById('process-btn').addEventListener('click', function () {
+
+    // Show progress bar
+  document.getElementById("progress-container").style.display = "block";
+  document.getElementById("progress-bar").value = 0;
+  document.getElementById("progress-text").innerText = "0%";
+  let progressTimeoutId = null;
+
+  // Start polling progress
+  function pollProgress() {
+    fetch("/progress")
+      .then(res => {
+          return res.json();
+      })
+      .then(data => {
+
+        const bar = document.getElementById("progress-bar");
+        const text = document.getElementById("progress-text");
+        bar.value = data.percent || 0;
+        text.innerText = (data.percent || 0) + "% — " + (data.message || "");
+
+        if (data.status === "complete") {
+          console.log("Normalization is complete. Injecting DQstats HTML if available.");
+          text.innerText = "✅ Complete";
+
+          if (data.dqstats_html) {
+            const tbody = document.querySelector("#DQ-table tbody");
+            if (tbody) {
+              tbody.innerHTML = data.dqstats_html;
+              console.log("DQstats updated successfully.");
+            } else {
+              console.warn("DQ-table tbody not found in DOM.");
+            }
+          }
+
+          // 🔄 Inject refreshed streamrag table
+          fetch('/streamrag_api')
+            .then(res => res.json())  // Parse the JSON response
+            .then(data => {
+              // Extract the 'html' and 'streamrag' from the response
+              const html = data.html;
+              const streamrag = data.streamrag;
+
+              // Insert the HTML into the table
+              const streamTbody = document.querySelector('#streamtab tbody');
+              if (streamTbody) {
+                streamTbody.innerHTML = html;
+              }
+
+              // Now handle the 'streamrag' data (which is likely an object)
+              const labels = Object.keys(streamrag);
+              const dataPoints = labels.map(label => streamrag[label].Elect);
+              const rags = labels.map(label => streamrag[label].RAG);
+
+              console.log("streamtablabels:", labels);
+              console.log("streamtabdata:", dataPoints);
+              console.log("streamtabrags:", rags);
+
+              // Update the chart
+              window.parent.createOrUpdateChart(labels, dataPoints, rags);
+            })
+            .catch(error => {
+              console.error('Error:', error);
+            });
+
+
+          // Stop here; ❌ no further polling
+        } else if (data.status === "error") {
+          console.error("Error in normalization:", data.message);
+          text.innerText = "⚠️ " + (data.message || "Error");
+        } else if (data.status === "error") {
+          console.error("Error in normalization:", data.message);
+          text.innerText = "⚠️ " + (data.message || "Error");
+
+          // Stop polling
+          if (progressTimeoutId) {
+              clearTimeout(progressTimeoutId);
+          }
+
+        } else {
+          // Continue polling after 500ms
+          progressTimeoutId = setTimeout(pollProgress, 500);
+        }
+      })
+      .catch(err => {
+        console.error("Polling error:", err);
+      });
+  }
+
+  const streamToProcess = prompt("Enter the election name for which you want to import data:");
+  if (!streamToProcess) return;
+
+  const normalizedInput = streamToProcess.trim().toLowerCase();
+  const rows = document.querySelectorAll('#file-info-tbody tr');
+  const formData = new FormData();
+  let found = false;
+  console.log(`streamtoProcess ${rows}`);
+
+  rows.forEach((row, index) => {
+    const election = row.querySelector('.election').value.trim().toLowerCase();
+    const active = row.querySelector('.active').checked;
+    const order = row.querySelector('.order').value;
+    const ftype = row.querySelector('.type').value;
+    const purpose = row.querySelector('.purpose').value;
+    const fixlevel = row.querySelector('.fixlevel').value;
+    const fileInput = row.querySelector('.file-picker');
+    const filepathEl = row.querySelector('.file-path');
+    const filepath = filepathEl ? filepathEl.value : '';
+
+//      alert('inside active and stream: '+ stream+active );
+
+    if (active && election === normalizedInput) {
+      formData.append('election', normalizedInput);
+
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        formData.append(`files_${index}`, file);  // upload if picked this session
+      } else if (filepath) {
+        formData.append(`stored_path_${index}`, filepath);  // use stored safe path
+//          alert('Filepath found: '+`stored_path_${index}` + filepath);
+      } else {
+        console.warn(`No file selected or stored path for election '${election}'`);
+        return; // skip this row
+      }
+      console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
+      console.log(`Row ${index} filepath: "${filepath}"`);
+      // Append other metadata
+      formData.append(`meta_${index}_order`, order);
+      formData.append(`meta_${index}_type`, ftype);
+      formData.append(`meta_${index}_purpose`, purpose);
+      formData.append(`meta_${index}_fixlevel`, fixlevel);
+      formData.append(`meta_${index}_election`, election);
+      // After metadata is appended
+
+
+      found = true;
+    };
+    console.log(`Row election: '${election}', user input: '${normalizedInput}', active: ${active}`);
+
+  });
+
+  if (!found) {
+    alert("No matching files found for election: " + streamToProcess);
+    return;
+  }
+
+  pollProgress();
+
+  fetch('/normalise', {
+    method: 'POST',
+    body: formData
+  })
+    .then(response => response.text())
+    .then(html => {
+      const dqTableBody = document.querySelector('#DQ-table tbody');
+      if (dqTableBody) {
+        dqTableBody.innerHTML = html;
+      }
+
+      // Optionally reload streamtab again after update
+      fetch('/streamrag_api')
+        .then(res => res.json())  // Parse the JSON response
+        .then(data => {
+          // Extract the 'html' and 'streamrag' from the response
+
+          const html = data.html;
+          const streamrag = data.streamrag;
+
+          // Insert the HTML into the table
+          const streamTbody = document.querySelector('#streamtab tbody');
+          if (streamTbody) {
+            streamTbody.innerHTML = html;
+          }
+
+          // Now handle the 'streamrag' data (which is likely an object)
+          const labels = Object.keys(streamrag);
+          const dataPoints = labels.map(label => streamrag[label].Elect);
+          const rags = labels.map(label => streamrag[label].RAG);
+
+          console.log("streamtablabels:", labels);
+          console.log("streamtabdata:", dataPoints);
+          console.log("streamtabrags:", rags);
+
+          // Update the chart
+          window.parent.createOrUpdateChart(labels, dataPoints, rags);
+        })
+        .catch(error => {
+          console.error('Error:', error);
+        });
+      })
+    .catch(error => {
+      clearTimeout(progressTimeoutId);
+      progressTimeoutId = null;
+      console.error('Error:', error);
+      alert("Processing error: " + error);
+    });
+});
 
 
 
