@@ -118,7 +118,7 @@ height: 14px;
 width: 1200px;
 background: white;
 left: 0;
-bottom: 230px;
+bottom: 235px;
 font-weight: bold;
 font-size: 1.5em;
 display: flex;
@@ -140,7 +140,7 @@ gap: 1rem;
 	position: absolute;
 	bottom: 0;
 	left: 0;
-	height: 200px;
+	height: 230px;
 	width: 1200px;
 	overflow: scroll;
 	background: white;
@@ -304,6 +304,12 @@ gap: 1rem;
 	text-align: right;
 	padding-right : 5px;
 
+}
+
+input.right-cropped {
+  text-align: right;
+  direction: rtl;
+  unicode-bidi: plaintext;
 }
 
 .rightedmerge {
@@ -544,6 +550,7 @@ dfn {
 
 h1 {
     position : relative;
+    text-align : center;
 		font-size: 3em;
     font-weight: bold;
     margin: .67em 0

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block map %}
 <div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload=""> </iframe>
+    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="fetchTableData('nodelist_xref')"> </iframe>
 </div>
 <script >
   // Listen to message from child window
@@ -101,12 +101,17 @@
 
       <div id="constants-container">
       <ul>
+        <li class="righted">
+          <select class="righted"name="streams" id="streams" style="display: none;"></select><br>
+      </li>
       <li class="righted">
         Type of Election:<select class="righted"name="territories" id="territories"></select><br>
       </li>
-
       <li class="righted">
-      Party selected: <select class="righted"name="yourparty" id="yourparty"></select><br>
+        Territory:<input class="righted" type="text" name="territory" id="territory" readonly><br>
+      </li>
+      <li class="righted">
+      Party selected: <select class="righted" name="yourparty" id="yourparty"></select><br>
       </li>
       <li class="righted">
       Walk Size:<input class="righted" type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
@@ -204,7 +209,7 @@
     <option value="ward_layer">Wards</option>
     <option value="division_layer">Divisions</option>
     <option value="polling_district_layer">Polling Districts</option>
-    <option value="walks_layer">Walks</option>
+    <option value="walk_layer">Walks</option>
     <option value="street_layer">Streets</option>
     <option value="walkleg_layer">Walklegs</option>
   </select>
@@ -368,12 +373,18 @@ async function fetchAndUpdateChart() {
 };
 
   function updateConstantsUI(constants, options) {
+    console.log(`Update to constants: ${Object.keys(constants)} : ${Object.entries(options)}`);
     Object.entries(constants).forEach(([key, value]) => {
       const el = document.getElementById(key);
       if (!el) return;
 
       const optsObj = options[key] || {};
       el.innerHTML = ""; // Clear current options
+      if (options[key] && typeof options[key] === 'object') {
+          console.log(`Update to constant: ${key} ${constants[key]} :`, Object.entries(options[key]));
+        } else {
+          console.log(`Update to constant: ${key} ${constants[key]} : (no options available)`);
+        }
 
       if (el.tagName === "SELECT") {
 
@@ -427,7 +438,7 @@ async function fetchAndUpdateChart() {
           };
 
         } else {
-          // Generic SELECT fields
+          // Generic SELECT fields C: Conservative , W:Westminster etc
           Object.entries(optsObj).forEach(([optValue, optLabel]) => {
             const o = document.createElement("option");
             o.value = optValue;
@@ -468,6 +479,7 @@ async function fetchAndUpdateChart() {
         });
       };
     });
+    attachListenersToConstantFields(constants);
   }
 
 
@@ -710,6 +722,74 @@ fetch("/get-constants", { credentials: 'same-origin' })
         });
       });
 });
+
+function attachListenersToConstantFields(constants) {
+  Object.keys(constants).forEach(key => {
+    const el = document.getElementById(key);
+    if (!el) return;
+
+    const listener = () => {
+      // Fetch updated constants/options from server and refresh UI
+      fetch("/get-constants", { credentials: 'same-origin' })
+        .then(res => res.json())
+        .then(data => {
+          updateConstantsUI(data.constants, data.options);
+        });
+    };
+
+    // Remove any previous listeners (avoid duplicates)
+    el.removeEventListener("change", listener);
+    el.removeEventListener("input", listener);
+
+    // Add appropriate listener depending on element type
+    if (el.tagName === "SELECT" && el.multiple) {
+      el.addEventListener("blur", listener); // For multi-selects
+    } else {
+      el.addEventListener("change", listener);
+      el.addEventListener("input", listener);
+    }
+  });
+}
+
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.classList.contains('parent-dropdown')) {
+    const select = e.target;
+    const newParent = select.value;
+    const oldParent = select.getAttribute('data-old-value');
+    const subject = select.getAttribute('data-subject');
+    console.log(`python- data received : select ${select} newP:${newParent} oldP:${oldParent} subject: ${subject}`);
+    if (!subject) {
+      console.error("⚠ Could not find subject (node name) in row");
+      return;
+    }
+
+    fetch('/reassign_parent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        subject: subject,
+        old_parent: oldParent,
+        new_parent: newParent
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === 'success') {
+        console.log("✅ Reassignment complete:", data.message);
+        window.location.href = data.mapfile;
+        // Optionally update the UI or reload the map
+      } else {
+        console.error("❌ Reassignment failed:", data.message);
+      }
+    })
+    .catch(error => {
+      console.error("❌ Network or server error:", error);
+    });
+  }
+});
+
 
 
 </script>
