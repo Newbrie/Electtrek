@@ -160,6 +160,7 @@ function collectTableData() {
     const rowData = {
       order: parseInt(row.querySelector('.order')?.value || "0"),
       election: row.querySelector('.election')?.value || "",
+      territory: row.querySelector('.territory')?.value || "",
       filename: row.querySelector('.filename')?.value || "",
       type: row.querySelector('.type')?.value || "",
       purpose: row.querySelector('.purpose')?.value || "",
@@ -423,19 +424,54 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
   }
 });
 
+function populateElectionDropdowns() {
+const parentSelect = window.parent.document.getElementById("streams");
+const electionNames = Array.from(parentSelect.options).map(opt => opt.value);
+
+// 🆕 Access the election-to-territory mapping
+const territoryEL = window.parent.document.getElementById('territory');
+
+const allElectionDropdowns = document.querySelectorAll('.editable.election');
+
+allElectionDropdowns.forEach(select => {
+  const currentValue = select.getAttribute('data-initial');
+  const currentTerritory = select.getAttribute('data-territory');
+  const isNewRow = select.getAttribute('data-new') === 'true';
+
+  select.innerHTML = '';  // Clear existing options
+
+  electionNames.forEach(electionName => {
+    const option = document.createElement('option');
+    option.value = electionName;
+    option.textContent = electionName;
+
+    // 🧠 Add data-territory to each option
+    option.dataset.territory = territoryEL.value || '';
+
+    if (electionName === currentValue) {
+      option.selected = true;
+    }
+
+    select.appendChild(option);
+  });
+
+  // If current value is missing from the list
+  if (currentValue && !electionNames.includes(currentValue)) {
+    const missingOption = document.createElement('option');
+    missingOption.value = currentValue;
+    missingOption.textContent = currentValue + " (not found)";
+    missingOption.dataset.territory = currentTerritory || '';
+    missingOption.selected = true;
+    select.appendChild(missingOption);
+  }
+});
+
+console.log("✅ Populated election dropdowns with data-territory values.");
+}
 
   document.addEventListener('DOMContentLoaded', function () {
+
     populateElectionDropdowns();
-
-    const fields = document.querySelectorAll('.territory');
-    console.log("Found .territory inputs:", fields);  // ← Does this log anything?
-
-    fields.forEach(input => {
-      const full = input.dataset.fullTerritory || '';
-      const parts = full.split('/');
-      const last = parts.pop();
-      input.value = last || '';  // fallback if empty
-    });
 
   document.querySelectorAll('.filename').forEach(input => {
       input.addEventListener('input', function () {
@@ -446,6 +482,24 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
           }
       });
     });
+
+    document.querySelectorAll('.editable.election').forEach(select => {
+    select.addEventListener('change', function () {
+      const selectedOption = this.options[this.selectedIndex];
+      const territory = selectedOption.dataset.territory || this.dataset.territory || '';
+
+      const inputRow = this.closest('tr') || this.closest('.row'); // adjust to your structure
+      const territoryInput = inputRow.querySelector('.territory');
+
+      if (territoryInput) {
+        const parts = territory.split('/');
+        const last = parts.pop();
+        territoryInput.value = last || '';
+        territoryInput.setAttribute('data-full-territory', territory); // optional
+      }
+    });
+  });
+
   });
 
 
@@ -651,52 +705,8 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
         });
     });
 
-    function populateElectionDropdowns() {
-      const parentSelect = window.parent.document.getElementById("streams");
-      const electionNames = Array.from(parentSelect.options).map(opt => opt.value);
-      const Territory = window.parent.document.getElementById("territory")?.value || '';
 
 
-      const allElectionDropdowns = document.querySelectorAll('.editable.election');
-
-      allElectionDropdowns.forEach(select => {
-        const currentValue = select.getAttribute('data-initial');  // Current election value
-        const currentTerritory = select.getAttribute('data-territory');  // 🆕 Territory value
-        const isNewRow = select.getAttribute('data-new') === 'true';
-
-        select.innerHTML = '';  // Clear options
-
-        electionNames.forEach(electionName => {
-          const option = document.createElement('option');
-          option.value = electionName;
-          option.textContent = electionName;
-          if (electionName === currentValue) {
-            option.selected = true;
-          }
-          select.appendChild(option);
-        });
-
-        if (currentValue && !electionNames.includes(currentValue)) {
-          const missingOption = document.createElement('option');
-          missingOption.value = currentValue;
-          missingOption.textContent = currentValue + " (not found)";
-          missingOption.selected = true;
-          select.appendChild(missingOption);
-        }
-
-        // ✅ Now handle the territory field in the same row
-        const territoryInput = select.closest('tr')?.querySelector('.territory');
-        if (territoryInput) {
-          if (currentTerritory) {
-            territoryInput.value = currentTerritory;
-          } else if (isNewRow && Territory) {
-            territoryInput.value = Territory;
-          }
-        }
-      });
-
-      console.log("✅ Populated election dropdowns and territory fields.");
-    }
 
 
 
