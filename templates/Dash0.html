@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block map %}
 <div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('map',path=mapfile) }} width="1200" height="800" onload="fetchTableData('nodelist_xref')"> </iframe>
+    <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" onload="fetchTableData('nodelist_xref')"> </iframe>
 </div>
 <script >
   // Listen to message from child window
@@ -433,7 +433,7 @@ async function fetchAndUpdateChart() {
             const selectedMap = el.value;
             console.log("🗺️ Selected map:", selectedMap);
             if (selectedMap) {
-              changeIframeSrc(`/map/${selectedMap}`);
+              changeIframeSrc(`/thru/${selectedMap}`);
             }
           };
 
@@ -520,8 +520,8 @@ async function fetchAndUpdateChart() {
       const mapfile = Array.isArray(mapfiles) ? mapfiles[mapfiles.length - 1] : null;
 
       if (mapfile) {
-        changeIframeSrc(`/map/${mapfile}`);
-        console.log(`New mapfile loaded: /map/${mapfile}`);
+        changeIframeSrc(`/thru/${mapfile}`);
+        console.log(`New mapfile loaded: /thru/${mapfile}`);
       }
 
       fetchTableData('nodelist_xref');
@@ -589,7 +589,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
     updateConstantsUI(data.constants, data.options);
       const mapfile = data.constants?.mapfiles[mapfiles.length -1];
     if (mapfile) {
-      changeIframeSrc(`/map/${mapfile}`);
+      changeIframeSrc(`/thru/${mapfile}`);
     }
     fetchTableData('nodelist_xref');
   });
@@ -622,7 +622,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
               updateConstantsUI(data.constants, data.options);
                 const mapfile = data.constants?.mapfiles[mapfiles.length -1];
               if (mapfile) {
-                changeIframeSrc(`/map/${mapfile}`);
+                changeIframeSrc(`/thru/${mapfile}`);
               }
               fetchTableData('nodelist_xref');
             });
