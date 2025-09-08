@@ -19,6 +19,7 @@ import numpy as np
 from numpy import ceil
 import statistics
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 import io
 import re
 from decimal import Decimal
@@ -1211,6 +1212,29 @@ class TreeNode:
         }
         # Construct map title
 
+        from folium import Element
+
+        move_close_button_css = """
+        <style>
+        /* Move close button to top-left */
+        .leaflet-popup-close-button {
+            right: auto !important;
+            left: 10px !important;
+            top: 10px !important;
+        }
+
+        /* Optional: style it differently */
+        .leaflet-popup-close-button {
+            font-size: 16px;
+            color: #444;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 4px;
+            padding: 2px 5px;
+        }
+        </style>
+        """
+        m.get_root().html.add_child(Element(move_close_button_css))
+
         title = f"{self.value} MAP"
 
         title_html = f'''<h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>'''
@@ -1345,7 +1369,7 @@ class TreeNode:
                 d = d.insert(0, "/"+p.value)
                 p = p.parent
                 level += 1
-        d = ''.join(d.insert(0,url_for('map',path="UNITED_KINGDOM")))
+        d = ''.join(d.insert(0,url_for('thru',path="UNITED_KINGDOM")))
         return d
 
     def add_Tchild(self, child_node, etype, elect):
@@ -1418,21 +1442,21 @@ class TreeNode:
         x = electorwalks.AddressNumber.values
         y = electorwalks.StreetName
         z = electorwalks.AddressPrefix.values
-        houses = len(list(set(zip(x,y,z))))+1
+        houses = len(list(set(zip(x,y,z))))
         self.updateHouses(houses)
         streets = len(electorwalks.StreetName.unique())
         areamsq = 34*21.2*20*21.2
         avstrlen = 200
-        housedensity = round(houses/(areamsq/10000),3)
-        avhousem = 100*round(math.sqrt(1/housedensity),2)
-        streetdash = avstrlen*streets/houses
+        housedensity = round(houses / (areamsq / 10000), 3) if areamsq else 1
+        avhousem = 100*round(math.sqrt(1/housedensity),2) if housedensity else 1
+        streetdash = avstrlen*streets/houses if houses else 100
         speed = 5*1000
         climbspeed = 5*1000 - climb*50/7
         leafmins = 0.5
         canvassmins = 5
         canvasssample = .5
         leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
-        canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2)
+        canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2) if streetdash else 1
         prodstats = {}
         CurrentElection = get_election_data(current_election,session)
         prodstats['ward'] = self.parent.parent.value
@@ -1608,7 +1632,8 @@ class ExtendedFeatureGroup(FeatureGroup):
 # zonal nodes are added at same time as walk nodes, zone nodes generated from zone grouped means of electors
 # children of zones gnerated by a downZO route similar to downWK
 # zone hull data generated from zone mask of areaelectors.
-        shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area'}
+        import builtins
+        shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
         zonecolour = {
             "ZONE_0": "black",
             "ZONE_1": "red",
@@ -1623,6 +1648,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             "ZONE_10": "gray"
         }
 # if there is a selected file , then allelectors will be full of records
+        print(f"____adding_shapenodes at {self.type} called {herenode.value} of type {stype}:")
         mask = areaelectors[shapecolumn[herenode.type]] == herenode.value
         nodeelectors = areaelectors[mask]
         # Step 2: Group by WalkName and compute mean lat/long (already done)
@@ -1664,9 +1690,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             print("___Zone: ", shapecolumn[stype], shape_node.value, shapeelectors)
     #even though nodes have been created,the current election view might not match
             if not shapeelectors.empty and len(shapeelectors.dropna(how="all")) > 0:
-                Streetsdf0 = pd.DataFrame(shapeelectors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone'])
+                Streetsdf0 = pd.DataFrame(shapeelectors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
                 Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
-                g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first'}
+                g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
                 Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
                 print ("______Streetsdf:",Streetsdf)
                 if stype == 'walk':
@@ -1683,11 +1709,79 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_shapenode (self,herenode,type,datablock):
         global levelcolours
+        def build_street_list_html(streets_df):
+            html = '''
+            <div style="
+                border: 1px solid #ccc;
+                border-radius: 10px;
+                padding: 10px;
+                background-color: white !important;
+                box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+                max-width: 600px;
+                overflow-x: auto;
+                font-family: sans-serif;
+                font-size: 10px;
+                white-space: nowrap;
+            ">
+                <table style="border-collapse: collapse; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;">Street Name</th>
+                            <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;">Number</th>
+                            <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;">Prefix</th>
+                            <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;">Houses</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+
+            for _, row in streets_df.iterrows():
+                nums = sorted(set(
+                    n.strip() for n in row['AddressNumber'].split(',')
+                    if n.strip() and n.strip().lower() != 'nan'
+                )) if pd.notna(row['AddressNumber']) else []
+
+                pres = sorted(set(
+                    p.strip() for p in row['AddressPrefix'].split(',')
+                    if p.strip() and p.strip().lower() != 'nan'
+                )) if pd.notna(row['AddressPrefix']) else []
+
+                hos = len(nums) + len(pres)
+
+                # Dropdowns
+                num_select = f"<select>{''.join(f'<option>{n.strip()}</option>' for n in nums)}</select>"
+                pre_select = f"<select>{''.join(f'<option>{p.strip()}</option>' for p in pres)}</select>"
+
+                html += f'''
+                    <tr>
+                        <td style="padding: 4px;"><b>{row['Name']}</b></td>
+                        <td style="padding: 4px;">{num_select}</td>
+                        <td style="padding: 4px;">{pre_select}</td>
+                        <td style="padding: 4px;"><i>{hos}</i></td>
+                    </tr>
+                '''
+
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+            return html
+
+
+
+
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
         print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
 
         # Create a single MultiPoint geometry that contains all the points
         multi_point = MultiPoint(points)
+        centroid = multi_point.centroid
+
+        # Access coordinates
+        centroid_lon = centroid.x
+        centroid_lat = centroid.y
+        herenode.centroid = (centroid_lat,centroid_lon)
 
         # Create a new DataFrame for a single row GeoDataFrame
         gdf = gpd.GeoDataFrame({
@@ -1720,7 +1814,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-            limbX['UPDOWN'] =  uptag1 +"<br>"+ downtag+"<br>"
+            streetstag = build_street_list_html(datablock)
+            limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+ downtag+"<br>"+ streetstag+"<br></div>"
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
 
 
@@ -1732,6 +1827,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         here = [float(f"{herenode.centroid[0]:.6f}"), float(f"{herenode.centroid[1]:.6f}")]
         pathref = herenode.mapfile()
         mapfile = '/transfer/'+pathref
+        # Turn into HTML list items
+
 
         limbX = limbX.to_crs("EPSG:4326")
         limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
@@ -2208,6 +2305,17 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return self._children
 
+
+def Hconcat(house_list):
+    # Make sure house_list is iterable and not accidentally a DataFrame or something else
+    try:
+        return ', '.join(sorted(set(map(str, house_list))))
+    except Exception as e:
+        print("❌ Error in Hconcat:", e)
+        print("Type of house_list:", type(house_list))
+        raise
+
+
 def get_text_color(fill_hex):
     # Convert hex to RGB
     fill_hex = fill_hex.lstrip('#')
@@ -2547,54 +2655,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
     from sklearn.metrics.pairwise import haversine_distances
 
-    def merge_small_clusters(X, label_dict, min_cluster_size=10):
-        """
-        Merge small clusters (<min_cluster_size) into the nearest larger cluster based on centroid.
-        - X: original DataFrame with 'Lat' and 'Long'
-        - label_dict: dictionary mapping index to cluster label
-        """
-        # Step 1: Turn label_dict into Series
-        labels_series = pd.Series(label_dict)
-
-        # Step 2: Group by cluster label
-        X_with_labels = X.copy()
-        X_with_labels['cluster'] = labels_series
-
-        # Step 3: Calculate centroids and sizes
-        centroids = X_with_labels.groupby('cluster')[['Lat', 'Long']].mean()
-        sizes = X_with_labels['cluster'].value_counts()
-
-        # Step 4: Identify small clusters
-        small_clusters = sizes[sizes < min_cluster_size].index.tolist()
-        large_clusters = sizes[sizes >= min_cluster_size].index.tolist()
-
-        print(f"🔍 Small clusters to merge: {small_clusters}")
-
-        # Convert lat/lon to radians for haversine
-        centroids_rad = np.radians(centroids[['Lat', 'Long']].values)
-
-        # Step 5: Reassign small clusters
-        updated_labels = labels_series.copy()
-        for sc in small_clusters:
-            idx = centroids.index.get_loc(sc)
-            sc_centroid = centroids_rad[idx]
-
-            # Compute distance to all large clusters
-            distances = []
-            for lc in large_clusters:
-                lc_idx = centroids.index.get_loc(lc)
-                lc_centroid = centroids_rad[lc_idx]
-                dist = haversine_distances([sc_centroid, lc_centroid])[0, 1]
-                distances.append((lc, dist))
-
-            # Find nearest large cluster
-            nearest_large = min(distances, key=lambda x: x[1])[0]
-            print(f"👉 Merging small cluster {sc} into {nearest_large}")
-
-            # Reassign
-            updated_labels[updated_labels == sc] = nearest_large
-
-        return updated_labels.to_dict()
 
     def recursive_kmeans_latlon(X, max_cluster_size=400, MAX_DEPTH=5, depth=0, prefix='K'):
         """
@@ -2648,7 +2708,13 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         current_node = get_current_node(session_data=session_data)
         current_election = get_current_election(session_data=session_data)
 
-
+        territory_path = CurrentElection['territory']
+        Territory_node = current_node.ping_node(session_data,territory_path)
+        ttype = gettypeoflevel(territory_path,Territory_node.level)
+        #        Territory_node = self
+        #        ttype = electtype
+        pfile = Treepolys[ttype]
+        Territoryboundary = pfile[pfile['FID']== Territory_node.fid]
 
         # Simulate step progress throughout your pipeline
         # All your existing code from the route goes here, replacing request.form/files/session
@@ -2906,8 +2972,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
 
             label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=SelectedElection['walksize'], MAX_DEPTH=10)
-
-            label_dict = merge_small_clusters(mainframe[['Lat', 'Long']], label_dict, min_cluster_size=10)
 
             newlabels = pd.Series(label_dict)
 
@@ -3276,7 +3340,7 @@ def resourcing():
 
     Territory_node = current_node.ping_node(session,CurrentElection['territory'])
 
-    mask = (allelectors['Election'] == current_election)
+    mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
     walks = set(areaelectors.WalkName.values)
@@ -4337,6 +4401,8 @@ def downbut(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     formdata = {}
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
 
 # the selected node has to be found from the selected button URL
@@ -4402,7 +4468,7 @@ def transfer(path):
     previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = previous_node.ping_node(session,path)
-    atype = gettypeoflevel(path, current_node.level)
+    atype = gettypeoflevel(path, current_node.level+1)
 
     mapfile = current_node.mapfile()
     visit_node(session, mapfile)
@@ -4413,7 +4479,7 @@ def transfer(path):
         return redirect(url_for(TypeMaker[atype],path=mapfile))
     else:
         session['current_node_id'] = current_node.fid
-#    return redirect(url_for('map',path=mapfile))
+#    return redirect(url_for('thru',path=mapfile))
         return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 
@@ -4433,18 +4499,15 @@ def downPDbut(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
 
-    T_level = CurrentElection['level']
     previous_node = current_node
     current_node = previous_node.ping_node(session,path) #aligns with election data and takes you to the clicked node
     current_node.file = subending(current_node.file,"-PDS.html") # forces looking for PDs file
 
-    Territory_node = current_node # the node which binds the election data
-#        mask = (allelectors['Election'] == current_election) & (allelectors['Area'] == Territory_node.value)
-#        areaelectors = allelectors[mask]
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
 
     mapfile = current_node.mapfile()
-    print(f"__downPD- {mapfile}-l4area {Territory_node.value}, lenAll {len(allelectors)}, len area {len(areaelectors)}")
-
+    print(f"__downPD- {mapfile}-l4area {current_node.value}, lenAll {len(allelectors)}, len area {len(areaelectors)}")
 
     print ("_________ROUTE/downPDbut/",path, request.method)
     if request.method == 'GET':
@@ -4452,24 +4515,24 @@ def downPDbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         if len(areaelectors)  == 0:
             flash("Can't find any elector data for this Area.")
-            print(f"Can't find elector data at {Territory_node.value} for election {current_election}" )
+            print(f"Can't find elector data at {current_node.value} for election {current_election}" )
         else:
-            print("_____ Before creation - PD display markers ", current_node.level,Territory_node.level, len(Featurelayers['polling_district']._children))
+            print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
             shapelayer = Featurelayers['polling_district'].create_layer(current_node, 'polling_district')
             if len(shapelayer._children) == 0:
                 current_node.file = subending(current_node.file,"-MAP.html")
                 mapfile = current_node.mapfile()
             else:
-                print("_______just before create_area_map call:",Territory_node.level, len(Featurelayers['polling_district']._children), mapfile)
+                print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
                 current_node.create_area_map(current_node.getselectedlayers(mapfile))
                 flash("________PDs added:  "+str(len(shapelayer._children)))
-                print("________After map created PDs added  :  ",Territory_node.level, len(shapelayer._children))
+                print("________After map created PDs added  :  ",current_node.level, len(shapelayer._children))
 
 #    face_file = subending(current_node.file,"-MAP.html")
 #    mapfile = current_node.dir+"/"+face_file
 # if this route is from a redirection rather than a service call , then create file if doesnt exist
-    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-        print ("_________New mapfile/",current_node.value, mapfile)
+    elif not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
+        print ("_________New PD mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_node,previous_node.type) #from upnode children type of prev node
     #        current_node.file = face_file
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
@@ -4498,38 +4561,37 @@ def downWKbut(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
-    T_level = CurrentElection['level']
     previous_node = current_node
+    # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(session,path)
     current_node.file = subending(current_node.file,"-WALKS.html")
-
-    Territory_node = current_node.findnodeat_Level(T_level) # the node which binds the election data
+ # the node which binds the election data
 
     mapfile = current_node.mapfile()
     print ("_________ROUTE/downWKbut",previous_node.value, current_node.value)
     flash ("_________ROUTE/downWKbut ")
-
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
     if request.method == 'GET':
-# use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         if len(areaelectors)  == 0:
             flash("Can't find any elector data for this Area.")
             print(f"Can't find elector data at {current_node.value} for election {current_election}" )
         else:
-            print("_____ Before creation - Walk display markers ", current_node.level,Territory_node.level, len(Featurelayers['walk']._children))
+            print("_____ Before creation - Walk display markers ", current_node.level, len(Featurelayers['walk']._children))
             shapelayer = Featurelayers['walk'].create_layer(current_node, 'walk')
             if len(shapelayer._children) == 0:
                 current_node.file = subending(current_node.file,"-MAP.html")
                 mapfile = current_node.mapfile()
             else:
                 print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-                current_node.create_area_map(current_node.getselectedlayers(mapfile))
+                current_node.create_area_map(current_node.getselectedlayers(path))
                 flash("________Walks added:  "+str(len(shapelayer._children)))
                 print("________After map created Walks added  :  ",current_node.level, len(shapelayer._children))
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
-    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-        print ("_________New mapfile/",current_node.value, mapfile)
+    elif not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
+#        simple transfer from another node -
+        print ("_________New WK mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_node,previous_node.type) #from upnode children type of prev node
     #        current_node.file = face_file
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
@@ -4564,7 +4626,6 @@ def STupdate(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-    T_level = CurrentElection['level']
 
 
 #    steps = path.split("/")
@@ -4577,14 +4638,13 @@ def STupdate(path):
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
     current_node = current_node.ping_node(session,path)
-    Territory_node = current_node.findnodeat_Level(T_level)
+
     print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
     mask = (
         (allelectors['Election'] == current_election) &
-        (allelectors['Area'] == Territory_node.value) &
         (allelectors['StreetName'] == street_node.value)
     )
     streetelectors = allelectors[mask]
@@ -4595,7 +4655,7 @@ def STupdate(path):
     # Get JSON data from request
 #        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
         try:
-            print(f"📥 Incoming request to update street: {path} (from all {len(allelectors)} in terr {Territory_node.value}) with source data {len(streetelectors)} ")
+            print(f"📥 Incoming request to update street: {path} (from all {len(allelectors)} in terr {CurrentElection['territory']}) with source data {len(streetelectors)} ")
 
             # ✅ Print raw request data (useful for debugging)
             print("📄 Raw request data:", request.data)
@@ -4734,8 +4794,11 @@ def PDdownST(path):
     PD_node = current_node
 
 # now pointing at the STREETS.html node containing a map of street markers
-    mask = areaelectors['PD'] == PD_node.value
-    PDelectors = areaelectors[mask]
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
+
+    mask2 = areaelectors['PD'] == PD_node.value
+    PDelectors = areaelectors[mask2]
     print(f"__PDdownST- lenAll {len(allelectors)}, len area {len(areaelectors)} lenPD {len(PDelectors)}")
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
@@ -4794,8 +4857,10 @@ def LGdownST(path):
 
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
-    mask = areaelectors['PD'] == PD_node.value
-    PDelectors = areaelectors[mask]
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
+    mask2 = areaelectors['PD'] == PD_node.value
+    PDelectors = areaelectors[mask2]
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         atype = gettypeoflevel(path, current_node.level)
@@ -4848,7 +4913,6 @@ def WKdownST(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
 
-    T_level = CurrentElection['level']
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
@@ -4859,8 +4923,11 @@ def WKdownST(path):
 
 
     walk_node = current_node
-    mask = areaelectors['WalkName'] == walk_node.value
-    walkelectors = areaelectors[mask]
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
+
+    mask2 = areaelectors['WalkName'] == walk_node.value
+    walkelectors = areaelectors[mask2]
 
     walks = areaelectors.WalkName.unique()
     if request.method == 'GET':
@@ -4982,6 +5049,9 @@ def get_table(table_name):
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
 
     # Table mapping
     table_map = {
@@ -5248,9 +5318,9 @@ def register():
         session['current_node_id'] = current_node.fid
         return redirect(url_for('get_location'))
 
-@app.route('/map/<path:path>', methods=['GET','POST'])
+@app.route('/thru/<path:path>', methods=['GET','POST'])
 @login_required
-def map(path):
+def thru(path):
     global TREK_NODES
     global CurrentElection
 # map is just a straight transfer to the given path
@@ -5261,8 +5331,8 @@ def map(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
 
-    flash ("_________ROUTE/map:"+path)
-    print ("_________ROUTE/map:",path, current_node.dir)
+    flash ("_________ROUTE/thru:"+path)
+    print ("_________ROUTE/thru:",path, current_node.dir)
 
     current_node = current_node.ping_node(session,path)
     mapfile = current_node.mapfile()
@@ -5340,7 +5410,7 @@ def filelist():
     current_election = get_current_election(session)
 
     if filetype == "maps":
-        return jsonify({"message": "Success", "file": url_for('map', path=mapfile)})
+        return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
 
 
@@ -5685,15 +5755,6 @@ def normalise():
     CurrentElection = get_election_data(current_election,session)
 
     session_data = dict(session)
-
-    territory_path = CurrentElection['territory']
-
-    Territory_node = current_node.ping_node(session_data,territory_path)
-    ttype = gettypeoflevel(territory_path,Territory_node.level)
-#        Territory_node = self
-#        ttype = electtype
-    pfile = Treepolys[ttype]
-    Territoryboundary = pfile[pfile['FID']== Territory_node.fid]
 
     RunningVals = {
     'Mean_Lat' : 51.240299,
