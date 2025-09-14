@@ -68,11 +68,17 @@ word-wrap: break-word;
 
       <!-- Street Search Column -->
       <div class="column">
-        <h2>Register Leaflet Tag (L*) coverage done for streetnames:</h2>
+        <h2>Register Leaflet Tag (L*) coverage done for :</h2>
+        <label>
+          <input type="radio" name="searchType" value="street" checked> Street
+        </label>
+        <label>
+          <input type="radio" name="searchType" value="walk"> Walk
+        </label>
         <p>Leaflet delivery is categorised as an 'input' for campaign informing purposes</p>
         {% for tag, desc in leaflet_tags.items() %}
           <label for="street-input-{{ tag }}"><strong>{{ tag }}</strong>: {{ desc }}</label>
-          <input type="text" id="street-input-{{ tag }}" placeholder="Search Street Name for {{ tag }}" oninput="filterStreets('{{ tag }}')">
+          <input type="text" id="street-input-{{ tag }}" placeholder="Search Street Name for {{ tag }}" oninput="filterLocations('{{ tag }}')">
           <ul id="street-results-{{ tag }}" class="results"></ul>
         {% endfor %}
 
@@ -112,57 +118,61 @@ word-wrap: break-word;
         .catch(error => console.error("Error checking ENOP:", error));
     }
 
-    function filterStreets(tag) {
+    function filterLocations(tag) {
       const input = document.getElementById(`street-input-${tag}`);
       const query = input.value.trim();
       const resultContainer = document.getElementById(`street-results-${tag}`);
+
+      const searchType = document.querySelector('input[name="searchType"]:checked').value; // 'street' or 'walk'
 
       if (!query) {
         resultContainer.innerHTML = '';
         return;
       }
 
-      fetch(`/streetsearch?query=${encodeURIComponent(query)}`)
+      fetch(`/locationsearch?type=${searchType}&query=${encodeURIComponent(query)}`)
         .then(response => response.json())
-        .then(filteredStreets => {
+        .then(results => {
           resultContainer.innerHTML = '';
-          filteredStreets.forEach(street => {
+          results.forEach(loc => {
             const li = document.createElement('li');
-            li.textContent = street.StreetName;
-            li.onclick = () => selectStreet(street, tag);
+            li.textContent = loc.name; // Use 'name' instead of 'StreetName'
+            li.onclick = () => selectLocation(loc, tag, searchType);
             resultContainer.appendChild(li);
           });
         })
-        .catch(error => console.error('Error fetching street names:', error));
+        .catch(error => console.error('Error fetching locations:', error));
     }
 
-    function selectStreet(street, tag) {
-  const input = document.getElementById(`street-input-${tag}`);
-  const resultContainer = document.getElementById(`street-results-${tag}`);
-  const combinedLog = document.getElementById('street-tagging-log');
+    function selectLocation(loc, tag, type) {
+      const input = document.getElementById(`street-input-${tag}`);
+      const resultContainer = document.getElementById(`street-results-${tag}`);
+      const combinedLog = document.getElementById('street-tagging-log');
 
-  input.value = street.StreetName;
-  resultContainer.innerHTML = '';
+      input.value = loc.name;
+      resultContainer.innerHTML = '';
 
-  fetch('/update_street_tags', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ street_index: street.index, tag: tag })
-  })
-  .then(response => response.json())
-  .then(data => {
-    // Show confirmation as an alert
-    alert(data.message);
+      fetch('/update_location_tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_type: type, // 'street' or 'walk'
+          location_index: loc.index,
+          tag: tag
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        alert(data.message);
+        const li = document.createElement("li");
+        li.textContent = `🏷️ ${loc.name} (${type}) tagged with ${tag}`;
+        li.style.color = 'blue';
+        combinedLog.appendChild(li);
+        combinedLog.scrollTop = combinedLog.scrollHeight;
+      })
+      .catch(error => console.error('Error updating tags:', error));
+    }
 
-    // Add to the shared log
-    const li = document.createElement("li");
-    li.textContent = `🏷️ ${street.StreetName} tagged with ${tag}`;
-    li.style.color = 'blue';
-    combinedLog.appendChild(li);
-    combinedLog.scrollTop = combinedLog.scrollHeight;
-  })
-  .catch(error => console.error('Error updating street tags:', error));
-}
 
   function handleAddTag() {
     const input = document.getElementById("new-tag");

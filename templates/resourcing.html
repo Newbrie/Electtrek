@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+calendar_plan<!DOCTYPE html>
 <html lang="en">
 <head>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
@@ -20,6 +20,20 @@
   cursor: grab;
 }
 
+/* Availability levels: 0 (none) to 10 (max) */
+.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
+.slot[data-availability="1"] { background-color: #e6f0ff; }
+.slot[data-availability="2"] { background-color: #cce0ff; }
+.slot[data-availability="3"] { background-color: #b3d1ff; }
+.slot[data-availability="4"] { background-color: #99c2ff; }
+.slot[data-availability="5"] { background-color: #80b3ff; }
+.slot[data-availability="6"] { background-color: #66a3ff; }
+.slot[data-availability="7"] { background-color: #4d94ff; }
+.slot[data-availability="8"] { background-color: #3385ff; }
+.slot[data-availability="9"] { background-color: #1a75ff; }
+.slot[data-availability="10"] { background-color: #0066ff; } /* max */
+
+
 .palette-header {
   background-color: #ddd;
   padding: 6px 10px;
@@ -27,6 +41,12 @@
   cursor: move;
   border-bottom: 1px solid #aaa;
   user-select: none;
+}
+
+.lozenge-selected {
+  outline: 2px solid #1890ff;
+  background-color: #cceeff !important;
+  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
 }
 
 
@@ -96,21 +116,15 @@
     .slot {
       flex: 1;
       border-top: 1px solid #ccc;
-      padding: 4px;
+      padding: 2px;
       font-size: 11px;
       font-weight: 300;
       color: #333;
+      min-height: 30px;
+      line-height: 1;
     }
 
-    .slot {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  min-height: 30px; /* Enough to hold a row of codes */
-}
+
 
 .walk-lozenge,
 .tag-lozenge,
@@ -131,12 +145,13 @@
 .walk-lozenge.dropped,
 .tag-lozenge.dropped,
 .resource-lozenge.dropped {
-  font-size: 11px;
+  font-size: 8px;
   padding: 2px 6px;
-  margin: 2px;
+  margin: 1px 0; /* ⬅️ Tight vertical spacing */
   cursor: pointer;
   display: inline-block;
   white-space: nowrap;
+  line-height: 1; /* ⬅️ Minimal line height */
 }
 
 
@@ -147,10 +162,13 @@
 <body>
 
   <h2>Election Work Calendar </h2>
+  <div id="calendar-controls" style="position: absolute; top: 20px; right: 50px; z-index: 1000;">
+  <button id="save-calendar-btn" style="padding: 6px 12px; font-size: 14px;">💾 Save Calendar</button>
+</div>
   <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
   <!-- Resource -->
   <!-- Existing Resource Palette -->
-  <div id="resource-palette" class="floating-palette">
+  <div id="resource-palette" class="floating-palette" style="top: 460px; right: 50px;">
     <div id="resource-handle" class="palette-header">Resources</div>
     <div id="resource-content">
       {% for res in resources %}
@@ -160,7 +178,7 @@
   </div>
 
   <!-- New Walks Palette -->
-  <div id="walks-palette" class="floating-palette">
+  <div id="walks-palette" class="floating-palette" style="top: 100px; right: 50px;">
     <div id="walks-handle" class="palette-header">Walks</div>
     <div id="walks-content">
       {% for w in walks %}
@@ -170,7 +188,7 @@
   </div>
 
   <!-- New Task Tags Palette -->
-  <div id="tags-palette" class="floating-palette">
+  <div id="tags-palette" class="floating-palette" style="top: 280px; right: 50px;">
     <div id="tags-handle" class="palette-header">Task Tags</div>
     <div id="tags-content">
       {% for code,desc in task_tags.items() %}
@@ -183,6 +201,20 @@
   <div class="calendar-grid" id="calendar-grid"></div>
 </body>
 <script>
+
+
+    function setupPaletteSelection() {
+      const lozenges = document.querySelectorAll('.walk-lozenge, .tag-lozenge, .resource-lozenge');
+
+      lozenges.forEach(lozenge => {
+        lozenge.addEventListener('click', function (e) {
+          e.stopPropagation(); // Prevent click events from triggering elsewhere
+          lozenge.classList.toggle('lozenge-selected');
+        });
+      });
+    }
+
+
     const tooltip = document.getElementById('tooltip');
 
     document.body.addEventListener('mouseover', function (e) {
@@ -242,25 +274,31 @@
     });
   }
 
+
   // Enable draggable behavior on all three palettes
   makePaletteDraggable("resource-palette", "resource-handle");
   makePaletteDraggable("walks-palette", "walks-handle");
   makePaletteDraggable("tags-palette", "tags-handle");
 
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    document.getElementById("save-calendar-btn").addEventListener("click", saveCalendarPlan);
+
+    await loadCalendarPlan(); // ✅ Fetch and restore on load
+    setupPaletteSelection();
+
     const container = document.getElementById("calendar-grid");
-    const daysToShow = 35;
+    const daysToShow = 45;
     const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM"];
 
     // ✅ Use election date from parent window
-    function parseDDMMYYYY(str) {
-      const [day, month, year] = str.split("-");
+    function parseYYYYMMDD(str) {
+      const [year, month, day] = str.split("-");
       return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
     }
 
 
     const electionDateStr = window.parent.document.getElementById('electiondate')?.value;
-    const endDate = parseDDMMYYYY(electionDateStr);
+    const endDate = parseYYYYMMDD(electionDateStr);
 
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - (daysToShow - 1));
@@ -271,6 +309,7 @@
     // Align first row (starting from Monday)
     const startDayOfWeek = startDate.getDay();
     const offset = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
+
 
     // Add blanks before the first real day if start isn't Monday
     for (let i = 0; i < offset; i++) {
@@ -300,9 +339,10 @@
     const cellDate = new Date(date);
     cellDate.setHours(0,0,0,0);
 
-    if (cellDate.getTime() === today.getTime()) {
+    if (cellDate.toDateString() === today.toDateString()) {
       dayDiv.classList.add("today-cell");
     }
+
 
     dayDiv.appendChild(header);
 
@@ -310,8 +350,25 @@
       const slotDiv = document.createElement("div");
       slotDiv.className = "slot";
       slotDiv.textContent = slot;
+      slotDiv.setAttribute("data-availability", "0"); // Initial availability
+      slotDiv.setAttribute("title", `${0} resources available`);
+
+
+      // Click to cycle availability
+      slotDiv.addEventListener("click", function (e) {
+        // Ignore clicks on lozenges inside the slot
+        if (e.target !== slotDiv) return;
+
+        let current = parseInt(slotDiv.getAttribute("data-availability")) || 0;
+        current = (current + 1) % 11; // cycle from 0 to 10
+        slotDiv.setAttribute("data-availability", current.toString());
+        slotDiv.setAttribute("title", `${current * 2} resources available`);
+
+      });
+
       dayDiv.appendChild(slotDiv);
     }
+
 
     weekRow.appendChild(dayDiv);
 
@@ -335,38 +392,210 @@
     });
   });
 
+  function updateSlotAvailability(slot) {
+    const resourceCount = [...slot.children].filter(child =>
+      child.classList.contains('resource-lozenge')
+    ).length;
+
+    const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
+
+    slot.setAttribute("data-availability", availabilityLevel);
+    slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
+  }
+
+
+
   // Slots: accept all groups
   document.querySelectorAll(".slot").forEach(slot => {
     Sortable.create(slot, {
       group: {
-        name: "calendar",     // name doesn't matter here
-        put: ["resource", "walks", "tags"]  // Accept items from these palettes
+        name: "calendar",
+        put: ["resource", "walks", "tags"]
       },
       animation: 150,
       onAdd: evt => {
-      const el = evt.item;
+        const el = evt.item;
+        const slot = evt.to;
 
-      const alreadyExists = [...evt.to.children].some(child =>
-        child !== el && child.textContent === el.textContent
-      );
+        const alreadyExists = [...slot.children].some(child =>
+          child !== el && child.textContent === el.textContent
+        );
 
-      if (alreadyExists) {
-        el.remove();
-        return;
+        if (alreadyExists) {
+          el.remove();
+          return;
+        }
+
+        el.classList.add('dropped');
+        el.setAttribute('draggable', false);
+
+        el.addEventListener('click', () => {
+          el.remove();
+          updateSlotAvailability(slot);  // 👈 Recalculate on removal
+        });
+
+        updateSlotAvailability(slot);  // 👈 Recalculate on add
       }
-
-      el.classList.add('dropped');
-      el.setAttribute('draggable', false);
-
-      el.addEventListener('click', () => el.remove());
-    }
-
-
     });
 
   });
 
+  document.querySelectorAll(".slot").forEach(slot => {
+  updateSlotAvailability(slot);
   });
+
+
+  });
+
+  function extractCalendarPlan() {
+    const state = { slots: {} };
+
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    dayColumns.forEach((col, dayIndex) => {
+      const slots = col.querySelectorAll(".slot");
+
+      slots.forEach(slot => {
+        const time = slot.textContent.trim();
+        const key = `${dayIndex}_${time}`;
+
+        const availability = parseInt(slot.getAttribute("data-availability")) || 0;
+
+        const lozenges = [...slot.children].filter(child =>
+          child.classList.contains("walk-lozenge") ||
+          child.classList.contains("tag-lozenge") ||
+          child.classList.contains("resource-lozenge")
+        ).map(loz => ({
+          type: loz.getAttribute("data-type"),
+          code: loz.textContent.trim()
+        }));
+
+        state.slots[key] = {
+          availability: availability,
+          lozenges: lozenges
+        };
+      });
+    });
+
+    return state;
+  }
+
+
+  function restoreCalendarPlan(data) {
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    Object.entries(data.slots).forEach(([key, slotData]) => {
+      const [dayIndexStr, timeLabel] = key.split("_");
+      const dayIndex = parseInt(dayIndexStr, 10);
+
+      const col = dayColumns[dayIndex];
+      if (!col) return;
+
+      const slots = [...col.querySelectorAll(".slot")];
+      const targetSlot = slots.find(s => s.textContent.trim() === timeLabel);
+      if (!targetSlot) return;
+
+      // Set availability
+      targetSlot.setAttribute("data-availability", slotData.availability);
+      targetSlot.setAttribute("title", `${slotData.availability * 2} resources available`);
+
+      // Remove existing lozenges
+      [...targetSlot.children].forEach(child => {
+        if (child.classList.contains("walk-lozenge") ||
+            child.classList.contains("tag-lozenge") ||
+            child.classList.contains("resource-lozenge")) {
+          child.remove();
+        }
+      });
+
+      // Re-add lozenges
+      slotData.lozenges.forEach(loz => {
+        const div = document.createElement("div");
+        div.className = `${loz.type}-lozenge dropped`;
+        div.setAttribute("data-type", loz.type);
+        div.setAttribute("draggable", false);
+        div.textContent = loz.code;
+
+        div.addEventListener("click", () => {
+          div.remove();
+          updateSlotAvailability(targetSlot);
+        });
+
+        targetSlot.appendChild(div);
+      });
+
+      updateSlotAvailability(targetSlot);
+    });
+  }
+
+
+  async function fetchCurrentElection() {
+    try {
+      const response = await fetch('/current-election', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch CurrentElection');
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching CurrentElection:', error);
+      return null;
+    }
+  }
+
+  function saveCalendarPlan() {
+    const btn = document.getElementById("save-calendar-btn");
+    btn.disabled = true;
+    btn.textContent = "💾 Saving...";
+
+    const calendarData = extractCalendarPlan();
+
+    fetch("/current-election", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        plan: calendarData
+      })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error("Failed to save calendar");
+      return response.json();
+    })
+    .then(() => {
+      btn.textContent = "✅ Saved";
+      setTimeout(() => {
+        btn.textContent = "💾 Save Calendar";
+        btn.disabled = false;
+      }, 1500);
+    })
+    .catch(error => {
+      btn.textContent = "⚠️ Error";
+      btn.disabled = false;
+      console.error("Save failed:", error);
+    });
+  }
+
+
+  async function loadCalendarPlan() {
+    try {
+      const response = await fetch('/current-election');
+      if (!response.ok) throw new Error("Failed to fetch election");
+
+      const electionData = await response.json();
+      if (electionData.calendar_plan) {
+        restoreCalendarPlan(electionData.calendar_plan);
+      }
+    } catch (err) {
+      console.error("Error loading calendar plan:", err);
+    }
+  }
 
 
   </script>
