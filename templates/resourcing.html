@@ -171,8 +171,14 @@ calendar_plan<!DOCTYPE html>
   <div id="resource-palette" class="floating-palette" style="top: 460px; right: 50px;">
     <div id="resource-handle" class="palette-header">Resources</div>
     <div id="resource-content">
-      {% for res in resources %}
-      <div class="resource-lozenge" data-id="{{ loop.index0 }}" data-type="resource" data-info="{{ res.Firstname }} {{ res.Surname }} {{ res.Status }}" draggable="true">{{ res.Code }}</div>
+      {% for key, value in resources.items() %}
+        <div class="resource-lozenge"
+             data-id="{{ key }}"
+             data-type="resource"
+             data-info="{{ value.Firstname }} {{ value.Surname }} {{ value.Status }}"
+             draggable="true">
+          {{ key }}
+        </div>
       {% endfor %}
     </div>
   </div>

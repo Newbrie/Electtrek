@@ -30,31 +30,45 @@
     }
 
     fetch(`/api/search?q=${encodeURIComponent(q)}`)
-      .then(res => res.json())
-      .then(response => {
-        const cols = response.columns;
-        const data = response.data;
-
-        if (data.length === 0 || cols.length === 0) {
-          resultsDiv.innerHTML = '<p>No results found.</p>';
-          return;
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! Status: ${res.status}`);
         }
+        return res.text(); // Get raw text first for debugging
+      })
+      .then(raw => {
+        try {
+          const response = JSON.parse(raw);
+          console.log("✅ Parsed response:", response);
 
-        const headers = cols.map(c => `<th>${c}</th>`).join('');
-        const rows = data.map(r =>
-          `<tr>${cols.map(c => `<td>${r[c] || ''}</td>`).join('')}</tr>`
-        ).join('');
+          const cols = response.columns || [];
+          const data = response.data || [];
 
-        resultsDiv.innerHTML = `
-          <table>
-            <thead><tr>${headers}</tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
+          if (data.length === 0 || cols.length === 0) {
+            resultsDiv.innerHTML = '<p>No results found.</p>';
+            return;
+          }
+
+          const headers = cols.map(c => `<th>${c}</th>`).join('');
+          const rows = data.map(r =>
+            `<tr>${cols.map(c => `<td>${r[c] || ''}</td>`).join('')}</tr>`
+          ).join('');
+
+          resultsDiv.innerHTML = `
+            <table>
+              <thead><tr>${headers}</tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        } catch (jsonErr) {
+          console.error("❌ Failed to parse JSON:", jsonErr);
+          console.warn("Raw response that failed JSON parse:", raw);
+          resultsDiv.innerHTML = `<p>Invalid server response.</p>`;
+        }
       })
       .catch(err => {
-        console.error('Search error:', err);
-        resultsDiv.innerHTML = '<p>Error loading results.</p>';
+        console.error("❌ Network or fetch error:", err);
+        resultsDiv.innerHTML = `<p>Error loading results: ${err.message}</p>`;
       });
   });
 </script>

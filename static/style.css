@@ -502,6 +502,56 @@ tr:nth-child(even) {
     white-space: nowrap; /* Prevents text from wrapping */
 }
 
+.er-table {
+  border-collapse: collapse;
+  width: 95%;
+  max-width: 1200px; /* optional, for consistency */
+  margin: 20px auto;
+  table-layout: fixed;  /* 🔧 forces column widths to respect your percentages */
+}
+th, td {
+border: 1px solid #aaa;
+padding: 8px;
+text-align: center;
+overflow: hidden;         /* 👈 prevents content from breaking the layout */
+text-overflow: ellipsis;  /* 👈 adds ... if content too long */
+white-space: nowrap;      /* 👈 prevents wrapping; use 'normal' if you want wrap */
+}
+  /* Column width by percentage */
+.er-table th:nth-child(1),
+.er-table td:nth-child(1) {
+width: 5%;
+}
+
+.er-table th:nth-child(2),
+.er-table td:nth-child(2) {
+width: 25%;
+}
+
+.er-table th:nth-child(3),
+.er-table td:nth-child(3) {
+width: 5%;
+}
+
+.er-table th:nth-child(4),
+.er-table td:nth-child(4) {
+width: 15%;
+}
+
+.er-table th:nth-child(5),
+.er-table td:nth-child(5) {
+width: 15%;
+}
+
+.er-table th:nth-child(6),
+.er-table td:nth-child(6) {
+width: 10%;
+}
+
+.er-table th:nth-child(7),
+.er-table td:nth-child(7) {
+width: 25%;
+}
 tr:has(.selectRow:checked) > td {
   background-color: #ccc;
 }

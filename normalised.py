@@ -420,7 +420,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         RunningVals2.setdefault('Mean_Lat', 51.240299)
         RunningVals2.setdefault('Mean_Lon', 51.240299)
         for index, elector in electors2.iterrows():
-            progress['percent'] = round(100*(index/len(electors2)),2)
+            progress['percent'] = round(100*(int(index)/len(electors2)),2)
             progress['status'] = 'running'
             progress['message'] = 'norming addresses'
 
@@ -443,8 +443,17 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
             addr = xx.replace('"', '')
         #        Addno1 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address1"]))
         #        Addno2 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address2"]))
-            Addno1 = re.search("(?:House|Flat|Apartment)?\s*((\d+[A-Za-z]?(?:\s*-\s*\d+[A-Za-z]?|\s*/\s*\d+[A-Za-z]?)?[\s,]*)+)", str(elector["Address1"]))
-            Addno2 = re.search("(?:House|Flat|Apartment)?\s*((\d+[A-Za-z]?(?:\s*-\s*\d+[A-Za-z]?|\s*/\s*\d+[A-Za-z]?)?[\s,]*)+)", str(elector["Address2"]))
+
+            Addno1 = re.search(
+                r"\b(?:(?:House|Flat|Apartment)\s*\d*\s*)?(\d+\s*[A-Za-z]?)(?:\s*[-/]\s*\d+[A-Za-z]?)?\b",
+                str(elector["Address1"]),
+                flags=re.IGNORECASE
+            )
+            Addno2 = re.search(
+                r"\b(?:(?:House|Flat|Apartment)\s*\d*\s*)?(\d+\s*[A-Za-z]?)(?:\s*[-/]\s*\d+[A-Za-z]?)?\b",
+                str(elector["Address2"]),
+                flags=re.IGNORECASE
+            )
             prefix = str(elector["Address1"]).lstrip()
             print ("xx:", xx, "addr:", addr, "Addno1:", Addno1, "Addno2:", Addno2, "prefix:", prefix, "P1:",str(elector['Address2']),"P2:" ,str(elector['Postcode'])  )
             if Addno1 is None:
@@ -538,7 +547,9 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                     Addno1 = str(Addno1.group())
                     Addno = str(Addno1)+"/"+str(Addno3)
                     print ("len11:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
-            electors2.loc[index,'StreetName'] = street.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(",","").replace(" ","_").upper()
+            # After you've set `street`, clean it BEFORE applying re.sub:
+            street = street.lstrip(" ,;-").strip()
+            electors2.loc[index,'StreetName'] = re.sub(r'[^A-Za-z0-9 ]+', '', street.replace(" & ", " AND")).replace(" ", "_").upper()
             electors2.loc[index,'AddressNumber'] = Addno
             print("__AddressPrefix", electors2.loc[index,'AddressPrefix'])
             if pd.isna(electors2.loc[index,'AddressPrefix']) or str(electors2.loc[index,'AddressPrefix']).strip() == "":

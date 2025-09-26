@@ -4,8 +4,8 @@
 {% block map %}
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
-<h1>Electoral registers, changes and postal voter files</h1>
-<h2>(Select fix level 3 to upload)</h2>
+<h3>Electoral registers, changes and postal voter files</h3>
+<h4 style="text-align: center">(Select fix level 3 to upload)</h4>
 <button id="add-row-btn">Add Row</button>
 <button id="save-btn">Save</button>
 
@@ -73,7 +73,7 @@
 </table>
 <!-- Import Table -->
 <div id="streams" class="section">
-    <h1 class="centred">DATA QUALITY DASHBOARD</h1>
+    <h3>1 class="centred">DATA QUALITY DASHBOARD</<h3>
     <table id="streamtab">
         <thead>
           <tr>
@@ -92,6 +92,9 @@
                   <td>{{ value['Files'] }}</td>
                   <td>{{ value['Elect'] }}</td>
                   <td>{{ value['RAG'] }}</td>
+                  <td>
+                    <button onclick="deactivateElection('{{ key }}')">Deactivate</button>
+                  </td>
               </tr>
           {% endfor %}
           </tbody>
@@ -150,6 +153,40 @@
     </table>
 </div>
 <script>
+
+  function deactivateElection(election) {
+    if (!confirm(`Are you sure you want to deactivate ${election}?`)) return;
+
+    fetch('/deactivate_stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ election: election })
+    })
+    .then(res => res.json())
+    .then(response => {
+      if (response.status === 'success') {
+        alert(`Election ${response.election} deactivated.`);
+        // Refresh the RAG table
+        return fetch('/streamrag_api')
+          .then(res => res.json())
+          .then(data => {
+            const html = data.html;
+            const streamTbody = document.querySelector('#streamtab tbody');
+            if (streamTbody) {
+              streamTbody.innerHTML = html;
+            }
+          });
+      } else {
+        alert(`Error: ${response.message}`);
+      }
+    })
+    .catch(err => {
+      console.error("Deactivation failed:", err);
+      alert("An error occurred while deactivating.");
+    });
+  }
 
 
 function collectTableData() {
@@ -380,7 +417,23 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
 
   populateElectionDropdowns();
 
+  document.querySelectorAll('.editable.election').forEach(select => {
+  select.addEventListener('change', function () {
+    const selectedOption = this.options[this.selectedIndex];
+    const territory = selectedOption.dataset.territory || this.dataset.territory || '';
+    this.setAttribute('data-territory', territory);
 
+    const inputRow = this.closest('tr') || this.closest('.row'); // adjust to your structure
+    const territoryInput = inputRow.querySelector('.territory');
+
+    if (territoryInput) {
+      const parts = territory.split('/');
+      const last = parts.pop();
+      territoryInput.value = last || '';
+      territoryInput.setAttribute('data-full-territory', territory); // optional
+    }
+  });
+});
 
   // 🔽 Auto-trigger file picker
   const fileInput = newRow.querySelector('.file-picker');
@@ -487,6 +540,7 @@ console.log("✅ Populated election dropdowns with data-territory values.");
     select.addEventListener('change', function () {
       const selectedOption = this.options[this.selectedIndex];
       const territory = selectedOption.dataset.territory || this.dataset.territory || '';
+      this.setAttribute('data-territory', territory);
 
       const inputRow = this.closest('tr') || this.closest('.row'); // adjust to your structure
       const territoryInput = inputRow.querySelector('.territory');

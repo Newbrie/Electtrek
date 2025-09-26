@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Election Summary Report</title>
+  <style>
+    /* Set the body margin to ensure content is properly centered within the page */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    /* The wrapper div with 2cm margins on all sides */
+    div {
+      margin-left: 2cm;
+      margin-right: 2cm;
+    }
+
+    /* Table styling */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      table-layout: fixed;
+      max-width: 206mm; /* Limit table width to A4 page width (minus 2cm margins) */
+      margin: 0 auto; /* Center table */
+    }
+
+    /* Table headers and cells */
+    th, td {
+      border: 1px solid #aaa;
+      padding: 8px;
+      text-align: center;
+      word-wrap: break-word;
+    }
+
+    /* Header background */
+    th {
+      background-color: #f0f0f0;
+    }
+
+    /* Heading for report */
+    h2 {
+      text-align: center;
+      font-size: 18px;
+      margin-bottom: 20px;
+    }
+
+    /* Add styles for iframe */
+    #mapwin2 {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    iframe {
+      width: 800px;
+      height: 500px;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <!-- Election map iframe -->
+    <div id="mapwin2" class="innertube">
+      <iframe id="iframe2" src="{{ url_for('thru', path=mapfile) }}" width="800" height="500" title="Election Map"></iframe>
+    </div>
+
+    <h2>Surrey Election Summary Report {{ reportdate }}</h2>
+
+    <!-- Election data table -->
+    <table id="canvass-table">
+      <thead>
+        <tr>
+          <th>Election</th>
+          <th>Territory</th>
+          <th>Election Date</th>
+          <th>Candidate</th>
+          <th>Campaign Manager</th>
+          <th>Manager Email</th>
+          <th>Mobile</th>
+          <th>Incumbent Party</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for election in report_data %}
+        <tr>
+          <td>{{ election.name }}</td>
+          <td>{{ election.territory }}</td>
+          <td>{{ election.electiondate }}</td>
+          <td>{{ election.candidate }}</td>
+          <td>{{ election.campaign_mgr }}</td>
+          <td>{{ election.campaignMgremail }}</td>
+          <td>{{ election.mobile }}</td>
+          <td>{{ election.incumbent_party }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

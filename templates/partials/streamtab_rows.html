@@ -5,5 +5,8 @@
       <td>{{ value['Loaded'] }}</td>
       <td>{{ value['Elect'] }}</td>
       <td>{{ value['RAG'] }}</td>
+      <td>
+        <button onclick="deactivateElection('{{ key }}')">Deactivate</button>
+      </td>
   </tr>
 {% endfor %}

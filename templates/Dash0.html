@@ -135,7 +135,16 @@
       Candidate: <select class="righted" name="candidate" id="candidate" ></select><br>
         </li>
       <li class="righted" >
-      Chair: <select class="righted" name="chair" id="chair" ></select><br>
+      Campaign Mgr: <select class="righted" name="campaignMgr" id="campaignMgr" ></select><br>
+      </li>
+      <li class="righted" >
+      Email: <input class="righted" name="campaignMgremail" id="campaignMgremail" readonly></input><br>
+      </li>
+      <li class="righted" >
+      Mobile: <select class="righted" name="mobile" id="mobile" ></select><br>
+      </li>
+      <li class="righted" >
+      Prev.Party: <select class="righted" name="previousParty" id="previousParty" disabled></select><br>
       </li>
       <li class="righted">
           Date of election:
@@ -156,7 +165,7 @@
               <button type = "button" id = "b1" class = "small_btn" onclick="setActionForm('filelist',filelist='maps')">Boundary<br>Maps</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b2" class = "small_btn" onclick="setActionForm('filelist',filelist='results')">Election<br>Results</button>
+              <button type = "button" id = "b2" class = "small_btn" onclick="window.open('/election-report', '_blank')">ELECTIONS<br>REPORT</button>
             </div>
             <div class="grid-item">
               <button type="button" id="b3" class="small_btn" >ELECTORAL<br>REGISTERS</button>
@@ -395,16 +404,19 @@ async function fetchAndUpdateChart() {
             el.appendChild(option);
           });
 
-        } else if (key === "candidate" || key === "chair") {
-          // Candidate/chair filtered by selected resources
+        } else if (key === "candidate" || key === "campaignMgr") {
+          // Candidate/compaignMgr filtered by selected resources
           const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
           selectedResources.forEach(code => {
             const person = options.resources?.[code];
             if (person) {
               const option = document.createElement("option");
+              const email = document.getElementById("campaignMgremail");
               option.value = code;
               option.textContent = `${person.Firstname} ${person.Surname}`;
-              if (value === code) option.selected = true;
+              if (value === code) { option.selected = true;
+                 email.value = `${person.campaignMgremail}`;
+               };
               el.appendChild(option);
             }
           });
@@ -432,7 +444,10 @@ async function fetchAndUpdateChart() {
             }
           };
 
-        } else {
+        } else if (key === "streams") {
+          // Do nothing as streams is populated elsewhere
+        }
+         else {
           // Generic SELECT fields C: Conservative , W:Westminster etc
           Object.entries(optsObj).forEach(([optValue, optLabel]) => {
             const o = document.createElement("option");
@@ -511,8 +526,7 @@ async function fetchAndUpdateChart() {
       updateConstantsUI(data.constants, data.options);
 
       // Extract mapfile from the list
-      const mapfiles = data.constants.mapfiles;
-      const mapfile = Array.isArray(mapfiles) ? mapfiles[mapfiles.length - 1] : null;
+      const mapfile = data.constants.territory;
 
       if (mapfile) {
         changeIframeSrc(`/thru/${mapfile}`);
@@ -521,6 +535,29 @@ async function fetchAndUpdateChart() {
 
       fetchTableData('nodelist_xref');
     });
+  }
+
+  function syncStreamsSelectWithTabs() {
+      const tabs = document.querySelectorAll('.election-tab');
+      const streamsSelect = document.getElementById('streams');
+
+      // Clear existing options
+      streamsSelect.innerHTML = '';
+
+      // Add each tab as an option
+      tabs.forEach(tab => {
+          const election = tab.dataset.election;
+          const option = document.createElement('option');
+          option.value = election;
+          option.textContent = `Election ${election}`;
+          streamsSelect.appendChild(option);
+      });
+
+      // Set the selected option to match the active tab
+      const activeTab = document.querySelector('.election-tab.active');
+      if (activeTab) {
+          streamsSelect.value = activeTab.dataset.election;
+      }
   }
 
 
@@ -538,6 +575,7 @@ async function fetchAndUpdateChart() {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
         fetchTableData('nodelist_xref');
+        syncStreamsSelectWithTabs();
         // ✅ All onclick bindings are preserved because they come from server-rendered HTML
       } else {
         alert("Could not delete election: " + (resp.error || "Unknown error"));
@@ -559,9 +597,11 @@ async function fetchAndUpdateChart() {
     .then(resp => {
       if (resp.success && resp.electiontabs_html) {
         document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
+        syncStreamsSelectWithTabs();
         updateConstantsUI(resp.constants, resp.options);
         fetchTableData('nodelist_xref');
         // ✅ Onclick handlers already embedded
+
       } else {
         alert("Error adding election: " + resp.error);
       }
@@ -594,7 +634,6 @@ fetch("/get-constants", { credentials: 'same-origin' })
     // your code here
 
 
-
   const tabContainer = document.getElementById("election-tabs");
 
   // 🔹 Load constants for the active election tab at startup
@@ -625,6 +664,9 @@ fetch("/get-constants", { credentials: 'same-origin' })
       });
   };
 
+
+
+syncStreamsSelectWithTabs();
 
   document.getElementById("update-territory-btn").addEventListener("click", () => {
     const activeTab = document.querySelector(".election-tab.active");
@@ -668,7 +710,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
       return;
     }
 
-    const dependentKeys = ["candidate", "chair"];
+    const dependentKeys = ["candidate", "campaignMgr"];
     const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
 
     dependentKeys.forEach(key => {
@@ -704,6 +746,21 @@ fetch("/get-constants", { credentials: 'same-origin' })
       }
     });
   };
+
+  document.addEventListener('click', function (e) {
+      if (e.target.classList.contains('election-tab')) {
+          // Remove active class from all tabs
+          document.querySelectorAll('.election-tab').forEach(tab => {
+              tab.classList.remove('active');
+          });
+
+          // Set clicked tab as active
+          e.target.classList.add('active');
+
+          // Sync select dropdown to match new active tab
+          syncStreamsSelectWithTabs();
+      }
+  });
 
 
     document.getElementById('resources').addEventListener('blur', () => {
