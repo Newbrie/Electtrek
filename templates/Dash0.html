@@ -3,6 +3,65 @@
 <div id="mapwin" class="innertube">
     <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" onload="fetchTableData('nodelist_xref')"> </iframe>
 </div>
+<style>
+  /* Container to align label and switch */
+  .toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* space between label and switch */
+    font-family: sans-serif;
+    margin: 10px 0;
+  }
+
+  .toggle-label {
+    font-size: 16px;
+    color: #333;
+  }
+
+  /* Switch styling */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0;
+    right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 28px;
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+  }
+
+  input:checked + .slider {
+    background-color: #4CAF50;
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(22px);
+  }
+</style>
 <script >
   // Listen to message from child window
   const pessages = [];
@@ -105,22 +164,31 @@
           <select class="righted"name="streams" id="streams" ></select><br>
       </li>
       <li class="righted">
-        Type of Election:<select class="righted"name="territories" id="territories"></select><br>
+        Type of Election: <select class="righted"name="territories" id="territories"></select><br>
       </li>
       <li class="righted">
-        Territory:<input class="righted" type="text" name="territory" id="territory" readonly><br>
+        Territory: <input class="righted" type="text" name="territory" id="territory" readonly><br>
       </li>
       <li class="righted">
       Party selected: <select class="righted" name="yourparty" id="yourparty"></select><br>
       </li>
       <li class="righted">
-      Walk Size:<input class="righted" type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
+      Walk Size: <input class="righted" type="number" min="100" max="500" step="50" name="walksize" id="walksize" /><br>
       </li>
       <li class="righted">
-      Team Size:<input class="righted" type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
+      Team Size: <input class="righted" type="number" min="1" max="25" step="1" name="teamsize" id="teamsize" /><br>
       </li>
       <li class="righted">
       GOTV: <input class="righted" type="number" id="GOTV" name="GOTV" min="0.01" max="0.99" step="0.01"  />
+      </li>
+      <li class="righted">
+        <div class="toggle-container">
+          <span class="toggle-label">Accumulate: </span>
+          <label class="switch">
+            <input type="checkbox" id="accumulate" name="accumulate" onchange="handleToggle(this)">
+            <span class="slider"></span>
+          </label>
+        </div>
       </li>
       <li class="righted">
       Bookmarks: <select class="righted" name="mapfiles" id="mapfiles" ></select><br>
@@ -235,6 +303,16 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+<script>
+  function handleToggle(el) {
+    if (el.checked) {
+      console.log("Switch is ON");
+    } else {
+      console.log("Switch is OFF");
+    }
+  }
+</script>
+
 <script>
 
   document.getElementById("tableSelector").addEventListener("change", function () {
@@ -517,11 +595,6 @@ async function fetchAndUpdateChart() {
     })
     .then(res => res.json())
     .then(data => {
-      if (!data.constants || !data.options) {
-        console.warn("Missing constants or options from response");
-        return;
-      }
-
       // Update constants UI
       updateConstantsUI(data.constants, data.options);
 
@@ -864,5 +937,6 @@ document.addEventListener('change', function(e) {
 
 
 </script>
+
 
 {% endblock captains %}

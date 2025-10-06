@@ -15,6 +15,16 @@ from datetime import datetime
 
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
+
+def normalname(name):
+    if isinstance(name, str):
+        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").strip().replace(" ","_").upper()
+    elif isinstance(name, pd.Series):
+        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.strip().str.replace(" ","_").str.upper()
+    else:
+        print("______ERROR: Can only normalise name in a string or series")
+    return name
+
 def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purpose):
     print ("____________inside normz_________", ImportFilename)
     templdir = config.workdirectories['templdir']
@@ -412,6 +422,34 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
             if col not in electors2.columns:
                 electors2[col] = np.nan  # or np.nan, or "" depending on your use case
 
+        def split_after_4alpha_and_comma(addr):
+            if not isinstance(addr, str):
+                return addr, None  # Leave unchanged if not a string
+
+            # Match pattern: 4 alphabetic characters followed by a comma
+            match = re.search(r'([A-Za-z]{4}),', addr)
+
+            if match:
+                split_index = match.end()  # Position *after* the comma
+                part1 = addr[:split_index - 1].strip()  # Up to the match (without comma)
+                part2 = addr[split_index:].strip()      # After the comma
+                return part1, part2
+
+            return addr, None  # No change if pattern not found
+
+        # Apply to your DataFrame
+        for index, row in electors2.iterrows():
+            addr = row['Address1']
+            new_addr1, new_addr2 = split_after_4alpha_and_comma(addr)
+            electors2.at[index, 'Address1'] = new_addr1
+            if new_addr2:
+                print("____Splitting first address line into two lines: ", row['Address1'])
+                electors2.at[index, 'Address6'] = electors2.at[index, 'Address5']
+                electors2.at[index, 'Address5'] = electors2.at[index, 'Address4']
+                electors2.at[index, 'Address4'] = electors2.at[index, 'Address3']
+                electors2.at[index, 'Address3'] = electors2.at[index, 'Address2']
+                electors2.at[index, 'Address2'] = new_addr2
+# having split the combined address1 into two if needed , start processing..
 
 
         #  set up the council attribute
@@ -422,7 +460,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         for index, elector in electors2.iterrows():
             progress['percent'] = round(100*(int(index)/len(electors2)),2)
             progress['status'] = 'running'
-            progress['message'] = 'norming addresses'
+            progress['message'] = 'norming addresses in '+ ImportFilename
 
         #            if DQstats.loc[Outcols.index('ENO'),'P2'] != 1 and DQstats.loc[Outcols.index('ENOT'),'P2'] == 1:
         #                enot = elector['ENOT'].split("-")
@@ -445,38 +483,63 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
         #        Addno2 = re.search("\d+\s*[a-fA-F]?[,;\s]+", str(elector["Address2"]))
 
             Addno1 = re.search(
-                r"\b(?:(?:House|Flat|Apartment)\s*\d*\s*)?(\d+\s*[A-Za-z]?)(?:\s*[-/]\s*\d+[A-Za-z]?)?\b",
+                r"""
+                \b
+                (                                   # --- Start capturing group
+                    (?:Flat|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
+                    |
+                    (?:Flat|Apartment|House)?\s*                                          # Optional prefix
+                    \d+[A-Za-z]{0,2}                                                      # Main number (e.g. 23B, 234BC)
+                    (?:\s*[-/]\s*\d+[A-Za-z]{0,2})?                                       # Optional range or slash
+                )
+                \b
+                """,
                 str(elector["Address1"]),
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE | re.VERBOSE
             )
+
+
             Addno2 = re.search(
-                r"\b(?:(?:House|Flat|Apartment)\s*\d*\s*)?(\d+\s*[A-Za-z]?)(?:\s*[-/]\s*\d+[A-Za-z]?)?\b",
+                r"""
+                \b
+                (                                   # --- Start capturing group
+                    (?:Flat|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
+                    |
+                    (?:Flat|Apartment|House)?\s*                                          # Optional prefix
+                    \d+[A-Za-z]{0,2}                                                      # Main number (e.g. 23B, 234BC)
+                    (?:\s*[-/]\s*\d+[A-Za-z]{0,2})?                                       # Optional range or slash
+                )
+                \b
+                """,
                 str(elector["Address2"]),
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE | re.VERBOSE
             )
-            prefix = str(elector["Address1"]).lstrip()
+            prefix = normalname(elector["Address1"])
             print ("xx:", xx, "addr:", addr, "Addno1:", Addno1, "Addno2:", Addno2, "prefix:", prefix, "P1:",str(elector['Address2']),"P2:" ,str(elector['Postcode'])  )
             if Addno1 is None:
+# so there is no number in Address 1 -  what about Address 2
               addr = str(elector.Address2)
               if Addno2 is None :
                 Addno = ""
-                street = str(elector.Address2).lstrip()
+                street = normalname(elector.Address2)
                 electors2.loc[index,'StreetName'] = street
                 electors2.loc[index,'Address_1'] = elector["Address3"]
                 electors2.loc[index,'Address_2'] = elector["Address4"]
                 electors2.loc[index,'Address_3'] = elector["Address5"]
                 electors2.loc[index,'Address_4'] = elector.get('Address6', None)
-                print ("len00:", 0, "ind10:", 0, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
+                prefix = normalname(elector["Address1"])
+                print ("Case00","len00:", 0, "ind10:", 0, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
               else:
                 Addnolen = len(Addno2.group())
                 Addno = str(Addno2.group())
                 Addnoindex = addr.index(Addno)
                 addr = str(elector.Address2).lstrip()
-                street = addr[Addnolen+Addnoindex:].rstrip().lstrip()
+                street = normalname(addr[Addnolen+Addnoindex:])
                 electors2.loc[index,'Address_1'] = elector["Address2"]
                 electors2.loc[index,'Address_2'] = elector["Address3"]
                 electors2.loc[index,'Address_3'] = elector["Address4"]
                 electors2.loc[index,'Address_4'] = elector["Address5"]
+                prefix = normalname(elector["Address1"])
                 print ("len01:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
                 if street == "" or street is None:
                   street = str(elector.Address3).lstrip()
@@ -484,27 +547,31 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                   electors2.loc[index,'Address_2'] = elector["Address4"]
                   electors2.loc[index,'Address_3'] = elector["Address5"]
                   electors2.loc[index,'Address_4'] = elector.get('Address6', None)
-                  print ("len010:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
+                  print ("Case010","len010:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             else:
+
+# so there is a number in Address 1 - but what about Address 2
               if Addno2 is None:
-                Addnolen = len(Addno1.group())
-                Addno = str(Addno1.group())
-                Addnoindex = addr.index(Addno)
-                street = addr[Addnolen+Addnoindex:].rstrip().lstrip()
+                match_text1 = Addno1.group()
+                start_index1 = Addno1.end()
+                original_string1 = str(elector["Address1"])
+
+                street = normalname(original_string1[start_index1:])
+
                 electors2.loc[index,'Address_1'] = elector["Address1"]
                 electors2.loc[index,'Address_2'] = elector["Address2"]
                 electors2.loc[index,'Address_3'] = elector["Address3"]
                 electors2.loc[index,'Address_4'] = elector["Address4"]
-                prefix = addr[:Addnoindex].rstrip().lstrip()
-                print ("len10:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
+                prefix = ""
+                print ("Case10","ind1:", start_index1, "No1:", match_text1, "ind2:", 0, "No2:", "", "Addr1:", original_string1, "Addr2:", "", "prefix:",prefix, "street:", street)
                 if street == "" or street is None:
-                  street = elector.Address2.lstrip()
+                  street = normalname(elector.Address2)
                   electors2.loc[index,'Address_1'] = elector["Address2"]
                   electors2.loc[index,'Address_2'] = elector["Address3"]
                   electors2.loc[index,'Address_3'] = elector["Address4"]
                   electors2.loc[index,'Address_4'] = elector["Address5"]
                   electors2.loc[index,'Address_5'] = elector.get('Address6', None)
-                  print ("len100:", Addnolen, "ind2:", Addnoindex, "str:", street, "addr:", elector['Address_1'],"addr2:", elector['Address_2'])
+                  print ("Case100","ind1:", start_index1, "No1:", match_text1, "ind2:", 0, "No2:", "", "Addr1:", original_string1, "Addr2:", "", "prefix:",prefix, "street:", street)
               else:
                 if re.sub(r"\s+", "", str(elector['Address2'])) == re.sub(r"\s+", "", str(elector['Postcode'])):
                     Addno2 = re.search("X","Y")
@@ -512,56 +579,56 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                     Addno = str(Addno1.group())
                     addr = str(elector["Address1"])
                     Addnoindex = addr.index(Addno)
-                    prefix = addr[Addnoindex+Addnolen:].rstrip().lstrip()
+                    prefix = normalname(addr[Addnoindex+Addnolen:])
                     electors2.loc[index,'Address_1'] = elector["Address1"]
                     electors2.loc[index,'Address_2'] = elector["Address2"]
                     electors2.loc[index,'Address_3'] = elector["Address3"]
                     electors2.loc[index,'Address_4'] = elector["Address4"]
-                    print ("len101:", Addnolen, "ind2:", Addnoindex, "str:", street, "addr:", elector['Address_1'])
+                    print ("Case110", Addnolen, "ind2:", Addnoindex, "str:", street, "addr:", elector['Address_1'])
                 else:
-                    Addnolen = len(Addno1.group())
-                    Addno = str(Addno1.group())
-                    addr = str(elector["Address1"])
-                    Addnoindex = addr.index(Addno)
-                    prefix = addr[Addnoindex+Addnolen:].rstrip().lstrip()
+                    match_text1 = Addno1.group()
+                    start_index1 = Addno1.end()
+                    original_string1 = str(elector["Address1"])
+                    prefix = normalname(original_string1[start_index1:])
 
-                    Addno3 = str(Addno2.group().rstrip())
-                    Addnolen = len(Addno2.group().rstrip())
-                    xx = str(elector["Address2"])
-                    addr = xx.replace('"', '')
-                    Addnoindex = addr.index(Addno3)
-                    street = addr[Addnolen+Addnoindex:].rstrip().lstrip()
+                    match_text2 = Addno2.group()
+                    start_index2 = Addno2.end()
+                    original_string2 = str(elector["Address2"])
+                    street = normalname(original_string2[start_index2:])
+
                     if street is None or street == "":
-                        street = str(elector["Address3"])
+                        street = normalname(elector["Address3"])
                         electors2.loc[index,'Address_1'] = elector["Address4"]
                         electors2.loc[index,'Address_2'] = elector["Address5"]
                         electors2.loc[index, 'Address_3'] = elector.get('Address6', None)
-                        print ("len110:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
+                        print ("Case1110","ind1:", start_index1, "No1:", match_text1, "ind2:", start_index2, "No2:", match_text2, "Addr1:", original_string1, "Addr2:", original_string2, "prefix:",prefix, "street:", street)
                     else:
                         electors2.loc[index,'Address_1'] = elector["Address3"]
                         electors2.loc[index,'Address_2'] = elector["Address4"]
                         electors2.loc[index,'Address_3'] = elector["Address5"]
                         electors2.loc[index,'Address_4'] = elector.get('Address6', None)
-                        print ("len111:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
-                    Addnolen1 = len(Addno1.group())
-                    Addno1 = str(Addno1.group())
-                    Addno = str(Addno1)+"/"+str(Addno3)
-                    print ("len11:", Addnolen, "ind10:", Addnoindex, "No:", Addno1, "No2:", Addno2, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
+                        print ("Case1111","ind1:", start_index1, "No1:", match_text1, "ind2:", start_index2, "No2:", match_text2, "Addr1:", original_string1, "Addr2:", original_string2, "prefix:",prefix, "street:", street)
+#                   Addnolen1 = len(Addno1.group())
+#                    Addno1 = str(Addno1.group())
+                    Addno = str(Addno1.group().rstrip())+"/"+str(Addno2.group().rstrip())
+                    print ("Case111","combaddno:", Addno,"ind1:", start_index1, "No1:", match_text1, "ind2:", start_index2, "No2:", match_text2, "Addr1:", original_string1, "Addr2:", original_string2, "prefix:",prefix, "street:", street)
             # After you've set `street`, clean it BEFORE applying re.sub:
-            street = street.lstrip(" ,;-").strip()
-            electors2.loc[index,'StreetName'] = re.sub(r'[^A-Za-z0-9 ]+', '', street.replace(" & ", " AND")).replace(" ", "_").upper()
+
+
+            prefix = normalname(prefix)
+            electors2.loc[index,'StreetName'] = street
             electors2.loc[index,'AddressNumber'] = Addno
             print("__AddressPrefix", electors2.loc[index,'AddressPrefix'])
-            if pd.isna(electors2.loc[index,'AddressPrefix']) or str(electors2.loc[index,'AddressPrefix']).strip() == "":
+            if pd.isna(electors2.loc[index,'AddressPrefix']) or str(electors2.loc[index,'AddressPrefix']).strip() == "" or str(electors2.loc[index,'AddressPrefix']).strip() == "nan":
                 electors2.loc[index,'AddressPrefix'] = prefix
             print("__200RunningVals2CALL values", RunningVals2)
-            if math.isnan(elector['Elevation'] or elector['Elevation'] is None):
+            if (isinstance(elector['Elevation'], float) and math.isnan(elector['Elevation']) or elector['Elevation'] is None):
                 electors2.loc[index,'Elevation'] = float(0.0)
             else:
                 electors2.loc[index,'Elevation'] = float(elector['Elevation'])
             try:
             #        Try/exception block for the API call
-                if math.isnan(elector.Lat):
+                if (isinstance(elector['Lat'], float) and math.isnan(elector['Lat'])):
                   if str(elector.Postcode) != "?":
                     url = "http://api.getthedata.com/postcode/"+str(elector.Postcode).replace(" ","+")
                   # It is a good practice not to hardcode the credentials. So ask the user to enter credentials at runtime

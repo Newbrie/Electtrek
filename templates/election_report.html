@@ -16,27 +16,23 @@
       margin-right: 2cm;
     }
 
-    /* Table styling */
-    table {
+    /* Table headers and cells */
+    .er-table {
       border-collapse: collapse;
       width: 100%;
-      table-layout: fixed;
-      max-width: 206mm; /* Limit table width to A4 page width (minus 2cm margins) */
-      margin: 0 auto; /* Center table */
+      max-width: 1200px; /* optional, for consistency */
+      margin: 5px auto;
+      table-layout: fixed;  /* 🔧 forces column widths to respect your percentages */
     }
-
-    /* Table headers and cells */
     th, td {
-      border: 1px solid #aaa;
-      padding: 8px;
-      text-align: center;
-      word-wrap: break-word;
-    }
-
-    /* Header background */
-    th {
-      background-color: #f0f0f0;
-    }
+    border: 1px solid #aaa;
+    padding: 2px;
+    text-align: center;
+    overflow: hidden;         /* 👈 prevents content from breaking the layout */
+    text-overflow: ellipsis;  /* 👈 adds ... if content too long */
+    white-space: nowrap;
+    word-wrap: break-word;      /* 👈 prevents wrapping; use 'normal' if you want wrap */
+  }
 
     /* Heading for report */
     h2 {
@@ -56,6 +52,38 @@
       width: 800px;
       height: 500px;
     }
+
+      /* Column width by percentage */
+
+  .er-table th:nth-child(1),
+  .er-table td:nth-child(1) {
+    width: 22%;
+  }
+
+  .er-table th:nth-child(2),
+  .er-table td:nth-child(2) {
+    width: 8%;
+  }
+
+  .er-table th:nth-child(3),
+  .er-table td:nth-child(3) {
+    width: 14%;
+  }
+
+  .er-table th:nth-child(4),
+  .er-table td:nth-child(4) {
+    width: 14%;
+  }
+
+  .er-table th:nth-child(5),
+  .er-table td:nth-child(5) {
+    width: 12%;
+  }
+
+  .er-table th:nth-child(6),
+  .er-table td:nth-child(6) {
+    width: 20%;
+  }
   </style>
 </head>
 <body>
@@ -68,29 +96,27 @@
     <h2>Surrey Election Summary Report {{ reportdate }}</h2>
 
     <!-- Election data table -->
-    <table id="canvass-table">
+    <table id="canvass-table" = class="er-table">
       <thead>
         <tr>
-          <th>Election</th>
           <th>Territory</th>
           <th>Election Date</th>
           <th>Candidate</th>
-          <th>Campaign Manager</th>
-          <th>Manager Email</th>
+          <th>Campaign Mgr</th>
           <th>Mobile</th>
+          <th>Manager Email</th>
           <th>Incumbent Party</th>
         </tr>
       </thead>
       <tbody>
         {% for election in report_data %}
         <tr>
-          <td>{{ election.name }}</td>
           <td>{{ election.territory }}</td>
           <td>{{ election.electiondate }}</td>
           <td>{{ election.candidate }}</td>
           <td>{{ election.campaign_mgr }}</td>
-          <td>{{ election.campaignMgremail }}</td>
           <td>{{ election.mobile }}</td>
+          <td>{{ election.campaignMgremail }}</td>
           <td>{{ election.incumbent_party }}</td>
         </tr>
         {% endfor %}

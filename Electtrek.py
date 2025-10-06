@@ -52,6 +52,7 @@ import json
 from geovoronoi import voronoi_regions_from_coords
 from folium import GeoJson, Tooltip, Popup
 import locale
+from shapely.ops import nearest_points
 
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
@@ -320,7 +321,7 @@ def get_election_names():
         match = pattern.match(filename)
         if match:
             name = match.group(1)
-            election_files[name] = None  # or any other value you want
+            election_files[name] = str(filename)
 
     return election_files
 
@@ -387,7 +388,8 @@ def get_current_node(session=None, session_data=None):
     global TREK_NODES
     try:
         if not session or 'current_node_id' not in session:
-            print(f"___System error: No session or current_node: ")
+            node = None
+        elif not session_data or 'current_node_id' not in session_data:
             node = None
     except Exception as e:
         node = None
@@ -699,6 +701,18 @@ class TreeNode:
             ]:
                 path = path.replace(suffix, "@@@")
             return path
+
+        def strip_leaf_from_path(path):
+            leaf = path.split("/").pop()
+            for suffix in [
+                "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html",
+                "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
+            ]:
+                leaf = leaf.replace(suffix, "")
+            leaf = leaf.split("--").pop()
+            return leaf
+
+
         def split_clean_path(path):
             path = strip_filename_from_path(path)
             return [part for part in path.strip("/").split("/") if part not in ["DIVS", "PDS", "WALKS", "WARDS", ""] and "@@@" not in part]
@@ -803,6 +817,16 @@ class TreeNode:
                 print("   ℹ️ No further branching at this level.")
         except Exception as e:
             print(f"   ⚠️ Failed to create child branches: {e}")
+
+
+        print(f"   ✅ Descended to: {node.value} (level {node.level})")
+        if final_ntype == 'street' or final_ntype == 'walkleg':
+            leaf = strip_leaf_from_path(raw_path_for_types)
+            leafmatches = [child for child in node.children if child.value == leaf]
+            if not leafmatches:
+                print(f"   ❌ No match for leaf '{leaf}' under node '{node.value}'. Returning original node: {node.value}")
+                return node
+            node = leafmatches[0]
 
         with open(TREKNODE_FILE, 'wb') as f:
             pickle.dump(TREK_NODES, f)
@@ -943,17 +967,16 @@ class TreeNode:
     #        if len(selects._children) == 0:
             # parent children = siblings, eg constituencies, counties, nations
             print(f"_____layerstest20 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
-            selects = Featurelayers[self.type].create_layer(current_election,self.parent,self.type)
-            selected.append(selects)
+            Featurelayers[self.type].create_layer(current_election,self.parent,self.type)
+            selected.append(Featurelayers[self.type])
             print(f"_____layerstest2 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
         if self.level > 1:
 #add parents layer, eg counties, nations, country
 #            if len(selectp._children) == 0:
             print(f"_____layerstest30 {self.parent.parent.value} type:{self.parent.type} layers: {list(reversed(selected))}")
-            selectp = Featurelayers[self.parent.type].create_layer(current_election,self.parent.parent,self.parent.type)
-            selected.append(selectp)
+            Featurelayers[self.parent.type].create_layer(current_election,self.parent.parent,self.parent.type)
+            selected.append(Featurelayers[self.parent.type])
             print(f"_____layerstest3 {self.parent.parent.value} type:{self.parent.type} layers: {list(reversed(selected))}")
-
 
         print(f"_____layerstest40 {self.findnodeat_Level(2).value} markers layers: {list(reversed(selected))}")
         markerlayer = Featurelayers['marker']
@@ -1188,7 +1211,7 @@ class TreeNode:
         [self.bbox, self.centroid] = self.get_bounding_box(block)
 
         if 'Zone' not in namepoints.columns:
-            print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.")
+            print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
             namepoints['Zone'] = 'ZONE_0'  # or whatever default you want
 
 
@@ -1254,7 +1277,10 @@ class TreeNode:
 
 # this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
 
-        mask = allelectors['Election'] == c_election
+        mask = (
+            (allelectors['Election'] == c_election) &
+            (allelectors['Area'] == self.value)
+            )
         areaelectors = allelectors[mask]
 
         if len(areaelectors) > 0:
@@ -1294,9 +1320,9 @@ class TreeNode:
                     mask = areaelectors['PD'] == self.value
                     PDelectors = areaelectors[mask]
         #            StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-                    streetdf0 = pd.DataFrame(PDelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat'])
+                    streetdf0 = pd.DataFrame(PDelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat', 'Zone'])
                     streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
-                    g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count'}
+                    g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count','Zone': 'first'}
                     streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Street df: ",streetdf)
                     nodelist = self.create_name_nodes(c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
@@ -1304,9 +1330,9 @@ class TreeNode:
                     mask = areaelectors['WalkName'] == self.value
                     walkelectors = areaelectors[mask]
     #                WalklegPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-                    walklegdf0 = pd.DataFrame(walkelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat'])
+                    walklegdf0 = pd.DataFrame(walkelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat', 'Zone'])
                     walklegdf1 = walklegdf0.rename(columns= {'StreetName': 'Name'})
-                    g = {'Election':'first','Lat':'mean','Long':'mean','ENOP':'count'}
+                    g = {'Election':'first','Lat':'mean','Long':'mean','ENOP':'count','Zone': 'first'}
                     walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Walkleg df: ",walklegdf)
                     print("____Walkleg elector df: ",walklegdf1)
@@ -1315,9 +1341,10 @@ class TreeNode:
                 print("❌ Error during data branch generation:", e)
                 return []
         else:
-            print("_____ Electoral file contains no relevant data for this area - Please load correct file",len(allelectors), len(areaelectors))
+            print(f"_____ Electoral file contains no  data for election {c_election} and {self.value} for {electtype} types - Please load correct file",len(allelectors), len(areaelectors))
+
             nodelist = []
-        print(f"____Created Data Branch for Election: {c_election} in area: {self.value} creating: {len(nodelist)} of child type {electtype} from: {len(areaelectors)} electors")
+        print(f"____Created Data Branch for Election: {c_election} in area: {self.value} creating: {len(nodelist)} of child type {electtype} from: {len(allelectors)} - {len(areaelectors)} electors")
 
         return nodelist
 
@@ -1403,99 +1430,240 @@ class TreeNode:
 
     def create_area_map(self, flayers):
         from folium import IFrame
-        from branca.element import Element, MacroElement
+        from branca.element import Element
 
-        LEVEL_ZOOM_MAP = {
-            'country': 12,
-            'nation': 13,
-            'county': 14,
-            'constituency': 15,
-            'ward': 16,
-            'division': 16,
-            'polling_district': 17,
-            'walk': 17,
-            'walkleg': 18,
-            'street': 18
-        }
-        # Construct map title
+        print("___BEFORE map creation")
 
-
+        # --- CSS to adjust popup styling
         move_close_button_css = """
-        <style>
-        /* Move close button to top-left */
-        .leaflet-popup-close-button {
-            right: auto !important;
-            left: 10px !important;
-            top: 10px !important;
-        }
+            <style>
+            .leaflet-popup-close-button {
+                right: auto !important;
+                left: 10px !important;
+                top: 10px !important;
+                font-size: 16px;
+                color: #444;
+                background: rgba(255, 255, 255, 0.8);
+                border-radius: 4px;
+                padding: 2px 5px;
+            }
+            </style>
+            """
 
-        /* Optional: style it differently */
-        .leaflet-popup-close-button {
-            font-size: 16px;
-            color: #444;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 4px;
-            padding: 2px 5px;
-        }
-        </style>
-        """
+        # --- Search bar with map detection and one single searchMap() function
+        search_bar_html = """
+            <style>
+            #customSearchBox {
+                position: fixed;
+                top: 60px;
+                left: 100px;
+                z-index: 1100;
+                background: white;
+                padding: 5px;
+                border: 1px solid #ccc;
+                font-size: 14px;
+            }
+            </style>
 
-        # Step 3: Inject JavaScript to stop scroll propagation
-        script = """
-        <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const popupElements = document.querySelectorAll('.leaflet-popup-content');
-            popupElements.forEach(function (popup) {
-                popup.addEventListener('wheel', function (e) {
-                    e.stopPropagation();
+            <div id="customSearchBox">
+                <input type="text" id="searchInput" placeholder="Search..." />
+                <button onclick="searchMap()">Search</button>
+            </div>
+
+            <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                // Try to detect map variable dynamically
+                for (const key in window) {
+                    if (window.hasOwnProperty(key)) {
+                        const val = window[key];
+                        if (val && val instanceof L.Map) {
+                            window.map = val;
+                            break;
+                        }
+                    }
+                }
+
+                // Allow Enter key to trigger search
+                const input = document.getElementById("searchInput");
+                input.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") {
+                        searchMap();
+                    }
                 });
             });
-        });
-        </script>
-        """
-        # Wrap scrollfix as a Folium Element and add to map
-        js_element = Element(script)
+
+            function extractVisibleText(element) {
+                const walker = document.createTreeWalker(
+                    element,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function (node) {
+                            const parent = node.parentNode;
+                            const style = window.getComputedStyle(parent);
+                            if (
+                                style &&
+                                style.visibility !== 'hidden' &&
+                                style.display !== 'none'
+                            ) {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                    }
+                );
+
+                let visibleText = '';
+                while (walker.nextNode()) {
+                    visibleText += walker.currentNode.nodeValue + ' ';
+                }
+                return visibleText.trim();
+            }
+
+            function searchMap() {
+                const query = document.getElementById("searchInput").value.toLowerCase().trim();
+                if (!query) return;
+
+                let found = false;
+
+                map.eachLayer(function (layer) {
+                    if (found) return;
+
+                    // ✅ Search Popups with <b data-name="...">
+                    if (layer.getPopup && layer.getPopup()) {
+                        let bElements = [];
+
+                        const content = layer.getPopup().getContent();
+
+                        if (content instanceof HTMLElement) {
+                            bElements = content.querySelectorAll('b[data-name]');
+                        } else if (typeof content === 'string') {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(content, 'text/html');
+                            bElements = doc.querySelectorAll('b[data-name]');
+                        }
+
+                        console.log("Found b[data-name] elements:", bElements.length);
+
+                        for (let b of bElements) {
+                            const dataName = b.getAttribute('data-name');
+                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
+                            if (normalizedDataName.includes(query)) {
+                                console.log('✅ Match found:', dataName);
+
+                                let latlng = null;
+                                if (typeof layer.getLatLng === 'function') {
+                                    latlng = layer.getLatLng();
+                                } else if (typeof layer.getBounds === 'function') {
+                                    latlng = layer.getBounds().getCenter();
+                                }
+
+                                if (latlng) {
+                                    map.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') {
+                                        layer.openPopup();
+                                    }
+                                    found = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    // ✅ Search Tooltips
+                    if (!found && layer.getTooltip && layer.getTooltip()) {
+                        const tooltipContent = layer.getTooltip().getContent();
+                        if (tooltipContent && tooltipContent.toLowerCase().includes(query)) {
+                            let latlng = null;
+                            if (typeof layer.getLatLng === 'function') {
+                                latlng = layer.getLatLng();
+                            } else if (typeof layer.getBounds === 'function') {
+                                latlng = layer.getBounds().getCenter();
+                            }
+
+                            if (latlng) {
+                                map.setView(latlng, 17);
+                                found = true;
+                                return;
+                            }
+                        }
+                    }
+
+                    // ✅ Search DivIcons (custom markers)
+                    if (!found && layer instanceof L.Marker) {
+                        if (layer.options.icon instanceof L.DivIcon) {
+                            const iconContent = layer.options.icon.options.html;
+                            if (iconContent.toLowerCase().includes(query)) {
+                                let latlng = null;
+                                if (typeof layer.getLatLng === 'function') {
+                                    latlng = layer.getLatLng();
+                                }
+
+                                if (latlng) {
+                                    map.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') {
+                                        layer.openPopup();
+                                    }
+
+                                    // Optional: highlight the DivIcon marker visually
+                                    if (layer._icon) {
+                                        layer._icon.style.border = "2px solid red";
+                                    }
+
+                                    found = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                if (!found) {
+                    alert("No matching location found.");
+                }
+            }
 
 
+
+
+            </script>
+            """
+
+
+        # --- Title for the map
         title = f"{self.value} MAP"
+        title_html = f'''
+        <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
+        '''
 
-        title_html = f'''<h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>'''
-        print("_____before adding title at:", self.value, self.level)
-
-        # Create map centered on centroid with appropriate zoom
-        map_center = self.centroid  # [lat, lon]
-        zoom = LEVEL_ZOOM_MAP[self.type]  # Fallback to 13 if level not found
-
-        Map = folium.Map(
-            location=map_center,
-            trackResize=False,
-            tiles="OpenStreetMap",
-            crs="EPSG3857",
-            zoom_start=zoom,
+        # --- Create the map
+        FolMap = folium.Map(
+            location=self.centroid,
+            zoom_start=LEVEL_ZOOM_MAP[self.type],
             width='100%',
-            height='800px'
+            height='800px',
+            crs='EPSG3857'
         )
 
-        # Add the map title
-        Map.get_root().html.add_child(folium.Element(title_html))
-        Map.get_root().html.add_child(folium.Element(move_close_button_css))
-        Map.get_root().html.add_child(js_element)
+        # --- Inject custom HTML and JS into map
+        FolMap.get_root().html.add_child(folium.Element(title_html))
+        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
+        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
 
         # Add all layers
         for layer in flayers:
-            Map.add_child(layer)
+            FolMap.add_child(layer)
 
         # Ensure there's only one LayerControl
-        if not any(isinstance(child, folium.map.LayerControl) for child in Map._children.values()):
-            Map.add_child(folium.LayerControl())
+        if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
+            FolMap.add_child(folium.LayerControl())
 
         # Add custom CSS/JS
-        Map.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
-        Map.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
-        Map.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
+        FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
+        FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
+        FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
 
         # Fit map to bounding box
-        print("_____before saving map file:", self.locmappath(""), len(Map._children), self.value, self.level)
+        print("_____before saving map file:", self.locmappath(""), len(FolMap._children), self.value, self.level)
         if self.level == 4:
             print("_____bboxcheck", self.value, self.bbox)
         if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
@@ -1512,11 +1680,11 @@ class TreeNode:
 
                 if sw == ne:
                     print("⚠️ BBox corners are identical; using centroid instead")
-                    Map.location = self.centroid
-                    Map.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
+                    FolMap.location = self.centroid
+                    FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
                 else:
                     print("✅ BBox is valid, applying fit_bounds")
-                    Map.fit_bounds([sw, ne], padding=(0, 0))
+                    FolMap.fit_bounds([sw, ne], padding=(0, 0))
 
             except (TypeError, ValueError) as e:
                 print(f"⚠️ Invalid bbox values: {self.bbox} | Error: {e}")
@@ -1527,11 +1695,11 @@ class TreeNode:
         dir = self.dir
         # Save to file
         target = self.locmappath("")
-        Map.save(target)
+        FolMap.save(target)
         print("Centroid raw:", self.centroid)
-        print("_____saved map file:", target, len(flayers), self.value, self.dir, self.file)
+        print(" ✅ _____saved map file:", target, len(flayers), self.value, self.dir, self.file)
 
-        return Map
+        return FolMap
 
 
     def set_bounding_box(self,block):
@@ -1837,81 +2005,56 @@ class TreeNode:
         print("_________leafnodes  ",count)
         return
 
+
 def build_street_list_html(streets_df):
-    html = '''
-    <div style="
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 10px;
-        background-color: white !important;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-        max-width: 600px;
-        overflow-x: auto;
-        font-family: sans-serif;
-        font-size: 8pt;
-        white-space: nowrap;
-    ">
-        <table style="border-collapse: collapse; width: 100%;">
-            <thead>
-                <tr>
-                    <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd; font-size: 8pt;">Street Name</th>
-                    <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;font-size: 8pt;">Houses</th>
-                    <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;font-size: 8pt;">Number</th>
-                    <th style="text-align:left; padding: 4px; border-bottom: 1px solid #ddd;font-size: 8pt;">Prefix</th>
-                </tr>
-            </thead>
-            <tbody>
-    '''
+    global environment
+    """
+    Renders the street list HTML using Jinja2 templates.
 
+    :param streets_df: A pandas DataFrame with columns like 'Name', 'AddressNumber', 'AddressPrefix'
+    :param env: Jinja2 Environment instance
+    :return: Rendered HTML string
+    """
+
+    VID = {
+        "R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green",
+        "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"
+    }
+
+    # Extract "unit" from AddressPrefix or AddressNumber
+    def extract_unit(row):
+        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
+        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
+
+        # Avoid appending 'nan' or empty values
+        if prefix.lower() != 'nan' and prefix:
+            return prefix
+        elif number.lower() != 'nan' and number:
+            match = re.search(r'\d+', number)
+            return match.group() if match else None
+        return None
+
+
+    streets_df['unit'] = streets_df.apply(extract_unit, axis=1)
+    unit_counts = streets_df.copy()
+    unit_counts['unit'] = unit_counts['unit'].astype(str).str.strip()
+    unit_counts = unit_counts.groupby(['Name', 'unit']).size().to_dict()
+
+    # Format data for the template
+    rows = []
     for _, row in streets_df.iterrows():
-        nums = sorted(set(
-            n.strip() for n in row['AddressNumber'].split(',')
-            if n.strip() and n.strip().lower() != 'nan'
-        )) if pd.notna(row['AddressNumber']) else []
+        name = row['Name']
+        unit = row['unit'] or "—"
+        total = unit_counts.get((name, unit), 1)
+        rows.append({
+            "name": name,
+            "unit": unit,
+            "total": total
+        })
 
-        pres = sorted(set(
-            p.strip() for p in row['AddressPrefix'].split(',')
-            if p.strip() and p.strip().lower() != 'nan'
-        )) if pd.notna(row['AddressPrefix']) else []
-
-        hos = len(nums) + len(pres)
-
-        # 🔢 Convert number strings to actual numbers (when possible)
-        num_values = []
-        for n in nums:
-            try:
-                num_val = int(''.join(filter(str.isdigit, n)))
-                num_values.append(num_val)
-            except:
-                pass  # skip non-numeric
-
-        # 🧾 Format the min-max display or fallback to "-"
-        if num_values:
-            min_val = min(num_values)
-            max_val = max(num_values)
-            num_display = f"({min_val} - {max_val})"
-        else:
-            num_display = "( - )"
-
-        # Prefix dropdown remains the same
-        pre_select = f"<select>{''.join(f'<option>{p}</option>' for p in pres)}</select>"
-
-        html += f'''
-            <tr>
-                <td style="padding: 4px;font-size: 8pt;"><b>{row['Name']}</b></td>
-                <td style="padding: 4px;font-size: 8pt;"><i>{hos}</i></td>
-                <td style="padding: 4px;font-size: 8pt;">{num_display}</td>
-                <td style="padding: 4px;font-size: 8pt;">{pre_select}</td>
-            </tr>
-        '''
-
-    html += '''
-            </tbody>
-        </table>
-    </div>
-    '''
-    return html
-
+    # Get the Jinja2 template
+    template = environment.get_template("street_list.html")
+    return template.render(rows=rows, vid=VID)
 
 
 
@@ -1929,32 +2072,31 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def generate_voronoi_with_geovoronoi(self, c_election, target_node, vtype, add_to_map=True, color="#3388ff"):
+    def generate_voronoi_with_geovoronoi(self, c_election, target_node, vtype, static=False, add_to_map=True, color="#3388ff"):
         global allelectors
+        global levelcolours
+    # generate voronoi fields within the target_node Boundary
         shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
 
         print("📍 Starting generate_voronoi_with_geovoronoi")
-        current_node = get_current_node(session)
-        print(f"🔄 Retrieved current_node: {current_node}")
 
         CurrentElection = get_election_data(c_election)
         print(f"🗳️ Loaded election data for: {c_election}")
 
-        territory_path = CurrentElection['territory']
-        print(f"📁 Territory path: {territory_path}")
+        target_path = target_node.mapfile()
+        print(f"📁 Target path: {target_path}")
 
-        Territory_node = current_node.ping_node(c_election, territory_path)
-        print(f"📌 Territory node: {Territory_node}")
+        print(f"📌 Target node: {target_node.value}")
 
-        ttype = gettypeoflevel(territory_path, Territory_node.level)
+        ttype = target_node.type
         print(f"📂 Territory type: {ttype}")
 
         pfile = Treepolys[ttype]
         print(f"🗺️ Loaded polygon file for type '{ttype}', records: {len(pfile)}")
 
         # Select boundary by FID
-        Territory_boundary = pfile[pfile['FID'] == Territory_node.fid]
-        print(f"🧭 Filtered territory boundary by FID = {Territory_node.fid}, matches: {len(Territory_boundary)}")
+        Territory_boundary = pfile[pfile['FID'] == target_node.fid]
+        print(f"🧭 Filtered territory boundary by FID = {target_node.fid}, matches: {len(Territory_boundary)}")
 
         # Get the shapely polygon for area
         if hasattr(Territory_boundary, 'geometry'):
@@ -1966,9 +2108,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         children = target_node.childrenoftype(vtype)
         print(f"👶 Found {len(children)} children of type '{vtype}'")
+    # children nodes are the target child Walks/PDs polygons which should fit into area_shape
 
         if not children:
-            print("⚠️ No children found — exiting early")
+            print("⚠️ No children found so no fields for the node— exiting early")
+            # no children means no fields
             return []
 
         # Build coords array from centroids
@@ -1979,12 +2123,13 @@ class ExtendedFeatureGroup(FeatureGroup):
                 (allelectors['Area'] == target_node.value)
             )
         nodeelectors = allelectors[mask]
-
+# these are the electors within the area - the area being the Level 4 area(div/ward)
 
         coords = []
         valid_children = []
 
         for child in children:
+# these are the centroids that will form the centre of each voronoi field
             cent = child.centroid
             if isinstance(cent, (tuple, list)) and len(cent) == 2:
                 lon, lat = cent[1], cent[0]  # Note: [lon, lat] = [x, y]
@@ -1995,28 +2140,37 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             point = Point(lon, lat)
 
-            # Ensure it's within the polygon
+# Ensure the child centroid is within the overall boundary else centroid of first street within
             if not area_shape.contains(point):
-                child = child.ping_node(c_election,child.dir)
-                cent = child.child.centroid
-                point = Point(cent[1],cent[0])
-#                point, _ = nearest_points(area_shape, point)
+#                childx = target_node.ping_node(c_election,child.dir)
+#                print(f"Point {point} is not in shape so looking at children:",[x.value for x in child.children])
+
+
+                p1, _ = nearest_points(area_shape, point)
+                point = p1  # now point is on area_shape
+                print(f"Point {point} is not in shape {area_shape} so looking at nearest point")
+
+#                for grandchild in child.children:
+#                    cent = grandchild.centroid
+#                    point = Point(cent[1],cent[0])
+#                    if area_shape.contains(point):
+#                        print("___Selecting right child within shape as field centroid", grandchild.dir, point)
+#                       found a child inside the area
+#                        break
+    #                point, _ = nearest_points(area_shape, point)
 
             coords.append([point.x, point.y])  # Ensure only 2D coords
             valid_children.append((child, point))
 
-
-
-
         # Clip Voronoi regions to area_shape
-        try:
-            print("🧮 Generating Voronoi regions using geovoronoi...")
-            # Pass coords as a list of Point objects
-            coords = np.array(coords)
-            # Ensure 2D shape
-            if coords.shape[1] != 2:
-                raise ValueError(f"Expected 2D coordinates, got shape: {coords.shape}")
 
+        print("🧮 Generating Voronoi regions using geovoronoi...")
+        # Pass coords as a list of Point objects
+        coords = np.array(coords)
+        # Ensure 2D shape
+        if coords.shape[1] != 2:
+            raise ValueError(f"Expected 2D coordinates, got shape: {coords.shape}")
+        try:
             region_polys, region_pts = voronoi_regions_from_coords(coords, area_shape)
             print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
         except Exception as e:
@@ -2039,6 +2193,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     break
 
             if matched_child:
+            #  one walk child matched to region_polygon
                 matched_child.voronoi_region = region_polygon
                 print(f"✅ Region {region_index} assigned to child: {matched_child.value}")
                 voronoi_regions.append({'child': matched_child, 'region': region_polygon})
@@ -2046,8 +2201,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"⚠️ No matching child found for region index {region_index}")
 
 
-            if add_to_map:
-                label = str(child.value)
+            if matched_child and add_to_map:
+                label = str(matched_child.value)
 
                 # Here, we dynamically assign a color, either from the child or default to color
                 fill_color = getattr(child, "col", color)  # If no color assigned, default to passed color
@@ -2058,7 +2213,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 mask1 = nodeelectors[shapecolumn[vtype]] == child.value
                 region_electors = nodeelectors[mask1]
-
+#________________________First get the data that the walk layer polygon fields requires
                 if not region_electors.empty and len(region_electors.dropna(how="all")) > 0:
                     Streetsdf0 = pd.DataFrame(region_electors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
                     Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
@@ -2067,62 +2222,212 @@ class ExtendedFeatureGroup(FeatureGroup):
                     streetstag = build_street_list_html(Streetsdf)
                     print ("______Voronoi Streetsdf:",len(Streetsdf), streetstag)
                     print (f" {len(Streetsdf)} streets exist in {target_node.value} under {c_election} election for the {shapecolumn[vtype]} column with this value {child.value}")
-                else:
-                    streetstag = ""
-                    flash("no data exists for this election at this location")
-                    print (f" no streets exist at {target_node.value} under this {c_election} election for this {shapecolumn[vtype]} column with this value {child.value}")
+
+                    points = [Point(lon, lat) for lon, lat in zip(Streetsdf['Long'], Streetsdf['Lat'])]
+                    print('_______Walk Shape', matched_child.value, matched_child.level, len(Streetsdf), points)
+
+                    # Create a single MultiPoint geometry that contains all the points
+                    multi_point = MultiPoint(points)
+                    centroid = multi_point.centroid
+
+                    # Access coordinates
+                    centroid_lon = centroid.x
+                    centroid_lat = centroid.y
+    #                target_node.centroid = (centroid_lat,centroid_lon)
+
+                    # Create a new DataFrame for a single row GeoDataFrame
+                    gdf = gpd.GeoDataFrame({
+                        'NAME': [matched_child.value],  # You can modify this name to fit your case
+                        'FID': [matched_child.fid],  # FID can be a unique value for the row
+                        'LAT': [multi_point.centroid.y],  # You can modify this name to fit your case
+                        'LONG': [multi_point.centroid.x],  # FID can be a unique value for the row
+                        'geometry': [multi_point]  # The geometry field contains the MultiPoint geometry
+                    }, crs="EPSG:4326")
 
 
+                    #            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
+                    #        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
+                    # Generate enclosing shape
+                    limbX = matched_child.create_enclosing_gdf(gdf)
+                    limbX['col'] = matched_child.col
+                    numtag = str(matched_child.tagno)+" "+str(matched_child.value)
+                    num = str(matched_child.tagno)
+                    tag = str(matched_child.value)
+                    typetag = "streets in "+str(matched_child.type)+" "+str(matched_child.value)
+            #        here = [float(f"{target_node.centroid[0]:.6f}"), float(f"{target_node.centroid[1]:.6f}")]
 
-                gj = GeoJson(
-                    data=region_polygon.__geo_interface__,
-                    style_function=lambda feature, col=fill_color: {
-                        'fillColor': col,
-                        'color': 'black',
-                        'weight': 1,
-                        'fillOpacity': 0.4,
-                    },
-                    name=f"Voronoi {label}",
-                    tooltip=Tooltip(label),
-                    popup=Popup(streetstag),
-                )
-                gj.add_to(self)
-                print(f"🖼️ Added GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
+                    popup_html = ""
 
+                    if vtype == 'polling_district':
+                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file +" street", matched_child.value,'street')
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file, matched_child.parent.value,matched_child.parent.type)
+                    #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(target_node.dir+"/"+target_node.file, target_node.value,getchildtype('polling_district'))
+                        downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
+                    #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
+                    #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), target_node.dir+"/"+target_node.file)
+                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+                        limbX['UPDOWN'] = uptag1 +"<br>"+ downST
+                        print("_________new PD convex hull and tagno:  ",matched_child.value, matched_child.tagno, gdf)
 
+                        streetstag = ""
+                    elif vtype == 'walk':
+                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file+" walkleg", matched_child.value,'walkleg')
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file, matched_child.parent.value,matched_child.parent.type)
+                        downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
+                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+                        streetstag = build_street_list_html(Streetsdf)
+                        limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+downtag+"</div>"
+                        print("_________new Walk convex hull and tagno:  ",matched_child.value, matched_child.tagno)
 
-                centroid = region_polygon.centroid
-                cent = [centroid.y, centroid.x]  # folium expects (lat, lon)
+    #________________________Now paint items onto the walk layer
+                    if not static:
+                        limbX = limbX.to_crs("EPSG:4326")
+                        limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
 
-                tag = child.value
-                mapfile = child.mapfile()
-                tcol = get_text_color(to_hex(fill_color))
-                bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
-                fcol = invert_black_white(tcol)
-                self.add_child(folium.Marker(
-                     location=[cent[0], cent[1]],
-                     icon = folium.DivIcon(
-                            html=f'''
-                            <a href='{mapfile}'><div style="
-                                color: {tcol};
-                                font-size: 10pt;
-                                font-weight: bold;
-                                text-align: center;
-                                padding: 2px;
-                                white-space: nowrap;">
-                                <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                border: 2px solid black;">{tag} </span>
-                                </div></a>
-                                ''',
-                           )
-                           )
-                           )
-                print(f"🖼️ Added walk area marker: {tag} with color: {tcol}")
+                        feature = limb['features'][0]
+                        props = feature['properties']
+                        popup_html = f"""
+                        <div style='white-space: normal; text-align: center' >
+                            <strong> {typetag}:<br></strong> {props.get('UPDOWN', 'N/A')}<br> {streetstag}<br>
+                        </div>
+                        """
 
-            voronoi_regions.append({
-                'child': child,
-                'region': region_polygon
-            })
+                        popup = folium.Popup(popup_html, max_width=600)
+                        #        target_node.tagno = len(self._children)+1
+                        pathref = matched_child.mapfile()
+                        mapfile = '/transfer/'+pathref
+                        # Turn into HTML list items
+
+                        # Ensure 'properties' exists in the GeoJSON and add 'col'
+                        print("GeoJSON Convex creation:", limb)
+                        if 'properties' not in limb:
+                            limb['properties'] = {}
+
+                        # Add the color to properties — this is **required**
+                        limb['properties']['col'] = to_hex(matched_child.col)
+
+                        gj = GeoJson(
+                            data=region_polygon.__geo_interface__,
+                            style_function=lambda feature, col=fill_color: {
+                                'fillColor': col,
+                                'color': 'black',
+                                'weight': 1,
+                                'fillOpacity': 0.4,
+                            },
+                            name=f"Voronoi {label}",
+                            tooltip=Tooltip(label),
+                            popup=popup,
+                        )
+                        gj.add_to(self)
+                        print(f"🖼️ Added Non-static GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
+
+                        centroid = region_polygon.centroid
+                        cent = [centroid.y, centroid.x]  # folium expects (lat, lon)
+
+                        tag = matched_child.value
+
+                        mapfile = matched_child.mapfile()
+
+                        tcol = get_text_color(to_hex(fill_color))
+                        bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
+                        fcol = invert_black_white(tcol)
+                        self.add_child(folium.Marker(
+                             location=[cent[0], cent[1]],
+                             icon = folium.DivIcon(
+                                    html=f'''
+                                    <a href="{mapfile}" data-name="{tag}">
+                                        <div style="
+                                            color: {tcol};
+                                            font-size: 10pt;
+                                            font-weight: bold;
+                                            text-align: center;
+                                            padding: 2px;
+                                            white-space: nowrap;">
+                                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                            border: 2px solid black;">{tag}</span>
+                                        </div>
+                                    </a>
+                                    '''
+                                    ,
+                                   )
+                                   )
+                                   )
+                    else:
+                        limbX = limbX.to_crs("EPSG:4326")
+                        limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
+
+                        feature = limb['features'][0]
+                        props = feature['properties']
+                        popup_html = f"""
+                        <div style='white-space: normal; text-align: center' >
+                            <strong> {typetag}:<br></strong> <br> {streetstag}<br>
+                        </div>
+                        """
+                        # Turn into HTML list items
+                        popup = folium.Popup(popup_html, max_width=600)
+                        #        target_node.tagno = len(self._children)+1
+                        # Turn into HTML list items
+                        # Ensure 'properties' exists in the GeoJSON and add 'col'
+                        print("GeoJSON Convex creation:", limb)
+                        if 'properties' not in limb:
+                            limb['properties'] = {}
+
+                        # Add the color to properties — this is **required**
+                        limb['properties']['col'] = to_hex(matched_child.col)
+
+                        gj = GeoJson(
+                            data=region_polygon.__geo_interface__,
+                            style_function=lambda feature, col=fill_color: {
+                                'fillColor': col,
+                                'color': 'black',
+                                'weight': 1,
+                                'fillOpacity': 0.4,
+                            },
+                            name=f"Voronoi {label}",
+                            tooltip=Tooltip(label),
+                            popup=popup,
+                        )
+                        gj.add_to(self)
+                        print(f"🖼️ Added Static GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
+
+                        centroid = region_polygon.centroid
+                        cent = [centroid.y, centroid.x]  # folium expects (lat, lon)
+
+                        tag = matched_child.value
+
+                        tcol = get_text_color(to_hex(fill_color))
+                        bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
+                        fcol = invert_black_white(tcol)
+                        self.add_child(folium.Marker(
+                             location=[cent[0], cent[1]],
+                             icon = folium.DivIcon(
+                                    html=f'''
+                                    <a data-name="{tag}">
+                                        <div style="
+                                            color: {tcol};
+                                            font-size: 10pt;
+                                            font-weight: bold;
+                                            text-align: center;
+                                            padding: 2px;
+                                            white-space: nowrap;">
+                                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                            border: 2px solid black;">{tag}</span>
+                                        </div>
+                                    </a>
+                                    '''
+                                    ,
+                                   )
+                                   )
+                                   )
+                    print(f"🖼️ Added walk area marker: {tag} with color: {tcol}")
+
+                voronoi_regions.append({
+                    'child': matched_child,
+                    'region': region_polygon
+                })
+            else:
+                flash("no data exists for this election at this location")
+                print (f" no walks exist for this region {region_polygon} under this {c_election} election ")
 
         print("✅ Voronoi generation complete.")
         return voronoi_regions
@@ -2295,18 +2600,18 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_child(folium.Marker(
                  location=here,
                  icon = folium.DivIcon(
-                        html='''
-                        <a href='{2}'><div style="
-                            color: {3};
+                        html=f'''
+                        <a href='{mapfile}' data-name='{tag}'><div style="
+                            color: {tcol};
                             font-size: 10pt;
                             font-weight: bold;
                             text-align: center;
                             padding: 2px;
                             white-space: nowrap;">
-                            <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{0}</span>
-                            {1}</div></a>
-                            '''.format(tag,"",mapfile,tcol,fcol),
+                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                            border: 2px solid black;">{tag}</span>
+                            </div></a>
+                            ''',
                        )
                        )
                        )
@@ -2344,57 +2649,66 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_child(folium.Marker(
                  location=here,
                  icon = folium.DivIcon(
-                        html='''
-                        <a href='{2}'><div style="
-                            color: {3};
+                        html=f'''
+                        <a href='{mapfile}' data-name='{tag}'><div style="
+                            color: {tcol};
                             font-size: 10pt;
                             font-weight: bold;
                             text-align: center;
                             padding: 2px;
                             white-space: nowrap;">
-                            <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{0}</span>
-                            {1}</div></a>
-                            '''.format(num,tag,mapfile,tcol,fcol),
+                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                            border: 2px solid black;">{num}</span>
+                            {tag}</div></a>
+                            ''',
                        )
                        )
                        )
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def create_layer(self, c_election, node, intention_type):
+    def create_layer(self, c_election, node, intention_type, static=False):
         global allelectors
+        CurrentElection = get_election_data(c_election)
         print(f"__Layer id:{self.id} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
+        entrylen = len(self._children)
         if intention_type == 'marker':
-            # always regen markers ev
-            self._children.clear()
+            # always regen markers if CurrentElection['accumulate'] is false
+            if not CurrentElection['accumulate']:
+                self._children.clear()
+                entrylen = len(self._children)
+                print("ACCUMULATING from",entrylen)
             self.id = node.fid
-            self.add_genmarkers(node,'marker')
-            return self
+            self.add_genmarkers(node,'marker',static)
+            return len(self._children) - entrylen
 # each layer content is identified by the node id at which it created, so new node new content, same node old content
-        if self.id != node.value:
-            self._children.clear()
-            self.id = node.value
+        if self.id != node.value: # new node new content
+            if not CurrentElection['accumulate']:
+                self._children.clear()
+                entrylen = len(self._children)
+                print("ACCUMULATING from",entrylen)
+            self.id = node.fid
     # create the content for an existing layer derived from the node children and required type
             if intention_type == 'street' or intention_type == 'walkleg':
-                self.add_nodemarks(node,intention_type)
+                self.add_nodemarks(node,intention_type,static)
             elif intention_type == 'polling_district' or intention_type == 'walk':
                 print(f"calling creation of voronoi in {c_election} - node {node.value} type {intention_type}")
 #                self.add_shapenodes(c_election,node,intention_type)
-                self.generate_voronoi_with_geovoronoi(c_election,node,intention_type)
+                self.generate_voronoi_with_geovoronoi(c_election,node,intention_type, static)
+                print(f"created {len(self._children)} voronoi in {c_election} - node {node.value} type {intention_type} static:{static}")
             elif intention_type == 'marker':
-                self.add_genmarkers(node,'marker')
+                self.add_genmarkers(node,'marker',static)
             else:
-                self.add_nodemaps(node, intention_type)
-        else:
+                self.add_nodemaps(node, intention_type, static)
+        else: #no change - same node old content
         # each layer content is identified by the node id at which it created, so new node new content, same node old content
-            self.id = "XXXX-Replace_XXXX"
+            self.id = 0
             print("___New Layer with node.value = self.id ie it already exists :", self.id)
             #the exist id = the new id , dont do anything
-        return self
+        return len(self._children) - entrylen
 
 
-    def add_genmarkers(self,node,type):
+    def add_genmarkers(self,node,type, static):
         def compute_font_size(days):
             if days <= -35:
                 return 10
@@ -2566,17 +2880,17 @@ class ExtendedFeatureGroup(FeatureGroup):
                     location=here,
                     tooltip= tooltip_text,
                     icon=folium.DivIcon(
-                        html='''
-                        <a href='{2}'><div style="
-                            color: {3};
+                        html=f'''
+                        <a href='{mapfile}' data-name='{tag}'><div style="
+                            color: {tcol};
                             font-weight: bold;
                             text-align: center;
                             padding: 2px;
                             white-space: nowrap;">
-                            <span style="font-size: {5}px;background: {4}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{0}</span>
-                            {1}</div></a>
-                        '''.format(num, tag, mapfile, tcol, fcol, fontsize),
+                            <span style="font-size: {fontsize}px;background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                            border: 2px solid black;">{num}</span>
+                            {tag}</div></a>
+                        ''',
                     )
                 ))
             try:
@@ -2588,7 +2902,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return
 
 
-    def add_nodemaps (self,herenode,type):
+    def add_nodemaps (self,herenode,type,static):
         global Treepolys
         global levelcolours
         global Con_Results_data
@@ -2662,10 +2976,19 @@ class ExtendedFeatureGroup(FeatureGroup):
                             </button>
                         """.format(c.dir+"/"+c.file+" walk", c.value)
 
+                        MWbtn = """
+                            <button type='button' class='guil-button' onclick='moveDown("/downMWbut/{0}", "{1}", "walk");' class='btn btn-norm'>
+                                STAT
+                            </button>
+                        """.format(c.dir+"/"+c.file+" walk", c.value)
+
 
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
 
-                        limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+PDbtn+" "+WKbtn
+                        if not static:
+                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+PDbtn+" "+WKbtn+" "+MWbtn
+                        else:
+                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"
     #                    c.tagno = len(self._children)+1
                         pathref = c.mapfile()
                         mapfile = '/transfer/'+pathref
@@ -2715,33 +3038,52 @@ class ExtendedFeatureGroup(FeatureGroup):
                     pathref = c.mapfile()
                     mapfile = '/transfer/'+pathref
 
-
-                    self.add_child(folium.Marker(
-                         location=here,
-                         icon = folium.DivIcon(
-                                html='''
-                                <a href='{2}'><div style="
-                                    color: {3};
-                                    font-size: 10pt;
-                                    font-weight: bold;
-                                    text-align: center;
-                                    padding: 2px;
-                                    white-space: nowrap;">
-                                    <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
-                                    border: 2px solid black;">{0}</span>
-                                    {1}</div></a>
-                                    '''.format(num,numtag,mapfile,tcol,fcol),
-
-                                   )
-                                   )
-                                   )
+                    if not static:
+                        self.add_child(folium.Marker(
+                             location=here,
+                             icon = folium.DivIcon(
+                                    html=f'''
+                                    <a href="{mapfile}" data-name="{tag}"><div style="
+                                        color: {tcol};
+                                        font-size: 10pt;
+                                        font-weight: bold;
+                                        text-align: center;
+                                        padding: 2px;
+                                        white-space: nowrap;">
+                                        <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                        border: 2px solid black;">{num}</span>
+                                        {numtag}</div></a>
+                                        ''',
+                                       )
+                                       )
+                                       )
+                    else:
+                        self.add_child(folium.Marker(
+                             location=here,
+                             icon = folium.DivIcon(
+                                    html=f'''
+                                    <a data-name="{tag}">
+                                    <div style="
+                                        color: {tcol};
+                                        font-size: 10pt;
+                                        font-weight: bold;
+                                        text-align: center;
+                                        padding: 2px;
+                                        white-space: nowrap;">
+                                        <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                        border: 2px solid black;">{num}</span>
+                                        {numtag}</div></a>
+                                        ''',
+                                       )
+                                       )
+                                       )
 
 
         print("________Layer map polys",herenode.value,herenode.level, len(Featurelayers[gettypeoflevel(herenode.dir,herenode.level+1)]._children))
 
         return self._children
 
-    def add_nodemarks (self,herenode,type):
+    def add_nodemarks (self,herenode,type,static):
         global levelcolours
         num = len(herenode.childrenoftype(type))
         print(f"___creating {num} add_nodemarks of type {type} for {herenode.value} at level {herenode.level}")
@@ -2763,24 +3105,46 @@ class ExtendedFeatureGroup(FeatureGroup):
             bcol = adjust_boundary_color(to_hex(c.col),0.7)
             fcol = invert_black_white(tcol)
 
-            self.add_child(folium.Marker(
-                 location=here,
-                 icon = folium.DivIcon(
-                        html='''
-                        <a href='{2}'><div style="
-                            color: {3};
-                            font-size: 10pt;
-                            font-weight: bold;
-                            text-align: center;
-                            padding: 2px;
-                            white-space: nowrap;">
-                            <span style="background: {4}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{0}</span>
-                            {1}</div></a>
-                            '''.format(num,tag,mapfile, tcol, fcol),
-                       )
-                       )
-                       )
+            if not static:
+                self.add_child(folium.Marker(
+                     location=here,
+                     icon = folium.DivIcon(
+                            html=f'''
+                            <a href="{mapfile}" data-name="{tag}"><div style="
+                                color: {tcol};
+                                font-size: 10pt;
+                                font-weight: bold;
+                                text-align: center;
+                                padding: 2px;
+                                white-space: nowrap;">
+                                <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                border: 2px solid black;">{num}</span>
+                                {tag}</div></a>
+                                ''',
+                           )
+                           )
+                           )
+            else:
+                self.add_child(folium.Marker(
+                     location=here,
+                     icon = folium.DivIcon(
+                            html=f'''
+                            <a data-name="{tag}">
+                            <div style="
+                                color: {tcol};
+                                font-size: 10pt;
+                                font-weight: bold;
+                                text-align: center;
+                                padding: 2px;
+                                white-space: nowrap;">
+                                <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
+                                border: 2px solid black;">{num}</span>
+                                {tag}</div></a>
+                                ''',
+                           )
+                           )
+                           )
+
 
 
         print("________Layer map points",herenode.value,herenode.level,len(self._children))
@@ -3014,7 +3378,6 @@ def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
 
 def getstreamrag():
 # if allstreams.csv exists then we have a RAG dataframe, otherwise black - empty
-
     file_path = ELECTOR_FILE
     print("____getstreamrag entered", file_path)
     rag = {}
@@ -3130,24 +3493,41 @@ def reset_nodes():
         pickle.dump(TREK_NODES, f)
     return
 
-def get_L4area(node,pointposition):
-    global _____Treepolys
-    global Fullpolys
-    if node.level == 4:
-        return node.value
-    else:
-        pfile = Fullpolys[gettypeoflevel(node.dir,node.level+1)]
-        polylocated = electorwalks.find_boundary(pfile,pointposition)
-        if not polylocated:
-            print("____No Level 4 boundary found for electors in this file")
-            RaiseException ('No Level 4')
-            return None
-    return polylocated.NAME
 
-def add_zone_Level4 ( teamsize, unzonedelectors):
+def get_L4area(nodelist, here):
+    global Treepolys
+
+    if not nodelist:
+        raise ValueError("Empty nodelist passed to get_L4area")
+
+    # Get the level and dir from the first node
+    level = nodelist[0].level
+    dir_path = nodelist[0].parent.dir  # assuming this structure
+    ttype = nodelist[0].type
+
+    # Load correct polygon file for that level
+    pfile = Treepolys[ttype]
+
+    if pfile.empty:
+        print("____No Level 4 boundary found in file")
+        raise Exception('No Level 4 boundaries found')
+
+    # Loop through rows and check containment
+    for _, row in pfile.iterrows():
+        geom = row['geometry']
+        if geom.contains(here):
+            polyname = normalname(row['NAME'])  # directly access the string
+            print("____Level 4 boundary found:", polyname)
+            return polyname  # ✅ return string
+
+    print("____No Level 4 boundary matched for this point")
+    return None
+
+
+def add_zone_Level4(teamsize, unzonedelectors):
     walkcolumn = {
         'polling_district': 'PD',
-        'walk': 'Name',
+        'walk': 'WalkName',
         'ward': 'Area',
         'division': 'Area',
         'constituency': 'Area'
@@ -3155,50 +3535,38 @@ def add_zone_Level4 ( teamsize, unzonedelectors):
 
     print("🧹 Cleaning lat/lon data")
     print(f"✅ {len(unzonedelectors)} walk centroids before cleaning")
-    unzonedelectors = unzonedelectors[np.isfinite(unzonedelectors['Lat']) & np.isfinite(unzonedelectors['Long'])]
-    unzonedelectors = unzonedelectors[(unzonedelectors['Lat'].between(-90, 90)) & (unzonedelectors['Long'].between(-180, 180))]
+    unzonedelectors = unzonedelectors[
+        np.isfinite(unzonedelectors['Lat']) & np.isfinite(unzonedelectors['Long'])
+    ]
+    unzonedelectors = unzonedelectors[
+        (unzonedelectors['Lat'].between(-90, 90)) &
+        (unzonedelectors['Long'].between(-180, 180))
+    ]
     print(f"✅ {len(unzonedelectors)} valid walk centroids after cleaning")
+
+    if unzonedelectors.empty:
+        print("❌ No valid coordinates to cluster.")
+        return unzonedelectors
 
     coords = unzonedelectors[['Lat', 'Long']].values
     num_walks = len(coords)
     N = min(teamsize, num_walks)
-    print(f"🎯 Clustering into {N} zones (teamsize={teamsize}, walks={num_walks})")
+
+    print(f"🎯 Clustering {num_walks} walks into {N} zones (teamsize={teamsize})")
 
     if N > 1:
-        kmeans = KMeans(n_clusters=N, random_state=42)
-        unzonedelectors['Zone'] = kmeans.fit_predict(coords)
-        unzonedelectors['Zone'] = unzonedelectors['Zone'].map(lambda z: f"ZONE_{z + 1}")
+        kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
+        labels = kmeans.fit_predict(coords)
+        unzonedelectors['Zone'] = [f"ZONE_{label + 1}" for label in labels]
+
         print("🎨 Assigned zones via KMeans clustering")
-        print("___unzonedelectors Zone column preview:\n", unzonedelectors[['WalkName', 'Zone']].dropna().head())
+        print("___Zone column preview:\n", unzonedelectors[['WalkName', 'Zone']].dropna().head())
     else:
-        unzonedelectors['Zone'] = ['ZONE_0'] * num_walks
+        unzonedelectors['Zone'] = 'ZONE_0'
         print("⚠️ Only one walk — all assigned to ZONE_0")
 
-
-    print("🎨 Assigning colours to walk electors")
-    walks = unzonedelectors['WalkName'].unique()
-    for walk in walks:
-        colname = walkcolumn['walk']
-        if colname not in unzonedelectors.columns:
-            print(f"❌ Column '{colname}' not found in unzonedelectors!")
-            print(f"Available columns: {list(unzonedelectors.columns)}")
-            continue
-
-        print(f"🔍 Matching walk_node.value '{walk}' to column '{colname}'")
-        print(f"📏 Types — column: {unzonedelectors[colname].dtype}, walk_node.value: {type(walk)}")
-
-        mask2 = unzonedelectors[colname] == walk
-        walkelectors = unzonedelectors[mask2].copy()
-
-        print(f"👣 walk_node: {walk}, children: {len(walks)}, match electors: {len(walkelectors)}")
-
-        if not walkelectors.empty and len(walkelectors.dropna(how="all")) > 0:
-            walkelectors['Zone'] = walk_to_zone.get(walk, "ZONE_0")
-            unzonedelectors.loc[mask2, 'Zone'] = walkelectors['Zone']
-        else:
-            flash("⚠️ No data exists for this election at this location")
-            print(f"⚠️ Nodes exist at {walk} but no matching electors for election {c_election} and column '{colname}' = {walk}")
     return unzonedelectors
+
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress, markerframe
@@ -3273,20 +3641,23 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         # 6. Process metadata for all files in selected stream( does not have to be current election)
         file_index = 0
-        mainframe = pd.DataFrame()
+        mainframes = []
         deltaframes = []
+        aviframes = []
+        DQstatslist =[]
+        mainframe = pd.DataFrame()
+        deltaframe = pd.DataFrame()
         aviframe = pd.DataFrame()
         DQstats = pd.DataFrame()
-        stream = "DEMO" # default - drives the filtering of all imported data - entered by user
 
         progress["percent"] = 1
         progress["status"] = "sourcing"
         progress["message"] = "Sourcing data from instruction files ..."
 
 
-        print("___Route/normalise")
+        print("___Route/normalise: ",meta_data.items())
         total = len(meta_data)
-        for idx, (index, data) in enumerate(sorted(meta_data.items(), key=lambda x: int(x[0]))):
+        for idx, (index, data) in enumerate(sorted(meta_data.items(), key=lambda x: int(x[1]['order']))):
             progress["percent"] = int((idx / total) * 100)
             progress["status"] = "processing"
             progress["message"] = f"Processing sourced data (file {idx + 1} of {total})..."
@@ -3305,7 +3676,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             print(f"___Selected {stream} election and session node id: ", session_data.get('current_node_id'))
             SelectedElection = get_election_data(stream)  # essential for election specific processing
 
-            order = data.get('order')
+            order = int(data.get('order'))
             filetype = data.get('type')
             purpose = data.get('purpose')
             try:
@@ -3393,38 +3764,43 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             Outcomes = pd.read_excel(GENESYS_FILE)
             Outcols = Outcomes.columns.to_list()
             if purpose == "main":
-            # this is the main index
+            # this is one of the main index files (1+)
                 progress["percent"] = 25
                 progress["status"] = "running"
-                progress["message"] = "Normalising main file ..."
+                progress["message"] = "Normalising main file :"+ ImportFilename
                 results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-                DQstats = pd.concat([DQstats, results[1]])
-                mainframe = results[0]
-                mainframe = pd.DataFrame(mainframe,columns=Outcols)
+                temp = pd.DataFrame(results[0],columns=Outcols)
+                mainframes.append(temp)
+                DQstatslist.append(results[1])
             elif purpose == 'delta':
-            # this is one of many changes that needs to be applied to the main index
+            # this is one of many changes that may  be applied to the main index
                 progress["percent"] = 40
                 progress["status"] = "running"
-                progress["message"] = "Normalising delta files ..."
+                progress["message"] = "Normalising delta files :"+ImportFilename
                 if 'ElectorCreatedMonth' in dfx.columns:
                     dfx = dfx[dfx['ElectorCreatedMonth'] > 0] # extract all new registrations
                     results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-                    DQstats = pd.concat([DQstats, results[1]])
-                    deltaframes.append(results[0])
+                    temp = pd.DataFrame(results[0],columns=Outcols)
+                    deltaframes.append(temp)
+                    DQstatslist.append(results[1])
                 else:
                     progress["percent"] = 60
                     progress["status"] = "completing"
-                    progress["message"] = "Normalising delta files ..."
+                    progress["message"] = "Normalising delta files :"+ImportFilename
                     print("NO NEW REGISTRATIONS IN DELTA FILE", dfx.columns)
+                    results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
+                    temp = pd.DataFrame(results[0],columns=Outcols)
+                    deltaframes.append(temp)
+                    DQstatslist.append(results[1])
             elif purpose == 'avi':
             # this is an addition of columns to the main index
                 progress["percent"] = 60
                 progress["status"] = "running"
-                progress["message"] = "Normalising avi file ..."
+                progress["message"] = "Normalising avi file :"+ImportFilename
                 results = normz(progress,RunningVals,Lookups,stream,ImportFilename,dfx,fixlevel, purpose)
-                DQstats = pd.concat([DQstats, results[1]])
-                aviframe =  results[0]
-                aviframe = aviframe[['ENOP','AV']]
+                temp = aviframe[['ENOP','AV']]
+                aviframes.append(temp)
+                DQstatslist.append(results[1])
             elif purpose == 'resource':
                 progress["percent"] = 60
                 progress["status"] = "running"
@@ -3455,44 +3831,43 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                     raise ValueError(f"Not all {dfx.columns.tolist()} in {required_columns}")
                 print(f"___Markers {len(dfx)} imported: {dfx.columns}")
 
-
-
     # full stream now received - need to apply changes to main
 
-        fullsum = len(mainframe)+len(deltaframes)+len(aviframe)
-        if fixlevel == 3 and len(mainframe) > 0:
-            print("__Processed main,delta,avi electors:", len(mainframe), len(deltaframes),len(aviframe), mainframe.columns)
-            len1 = len(mainframe)
-            if len(deltaframes) > 0:
-                progress["percent"] = 75
+        fullsum = sum(len(x) for x in mainframes + deltaframes + aviframes)
+
+        if fixlevel == 3:
+            for DQ in DQstatslist:
+                DQstats = pd.concat([DQstats, DQ])
+
+            for i,mf in enumerate(mainframes):
+                progress["percent"] = round(((i + 1) / len(mainframes)) * 100, 2)
                 progress["status"] = "running"
-                progress["message"] = "Pipelining normalised main file ..."
+                progress["message"] = "Pipelining normalised delta files ..."
+                print("__Processed main,delta,avi electors:", len(mf), len(deltaframes),len(aviframe), mf.columns)
+                mainframe = pd.concat([mainframe, pd.DataFrame(mf)], ignore_index=True)
+                len1 = len(mf)
+                print("__Processed mainframe electors:", len(mf), mf.columns)
 
-                Outcols = mainframe.columns.to_list()
-                for deltaframe in deltaframes:
-                    progress["percent"] = 80
-                    progress["status"] = "running"
-                    progress["message"] = "Pipelining normalised delta files ..."
 
-                    deltaframe = pd.DataFrame(deltaframe,columns=Outcols)
-                    print("_____Deltaframe Details:", deltaframe)
-                    for index, change in deltaframe.iterrows():
-                        print("_____Delta Change Details:", change)
-                        mainframe = pd.concat([mainframe, pd.DataFrame(deltaframe)], ignore_index=True)
-                    print("__Processed deltaframe electors:", len(deltaframe), mainframe.columns)
-            if len(aviframe) > 0:
+            for i,df in enumerate(deltaframes):
+                progress["percent"] = round(((i + 1) / len(mainframes)) * 100, 2)
+                progress["status"] = "running"
+                progress["message"] = "Pipelining normalised delta files ..."
+                print("_____Deltaframe Details:", df)
+                for index, change in df.iterrows():
+                    print("_____Delta Change Details:", change)
+                mainframe = pd.concat([mainframe, pd.DataFrame(df)], ignore_index=True)
+                print("__Processed deltaframe electors:", len(df), df.columns)
+
+            for i,af in enumerate(aviframes):
                 progress["percent"] = 85
                 progress["status"] = "running"
                 progress["message"] = "Pipelining normalised avi file ..."
-
                 print(f"____compare merge length before: {len1} after {len(mainframe)}")
-                mainframe = mainframe.merge(aviframe, on='ENOP',how='left', indicator=True )
+                mainframe = mainframe.merge(af, on='ENOP',how='left', indicator=True )
                 mainframe = mainframe.rename(columns= {'AV_y': 'AV'})
-
-                aviframe.to_csv("avitest.csv",sep='\t', encoding='utf-8', index=False)
-
-                print("__Processed aviframe:", len(aviframe), aviframe.columns)
-
+                af.to_csv("avitest.csv",sep='\t', encoding='utf-8', index=False)
+                print("__Processed aviframe:", len(af), af.columns)
 
             progress["percent"] = 90
             progress["status"] = "running"
@@ -3502,8 +3877,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
             current_election = stream
             CurrentElection = get_election_data(stream)
-            restore_from_persist(session_data=session_data)
-            current_node = get_current_node(session_data=session_data)
+            current_node = get_current_node(session_data)
+
+            print('___persisting file ', ELECTOR_FILE, len(allelectors))
+            allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
+
 
             territory_path = CurrentElection['territory'] # this is the node at which the imported data is to be filtered through
             Territory_node = current_node.ping_node(current_election,territory_path)
@@ -3526,8 +3904,31 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 print(f"____PD: {PD} Postcode: {PDelectors['Postcode'].iloc[0]} lat: {PDmaplaty}, long: {PDmaplongx} at node:",Territory_node.value, Territory_node.fid)
     # Need to add L4-AREA value - for all PDs - pull together all PDs which are within the area(ward or division) boundary
                 spot = Point(float('%.6f'%(PDmaplongx)),float('%.6f'%(PDmaplaty)))
+
+                areatypecolumn = {
+                    '-DIVS.html': 'division',
+                    '-MAP.html': 'ward',
+                    '-WARDS.html': 'ward',
+                    '-MAP.html': 'constituency'
+                }
+
                 if Territoryboundary.geometry.contains(spot).item():
-                    Area = get_L4area(Territory_node,spot)
+                    if Territory_node.level == 3:
+                        areatype = next(
+                            (value for key, value in areatypecolumn.items() if territory_path.endswith(key)),
+                            'ward'  # Default if no match found
+                            )
+                        tpath = territory_path +" "+ areatype
+                        Territory_node.ping_node(current_election,tpath)
+                        Area = get_L4area(Territory_node.childrenoftype(areatype),spot)
+                    else:
+                        Area = Territory_node.value
+                        areatype = next(
+                            (value for key, value in areatypecolumn.items() if territory_path.endswith(key)),
+                            'ward'  # Default if no match found
+                            )
+                        tpath = territory_path
+                    print(f"__New L4 Area:{Area} of type {areatype} at {tpath}")
                     PDelectors['Area'] = Area
                     frames.append(PDelectors)
 
@@ -3536,21 +3937,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 mainframe = pd.concat(frames)
             mainframe = mainframe.reset_index(drop=True)
 
-            print("____Final Loadable mainframe columns:",len(mainframe),mainframe.columns)
+            print("____Final Loadable mainframe Areas:",len(mainframe),mainframe['Area'])
         # now generate walkname labels according to a max zone size (electors) defined for the stream(election)
 
             label_dict = recursive_kmeans_latlon(mainframe[['Lat', 'Long']], max_cluster_size=int(SelectedElection['walksize']), MAX_DEPTH=15)
 
-# ---- ADD Zones for all Level 4 areas within Level 3 areas in the import
 
-            L4groups = mainframe['Area'].unique()
-
-            for L4group in L4groups:
-                maskX = mainframe['Area'] == L4group
-                L4electors = mainframe[maskX]  # gets only the L4 electors in your ward/division
-                Zonedelectors = add_zone_Level4(CurrentElection['teamsize'],L4electors)
-                Zonedelectors.to_csv("zonedelectors.csv",sep='\t', encoding='utf-8', index=False)
-                mainframe = Zonedelectors
 # ----- Serialise Labels
 
             newlabels = pd.Series(label_dict)
@@ -3576,8 +3968,28 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
             mainframe["WalkName"] = mainframe.index.map(serial_label_series)
 
-# -------- Import Data into Allelectors
+# ---- ADD Zones for all Level 4 areas within Level 3 areas in the import
 
+            L4groups = mainframe['Area'].unique()
+            print("____L4groups:",len(mainframe),L4groups)
+
+            zonedelectors =pd.DataFrame()
+            frames = []
+            for L4group in L4groups:
+                maskX = mainframe['Area'] == L4group
+                L4electors = mainframe[maskX]  # gets only the L4 electors in your ward/division
+                print("L4Group {L4group} in {L4groups}:",len(L4electors),L4electors.columns)
+                zonedelectors = add_zone_Level4(CurrentElection['teamsize'],L4electors)
+                frames.append(zonedelectors)
+
+            if len(frames) > 0:
+                zonedelectors = pd.concat(frames)
+            zonedelectors.to_csv("zonedelectors.csv",sep='\t', encoding='utf-8', index=False)
+
+            mainframe = zonedelectors.copy()
+
+# -------- Import Data into allelectors
+            print("__details of Outcoles and DQstats", Outcols,DQstats)
             DQstats.loc[Outcols.index('WalkName'),'P3'] = 1
             formdata['tabledetails'] = "Electoral Roll File "+ImportFilename+" Details"
             layeritems = get_layer_table(results[0].head(), formdata['tabledetails'])
@@ -3694,13 +4106,6 @@ if os.path.exists(config.workdirectories['workdir'] + "Markers.csv") and os.path
 MapRoot = get_current_node(session=None)
 RootPath = MapRoot.dir+"/"+MapRoot.file
 Featurelayers['marker'].create_layer("DEMO",MapRoot,'marker')
-
-MapRoot.create_area_map(MapRoot.getselectedlayers(RootPath))
-print(f"MAPROOT:{MapRoot.value} ROOTPATH: {RootPath}")
-
-formdata = {}
-allelectors = pd.read_excel(GENESYS_FILE)
-allelectors.drop(allelectors.index, inplace=True)
 
 layeritems = []
 #allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
@@ -4546,33 +4951,49 @@ def streamrag_api():
 @app.route('/deactivate_stream', methods=['POST'])
 @login_required
 def deactivate_stream():
+    # Example: Remove all electors for the given election
+    global allelectors
     election = request.json.get('election')
+    ELECTIONS = get_election_names()
+
+    if os.path.exists(TABLE_FILE):
+        try:
+            with open(TABLE_FILE) as f:
+                stream_table = json.load(f)
+                stream_table2 = [row for row in stream_table if row.get('stream') != election]
+                if len(stream_table) < len(stream_table2):
+                    # Save to JSON file
+                    with open(TABLE_FILE, 'w') as f:
+                        json.dump(stream_table2, f, indent=2)
+
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+
+    if election not in ELECTIONS.keys():
+        return jsonify({'status': 'error', 'message': 'Election does not exist','html':html}), 400
     CurrentElection = get_election_data(election)
     current_node = get_current_node(session)
     delete_path = CurrentElection['territory']
     delete_node = current_node.ping_node(election,delete_path)
-    if not election:
-        return jsonify({'status': 'error', 'message': 'Missing election parameter'}), 400
 
-    # Example: Remove all electors for the given election
-    global allelectors
-    if 'Election' in allelectors.columns:
-        before_count = len(allelectors)
-        allelectors = allelectors[allelectors['Election'] != election]
-        after_count = len(allelectors)
-        print(f"Deactivated election {election}. Removed {before_count - after_count} electors.")
+    before_count = len(allelectors)
+    allelectors = allelectors[allelectors['Election'] != election]
+    after_count = len(allelectors)
+    print(f"Deactivated election {election}. Removed {before_count - after_count} electors.")
 
-        # remove the  child data nodes under the delete nodes
-        ttype = gettypeoflevel(delete_path,delete_node.level+1)
-        Featurelayers[ttype].reset()
-        for datanode in delete_node.children:
-            delete_node.children.remove(datanode)
+    # remove the  child data nodes under the delete nodes
+    ttype = gettypeoflevel(delete_path,delete_node.level+1)
+    Featurelayers[ttype].reset()
+    for datanode in delete_node.children:
+        delete_node.children.remove(datanode)
 
-        # Optionally persist this change
-        allelectors.to_csv(ELECTOR_FILE, sep='\t', index=False, encoding='utf-8')
-
-    return jsonify({'status': 'success', 'election': election})
-
+    # Optionally persist this change
+    allelectors.to_csv(ELECTOR_FILE, sep='\t', index=False, encoding='utf-8')
+    streamrag = getstreamrag()
+    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
+    print(f"____Deactivate table :{streamrag} in html {html} ")
+    return jsonify({'status': 'success', 'election': election,'streamrag':streamrag,'html':html }), 200
 
 
 @app.route('/reset_Elections', methods=['POST'])
@@ -4651,7 +5072,7 @@ def election_report():
     # Process each election file in the directory
     nodemolist = os.listdir(elections_dir)
     for filename in nodemolist:
-        if filename.startswith("Elections-") and filename.endswith(".json") and filename.find("DEMO") < 0:
+        if filename.startswith("Elections-") and filename.endswith(".json") and filename.find("DEMO") < 0 and filename.find("GA1") < 0 :
             election_name = filename[len("Elections-"):-len(".json")]
             file_path = os.path.join(elections_dir, filename)
             try:
@@ -4684,7 +5105,7 @@ def election_report():
                 print(f"____election territory path:{territory_path} elect:{election_node.value}")
                 # Get full party name from the abbreviation
                 selected_party_key = election_node.party
-                incumbent_party = OPTIONS['yourparty'].get(selected_party_key, 'U')
+                incumbent_party = OPTIONS['yourparty'].get(selected_party_key, 'Independent')
                 # Extract the filename from the 'territory' path and remove the suffix
 
                 def ordinal(n):
@@ -4729,6 +5150,7 @@ def election_report():
 
 
     Featurelayers['marker'].create_layer(current_election,current_node,'marker')
+    flash("No marker data for the selected election available!")
     selectedlayers = current_node.getselectedlayers(reportfile)
     current_node.create_area_map(selectedlayers)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
@@ -4742,6 +5164,9 @@ def set_election():
     global CurrentElection
     global OPTIONS
     global constants
+    global TREK_NODES
+    global Treepolys
+    restore_from_persist(session)
 # so change current_election and return current election constants and options
     data = request.get_json()
     current_node = get_current_node(session)
@@ -4750,9 +5175,9 @@ def set_election():
     print(f"____switching from election: {current_election} to {session['current_election']}")
     current_election = data.get("election")
     CurrentElection = get_election_data(current_election)
-    CurrentElection['previousParty'] = current_node.party
-    print(f"____CurrentElection: at {current_node.value} for {current_election} path:{CurrentElection['territory']} details:{CurrentElection} " )
     if CurrentElection:
+        CurrentElection['previousParty'] = current_node.party
+        print(f"____CurrentElection: at {current_node.value} for {current_election} path:{CurrentElection['territory']} details:{CurrentElection} " )
         mapfile = CurrentElection['territory']
         current_node = current_node.ping_node(current_election,mapfile)
         visit_node(current_election,CurrentElection,mapfile)
@@ -5231,6 +5656,9 @@ def dashboard():
         mapfile = current_node.mapfile()
         print ("___Dashboard persisted filename: ",mapfile)
         persist(current_node)
+        if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
+            selectedlayers = current_node.getselectedlayers(mapfile)
+            current_node.create_area_map(selectedlayers)
 
 #        redirect(url_for('captains'))
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -5287,6 +5715,9 @@ def downbut(path):
     visit_node(current_election,CurrentElection,mapfile)
 
     persist(current_node)
+    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
+        selectedlayers = current_node.getselectedlayers(mapfile)
+        current_node.create_area_map(selectedlayers)
 
 #    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
     print(f"_____creating mapfile for {atype} map file path :{mapfile} for path:{mapfile}" )
@@ -5371,15 +5802,12 @@ def downPDbut(path):
                 os.remove(mapfile)
         else:
             print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-            shapelayer = Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
-            if len(shapelayer._children) == 0:
-                current_node.file = subending(current_node.file,"-MAP.html")
-                mapfile = current_node.mapfile()
-            else:
-                print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
-                current_node.create_area_map(current_node.getselectedlayers(mapfile))
-                flash("________PDs added:  "+str(len(shapelayer._children)))
-                print("________After map created PDs added  :  ",current_node.level, len(shapelayer._children))
+            Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
+            mapfile = current_node.mapfile()
+            print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
+            current_node.create_area_map(current_node.getselectedlayers(mapfile))
+            flash("________PDs added:  "+str(len(Featurelayers['polling_district']._children)))
+            print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
 #    face_file = subending(current_node.file,"-MAP.html")
 #    mapfile = current_node.dir+"/"+face_file
@@ -5388,9 +5816,7 @@ def downPDbut(path):
     if not os.path.exists(PDpathfile):
         print ("_________New PD mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-    #        current_node.file = face_file
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
-
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
     session['current_node_id'] = current_node.fid
@@ -5439,15 +5865,13 @@ def downWKbut(path):
                 os.remove(mapfile)
         else:
             print(f"_____ Before creation - Walk display markers at CE {current_election} ",current_node.level, len(Featurelayers['walk']._children))
-            shapelayer = Featurelayers['walk'].create_layer(current_election,current_node, 'walk')
-            if len(shapelayer._children) == 0:
-                current_node.file = subending(current_node.file,"-MAP.html")
-                mapfile = current_node.mapfile()
-            else:
-                print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-                current_node.create_area_map(current_node.getselectedlayers(path))
-                flash("________Walks added:  "+str(len(shapelayer._children)))
-                print("________After map created Walks added  :  ",current_node.level, len(shapelayer._children))
+
+            Featurelayers['walk'].create_layer(current_election,current_node, 'walk')
+            mapfile = current_node.mapfile()
+            print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
+            current_node.create_area_map(current_node.getselectedlayers(path))
+            flash("________Walks added:  "+str(len(Featurelayers['walk']._children)))
+            print("________After map created Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
 
@@ -5455,6 +5879,7 @@ def downWKbut(path):
 #        simple transfer from another node -
         print ("_________New WK mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_election,current_node,'walk') #from upnode children type of prev node
+
     #        current_node.file = face_file
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
 
@@ -5464,6 +5889,69 @@ def downWKbut(path):
 
         print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
         print("_______writing to file:", mapfile)
+
+    persist(current_node)
+    visit_node(current_election,CurrentElection,mapfile)
+
+    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+
+@app.route('/downMWbut/<path:path>', methods=['GET','POST'])
+@login_required
+def downMWbut(path):
+    global Treepolys
+    global Fullpolys
+    global Featurelayers
+    global TREK_NODES
+    global areaelectors
+    global filename
+    global layeritems
+    global CurrentElection
+# so this is the button which creates the nodes and map of equal sized walks for the troops
+    restore_from_persist(session=session)
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
+
+    previous_node = current_node
+    # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
+    current_node = previous_node.ping_node(current_election,path)
+    session['current_node_id'] = current_node.fid
+    current_node.file = subending(current_node.file,"-WALKS.html")
+ # the node which binds the election data
+    CurrentElection = get_election_data(current_election)
+    mapfile = current_node.mapfile()
+    print (f"_________ROUTE/downMWbut2 CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {mapfile}")
+    flash ("_________ROUTE/downMWbut ")
+    mask = allelectors['Election'] == current_election
+    areaelectors = allelectors[mask]
+    walkpathfile = os.path.join(config.workdirectories['workdir'],mapfile)
+
+    if request.method == 'GET':
+        if len(areaelectors)  == 0:
+            flash("Can't find any elector data for this Area.")
+            print(f"Can't find elector data at {current_node.value} for election {current_election}" )
+            if os.path.exists(walkpathfile):
+                os.remove(walkpathfile)
+        else:
+            print(f"_____ Before creation - Static Walk display markers at CE {current_election} ",current_node.level, len(Featurelayers['walk']._children))
+            Featurelayers['walk'].create_layer(current_election,current_node, 'walk',static=True)
+            print("_______just before Static Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
+            current_node.create_area_map(current_node.getselectedlayers(path))
+            flash("________Static Walks added:  "+str(len(Featurelayers['walk']._children)))
+            print("________After map created Static Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
+
+    #            allelectors = getblock(allelectors,'Area',current_node.value)
+
+    if not os.path.exists(walkpathfile):
+#        simple transfer from another node -
+        print ("_________New MW mapfile/",current_node.value, walkpathfile)
+        Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
+        current_node.create_area_map(current_node.getselectedlayers(path))
+    #    moredata = importVI(allelectors.copy())
+    #    if len(moredata) > 0:
+    #        allelectors = moredata
+        print("________ Static Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
+        print("_______writing to file:", walkpathfile)
 
     persist(current_node)
     visit_node(current_election,CurrentElection,mapfile)
@@ -5696,6 +6184,7 @@ def PDdownST(path):
     visit_node(current_election,CurrentElection,mapfile)
     persist(current_node)
 
+
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])
@@ -5732,15 +6221,13 @@ def LGdownST(path):
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         atype = gettypeoflevel(path, current_node.level)
         Featurelayers['street'].create_layer(current_election,PD_node,'street')
-
-        if len(areaelectors) == 0 or len(Featurelayers['street']._children) == 0:
-            flash("Can't find any elector data for this Polling District.")
-            print("Can't find any elector data for this Polling District.")
-            if os.path.exists(mapfile):
-                os.remove(mapfile)
-        else:
-            flash("________streets added  :  "+str(Featurelayers['street']._children))
-            print("________streets added  :  "+str(len(Featurelayers['street']._children)))
+        flash("No data for the selected election available!")
+        flash("Can't find any elector data for this Polling District.")
+        print("Can't find any elector data for this Polling District.")
+        if os.path.exists(mapfile):
+            os.remove(mapfile)
+        flash("________streets added  :  "+str(Featurelayers['street']._children))
+        print("________streets added  :  "+str(len(Featurelayers['street']._children)))
 
         streetnodelist = PD_node.childrenoftype('street')
         for street_node in streetnodelist:
@@ -5805,6 +6292,7 @@ def WKdownST(path):
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
 
         Featurelayers['walkleg'].create_layer(current_election,walk_node,'walkleg')
+        flash("No data for the selected election available!")
         walklegnodelist = walk_node.childrenoftype('walkleg')
         print ("________Walklegs",walk_node.value,len(walklegnodelist))
 # for each walkleg node(partial street), add a walkleg node marker to the walk_node parent layer (ie PD_node.level+1)
@@ -5813,7 +6301,7 @@ def WKdownST(path):
             streetelectors = walkelectors[mask]
             walkleg_node.create_streetsheet(current_election,streetelectors)
 
-        walk_node.create_area_map(walk_node.getselectedlayers(path))
+            walk_node.create_area_map(walk_node.getselectedlayers(path))
 
     mapfile = walk_node.mapfile()
 
@@ -5986,7 +6474,7 @@ def displayareas():
         path = current_node.dir+"/"+current_node.file
         ctype = gettypeoflevel(path, current_node.level+1)
 
-        formdata['tabledetails'] = current_node.value +getchildtype(current_node.type)+"s"
+        formdata = current_node.value +getchildtype(current_node.type)+"s"
         tablenodes = current_node.childrenoftype(ctype)
         if len(tablenodes) == 0:
             if current_node.level > 0:
@@ -5994,7 +6482,7 @@ def displayareas():
                 tablenodes = current_node.parent.childrenoftype(ctype)
             else:
                 return jsonify([[], [], "No data"])
-        layeritems = get_layer_table(tablenodes ,formdata['tabledetails'])
+        layeritems = get_layer_table(tablenodes ,formdata)
         print(f"Display layeritems area {current_node.value} - {ctype} - {len(tablenodes)}")
 
     if not layeritems or len(layeritems) < 3:
@@ -6118,6 +6606,8 @@ def upbut(path):
     global layeritems
     global CurrentElection
 
+    FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
+
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
@@ -6129,8 +6619,8 @@ def upbut(path):
 # for PDs the up button should take you to the -PDS file, for walks the -WALKS file
 #
     previous_node = current_node
-    current_node = previous_node.ping_node(current_election,path)
-    session['current_node_id'] = current_node.fid
+    current_node = previous_node.parent.ping_node(current_election,path)
+    session['current_node_id'] = previous_node.parent.fid
 
     if current_node.level < 3:
         restore_fullpolys(current_node.type)
@@ -6148,11 +6638,13 @@ def upbut(path):
     print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
     mapfile = current_node.dir+"/"+face_file
-    if not os.path.exists(os.path.join(config.workdirectories['workdir'],face_file)):
+    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-        current_node.file = face_file
+        flash("No data for the selected node available,attempting to generate !")
+        print("No data for the selected node available,attempting to generate !")
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
-
+        current_node.file = face_file
+        mapfile = current_node.mapfile()
     print("________chosen node url",mapfile)
     visit_node(current_election,CurrentElection,mapfile)
     persist(current_node)
@@ -6207,24 +6699,20 @@ def thru(path):
     flash ("_________ROUTE/thru:"+path)
     print ("_________ROUTE/thru:",path, CurrentElection)
 
-    current_node = current_node.ping_node(current_election,path)
-    session['current_node_id'] = current_node.fid
-    if path.find(" "):
-        mapfile = current_node.mapfile()
+    if os.path.exists(os.path.join(config.workdirectories['workdir'],path)):
+        flash(f"Using existing file: {path}", "info")
+        print(f"Using existing file: {path} and CurrentElection: {CurrentElection}")
+        visit_node(current_election,CurrentElection,path)
+        return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
     else:
-        mapfile = path
-
-    if os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-        flash(f"Using existing file: {mapfile}", "info")
-        print(f"Using existing file: {mapfile} and CurrentElection: {CurrentElection}")
-        visit_node(current_election,CurrentElection,mapfile)
-        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
-    else:
-        flash(f"Creating new mapfile:{mapfile}", "info")
-        print(f"Creating new mapfile:{mapfile}")
-        current_node.create_area_map(current_node.getselectedlayers(mapfile))
-        visit_node(current_election,CurrentElection,mapfile)
-        return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+        flash(f"Creating new mapfile:{path}", "info")
+        print(f"Creating new mapfile:{path}")
+        current_node = current_node.ping_node(current_election,path)
+        fileending = "-"+path.split("-").pop()
+        current_node.file = subending(current_node.file,fileending)
+        current_node.create_area_map(current_node.getselectedlayers(path))
+        visit_node(current_election,CurrentElection,path)
+        return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required
@@ -6327,6 +6815,9 @@ def get_progress():
     progress['status'] = 'complete'
     progress['message'] = 'Normalization Complete'
     progress['election'] = progress['election']
+    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
+    print("___JSONIFYED streamrag:",streamrag)
+
     for key, value in progress.items():
         print(f"Progress2-{key} => {value}")
     return jsonify({
@@ -6334,7 +6825,10 @@ def get_progress():
         'percent': progress['percent'],
         'status': progress['status'],
         'message': progress['message'],
-        'dqstats_html': progress['dqstats_html']
+        'dqstats_html': progress['dqstats_html'],
+        'html': html,
+        'streamrag' :streamrag
+
     })
   # Send whole object as JSON
 
@@ -6405,7 +6899,7 @@ def postcode():
     lookuplatlong = df1[df1['Postcode'] == postcodeentry]
     here = [float(f"{lookuplatlong.Lat.values[0]:.6f}"), float(f"{lookuplatlong.Long.values[0]:.6f}")]
     pfile = Treepolys[gettypeoflevel(current_node.dir,current_node.level+1)]
-    polylocated = electorwalks.find_boundary(pfile,here)
+    polylocated = find_boundary(pfile,here)
     flash(f'___The branch that contains this postcode is:{polylocated.NAME}')
 
     return redirect(url_for('dashboard'))
@@ -6508,6 +7002,7 @@ def firstpage():
     # the map under the selected node map needs to be configured
     # the selected  boundary options need to be added to the layer
         Featurelayers[atype].create_layer(current_election,current_node,atype)
+
         streamrag = getstreamrag()
         print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[atype].name} - id {Featurelayers[atype].id}")
         flayers = current_node.getselectedlayers(sourcepath)
@@ -6530,6 +7025,7 @@ def firstpage():
         print(f"🧪 current election 3 {current_election} - current_node mapfile:{mapfile}")
 
         return render_template("Dash0.html", VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile)
+
     else:
         return redirect(url_for('login'))
 

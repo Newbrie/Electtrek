@@ -4,7 +4,7 @@
 {% block map %}
 <!-- Editable File Information Table -->
 <!-- Editable File Information Table -->
-<h3>Electoral registers, changes and postal voter files</h3>
+<h4 style="text-align: center">Electoral registers, changes and postal voter files</h4>
 <h4 style="text-align: center">(Select fix level 3 to upload)</h4>
 <button id="add-row-btn">Add Row</button>
 <button id="save-btn">Save</button>
@@ -73,7 +73,7 @@
 </table>
 <!-- Import Table -->
 <div id="streams" class="section">
-    <h3>1 class="centred">DATA QUALITY DASHBOARD</<h3>
+    <h3 class="centred">DATA QUALITY DASHBOARD</<h3>
     <table id="streamtab">
         <thead>
           <tr>
@@ -167,25 +167,47 @@
     .then(res => res.json())
     .then(response => {
       if (response.status === 'success') {
-        alert(`Election ${response.election} deactivated.`);
-        // Refresh the RAG table
-        return fetch('/streamrag_api')
-          .then(res => res.json())
-          .then(data => {
-            const html = data.html;
-            const streamTbody = document.querySelector('#streamtab tbody');
-            if (streamTbody) {
-              streamTbody.innerHTML = html;
-            }
-          });
+        const html = response.html;
+        const streamrag = response.streamrag;
+        const streamTbody = document.querySelector('#streamtab tbody');
+        if (streamTbody) {
+          streamTbody.innerHTML = html;
+        };
+        alert(`Election  ${response.election} successfully deactivated.`);
+
+        window.parent.updateMessages();
       } else {
-        alert(`Error: ${response.message}`);
+        alert(`Deactivation Error: ${response.message}`);
       }
+
     })
     .catch(err => {
       console.error("Deactivation failed:", err);
       alert("An error occurred while deactivating.");
     });
+    // Refresh the RAG table
+    fetch('/streamrag_api')
+      .then(res => res.json())
+      .then(data => {
+        const html = data.html;
+        const streamrag = data.streamrag;
+        const streamTbody = document.querySelector('#streamtab tbody');
+        if (streamTbody) {
+          streamTbody.innerHTML = html;
+        }
+        window.parent.updateMessages();
+        // Now handle the 'streamrag' data (which is likely an object)
+        const labels = Object.keys(streamrag);
+        const dataPoints = labels.map(label => streamrag[label].Elect);
+        const rags = labels.map(label => streamrag[label].RAG);
+
+        console.log("streamtablabels:", labels);
+        console.log("streamtabdata:", dataPoints);
+        console.log("streamtabrags:", rags);
+
+        // Update the chart
+        window.parent.createOrUpdateChart(labels, dataPoints, rags);
+      });
   }
 
 
@@ -235,17 +257,6 @@ document.getElementById('reset-btn').addEventListener('click', () => {
           streamTbody.innerHTML = html;
         }
         window.parent.updateMessages();
-        // Now handle the 'streamrag' data (which is likely an object)
-        const labels = Object.keys(streamrag);
-        const dataPoints = labels.map(label => streamrag[label].Elect);
-        const rags = labels.map(label => streamrag[label].RAG);
-
-        console.log("streamtablabels:", labels);
-        console.log("streamtabdata:", dataPoints);
-        console.log("streamtabrags:", rags);
-
-        // Update the chart
-        window.parent.createOrUpdateChart(labels, dataPoints, rags);
       })
       .catch(error => {
         console.error('Error:', error);
@@ -595,35 +606,23 @@ console.log("✅ Populated election dropdowns with data-territory values.");
                 }
               }
 
-              // 🔄 Inject refreshed streamrag table
-              fetch('/streamrag_api')
-                .then(res => res.json())  // Parse the JSON response
-                .then(data => {
-                  // Extract the 'html' and 'streamrag' from the response
-                  const html = data.html;
-                  const streamrag = data.streamrag;
+              const html = data.html;
+              const streamrag = data.streamrag;
+              const streamTbody = document.querySelector('#streamtab tbody');
+              if (streamTbody) {
+                streamTbody.innerHTML = html;
+              }
+              // Now handle the 'streamrag' data (which is likely an object)
+              const labels = Object.keys(streamrag);
+              const dataPoints = labels.map(label => streamrag[label].Elect);
+              const rags = labels.map(label => streamrag[label].RAG);
 
-                  // Insert the HTML into the table
-                  const streamTbody = document.querySelector('#streamtab tbody');
-                  if (streamTbody) {
-                    streamTbody.innerHTML = html;
-                  }
+              console.log("streamtablabels:", labels);
+              console.log("streamtabdata:", dataPoints);
+              console.log("streamtabrags:", rags);
 
-                  // Now handle the 'streamrag' data (which is likely an object)
-                  const labels = Object.keys(streamrag);
-                  const dataPoints = labels.map(label => streamrag[label].Elect);
-                  const rags = labels.map(label => streamrag[label].RAG);
-
-                  console.log("streamtablabels:", labels);
-                  console.log("streamtabdata:", dataPoints);
-                  console.log("streamtabrags:", rags);
-
-                  // Update the chart
-                  window.parent.createOrUpdateChart(labels, dataPoints, rags);
-                })
-                .catch(error => {
-                  console.error('Error:', error);
-                });
+              // Update the chart
+              window.parent.createOrUpdateChart(labels, dataPoints, rags);
 
 
               // Stop here; ❌ no further polling

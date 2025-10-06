@@ -1,0 +1,56 @@
+<div>
+    <table>
+        <thead>
+            <tr>
+                <th>Street Name</th>
+                <th>Total</th>
+                <th>Unit</th>
+                <th>VI</th>
+                <th>Votes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.total }}</td>
+                <td>{{ row.unit }}</td>
+                <td>
+                    <select onchange="updateMaxVote(this)">
+                        {% for key, value in vid.items() %}
+                        <option value="{{ key }}" data-max="{{ row.total }}">{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <button onclick="incrementVoteCount(this)" data-count="0" data-max="{{ row.total }}" style="font-size: 8pt;">0/{{ row.total }}</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function incrementVoteCount(button) {
+    let count = parseInt(button.getAttribute("data-count")) || 0;
+    let max = parseInt(button.getAttribute("data-max")) || 1;
+    count = (count + 1) % (max + 1);
+    button.setAttribute("data-count", count);
+    button.innerText = count + "/" + max;
+
+    const row = button.closest("tr");
+    row.style.backgroundColor = count > 0 ? "#d4edda" : "";
+}
+
+function updateMaxVote(selectEl) {
+    const max = parseInt(selectEl.options[selectEl.selectedIndex].getAttribute("data-max")) || 1;
+
+    const row = selectEl.closest("tr");
+    const button = row.querySelector("button");
+    button.setAttribute("data-max", max);
+    button.setAttribute("data-count", 0);
+    button.innerText = "0/" + max;
+    row.style.backgroundColor = "";
+}
+</script>
