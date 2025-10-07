@@ -2009,8 +2009,6 @@ class TreeNode:
 from collections import defaultdict
 
 def build_street_list_html(streets_df):
-    import pandas as pd
-    import re
 
     # Voting intention map
     VID = {
@@ -2030,7 +2028,12 @@ def build_street_list_html(streets_df):
 
 
     # Count elector records for each (street, unit)
-    unit_counts = streets_df.groupby(['Name', 'unit']).size().to_dict()
+    unit_counts = {
+        unit: count
+        for (name, unit), count in streets_df.groupby(['Name', 'unit']).size().items()
+        if name == street_name
+    }
+    unit_counts_json = json.dumps(unit_counts)
 
     print("______Unit Counts",unit_counts)
 
@@ -2094,26 +2097,31 @@ def build_street_list_html(streets_df):
         num_display = f"({min(num_values)} - {max(num_values)})" if num_values else "( - )"
 
         # Unit dropdown
-        unit_dropdown = f"""
+        unit_dropdown = f'''
         <select onchange="updateMaxVote(this)" style='width: 100%; font-size: 8pt;'>
-            {''.join(f'<option value="{u}" data-max="{total_units}">{u}</option>' for u in unit_list)}
+            {"".join(f'<option value="{u}" data-max="{total_units}">{u}</option>' for u in unit_list)}
         </select>
-        """
+        '''
 
         # VI select
         vi_select = '<select style="font-size:8pt;">' + ''.join(
             f'<option value="{key}">{value}</option>' for key, value in VID.items()
-        ) + '</select>'
+            ) + '</select>'
 
-        max_votes = unit_counts.get((street_name, unit), 1)
+
+
+        first_unit = unit_list[0] if unit_list else "—"
+        max_votes = unit_counts.get((street_name, first_unit), 1)
+
+
         vote_button = f'''
             <button onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}" style="font-size: 8pt;">0/{max_votes}</button>
         '''
-        
+
         # Add row
         html += f'''
         <tr>
-            <td style="padding: 4px; font-size: 8pt;"><b data-name="{street_name}">{street_name}</b></td>
+            <td style="padding: 4px; font-size: 8pt;"><b data-name="{street_name}" data-unit-counts='{unit_counts_json}'>{street_name} </b></td>
             <td style="padding: 4px; font-size: 8pt;"><i>{hos}</i></td>
             <td style="padding: 4px; font-size: 8pt;">{num_display}</td>
             <td style="padding: 4px;">{unit_dropdown}</td>
@@ -2127,9 +2135,6 @@ def build_street_list_html(streets_df):
         </table>
     </div>
     '''
-
-    return html
-
 
     return html
 

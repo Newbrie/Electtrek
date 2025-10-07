@@ -563,17 +563,22 @@ var showMore = function (msg,area, type) {
   }
 
   function updateMaxVote(selectEl) {
-      const selectedUnit = selectEl.value;
       const row = selectEl.closest("tr");
-      const street = row.querySelector("b[data-name]").getAttribute("data-name");
+      const unit = selectEl.value;
 
-      const key = street + "|" + selectedUnit;
-      const max = unitCounts[key] || 1;
+      const unitCountsAttr = row.getAttribute("data-unit-counts");
+      let unitCounts = {};
+      try {
+          unitCounts = JSON.parse(unitCountsAttr);
+      } catch (e) {
+          console.warn("Could not parse unit counts", e);
+      }
+
+      const max = unitCounts[unit] || 1;
 
       const button = row.querySelector("button");
       button.setAttribute("data-max", max);
       button.setAttribute("data-count", 0);
-      button.innerText = "0/" + max;
-
+      button.innerText = `0/${max}`;
       row.style.backgroundColor = "";
   }
