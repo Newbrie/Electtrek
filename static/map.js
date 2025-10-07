@@ -564,16 +564,21 @@ var showMore = function (msg,area, type) {
 
 
   function updateMaxVote(selectElement) {
-      const selectedUnit = selectElement.value;
-      const row = selectElement.closest('tr');
-      const bTag = row.querySelector('b[data-unit-counts]');
-      const voteBtn = row.querySelector('button');
+    const selectedUnit = selectElement.value;
+    const row = selectElement.closest('tr');
+    const bTag = row.querySelector('b[data-unit-counts]');
+    const voteBtn = row.querySelector('button');
 
-      if (!bTag || !voteBtn) return;
+    if (!bTag || !voteBtn) return;
 
-      const unitCounts = JSON.parse(bTag.dataset.unitCounts || '{}');
-      const max = unitCounts[selectedUnit] || 1;
+    const unitCounts = JSON.parse(bTag.dataset.unitCounts || '{}');
+    const max = unitCounts[selectedUnit] || 1;
 
-      voteBtn.dataset.max = max;
-      voteBtn.innerHTML = `${voteBtn.dataset.count}/${max}`;
-  }
+    // Reset count when unit changes
+    voteBtn.dataset.count = 0;
+    voteBtn.dataset.max = max;
+    voteBtn.innerText = `0/${max}`;
+
+    // Also reset background color
+    row.style.backgroundColor = "";
+}
