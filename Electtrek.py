@@ -2016,26 +2016,32 @@ def build_street_list_html(streets_df):
         "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"
     }
 
+    from collections import Counter
+
+    def count_units_from_column(df, column):
+        all_units = (
+            unit.strip()
+            for row in df[column].dropna()
+            for unit in str(row).split(',')
+            if unit.strip().lower() != 'nan' and unit.strip() != ''
+        )
+        return Counter(all_units)
+
+
     def extract_unit(row):
-        if pd.notna(row['AddressPrefix']) and str(row['AddressPrefix']).strip().lower() != 'nan':
-            return str(row['AddressPrefix']).strip()
-        elif pd.notna(row['AddressNumber']) and str(row['AddressNumber']).strip().lower() != 'nan':
-            match = re.search(r'\d+', str(row['AddressNumber']))
-            return match.group() if match else None
+        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
+        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
+
+        # Return the first valid field (not empty, not "nan")
+        if prefix and prefix.lower() != 'nan':
+            return prefix
+        if number and number.lower() != 'nan':
+            return number
         return None
 
+
     streets_df['unit'] = streets_df.apply(extract_unit, axis=1)
-
-
-    # Count elector records for each (street, unit)
-    unit_counts = {
-        unit: count
-        for (name, unit), count in streets_df.groupby(['Name', 'unit']).size().items()
-        if name == street_name
-    }
-    unit_counts_json = json.dumps(unit_counts)
-
-    print("______Unit Counts",unit_counts)
+    print(f"____Street_df:{streets_df['unit']} ")
 
     html = '''
     <div style="
@@ -2063,30 +2069,34 @@ def build_street_list_html(streets_df):
             </thead>
             <tbody>
     '''
+    unit_set = set()
+    num_values = set()
 
-    for street_name, group in streets_df.groupby("Name"):
+    # Now group by street name and extract per-unit counts
+    for street_name, street_group in streets_df.groupby("Name"):
+        # Inside your loop for street_name, street_group in streets_df.groupby("Name"):
+        unit_counts = count_units_from_column(street_group, 'unit')
+
+        # JSON version for embedding in HTML
+        unit_counts_json = json.dumps(unit_counts)
+
+        print(f"Street: {street_name}")
+        print(f"Unit Counts: {unit_counts}")
+        print(f"JSON: {unit_counts_json}")
+
         unit_set = set()
-        num_values = set()
+        num_values = []
 
-        for _, row in group.iterrows():
-            # Collect AddressNumber values
-            if pd.notna(row['AddressNumber']):
-                parts = str(row['AddressNumber']).split(',')
+        for _, row in street_group.iterrows():  # ✅ only iterate this street's rows
+            if pd.notna(row['unit']):
+                parts = str(row['unit']).split(',')
                 for part in parts:
                     val = part.strip()
                     if val and val.lower() != 'nan':
                         unit_set.add(val)
                         match = re.search(r'\d+', val)
                         if match:
-                            num_values.add(int(match.group()))
-
-            # Collect AddressPrefix values
-            if pd.notna(row['AddressPrefix']):
-                parts = str(row['AddressPrefix']).split(',')
-                for part in parts:
-                    val = part.strip()
-                    if val and val.lower() != 'nan':
-                        unit_set.add(val)
+                            num_values.append(int(match.group()))
 
         unit_list = sorted(unit_set)
         total_units = len(unit_list) or 1
@@ -2099,7 +2109,7 @@ def build_street_list_html(streets_df):
         # Unit dropdown
         unit_dropdown = f'''
         <select onchange="updateMaxVote(this)" style='width: 100%; font-size: 8pt;'>
-            {"".join(f'<option value="{u}" data-max="{total_units}">{u}</option>' for u in unit_list)}
+            {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
         '''
 
@@ -2110,14 +2120,15 @@ def build_street_list_html(streets_df):
 
 
 
-        first_unit = unit_list[0] if unit_list else "—"
-        max_votes = unit_counts.get((street_name, first_unit), 1)
+        first_unit = unit_list[0] if unit_list else None
+        max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
+
 
 
         vote_button = f'''
             <button onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}" style="font-size: 8pt;">0/{max_votes}</button>
         '''
-
+        print("______Unit Counts",unit_counts)
         # Add row
         html += f'''
         <tr>
@@ -2300,7 +2311,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                 if not region_electors.empty and len(region_electors.dropna(how="all")) > 0:
                     Streetsdf0 = pd.DataFrame(region_electors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
                     Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
-                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
+#                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
+                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first','AddressNumber': lambda x: ','.join(x.dropna().astype(str)),
+                        'AddressPrefix': lambda x: ','.join(x.dropna().astype(str))
+                        }
                     Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
                     streetstag = build_street_list_html(Streetsdf)
                     print ("______Voronoi Streetsdf:",len(Streetsdf), streetstag)

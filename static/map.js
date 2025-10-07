@@ -562,23 +562,19 @@ var showMore = function (msg,area, type) {
       row.style.backgroundColor = count > 0 ? "#d4edda" : "";
   }
 
-  function updateMaxVote(selectEl) {
-      const row = selectEl.closest("tr");
-      const unit = selectEl.value;
+  <script>
+  function updateMaxVote(selectElement) {
+      const selectedUnit = selectElement.value;
+      const row = selectElement.closest('tr');
+      const bTag = row.querySelector('b[data-unit-counts]');
+      const voteBtn = row.querySelector('button');
 
-      const unitCountsAttr = row.getAttribute("data-unit-counts");
-      let unitCounts = {};
-      try {
-          unitCounts = JSON.parse(unitCountsAttr);
-      } catch (e) {
-          console.warn("Could not parse unit counts", e);
-      }
+      if (!bTag || !voteBtn) return;
 
-      const max = unitCounts[unit] || 1;
+      const unitCounts = JSON.parse(bTag.dataset.unitCounts || '{}');
+      const max = unitCounts[selectedUnit] || 1;
 
-      const button = row.querySelector("button");
-      button.setAttribute("data-max", max);
-      button.setAttribute("data-count", 0);
-      button.innerText = `0/${max}`;
-      row.style.backgroundColor = "";
+      voteBtn.dataset.max = max;
+      voteBtn.innerHTML = `${voteBtn.dataset.count}/${max}`;
   }
+  </script>
