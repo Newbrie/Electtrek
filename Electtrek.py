@@ -2128,7 +2128,10 @@ def build_street_list_html(streets_df):
         vote_button = f'''
             <button onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}" style="font-size: 8pt;">0/{max_votes}</button>
         '''
-        print("______Unit Counts",unit_counts)
+        print(f"unit_dropdown: {unit_dropdown}")
+        print(f"vi_select: {vi_select}")
+        print(f"vote_button: {vote_button}")
+    
         # Add row
         html += f'''
         <tr>

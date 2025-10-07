@@ -562,7 +562,7 @@ var showMore = function (msg,area, type) {
       row.style.backgroundColor = count > 0 ? "#d4edda" : "";
   }
 
-  <script>
+
   function updateMaxVote(selectElement) {
       const selectedUnit = selectElement.value;
       const row = selectElement.closest('tr');
@@ -577,4 +577,3 @@ var showMore = function (msg,area, type) {
       voteBtn.dataset.max = max;
       voteBtn.innerHTML = `${voteBtn.dataset.count}/${max}`;
   }
-  </script>
