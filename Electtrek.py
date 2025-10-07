@@ -2006,55 +2006,133 @@ class TreeNode:
         return
 
 
+from collections import defaultdict
+
 def build_street_list_html(streets_df):
-    global environment
-    """
-    Renders the street list HTML using Jinja2 templates.
+    import pandas as pd
+    import re
 
-    :param streets_df: A pandas DataFrame with columns like 'Name', 'AddressNumber', 'AddressPrefix'
-    :param env: Jinja2 Environment instance
-    :return: Rendered HTML string
-    """
-
+    # Voting intention map
     VID = {
         "R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green",
         "I": "Independent", "PC": "Plaid Cymru", "SD": "SDP", "Z": "Maybe", "W": "Wont Vote", "X": "Won't Say"
     }
 
-    # Extract "unit" from AddressPrefix or AddressNumber
     def extract_unit(row):
-        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
-        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
-
-        # Avoid appending 'nan' or empty values
-        if prefix.lower() != 'nan' and prefix:
-            return prefix
-        elif number.lower() != 'nan' and number:
-            match = re.search(r'\d+', number)
+        if pd.notna(row['AddressPrefix']) and str(row['AddressPrefix']).strip().lower() != 'nan':
+            return str(row['AddressPrefix']).strip()
+        elif pd.notna(row['AddressNumber']) and str(row['AddressNumber']).strip().lower() != 'nan':
+            match = re.search(r'\d+', str(row['AddressNumber']))
             return match.group() if match else None
         return None
 
-
     streets_df['unit'] = streets_df.apply(extract_unit, axis=1)
-    unit_counts = streets_df.copy()
-    unit_counts['unit'] = unit_counts['unit'].astype(str).str.strip()
-    unit_counts = unit_counts.groupby(['Name', 'unit']).size().to_dict()
 
-    # Format data for the template
-    rows = []
-    for _, row in streets_df.iterrows():
-        name = row['Name']
-        unit = row['unit'] or "—"
-        total = unit_counts.get((name, unit), 1)
-        rows.append({
-            "name": name,
-            "unit": unit,
-            "total": total
-        })
 
-    # Get the Jinja2 template
-    template = environment.get_template("street_list.html")
-    return template.render(rows=rows, vid=VID)
+    # Count elector records for each (street, unit)
+    unit_counts = streets_df.groupby(['Name', 'unit']).size().to_dict()
+
+    print("______Unit Counts",unit_counts)
+
+    html = '''
+    <div style="
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 10px;
+        background-color: white !important;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+        max-width: 600px;
+        overflow-x: auto;
+        font-family: sans-serif;
+        font-size: 8pt;
+        white-space: nowrap;
+    ">
+        <table style="border-collapse: collapse; width: 100%;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding: 4px;">Street Name</th>
+                    <th style="text-align:left; padding: 4px;">Total</th>
+                    <th style="text-align:left; padding: 4px;">Range</th>
+                    <th style="text-align:left; padding: 4px;">Unit</th>
+                    <th style="text-align:left; padding: 4px;">VI</th>
+                    <th style="text-align:left; padding: 4px;">Votes</th>
+                </tr>
+            </thead>
+            <tbody>
+    '''
+
+    for street_name, group in streets_df.groupby("Name"):
+        unit_set = set()
+        num_values = set()
+
+        for _, row in group.iterrows():
+            # Collect AddressNumber values
+            if pd.notna(row['AddressNumber']):
+                parts = str(row['AddressNumber']).split(',')
+                for part in parts:
+                    val = part.strip()
+                    if val and val.lower() != 'nan':
+                        unit_set.add(val)
+                        match = re.search(r'\d+', val)
+                        if match:
+                            num_values.add(int(match.group()))
+
+            # Collect AddressPrefix values
+            if pd.notna(row['AddressPrefix']):
+                parts = str(row['AddressPrefix']).split(',')
+                for part in parts:
+                    val = part.strip()
+                    if val and val.lower() != 'nan':
+                        unit_set.add(val)
+
+        unit_list = sorted(unit_set)
+        total_units = len(unit_list) or 1
+        hos = total_units
+
+        # Address range display
+        num_values = sorted(num_values)
+        num_display = f"({min(num_values)} - {max(num_values)})" if num_values else "( - )"
+
+        # Unit dropdown
+        unit_dropdown = f"""
+        <select onchange="updateMaxVote(this)" style='width: 100%; font-size: 8pt;'>
+            {''.join(f'<option value="{u}" data-max="{total_units}">{u}</option>' for u in unit_list)}
+        </select>
+        """
+
+        # VI select
+        vi_select = '<select style="font-size:8pt;">' + ''.join(
+            f'<option value="{key}">{value}</option>' for key, value in VID.items()
+        ) + '</select>'
+
+        max_votes = unit_counts.get((street_name, unit), 1)
+        vote_button = f'''
+            <button onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}" style="font-size: 8pt;">0/{max_votes}</button>
+        '''
+        
+        # Add row
+        html += f'''
+        <tr>
+            <td style="padding: 4px; font-size: 8pt;"><b data-name="{street_name}">{street_name}</b></td>
+            <td style="padding: 4px; font-size: 8pt;"><i>{hos}</i></td>
+            <td style="padding: 4px; font-size: 8pt;">{num_display}</td>
+            <td style="padding: 4px;">{unit_dropdown}</td>
+            <td style="padding: 4px;">{vi_select}</td>
+            <td style="padding: 4px;">{vote_button}</td>
+        </tr>
+        '''
+
+    html += '''
+            </tbody>
+        </table>
+    </div>
+    '''
+
+    return html
+
+
+    return html
+
 
 
 
@@ -3967,6 +4045,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 print(f"   {k} → {v}")
 
             mainframe["WalkName"] = mainframe.index.map(serial_label_series)
+# K2-3-4    mainframe["WalkName"] = mainframe.index.map(newlabels)
 
 # ---- ADD Zones for all Level 4 areas within Level 3 areas in the import
 

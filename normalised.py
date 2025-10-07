@@ -563,6 +563,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                 electors2.loc[index,'Address_3'] = elector["Address3"]
                 electors2.loc[index,'Address_4'] = elector["Address4"]
                 prefix = ""
+                Addno = match_text1
                 print ("Case10","ind1:", start_index1, "No1:", match_text1, "ind2:", 0, "No2:", "", "Addr1:", original_string1, "Addr2:", "", "prefix:",prefix, "street:", street)
                 if street == "" or street is None:
                   street = normalname(elector.Address2)

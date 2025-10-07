@@ -563,11 +563,17 @@ var showMore = function (msg,area, type) {
   }
 
   function updateMaxVote(selectEl) {
-      const max = parseInt(selectEl.options[selectEl.selectedIndex].getAttribute("data-max")) || 1;
+      const selectedUnit = selectEl.value;
       const row = selectEl.closest("tr");
+      const street = row.querySelector("b[data-name]").getAttribute("data-name");
+
+      const key = street + "|" + selectedUnit;
+      const max = unitCounts[key] || 1;
+
       const button = row.querySelector("button");
       button.setAttribute("data-max", max);
       button.setAttribute("data-count", 0);
       button.innerText = "0/" + max;
+
       row.style.backgroundColor = "";
   }
