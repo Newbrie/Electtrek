@@ -1429,10 +1429,29 @@ class TreeNode:
 
 
     def create_area_map(self, flayers):
+        global STATICSWITCH
         from folium import IFrame
         from branca.element import Element
 
         print("___BEFORE map creation")
+
+        password_html = '''
+            <!-- Password Login Section -->
+            <div id="login">
+              <h2>Enter Password</h2>
+              <input type="password" id="passwordInput" placeholder="Password">
+              <button onclick="checkPassword()">Submit</button>
+              <p id="error" style="color: red;"></p>
+            </div>
+
+            <!-- Protected Content -->
+            <div id="content" style="display: none;">
+              <!-- Your site content goes here -->
+              <h1>Welcome!</h1>
+              <p>This is the protected area of the site.</p>
+            </div>
+            '''
+
 
         # --- CSS to adjust popup styling
         move_close_button_css = """
@@ -1645,6 +1664,8 @@ class TreeNode:
         )
 
         # --- Inject custom HTML and JS into map
+        if STATICSWITCH:
+            FolMap.get_root().html.add_child(folium.Element(password_html))
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
@@ -2131,7 +2152,7 @@ def build_street_list_html(streets_df):
         print(f"unit_dropdown: {unit_dropdown}")
         print(f"vi_select: {vi_select}")
         print(f"vote_button: {vote_button}")
-    
+
         # Add row
         html += f'''
         <tr>
@@ -4146,6 +4167,7 @@ app.config['SESSION_COOKIE_PATH'] = '/'
 
 
 
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -4174,7 +4196,7 @@ Featurelayers = {
 "marker": ExtendedFeatureGroup(name='Special Markers', overlay=True, control=True, show=True, id='UNITED_KINGDOM')
 }
 
-
+STATICSWITCH = False
 
 #or i, (key, fg) in enumerate(Featurelayers.items(), start=1):
 #    fg.id = i
@@ -6007,7 +6029,9 @@ def downMWbut(path):
     global filename
     global layeritems
     global CurrentElection
+    global STATICSWITCH
 # so this is the button which creates the nodes and map of equal sized walks for the troops
+
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
@@ -6037,7 +6061,9 @@ def downMWbut(path):
             print(f"_____ Before creation - Static Walk display markers at CE {current_election} ",current_node.level, len(Featurelayers['walk']._children))
             Featurelayers['walk'].create_layer(current_election,current_node, 'walk',static=True)
             print("_______just before Static Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
+            STATICSWITCH = True
             current_node.create_area_map(current_node.getselectedlayers(path))
+            STATICSWITCH = False
             flash("________Static Walks added:  "+str(len(Featurelayers['walk']._children)))
             print("________After map created Static Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
 
@@ -6047,7 +6073,9 @@ def downMWbut(path):
 #        simple transfer from another node -
         print ("_________New MW mapfile/",current_node.value, walkpathfile)
         Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
+        STATICSWITCH = True
         current_node.create_area_map(current_node.getselectedlayers(path))
+        STATICSWITCH = False
     #    moredata = importVI(allelectors.copy())
     #    if len(moredata) > 0:
     #        allelectors = moredata
@@ -6056,6 +6084,7 @@ def downMWbut(path):
 
     persist(current_node)
     visit_node(current_election,CurrentElection,mapfile)
+
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
