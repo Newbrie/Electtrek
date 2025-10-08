@@ -69,6 +69,11 @@ body {
 			font-family:Arial, Helvetica, sans-serif;
 			line-height: 1.5em;
 		}
+body.protected #content { display: none; }
+body.protected #login { display: block; }
+
+body.unlocked #content { display: block; }
+body.unlocked #login { display: none; }
 
 
 		#main {

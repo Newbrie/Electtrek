@@ -596,6 +596,7 @@ async function checkPassword() {
   const correctHash = "92523985e558a2af5170a766a41a7482081a0753c7d4ef6336c0ecd43dc71dad";
 
   if (hash === correctHash) {
+    document.body.classList.add("unlocked");
     document.getElementById("login").style.display = "none";
     document.getElementById("content").style.display = "block";
   } else {
