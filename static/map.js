@@ -130,7 +130,7 @@ var showMore = function (msg,area, type) {
       tabletitle = document.getElementById("tabletitle");
       table = document.getElementById("captains-table");
       tabtitle = document.getElementById("selectedTitle");
-      console.log("✅ Running in parent document");
+      console.log("✅ Running in parent document"+table);
       
           // Now safely use docContext to query elements
 
