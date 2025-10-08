@@ -126,27 +126,12 @@ var showMore = function (msg,area, type) {
           "W": "white", "X": "darkgray"
       };
       let tabletitle, table, tabtitle;
-      if (window.self !== window.top) {
-          // Running inside an iframe
-          tabletitle = parent.document.getElementById("tabletitle");
-          table = parent.document.getElementById("captains-table");
-          tabtitle = parent.document.getElementById("selectedTitle");
-          console.log("✅ Running inside iframe", );
-          docContext = document;
-      } else {
-          // Running in the parent window
-          tabletitle = document.getElementById("tabletitle");
-          table = document.getElementById("captains-table");
-          tabtitle = document.getElementById("selectedTitle");
-          console.log("✅ Running in parent document");
-
-          const iframe = document.getElementById("iframe1");
-          if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
-              console.error("❌ Iframe or its content is not accessible");
-              return;
-          }
-      }
-
+      // Running in the parent window
+      tabletitle = document.getElementById("tabletitle");
+      table = document.getElementById("captains-table");
+      tabtitle = document.getElementById("selectedTitle");
+      console.log("✅ Running in parent document");
+      
           // Now safely use docContext to query elements
 
       const tabhead = table.querySelector("thead");

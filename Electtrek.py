@@ -645,6 +645,13 @@ def get_common_prefix_len(a, b):
             return i
     return min_len
 
+def strip_filename_from_path(path):
+    for suffix in [
+        "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html",
+        "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
+    ]:
+        path = path.replace(suffix, "@@@")
+    return path
 
 
 # This prints a script tag you can paste into your HTML
@@ -694,13 +701,6 @@ class TreeNode:
         global allelectors
         global areaelectors
         global CurrentElection
-        def strip_filename_from_path(path):
-            for suffix in [
-                "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html",
-                "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
-            ]:
-                path = path.replace(suffix, "@@@")
-            return path
 
         def strip_leaf_from_path(path):
             leaf = path.split("/").pop()
@@ -1435,22 +1435,147 @@ class TreeNode:
 
         print("___BEFORE map creation")
 
-        password_html = '''
-            <!-- Password Login Section -->
-            <div id="login">
-              <h2>Enter Password</h2>
-              <input type="password" id="passwordInput" placeholder="Password">
-              <button onclick="checkPassword()">Submit</button>
-              <p id="error" style="color: red;"></p>
-            </div>
 
-            <!-- Protected Content -->
-            <div id="content" style="display: none;">
-              <!-- Your site content goes here -->
-              <h1>Welcome!</h1>
-              <p>This is the protected area of the site.</p>
+        import hashlib
+        import re
+        from pathlib import Path
+
+        def inject_password_protection(html_path: str, password: str):
+            """
+            Inject a password overlay + JS into a folium HTML file.
+            Does NOT hide the folium map div (so no invalidateSize needed).
+            """
+            password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+            html_p = Path(html_path)
+            html = html_p.read_text(encoding="utf-8")
+
+            # find the folium map div id
+            m = re.search(r'<div class="folium-map" id="([^"]+)"', html)
+            if not m:
+                raise ValueError('Could not find folium map container in HTML (looking for <div="folium-map" id="...").')
+            map_div_id = m.group(1)
+
+            # --- NOTE: Do NOT set display:none on the map div.
+            # Remove any previous attempts to hide it (defensive)
+            html = re.sub(
+                rf'(<div class="folium-map" id="{re.escape(map_div_id)}")\s*style="[^"]*"',
+                rf'\1',
+                html,
+                count=1
+            )
+
+            # injection HTML + JS (no display:none, overlay covers map)
+            injection = f"""
+        <!-- PASSWORD OVERLAY + UNLOCK SCRIPT (injected) -->
+        <style>
+          /* ensure page & map can fill viewport */
+          html, body {{ height: 100%; margin: 0; padding: 0; }}
+          .folium-map {{ /* ensure map container has height if missing */ height: 100% !important; }}
+
+          #password-overlay {{
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(255,255,255,0.92); /* slightly transparent so you can see if tiles load */
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }}
+          #password-overlay .box {{
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            max-width: 92vw;
+            background: rgba(255,255,255,0.96);
+          }}
+          #password-overlay input {{
+            font-size: 14px;
+            padding: 8px;
+            margin-right: 8px;
+          }}
+        </style>
+
+        <div id="password-overlay" role="dialog" aria-modal="true" aria-label="Password required">
+          <div class="box">
+            <div>
+              <input id="password-input" type="password" placeholder="Enter password" />
+              <button id="password-submit">Submit</button>
             </div>
-            '''
+            <p id="error-message" style="color: tomato; display: none; margin-top: 8px;">Incorrect password</p>
+          </div>
+        </div>
+
+        <script>
+        async function sha256(str) {{
+          const utf8 = new TextEncoder().encode(str);
+          const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        }}
+
+        async function checkPassword() {{
+          console.debug("checkPassword() called");
+          const input = document.getElementById("password-input").value || "";
+          const error = document.getElementById("error-message");
+          try {{
+            const hash = await sha256(input);
+            console.debug("computed hash:", hash);
+            if (hash === "{password_hash}") {{
+              console.info("Password correct — removing overlay");
+              const overlay = document.getElementById("password-overlay");
+              if (overlay) overlay.remove();
+              try {{ sessionStorage.setItem("map_access_granted", "1"); }} catch(e){{/* ignore */}}
+            }} else {{
+              console.warn("Incorrect password");
+              if (error) error.style.display = "block";
+            }}
+          }} catch (e) {{
+            console.error("Password check failed:", e);
+            if (error) error.style.display = "block";
+          }}
+        }}
+
+        // wire events
+        document.addEventListener("DOMContentLoaded", function() {{
+          // Restore prior session if present
+          try {{
+            if (sessionStorage.getItem("map_access_granted") === "1") {{
+              const overlay = document.getElementById("password-overlay");
+              if (overlay) overlay.remove();
+            }}
+          }} catch(e){{/* ignore */}}
+
+          const btn = document.getElementById("password-submit");
+          if (btn) btn.addEventListener("click", checkPassword);
+
+          const input = document.getElementById("password-input");
+          if (input) {{
+            input.addEventListener("keydown", function(ev) {{
+              if (ev.key === "Enter") {{
+                ev.preventDefault();
+                checkPassword();
+              }}
+            }});
+          }}
+        }});
+
+        // small safety: do not rely on L to exist at parse-time in other injected scripts.
+        // Guard usage of L in other injected JS.
+        </script>
+        """
+
+            # Insert injection just before </body>
+            if "</body>" in html:
+                html = html.replace("</body>", injection + "\n</body>")
+            else:
+                html = html + injection
+
+            html_p.write_text(html, encoding="utf-8")
+            print(f"Injected password protection into {html_path}; map div id = {map_div_id}")
+            return
+
 
 
         # --- CSS to adjust popup styling
@@ -1664,8 +1789,8 @@ class TreeNode:
         )
 
         # --- Inject custom HTML and JS into map
-        if STATICSWITCH:
-            FolMap.get_root().html.add_child(folium.Element(password_html))
+
+
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
@@ -1717,6 +1842,9 @@ class TreeNode:
         # Save to file
         target = self.locmappath("")
         FolMap.save(target)
+        if STATICSWITCH:
+            # Inject password protection (password is "secret123")
+            inject_password_protection(target, "secret123")
         print("Centroid raw:", self.centroid)
         print(" ✅ _____saved map file:", target, len(flayers), self.value, self.dir, self.file)
 
@@ -4197,6 +4325,22 @@ Featurelayers = {
 }
 
 STATICSWITCH = False
+TABLE_TYPES  = {
+    "resources": "Resources",
+    "markerframe": "Event Markers",
+    "report_data": "Report Data",
+    "stream_table": "Import Data Streams",
+    "nodelist_xref" : "Nodelist xref",
+    "nation_layer" : "Nations",
+    "county_layer" : "Counties",
+    "constituency_layer" : "Constituencies",
+    "ward_layer" : "Wards",
+    "division_layer" : "Divisions",
+    "polling_district_layer" : "Polling Districts",
+    "walk_layer" : "Walks",
+    "street_layer" : "Streets",
+    "walkleg_layer" : "Walklegs"
+}
 
 #or i, (key, fg) in enumerate(Featurelayers.items(), start=1):
 #    fg.id = i
@@ -4567,9 +4711,9 @@ def kanban():
     grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
     print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg','VI_L1Done','VI_Canvassed' ]].head());
     mapfile = current_node.mapfile()
-    formdata['tabledetails'] = current_node.value+" details"
+    title = current_node.value+" details"
     items = current_node.childrenoftype('walk')
-    layeritems = get_layer_table(items,formdata['tabledetails'] )
+    layeritems = get_layer_table(items,title )
     print("___Layeritems: ",[x.value for x in items] )
 
 
@@ -5173,6 +5317,7 @@ def election_report():
     global OPTIONS
     global resources
     global markerframe
+    global report_data
     resources = OPTIONS['resources']
     # Define the absolute path to the 'static/data' directory
     elections_dir = os.path.join(config.workdirectories['workdir'], 'static', 'data')
@@ -5524,6 +5669,7 @@ def update_territory():
 def index():
     global TREK_NODES
     global streamrag
+    global TABLE_TYPES
 
 
     ELECTIONS = get_election_names()
@@ -5539,7 +5685,7 @@ def index():
         mapfile = current_node.mapfile()
 #        redirect(url_for('captains'))
 
-        return render_template("Dash0.html",  formdata=formdata,current_election=current_election, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata,table_types=TABLE_TYPES,current_election=current_election, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
 
     return render_template("index.html")
 
@@ -6497,6 +6643,7 @@ def wardreport(path):
 @login_required
 def get_table(table_name):
     global resources
+    global report_data
     global markerframe
     global stream_table
     global layertable
@@ -6505,6 +6652,9 @@ def get_table(table_name):
 
     def get_resources_table():
         return pd.DataFrame(resources)
+
+    def get_report_table():
+        return pd.DataFrame(report_data)
 
     def get_markers_table():
         print(f"Markerframe type: {type(markerframe)}")
@@ -6543,6 +6693,7 @@ def get_table(table_name):
 
     # Table mapping
     table_map = {
+        "report" : get_report_table,
         "resources" : get_resources_table,
         "markerframe" : get_markers_table,
         "stream_table" : get_stream_table
@@ -6736,14 +6887,18 @@ def upbut(path):
     global layeritems
     global CurrentElection
 
-    FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
-
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
     flash('_______ROUTE/upbut',path)
     print('_______ROUTE/upbut',path, current_node.value)
+    trimmed_path = path
+    if path.find(" ") > -1:
+        dest_path = path.split(" ")
+        moretype = dest_path.pop() # take off any trailing parameters
+        trimmed_path = dest_path[0]
+
     formdata = {}
 # a up button on a node has been selected on the map, so the parent map must be displayed with new up/down options
 # for PDs the up button should take you to the -PDS file, for walks the -WALKS file
@@ -6755,7 +6910,6 @@ def upbut(path):
     if current_node.level < 3:
         restore_fullpolys(current_node.type)
 
-
 # the previous node's type determines the 'face' of the destination node
     atype = gettypeoflevel(path,current_node.level+1) # destination type
     #formdata['username'] = session["username"]
@@ -6764,17 +6918,16 @@ def upbut(path):
     formdata['importfile'] = ""
 
     FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
-    face_file = subending(current_node.file,FACEENDING[previous_node.type])
+    face_file = subending(trimmed_path,FACEENDING[previous_node.type])
     print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
-    mapfile = current_node.dir+"/"+face_file
+    mapfile = trimmed_path
     if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
         current_node.create_area_map(current_node.getselectedlayers(mapfile))
-        current_node.file = face_file
-        mapfile = current_node.mapfile()
+
     print("________chosen node url",mapfile)
     visit_node(current_election,CurrentElection,mapfile)
     persist(current_node)
@@ -6973,6 +7126,7 @@ def walks():
     global Fullpolys
     global streamrag
     global CurrentElection
+    global TABLE_TYPES
 
 
     global environment
@@ -6997,7 +7151,7 @@ def walks():
 #    formdata['username'] = session['username']
         session['current_node_id'] = current_node.fid
 
-        return render_template('Dash0.html',  formdata=formdata, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -7049,6 +7203,7 @@ def firstpage():
     global streamrag
     global markerframe
     global CurrentElection
+    global TABLE_TYPES
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
@@ -7154,7 +7309,7 @@ def firstpage():
 
         print(f"🧪 current election 3 {current_election} - current_node mapfile:{mapfile}")
 
-        return render_template("Dash0.html", VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile)
+        return render_template("Dash0.html", table_types=TABLE_TYPES,VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile)
 
     else:
         return redirect(url_for('login'))
@@ -7170,6 +7325,7 @@ def cards():
     global Fullpolys
     global streamrag
     global environment
+    global TABLE_TYPES
 
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
@@ -7197,7 +7353,7 @@ def cards():
                 mapfile =  prodcards[2]
                 group = prodcards[0]
                 ELECTIONS = get_election_names()
-                return render_template('Dash0.html',  formdata=formdata,current_election=CurrentElection[session.get("current_election")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CurrentElection[session.get("current_election")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")
