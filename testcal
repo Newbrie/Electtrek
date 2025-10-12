@@ -1,0 +1,835 @@
+calendar_plan<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <meta charset="UTF-8">
+  <title>35-Day Calendar (Aligned Weeks)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+
+    resource-item {
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-weight: bold;
+  color: #0050b3;
+  cursor: grab;
+}
+
+/* Availability levels: 0 (none) to 10 (max) */
+.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
+.slot[data-availability="1"] { background-color: #e6f0ff; }
+.slot[data-availability="2"] { background-color: #cce0ff; }
+.slot[data-availability="3"] { background-color: #b3d1ff; }
+.slot[data-availability="4"] { background-color: #99c2ff; }
+.slot[data-availability="5"] { background-color: #80b3ff; }
+.slot[data-availability="6"] { background-color: #66a3ff; }
+.slot[data-availability="7"] { background-color: #4d94ff; }
+.slot[data-availability="8"] { background-color: #3385ff; }
+.slot[data-availability="9"] { background-color: #1a75ff; }
+.slot[data-availability="10"] { background-color: #0066ff; } /* max */
+
+
+.palette-header {
+  background-color: #ddd;
+  padding: 6px 10px;
+  font-weight: bold;
+  cursor: move;
+  border-bottom: 1px solid #aaa;
+  user-select: none;
+}
+
+.lozenge-selected {
+  outline: 2px solid #1890ff;
+  background-color: #cceeff !important;
+  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
+}
+
+
+.floating-palette {
+  position: fixed;
+  background-color: #f9f9f9;
+  border: 2px solid #aaa;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 999;
+  width: 200px;
+}
+
+
+
+    .calendar-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+
+
+    .today-cell {
+  border: 4px double #007BFF; /* Adjust color & thickness as you want */
+}
+
+    .slot:hover {
+  background-color: #cce5ff;
+  cursor: pointer;
+}
+
+    .week-row {
+      display: flex;
+      gap: 2px;
+    }
+
+    .day-column, .empty-day {
+      width: 120px;
+      height: 300px;
+      border: 1px solid #ddd;
+      background-color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .day-column.today-cell {
+  border: 4px double #007BFF !important;
+}
+
+
+#calendar-controls {
+  position: fixed;
+  top: 20px;
+  right: 50px;
+  z-index: 1000;
+}
+
+#calendar-controls button {
+  padding: 6px 12px;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+    .empty-day {
+      background-color: #fff;
+      border: none;
+    }
+
+    .day-header {
+      background-color: #e0e0e0;
+      padding: 4px;
+      text-align: center;
+      font-weight: bold;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .slot {
+      flex: 1;
+      border-top: 1px solid #ccc;
+      padding: 2px;
+      font-size: 11px;
+      font-weight: 300;
+      color: #333;
+      min-height: 30px;
+      line-height: 1;
+    }
+
+
+
+.walk-lozenge,
+.tag-lozenge,
+.resource-lozenge {
+  background-color: #e0f0ff;
+  border-radius: 15px;
+  padding: 4px 8px; /* Smaller padding */
+  font-weight: bold;
+  font-size: 13px;
+  cursor: grab;
+  display: inline-block; /* Ensures width fits text */
+  margin: 2px;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+
+/* Compact style when dropped */
+.walk-lozenge.dropped,
+.tag-lozenge.dropped,
+.resource-lozenge.dropped {
+  font-size: 8px;
+  padding: 2px 6px;
+  margin: 1px 0; /* ⬅️ Tight vertical spacing */
+  cursor: pointer;
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1; /* ⬅️ Minimal line height */
+}
+
+.place-lozenge {
+  background-color: #ffe6cc;
+  border-radius: 15px;
+  padding: 4px 8px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: grab;
+  display: inline-block;
+  margin: 2px;
+  white-space: nowrap;
+}
+
+.place-lozenge.dropped {
+  font-size: 8px;
+  padding: 2px 6px;
+  margin: 1px 0;
+  cursor: pointer;
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.walk-lozenge {
+  background-color: #d4edda; /* ✅ Light green */
+}
+
+.tag-lozenge {
+  background-color: #fff3cd; /* ✅ Light yellow */
+}
+
+.resource-lozenge {
+  background-color: #f8d7da; /* ✅ Light red */
+}
+
+.place-lozenge {
+  background-color: #d1ecf1; /* ✅ Light cyan */
+}
+
+
+  </style>
+</head>
+<body>
+
+  <h2>Election Work Calendar </h2>
+  <div id="calendar-controls" style="position: fixed; top: 20px; right: 50px; z-index: 1000;">
+  <button id="save-calendar-btn" style="padding: 6px 12px; font-size: 14px;">💾 Save Calendar</button>
+  <button id="generate-summary-btn" style="padding: 6px 12px; font-size: 14px; margin-left: 10px;">📋 Generate Calendar/Table</button>
+  <button id="download-cal-btn" style="padding: 6px 12px; font-size: 14px; margin-top:8px;">📄 Save CAL HTML</button>
+
+</div>
+
+
+  <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
+  <!-- Resource -->
+  <!-- Existing Resource Palette -->
+  <div id="resource-palette" class="floating-palette" style="top: 460px; right: 50px;">
+    <div id="resource-handle" class="palette-header">Who - Resources</div>
+    <div id="resource-content">
+      {% for key, value in resources.items() %}
+        <div class="resource-lozenge"
+             data-id="{{ key }}"
+             data-type="resource"
+             data-info="{{ value.Firstname }} {{ value.Surname }} {{ value.Status }}"
+             draggable="true">
+          {{ key }}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- New Walks Palette -->
+  <div id="walks-palette" class="floating-palette" style="top: 100px; right: 50px;">
+    <div id="walks-handle" class="palette-header">Where - Zone-Walks</div>
+    <div id="walks-content">
+      {% for w in walks %}
+      <div class="walk-lozenge" data-id="{{ loop.index0 }}" data-type="walk" data-info="{{ w }}" draggable="true">{{ w }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- New Task Tags Palette -->
+  <div id="tags-palette" class="floating-palette" style="top: 280px; right: 50px;">
+    <div id="tags-handle" class="palette-header">What - Activities</div>
+    <div id="tags-content">
+      {% for code,desc in task_tags.items() %}
+      <div class="tag-lozenge" data-id="{{ loop.index0 }}" data-type="task" data-info="{{ desc }}" draggable="true">{{ code }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+
+  <!-- New Places Palette -->
+  <div id="places-palette" class="floating-palette" style="top: 640px; right: 50px;">
+    <div id="places-handle" class="palette-header">Where - Places</div>
+    <div id="places-content">
+      {% for place in places %}
+        <div class="place-lozenge"
+             data-id="{{ loop.index0 }}"
+             data-type="place"
+             title="{{ place.AddressPrefix }}"
+             data-info="Lat: {{ place.lat }}, Lon: {{ place.lon }}"
+             draggable="true">
+          {{ place.id }}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Your calendar grid -->
+  <div class="calendar-grid" id="calendar-grid"></div>
+  <h3>📋 Calendar Summary Table</h3>
+<div id="summary-container"></div>
+
+</body>
+<script>
+
+  // Pass the calendar plan JSON safely to JS variable
+  const calendarPlan = {{ CurrentElection['calendar_plan'] | tojson | safe }};
+
+  function setupPaletteSelection() {
+    const lozenges = document.querySelectorAll('.walk-lozenge, .tag-lozenge, .resource-lozenge');
+
+    lozenges.forEach(lozenge => {
+      lozenge.addEventListener('click', function (e) {
+        e.stopPropagation(); // Prevent click events from triggering elsewhere
+        lozenge.classList.toggle('lozenge-selected');
+      });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize your calendar using the passed calendarPlan
+    initializeCalendar(calendarPlan);
+  });
+
+  function initializeCalendar(plan) {
+    if (!plan || !plan.plan || !plan.plan.slots) {
+      console.warn("Invalid calendar plan format:", plan);
+      return;
+    }
+
+    const slots = plan.plan.slots;
+
+    for (const [slotId, slotData] of Object.entries(slots)) {
+      const safeSlotId = CSS.escape(slotId);  // Escape problematic characters
+      const slotElement = document.querySelector(`[data-slot-id="${safeSlotId}"]`);
+
+      if (!slotElement) {
+        continue;
+      }
+
+      // Apply availability styling
+      if (slotData.availability > 0) {
+        slotElement.classList.add("available");
+      } else {
+        slotElement.classList.remove("available");
+      }
+
+      // Handle lozenges
+      const lozengeContainer = slotElement.querySelector(".lozenges");
+      if (lozengeContainer) {
+        lozengeContainer.innerHTML = "";
+        if (Array.isArray(slotData.lozenges)) {
+          slotData.lozenges.forEach(lozenge => {
+            const span = document.createElement("span");
+            span.classList.add("lozenge", `lozenge-${lozenge.type}`);
+            span.textContent = lozenge.code;
+            lozengeContainer.appendChild(span);
+          });
+        }
+      }
+    }
+
+  }
+
+
+
+    const tooltip = document.getElementById('tooltip');
+
+    document.body.addEventListener('mouseover', function (e) {
+      const target = e.target;
+
+      if (target.classList.contains('walk-lozenge') ||
+          target.classList.contains('tag-lozenge') ||
+          target.classList.contains('resource-lozenge')) {
+
+        const info = target.getAttribute('data-info') || 'No details';
+
+        tooltip.textContent = info;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${e.pageX + 10}px`;
+        tooltip.style.top = `${e.pageY + 10}px`;
+      }
+    });
+
+    document.body.addEventListener('mousemove', function (e) {
+      if (tooltip.style.display === 'block') {
+        tooltip.style.left = `${e.pageX + 10}px`;
+        tooltip.style.top = `${e.pageY + 10}px`;
+      }
+    });
+
+    document.body.addEventListener('mouseout', function (e) {
+      const target = e.target;
+
+      if (target.classList.contains('walk-lozenge') ||
+          target.classList.contains('tag-lozenge') ||
+          target.classList.contains('resource-lozenge')) {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    function makePaletteDraggable(paletteId, handleId) {
+    const palette = document.getElementById(paletteId);
+    const handle = document.getElementById(handleId);
+    let isDragging = false, offsetX = 0, offsetY = 0;
+
+    handle.addEventListener("mousedown", e => {
+      isDragging = true;
+      offsetX = e.clientX - palette.offsetLeft;
+      offsetY = e.clientY - palette.offsetTop;
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (isDragging) {
+        palette.style.left = `${e.clientX - offsetX}px`;
+        palette.style.top = `${e.clientY - offsetY}px`;
+      }
+    });
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+      document.body.style.userSelect = "auto";
+    });
+  }
+
+
+  // Enable draggable behavior on all three palettes
+  makePaletteDraggable("resource-palette", "resource-handle");
+  makePaletteDraggable("walks-palette", "walks-handle");
+  makePaletteDraggable("tags-palette", "tags-handle");
+  makePaletteDraggable("places-palette", "places-handle");
+
+
+  async function loadCalendarPlan() {
+    try {
+      const response = await fetch('/current-election');
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      const data = await response.json();
+
+      // Assuming your calendar plan is inside data.CurrentElection or similar
+      const calendarPlan = data.CurrentElection?.calendar_plan || {};
+      console.log("✅ Calendar loaded:",calendarPlan);
+
+      return calendarPlan;
+    } catch (error) {
+      console.error('Failed to load calendar plan:', error);
+      return [];
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    document.getElementById("save-calendar-btn").addEventListener("click", saveCalendarPlan);
+
+    await loadCalendarPlan(); // ✅ Fetch and restore on load
+    setupPaletteSelection();
+
+    const container = document.getElementById("calendar-grid");
+    const daysToShow = 45;
+    const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM"];
+
+    // ✅ Use election date from parent window
+    function parseYYYYMMDD(str) {
+      const [year, month, day] = str.split("-");
+      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    }
+
+
+    const electionDateStr = window.parent.document.getElementById('electiondate')?.value;
+    const endDate = parseYYYYMMDD(electionDateStr);
+
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (daysToShow - 1));
+
+    let weekRow = document.createElement("div");
+    weekRow.className = "week-row";
+
+    // Align first row (starting from Monday)
+    const startDayOfWeek = startDate.getDay();
+    const offset = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
+
+
+    // Add blanks before the first real day if start isn't Monday
+    for (let i = 0; i < offset; i++) {
+    const empty = document.createElement("div");
+    empty.className = "empty-day";
+    weekRow.appendChild(empty);
+    }
+
+    for (let i = 0; i < daysToShow; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+
+      const dayDiv = document.createElement("div"); // ✅ Must be here
+      dayDiv.className = "day-column";
+
+      const dateStr = date.toISOString().split("T")[0];
+      dayDiv.setAttribute("data-date", dateStr); // ← works now
+
+      const dayNumber = date.getDate();
+      const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+      const dayOfWeek = date.getDay(); // 0 = Sunday
+
+      const header = document.createElement("div");
+      header.className = "day-header";
+      header.textContent = `${weekday} ${dayNumber}`;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const cellDate = new Date(date);
+      cellDate.setHours(0, 0, 0, 0);
+
+      if (cellDate.toDateString() === today.toDateString()) {
+        dayDiv.classList.add("today-cell");
+      }
+
+      dayDiv.appendChild(header);
+
+      for (const slot of slots) {
+        const slotDiv = document.createElement("div");
+        slotDiv.className = "slot";
+        slotDiv.textContent = slot;
+        slotDiv.setAttribute("data-availability", "0");
+        slotDiv.setAttribute("title", "0 resources available");
+        dayDiv.appendChild(slotDiv);
+      }
+
+      weekRow.appendChild(dayDiv);
+
+      // Wrap row on Sundays or last day
+      if (dayOfWeek === 0 || i === daysToShow - 1) {
+        container.appendChild(weekRow);
+        weekRow = document.createElement("div");
+        weekRow.className = "week-row";
+      }
+    }
+
+      // Make each slot droppable
+      // Setup Sortable group behavior
+      // Palettes: distinct groups with clone pull, no put
+
+  ["resource-content", "walks-content", "tags-content", "places-content"].forEach((id, i) => {
+    let groupName = id.split("-")[0]; // use let here
+    if (groupName === "places") groupName = "place"; // fix mismatch
+
+    Sortable.create(document.getElementById(id), {
+      group: { name: groupName, pull: "clone", put: false },
+      sort: false,
+      animation: 150,
+    });
+  });
+
+  function updateSlotAvailability(slot) {
+    const resourceCount = [...slot.children].filter(child =>
+      child.classList.contains('resource-lozenge')
+    ).length;
+
+    const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
+
+    slot.setAttribute("data-availability", availabilityLevel);
+    slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
+  }
+
+
+
+  // Slots: accept all groups
+  document.querySelectorAll(".slot").forEach(slot => {
+    Sortable.create(slot, {
+      group: {
+        name: "calendar",
+        put: ["resource", "walks", "tags", "place"]
+      },
+      animation: 150,
+      onAdd: evt => {
+        const el = evt.item;
+        const slot = evt.to;
+
+        const alreadyExists = [...slot.children].some(child =>
+          child !== el && child.textContent === el.textContent
+        );
+
+        if (alreadyExists) {
+          el.remove();
+          return;
+        }
+
+        el.classList.add('dropped');
+        el.setAttribute('draggable', false);
+
+        el.addEventListener('click', () => {
+          el.remove();
+          updateSlotAvailability(slot);  // 👈 Recalculate on removal
+        });
+
+        updateSlotAvailability(slot);  // 👈 Recalculate on add
+      }
+    });
+
+  });
+
+  document.querySelectorAll(".slot").forEach(slot => {
+  updateSlotAvailability(slot);
+  });
+
+
+  });
+
+  function extractCalendarPlan() {
+    const state = { slots: {} };
+
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    dayColumns.forEach((col, dayIndex) => {
+      const slots = col.querySelectorAll(".slot");
+
+      slots.forEach(slot => {
+        const time = slot.textContent.trim();
+        const key = `${dayIndex}_${time}`;
+
+        const availability = parseInt(slot.getAttribute("data-availability")) || 0;
+
+        const lozenges = [...slot.children].filter(child =>
+          child.classList.contains("walk-lozenge") ||
+          child.classList.contains("tag-lozenge") ||
+          child.classList.contains("resource-lozenge") ||
+          child.classList.contains("place-lozenge")
+        ).map(loz => ({
+          type: loz.getAttribute("data-type"),
+          code: loz.textContent.trim()
+        }));
+
+        state.slots[key] = {
+          availability: availability,
+          lozenges: lozenges
+        };
+      });
+    });
+
+    return state;
+  }
+
+
+
+  function saveCalendarPlan() {
+    const btn = document.getElementById("save-calendar-btn");
+    btn.disabled = true;
+    btn.textContent = "💾 Saving...";
+
+    const calendarData = extractCalendarPlan();
+
+    fetch("/current-election", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        plan: calendarData
+      })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error("Failed to save calendar");
+      return response.json();
+    })
+    .then(() => {
+      btn.textContent = "✅ Saved";
+      setTimeout(() => {
+        btn.textContent = "💾 Save Calendar";
+        btn.disabled = false;
+      }, 1500);
+    })
+    .catch(error => {
+      btn.textContent = "⚠️ Error";
+      btn.disabled = false;
+      console.error("Save failed:", error);
+    });
+  }
+
+  document.getElementById("generate-summary-btn").addEventListener("click", () => {
+    const summary = [];
+
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+    dayColumns.forEach((col, dayIndex) => {
+      const dateHeader = col.querySelector(".day-header")?.textContent.trim() || `Day ${dayIndex}`;
+      const slotDivs = col.querySelectorAll(".slot");
+
+      slotDivs.forEach(slot => {
+        const time = slot.firstChild?.nodeValue?.trim() || "Unknown";
+
+        const activities = [];
+        const where = [];
+        const resources = [];
+
+        [...slot.children].forEach(child => {
+          if (child.classList.contains("tag-lozenge")) {
+            // Task activity
+            const label = child.textContent.trim();
+            const info = child.getAttribute("data-info") || "";
+            activities.push(`${label} – ${info}`);
+          } else if (child.classList.contains("walk-lozenge")) {
+            where.push(child.textContent.trim());
+          } else if (child.classList.contains("place-lozenge")) {
+            const label = child.textContent.trim();
+            const info = child.getAttribute("title") || "";
+            where.push(`${label} – ${info}`);
+          } else if (child.classList.contains("resource-lozenge")) {
+            const code = child.textContent.trim();
+            const info = child.getAttribute("data-info") || "";
+            resources.push(`${code} – ${info}`);
+          }
+        });
+
+        if (activities.length || where.length || resources.length) {
+          summary.push({
+            date: dateHeader,
+            time: time,
+            what: activities.join(", "),
+            where: where.join(", "),
+            resources: resources.join(", ")
+          });
+        }
+      });
+    });
+
+    // Render the table
+    const container = document.getElementById("summary-container");
+    container.innerHTML = "";
+
+    if (summary.length === 0) {
+      container.innerHTML = "<p>No data in calendar.</p>";
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.style.borderCollapse = "collapse";
+    table.style.width = "100%";
+    table.style.marginTop = "20px";
+
+    const headerRow = document.createElement("tr");
+    ["Date", "Time", "What", "Where", "Resources"].forEach(header => {
+      const th = document.createElement("th");
+      th.textContent = header;
+      th.style.border = "1px solid #ccc";
+      th.style.padding = "6px";
+      th.style.backgroundColor = "#f0f0f0";
+      if (header === "Date" || header === "Time") {
+        th.style.width = "1%"; // shrink to fit
+        th.style.whiteSpace = "nowrap";
+      }
+      headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    summary.forEach(row => {
+      const tr = document.createElement("tr");
+      ["date", "time", "what", "where", "resources"].forEach(field => {
+        const td = document.createElement("td");
+        td.textContent = row[field];
+        td.style.border = "1px solid #ccc";
+        td.style.padding = "6px";
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+
+    container.appendChild(table);
+  });
+  function downloadCurrentPageHTML() {
+    // Determine filename
+    let electionName = "election";  // fallback
+    try {
+      // Try to read from parent or hidden field
+      const el = window.parent.document.getElementById("electionname");
+      if (el && el.value) {
+        electionName = el.value;
+      }
+    } catch (e) {
+      console.warn("Could not read election name from parent:", e);
+    }
+    const filename = `${electionName}-CAL.html`;
+
+    // Clone the document
+    const docClone = document.documentElement.cloneNode(true);
+
+    // Optionally: Insert <base href="..."> so relative links resolve
+    const head = docClone.querySelector("head");
+    if (head) {
+      const base = document.createElement("base");
+      base.href = window.location.href;
+      head.insertBefore(base, head.firstChild);
+    }
+
+    // Serialize
+    const serializer = new XMLSerializer();
+    let htmlString = serializer.serializeToString(docClone);
+
+    // Prepend doctype
+    htmlString = "<!DOCTYPE html>\n" + htmlString;
+
+    // Make a blob
+    const blob = new Blob([htmlString], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+
+    // Create a link and click it
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+
+    // example where htmlString is your serialized DOM
+    uploadHtmlAndProtect(htmlString, electionName)
+      .then(res => alert("Server saved & protected file: " + res.path))
+      .catch(err => alert("Failed: " + err.message));
+
+  }
+
+  // Hook the button
+  document.getElementById("download-cal-btn").addEventListener("click", downloadCurrentPageHTML);
+
+
+  // uploads client-generated HTML to server and asks server to inject protection & overwrite the saved file
+  async function uploadHtmlAndProtect(htmlString, electionName) {
+    // electionName used to name the file server-side; sanitize on server too
+    const filename = `${electionName || 'election'}-CAL.html`;
+
+    const form = new FormData();
+    const blob = new Blob([htmlString], { type: "text/html" });
+    form.append("file", blob, filename);
+
+    // optional metadata
+    form.append("election_name", electionName || "");
+
+    const resp = await fetch("/api/upload-and-protect", {
+      method: "POST",
+      credentials: "same-origin", // include cookies if you use session auth
+      body: form
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error("Server error: " + txt);
+    }
+
+    const json = await resp.json();
+    // { ok: true, path: "/protected/XYZ-CAL.html" }
+    return json;
+  }
+
+  window.addEventListener("DOMContentLoaded", loadCalendarPlan);
+
+  </script>
+
+</body>
+</html>

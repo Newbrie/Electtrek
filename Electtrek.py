@@ -701,6 +701,8 @@ class TreeNode:
         global allelectors
         global areaelectors
         global CurrentElection
+        global SERVER_PASSWORD
+
 
         def strip_leaf_from_path(path):
             leaf = path.split("/").pop()
@@ -833,120 +835,6 @@ class TreeNode:
         return node
 
 
-
-    def ping_node2(self,c_election,dest_path):
-        global Treepolys
-        global Fullpolys
-        global levels
-        global TREK_NODES
-        global allelectors
-        global areaelectors
-        global CurrentElection
-
-# used to grab the node in the node tree at which an operation is to be conducted
-# the dest_path provides the steps to get from the top to the destination leaf
-#  in dest_path the moretype values -  ward, etc if you want to create nodes of certain type at the end of the search
-
-        print(f"_____Treepolys in {c_election} for ping:{TREEPOLY_FILE}")
-        moretype = ""
-        dest = dest_path
-        if dest_path.find(" ") > -1:
-            dest_path3 = dest_path.split(" ")
-            moretype = dest_path3.pop() # take off any trailing parameters
-            dest = dest_path3[0]
-# dest not provides the first part of the part only (no moretype)
-
-        deststeps = list(reversed(stepify(dest)))
-#dest steps is a list of steps from lowest(level) to highest(level) leaf
-#        sourcetrunk = list(reversed(self.path_intersect(dest))) # lowest left - UK right
-#sourcetrunk is the overlapping steps of the start(self node) with the dest path
-        node = self.upto(deststeps) # the start node for the depth first Ping_node search
-#so node will be the node at which to start the ping search len(trunk will range from 1 to level)
-# the steps to cycle through will be the last trunk node plus remaining steps in dest_path
-        steps = list(deststeps[0:len(deststeps)-node.level]) # lowest level righ( UK pops first)
-        print(f"____ping self: {self.value} start: {node.value}  deststeps: { deststeps} vs remaining steps: {steps} :")
-        block = pd.DataFrame()
-        newnodes = [node]
-#starting at the bottom of the trunk
-        i = 0
-        next = ""
-        if len(steps) == 0:
-            print("____ping self: {self.value} invalid path ABORT:")
-            return None
-        while steps:
-# shuffle down child nodes starting at top looking for the 'next' = child.value
-            next = steps.pop()
-# set the next level of selected type driven by the target path + moretype parameter
-
-            print(f"____In path {dest_path} after pop next {next} vs newnodes {[x.value for x in newnodes]} :")
-            if next in ["PDS","WALKS","DIVS","WARDS"]: # just ignore these steps in the path
-                pass
-            else:
-                # start with the topmost node + children
-                i = i+1
-                options = [node.children]
-                catch = [x for x in options if x.value == next]
-                print(f"____Ping Loop Test in {c_election}- Next:{next} vs Node:{node.value} at node lev {node.level}", "node children:",[x.value for x in node.children],"Catch:", catch)
-                if catch:
-                    node = catch[0]
-                    print("____ EXISTING NODE FOUND  ",node.value,catch[0].value, moretype)
-                    if steps == []:
-# caught node but no more in tree so either create new map nodes (level < 4) or create new data nodes (>=4)
-                        ntype = gettypeoflevel(dest_path,node.level+1)
-# ping also used to retrieve children of destination node in dest_path
-                        print(f"____ Creating new nodes at {node.value} / {catch[0].value} lev {node.level} of type: {ntype}")
-                        if node.level < 4:
-# catch but another map layer poss so create map children
-                            newnodes = node.create_map_branch(c_election,ntype)
-                            if len(newnodes) == 0:
-                                print(f"____ Error1 - cant find any map children {newnodes} in {node.value} of type {ntype} ")
-                        elif node.level < 6:
-# catch but beyond map level, and within data level so create data children
-                            newnodes = node.create_data_branch(c_election,ntype)
-                            if len(newnodes) == 0:
-                                print(f"____ Data Leaf - no data children {newnodes}  in {node.value} of type {ntype} ")
-                elif node.level < 4:
-                    steps.append(next)
-# No catch at ward/div level < 4 so back next node so add branch to tree from map
-                    ntype = gettypeoflevel(dest_path, node.level+1)
-                    print("____ TRYING NEW MAP NODES AT ", node.value,node.level,ntype,dest_path)
-                    newnodes = node.create_map_branch(c_election,ntype)
-                    print(f"____ NEW NODES AT {node.value} lev {node.level} newnodes {[x.value for x in newnodes]} and children {[x.value for x in node.children]}")
-                    if len(newnodes) <= 1:
-                        print(f"____ Error2 - cant find any map children {newnodes}  in {node.value} of type {ntype} ")
-                        node = self
-                        return node
-                elif node.level == 4:
-                    steps.append(next)
-# No catch at PD/Walk level so add a data branch of type PDs(polling_districts) or Walks (from kmeans)
-                    ntype = gettypeoflevel(dest_path, node.level+1)
-                    print(f"____ TRYING NEW DATA L4 NODES AT {node.value} ",node.level,ntype,dest_path)
-                    newnodes = node.create_data_branch(c_election,ntype)
-                    print(f"____ NEW DATA L4 NODES AT {node.value} lev {node.level} newnodes {[x.value for x in newnodes]} and children {[x.value for x in node.children]}")
-                    if len(newnodes) == 0:
-                        print(f"____ Error - cant find any data children {newnodes}  in {node.value} of type {ntype} ")
-                        node = self
-                        return node
-                elif node.level == 5:
-                    steps.append(next)
-# No catch at street level so add a data branch - lower data nodes will be streets or walklegs
-                    ntype = gettypeoflevel(dest_path, node.level+1)
-                    print(f"____ TRYING NEW DATA L5 NODES AT {node.value} ",node.level,ntype,dest_path)
-                    newnodes = node.create_data_branch(c_election,ntype)
-                    print(f"____ NEW DATA L5 NODES AT {node.value} lev {node.level} newnodes {[x.value for x in newnodes]} and children {[x.value for x in node.children]}")
-                    if len(newnodes) <= 1:
-                        print(f"____ cant find any data children {newnodes}  in {node.value} of type {ntype} ")
-                        node = self
-                        return node
-                else :
-#No catch at elector level so exit
-                    break
-                    #
-
-        print("____ping end:", node.value, node.level,next, steps, )
-
-
-        return node
 
     def getselectedlayers(self,path):
         global Featurelayers
@@ -1429,6 +1317,7 @@ class TreeNode:
 
 
     def create_area_map(self, flayers):
+        global SERVER_PASSWORD
         global STATICSWITCH
         from folium import IFrame
         from branca.element import Element
@@ -1843,8 +1732,8 @@ class TreeNode:
         target = self.locmappath("")
         FolMap.save(target)
         if STATICSWITCH:
-            # Inject password protection (password is "secret123")
-            inject_password_protection(target, "secret123")
+
+            inject_password_protection_generic(target, SERVER_PASSWORD)
         print("Centroid raw:", self.centroid)
         print(" ✅ _____saved map file:", target, len(flayers), self.value, self.dir, self.file)
 
@@ -2197,7 +2086,8 @@ def build_street_list_html(streets_df):
         border: 1px solid #ccc;
         border-radius: 10px;
         padding: 10px;
-        background-color: white !important;
+        background-color: black; !important;
+        color: white; !important;
         box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
         max-width: 600px;
         overflow-x: auto;
@@ -2222,7 +2112,7 @@ def build_street_list_html(streets_df):
     num_values = set()
 
     # Now group by street name and extract per-unit counts
-    for street_name, street_group in streets_df.groupby("Name"):
+    for street_name, street_group in streets_df.groupby("StreetName"):
         # Inside your loop for street_name, street_group in streets_df.groupby("Name"):
         unit_counts = count_units_from_column(street_group, 'unit')
 
@@ -4270,6 +4160,155 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         progress["message"] = f"Error: {str(e)}"
 
 
+import hashlib
+import re
+from pathlib import Path
+from typing import Optional
+
+def inject_password_protection_generic(html_path: str, password: str, content_selector: Optional[str] = None):
+    """
+    Inject a password overlay + JS into any HTML file.
+
+    - html_path: path to the HTML file to modify
+    - password: plaintext password to hash & embed (client will hash & compare)
+    - content_selector: optional CSS selector (e.g. "#main-content" or ".calendar-grid")
+        If provided, the script will try to UNHIDE that element after correct password.
+        If not provided, overlay simply removes itself and reveals page as-is.
+
+    This is safe to call on both Folium map HTML and your CAL.html.
+    """
+    password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    p = Path(html_path)
+    html = p.read_text(encoding="utf-8")
+
+    # Defensive: remove any previous inline display:none on a folium map div if present
+    m = re.search(r'<div class="folium-map" id="([^"]+)"', html)
+    map_div_id = None
+    if m:
+        map_div_id = m.group(1)
+        # remove earlier style attributes on this div (defensive)
+        html = re.sub(
+            rf'(<div class="folium-map" id="{re.escape(map_div_id)}")\s*style="[^"]*"',
+            rf'\1',
+            html,
+            count=1
+        )
+
+    # choose the selector that the injected script will unhide (map div takes precedence)
+    if map_div_id:
+        unhide_selector_js = f'document.getElementById("{map_div_id}")'
+    elif content_selector:
+        # ensure the selector string is safely embedded in JS
+        sel_js = content_selector.replace('"', '\\"')
+        unhide_selector_js = f'document.querySelector("{sel_js}")'
+    else:
+        unhide_selector_js = "null"  # overlay will simply remove itself
+
+    injection = f"""
+<!-- PASSWORD OVERLAY + UNLOCK SCRIPT (injected) -->
+<style>
+  /* minimal overlay styles */
+  #password-overlay {{
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(255,255,255,0.95);
+    z-index: 99999;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }}
+  #password-overlay .box {{
+    background: #fff;
+    padding: 14px;
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.14);
+    max-width: 92vw;
+  }}
+  #password-overlay input {{ font-size:14px; padding:8px; }}
+</style>
+
+<div id="password-overlay" role="dialog" aria-modal="true" aria-label="Password required">
+  <div class="box">
+    <div style="margin-bottom:8px; font-weight:700;">Protected content</div>
+    <div style="margin-bottom:8px;">
+      <input id="password-input" type="password" placeholder="Enter password" />
+      <button id="password-submit">Unlock</button>
+    </div>
+    <div id="password-error" style="color:#c00; display:none;">Incorrect password</div>
+    <div style="margin-top:8px; font-size:12px; color:#666;">This is client-side gating only.</div>
+  </div>
+</div>
+
+<script>
+(async function() {{
+  const expectedHash = "{password_hash}";
+
+  async function sha256(str) {{
+    const utf8 = new TextEncoder().encode(str);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  }}
+
+  async function unlock() {{
+    const input = document.getElementById('password-input');
+    const err = document.getElementById('password-error');
+    err.style.display = 'none';
+    const val = (input && input.value) ? input.value : '';
+    try {{
+      const h = await sha256(val);
+      if (h === expectedHash) {{
+        // remove overlay
+        const ov = document.getElementById('password-overlay');
+        if (ov) ov.remove();
+
+        // optionally unhide a content element (map or provided selector)
+        try {{
+          const toShow = {unhide_selector_js};
+          if (toShow) {{
+            // if element was hidden via display:none, remove that inline style
+            toShow.style.display = '';
+          }}
+        }} catch(e) {{ /* ignore */ }}
+
+        try {{ sessionStorage.setItem("map_access_granted", "1"); }} catch(e){{}}
+      }} else {{
+        err.style.display = 'block';
+      }}
+    }} catch(e) {{
+      console.error('Password check failed', e);
+      err.style.display = 'block';
+    }}
+  }}
+
+  document.getElementById('password-submit').addEventListener('click', unlock);
+  const pw = document.getElementById('password-input');
+  pw && pw.addEventListener('keydown', function(ev) {{ if (ev.key === 'Enter') {{ ev.preventDefault(); unlock(); }} }});
+
+  // restore prior session
+  try {{
+    if (sessionStorage.getItem("map_access_granted") === "1") {{
+      const ov = document.getElementById('password-overlay');
+      if (ov) ov.remove();
+      const toShow = {unhide_selector_js};
+      if (toShow) toShow.style.display = '';
+    }}
+  }} catch(e){{}}
+}})();
+</script>
+"""
+
+    # insert just before </body>
+    if "</body>" in html:
+        html = html.replace("</body>", injection + "\n</body>")
+    else:
+        html = html + injection
+
+    p.write_text(html, encoding="utf-8")
+    print(f"Injected password protection into {html_path} (map_div_id={map_div_id}, selector={content_selector})")
+    return
+
 
 
 # ____XXXXX create and configure the app
@@ -4294,7 +4333,8 @@ app.config['TESTING'] = False
 app.config['SESSION_COOKIE_PATH'] = '/'
 
 
-
+# Password used by server to protect files (read from env)
+SERVER_PASSWORD = os.environ.get("CAL_PROTECT_PASSWORD", "secret123")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -4602,13 +4642,63 @@ def resourcing():
     global current_node
     global allelectors
     global layeritems
-
+    global markerframe
     global TREK_NODES
     global resources
+
+
+    import re
+    from collections import defaultdict
+
+    def generate_place_code(prefix):
+        """Generate a code from the first letter of each word in the address prefix."""
+        words = re.findall(r'\b\w', prefix)
+        return ''.join(words).upper()
+
+    def build_place_lozenges(markerframe):
+        code_counts = defaultdict(int)
+        place_lozenges = []
+
+        for idx, row in enumerate(markerframe):
+            prefix = row.get('AddressPrefix')
+            if not prefix:
+                continue
+
+            # Generate base code (e.g., Grand Hotel → GH)
+            base_code = generate_place_code(prefix)
+
+            # Track and disambiguate duplicates
+            code_counts[base_code] += 1
+            code = base_code if code_counts[base_code] == 1 else f"{base_code}{code_counts[base_code]}"
+
+            # Build full address for tooltip
+            address_parts = filter(None, [
+                row.get('AddressPrefix'),
+                row.get('Address1'),
+                row.get('Address2'),
+                row.get('Postcode')
+            ])
+            full_address = ', '.join(address_parts)
+
+            place_lozenges.append({
+                'code': code,
+                'tooltip': full_address,
+                'lat': row.get('lat'),
+                'lon': row.get('lon')
+            })
+
+        return place_lozenges
+
+
 
     with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
         resources = json.load(f)
 
+    with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+        markerframe = json.load(f)
+
+    # Track used IDs across both existing and new entries
+    places = build_place_lozenges(markerframe)
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
@@ -4627,7 +4717,21 @@ def resourcing():
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
-    walks = set(areaelectors.WalkName.values)
+
+    walks = {}
+    for walkname in set(areaelectors.WalkName.values):
+        if not walkname:
+            continue
+        mask1 = areaelectors['WalkName'] == walkname
+        streets = areaelectors[mask1]["StreetName"].unique().tolist()
+        datablock = areaelectors[mask1]
+        streets_html = build_street_list_html(datablock)  # your existing function
+        walks[walkname] = {
+            "code": walkname,
+            "streets": streets,
+            "tooltip_html": streets_html
+        }
+
 
     # share input and outcome tags
     valid_tags = CurrentElection['tags']
@@ -4641,7 +4745,7 @@ def resourcing():
             outcome_tags[tag] = description
     print(f"___Route/resourcing Task Tags {task_tags} Outcome Tags: {outcome_tags} walks:{walks}")
 
-    return render_template('resourcing.html', resources=selectedResources, task_tags=task_tags, walks=walks )
+    return render_template('resourcing.html', current_election=current_election,CurrentElection=CurrentElection,places=places,resources=selectedResources, task_tags=task_tags, walks=walks )
 
 @app.route('/updateResourcing', methods=['POST'])
 @login_required
@@ -4699,8 +4803,8 @@ def kanban():
 
     df['VI_Party'] = df['VI'].apply(lambda vi: 1 if vi == CurrentElection['yourparty'] else 0)
     df['VI_Canvassed'] = df['VI'].apply(lambda vi: 1 if isinstance(vi, str) else 0)
-    df['VI_L1Done'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "L1" in tags.split() else 0)
-    df['VI_Voted'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "M1" in tags.split() else 0)
+    df['VI_L1Done'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "Leaflet1" in tags.split() else 0)
+    df['VI_Voted'] = df['Tags'].apply(lambda tags: 1 if isinstance(tags, str) and "Houseboard1" in tags.split() else 0)
     g = {'ENOP': 'count', 'Kanban': 'first', 'VI_Party': 'sum', 'VI_Voted': 'sum', 'VI_L1Done': 'sum','VI_Canvassed': 'sum'}
     grouped = df.groupby('WalkName').agg(g).reset_index()
     print("Unique WalkNames:", df['WalkName'].dropna().unique())
@@ -4842,18 +4946,21 @@ def telling():
     valid_tags = CurrentElection['tags']
     leaflet_tags = {}
     marked_tags = {}
+    activity_tags = {}
 
-    for tag, description in valid_tags.items():
+    for tag, description in activity_tags.items():
+        activity_tags[tag] = description
         if tag.startswith('L'):
             leaflet_tags[tag] = description
         elif tag.startswith('M'):
             marked_tags[tag] = description
-    print("____Tags v l m:",valid_tags,leaflet_tags, marked_tags)
+    print("____Tags v l m:",activity_tags,leaflet_tags, marked_tags)
     return render_template(
         'telling.html',
+        activity_tags=activity_tags,
         leaflet_tags=leaflet_tags,
         marked_tags=marked_tags
-    )
+        )
 
 @app.route('/leafletting')
 @login_required
@@ -4863,15 +4970,18 @@ def leafletting():
     valid_tags = CurrentElection['tags']
     leaflet_tags = {}
     marked_tags = {}
+    activity_tags = {}
 
-    for tag, description in valid_tags.items():
+    for tag, description in activity_tags.items():
+        activity_tags[tag] = description
         if tag.startswith('L'):
             leaflet_tags[tag] = description
         elif tag.startswith('M'):
             marked_tags[tag] = description
-
+    print("____Tags v l m:",activity_tags,leaflet_tags, marked_tags)
     return render_template(
         'leafletting.html',
+        activity_tags=activity_tags,
         leaflet_tags=leaflet_tags,
         marked_tags=marked_tags
     )
@@ -5158,7 +5268,7 @@ def get_tags():
     current_election = get_current_election(session)
     tags = CurrentElection['tags']
 
-    # tags is assumed to be a dict: { "L1": "FirstLeaflet", ... }
+    # tags is assumed to be a dict: { "leafletting1": "FirstLeaflet", ... }
     tag_list = [{"code": code, "label": label} for code, label in tags.items()]
 
     return jsonify(tags=tag_list)
@@ -5463,8 +5573,10 @@ def set_election():
 @app.route('/current-election', methods=['GET'])
 @login_required
 def retrieve_current_election():
-    current_election = get_current_election()
+    current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     calendar_plan = CurrentElection['calendar_plan']
+    print("____Route/GET current-election", jsonify(calendar_plan) )
     return jsonify(CurrentElection)
 
 # POST /current-election
@@ -5473,10 +5585,12 @@ def retrieve_current_election():
 def update_current_election():
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
+    CurrentElection = get_election_data(current_election)
     try:
         data = request.get_json()
         # You could add validation here if needed
         CurrentElection['calendar_plan'] = data
+        print("____Route/POST current-election", data )
         save_election_data(current_election,CurrentElection)
         return jsonify({"success": True})
     except Exception as e:
@@ -5703,17 +5817,17 @@ def validate_tags():
     tags_data = CurrentElection['tags']
     print("____Standard Tag options for election",tags_data)
 
-    valid_tags = set(tags_data)  # E.g. {'M1', 'M2', 'L1', 'L3'}
+    valid_tags = set(tags_data)  # E.g. {'M1', 'M2', 'Leafletting1', 'L3'}
     print("____Standard Tag options as set",valid_tags)
 
     # Parse input from frontend
     data = request.get_json()
-    current_tags = data.get('tags', '')  # e.g. "M1 L1 X99"
+    current_tags = data.get('tags', '')  # e.g. "M1 Leafletting1 X99"
     original = data.get('original', '')
     print("_____elector data and original",current_tags,original)
 
     # Normalize and split input tags
-    tag_list = current_tags.strip().split()  # ['M1', 'L1', 'X99']
+    tag_list = current_tags.strip().split()  # ['M1', 'Leafletting1', 'X99']
     print("____New Tag settings for elector",tag_list, valid_tags)
 
     # Check for any invalid tags
@@ -6654,6 +6768,11 @@ def get_table(table_name):
         return pd.DataFrame(resources)
 
     def get_report_table():
+        try:
+            if report_data:
+                pd.DataFrame(report_data)
+        except:
+            report_data = pd.DataFrame()
         return pd.DataFrame(report_data)
 
     def get_markers_table():
@@ -6693,7 +6812,7 @@ def get_table(table_name):
 
     # Table mapping
     table_map = {
-        "report" : get_report_table,
+        "report_data" : get_report_table,
         "resources" : get_resources_table,
         "markerframe" : get_markers_table,
         "stream_table" : get_stream_table
@@ -7576,6 +7695,47 @@ def stream_input():
         streamrag=streamrag,
         DQstats=DQstats,
     )
+
+# server.py (Flask)
+
+from pathlib import Path
+from flask import Flask, request, jsonify, current_app, send_file
+from werkzeug.utils import secure_filename
+
+# Very important: protect this route with authentication in production
+@app.route("/api/upload-and-protect", methods=["POST"])
+def upload_and_protect():
+    global SERVER_PASSWORD
+    # Basic checks
+    if "file" not in request.files:
+        return "Missing file", 400
+
+    file = request.files["file"]
+    orig_filename = secure_filename(file.filename or "calendar.html")
+
+    # Optional: restrict filename pattern to avoid abuse
+    if not orig_filename.lower().endswith(".html"):
+        return "Only .html files allowed", 400
+
+    # Save to server (overwrite if exists)
+    save_path = config.workdirectories['workdir']+"/"+orig_filename
+    try:
+        file.save(save_path)
+    except Exception as e:
+        current_app.logger.exception("Failed saving uploaded file")
+        return jsonify({"ok": False, "error": "save_failed"}), 500
+
+    # Now call your injector to inject overlay & JS and overwrite in place
+    try:
+        inject_password_protection_generic(str(save_path), SERVER_PASSWORD)
+    except Exception as e:
+        current_app.logger.exception("inject failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # Option: return JSON with saved path or a download URL
+    return jsonify({"ok": True, "path": str(save_path), "filename": orig_filename})
+
+
 
 if __name__ in '__main__':
     with app.app_context():

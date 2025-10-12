@@ -1,9 +1,13 @@
-calendar_plan<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- In your HTML file -->
+<link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <meta charset="UTF-8">
-  <title>35-Day Calendar (Aligned Weeks)</title>
+  <title>44-Day Calendar (Aligned Weeks)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -51,18 +55,15 @@ calendar_plan<!DOCTYPE html>
 
 
 .floating-palette {
-  position: absolute;
-  top: 100px;
-  right: 50px;
-  width: 200px;
-  padding: 10px;
+  position: fixed;
   background-color: #f9f9f9;
   border: 2px solid #aaa;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  cursor: move;
   z-index: 999;
+  width: 200px;
 }
+
 
 
     .calendar-grid {
@@ -71,11 +72,15 @@ calendar_plan<!DOCTYPE html>
       gap: 10px;
     }
 
+    .election-highlight {
+      border: 2px double red;!important;
+      box-sizing: border-box;
+    }
 
-
-    .today-cell {
-  border: 4px double #007BFF; /* Adjust color & thickness as you want */
-}
+    .today-highlight {
+      border: 2px double blue;!important;
+      box-sizing: border-box;
+    }
 
     .slot:hover {
   background-color: #cce5ff;
@@ -98,6 +103,20 @@ calendar_plan<!DOCTYPE html>
 
     .day-column.today-cell {
   border: 4px double #007BFF !important;
+}
+
+
+#calendar-controls {
+  position: fixed;
+  top: 20px;
+  right: 50px;
+  z-index: 1000;
+}
+
+#calendar-controls button {
+  padding: 6px 12px;
+  font-size: 14px;
+  margin-left: 10px;
 }
 
     .empty-day {
@@ -128,7 +147,8 @@ calendar_plan<!DOCTYPE html>
 
 .walk-lozenge,
 .tag-lozenge,
-.resource-lozenge {
+.resource-lozenge,
+.place-lozenge {
   background-color: #e0f0ff;
   border-radius: 15px;
   padding: 4px 8px; /* Smaller padding */
@@ -144,7 +164,8 @@ calendar_plan<!DOCTYPE html>
 /* Compact style when dropped */
 .walk-lozenge.dropped,
 .tag-lozenge.dropped,
-.resource-lozenge.dropped {
+.resource-lozenge.dropped,
+.place-lozenge.dropped  {
   font-size: 8px;
   padding: 2px 6px;
   margin: 1px 0; /* ⬅️ Tight vertical spacing */
@@ -156,20 +177,73 @@ calendar_plan<!DOCTYPE html>
 
 
 
+.walk-lozenge {
+  background-color: #d4edda; /* ✅ Light green */
+}
+
+.tag-lozenge {
+  background-color: #fff3cd; /* ✅ Light yellow */
+}
+
+.resource-lozenge {
+  background-color: #f8d7da; /* ✅ Light red */
+}
+
+.place-lozenge {
+  background-color: #d1ecf1; /* ✅ Light cyan */
+}
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1em;
+  table-layout: auto; /* allow flexible column sizes */
+}
+
+.summary-table th,
+.summary-table td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  vertical-align: top;
+  text-align: left;
+}
+
+/* Minimize width of first two columns */
+.summary-table th:nth-child(1),
+.summary-table td:nth-child(1),
+.summary-table th:nth-child(2),
+.summary-table td:nth-child(2) {
+  white-space: nowrap;
+  width: 1%;
+}
+.walk-tooltip {
+  color: white;  !important;       /* or another visible color */
+  background-color: black;!important;
+}
+.walk-tooltip ul {
+  list-style: disc;
+  margin: 0;
+  padding-left: 20px;
+  color: white;!important;
+}
 
   </style>
 </head>
 <body>
 
-  <h2>Election Work Calendar </h2>
-  <div id="calendar-controls" style="position: absolute; top: 20px; right: 50px; z-index: 1000;">
+  <h2>{{current_election}} Elections Calendar </h2>
+  <div id="calendar-controls" style="position: fixed; top: 20px; right: 50px; z-index: 1000;">
   <button id="save-calendar-btn" style="padding: 6px 12px; font-size: 14px;">💾 Save Calendar</button>
+  <button id="generate-summary-btn" style="padding: 6px 12px; font-size: 14px; margin-left: 10px;">📋 Generate Calendar/Table</button>
+  <button id="export-html-btn" style="padding: 6px 12px; font-size: 14px; margin-top:8px;">🔐 Export Protected HTML</button>
+
 </div>
+
+
   <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
   <!-- Resource -->
   <!-- Existing Resource Palette -->
   <div id="resource-palette" class="floating-palette" style="top: 460px; right: 50px;">
-    <div id="resource-handle" class="palette-header">Resources</div>
+    <div id="resource-handle" class="palette-header">Who - Resources</div>
     <div id="resource-content">
       {% for key, value in resources.items() %}
         <div class="resource-lozenge"
@@ -185,7 +259,7 @@ calendar_plan<!DOCTYPE html>
 
   <!-- New Walks Palette -->
   <div id="walks-palette" class="floating-palette" style="top: 100px; right: 50px;">
-    <div id="walks-handle" class="palette-header">Walks</div>
+    <div id="walks-handle" class="palette-header">Where - Zone-Walks</div>
     <div id="walks-content">
       {% for w in walks %}
       <div class="walk-lozenge" data-id="{{ loop.index0 }}" data-type="walk" data-info="{{ w }}" draggable="true">{{ w }}</div>
@@ -195,30 +269,164 @@ calendar_plan<!DOCTYPE html>
 
   <!-- New Task Tags Palette -->
   <div id="tags-palette" class="floating-palette" style="top: 280px; right: 50px;">
-    <div id="tags-handle" class="palette-header">Task Tags</div>
+    <div id="tags-handle" class="palette-header">What - Activities</div>
     <div id="tags-content">
       {% for code,desc in task_tags.items() %}
-      <div class="tag-lozenge" data-id="{{ loop.index0 }}" data-type="task" data-info="{{ desc }}" draggable="true">{{ code }}</div>
+      <div class="tag-lozenge" data-id="{{ loop.index0 }}" data-type="tag" data-info="{{ desc }}" draggable="true">{{ code }}</div>
       {% endfor %}
     </div>
   </div>
 
+
+  <!-- New Places Palette -->
+  <div id="places-palette" class="floating-palette" style="top: 640px; right: 50px;">
+    <div id="places-handle" class="palette-header">Where - Places</div>
+    <div id="places-content" class="palette-group">
+  {% for place in places %}
+  <div class="place-lozenge" data-type="place" title="{{ place.tooltip }}">{{ place.code }}</div>
+  {% endfor %}
+</div>
+  </div>
+
   <!-- Your calendar grid -->
   <div class="calendar-grid" id="calendar-grid"></div>
+  <h3>📋 Calendar Summary Table</h3>
+<div id="calendar-summary"></div>
+
 </body>
 <script>
 
+  // Make backend data available to JS
+  window.tagDescriptions = {{ task_tags | tojson }};
+  window.placeDetails = {{ places | tojson }};
+  window.walkDetails = {{ walks | tojson }};
+  console.log("Injected walks:", {{ walks | tojson }});
 
-    function setupPaletteSelection() {
-      const lozenges = document.querySelectorAll('.walk-lozenge, .tag-lozenge, .resource-lozenge');
 
-      lozenges.forEach(lozenge => {
-        lozenge.addEventListener('click', function (e) {
-          e.stopPropagation(); // Prevent click events from triggering elsewhere
-          lozenge.classList.toggle('lozenge-selected');
+  function setupWalkLozengeTooltips() {
+    const walkLozenges = document.querySelectorAll('.walk-lozenge');
+
+    walkLozenges.forEach(loz => {
+      const code = loz.textContent.trim();  // e.g., "K01"
+      const walkInfo = window.walkDetails?.[code];
+
+      if (walkInfo?.tooltip_html) {
+        tippy(loz, {
+          content: walkInfo.tooltip_html,
+          allowHTML: true,
+          interactive: false,
+          theme: 'light', // optional
         });
+      }
+    });
+  }
+
+
+  function generateSummaryReport() {
+    const summaryContainer = document.getElementById("summary-report");
+    summaryContainer.innerHTML = ""; // Clear previous report
+
+    const state = extractCalendarPlan();
+    if (!state?.slots) return;
+
+    const table = document.createElement("table");
+    table.className = "summary-table";
+
+    const headerRow = document.createElement("tr");
+    ["Date + Time", "Who", "What", "Where"].forEach(headerText => {
+      const th = document.createElement("th");
+      th.textContent = headerText;
+      headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    Object.entries(state.slots).forEach(([key, slot]) => {
+      const [dayIndexStr, time] = key.split("_");
+      const dayIndex = parseInt(dayIndexStr, 10);
+      const col = dayColumns[dayIndex];
+      const dateStr = col?.querySelector(".day-header")?.textContent || "Unknown Date";
+
+      // WHO = resources
+      const who = slot.lozenges
+        .filter(l => l.type === "resource")
+        .map(l => l.code)
+        .join(", ");
+
+      // WHAT = task + tag
+      const taskTags = slot.lozenges
+        .filter(l => l.type === "task" || l.type === "tag")
+        .map(l => {
+          const desc = window.tagDescriptions?.[l.code] || "(no description)";
+          return `${l.code}${l.type === "tag" ? `: ${desc}` : ""}`;
+        })
+        .join(", ");
+
+      // WHERE = walk + place
+      const walkItems = slot.lozenges
+        .filter(l => l.type === "walk")
+        .map(l => {
+          const walk = window.walkDetails?.[l.code];
+          return walk && walk.streets?.length
+            ? `${l.code}: ${walk.streets.join("; ")}`
+            : l.code;
+        });
+
+      const placeItems = slot.lozenges
+        .filter(l => l.type === "place")
+        .map(l => {
+          const place = window.placeDetails?.find(p => p.code === l.code);
+          return place ? `${place.code}: ${place.tooltip}` : l.code;
+        });
+
+      const whereParts = [];
+      if (walkItems.length) whereParts.push(`Walk: ${walkItems.join(" | ")}`);
+      if (placeItems.length) whereParts.push(`Place: ${placeItems.join(" | ")}`);
+      const where = whereParts.join(" | ");
+
+      // Build row
+      const row = document.createElement("tr");
+      [ `${dateStr}, ${time}`, who, taskTags, where ].forEach(cellText => {
+        const td = document.createElement("td");
+        td.textContent = cellText;
+        row.appendChild(td);
       });
+
+      table.appendChild(row);
+    });
+
+    summaryContainer.appendChild(table);
+  }
+
+
+function updateSlotAvailability(slot) {
+  const resourceCount = [...slot.children].filter(child =>
+    child.classList.contains('resource-lozenge')
+  ).length;
+
+  const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
+
+  slot.setAttribute("data-availability", availabilityLevel);
+  slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
+}
+
+
+function setupPaletteSelection() {
+  document.body.addEventListener('click', function (e) {
+    if (
+      e.target.classList.contains('walk-lozenge') ||
+      e.target.classList.contains('tag-lozenge') ||
+      e.target.classList.contains('resource-lozenge') ||
+      e.target.classList.contains('place-lozenge')
+    ) {
+      e.stopPropagation();
+      e.target.classList.toggle('lozenge-selected');
     }
+  });
+}
+
+
 
 
     const tooltip = document.getElementById('tooltip');
@@ -228,7 +436,9 @@ calendar_plan<!DOCTYPE html>
 
       if (target.classList.contains('walk-lozenge') ||
           target.classList.contains('tag-lozenge') ||
-          target.classList.contains('resource-lozenge')) {
+          target.classList.contains('resource-lozenge') ||
+          target.classList.contains('place-lozenge'))
+           {
 
         const info = target.getAttribute('data-info') || 'No details';
 
@@ -251,7 +461,8 @@ calendar_plan<!DOCTYPE html>
 
       if (target.classList.contains('walk-lozenge') ||
           target.classList.contains('tag-lozenge') ||
-          target.classList.contains('resource-lozenge')) {
+          target.classList.contains('resource-lozenge') ||
+            target.classList.contains('place-lozenge'))  {
         tooltip.style.display = 'none';
       }
     });
@@ -285,11 +496,11 @@ calendar_plan<!DOCTYPE html>
   makePaletteDraggable("resource-palette", "resource-handle");
   makePaletteDraggable("walks-palette", "walks-handle");
   makePaletteDraggable("tags-palette", "tags-handle");
+  makePaletteDraggable("places-palette", "places-handle");
 
   document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("save-calendar-btn").addEventListener("click", saveCalendarPlan);
 
-    await loadCalendarPlan(); // ✅ Fetch and restore on load
     setupPaletteSelection();
 
     const container = document.getElementById("calendar-grid");
@@ -352,27 +563,24 @@ calendar_plan<!DOCTYPE html>
 
     dayDiv.appendChild(header);
 
-    for (const slot of slots) {
+    for (const slotName of slots) {
       const slotDiv = document.createElement("div");
       slotDiv.className = "slot";
-      slotDiv.textContent = slot;
-      slotDiv.setAttribute("data-availability", "0"); // Initial availability
+      slotDiv.setAttribute("data-availability", "0");
       slotDiv.setAttribute("title", `${0} resources available`);
+      slotDiv.setAttribute("data-time", slotName);
 
+      // Create a child div ONLY for the slot time label
+      const timeLabel = document.createElement("div");
+      timeLabel.className = "slot-label";
+      timeLabel.textContent = slotName;
 
-      // Click to cycle availability
-      slotDiv.addEventListener("click", function (e) {
-        // Ignore clicks on lozenges inside the slot
-        if (e.target !== slotDiv) return;
+      slotDiv.appendChild(timeLabel);
 
-        let current = parseInt(slotDiv.getAttribute("data-availability")) || 0;
-        current = (current + 1) % 11; // cycle from 0 to 10
-        slotDiv.setAttribute("data-availability", current.toString());
-        slotDiv.setAttribute("title", `${current * 2} resources available`);
-
-      });
+      // Your existing click event and other logic on slotDiv goes here
 
       dayDiv.appendChild(slotDiv);
+
     }
 
 
@@ -386,10 +594,12 @@ calendar_plan<!DOCTYPE html>
       weekRow.className = "week-row";
     }
     }
+    await loadCalendarPlan(); // ✅ Fetch and restore on load
+
       // Make each slot droppable
       // Setup Sortable group behavior
       // Palettes: distinct groups with clone pull, no put
-  ["resource-content", "walks-content", "tags-content"].forEach((id, i) => {
+    ["resource-content", "walks-content", "tags-content", "places-content"].forEach((id) => {
     const groupName = id.split("-")[0]; // 'resource', 'walks', or 'tags'
     Sortable.create(document.getElementById(id), {
       group: { name: groupName, pull: "clone", put: false },
@@ -398,16 +608,6 @@ calendar_plan<!DOCTYPE html>
     });
   });
 
-  function updateSlotAvailability(slot) {
-    const resourceCount = [...slot.children].filter(child =>
-      child.classList.contains('resource-lozenge')
-    ).length;
-
-    const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
-
-    slot.setAttribute("data-availability", availabilityLevel);
-    slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
-  }
 
 
 
@@ -416,7 +616,7 @@ calendar_plan<!DOCTYPE html>
     Sortable.create(slot, {
       group: {
         name: "calendar",
-        put: ["resource", "walks", "tags"]
+        put: ["resource", "walks", "tags", "places"]
       },
       animation: 150,
       onAdd: evt => {
@@ -454,85 +654,138 @@ calendar_plan<!DOCTYPE html>
   });
 
   function extractCalendarPlan() {
-    const state = { slots: {} };
+  const state = { slots: {} };
 
-    const dayColumns = [...document.querySelectorAll(".day-column")];
+  const dayColumns = [...document.querySelectorAll(".day-column")];
 
-    dayColumns.forEach((col, dayIndex) => {
-      const slots = col.querySelectorAll(".slot");
+  dayColumns.forEach((col, dayIndex) => {
+    const slots = col.querySelectorAll(".slot");
 
-      slots.forEach(slot => {
-        const time = slot.textContent.trim();
-        const key = `${dayIndex}_${time}`;
+    slots.forEach((slot, slotIndex) => {
+      const timeLabel = slot.querySelector(".slot-label");
+      if (!timeLabel) {
+        console.warn(`⚠️ Slot ${slotIndex} in day ${dayIndex} has no time label, skipping`);
+        return;
+      }
 
-        const availability = parseInt(slot.getAttribute("data-availability")) || 0;
+      const time = timeLabel.textContent.trim();
+      const key = `${dayIndex}_${time}`;
+      const availability = parseInt(slot.getAttribute("data-availability")) || 0;
 
-        const lozenges = [...slot.children].filter(child =>
-          child.classList.contains("walk-lozenge") ||
-          child.classList.contains("tag-lozenge") ||
-          child.classList.contains("resource-lozenge")
-        ).map(loz => ({
-          type: loz.getAttribute("data-type"),
-          code: loz.textContent.trim()
-        }));
+      // Collect lozenges
+      const lozengeElements = [...slot.children].filter(child =>
+        child.classList.contains("walk-lozenge") ||
+        child.classList.contains("tag-lozenge") ||
+        child.classList.contains("resource-lozenge") ||
+        child.classList.contains("place-lozenge") // Include task lozenges if relevant
+      );
 
+      const lozenges = lozengeElements.map(loz => ({
+        type: loz.getAttribute("data-type"),
+        code: loz.textContent.trim()
+      }));
+
+      if (lozenges.length > 0 || availability > 0) {
         state.slots[key] = {
-          availability: availability,
-          lozenges: lozenges
+          availability,
+          lozenges
         };
-      });
+
+      } else {
+
+      }
     });
+  });
 
-    return state;
-  }
+  console.log("✅ Final extracted plan:", state);
+  return state;
+};
+
+function restoreCalendarPlan(data) {
+const dayColumns = [...document.querySelectorAll(".day-column")];
+
+Object.entries(data.slots).forEach(([key, slotData]) => {
+  const [dayIndexStr, timeLabel] = key.split("_");
+  const dayIndex = parseInt(dayIndexStr, 10);
+
+  const col = dayColumns[dayIndex];
+  if (!col) return;
+
+  const slots = [...col.querySelectorAll(".slot")];
+
+  // ✅ Use only the time label for matching
+  console.log("🔍 Looking for slot", timeLabel);
+console.log("🔍 In column", dayIndex, "slots are:", slots.map(s => s.textContent));
+
+  const targetSlot = slots.find(s => s.getAttribute("data-time") === timeLabel);
+  if (!targetSlot) return;
+
+  // Set availability
+  targetSlot.setAttribute("data-availability", slotData.availability);
+  targetSlot.setAttribute("title", `${slotData.availability * 2} resources available`);
+
+  // Remove existing lozenges
+  [...targetSlot.children].forEach(child => {
+    if (
+      child.classList.contains("walk-lozenge") ||
+      child.classList.contains("tag-lozenge") ||
+      child.classList.contains("resource-lozenge") ||
+      child.classList.contains("place-lozenge")
+    ) {
+      child.remove();
+    }
+  });
+
+  // Re-add lozenges
+  slotData.lozenges.forEach(loz => {
+    const div = document.createElement("div");
+    div.className = `${loz.type}-lozenge dropped`;
+    div.setAttribute("data-type", loz.type);
+    div.setAttribute("draggable", false);
+    div.textContent = loz.code;
 
 
-  function restoreCalendarPlan(data) {
-    const dayColumns = [...document.querySelectorAll(".day-column")];
-
-    Object.entries(data.slots).forEach(([key, slotData]) => {
-      const [dayIndexStr, timeLabel] = key.split("_");
-      const dayIndex = parseInt(dayIndexStr, 10);
-
-      const col = dayColumns[dayIndex];
-      if (!col) return;
-
-      const slots = [...col.querySelectorAll(".slot")];
-      const targetSlot = slots.find(s => s.textContent.trim() === timeLabel);
-      if (!targetSlot) return;
-
-      // Set availability
-      targetSlot.setAttribute("data-availability", slotData.availability);
-      targetSlot.setAttribute("title", `${slotData.availability * 2} resources available`);
-
-      // Remove existing lozenges
-      [...targetSlot.children].forEach(child => {
-        if (child.classList.contains("walk-lozenge") ||
-            child.classList.contains("tag-lozenge") ||
-            child.classList.contains("resource-lozenge")) {
-          child.remove();
-        }
-      });
-
-      // Re-add lozenges
-      slotData.lozenges.forEach(loz => {
-        const div = document.createElement("div");
-        div.className = `${loz.type}-lozenge dropped`;
-        div.setAttribute("data-type", loz.type);
-        div.setAttribute("draggable", false);
-        div.textContent = loz.code;
-
-        div.addEventListener("click", () => {
-          div.remove();
-          updateSlotAvailability(targetSlot);
+    // Tooltip for walk lozenges
+    if (loz.type === "walk") {
+      const walkInfo = window.walkDetails?.[loz.code];
+      if (walkInfo && walkInfo.tooltip_html) {
+        tippy(div, {
+          content: walkInfo.tooltip_html,
+          allowHTML: true,
+          interactive: false,
+          theme: 'light',  // optional styling
         });
+      }
+    }
 
-        targetSlot.appendChild(div);
+    // Tooltip for places
+    if (loz.type === "place" && loz.tooltip) {
+      tippy(div, {
+        content: loz.tooltip,
+        allowHTML: true,
+        interactive: false,
+        theme: 'light',
       });
+    }
 
+    // Tooltip for places, tags etc
+    if (loz.type === "place" && loz.tooltip) {
+      div.setAttribute("title", loz.tooltip);
+    }
+
+    div.addEventListener("click", () => {
+      div.remove();
       updateSlotAvailability(targetSlot);
     });
-  }
+
+    targetSlot.appendChild(div);
+  });
+
+
+  updateSlotAvailability(targetSlot);
+});
+}
+
 
 
   async function fetchCurrentElection() {
@@ -590,18 +843,230 @@ calendar_plan<!DOCTYPE html>
 
 
   async function loadCalendarPlan() {
+    console.log("🔁 loadCalendarPlan called");
     try {
       const response = await fetch('/current-election');
+      console.log("🔁 Fetch /current-election status:", response.status);
       if (!response.ok) throw new Error("Failed to fetch election");
 
       const electionData = await response.json();
-      if (electionData.calendar_plan) {
-        restoreCalendarPlan(electionData.calendar_plan);
+      console.log("📥 electionData:", electionData);
+
+      if (electionData.calendar_plan?.plan) {
+        console.log("📦 Passing plan to restore:", electionData.calendar_plan.plan);
+        restoreCalendarPlan(electionData.calendar_plan.plan);
+      } else {
+        console.warn("⚠️ No calendar_plan.plan in electionData");
       }
     } catch (err) {
-      console.error("Error loading calendar plan:", err);
+      console.error("❌ Error in loadCalendarPlan():", err);
     }
   }
+
+  document.getElementById("export-html-btn").addEventListener("click", async () => {
+    await saveCalendarPlan();
+    const btn = document.getElementById("export-html-btn");
+    btn.disabled = true;
+    btn.textContent = "🔄 Exporting...";
+
+    try {
+      // Create a standalone HTML document
+      const htmlContent = createStandaloneHTML();
+
+      // Create a Blob and FormData to send as 'file'
+      const blob = new Blob([htmlContent], { type: "text/html" });
+      const formData = new FormData();
+      formData.append("file", blob, "calendar.html");
+
+      // Upload to backend
+      const response = await fetch("/api/upload-and-protect", {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || "Upload failed");
+      }
+
+      btn.textContent = "✅ Exported & Protected";
+    } catch (err) {
+      console.error("Export failed:", err);
+      btn.textContent = "❌ Failed";
+    } finally {
+      setTimeout(() => {
+        btn.textContent = "🔐 Export Protected HTML";
+        btn.disabled = false;
+      }, 1500);
+    }
+  });
+
+  function createStandaloneHTML() {
+    // Clone current document content
+    const doctype = "<!DOCTYPE html>";
+    const html = document.documentElement.cloneNode(true);
+
+    // Inline all CSS (optional enhancement if you want standalone styles)
+    // You can also leave <link rel="stylesheet"> tags alone if your server will serve them
+
+    // Serialize to full HTML string
+    return doctype + "\n" + html.outerHTML;
+  }
+
+
+  document.getElementById("generate-summary-btn").addEventListener("click", function () {
+    const summary = extractCalendarPlan();
+
+    const summaryTable = document.createElement("table");
+    summaryTable.className = "summary-table";
+    summaryTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>Date & Time</th>
+          <th>Activities</th>
+          <th>Resources</th>
+          <th>Places</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = summaryTable.querySelector("tbody");
+
+    const walks = window.walkData || {};
+    const places = window.placeData || [];
+    const tags = window.tagDescriptions || {};
+    const placeMap = Object.fromEntries(places.map(p => [p.code, p.tooltip]));
+
+    Object.entries(summary.slots).forEach(([key, slot]) => {
+      const [dayIndex, time] = key.split("_");
+
+      const resourceList = [];
+      const placeList = [];
+      const activityList = [];
+
+      slot.lozenges.forEach(loz => {
+        switch (loz.type) {
+          case "resource":
+            resourceList.push(loz.code);
+            break;
+
+          case "walk": {
+            const div = document.createElement("div");
+            div.className = `${loz.type}-lozenge`;
+            div.setAttribute("data-type", loz.type);
+            div.setAttribute("draggable", false);
+            div.textContent = loz.code;
+
+            let walkInfo = window.walkDetails?.[loz.code];
+            console.log("📥 walkinfo:", walkInfo);
+
+            if (walkInfo?.tooltip_html) {
+              tippy(div, {
+                content: walkInfo.tooltip_html,
+                allowHTML: true,
+                interactive: false,
+                theme: 'light', // Optional: 'light-border' is another good one
+              });
+            }
+          }
+
+            case "place": {
+              const placeInfo = window.placeDetails?.find(p => p.code === loz.code);
+              if (placeInfo) {
+                placeList.push(`${loz.code} – ${placeInfo.tooltip}`);
+              } else {
+                placeList.push(`${loz.code} – (place unknown)`);
+              }
+              break;
+            }
+
+            case "tag": {
+              const tagDesc = window.tagDescriptions?.[loz.code] || "";
+              activityList.push(`${loz.code} – ${tagDesc}`);
+              break;
+            }
+
+            placeList.push(div.outerHTML);  // Optional if you're building a table
+            break;
+          }
+      });
+
+
+      slot.lozenges.forEach(loz => {
+        switch (loz.type) {
+          case "resource":
+            resourceList.push(loz.code);
+            break;
+
+          case "walk": {
+            const div = document.createElement("div");
+            div.className = `${loz.type}-lozenge`;
+            div.setAttribute("data-type", loz.type);
+            div.setAttribute("draggable", false);
+            div.textContent = loz.code;
+            walkInfo = window.walkDetails?.[loz.code];  // ✅ Corrected
+            console.log("📥 walkinfo:", walkInfo);
+
+            if (walkInfo && walkInfo.tooltip_html) {
+              tippy(div, {
+                content: walkInfo.tooltip_html,
+                allowHTML: true,
+                interactive: false,
+                theme: 'light',  // optional styling
+              });
+            };
+
+            if (walkInfo) {
+              const fullWalk = `Walk Area: ${loz.code} – ${walkInfo.streets.join(", ")}`;
+              placeList.push(fullWalk);
+            } else {
+              placeList.push(`Walk Area: ${loz.code}`);
+            }
+            break;
+          }
+
+          case "place": {
+            const placeInfo = window.placeDetails?.find(p => p.code === loz.code);
+            if (placeInfo) {
+              placeList.push(`${loz.code} – ${placeInfo.tooltip}`);
+            } else {
+              placeList.push(`${loz.code} – (place unknown)`);
+            }
+            break;
+          }
+
+          case "tag": {
+            const tagDesc = window.tagDescriptions?.[loz.code] || "";
+            activityList.push(`${loz.code} – ${tagDesc}`);
+            break;
+          }
+
+          default:
+            console.warn("Unknown lozenge type:", loz.type);
+        }
+      });
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${time}</td>
+        <td>${activityList.join("<br>")}</td>
+        <td>${resourceList.join(", ")}</td>
+        <td>${placeList.join("<br>")}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    const container = document.getElementById("calendar-summary");
+    container.innerHTML = ""; // Clear previous content
+    container.appendChild(summaryTable);
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setupPaletteSelection();
+    setupWalkLozengeTooltips(); // ✅ Enable walk tooltips
+  });
 
 
   </script>

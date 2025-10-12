@@ -239,7 +239,7 @@
               <button type="button" id="b3" class="small_btn" >ELECTORAL<br>REGISTERS</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b4" class = "small_btn">LEAFLET<br>DELIVERY</button>
+              <button type = "button" id = "b4" class = "small_btn">ACTIVITY<br>DELIVERY</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b5" class = "small_btn">CAMPAIGN PROGRESS</button>
@@ -274,6 +274,7 @@
     {% for key, value in table_types.items() %}
     <option value="{{ key }}">{{ value }}</option>
   {% endfor %}
+  </select>
 
 </div>
 
@@ -618,6 +619,91 @@ async function fetchAndUpdateChart() {
 
       fetchTableData('nodelist_xref');
     });
+  }
+
+  function fetchTableData(tableName) {
+
+    const VCO = {
+        "O": "brown", "R": "cyan", "C": "blue", "S": "red",
+        "LD": "yellow", "G": "limegreen", "I": "indigo",
+        "PC": "darkred", "SD": "orange", "Z": "lightgray",
+        "W": "white", "X": "darkgray"
+    };
+    let tabletitle, table, tabtitle;
+    // Running in the parent window
+    tabletitle = document.getElementById("tabletitle");
+    table = document.getElementById("captains-table");
+    tabtitle = document.getElementById("selectedTitle");
+    console.log("✅ Running in parent document"+table);
+
+        // Now safely use docContext to query elements
+
+    const tabhead = table.querySelector("thead");
+    const tabbody = table.querySelector("tbody");
+    fetch(`/get_table/${tableName}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin"
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("Network response was not ok");
+        return response.json();
+    })
+    .then(data => {
+      console.log("Get_table data received:", data);
+        if (!Array.isArray(data) || data.length < 3) {
+            console.error("Invalid or incomplete data:", data);
+            return;
+        }
+
+        const columnHeaders = data[0];
+        const rows = data[1];
+        const title = data[2];
+
+        tabtitle.innerHTML = title;
+        tabhead.innerHTML = "";
+        tabbody.innerHTML = "";
+
+        const headRow = document.createElement("tr");
+        const checkboxHeader = document.createElement("th");
+        checkboxHeader.textContent = "?";
+        headRow.appendChild(checkboxHeader);
+
+        columnHeaders.forEach(header => {
+            const th = document.createElement("th");
+            th.textContent = header.toUpperCase();
+            headRow.appendChild(th);
+        });
+
+        tabhead.appendChild(headRow);
+
+        rows.forEach(record => {
+            const row = document.createElement("tr");
+            const checkboxCell = document.createElement("td");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "selectRow[]";
+            checkbox.classList.add("selectRow");
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+
+            columnHeaders.forEach(header => {
+                const cell = document.createElement("td");
+                const value = record[header] !== undefined ? record[header] : "";
+                cell.innerHTML = value;
+
+                if (header === yourparty.value) {
+                    const color = VCO[yourparty.value] || "inherit";
+                    cell.style.backgroundColor = color;
+                }
+
+                row.appendChild(cell);
+            });
+
+            tabbody.appendChild(row);
+        });
+    })
+    .catch(error => console.error("Get_table fetch error:", error));
   }
 
   function syncStreamsSelectWithTabs() {
