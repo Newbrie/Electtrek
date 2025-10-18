@@ -17,3 +17,5 @@ TREKNODE_FILE = os.path.join(workdirectories['workdir'],'static','data','Treknod
 FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','data','Fullpolys.pkl')
 MARKER_FILE = os.path.join(workdirectories['workdir'],'static','data','Markers.json')
 RESOURCE_FILE = os.path.join(workdirectories['workdir'],'static','data','Resources.json')
+DEVURLS = { "prod" : "https://electtrek.com",
+            "dev" : "http://127.0.0.1:5000" }

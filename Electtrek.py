@@ -1,8 +1,8 @@
 from canvasscards import prodcards, find_boundary
 from walks import prodwalks
-#import electwalks, locmappath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
+#import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,MARKER_FILE, RESOURCE_FILE
+from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,MARKER_FILE, RESOURCE_FILE, DEVURLS
 from normalised import normz
 #import normz
 import folium
@@ -302,7 +302,7 @@ def get_layer_table(nodelist,title):
 
 
 def subending(filename, ending):
-  stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-ZONES.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
+  stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-CAL.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-ZONES.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
   print(f"____Subending test: from {filename} to {stem.replace('@@@', ending)}")
   return stem.replace("@@@", ending)
 
@@ -350,8 +350,6 @@ def get_current_election(session=None, session_data=None):
     else:
         current_election = "DEMO"
         print("⚠️ current_election not found in session so using DEMO")
-
-    CurrentElection = get_election_data(current_election)
 
     return current_election
 
@@ -608,7 +606,7 @@ with open(OPTIONS_FILE, 'w') as f:
 IGNORABLE_SEGMENTS = {"PDS", "WALKS", "DIVS", "WARDS"}
 
 FILE_SUFFIXES = [
-    "-PRINT.html", "-MAP.html", "-WALKS.html",
+    "-PRINT.html", "-MAP.html","-CAL.html", "-WALKS.html",
     "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"
 ]
 
@@ -647,7 +645,7 @@ def get_common_prefix_len(a, b):
 
 def strip_filename_from_path(path):
     for suffix in [
-        "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html",
+        "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
         "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
     ]:
         path = path.replace(suffix, "@@@")
@@ -692,6 +690,9 @@ class TreeNode:
     def mapfile(self):
         return self.dir+"/"+self.file
 
+    def calfile(self):
+        return self.dir+"/"+subending(self.file,"-CAL.html")
+
 
     def ping_node(self, c_election, dest_path):
         global Treepolys
@@ -707,7 +708,7 @@ class TreeNode:
         def strip_leaf_from_path(path):
             leaf = path.split("/").pop()
             for suffix in [
-                "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html",
+                "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
                 "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
             ]:
                 leaf = leaf.replace(suffix, "")
@@ -1047,7 +1048,7 @@ class TreeNode:
         return typechildren
 
 
-    def locmappath(self,real):
+    def locfilepath(self,file_text):
         global levelcolours
 
         dir = self.dir
@@ -1055,27 +1056,22 @@ class TreeNode:
                 dir = self.dir+"/PDS"
         elif self.type == 'walk'and dir.find("/WALKS") <= 0:
                 dir = self.dir+"/WALKS"
-        target = config.workdirectories['workdir'] + dir + "/" + self.file
+        elif self.type == 'division'and dir.find("/DIVS") <= 0:
+                dir = self.dir+"/DIVS"
+        elif self.type == 'ward'and dir.find("/WARDS") <= 0:
+                dir = self.dir+"/WARDS"
+        target = config.workdirectories['workdir'] + dir + "/" + file_text
 
         dir = os.path.dirname(target)
-        print(f"____target director {dir} and filename:{self.file}")
+        print(f"____target director {dir} and filename:{file_text}")
         os.chdir(config.workdirectories['workdir'])
-        if real == "":
-            if not os.path.exists(dir):
-              os.makedirs(dir)
-              print("_______Folder %s created!" % dir)
-              os.chdir(dir)
-            else:
-              print("________Folder %s already exists" % dir)
-              os.chdir(dir)
+        if not os.path.exists(dir):
+          os.makedirs(dir)
+          print("_______Folder %s created!" % dir)
+          os.chdir(dir)
         else:
-            if not os.path.exists(dir):
-              os.system("ln -s "+real+" "+ target)
-              os.system("cd -P "+dir)
-              print("______Symbolic Folder %s created!" % dir)
-            else:
-              os.system("cd -P "+dir)
-              print("_______Folder %s already exists" % dir)
+          print("________Folder %s already exists" % dir)
+          os.chdir(dir)
         return target
 
     def create_name_nodes(self,elect,nodetype,namepoints,ending):
@@ -1316,15 +1312,152 @@ class TreeNode:
         return fam_nodes
 
 
-    def create_area_map(self, flayers):
+    def create_area_cal(self,CE,CElection):
+        global current_node
+        global allelectors
+        global layeritems
+        global markerframe
+        global TREK_NODES
+        global resources
+
+
+        import re
+        from collections import defaultdict
+
+        def generate_place_code(prefix):
+            """Generate a code from the first letter of each word in the address prefix."""
+            words = re.findall(r'\b\w', prefix)
+            return ''.join(words).upper()
+
+        def build_place_lozenges(markerframe):
+            code_counts = defaultdict(int)
+            place_lozenges = []
+
+            for idx, row in enumerate(markerframe):
+                prefix = row.get('AddressPrefix')
+                if not prefix:
+                    continue
+
+                # Generate base code (e.g., Grand Hotel → GH)
+                base_code = generate_place_code(prefix)
+
+                # Track and disambiguate duplicates
+                code_counts[base_code] += 1
+                code = base_code if code_counts[base_code] == 1 else f"{base_code}{code_counts[base_code]}"
+
+                # Build full address for tooltip
+                address_parts = filter(None, [
+                    row.get('AddressPrefix'),
+                    row.get('Address1'),
+                    row.get('Address2'),
+                    row.get('Postcode')
+                ])
+                full_address = ', '.join(address_parts)
+
+                place_lozenges.append({
+                    'code': code,
+                    'tooltip': full_address,
+                    'lat': row.get('lat'),
+                    'lon': row.get('lon')
+                })
+
+                    # Convert list of places to dict keyed by code
+            place_details_dict = {p['code']: p for p in place_lozenges}
+
+            return place_details_dict
+
+
+
+        with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
+            resources = json.load(f)
+
+        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+            markerframe = json.load(f)
+
+        # Track used IDs across both existing and new entries
+        places = build_place_lozenges(markerframe)
+
+#        restore_from_persist(session=session)
+#        current_node = get_current_node(session)
+#        CE = get_current_election(session)
+
+        selectedResources = {
+                k: v for k, v in resources.items()
+                if k in CElection['resources']
+            }
+
+        Territory_node = self.ping_node(CE,CElection['territory'])
+        session['current_node_id'] = Territory_node.fid
+
+        print(f"___resources in election {CE} Territory node: {Territory_node.value} Resources: {selectedResources} ")
+        mask = allelectors['Election'] == CE
+        areaelectors = allelectors[mask]
+        areas = {}
+
+        if Territory_node.level == 4:
+
+            for walkname in set(areaelectors.WalkName.values):
+                print(f"_____Walk Name: {walkname} ")
+                if not walkname:
+                    continue
+                mask1 = areaelectors['WalkName'] == walkname
+                streets = areaelectors[mask1]["StreetName"].unique().tolist()
+                datablock = areaelectors[mask1]
+                streets_html = build_street_list_html(datablock)  # your existing function
+                areas[walkname] = {
+                    "code": walkname,
+                    "streets": streets,
+                    "tooltip_html": streets_html
+                }
+        elif Territory_node.level == 3:
+            for areaname in set(areaelectors.Area.values):
+                print(f"_____Area Name: {areaname} ")
+
+                if not areaname:
+                    continue
+                mask2 = areaelectors['Area'] == areaname
+                walks = areaelectors[mask2]["WalkName"].unique().tolist()
+                datablock = areaelectors[mask2]
+                walks_html = build_area_list_html(datablock)
+                areas[areaname] = {
+                    "code": areaname,
+                    "streets": walks,
+                    "tooltip_html": walks_html
+                }
+
+
+        # share input and outcome tags
+        valid_tags = CElection['tags']
+        task_tags = {}
+        outcome_tags = {}
+
+        for tag, description in valid_tags.items():
+            if tag.startswith('L'):
+                task_tags[tag] = description
+            elif tag.startswith('M'):
+                outcome_tags[tag] = description
+        print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
+
+        calendar_html = render_template('resourcing.html', current_election=CE,CurrentElection=CElection,places=places,resources=selectedResources, task_tags=valid_tags, areas=areas, DEVURLS=config.DEVURLS )
+
+        calendar_filename = subending(self.file,"-CAL.html")
+        target = self.locfilepath(calendar_filename)
+        # Save to file
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(calendar_html)
+
+        return calendar_filename
+
+
+    def create_area_map(self, flayers, CE, CEdata):
         global SERVER_PASSWORD
         global STATICSWITCH
         from folium import IFrame
         from branca.element import Element
 
-        print("___BEFORE map creation")
+        print("___BEFORE map creation:", self.file)
 
-
+        self.create_area_cal(CE,CEdata)
         import hashlib
         import re
         from pathlib import Path
@@ -1698,7 +1831,7 @@ class TreeNode:
         FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
 
         # Fit map to bounding box
-        print("_____before saving map file:", self.locmappath(""), len(FolMap._children), self.value, self.level)
+        print("_____before saving map file:", self.locfilepath(self.file), len(FolMap._children), self.value, self.level)
         if self.level == 4:
             print("_____bboxcheck", self.value, self.bbox)
         if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
@@ -1726,13 +1859,11 @@ class TreeNode:
         else:
             print(f"⚠️ BBox is missing or badly formatted: {self.bbox}")
 
-
-        dir = self.dir
         # Save to file
-        target = self.locmappath("")
+        target = self.locfilepath(self.file)
         FolMap.save(target)
-        if STATICSWITCH:
 
+        if STATICSWITCH:
             inject_password_protection_generic(target, SERVER_PASSWORD)
         print("Centroid raw:", self.centroid)
         print(" ✅ _____saved map file:", target, len(flayers), self.value, self.dir, self.file)
@@ -1902,7 +2033,7 @@ class TreeNode:
         prodstats['canvasshrs'] = round(canvasshrs,2)
 
         #                  electorwalks['ENOP'] =  electorwalks['PD']+"-"+electorwalks['ENO']+ electorwalks['Suffix']*0.1
-        target = self.locmappath("")
+        target = self.locfilepath(self.file)
         results_filename = streetfile_name+"-PRINT.html"
         datafile = "/STupdate/" + self.dir+"/"+streetfile_name+"-SDATA.csv"
         # mapfile is used for the up link to the PD streets list
@@ -2191,6 +2322,54 @@ def build_street_list_html(streets_df):
 
     return html
 
+
+def build_area_list_html(datablock):
+    html = '''
+    <div style="
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 10px;
+        background-color: black !important;
+        color: white !important;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+        max-width: 500px;
+        overflow-x: auto;
+        font-family: sans-serif;
+        font-size: 9pt;
+        white-space: nowrap;
+    ">
+        <table style="border-collapse: collapse; width: 100%;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding: 4px;">Area Name</th>
+                    <th style="text-align:left; padding: 4px;"># Streets</th>
+                    <th style="text-align:left; padding: 4px;"># Electors</th>
+                </tr>
+            </thead>
+            <tbody>
+    '''
+
+    grouped = datablock.groupby("Area")
+
+    for area_name, group in grouped:
+        num_streets = group["StreetName"].nunique()
+        num_electors = len(group)
+
+        html += f'''
+        <tr>
+            <td style="padding: 4px;">{area_name}</td>
+            <td style="padding: 4px;">{num_streets}</td>
+            <td style="padding: 4px;">{num_electors}</td>
+        </tr>
+        '''
+
+    html += '''
+            </tbody>
+        </table>
+    </div>
+    '''
+
+    return html
 
 
 
@@ -4310,9 +4489,11 @@ def inject_password_protection_generic(html_path: str, password: str, content_se
     return
 
 
-
+from flask_cors import CORS
 # ____XXXXX create and configure the app
 app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
+
+CORS(app)  # <-- This enables CORS for all routes
 
 sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
 # Configure Alchemy
@@ -4335,6 +4516,7 @@ app.config['SESSION_COOKIE_PATH'] = '/'
 
 # Password used by server to protect files (read from env)
 SERVER_PASSWORD = os.environ.get("CAL_PROTECT_PASSWORD", "secret123")
+
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -4495,6 +4677,7 @@ def reassign_parent():
     print(f"✔ Current node: {current_node.value if current_node else 'None'}")
 
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     print(f"✔ Current election: {current_election if current_election else 'None'}")
 
     data = request.get_json()
@@ -4613,18 +4796,17 @@ def reassign_parent():
 
     # Regenerate maps
     print(f"🔁 Regenerating map for grand parent: {mapfile0}")
-    old_parent_node.parent.create_area_map(old_parent_node.parent.getselectedlayers(mapfile0))
+    old_parent_node.parent.create_area_map(old_parent_node.parent.getselectedlayers(mapfile0), current_election, CurrentElection)
 
     print(f"🔁 Regenerating map for old parent: {mapfile1}")
-    old_parent_node.create_area_map(old_parent_node.getselectedlayers(mapfile1))
+    old_parent_node.create_area_map(old_parent_node.getselectedlayers(mapfile1), current_election, CurrentElection)
 
     print(f"🔁 Regenerating map for new parent: {mapfile2}")
-    new_parent_node.create_area_map(new_parent_node.getselectedlayers(mapfile2))
+    new_parent_node.create_area_map(new_parent_node.getselectedlayers(mapfile2), current_election, CurrentElection)
 
     # Update session and persist
     session['current_node_id'] = old_parent_node.parent.fid
     persist(new_parent_node.parent)
-    CurrentElection = get_election_data(current_election)
     visit_node(current_election,CurrentElection, mapfile0)
 
     print("✅ Reassignment complete")
@@ -4636,116 +4818,38 @@ def reassign_parent():
 
 
 
-@app.route('/resourcing')
+# Optional: handle user ping
+@app.route("/api/user-ping", methods=["POST"])
 @login_required
-def resourcing():
-    global current_node
-    global allelectors
-    global layeritems
-    global markerframe
-    global TREK_NODES
-    global resources
+def user_ping():
+    global active_users
+    active_users = {}
+    data = request.json
+    user_id = data.get("user_id")
+    name = data.get("display_name", "Anonymous")
 
-
-    import re
-    from collections import defaultdict
-
-    def generate_place_code(prefix):
-        """Generate a code from the first letter of each word in the address prefix."""
-        words = re.findall(r'\b\w', prefix)
-        return ''.join(words).upper()
-
-    def build_place_lozenges(markerframe):
-        code_counts = defaultdict(int)
-        place_lozenges = []
-
-        for idx, row in enumerate(markerframe):
-            prefix = row.get('AddressPrefix')
-            if not prefix:
-                continue
-
-            # Generate base code (e.g., Grand Hotel → GH)
-            base_code = generate_place_code(prefix)
-
-            # Track and disambiguate duplicates
-            code_counts[base_code] += 1
-            code = base_code if code_counts[base_code] == 1 else f"{base_code}{code_counts[base_code]}"
-
-            # Build full address for tooltip
-            address_parts = filter(None, [
-                row.get('AddressPrefix'),
-                row.get('Address1'),
-                row.get('Address2'),
-                row.get('Postcode')
-            ])
-            full_address = ', '.join(address_parts)
-
-            place_lozenges.append({
-                'code': code,
-                'tooltip': full_address,
-                'lat': row.get('lat'),
-                'lon': row.get('lon')
-            })
-
-        return place_lozenges
-
-
-
-    with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
-        resources = json.load(f)
-
-    with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-        markerframe = json.load(f)
-
-    # Track used IDs across both existing and new entries
-    places = build_place_lozenges(markerframe)
-
-    restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = get_current_election(session)
-    CurrentElection = get_election_data(current_election)
-
-    selectedResources = {
-            k: v for k, v in resources.items()
-            if k in CurrentElection['resources']
+    if user_id:
+        active_users[user_id] = {
+            "name": name,
+            "last_seen": datetime.utcnow()
         }
+        return jsonify(ok=True)
+    return jsonify(ok=False), 400
 
-    Territory_node = current_node.ping_node(current_election,CurrentElection['territory'])
-    session['current_node_id'] = Territory_node.fid
-
-    print(f"___Route/resourcing election {current_election} Territory node: {Territory_node.value} Resources: {selectedResources} ")
-    mask = allelectors['Election'] == current_election
-    areaelectors = allelectors[mask]
-
-
-    walks = {}
-    for walkname in set(areaelectors.WalkName.values):
-        if not walkname:
-            continue
-        mask1 = areaelectors['WalkName'] == walkname
-        streets = areaelectors[mask1]["StreetName"].unique().tolist()
-        datablock = areaelectors[mask1]
-        streets_html = build_street_list_html(datablock)  # your existing function
-        walks[walkname] = {
-            "code": walkname,
-            "streets": streets,
-            "tooltip_html": streets_html
-        }
+# Optional: return list of active users
+@app.route("/api/active-users", methods=["GET"])
+@login_required
+def active_users_list():
+    global active_users
+    threshold = datetime.utcnow() - timedelta(seconds=60)
+    users = [
+        {"id": uid, "name": info["name"]}
+        for uid, info in active_users.items()
+        if info["last_seen"] > threshold
+    ]
+    return jsonify(users)
 
 
-    # share input and outcome tags
-    valid_tags = CurrentElection['tags']
-    task_tags = {}
-    outcome_tags = {}
-
-    for tag, description in valid_tags.items():
-        if tag.startswith('L'):
-            task_tags[tag] = description
-        elif tag.startswith('M'):
-            outcome_tags[tag] = description
-    print(f"___Route/resourcing Task Tags {task_tags} Outcome Tags: {outcome_tags} walks:{walks}")
-
-    return render_template('resourcing.html', current_election=current_election,CurrentElection=CurrentElection,places=places,resources=selectedResources, task_tags=task_tags, walks=walks )
 
 @app.route('/updateResourcing', methods=['POST'])
 @login_required
@@ -4787,6 +4891,7 @@ def kanban():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     current_node = current_node.ping_node(current_election,CurrentElection['territory'])
     session['current_node_id'] = current_node.fid
     mask = (allelectors['Election'] == current_election)
@@ -4915,6 +5020,7 @@ def update_walk_kanban():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     Territory_node = current_node.ping_node(current_election,Current_Election['territory'])
     mask = (
             (allelectors['Election'] == current_election) &
@@ -4941,6 +5047,7 @@ def telling():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
     valid_tags = CurrentElection['tags']
@@ -4993,6 +5100,7 @@ def check_enop(enop):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     # Check if ENOP exists in the DataFrame
     if enop in allelectors['ENOP'].values:
         # Get the current Tags for the ENOP
@@ -5054,6 +5162,7 @@ def update_location_tags():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
 
@@ -5110,6 +5219,7 @@ def location_search():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
     query = request.args.get("query", "").strip()
@@ -5153,7 +5263,7 @@ def search_api():
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     if len(allelectors) != 0:
         restore_from_persist(session=session)
 
@@ -5239,6 +5349,7 @@ def location():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
@@ -5266,6 +5377,7 @@ def get_tags():
     global CurrentElection
     restore_from_persist(session=session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     tags = CurrentElection['tags']
 
     # tags is assumed to be a dict: { "leafletting1": "FirstLeaflet", ... }
@@ -5281,7 +5393,7 @@ def add_tag():
     restore_from_persist(session=session)
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
-
+    CurrentElection = get_election_data(current_election)
     try:
         data = request.get_json()
         tag = data.get("tag", "").strip()
@@ -5437,6 +5549,7 @@ def election_report():
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     reportfile = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY-MAP.html"
     current_node = current_node.ping_node(current_election,reportfile)
 
@@ -5474,7 +5587,7 @@ def election_report():
                     territory_filename = os.path.basename(territory_path)
 
                     # Remove suffixes from the filename
-                    for suffix in ['-MAP.html', '-PDS.html', '-WALKS.html','-WARDS.html','-DIVS.html', '-DEMO.html']:
+                    for suffix in ['-MAP.html', '-CAL.html','-PDS.html', '-WALKS.html','-WARDS.html','-DIVS.html', '-DEMO.html']:
                         if territory_filename.endswith(suffix):
                             territory_filename = territory_filename[:-len(suffix)]
 
@@ -5530,7 +5643,7 @@ def election_report():
     Featurelayers['marker'].create_layer(current_election,current_node,'marker')
     flash("No marker data for the selected election available!")
     selectedlayers = current_node.getselectedlayers(reportfile)
-    current_node.create_area_map(selectedlayers)
+    current_node.create_area_map(selectedlayers, current_election, CurrentElection)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
 
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
@@ -5550,7 +5663,7 @@ def set_election():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     session['current_election'] = data.get("election")
-    print(f"____switching from election: {current_election} to {session['current_election']}")
+    print(f"____switching from election: {current_election} to {data.get('election')}")
     current_election = data.get("election")
     CurrentElection = get_election_data(current_election)
     if CurrentElection:
@@ -5576,8 +5689,8 @@ def retrieve_current_election():
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
     calendar_plan = CurrentElection['calendar_plan']
-    print("____Route/GET current-election", jsonify(calendar_plan) )
-    return jsonify(CurrentElection)
+    print(f"____Route/GET current-election: {current_election} ", json.dumps(calendar_plan) )
+    return jsonify(calendar_plan)
 
 # POST /current-election
 @app.route('/current-election', methods=['POST'])
@@ -5795,11 +5908,12 @@ def index():
         restore_from_persist(session=session)
         current_node = get_current_node(session)
         current_election = get_current_election(session)
-
+        CurrentElection = get_election_data(current_election)
         mapfile = current_node.mapfile()
+        calfile = current_node.calfile()
 #        redirect(url_for('captains'))
 
-        return render_template("Dash0.html",  formdata=formdata,table_types=TABLE_TYPES,current_election=current_election, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile)
+        return render_template("Dash0.html",  formdata=formdata,table_types=TABLE_TYPES,current_election=current_election, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
 
     return render_template("index.html")
 
@@ -5812,7 +5926,7 @@ def validate_tags():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     # Ensure the valid tags list is a list of strings
     tags_data = CurrentElection['tags']
     print("____Standard Tag options for election",tags_data)
@@ -5861,7 +5975,7 @@ def login():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
     # Check if it exists
@@ -6041,7 +6155,7 @@ def dashboard():
         persist(current_node)
         if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
             selectedlayers = current_node.getselectedlayers(mapfile)
-            current_node.create_area_map(selectedlayers)
+            current_node.create_area_map(selectedlayers,current_election,CurrentElection)
 
 #        redirect(url_for('captains'))
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -6090,7 +6204,7 @@ def downbut(path):
 # the selected  boundary options need to be added to the layer
     Featurelayers[atype].create_layer(current_election,current_node,atype)
     selectedlayers = current_node.getselectedlayers(path)
-    current_node.create_area_map(selectedlayers)
+    current_node.create_area_map(selectedlayers,current_election,CurrentElection)
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
 
     mapfile = current_node.mapfile()
@@ -6100,7 +6214,7 @@ def downbut(path):
     persist(current_node)
     if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         selectedlayers = current_node.getselectedlayers(mapfile)
-        current_node.create_area_map(selectedlayers)
+        current_node.create_area_map(selectedlayers,current_election,CurrentElection)
 
 #    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
     print(f"_____creating mapfile for {atype} map file path :{mapfile} for path:{mapfile}" )
@@ -6123,7 +6237,7 @@ def transfer(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     formdata = {}
 # transfering to another any other node with siblings listed below
     previous_node = current_node
@@ -6160,7 +6274,7 @@ def downPDbut(path):
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
 
     previous_node = current_node
     current_node = previous_node.ping_node(current_election,path) #aligns with election data and takes you to the clicked node
@@ -6188,7 +6302,7 @@ def downPDbut(path):
             Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
             mapfile = current_node.mapfile()
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
-            current_node.create_area_map(current_node.getselectedlayers(mapfile))
+            current_node.create_area_map(current_node.getselectedlayers(mapfile),current_election,CurrentElection)
             flash("________PDs added:  "+str(len(Featurelayers['polling_district']._children)))
             print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
@@ -6199,7 +6313,7 @@ def downPDbut(path):
     if not os.path.exists(PDpathfile):
         print ("_________New PD mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-        current_node.create_area_map(current_node.getselectedlayers(mapfile))
+        current_node.create_area_map(current_node.getselectedlayers(mapfile),current_election,CurrentElection)
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
     session['current_node_id'] = current_node.fid
@@ -6223,7 +6337,7 @@ def downWKbut(path):
 # so this is the button which creates the nodes and map of equal sized walks for the troops
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
     print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
@@ -6252,7 +6366,7 @@ def downWKbut(path):
             Featurelayers['walk'].create_layer(current_election,current_node, 'walk')
             mapfile = current_node.mapfile()
             print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-            current_node.create_area_map(current_node.getselectedlayers(path))
+            current_node.create_area_map(current_node.getselectedlayers(path),current_election,CurrentElection)
             flash("________Walks added:  "+str(len(Featurelayers['walk']._children)))
             print("________After map created Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
 
@@ -6264,7 +6378,7 @@ def downWKbut(path):
         Featurelayers[previous_node.type].create_layer(current_election,current_node,'walk') #from upnode children type of prev node
 
     #        current_node.file = face_file
-        current_node.create_area_map(current_node.getselectedlayers(mapfile))
+        current_node.create_area_map(current_node.getselectedlayers(mapfile),current_election,CurrentElection)
 
     #    moredata = importVI(allelectors.copy())
     #    if len(moredata) > 0:
@@ -6294,7 +6408,7 @@ def downMWbut(path):
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
@@ -6322,7 +6436,7 @@ def downMWbut(path):
             Featurelayers['walk'].create_layer(current_election,current_node, 'walk',static=True)
             print("_______just before Static Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
             STATICSWITCH = True
-            current_node.create_area_map(current_node.getselectedlayers(path))
+            current_node.create_area_map(current_node.getselectedlayers(path),current_election,CurrentElection)
             STATICSWITCH = False
             flash("________Static Walks added:  "+str(len(Featurelayers['walk']._children)))
             print("________After map created Static Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
@@ -6334,7 +6448,7 @@ def downMWbut(path):
         print ("_________New MW mapfile/",current_node.value, walkpathfile)
         Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
         STATICSWITCH = True
-        current_node.create_area_map(current_node.getselectedlayers(path))
+        current_node.create_area_map(current_node.getselectedlayers(path),current_election,CurrentElection)
         STATICSWITCH = False
     #    moredata = importVI(allelectors.copy())
     #    if len(moredata) > 0:
@@ -6363,7 +6477,7 @@ def STupdate(path):
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
     CurrentElection = get_election_data(current_election)
 
 #    steps = path.split("/")
@@ -6523,7 +6637,7 @@ def PDdownST(path):
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
     CurrentElection = get_election_data(current_election)
 
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
@@ -6563,7 +6677,7 @@ def PDdownST(path):
 
 #           only create a map if the branch does not already exist
 
-        PD_node.create_area_map(PD_node.getselectedlayers(path))
+        PD_node.create_area_map(PD_node.getselectedlayers(path),current_election,CurrentElection)
     mapfile = PD_node.mapfile()
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -6592,7 +6706,8 @@ def LGdownST(path):
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
+    CurrentElection = get_election_data(current_election)
     T_level = CurrentElection['level']
 
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
@@ -6625,7 +6740,7 @@ def LGdownST(path):
             streetelectors = PDelectors[mask]
             street_node.create_streetsheet(current_election,streetelectors)
 
-        PD_node.create_area_map(PD_node.getselectedlayers(path))
+        PD_node.create_area_map(PD_node.getselectedlayers(path),current_election,CurrentElection)
     mapfile = PD_node.mapfile()
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -6657,7 +6772,8 @@ def WKdownST(path):
     global CurrentElection
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = get_current_election(session)
+    current_election = (session)
+    CurrentElection = get_election_data(current_election)
 
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
@@ -6691,7 +6807,7 @@ def WKdownST(path):
             streetelectors = walkelectors[mask]
             walkleg_node.create_streetsheet(current_election,streetelectors)
 
-            walk_node.create_area_map(walk_node.getselectedlayers(path))
+            walk_node.create_area_map(walk_node.getselectedlayers(path), current_election,CurrentElection)
 
     mapfile = walk_node.mapfile()
 
@@ -6721,7 +6837,7 @@ def wardreport(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     current_node = current_node.ping_node(current_election,path)
     session['current_node_id'] = current_node.fid
 
@@ -6806,7 +6922,7 @@ def get_table(table_name):
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
@@ -6861,6 +6977,7 @@ def displayareas():
 
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
+    CurrentElection = get_election_data(current_election)
     print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
         if len(markerframe) > 0:
@@ -6957,7 +7074,7 @@ def divreport(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
     current_node = current_node.ping_node(current_election,path)
@@ -7045,7 +7162,7 @@ def upbut(path):
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
-        current_node.create_area_map(current_node.getselectedlayers(mapfile))
+        current_node.create_area_map(current_node.getselectedlayers(mapfile), current_election,CurrentElection)
 
     print("________chosen node url",mapfile)
     visit_node(current_election,CurrentElection,mapfile)
@@ -7112,7 +7229,7 @@ def thru(path):
         current_node = current_node.ping_node(current_election,path)
         fileending = "-"+path.split("-").pop()
         current_node.file = subending(current_node.file,fileending)
-        current_node.create_area_map(current_node.getselectedlayers(path))
+        current_node.create_area_map(current_node.getselectedlayers(path), current_election,CurrentElection)
         visit_node(current_election,CurrentElection,path)
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -7125,7 +7242,7 @@ def showmore(path):
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     steps = path.split("/")
     last = steps.pop().split("--")
     current_node = selected_childnode(current_node,last[1])
@@ -7144,6 +7261,7 @@ def showmore(path):
 def upload_file():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
     file = request.files.get('file')
     if not file:
         return jsonify({'error': 'No file received'}), 400
@@ -7175,7 +7293,7 @@ def filelist():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
@@ -7252,7 +7370,7 @@ def walks():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
 
@@ -7269,8 +7387,9 @@ def walks():
 
 #    formdata['username'] = session['username']
         session['current_node_id'] = current_node.fid
+        calfile = current_node.calfile()
 
-        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -7285,7 +7404,7 @@ def postcode():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
-
+    CurrentElection = get_election_data(current_election)
 
     flash('__ROUTE/Findpostcode')
 
@@ -7327,6 +7446,7 @@ def firstpage():
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
 
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
@@ -7382,42 +7502,32 @@ def firstpage():
             pickle.dump(Fullpolys, f)
         print(f"🧪 current election 0 {current_election} - current_node:{current_node.value}")
 
-        session['next'] = sourcepath
-# use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-        current_node = MapRoot.ping_node(current_election,sourcepath)
-        session['current_node_id'] = current_node.fid
-        print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
-
-        print("____Firstpage Sourcepath",sourcepath, current_node.value)
-
+# geolocation has determined the mapfile (and node ) the you are at.
     if current_user.is_authenticated:
         formdata = {}
         formdata['country'] = "UNITED_KINGDOM"
         flash('_______ROUTE/firstpage')
         print('_______ROUTE/firstpage at :',current_node.value )
-        formdata['importfile'] = "SCC-CandidateSelection.xlsx"
-        if len(request.form) > 0:
-            formdata['importfile'] = request.files['importfile'].filename
-#        df1 = pd.read_excel(config.workdirectories['workdir']+"/"+formdata['importfile'])
-#        formdata['tabledetails'] = "Candidates File "+formdata['importfile']+" Details"
-#        layeritems =[list(df1.columns.values),df1, formdata['tabledetails']]
 
-        atype = gettypeoflevel(sourcepath,current_node.level+1)
+        mapfile = sourcepath
+        calfile = subending(mapfile,"-CAL.html")
+        capped_append(CurrentElection['mapfiles'],mapfile)
+
+        session['next'] = mapfile
+# use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
+        current_node = MapRoot.ping_node(current_election,mapfile)
+        session['current_node_id'] = current_node.fid
+        print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
+        print("____Firstpage Mapfile",mapfile, current_node.value)
+        atype = gettypeoflevel(mapfile,current_node.level+1)
     # the map under the selected node map needs to be configured
     # the selected  boundary options need to be added to the layer
         Featurelayers[atype].create_layer(current_election,current_node,atype)
-
         streamrag = getstreamrag()
         print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[atype].name} - id {Featurelayers[atype].id}")
-        flayers = current_node.getselectedlayers(sourcepath)
-        current_node.create_area_map(flayers)
+        flayers = current_node.getselectedlayers(mapfile)
+        current_node.create_area_map(flayers, current_election,CurrentElection)
         print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
-
-        if CurrentElection['territory']:
-            mapfile = CurrentElection['territory']
-        else:
-            mapfile = current_node.dir+"/"+current_node.file
-            capped_append(CurrentElection['mapfiles'],mapfile)
 
 #        CurrentElection['mapfiles'][-1] = mapfile
 
@@ -7428,7 +7538,7 @@ def firstpage():
 
         print(f"🧪 current election 3 {current_election} - current_node mapfile:{mapfile}")
 
-        return render_template("Dash0.html", table_types=TABLE_TYPES,VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile)
+        return render_template("Dash0.html", table_types=TABLE_TYPES,VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile,calfile=calfile)
 
     else:
         return redirect(url_for('login'))
@@ -7472,7 +7582,8 @@ def cards():
                 mapfile =  prodcards[2]
                 group = prodcards[0]
                 ELECTIONS = get_election_names()
-                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CurrentElection[session.get("current_election")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
+                calfile = current_node.calfile()
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CurrentElection[session.get("current_election")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

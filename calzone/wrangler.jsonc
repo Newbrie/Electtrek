@@ -1,34 +1,18 @@
 /**
- * For more  details on how to configure Wrangler, refer to:
+ * For more details on how to configure Wrangler, refer to:
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
-
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "calshare",
-	"main": "src/index.ts",
-	"compatibility_date": "2025-10-11",
-	"compatibility_flags": [
-		"global_fetch_strictly_public"
-	],
-  // Your custom route(s) for production (must match your DNS setup in Cloudflare)
-    "routes": [
-      "https://electtrek.com/*"
-    ],
+	"name": "calzone",
+	"compatibility_date": "2025-09-06",
 	"assets": {
 		// The path to the directory containing the `index.html` file to be served at `/`
 		"directory": "./public"
 	},
 	"observability": {
 		"enabled": true
-	},
-
-  "kv_namespaces": [
-    {
-      "binding": "KVelecttrek", // Used in your Worker as env.CALENDAR_KV
-      "id": "5ead46ca3d1a45b5bbbcc74a48289a72" // KV namespace ID from Cloudflare dashboard
-    }
-  ]
+	}
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -59,4 +43,8 @@
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
 	 */
 	// "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
+
+
+
+
 }

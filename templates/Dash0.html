@@ -91,22 +91,7 @@
     logWindow.scrollTop = logWindow.scrollHeight;
       });
 
-  function changeIframeSrc(newurl) {
-    var msg = "Retrieving area "+newurl;
-    var logWindow = document.getElementById("logwin");
-    var li = document.createElement("li");
-    li.appendChild(document.createTextNode(msg));
-    logWindow.appendChild(li);
-    logWindow.scrollTop = logWindow.scrollHeight;
-    document.getElementById("iframe1").src = newurl;
-      };
 
-  function toUpperCase(str) {
-    return str.replace(
-      /\w\S*/g,
-      text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
-    );
-  };
 
 </script>
 {% endblock map %}
@@ -280,21 +265,120 @@
 
 
 <div id="datawin" class="innertube">
-
-	    <table id="captains-table">
-
-      <thead>
-
-      </thead>
-      <tbody style="height: 70px">
-
-      </tbody>
-
-	    </table>
+  <table id="captains-table">
+    <thead></thead>
+    <tbody style="height: 70px"></tbody>
+  </table>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
 <script>
+function fetchTableData(tableName) {
+  const VCO = {
+    O: "brown", R: "cyan", C: "blue", S: "red",
+    LD: "yellow", G: "limegreen", I: "indigo",
+    PC: "darkred", SD: "orange", Z: "lightgray",
+    W: "white", X: "darkgray"
+  };
+
+  const table = document.getElementById("captains-table");
+  const tabtitle = document.getElementById("selectedTitle");
+  const tabletitle = document.getElementById("tabletitle");
+
+  if (!table || !tabtitle) {
+    console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
+    return;
+  }
+
+  const tabhead = table.querySelector("thead");
+  const tabbody = table.querySelector("tbody");
+
+  if (!tabhead || !tabbody) {
+    console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+    return;
+  }
+
+  console.log(`📥 Fetching data for table: ${tableName}`);
+
+  fetch(`/get_table/${tableName}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin"
+  })
+  .then(response => {
+    if (!response.ok) throw new Error(`Server returned ${response.status}`);
+    return response.json();
+  })
+  .then(data => {
+    if (!Array.isArray(data) || data.length < 3) {
+      console.error("❌ Invalid data format received:", data);
+      return;
+    }
+
+    const [columnHeaders, rows, title] = data;
+
+    // Clear and set title
+    tabtitle.textContent = title;
+    tabhead.innerHTML = "";
+    tabbody.innerHTML = "";
+
+    // Create table head
+    const headRow = document.createElement("tr");
+    const checkboxHeader = document.createElement("th");
+    checkboxHeader.textContent = "?";
+    headRow.appendChild(checkboxHeader);
+
+    columnHeaders.forEach(header => {
+      const th = document.createElement("th");
+      th.textContent = header.toUpperCase();
+      headRow.appendChild(th);
+    });
+    tabhead.appendChild(headRow);
+
+    // Try to get the current party selector if it exists
+    const yourpartyEl = document.getElementById("yourparty");
+    const selectedParty = yourpartyEl ? yourpartyEl.value : null;
+
+    rows.forEach(record => {
+      const row = document.createElement("tr");
+
+      // Add checkbox cell
+      const checkboxCell = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "selectRow[]";
+      checkbox.classList.add("selectRow");
+      checkboxCell.appendChild(checkbox);
+      row.appendChild(checkboxCell);
+
+      columnHeaders.forEach(header => {
+        const cell = document.createElement("td");
+        const value = record[header] !== undefined ? record[header] : "";
+
+        cell.textContent = value;
+
+        // Highlight cell based on party
+        if (selectedParty && header === selectedParty) {
+          const color = VCO[selectedParty] || "inherit";
+          cell.style.backgroundColor = color;
+        }
+
+        row.appendChild(cell);
+      });
+
+      tabbody.appendChild(row);
+    });
+
+    console.log(`✅ Table "${tableName}" populated with ${rows.length} rows.`);
+  })
+  .catch(error => {
+    console.error("❌ Error fetching table data:", error);
+  });
+}
+
+
   function handleToggle(el) {
     if (el.checked) {
       console.log("Switch is ON");
@@ -305,6 +389,23 @@
 </script>
 
 <script>
+
+  function changeIframeSrc(newurl) {
+    var msg = "Retrieving area "+newurl;
+    var logWindow = document.getElementById("logwin");
+    var li = document.createElement("li");
+    li.appendChild(document.createTextNode(msg));
+    logWindow.appendChild(li);
+    logWindow.scrollTop = logWindow.scrollHeight;
+    document.getElementById("iframe1").src = newurl;
+      };
+
+  function toUpperCase(str) {
+    return str.replace(
+      /\w\S*/g,
+      text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
+    );
+  };
 
   function refreshTableData(selectedTable) {
     window.parent.postMessage({
@@ -318,59 +419,80 @@
     if (event.data.type === "update-table") {
         const stable = document.getElementById(event.data.stable);
         if (stable) {
-            console.log("Received message to updateTable: "+selectedTable);
+          console.log("Received message to updateTable: " + event.data.stable);
             fetchTableData(stable);
         }
     }
 });
 
+function subending(filename, ending) {
+  const endings = [
+    ".XLSX", ".xlsx", ".CSV", ".csv",
+    "-PRINT.html", "-MAP.html", "-WALKS.html",
+    "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"
+  ];
 
-  document.getElementById("tableSelector").addEventListener("change", function () {
-      const selectedTable = this.value;
-//      const iframe1 = document.getElementById("iframe1");
-//      const iframeWindow = iframe1.contentWindow;
-// Access something in the iframe:
+  let stem = filename;
+
+  for (const suffix of endings) {
+    if (filename.endsWith(suffix)) {
+      stem = filename.slice(0, -suffix.length);
+      break;
+    }
+  }
+
+  const result = stem + ending;
+  console.log(`____Subending test: from ${filename} to ${result}`);
+  return result;
+}
+
+  const tableSelector = document.getElementById("tableSelector");
+  if (tableSelector) {
+    tableSelector.addEventListener("change", e => {
+      const selectedTable = e.target.value;
       fetchTableData(selectedTable);
       console.log("selectedTable:"+selectedTable);
-  });
+    });
+  }
+
 
   document.getElementById("logout-button").addEventListener("click", function() {
   window.location.href = "/logout";
   });
 
   document.getElementById("b4").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('leafletting') }}";
+  changeIframeSrc("{{ url_for('leafletting') }}");
   });
 
   document.getElementById("b9").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('resourcing') }}";
+      changeIframeSrc("{{ url_for('telling') }}");
   });
 
 
   document.getElementById("b7").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('search') }}";
+  changeIframeSrc("{{ url_for('search') }}");
   });
 
 
   document.getElementById("b5").addEventListener("click", function() {
-    document.getElementById("iframe1").src = "{{ url_for('kanban') }}";
+    changeIframeSrc("{{ url_for('kanban') }}");
   });
 
   document.getElementById("b6").addEventListener("click", function() {
-  document.getElementById("iframe1").src = "{{ url_for('telling') }}";
+  changeIframeSrc("{{ url_for('telling') }}");
 });
 
 
   // Handle the "Back to Main" button click
   document.getElementById("b8").addEventListener("click", function() {
       // Change the iframe src to the stream processing input page
-      document.getElementById("iframe1").src = "{{ url_for('dashboard') }}";
+      changeIframeSrc("{{ url_for('dashboard') }}");
   });
 
   // Handle the "Electoral Roll" button click
   document.getElementById("b3").addEventListener("click", function() {
       // Change the iframe src to the stream processing input page
-      document.getElementById("iframe1").src = "{{ url_for('stream_input') }}";
+    changeIframeSrc("{{ url_for('stream_input') }}");
   });
 
   let streamChart = null;
@@ -436,18 +558,24 @@
   };
 
   function updateChart(newLabels, newData, newRags) {
-  const ragColors = {
-    red: 'rgba(255, 99, 132, 0.2)',
-    amber: 'rgba(255, 159, 64, 0.2)',
-    green: 'rgba(75, 192, 192, 0.2)'
-  };
-  const Chart = parent.document.getElementById("streamChart");
-  Chart.data.labels = newLabels;
-  Chart.data.datasets[0].data = newData;
-  Chart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag]);
+    const ragColors = {
+      red: 'rgba(255, 99, 132, 0.2)',
+      amber: 'rgba(255, 159, 64, 0.2)',
+      green: 'rgba(75, 192, 192, 0.2)'
+    };
 
-  streamChart.update();
-};
+    if (!streamChart) {
+      console.warn("Chart not initialized.");
+      return;
+    }
+
+    streamChart.data.labels = newLabels;
+    streamChart.data.datasets[0].data = newData;
+    streamChart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag] || 'gray');
+
+    streamChart.update();
+  };
+
 async function fetchAndUpdateChart() {
   try {
     const response = await fetch('/streamrag_api');
@@ -571,7 +699,7 @@ async function fetchAndUpdateChart() {
         .then(res => res.json())
         .then(resp => {
           if (resp.success) {
-            fetchTableData('nodelist_xref');
+//            fetchTableData('nodelist_xref');
           } else {
             alert("Failed to update: " + resp.error);
           }
@@ -621,90 +749,7 @@ async function fetchAndUpdateChart() {
     });
   }
 
-  function fetchTableData(tableName) {
 
-    const VCO = {
-        "O": "brown", "R": "cyan", "C": "blue", "S": "red",
-        "LD": "yellow", "G": "limegreen", "I": "indigo",
-        "PC": "darkred", "SD": "orange", "Z": "lightgray",
-        "W": "white", "X": "darkgray"
-    };
-    let tabletitle, table, tabtitle;
-    // Running in the parent window
-    tabletitle = document.getElementById("tabletitle");
-    table = document.getElementById("captains-table");
-    tabtitle = document.getElementById("selectedTitle");
-    console.log("✅ Running in parent document"+table);
-
-        // Now safely use docContext to query elements
-
-    const tabhead = table.querySelector("thead");
-    const tabbody = table.querySelector("tbody");
-    fetch(`/get_table/${tableName}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin"
-    })
-    .then(response => {
-        if (!response.ok) throw new Error("Network response was not ok");
-        return response.json();
-    })
-    .then(data => {
-      console.log("Get_table data received:", data);
-        if (!Array.isArray(data) || data.length < 3) {
-            console.error("Invalid or incomplete data:", data);
-            return;
-        }
-
-        const columnHeaders = data[0];
-        const rows = data[1];
-        const title = data[2];
-
-        tabtitle.innerHTML = title;
-        tabhead.innerHTML = "";
-        tabbody.innerHTML = "";
-
-        const headRow = document.createElement("tr");
-        const checkboxHeader = document.createElement("th");
-        checkboxHeader.textContent = "?";
-        headRow.appendChild(checkboxHeader);
-
-        columnHeaders.forEach(header => {
-            const th = document.createElement("th");
-            th.textContent = header.toUpperCase();
-            headRow.appendChild(th);
-        });
-
-        tabhead.appendChild(headRow);
-
-        rows.forEach(record => {
-            const row = document.createElement("tr");
-            const checkboxCell = document.createElement("td");
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.name = "selectRow[]";
-            checkbox.classList.add("selectRow");
-            checkboxCell.appendChild(checkbox);
-            row.appendChild(checkboxCell);
-
-            columnHeaders.forEach(header => {
-                const cell = document.createElement("td");
-                const value = record[header] !== undefined ? record[header] : "";
-                cell.innerHTML = value;
-
-                if (header === yourparty.value) {
-                    const color = VCO[yourparty.value] || "inherit";
-                    cell.style.backgroundColor = color;
-                }
-
-                row.appendChild(cell);
-            });
-
-            tabbody.appendChild(row);
-        });
-    })
-    .catch(error => console.error("Get_table fetch error:", error));
-  }
 
   function syncStreamsSelectWithTabs() {
       const tabs = document.querySelectorAll('.election-tab');
@@ -791,7 +836,7 @@ fetch("/get-constants", { credentials: 'same-origin' })
   .then(res => res.json())
   .then(data => {
     updateConstantsUI(data.constants, data.options);
-      const mapfile = data.constants?.mapfiles[mapfiles.length -1];
+    const mapfile = data.constants?.mapfiles?.slice(-1)[0];
     if (mapfile) {
       changeIframeSrc(`/thru/${mapfile}`);
     }
@@ -823,11 +868,10 @@ fetch("/get-constants", { credentials: 'same-origin' })
             .then(res => res.json())
             .then(data => {
               updateConstantsUI(data.constants, data.options);
-                const mapfile = data.constants?.mapfiles[mapfiles.length -1];
+                const mapfile = data.constants?.mapfiles?.slice(-1)[0];
               if (mapfile) {
                 changeIframeSrc(`/thru/${mapfile}`);
               }
-              fetchTableData('nodelist_xref');
             });
         }
       });
