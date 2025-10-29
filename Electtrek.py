@@ -1893,10 +1893,16 @@ class TreeNode:
             }
         }
 
+
         // Attach drag behavior AFTER element exists
         const palette = document.getElementById("places-palette");
         if (palette) {
             dragElement(palette);
+            const header = palette.querySelector(".palette-header");
+            // Toggle collapse on header click
+            header.addEventListener("click", () => {
+                palette.classList.toggle("collapsed");
+            });
         } else {
             console.warn("⚠️ #places-palette not found");
         }
@@ -3262,6 +3268,17 @@ class ExtendedFeatureGroup(FeatureGroup):
             Offsets a latitude and longitude by a distance (in meters) in a given bearing.
             No external libraries used.
             """
+            # --- Defensive cleanup ---
+            try:
+                # Convert None, strings, NaN etc. to float
+                bearing_deg = float(bearing_deg)
+                if math.isnan(bearing_deg):
+                    bearing_deg = 0.0
+            except (TypeError, ValueError):
+                bearing_deg = 0.0
+
+            # --- Normal behavior ---
+            bearing_rad = math.radians(bearing_deg)
             R = 6371000  # Radius of Earth in meters
 
             lat_rad = math.radians(lat)
@@ -3283,14 +3300,26 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         def get_latlong(Postcode, Lat, Long):
             # Only call API if Lat or Long is NaN or missing
-            if Lat is not None and Long is not None and not (math.isnan(Lat) or math.isnan(Long)):
+            if (
+                Lat != "nan"
+                and Long != "nan"
+                and Lat is not None
+                and Long is not None
+                and isinstance(Lat, (int, float))
+                and isinstance(Long, (int, float))
+                and not math.isnan(Lat)
+                and not math.isnan(Long)
+                ):
                 return [round(Lat, 6), round(Long, 6)]
+
 
             # If postcode empty or None, fallback immediately
             if not Postcode:
                 print("Empty postcode; using default lat/long")
-                Long = statistics.mean([-7.57216793459, 1.68153079591])
-                Lat = statistics.mean([49.959999905, 58.6350001085])
+                Long = self.centroid[1]
+                Lat = self.centroid[0]
+#                Long = statistics.mean([-7.57216793459, 1.68153079591])
+#                Lat = statistics.mean([49.959999905, 58.6350001085])
                 return [round(Lat, 6), round(Long, 6)]
 
             url = "http://api.getthedata.com/postcode/" + str(Postcode).replace(" ", "+")
@@ -3307,19 +3336,123 @@ class ExtendedFeatureGroup(FeatureGroup):
                         print(f"No match for postcode {Postcode}, using default lat/long")
                         Long = statistics.mean([-7.57216793459, 1.68153079591])
                         Lat = statistics.mean([49.959999905, 58.6350001085])
+                        return [round(Lat, 6), round(Long, 6)]
                 else:
                     print(f"Failed to fetch latlong for postcode {Postcode}, status code: {myResponse.status_code}")
-                    Long = statistics.mean([-7.57216793459, 1.68153079591])
-                    Lat = statistics.mean([49.959999905, 58.6350001085])
+                    Long = self.centroid[1]
+                    Lat = self.centroid[0]
+#                    Long = statistics.mean([-7.57216793459, 1.68153079591])
+#                    Lat = statistics.mean([49.959999905, 58.6350001085])
+                    return [round(Lat, 6), round(Long, 6)]
             except Exception as e:
                 print(f"Exception fetching latlong for postcode {Postcode}: {e}")
-                Long = statistics.mean([-7.57216793459, 1.68153079591])
-                Lat = statistics.mean([49.959999905, 58.6350001085])
+                Long = self.centroid[1]
+                Lat = self.centroid[0]
 
             return [round(Lat, 6), round(Long, 6)]
 
+        def process_marker_file(MARKER_FILE):
+            print("___MARKER_FILE:", MARKER_FILE)
 
-        print("___MARKER_FILE:", MARKER_FILE)
+            # --- Validate file existence ---
+            if not os.path.exists(MARKER_FILE) or os.path.getsize(MARKER_FILE) == 0:
+                raise FileNotFoundError(f"MARKER_FILE not found or empty: {MARKER_FILE}")
+
+            # --- Load JSON ---
+            with open(MARKER_FILE, "r", encoding="utf-8") as f:
+                markerframe = json.load(f)
+
+            if not markerframe:
+                print("⚠️ No data found in markerframe.")
+                return
+
+            # --- Setup constants ---
+            today = datetime.today().date()
+            mean_lat = statistics.mean([49.959999905, 58.6350001085])
+            mean_lng = statistics.mean([-7.57216793459, 1.68153079591])
+            default_offset_radius = 200
+
+            # --- Precompute DaysTo for ranking ---
+            parsed_dates = []
+            for row in markerframe:
+                raw_date = str(row.get("EventDate", "")).strip()
+                try:
+                    parsed_date = datetime.strptime(raw_date, "%d%b%y").date()
+                except Exception:
+                    parsed_date = today + timedelta(days=35)
+                parsed_dates.append(parsed_date)
+            # rank by date ascending
+            sorted_indices = sorted(range(len(parsed_dates)), key=lambda i: (parsed_dates[i] - today).days)
+            ranks = {i: rank + 1 for rank, i in enumerate(sorted_indices)}
+
+            # --- Main unified loop ---
+            for i, row in enumerate(markerframe):
+                # --- LAT/LONG validation ---
+                lat = row.get("Lat")
+                lng = row.get("Long")
+                if not (isinstance(lat, (int, float)) and not math.isnan(lat)):
+                    lat = mean_lat
+                if not (isinstance(lng, (int, float)) and not math.isnan(lng)):
+                    lng = mean_lng
+
+                postcode = row.get("Postcode", "")
+                offset_deg = row.get("Off", 0) or 0
+                if not isinstance(offset_deg, (int, float)):
+                    offset_deg = 0.0
+
+                lat, lng = get_latlong(postcode, lat, lng)
+                lat, lng = offset_latlong(lat, lng, offset_deg, default_offset_radius)
+                row["Lat"], row["Long"] = lat, lng
+
+                # --- EVENT DATE & DAYSTO ---
+                raw_date = str(row.get("EventDate", "")).strip()
+                try:
+                    parsed_date = datetime.strptime(raw_date, "%d%b%y").date()
+                except Exception:
+                    parsed_date = today + timedelta(days=35)
+                row["EventDate"] = parsed_date.strftime("%d%b%y")
+                row["DaysTo"] = (parsed_date - today).days
+
+                # --- RANK ---
+                row["ProximityRank"] = ranks[i]
+
+                # --- MARKER CREATION ---
+                num = str(row["DaysTo"])
+                tag = row.get("AddressPrefix", "")
+                mapfile = row.get("url", "#")
+
+                fontsize = str(compute_font_size(-row["DaysTo"]))
+                tooltip_text = f"{tag} ({parsed_date.strftime('%Y-%m-%d')})"
+                tcol, fcol = "yellow", "red"
+
+                print(f"→ Marker: {tag}, Date={row['EventDate']}, DaysTo={row['DaysTo']}, Lat={lat}, Lng={lng}")
+
+                # --- Add to map ---
+                self.add_child(folium.Marker(
+                    location=[lat, lng],
+                    tooltip=tooltip_text,
+                    icon=folium.DivIcon(html=f"""
+                        <a href='{mapfile}' data-name='{tag}'>
+                          <div style="color:{tcol}; font-weight:bold; text-align:center; padding:2px; white-space:nowrap;">
+                            <span style="font-size:{fontsize}px; background:{fcol}; padding:1px 2px; border-radius:5px; border:2px solid black;">
+                                {num}
+                            </span> {tag}
+                          </div>
+                        </a>
+                    """)
+                ))
+
+            # --- Write updated file ---
+            try:
+                with open(MARKER_FILE, "w", encoding="utf-8") as f:
+                    json.dump(markerframe, f, indent=2)
+                print(f"✅ Saved updated markers → {MARKER_FILE}")
+            except Exception as e:
+                print(f"❌ Failed to write marker file: {e}")
+
+            return
+
+        process_marker_file(MARKER_FILE)
 
         if  not os.path.exists(MARKER_FILE) or os.path.getsize(MARKER_FILE) == 0:
             raise FileNotFoundError(f"MARKER_FILE not found: {MARKER_FILE}")
@@ -3331,8 +3464,8 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         if len(markerframe) > 0:
             for row in markerframe:
-                lat = row.get("Lat", float('nan'))
-                lng = row.get("Long", float('nan'))
+                lat = row.get("Lat", statistics.mean([49.959999905, 58.6350001085]))
+                lng = row.get("Long", statistics.mean([-7.57216793459, 1.68153079591]))
                 postcode = row.get("Postcode", "")
                 offset_deg = row.get("Off", 0)  # Default to 0 if not present
 
@@ -3390,8 +3523,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                 tag = row.get("AddressPrefix", "")
                 postcode = row.get("Postcode", "")
                 mapfile = row.get("url", "#")
-                lat = row.get("Lat", float('nan'))
-                lng = row.get("Long", float('nan'))
+                lat = row.get("Lat", statistics.mean([49.959999905, 58.6350001085]))
+                lng = row.get("Long", statistics.mean([-7.57216793459, 1.68153079591]))
 
                 here = [lat, lng]
                 fontsize = str(compute_font_size(-row["DaysTo"]))
@@ -4820,12 +4953,27 @@ progress = {
 DQ_DATA = {
 "df": pd.DataFrame(),  # initially empty
 }
-if os.path.exists(config.workdirectories['workdir'] + "Markers.csv") and os.path.getsize(config.workdirectories['workdir'] + "Markers.csv") > 0:
-    markerframe = pd.read_csv(config.workdirectories['workdir'] + "Markers.csv", sep='\t', engine='python')
+
+csv_path = config.workdirectories['workdir'] + "Markers.csv"
+
+if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+    # Read CSV
+    markerframe = pd.read_csv(csv_path, sep='\t', engine='python')
+
+    # Replace NaNs with None before JSON export
+    markerframe = markerframe.replace({np.nan: None})
+
+    # Convert to dict
+    marker_dict = markerframe.to_dict(orient='records')
+
+    # ✅ Safe dump (disallow NaN completely)
     with open(MARKER_FILE, "w", encoding="utf-8") as f:
-        json.dump(markerframe.to_dict(orient='records'), f, indent=2)
+        json.dump(marker_dict, f, indent=2, allow_nan=False)
+
+    # Reload
     with open(MARKER_FILE, 'r', encoding="utf-8") as f:
         markerframe = json.load(f)
+
 
     print("___Marker columns",list(markerframe[0].keys()))
 
