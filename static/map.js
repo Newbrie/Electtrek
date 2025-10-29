@@ -505,7 +505,7 @@ async function checkPassword() {
   }
 }
 
-window.createLozengeElement = function highlightLozenge(loz) {
+window.highlightLozenge = function highlightLozenge(loz) {
 document.querySelectorAll('.lozenge.selected').forEach(el => {
   el.classList.remove('selected');
 });
