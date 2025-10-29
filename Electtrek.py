@@ -1854,6 +1854,8 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
 
+
+
         # --- Floating “Places Palette” (lozenge-based) ---
         places_palette_html = """
         <div id="palette-container">
@@ -1919,6 +1921,46 @@ class TreeNode:
         """
 
         FolMap.get_root().html.add_child(folium.Element(places_palette_html))
+
+
+        # Default date for markers with missing EventDate
+        default_date = '2016-06-23'
+
+        # Prepare a list of place entries
+        places_list = []
+        for entry in markerframe:
+            event_date = entry.get('EventDate') or default_date
+            prefix = entry['AddressPrefix']
+            address = f"{entry['Address1']} / {entry['Address2']}"
+            postcode = entry['Postcode']
+            lat = entry['Lat']
+            lng = entry['Long']
+
+            places_list.append({
+                "prefix": prefix,
+                "address": address,
+                "postcode": postcode,
+                "lat": lat,
+                "lng": lng
+            })
+
+        # Serialize to JSON
+        places_json = json.dumps(places_list)
+
+        # JS to preload palette safely
+        places_preload_js = f"""
+        <script>
+        document.addEventListener('DOMContentLoaded', () => {{
+            const placesData = {places_json};
+            placesData.forEach(p => {{
+                addPlaceToPalette(p.prefix, p.address, p.postcode, p.lat, p.lng);
+            }});
+        }});
+        </script>
+        """
+
+        # Inject into Folium map
+        FolMap.get_root().html.add_child(folium.Element(places_preload_js))
 
 
         # --- Updated click JS ---

@@ -29,7 +29,30 @@
   padding: 6px 10px;
   scrollbar-width: thick;
   justify-content: flex-start;
-  max-width: 360px;  
+  max-width: 360px;
+  max-height: 500px;
+}
+#places-palette {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    width: 360px;           /* fixed max width */
+    max-height: 600px;      /* palette grows until this height, then scrolls */
+    background: rgba(255,255,255,0.95);
+    border: 2px solid #666;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: Arial, sans-serif;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+    cursor: move;
+    overflow-y: auto;       /* scroll vertically if content exceeds max-height */
+}
+
+#places-body {
+    display: flex;
+    flex-wrap: wrap;       /* wrap lozenges to next line */
+    gap: 8px;              /* spacing between lozenges */
 }
 
 .palette-body::-webkit-scrollbar {
