@@ -15,246 +15,6 @@
     }
 
 
-
-/* Availability levels: 0 (none) to 10 (max) */
-.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
-.slot[data-availability="1"] { background-color: #e6f0ff; }
-.slot[data-availability="2"] { background-color: #cce0ff; }
-.slot[data-availability="3"] { background-color: #b3d1ff; }
-.slot[data-availability="4"] { background-color: #99c2ff; }
-.slot[data-availability="5"] { background-color: #80b3ff; }
-.slot[data-availability="6"] { background-color: #66a3ff; }
-.slot[data-availability="7"] { background-color: #4d94ff; }
-.slot[data-availability="8"] { background-color: #3385ff; }
-.slot[data-availability="9"] { background-color: #1a75ff; }
-.slot[data-availability="10"] { background-color: #0066ff; } /* max */
-
-
-.palette-header {
-  background-color: #ddd;
-  padding: 6px 10px;
-  font-weight: bold;
-  cursor: move;
-  border-bottom: 1px solid #aaa;
-  user-select: none;
-}
-
-.lozenge-selected {
-  outline: 2px solid #1890ff;
-  background-color: #cceeff !important;
-  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
-}
-
-
-.floating-palette {
-  position: fixed;
-  background-color: #f9f9f9;
-  border: 2px solid #aaa;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  z-index: 999;
-  width: 200px;
-}
-
-.election-day-cell {
-  border: 3px double red !important;
-}
-
-
-
-.calendar-grid {
-  margin-top: 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.election-highlight {
-  border: 2px double red;!important;
-  box-sizing: border-box;
-}
-
-.today-highlight {
-  border: 2px double blue;!important;
-  box-sizing: border-box;
-}
-
-
-.week-row {
-  display: flex;
-  gap: 2px;
-}
-
-.day-column, .empty-day {
-  width: 120px;
-  height: 300px;
-  border: 1px solid #ddd;
-  background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-}
-
-.day-column.today-cell {
-border: 4px double #007BFF !important;
-}
-#user-palette {
-    position: fixed;
-    bottom: 40px;
-    left: 20px;
-    background: #f9f9f9;
-    border-colour: gray;
-    padding: 10px;
-    border: 4px solid #ddd;
-    max-width: 200px;
-    z-index: 1000;
-}
-#palette-container {
-  position: fixed;
-  top: 100px;
-  right: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 999;
-}
-
-.palette {
-  background-color: #f9f9f9;
-  border: 2px solid #aaa;
-  border-radius: 8px;
-  width: 200px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-
-
-#calendar-controls {
-  position: fixed;
-  top: 20px;
-  right: 50px;
-  z-index: 1000;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-
-#calendar-controls button {
-  padding: 6px 12px;
-  font-size: 14px;
-  margin-left: 10px;
-}
-
-    .empty-day {
-      background-color: #fff;
-      border: none;
-    }
-
-    .day-header {
-      background-color: #e0e0e0;
-      padding: 4px;
-      text-align: center;
-      font-weight: bold;
-      border-bottom: 1px solid #ccc;
-    }
-
-    .slot {
-      flex: 1;
-      border-top: 1px solid #ccc;
-      padding: 2px;
-      font-size: 11px;
-      font-weight: 300;
-      color: #333;
-      min-height: 30px;
-      line-height: 1;
-    }
-
-  .slot:hover {
-      background-color: #cce5ff;
-      cursor: pointer;
-    }
-
-
-.area-lozenge,
-.tag-lozenge,
-.resource-lozenge,
-.place-lozenge {
-  background-color: #e0f0ff;
-  border-radius: 15px;
-  padding: 4px 8px; /* Smaller padding */
-  font-weight: bold;
-  font-size: 13px;
-  cursor: grab;
-  display: inline-block; /* Ensures width fits text */
-  margin: 2px;
-  white-space: nowrap; /* Prevent text wrapping */
-}
-
-
-
-/* Compact style when dropped */
-.area-lozenge.dropped,
-.tag-lozenge.dropped,
-.resource-lozenge.dropped,
-.place-lozenge.dropped  {
-  font-size: 8px;
-  padding: 2px 6px;
-  margin: 1px 0; /* ⬅️ Tight vertical spacing */
-  cursor: pointer;
-  display: inline-block;
-  white-space: nowrap;
-  line-height: 1; /* ⬅️ Minimal line height */
-}
-
-
-.area-lozenge {
-  background-color: #d4edda; /* ✅ Light green */
-}
-
-.tag-lozenge {
-  background-color: #fff3cd; /* ✅ Light yellow */
-}
-
-.resource-lozenge {
-  background-color: #f8d7da; /* ✅ Light red */
-}
-
-.place-lozenge {
-  background-color: #d1ecf1; /* ✅ Light cyan */
-}
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1em;
-  table-layout: auto; /* allow flexible column sizes */
-}
-
-.summary-table th,
-.summary-table td {
-  border: 1px solid #ccc;
-  padding: 8px;
-  vertical-align: top;
-  text-align: left;
-}
-
-/* Minimize width of first two columns */
-.summary-table th:nth-child(1),
-.summary-table td:nth-child(1),
-.summary-table th:nth-child(2),
-.summary-table td:nth-child(2) {
-  white-space: nowrap;
-  width: 1%;
-}
-.area-tooltip {
-  color: white;  !important;       /* or another visible color */
-  background-color: black;!important;
-}
-.area-tooltip ul {
-  list-style: disc;
-  margin: 0;
-  padding-left: 20px;
-  color: white;!important;
-}
-
 h2 {
   position: fixed;
   top: 20px;
@@ -283,40 +43,36 @@ h2 {
   <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
   <!-- Resource -->
   <!-- Existing Resource Palette -->
-  <div id="resource-palette" class="floating-palette" style="top: 460px; right: 50px;">
-    <div id="resource-handle" class="palette-header">Who - Resources</div>
+  <div id="resource-palette" class="palette floating-palette" style="top: 460px; right: 50px;">
+    <div id="resource-handle" class="vertical-header">Who - Resources</div>
     <div id="resource-content">
     </div>
   </div>
 
   <!-- New areas Palette -->
-  <div id="areas-palette" class="floating-palette"style="top: 100px; right: 50px;" >
-    <div id="areas-handle" class="palette-header">Where - Areas</div>
+  <div id="areas-palette" class="palette floating-palette"style="top: 100px; right: 50px;" >
+    <div id="areas-handle" class="vertical-header">Where - Areas</div>
     <div id="areas-content">
     </div>
   </div>
 
   <!-- New Task Tags Palette -->
-  <div id="tags-palette" class="floating-palette" style="top: 250px; right: 50px;">
-    <div id="tags-handle" class="palette-header">What - Activities</div>
+  <div id="tags-palette" class="palette floating-palette" style="top: 250px; right: 50px;">
+    <div id="tags-handle" class="vertical-header">What - Activities</div>
     <div id="tags-content">
     </div>
   </div>
 
 
   <!-- New Places Palette -->
-  <div id="places-palette" class="floating-palette" style="top: 300px; right: 50px;">
-    <div id="places-handle" class="palette-header">Where - Places</div>
+  <div id="places-palette" class="palette floating-palette" style="top: 300px; right: 50px;">
+    <div id="places-handle" class="vertical-header">Where - Places</div>
     <div id="places-content" class="palette-group">
 
     </div>
   </div>
     </div>
 
-  <div id="user-palette" style="display:none;">
-    <h4>🧑 Users Online</h4>
-    <div id="user-lozenges" style="display: flex; flex-wrap: wrap; gap: 4px;"></div>
-  </div>
 
 
   <!-- Your calendar grid -->
@@ -327,6 +83,11 @@ h2 {
 
 </body>
 <script>
+
+const USER_ID = localStorage.getItem("user_id") || crypto.randomUUID();
+localStorage.setItem("user_id", USER_ID);
+const DISPLAY_NAME = prompt("Enter your name:") || USER_ID.slice(0, 6);
+console.log("📅 Started User pinging - USER_ID:", USER_ID);
 
 
 function buildResourcePalette(containerId) {
@@ -407,9 +168,12 @@ function buildPlacesPalette(containerId) {
       if (areaInfo?.tooltip_html) {
         tippy(loz, {
           content: areaInfo.tooltip_html,
+          hideOnClick: true,
           allowHTML: true,
-          interactive: false,
+          trigger: 'click',
+          interactive: true,
           theme: 'light', // optional
+          appendTo: document.body,
         });
       }
     });
@@ -424,9 +188,12 @@ function buildPlacesPalette(containerId) {
       if (placeInfo?.tooltip) {
         tippy(loz, {
           content: placeInfo.tooltip,
+          hideOnClick: true,
           allowHTML: true,
-          interactive: false,
+          trigger: 'click',
+          interactive: true,
           theme: 'light', // optional
+          appendTo: document.body,
         });
       }
     });
@@ -439,97 +206,23 @@ function buildPlacesPalette(containerId) {
     resourceLozenges.forEach(loz => {
       const Code = loz.textContent.trim();  // e.g., "MN"
       const resourceInfo = resourceDetails?.[Code];
+
       const tooltip = resourceInfo.Firstname + " " + resourceInfo.Surname;
       console.log("Resource Info...",tooltip);
 
       if (tooltip) {
         tippy(loz, {
           content: tooltip,
+          hideOnClick: true,
           allowHTML: true,
-          interactive: false,
+          trigger: 'click',
+          interactive: true,
           theme: 'light', // optional
+          appendTo: document.body,
         });
       }
     });
   }
-
-  function highlightLozenge(loz) {
-  document.querySelectorAll('.lozenge.selected').forEach(el => {
-    el.classList.remove('selected');
-  });
-  loz.classList.add('selected');
-}
-
-
-  function createLozengeElement(loz, { selectable = false, removable = false } = {}) {
-     const div = document.createElement("div");
-     div.setAttribute("data-type", loz.type);
-     div.setAttribute("data-code", loz.code);
-     div.setAttribute("draggable", true);
-     div.setAttribute("id", `lozenge-${loz.type}-${loz.code}-${Math.random().toString(36).substring(2, 8)}`);
-     div.textContent = loz.code;
-
-     div.className = `lozenge ${loz.type}-lozenge`;
-     if (!selectable) div.classList.add("dropped");
-     div.textContent = loz.code;
-     div.addEventListener("dragstart", (e) => {
-       e.dataTransfer.setData("text/plain", div.id);
-     });
-
-     // Decide tooltip content for tippy
-     let tooltipContent = null;
-
-     if (loz.type === "area") {
-       const areaInfo = window.areas?.[loz.code];
-       tooltipContent = areaInfo?.tooltip_html || loz.info || null;
-     } else if (loz.type === "resource") {
-       const resourceInfo = window.resources?.[loz.code];
-       tooltipContent = resourceInfo.Firstname + " " + resourceInfo.Surname;
-       console.log("Resource Tooltips",tooltipContent);
-     } else if (loz.type === "place") {
-           const placeInfo = window.places?.[loz.code];
-           tooltipContent = placeInfo?.tooltip;
-           console.log("Place Tooltip ",loz.code,placeInfo);
-           console.log("placeDetails keys:", Object.keys(window.places));
-     } else if (loz.type === "tag") {
-           const tagInfo = window.task_tags?.[loz.code];
-           tooltipContent = tagInfo;
-           console.log("Task tag Tooltip ",loz.code,tagInfo);
-           console.log("tagDetails values:", Object.values(window.task_tags));
-
-         };
-
-
-     if (tooltipContent) {
-       tippy(div, {
-         content: tooltipContent,
-         allowHTML: true,
-         interactive: false,
-         theme: 'light',
-       });
-     }
-     div.removeAttribute("title");
-     div.removeAttribute("data-info"); // if you're using this anywhere
-
-
-     // Tooltip setup (as before)...
-
-     // ✅ Highlight (for palette lozenges)
-     if (selectable) {
-       div.addEventListener("click", () => {
-         highlightLozenge(div);
-       });
-     }
-
-     // ❌ Removal (for dropped lozenges)
-     if (removable) {
-       div.addEventListener("click", () => {
-         div.remove();
-       });
-     }
-
-     return div;
-    }
 
 
 
@@ -678,25 +371,51 @@ function setupPaletteSelection() {
   fetch(`${API}/api/active-users`)
     .then(res => res.json())
     .then(users => {
-      const container = document.getElementById("user-lozenges");
-      container.innerHTML = ""; // Clear old
+      const container = document.getElementById("resource-palette");
 
       users.forEach(u => {
-        const div = document.createElement("div");
-        div.className = "lozenge";
-        div.textContent = u.name;
-        div.style = `
-          background: #eef;
-          padding: 4px 8px;
-          border-radius: 10px;
-          font-size: 12px;
-        `;
-        container.appendChild(div);
+        const userId = u.name; // or u.id if available
+
+        // Check if a lozenge with this user ID already exists
+        const exists = container.querySelector(`[data-code="${userId}"]`);
+        if (exists) return; // Skip if already present
+
+        // Split name into first and last
+        const parts = userId.split(" ");
+        const Firstname = parts[0];
+        const Surname = parts[1] || "";
+
+        // Add to window.resources so tooltip lookup works
+        window.resources = window.resources || {};
+        window.resources[userId] = {
+          Firstname,
+          Surname,
+          Status: "Active User"
+        };
+
+        const loz = {
+          type: "resource",
+          code: userId,
+          info: `User: ${Firstname} ${Surname} - Active User`
+        };
+
+        const el = createLozengeElement(loz, { selectable: true });
+        container.appendChild(el);
       });
+    })
+    .catch(err => {
+      console.error("Failed to fetch active users:", err);
     });
 }
 
+
+
 function pingUser() {
+
+  if (!USER_ID) {
+    console.warn("USER_ID not found in localStorage");
+    return;
+  }
   fetch(`${API}/api/user-ping`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1013,6 +732,17 @@ document.addEventListener("DOMContentLoaded", () => {
   buildAreaPalette("areas-content");
   buildTaskTagsPalette("tags-content");
   buildPlacesPalette("places-content");
+
+  let currentZIndex = 1000; // start at a safe base
+
+  // Attach to all palette headers
+  document.querySelectorAll('.vertical-header').forEach(header => {
+    header.addEventListener('mousedown', () => {
+      const palette = header.closest('.palette');
+      palette.style.zIndex = ++currentZIndex;
+    });
+  });
+
 });
 
 // Enable draggable behavior on all three palettes
@@ -1022,18 +752,13 @@ makePaletteDraggable("tags-palette", "tags-handle");
 makePaletteDraggable("places-palette", "places-handle");
 
 
-if (!isDev) {
-  document.getElementById("user-palette").style.display = "block";
+//if (!isDev) {
   setInterval(updateUserPalette, 5000);
   updateUserPalette();
-  const USER_ID = localStorage.getItem("user_id") || crypto.randomUUID();
-  localStorage.setItem("user_id", USER_ID);
-  const DISPLAY_NAME = prompt("Enter your name:") || USER_ID.slice(0, 6);
-
   // Ping every 25 seconds
   setInterval(pingUser, 25000);
   pingUser(); // Initial ping
-}
+//}
 
 document.addEventListener("DOMContentLoaded", async () => {
   // set up the calendar slots and the palettes of lozenges and fill the slots

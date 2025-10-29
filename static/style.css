@@ -1,3 +1,294 @@
+/* Availability levels: 0 (none) to 10 (max) */
+.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
+.slot[data-availability="1"] { background-color: #e6f0ff; }
+.slot[data-availability="2"] { background-color: #cce0ff; }
+.slot[data-availability="3"] { background-color: #b3d1ff; }
+.slot[data-availability="4"] { background-color: #99c2ff; }
+.slot[data-availability="5"] { background-color: #80b3ff; }
+.slot[data-availability="6"] { background-color: #66a3ff; }
+.slot[data-availability="7"] { background-color: #4d94ff; }
+.slot[data-availability="8"] { background-color: #3385ff; }
+.slot[data-availability="9"] { background-color: #1a75ff; }
+.slot[data-availability="10"] { background-color: #0066ff; } /* max */
+
+
+
+
+.palette-header {
+  background-color: #ddd;
+  padding: 6px 10px;
+  font-weight: bold;
+  cursor: move;
+  border-bottom: 1px solid #aaa;
+  user-select: none;
+}
+.palette-body {
+  display: flex;
+  overflow-x: auto;            /* enables horizontal scrolling */
+  gap: 8px;
+  padding: 6px 10px;
+  scrollbar-width: thin;       /* optional: thinner scrollbar for Firefox */
+}
+
+.palette-body::-webkit-scrollbar {
+  height: 6px;
+}
+
+.palette-body::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+}
+
+
+/* The pill-shaped lozenge */
+.lozenge {
+  display: inline-flex;
+  align-items: center;         /* ✅ vertical centering */
+  justify-content: center;     /* ✅ horizontal centering */
+  white-space: nowrap;
+  padding: 0 1em;
+  height: 3em;             /* horizontal padding only */
+  background-color: #e0e0e0;
+  border-radius: 9999px;       /* pill shape */
+  font-size: 2em;
+  line-height: normal;         /* ✅ let flexbox do the centering */
+  flex-shrink: 0;
+  cursor: grab;
+  box-sizing: border-box;      /* ✅ ensures padding doesn't break height */
+}
+
+
+
+.lozenge-selected {
+  outline: 2px solid #1890ff;
+  background-color: #cceeff !important;
+  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
+}
+
+.vertical-header {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background-color: #ddd;
+  border-right: 1px solid #aaa;
+  padding: 10px;
+
+  display: flex;
+  align-items: flex-start;       /* Top of vertical line (before rotation) */
+  justify-content: flex-end;     /* Right of writing-mode line (after rotation) */
+
+  height: auto;                  /* Don't stretch */
+  width: 40px;                   /* Fixed width for vertical bar */
+  box-sizing: border-box;
+}
+
+
+.floating-palette {
+  display: flex;             /* <--- key to horizontal layout */
+  flex-direction: row;
+  position: fixed;
+  background-color: #f9f9f9;
+  border: 2px solid #aaa;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 1000;
+  width: 200px;
+}
+
+.election-day-cell {
+  border: 3px double red !important;
+}
+
+
+.calendar-grid {
+  margin-top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.election-highlight {
+  border: 2px double red;!important;
+  box-sizing: border-box;
+}
+
+.today-highlight {
+  border: 2px double blue;!important;
+  box-sizing: border-box;
+}
+
+
+.week-row {
+  display: flex;
+  gap: 2px;
+}
+
+.day-column, .empty-day {
+  width: 120px;
+  height: 300px;
+  border: 1px solid #ddd;
+  background-color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.day-column.today-cell {
+border: 4px double #007BFF !important;
+}
+
+#palette-container {
+  max-height: 400px;
+  position: fixed;
+  top: 100px;
+  right: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 999;
+    overflow-y: auto;
+}
+
+
+.palette {
+  display: flex;
+  overflow-x: auto;             /* Horizontal scroll for lozenges */
+  gap: 8px;
+  background-color: #f9f9f9;
+  border: 2px solid #aaa;
+  border-radius: 8px;
+  width: 200px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+
+#calendar-controls {
+  position: fixed;
+  top: 20px;
+  right: 50px;
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+
+#calendar-controls button {
+  padding: 6px 12px;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+    .empty-day {
+      background-color: #fff;
+      border: none;
+    }
+
+    .day-header {
+      background-color: #e0e0e0;
+      padding: 4px;
+      text-align: center;
+      font-weight: bold;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .slot {
+      flex: 1;
+      border-top: 1px solid #ccc;
+      padding: 2px;
+      font-size: 11px;
+      font-weight: 300;
+      color: #333;
+      min-height: 30px;
+      line-height: 1;
+    }
+
+  .slot:hover {
+      background-color: #cce5ff;
+      cursor: pointer;
+    }
+
+
+.area-lozenge,
+.tag-lozenge,
+.resource-lozenge,
+.place-lozenge {
+  background-color: #e0f0ff;
+  border-radius: 15px;
+  padding: 4px 8px; /* Smaller padding */
+  font-weight: bold;
+  font-size: 13px;
+  cursor: grab;
+  display: inline-block; /* Ensures width fits text */
+  margin: 2px;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+
+
+/* Compact style when dropped */
+.area-lozenge.dropped,
+.tag-lozenge.dropped,
+.resource-lozenge.dropped,
+.place-lozenge.dropped  {
+  font-size: 8px;
+  padding: 2px 6px;
+  margin: 1px 0; /* ⬅️ Tight vertical spacing */
+  cursor: pointer;
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1; /* ⬅️ Minimal line height */
+}
+
+
+.area-lozenge {
+  background-color: #d4edda; /* ✅ Light green */
+}
+
+.tag-lozenge {
+  background-color: #fff3cd; /* ✅ Light yellow */
+}
+
+.resource-lozenge {
+  background-color: #f8d7da; /* ✅ Light red */
+}
+
+.place-lozenge {
+  background-color: #d1ecf1; /* ✅ Light cyan */
+}
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1em;
+  table-layout: auto; /* allow flexible column sizes */
+}
+
+.summary-table th,
+.summary-table td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  vertical-align: top;
+  text-align: left;
+}
+
+/* Minimize width of first two columns */
+.summary-table th:nth-child(1),
+.summary-table td:nth-child(1),
+.summary-table th:nth-child(2),
+.summary-table td:nth-child(2) {
+  white-space: nowrap;
+  width: 1%;
+}
+.area-tooltip {
+  color: white;  !important;       /* or another visible color */
+  background-color: black;!important;
+}
+.area-tooltip ul {
+  list-style: disc;
+  margin: 0;
+  padding-left: 20px;
+  color: white;!important;
+}
+
+
 #combined-content {
     display: flex;
     flex-direction: column;
@@ -500,9 +791,9 @@ tr:nth-child(even) {
 #datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
 #datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
  { /* 2-13 columns */
-    width: 10px;
-    min-width: 10px;
-    max-width: 10px;
+    width: 12px;
+    min-width: 12px;
+    max-width: 12px;
     overflow: hidden;
     white-space: nowrap; /* Prevents text from wrapping */
 }

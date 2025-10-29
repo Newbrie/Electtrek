@@ -57,6 +57,7 @@ import logging
 from flask import has_request_context
 
 
+
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
 
@@ -344,11 +345,11 @@ def get_current_election(session=None, session_data=None):
     Returns the current election from session data.
     """
 
-    if session and 'current_election' in session and session.get('current_election') in ELECTIONS:
-        current_election = session.get('current_election')
+    if session and 'current_election' in session and session.get('current_election',"DEMO") in ELECTIONS:
+        current_election = session.get('current_election',"DEMO")
         print(f"[Main Thread] current_election from session: in route {route()} for:", current_election)
     elif session_data and 'current_election' in session_data and session_data.get('current_election') in ELECTIONS:
-        current_election = session_data.get('current_election')
+        current_election = session_data.get('current_election',"DEMO")
         print(f"[Background Thread] current_election from session_data:in route {route()} for:", current_election)
     else:
         current_election = "DEMO"
@@ -404,13 +405,13 @@ def get_current_node(session=None, session_data=None):
             TREK_NODES = pickle.load(f)
 
     if session and 'current_node_id' in session:
-        current_node_id = session.get('current_node_id')
+        current_node_id = session.get('current_node_id',"UNITED_KINGDOM")
         print("[Main Thread] current_node_id from session:", session.get('current_node_id'))
-        node = TREK_NODES.get(session.get('current_node_id'))
-    elif session_data and 'current_node_id' in session_data and session_data.get('current_node_id'):
-        print("[Background Thread] current_node_id from session_data:", session_data.get('current_node_id'))
-        current_node_id = session_data.get('current_node_id')
-        node = TREK_NODES.get(session_data.get('current_node_id'))
+        node = TREK_NODES.get(current_node_id)
+    elif session_data and 'current_node_id' in session_data and session_data.get('current_node_id',"UNITED_KINGDOM"):
+        print("[Background Thread] current_node_id from session_data:", session_data.get('current_node_id',"UNITED_KINGDOM"))
+        current_node_id = session_data.get('current_node_id',"UNITED_KINGDOM")
+        node = TREK_NODES.get(current_node_id)
     else:
         current_node_id = 0
         node = None
@@ -683,6 +684,8 @@ class TreeNode:
         self.target = 1
         self.party = "O"
 
+
+
     def upto(self,deststeps):
         node = self
         while node.value not in deststeps:
@@ -772,8 +775,8 @@ class TreeNode:
         self_path = split_clean_path(self.mapfile())
         dest_path_parts = split_clean_path(path_str)
 
-        print(f"   🪜 self_path: {self_path}")
-        print(f"   🪜 dest_path_parts: {dest_path_parts}")
+        print(f"   🪜 under {route()} self_path: {self_path}")
+        print(f"   🪜 under {route()} dest_path_parts: {dest_path_parts}")
 
         # Step 2: Find common ancestor
         common_len = get_common_prefix_len(self_path, dest_path_parts)
@@ -800,31 +803,31 @@ class TreeNode:
             next_level = node.level + 1
             ntype = gettypeoflevel(raw_path_for_types, next_level)
 
-            print(f"   ➡️ Looking for part: '{part}' at level {next_level} (ntype={ntype})")
+            print(f"   ➡️ under {route()} Looking for part: '{part}' at level {next_level} (ntype={ntype})")
 
             # Expand children dynamically
             if next_level <= 4:
                 print(f"      🛠 create_map_branch({ntype})")
                 node.create_map_branch(c_election, ntype)
             elif next_level <= 6:
-                print(f"      🛠 create_data_branch({ntype})")
+                print(f"      🛠 create_data_branch for election {c_election}({ntype})")
                 node.create_data_branch(c_election, ntype)
 
             # Try to find a matching child
             matches = [child for child in node.children if child.value == part]
             if not matches:
-                print(f"   ❌ No match for '{part}' in node '{node.value}' children. Returning original node: {self.value}")
+                print(f"   ❌ under {route()} No match for '{part}' in node '{node.value}' children. Returning original node: {self.value}")
                 return self
 
             node = matches[0]
-            print(f"   ✅ Descended to: {node.value} (level {node.level})")
+            print(f"   ✅ under {route()} Descended to: {node.value} (level {node.level})")
 
         # Step 5: Handle optional zoom keyword
         if keyword in LEVEL_ZOOM_MAP:
             node.zoom_level = LEVEL_ZOOM_MAP[keyword]
             print(f"   🔍 Set zoom level to {node.zoom_level} due to keyword '{keyword}'")
 
-        print(f"✅ Reached destination node: {node.value} (level {node.level})")
+        print(f"✅ under {route()} Reached destination node: {node.value} (level {node.level})")
         # Step 6: Populate children of destination node
         final_level = node.level
         final_ntype = gettypeoflevel(raw_path_for_types, final_level + 1)
@@ -837,14 +840,14 @@ class TreeNode:
                 print("   ✅ create_map_branch() called")
             elif final_level < 6:
                 node.create_data_branch(c_election, final_ntype)
-                print("   ✅ create_data_branch() called")
+                print(f"   ✅ create_data_branch() called for {c_election}({final_ntype})")
             else:
                 print("   ℹ️ No further branching at this level.")
         except Exception as e:
             print(f"   ⚠️ Failed to create child branches: {e}")
 
 
-        print(f"   ✅ Descended to: {node.value} (level {node.level})")
+        print(f"   ✅ Descended to: {node.value} (level {node.level}) children: {len(node.children)}")
         if final_ntype == 'street' or final_ntype == 'walkleg':
             leaf = strip_leaf_from_path(raw_path_for_types)
             leafmatches = [child for child in node.children if child.value == leaf]
@@ -869,13 +872,14 @@ class TreeNode:
             selected = []
         else:
             selectc = Featurelayers[childtype]
+            selectc.show = True
             selected = [selectc]
             print(f"_____layerstest1 {self.value} type:{childtype} layers: {list(reversed(selected))}")
         if self.level > 0 :
 #add siblings layer = self.level eg constituencies
     #        if len(selects._children) == 0:
             # parent children = siblings, eg constituencies, counties, nations
-            print(f"_____layerstest20 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
+            print(f"_____layerstest20 {self.parent.value} lev:{self.level} type:{self.type} layers: {list(reversed(selected))}")
             Featurelayers[self.type].create_layer(current_election,self.parent,self.type)
             selected.append(Featurelayers[self.type])
             print(f"_____layerstest2 {self.parent.value} type:{self.type} layers: {list(reversed(selected))}")
@@ -1060,10 +1064,10 @@ class TreeNode:
 
     def childrenoftype(self,electtype):
         if self.level > 4:
-            typechildren = [x for x in self.children if x.type == electtype and x.election == session.get('current_election')]
+            typechildren = [x for x in self.children if x.type == electtype and x.election == session.get('current_election',"DEMO")]
         else:
             typechildren = [x for x in self.children if x.type == electtype]
-        print(f"__for node:{self.value} at level {self.level} there are {len(self.children)} of which  {len(typechildren)} are type {electtype} ")
+        print(f"__for node:{self.value} at level {self.level} there are {len(self.children)} of which {len(typechildren)} are type {electtype} available {[x.type for x in self.children]} ")
 
         return typechildren
 
@@ -1139,7 +1143,7 @@ class TreeNode:
 
     #    self.aggTarget()
         print('______Create Namepoints :',nodetype,namepoints)
-        print('______Create Nodelist :',nodetype,[x.value for x in fam_nodes])
+        print('______Create Nodelist :',nodetype,[(x.value,x.type) for x in fam_nodes])
 
         return fam_nodes
 
@@ -1279,7 +1283,7 @@ class TreeNode:
         print(f"geometry for {self.value} FID {self.fid} is ",parent_geom)
 
         # If no matching geometry is found, handle the case where parent_geom is empty
-        if parent_geom.empty:
+        if parent_geom.empty or self.level == 0:
             print(f"Adding back in Full {self.type} boundaries for {self.value} FID {self.fid}")
             restore_fullpolys(self.type)
             parent_poly = Treepolys[self.type]
@@ -1332,14 +1336,13 @@ class TreeNode:
         return fam_nodes
 
 
-    def create_area_cal(self,CE,CElection):
+    def create_area_cal(self,CE,CElection, datablock):
         global current_node
         global allelectors
         global layeritems
         global markerframe
         global TREK_NODES
         global resources
-
 
         import re
         from collections import defaultdict
@@ -1408,41 +1411,47 @@ class TreeNode:
 
 
         print(f"___resources in election {CE} self node: {self.value} Resources: {selectedResources} ")
+        print(f"number of records {len(datablock)} ")
 
         areas = {}
 
         if self.level == 4:
+            mask = datablock['Area'] == self.value
+            datablock = datablock[mask]
+            print(f"caldata for {self.value} of length {len(datablock)} ")
+            for walkname in set(datablock.WalkName.values):
+                print(f" under {route()} in walk {walkname}  create_area_cal with datablock {len(datablock)} and columns {datablock.columns}")
 
-            for walkname in set(areaelectors.WalkName.values):
-                print(f"_____Walk Name: {walkname} ")
                 if not walkname:
                     continue
-                mask1 = areaelectors['WalkName'] == walkname
-                streets = areaelectors[mask1]["StreetName"].unique().tolist()
-                datablock = areaelectors[mask1]
-                streets_html = build_street_list_html(datablock)  # your existing function
+                mask1 = datablock['WalkName'] == walkname
+                streets = datablock[mask1]["StreetName"].unique().tolist()
+                datablock2 = datablock[mask1]
+                print(f" under {route()} in walk {walkname}  create_area_cal with datablock {len(datablock)} and columns {datablock.columns}")
+
+                streets_html = build_street_list_html(datablock2)  # your existing function
                 areas[walkname] = {
                     "code": walkname,
                     "streets": streets,
                     "tooltip_html": streets_html
                 }
         elif self.level == 3:
-            for areaname in set(areaelectors.Area.values):
+            print(f"caldata for {self.value} of length {len(datablock)} cols:{datablock.columns} ")
+            for areaname in set(datablock.Area.values):
                 print(f"_____Area Name: {areaname} ")
 
                 if not areaname:
                     continue
-                mask2 = areaelectors['Area'] == areaname
-                walks = areaelectors[mask2]["WalkName"].unique().tolist()
-                datablock = areaelectors[mask2]
-                walks_html = build_area_list_html(datablock)
+                mask2 = datablock['Area'] == areaname
+                walks = datablock[mask2]["WalkName"].unique().tolist()
+                datablock2 = datablock[mask2]
+                print(f" under {route()} in Level 3 create_area_cal with datablock {len(datablock)}")
+                walks_html = build_area_list_html(datablock2)
                 areas[areaname] = {
                     "code": areaname,
-                    "streets": walks,
+                    "walks": walks,
                     "tooltip_html": walks_html
                 }
-
-
         # share input and outcome tags
         valid_tags = CElection['tags']
         task_tags = {}
@@ -1463,7 +1472,9 @@ class TreeNode:
         with open(target, "w", encoding="utf-8") as f:
             f.write(calendar_html)
 
-        return calendar_filename
+        calendar = self.dir+"/"+calendar_filename
+
+        return calendar
 
 
     def create_area_map(self, flayers, CE, CEdata):
@@ -1474,7 +1485,6 @@ class TreeNode:
 
         print(f"___BEFORE map creation: in route {route()} creating file: ", self.file)
 
-        self.create_area_cal(CE,CEdata)
         import hashlib
         import re
         from pathlib import Path
@@ -1815,8 +1825,8 @@ class TreeNode:
         # --- Title for the map
         title = f"{self.value} MAP"
         title_html = f'''
-        <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
-        '''
+            <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
+            '''
 
         # --- Create the map
         FolMap = folium.Map(
@@ -1827,12 +1837,137 @@ class TreeNode:
             crs='EPSG3857'
         )
 
+        folium.TileLayer(
+            tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
+            name='OPNVKarte (Public Transport)',
+            attr='Map data © OpenStreetMap contributors, OPNVKarte by memomaps.de',
+            overlay=False,
+            control=True
+        ).add_to(FolMap)
+
         # --- Inject custom HTML and JS into map
 
+        FolMap.add_child(folium.LatLngPopup())
+        FolMap.add_child(folium.ClickForMarker(popup=None))
 
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+
+        # --- Floating “Places Palette” (lozenge-based) ---
+        places_palette_js = """
+        <script>
+        window.places = window.places || {};
+
+        // Make existing palette draggable
+        function dragElement(el) {
+            var pos1=0,pos2=0,pos3=0,pos4=0;
+            el.onmousedown=dragMouseDown;
+            function dragMouseDown(e){
+                e=e||window.event; e.preventDefault();
+                pos3=e.clientX; pos4=e.clientY;
+                document.onmouseup=closeDragElement;
+                document.onmousemove=elementDrag;
+            }
+            function elementDrag(e){
+                e=e||window.event; e.preventDefault();
+                pos1=pos3-e.clientX; pos2=pos4-e.clientY;
+                pos3=e.clientX; pos4=e.clientY;
+                el.style.top=(el.offsetTop-pos2)+"px";
+                el.style.left=(el.offsetLeft-pos1)+"px";
+            }
+            function closeDragElement(){
+                document.onmouseup=null;
+                document.onmousemove=null;
+            }
+        }
+
+        // Attach drag to your global palette
+        dragElement(document.getElementById("places-palette"));
+
+        // Add a place lozenge to the existing palette
+        function addPlaceToPalette(prefix, address, postcode, lat, lng) {
+            const body = document.getElementById("places-body");
+            if (body.innerHTML === "(No pins yet)") body.innerHTML = "";
+
+            const code = prefix + "_" + Math.random().toString(36).substring(2, 8);
+            window.places[code] = {
+                tooltip: `<b>${address}</b><br>${postcode}`,
+                lat: lat,
+                lng: lng
+            };
+
+            if (typeof createLozengeElement === "function") {
+                const loz = createLozengeElement(
+                    { type: "place", code: prefix },
+                    { selectable: true, removable: true }
+                );
+                loz.addEventListener("click", () => {
+                    if (window.fmap) window.fmap.setView([lat, lng], 15);
+                });
+                body.appendChild(loz);
+            } else {
+                console.warn("⚠️ createLozengeElement not found!");
+            }
+        }
+        </script>
+        """
+        FolMap.get_root().html.add_child(folium.Element(places_palette_js))
+
+
+        # --- Updated click JS ---
+        js_map_name = FolMap.get_name()
+
+        click_js = """
+        function(e) {
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+
+            if (window.pinMarker) {
+                fmap.removeLayer(window.pinMarker);
+            }
+            window.pinMarker = L.marker([lat, lng]).addTo(fmap);
+
+            fetch(`/reverse_geocode?lat=${lat}&lng=${lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    var prefix = prompt("Enter a prefix for this location:", "");
+                    if (!prefix) prefix = "(no prefix)";
+                    var popupText = `<b>Prefix:</b> ${prefix}<br>
+                                     <b>Address:</b> ${data.Address1}<br>
+                                     <b>Postcode:</b> ${data.Postcode}`;
+                    window.pinMarker.bindPopup(popupText).openPopup();
+
+                    // Add to floating palette as a lozenge
+                    addPlaceToPalette(prefix, data.Address1, data.Postcode, lat, lng);
+
+                    // Send data back to server
+                    fetch(`/add_marker`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            lat: lat,
+                            lng: lng,
+                            address: data.Address1,
+                            postcode: data.Postcode,
+                            prefix: prefix
+                        })
+                    }).catch(err => console.error(err));
+                })
+                .catch(err => alert('Error: ' + err));
+        }
+        """
+
+        fscript = f"""
+        <script>
+        window.addEventListener('DOMContentLoaded', (event) => {{
+            window.fmap = {js_map_name};   // ✅ make fmap global
+            window.fmap.on('click', {click_js});
+        }});
+        </script>
+        """
+        FolMap.get_root().html.add_child(folium.Element(fscript))
+
 
         # Add all layers
         for layer in flayers:
@@ -2195,7 +2330,6 @@ class TreeNode:
 from collections import defaultdict
 
 def build_street_list_html(streets_df):
-
     # Voting intention map
     VID = {
         "R": "Reform", "C": "Conservative", "S": "Labour", "LD": "LibDem", "G": "Green",
@@ -2205,6 +2339,7 @@ def build_street_list_html(streets_df):
     from collections import Counter
 
     def count_units_from_column(df, column):
+        # count of all unique house numbers or names in the column across all electors
         all_units = (
             unit.strip()
             for row in df[column].dropna()
@@ -2215,6 +2350,7 @@ def build_street_list_html(streets_df):
 
 
     def extract_unit(row):
+        # building a new unit column value by combining the contents of AddressNumber and AddressPrefix
         prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
         number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
 
@@ -2359,6 +2495,7 @@ def build_area_list_html(datablock):
             <thead>
                 <tr>
                     <th style="text-align:left; padding: 4px;">Area Name</th>
+                    <th style="text-align:left; padding: 4px;"># Walks</th>
                     <th style="text-align:left; padding: 4px;"># Streets</th>
                     <th style="text-align:left; padding: 4px;"># Electors</th>
                 </tr>
@@ -2367,14 +2504,17 @@ def build_area_list_html(datablock):
     '''
 
     grouped = datablock.groupby("Area")
+    print(f"___area_list_html data {len(grouped)}")
 
     for area_name, group in grouped:
+        num_walks = group['WalkName'].nunique()
         num_streets = group["StreetName"].nunique()
         num_electors = len(group)
 
         html += f'''
         <tr>
             <td style="padding: 4px;">{area_name}</td>
+            <td style="padding: 4px;">{num_walks}</td>
             <td style="padding: 4px;">{num_streets}</td>
             <td style="padding: 4px;">{num_electors}</td>
         </tr>
@@ -2509,7 +2649,6 @@ class ExtendedFeatureGroup(FeatureGroup):
             print("❌ Error during Voronoi generation:", e)
             return []
 
-
         matched = set()
         voronoi_regions = []
 
@@ -2547,13 +2686,13 @@ class ExtendedFeatureGroup(FeatureGroup):
                 region_electors = nodeelectors[mask1]
 #________________________First get the data that the walk layer polygon fields requires
                 if not region_electors.empty and len(region_electors.dropna(how="all")) > 0:
-                    Streetsdf0 = pd.DataFrame(region_electors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
-                    Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
+                    Streetsdf = pd.DataFrame(region_electors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
+#                    Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
 #                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
-                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first','AddressNumber': lambda x: ','.join(x.dropna().astype(str)),
-                        'AddressPrefix': lambda x: ','.join(x.dropna().astype(str))
-                        }
-                    Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
+#                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first','AddressNumber': lambda x: ','.join(x.dropna().astype(str)),
+#                        'AddressPrefix': lambda x: ','.join(x.dropna().astype(str))
+#                        }
+#                    Streetsdf = Streetsdf0.groupby(['StreetName']).agg(g).reset_index()
                     streetstag = build_street_list_html(Streetsdf)
                     print ("______Voronoi Streetsdf:",len(Streetsdf), streetstag)
                     print (f" {len(Streetsdf)} streets exist in {target_node.value} under {c_election} election for the {shapecolumn[vtype]} column with this value {child.value}")
@@ -2641,16 +2780,23 @@ class ExtendedFeatureGroup(FeatureGroup):
                         # Add the color to properties — this is **required**
                         limb['properties']['col'] = to_hex(matched_child.col)
 
-                        gj = GeoJson(
-                            data=region_polygon.__geo_interface__,
-                            style_function=lambda feature, col=fill_color: {
-                                'fillColor': col,
-                                'color': 'black',
-                                'weight': 1,
+                        geojson_feature = {
+                            "type": "Feature",
+                            "properties": {"col": fill_color},
+                            "geometry": region_polygon.__geo_interface__,
+                        }
+                        gj = folium.GeoJson(
+                            data=json.loads(json.dumps(geojson_feature)),
+                            style_function=lambda feature: {
+                                'fillColor': feature["properties"]["col"],
+                                'color': '#FFFFFF',     # white border
+                                'weight': 4,            # thinner, adjustable
                                 'fillOpacity': 0.4,
+                                'opacity': 1.0,         # ensure stroke visible
+                                'stroke': True,         # explicitly enable stroke
                             },
                             name=f"Voronoi {label}",
-                            tooltip=Tooltip(label),
+                            tooltip=folium.Tooltip(label),
                             popup=popup,
                         )
                         gj.add_to(self)
@@ -2710,19 +2856,27 @@ class ExtendedFeatureGroup(FeatureGroup):
                         # Add the color to properties — this is **required**
                         limb['properties']['col'] = to_hex(matched_child.col)
 
-                        gj = GeoJson(
-                            data=region_polygon.__geo_interface__,
-                            style_function=lambda feature, col=fill_color: {
-                                'fillColor': col,
-                                'color': 'black',
-                                'weight': 1,
+                        geojson_feature = {
+                            "type": "Feature",
+                            "properties": {"col": fill_color},
+                            "geometry": region_polygon.__geo_interface__,
+                        }
+                        gj = folium.GeoJson(
+                            data=json.loads(json.dumps(geojson_feature)),
+                            style_function=lambda feature: {
+                                'fillColor': feature["properties"]["col"],
+                                'color': '#FFFFFF',     # white border
+                                'weight': 4,            # thinner, adjustable
                                 'fillOpacity': 0.4,
+                                'opacity': 1.0,         # ensure stroke visible
+                                'stroke': True,         # explicitly enable stroke
                             },
                             name=f"Voronoi {label}",
-                            tooltip=Tooltip(label),
+                            tooltip=folium.Tooltip(label),
                             popup=popup,
                         )
                         gj.add_to(self)
+
                         print(f"🖼️ Added Static GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
 
                         centroid = region_polygon.centroid
@@ -3976,7 +4130,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         # Setup logger
         logging.basicConfig(
-            filename = electtrek.log,
+            filename = "electtrek.log",
             level=logging.INFO,  # or INFO
             format='%(asctime)s [%(levelname)s] %(message)s'
         )
@@ -3993,7 +4147,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         aviframe = pd.DataFrame()
         DQstats = pd.DataFrame()
 
-        progress["percent"] = 1
+        progress["percent"] = 0
         progress["status"] = "sourcing"
         progress["message"] = "Sourcing data from instruction files ..."
 
@@ -4016,7 +4170,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 print(progress["message"])
                 return
 
-            print(f"___Selected {stream} election and session node id: ", session_data.get('current_node_id'))
+            print(f"___Selected {stream} election and session node id: ", session_data.get('current_node_id',"UNITED_KINGDOM"))
             SelectedElection = get_election_data(stream)  # essential for election specific processing
 
             order = int(data.get('order'))
@@ -4555,20 +4709,20 @@ login_manager.login_message_category = "info"
 
 
 Featurelayers = {
-"country": ExtendedFeatureGroup(name='Countries', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"nation": ExtendedFeatureGroup(name='Nations', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"county": ExtendedFeatureGroup(name='Counties', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"constituency": ExtendedFeatureGroup(name='Constituencies', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"ward": ExtendedFeatureGroup(name='Wards', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"division": ExtendedFeatureGroup(name='Divisions', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"polling_district": ExtendedFeatureGroup(name='Polling Districts', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"walk": ExtendedFeatureGroup(name='Walks', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"walkleg": ExtendedFeatureGroup(name='Walklegs', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"street": ExtendedFeatureGroup(name='Streets', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"result": ExtendedFeatureGroup(name='Results', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"target": ExtendedFeatureGroup(name='Targets', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"data": ExtendedFeatureGroup(name='Data', overlay=True, control=True, show=True, id='UNITED_KINGDOM'),
-"marker": ExtendedFeatureGroup(name='Special Markers', overlay=True, control=True, show=True, id='UNITED_KINGDOM')
+"country": ExtendedFeatureGroup(name='Countries', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"nation": ExtendedFeatureGroup(name='Nations', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"county": ExtendedFeatureGroup(name='Counties', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"constituency": ExtendedFeatureGroup(name='Constituencies', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"ward": ExtendedFeatureGroup(name='Wards', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"division": ExtendedFeatureGroup(name='Divisions', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"polling_district": ExtendedFeatureGroup(name='Polling Districts', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"walk": ExtendedFeatureGroup(name='Walks', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"walkleg": ExtendedFeatureGroup(name='Walklegs', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"street": ExtendedFeatureGroup(name='Streets', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"result": ExtendedFeatureGroup(name='Results', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"target": ExtendedFeatureGroup(name='Targets', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"data": ExtendedFeatureGroup(name='Data', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
+"marker": ExtendedFeatureGroup(name='Special Markers', overlay=True, control=True, show=False, id='UNITED_KINGDOM')
 }
 
 
@@ -4588,6 +4742,7 @@ TABLE_TYPES  = {
     "report_data": "Report Data",
     "stream_table": "Import Data Streams",
     "nodelist_xref" : "Nodelist xref",
+    "country_layer" : "Countries",
     "nation_layer" : "Nations",
     "county_layer" : "Counties",
     "constituency_layer" : "Constituencies",
@@ -4699,6 +4854,58 @@ def load_user(user_id):
 @login_manager.unauthorized_handler     # In unauthorized_handler we have a callback URL
 def unauthorized_callback():            # In call back url we can specify where we want to
     return render_template("index.html") # redirect the user in my case it is login page!
+
+
+@app.route("/reverse_geocode")
+@login_required
+def reverse_geocode():
+    lat = request.args.get("lat")
+    lng = request.args.get("lng")
+
+    url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&addressdetails=1"
+    response = requests.get(url, headers={"User-Agent": "YourAppName"})
+    data = response.json()
+
+    address = data.get("display_name", "Unknown location")
+    postcode = data.get("Address1", {}).get("Postcode", "N/A")
+    print(f"latlng - {lat}:{lng} url:{url} - addr:{address} - pc:{postcode}")
+    return jsonify({"Address1": address, "Postcode": postcode})
+
+
+@app.route('/add_marker', methods=['POST'])
+@login_required
+def add_marker():
+    data = request.get_json()
+    key = len(markerframe) + 1
+    markerframe[key] = data
+    print(f"Markerframe updated: {markerframe}")  # for debug
+    return jsonify({'status': 'ok', 'id': key})
+
+@app.route('/calendar', methods=['GET'])
+@login_required
+def calendar():
+    global allelectors
+    print(">>> Route/calendar called")
+    current_node = get_current_node(session)
+    restore_from_persist(session)
+    current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    mapfile = CurrentElection['territory']
+    calfile = subending(mapfile,"-CAL.html")
+    mask = (
+        (allelectors['Election'] == current_election)
+    )
+    areaelectors = allelectors.loc[mask].copy()  # important to avoid SettingWithCopyWarning
+    flash(f"Creating new calfile:{calfile}", "info")
+    print(f"Creating new calfile:{calfile} in elec {current_election} node: {current_node.value} under {len(areaelectors)}")
+    current_node = current_node.ping_node(current_election,calfile)
+    fileending = "-"+calfile.split("-").pop()
+    current_node.file = subending(current_node.file,fileending)
+    calfile = current_node.create_area_cal(current_election,CurrentElection,areaelectors)
+    print(f"Created new calfile:{calfile} in {route()}")
+    visit_node(current_node,current_election,CurrentElection,calfile)
+    return send_from_directory(app.config['UPLOAD_FOLDER'],calfile, as_attachment=False)
+
 
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
@@ -4855,14 +5062,13 @@ def reassign_parent():
 
 # Optional: handle user ping
 @app.route("/api/user-ping", methods=["POST"])
-@login_required
 def user_ping():
     global active_users
     active_users = {}
     data = request.json
     user_id = data.get("user_id")
-    name = data.get("display_name", "Anonymous")
-
+    name = data.get("display_name") or "Anonymous"
+    print(f" under {route()} user_id: {user_id} ")
     if user_id:
         active_users[user_id] = {
             "name": name,
@@ -4873,7 +5079,6 @@ def user_ping():
 
 # Optional: return list of active users
 @app.route("/api/active-users", methods=["GET"])
-@login_required
 def active_users_list():
     global active_users
     threshold = datetime.utcnow() - timedelta(seconds=60)
@@ -4882,6 +5087,7 @@ def active_users_list():
         for uid, info in active_users.items()
         if info["last_seen"] > threshold
     ]
+    print(f" under {route()} users: {users} ")
     return jsonify(users)
 
 
@@ -5998,7 +6204,7 @@ def login():
     global layeritems
     global CurrentElection
 
-    current_election = session.get('current_election')
+    current_election = session.get('current_election',"DEMO")
     if current_election:
         flash("User already logged in:", session['username'], " at ", current_node.value)
         print("_______ROUTE/Already logged in:", session['username'], " at ", current_node.value)
@@ -6143,7 +6349,7 @@ navigator.geolocation.getCurrentPosition(
 @login_required
 def logout():
 
-    current_node = TREK_NODES.get(session.get('current_node_id'))
+    current_node = TREK_NODES.get(session.get('current_node_id',"UNITED_KINGDOM"))
 
     flash("🔓 Logging out user:"+ current_user.get_id())
     print("🔓 Logging out user:", current_user.get_id())
@@ -6172,9 +6378,9 @@ def dashboard():
     CurrentElection = get_election_data("DEMO")
     print ("___Route/Dashboard allelectors len: ",len(allelectors))
     if 'username' in session:
-        print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id')}")
+        print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
         formdata = {}
-        current_node = TREK_NODES.get(session.get('current_node_id'))
+        current_node = TREK_NODES.get(session.get('current_node_id',"UNITED_KINGDOM"))
         if not current_node:
             current_node = TREK_NODES.get(next(iter(TREK_NODES), None)).findnodeat_Level(0)
         streamrag = getstreamrag()
@@ -6369,7 +6575,7 @@ def downWKbut(path):
 # so this is the button which creates the nodes and map of equal sized walks for the troops
     restore_from_persist(session=session)
     current_node = get_current_node(session)
-    current_election = (session)
+    current_election = get_current_election(session)
     print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
@@ -6918,7 +7124,7 @@ def get_table(table_name):
     def get_report_table():
         try:
             if report_data:
-                pd.DataFrame(report_data)
+                return pd.DataFrame(report_data)
         except:
             report_data = pd.DataFrame()
         return pd.DataFrame(report_data)
@@ -7366,8 +7572,10 @@ def get_progress():
     progress['status'] = 'complete'
     progress['message'] = 'Normalization Complete'
     progress['election'] = progress['election']
+    streamrag = getstreamrag()
     html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
     print("___JSONIFYED streamrag:",streamrag)
+
 
     for key, value in progress.items():
         print(f"Progress2-{key} => {value}")
@@ -7614,7 +7822,7 @@ def cards():
                 group = prodcards[0]
                 ELECTIONS = get_election_names()
                 calfile = current_node.calfile()
-                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CurrentElection[session.get("current_election")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CurrentElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")
@@ -7714,7 +7922,7 @@ def normalise():
     print("Form Data:", request_form)
     print("Form Files:", request_files)
 
-    target_election = session_data.get('current_election')
+    target_election = session_data.get('current_election',"DEMO")
     files = []
 
     # 3. Extract metadata and stored paths

@@ -514,6 +514,7 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                 str(elector["Address2"]),
                 flags=re.IGNORECASE | re.VERBOSE
             )
+
             prefix = normalname(elector["Address1"])
             print ("xx:", xx, "addr:", addr, "Addno1:", Addno1, "Addno2:", Addno2, "prefix:", prefix, "P1:",str(elector['Address2']),"P2:" ,str(elector['Postcode'])  )
             if Addno1 is None:
@@ -549,7 +550,6 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                   electors2.loc[index,'Address_4'] = elector.get('Address6', None)
                   print ("Case010","len010:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             else:
-
 # so there is a number in Address 1 - but what about Address 2
               if Addno2 is None:
                 match_text1 = Addno1.group()
@@ -591,12 +591,10 @@ def normz(progress, RunningVals1,Lookups, stream,ImportFilename,dfx,autofix,purp
                     start_index1 = Addno1.end()
                     original_string1 = str(elector["Address1"])
                     prefix = normalname(original_string1[start_index1:])
-
                     match_text2 = Addno2.group()
                     start_index2 = Addno2.end()
                     original_string2 = str(elector["Address2"])
                     street = normalname(original_string2[start_index2:])
-
                     if street is None or street == "":
                         street = normalname(elector["Address3"])
                         electors2.loc[index,'Address_1'] = elector["Address4"]

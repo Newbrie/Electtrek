@@ -230,7 +230,7 @@
               <button type = "button" id = "b5" class = "small_btn">CAMPAIGN PROGRESS</button>
             </div>
             <div class="grid-item">
-              <button type = "button" id = "b9" class = "small_btn">RESOURCING</button>
+              <button type = "button" id = "b9" class = "small_btn">CALENDAR</button>
             </div>
             <div class="grid-item">
               <button type = "button" id = "b6" class = "small_btn">VOTER<br>TELLING</button>
@@ -275,6 +275,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 
 <script>
+
+
 function fetchTableData(tableName) {
   const VCO = {
     O: "brown", R: "cyan", C: "blue", S: "red",
@@ -465,13 +467,7 @@ function subending(filename, ending) {
   });
 
   document.getElementById("b9").addEventListener("click", function() {
-    const mapfile = data.constants.territory;
-
-    if (mapfile) {
-      const calfile = subending(mapfile,"-CAL.html");
-      changeIframeSrc(`/thru/${calfile}`);
-      alert(`New calfile loaded: /thru/${calfile}`);
-    }
+      changeIframeSrc("{{ url_for('calendar') }}");
   });
 
 

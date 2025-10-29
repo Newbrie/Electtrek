@@ -504,3 +504,85 @@ async function checkPassword() {
     document.getElementById("error").textContent = "Incorrect password.";
   }
 }
+
+window.createLozengeElement = function highlightLozenge(loz) {
+document.querySelectorAll('.lozenge.selected').forEach(el => {
+  el.classList.remove('selected');
+});
+loz.classList.add('selected');
+}
+
+
+window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {
+   const div = document.createElement("div");
+   div.setAttribute("data-type", loz.type);
+   div.setAttribute("data-code", loz.code);
+   div.setAttribute("draggable", true);
+   div.setAttribute("tabindex", "0");  // ✅ Makes the lozenge focusable
+   div.setAttribute("id", `lozenge-${loz.type}-${loz.code}-${Math.random().toString(36).substring(2, 8)}`);
+   div.textContent = loz.code;
+
+   div.className = `lozenge ${loz.type}-lozenge`;
+   if (!selectable) div.classList.add("dropped");
+   div.textContent = loz.code;
+   div.addEventListener("dragstart", (e) => {
+     e.dataTransfer.setData("text/plain", div.id);
+   });
+
+   // Decide tooltip content for tippy
+   let tooltipContent = null;
+
+   if (loz.type === "area") {
+     const areaInfo = window.areas?.[loz.code];
+     tooltipContent = areaInfo?.tooltip_html || loz.info || null;
+   } else if (loz.type === "resource") {
+     const resourceInfo = window.resources?.[loz.code];
+     tooltipContent = resourceInfo.Firstname + " " + resourceInfo.Surname;
+     console.log("Resource Tooltips",tooltipContent);
+   } else if (loz.type === "place") {
+         const placeInfo = window.places?.[loz.code];
+         tooltipContent = placeInfo?.tooltip;
+         console.log("Place Tooltip ",loz.code,placeInfo);
+         console.log("placeDetails keys:", Object.keys(window.places));
+   } else if (loz.type === "tag") {
+         const tagInfo = window.task_tags?.[loz.code];
+         tooltipContent = tagInfo;
+         console.log("Task tag Tooltip ",loz.code,tagInfo);
+         console.log("tagDetails values:", Object.values(window.task_tags));
+
+       };
+
+
+   if (tooltipContent) {
+     tippy(div, {
+       content: tooltipContent,
+       hideOnClick: true,
+       allowHTML: true,
+       trigger: 'click',
+       interactive: true,
+       theme: 'light', // optional
+       appendTo: document.body,
+     });
+   }
+   div.removeAttribute("title");
+   div.removeAttribute("data-info"); // if you're using this anywhere
+
+
+   // Tooltip setup (as before)...
+
+   // ✅ Highlight (for palette lozenges)
+   if (selectable) {
+     div.addEventListener("click", () => {
+       highlightLozenge(div);
+     });
+   }
+
+   // ❌ Removal (for dropped lozenges)
+   if (removable) {
+     div.addEventListener("click", () => {
+       div.remove();
+     });
+   }
+
+   return div;
+  }
