@@ -1908,7 +1908,7 @@ class TreeNode:
             window.places[code] = { tooltip: `<b>${address}</b><br>${postcode}`, lat, lng };
 
             if (typeof createLozengeElement === "function") {
-                const loz = createLozengeElement({ type: "place", code: prefix }, { selectable: true, removable: true });
+                const loz = createLozengeElement({ type: "place", code: prefix }, { selectable: true, removable: false });
                 loz.addEventListener("click", () => { if(window.fmap) window.fmap.setView([lat, lng], 15); });
                 body.appendChild(loz);
             } else {
