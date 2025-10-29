@@ -49,29 +49,46 @@
     overflow-y: auto;       /* scroll vertically if content exceeds max-height */
 }
 
+
+#places-palette {
+    display: flex;
+    flex-direction: row; /* horizontal layout */
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.95);
+    border: 2px solid #666;
+    border-radius: 6px;
+    overflow: hidden;       /* clip body when collapsed */
+    transition: width 0.3s ease;
+}
+
+/* vertical header stays visible */
+.vertical-header {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    width: 40px;
+    flex-shrink: 0; /* prevent shrinking */
+    cursor: pointer;
+}
+
+/* body lozenges flex container */
 #places-body {
     display: flex;
-    flex-wrap: wrap;       /* wrap lozenges to next line */
-    gap: 8px;              /* spacing between lozenges */
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+    overflow-x: auto;
+    transition: width 0.3s ease, padding 0.3s ease;
 }
 
-/* Collapsed state: only header visible */
-#places-palette.collapsed {
-    height: auto; /* keep header visible */
-    max-height: none;
-}
-
-#places-palette.collapsed .palette-body,
+/* collapsed state: hide the body */
 #places-palette.collapsed #places-body {
-    display: none; /* hide content when collapsed */
-    transition: max-height 0.3s ease;
+    width: 0;
+    padding: 0;
+    overflow: hidden;
 }
-
-/* Optionally, add a little transition */
-#places-palette {
-    transition: max-height 0.3s ease;
-}
-
 
 .palette-body::-webkit-scrollbar {
   height: 6px;
