@@ -1,55 +1,9 @@
 
 
-.palette-header {
-  background-color: #ddd;
-  padding: 6px 10px;
-  font-weight: bold;
-  cursor: move;
-  border-bottom: 1px solid #aaa;
-  user-select: none;
-}
-.palette-body {
-  display: flex;
-  overflow-x: auto;            /* enables horizontal scrolling */
-  gap: 8px;
-  padding: 6px 10px;
-  scrollbar-width: thick;
-  justify-content: flex-start;
-  max-width: 360px;
-  max-height: 500px;
-}
-.vertical-header {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  background-color: #ddd;
-  border-right: 1px solid #aaa;
-  padding: 10px;
-
-  display: flex;
-  align-items: flex-start;       /* Top of vertical line (before rotation) */
-  justify-content: flex-end;     /* Right of writing-mode line (after rotation) */
-
-  height: auto;                  /* Don't stretch */
-  width: 40px;                   /* Fixed width for vertical bar */
-  box-sizing: border-box;
-}
-
-
-.floating-palette {
-  display: flex;             /* <--- key to horizontal layout */
-  flex-direction: row;
-  position: fixed;
-  background-color: #f9f9f9;
-  border: 2px solid #aaa;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  z-index: 1000;
-  width: 200px;
-}
-
+/* Palette container */
 #places-palette {
     display: flex;
-    flex-direction: row;       /* horizontal layout */
+    flex-direction: row;
     position: fixed;
     top: 80px;
     right: 20px;
@@ -57,21 +11,27 @@
     background: rgba(255,255,255,0.95);
     border: 2px solid #666;
     border-radius: 6px;
-    overflow: hidden;          /* clip body when collapsed */
-    width: auto;               /* natural width with body */
-    transition: width 0.3s ease;
+    overflow: hidden;
+    width: auto;
+    transition: width 0.3s ease, padding 0.3s ease;
 }
 
-/* vertical header stays visible */
+/* Vertical header stays visible */
 .vertical-header {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     width: 40px;
-    flex-shrink: 0;            /* prevent shrinking */
+    flex-shrink: 0;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #ddd;
+    border-right: 1px solid #aaa;
+    padding: 6px;
 }
 
-/* body lozenges flex container */
+/* Body container */
 #places-body {
     display: flex;
     flex-wrap: wrap;
@@ -81,196 +41,59 @@
     transition: width 0.3s ease, padding 0.3s ease;
 }
 
-/* collapsed state: shrink entire palette */
+/* Collapsed palette */
 #places-palette.collapsed {
-    width: 40px;               /* only show vertical header */
+    width: 40px; /* Only show header */
 }
 
 #places-palette.collapsed #places-body {
-    width: 0;                  /* hide contents */
+    width: 0;
     padding: 0;
     overflow: hidden;
 }
 
-#palette-container {
-  max-height: 400px;
-  position: fixed;
-  top: 100px;
-  right: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 999;
-    overflow-y: auto;
-}
-
-
-.palette {
-  display: flex;
-  overflow-x: auto;             /* Horizontal scroll for lozenges */
-  gap: 8px;
-  background-color: #f9f9f9;
-  border: 2px solid #aaa;
-  border-radius: 8px;
-  width: 200px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-
-
-#calendar-controls {
-  position: fixed;
-  top: 20px;
-  right: 50px;
-  z-index: 1000;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-
-#calendar-controls button {
-  padding: 6px 12px;
-  font-size: 14px;
-  margin-left: 10px;
-}
-
-    .empty-day {
-      background-color: #fff;
-      border: none;
-    }
-
-    .day-header {
-      background-color: #e0e0e0;
-      padding: 4px;
-      text-align: center;
-      font-weight: bold;
-      border-bottom: 1px solid #ccc;
-    }
-
-    .slot {
-      flex: 1;
-      border-top: 1px solid #ccc;
-      padding: 2px;
-      font-size: 11px;
-      font-weight: 300;
-      color: #333;
-      min-height: 30px;
-      line-height: 1;
-    }
-
-  .slot:hover {
-      background-color: #cce5ff;
-      cursor: pointer;
-    }
-
-
+/* Lozenges */
+.lozenge,
 .area-lozenge,
 .tag-lozenge,
 .resource-lozenge,
 .place-lozenge {
-  background-color: #e0f0ff;
-  border-radius: 15px;
-  padding: 4px 8px; /* Smaller padding */
-  font-weight: bold;
-  font-size: 13px;
-  cursor: grab;
-  display: inline-block; /* Ensures width fits text */
-  margin: 2px;
-  white-space: nowrap; /* Prevent text wrapping */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    padding: 4px 12px;       /* smaller padding */
+    height: auto;            /* auto height */
+    background-color: #e0e0e0;
+    border-radius: 9999px;
+    font-size: 14px;         /* normal size */
+    line-height: 1.2;
+    flex-shrink: 0;
+    cursor: pointer;         /* selectable */
+    box-sizing: border-box;
+    margin: 2px;
 }
 
-
-
-/* Compact style when dropped */
-.area-lozenge.dropped,
-.tag-lozenge.dropped,
-.resource-lozenge.dropped,
-.place-lozenge.dropped  {
-  font-size: 8px;
-  padding: 2px 6px;
-  margin: 1px 0; /* ⬅️ Tight vertical spacing */
-  cursor: pointer;
-  display: inline-block;
-  white-space: nowrap;
-  line-height: 1; /* ⬅️ Minimal line height */
-}
-
-
-.area-lozenge {
-  background-color: #d4edda; /* ✅ Light green */
-}
-
-.tag-lozenge {
-  background-color: #fff3cd; /* ✅ Light yellow */
-}
-
-.resource-lozenge {
-  background-color: #f8d7da; /* ✅ Light red */
-}
-
-.place-lozenge {
-  background-color: #d1ecf1; /* ✅ Light cyan */
-}
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1em;
-  table-layout: auto; /* allow flexible column sizes */
-}
-
-.summary-table th,
-.summary-table td {
-  border: 1px solid #ccc;
-  padding: 8px;
-  vertical-align: top;
-  text-align: left;
-}
-
-/* Minimize width of first two columns */
-.summary-table th:nth-child(1),
-.summary-table td:nth-child(1),
-.summary-table th:nth-child(2),
-.summary-table td:nth-child(2) {
-  white-space: nowrap;
-  width: 1%;
-}
-.area-tooltip {
-  color: white;  !important;       /* or another visible color */
-  background-color: black;!important;
-}
-.area-tooltip ul {
-  list-style: disc;
-  margin: 0;
-  padding-left: 20px;
-  color: white;!important;
-}
-
-
-/* The pill-shaped lozenge */
-.lozenge {
-  display: inline-flex;
-  align-items: center;         /* ✅ vertical centering */
-  justify-content: center;     /* ✅ horizontal centering */
-  white-space: nowrap;
-  padding: 0 1em;
-  height: 3em;             /* horizontal padding only */
-  background-color: #e0e0e0;
-  border-radius: 9999px;       /* pill shape */
-  font-size: 2em;
-  line-height: normal;         /* ✅ let flexbox do the centering */
-  flex-shrink: 0;
-  cursor: grab;
-  box-sizing: border-box;      /* ✅ ensures padding doesn't break height */
-}
-
-
-
+/* Optional: selected state */
 .lozenge-selected {
-  outline: 2px solid #1890ff;
-  background-color: #cceeff !important;
-  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
+    outline: 2px solid #1890ff;
+    background-color: #cceeff !important;
+    box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
 }
 
+/* Dropped/compact style */
+.lozenge.dropped {
+    font-size: 10px;
+    padding: 2px 6px;
+    margin: 1px 0;
+    line-height: 1;
+}
+
+/* Specific lozenge colors */
+.area-lozenge { background-color: #d4edda; }
+.tag-lozenge { background-color: #fff3cd; }
+.resource-lozenge { background-color: #f8d7da; }
+.place-lozenge { background-color: #d1ecf1; }
 
 .election-day-cell {
   border: 3px double red !important;
