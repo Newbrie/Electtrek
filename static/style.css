@@ -2,35 +2,34 @@
 /* -----------------------------
    Collapsible Palettes
    ----------------------------- */
-   .collapsible-palette .vertical-header {
-     writing-mode: vertical-rl;
-     transform: rotate(180deg);       /* keep text upright */
-     width: 40px;
-     cursor: pointer;
-     display: flex;
-     align-items: flex-end;           /* pushes text toward the “right” of rotated header */
-     justify-content: flex-start;     /* keeps text at the top of the vertical header */
-     background: #ddd;
-     border-right: 1px solid #aaa;
-     padding: 6px;
-     flex-shrink: 0;
-     text-align: right;               /* ensures text lines are right-aligned in the narrow header */
-   }
+.collapsible-palette {
+    display: flex;                  /* header + body horizontally */
+    flex-direction: row;
+    position: fixed;                /* float above content */
+    background-color: #f9f9f9;
+    border: 2px solid #aaa;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    overflow: hidden;               /* hide body when collapsed */
+    z-index: 1000;
+    transition: width 0.3s ease, padding 0.3s ease;
+    font-size: 14px;                /* base font size for lozenges */
+}
 
 /* Vertical header always visible and draggable */
 .collapsible-palette .vertical-header {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    background-color: #ddd;
-    border-right: 1px solid #aaa;
-    padding: 10px;
-    width: 40px;                    /* always visible */
-    flex-shrink: 0;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);       /* keep text upright */
+  width: 40px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;           /* pushes text toward the “right” of rotated header */
+  justify-content: flex-start;     /* keeps text at the top of the vertical header */
+  background: #ddd;
+  border-right: 1px solid #aaa;
+  padding: 6px;
+  flex-shrink: 0;
+  text-align: right;               /* ensures text lines are right-aligned in the narrow header */
 }
 
 /* Palette body containing lozenges */
