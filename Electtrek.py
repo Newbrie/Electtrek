@@ -1855,11 +1855,20 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
 
         # --- Floating “Places Palette” (lozenge-based) ---
-        places_palette_js = """
+        places_palette_html = """
+        <div id="palette-container">
+          <div class="palette floating-palette" id="places-palette" style="top: 300px; right: 50px;">
+            <div class="palette-header vertical-header" id="places-handle">📍 Places</div>
+            <div class="palette-body" id="places-body">(No pins yet)</div>
+          </div>
+        </div>
+
+        <script src="https://unpkg.com/@popperjs/core@2"></script>
+        <script src="https://unpkg.com/tippy.js@6"></script>
+
         <script>
         window.places = window.places || {};
 
-        // Make existing palette draggable
         function dragElement(el) {
             var pos1=0,pos2=0,pos3=0,pos4=0;
             el.onmousedown=dragMouseDown;
@@ -1882,29 +1891,25 @@ class TreeNode:
             }
         }
 
-        // Attach drag to your global palette
-        dragElement(document.getElementById("places-palette"));
+        // Attach drag behavior AFTER element exists
+        const palette = document.getElementById("places-palette");
+        if (palette) {
+            dragElement(palette);
+        } else {
+            console.warn("⚠️ #places-palette not found");
+        }
 
-        // Add a place lozenge to the existing palette
+        // Function to add lozenges
         function addPlaceToPalette(prefix, address, postcode, lat, lng) {
             const body = document.getElementById("places-body");
             if (body.innerHTML === "(No pins yet)") body.innerHTML = "";
 
             const code = prefix + "_" + Math.random().toString(36).substring(2, 8);
-            window.places[code] = {
-                tooltip: `<b>${address}</b><br>${postcode}`,
-                lat: lat,
-                lng: lng
-            };
+            window.places[code] = { tooltip: `<b>${address}</b><br>${postcode}`, lat, lng };
 
             if (typeof createLozengeElement === "function") {
-                const loz = createLozengeElement(
-                    { type: "place", code: prefix },
-                    { selectable: true, removable: true }
-                );
-                loz.addEventListener("click", () => {
-                    if (window.fmap) window.fmap.setView([lat, lng], 15);
-                });
+                const loz = createLozengeElement({ type: "place", code: prefix }, { selectable: true, removable: true });
+                loz.addEventListener("click", () => { if(window.fmap) window.fmap.setView([lat, lng], 15); });
                 body.appendChild(loz);
             } else {
                 console.warn("⚠️ createLozengeElement not found!");
@@ -1912,7 +1917,8 @@ class TreeNode:
         }
         </script>
         """
-        FolMap.get_root().html.add_child(folium.Element(places_palette_js))
+
+        FolMap.get_root().html.add_child(folium.Element(places_palette_html))
 
 
         # --- Updated click JS ---
