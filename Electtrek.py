@@ -2057,6 +2057,7 @@ class TreeNode:
                     FolMap.location = self.centroid
                     FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
                 else:
+                    raise Exception('XYZ')
                     print("✅ BBox is valid, applying fit_bounds")
                     FolMap.fit_bounds([sw, ne], padding=(0, 0))
 
