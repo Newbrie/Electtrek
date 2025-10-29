@@ -55,6 +55,19 @@
     gap: 8px;              /* spacing between lozenges */
 }
 
+/* Collapsed state: only header visible */
+#places-palette.collapsed {
+    height: auto; /* shrink to header height */
+    max-height: none;
+    overflow: hidden;
+}
+
+/* Optionally, add a little transition */
+#places-palette {
+    transition: max-height 0.3s ease;
+    cursor: grab;
+}
+
 .palette-body::-webkit-scrollbar {
   height: 6px;
 }
