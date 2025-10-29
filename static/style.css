@@ -1,21 +1,24 @@
 
-/* All palettes share this structure */
-.palette {
-    display: flex;                  /* horizontal layout: header + body */
-    flex-direction: row;
-    position: fixed;
-    background-color: #f9f9f9;
-    border: 2px solid #aaa;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    overflow: hidden;               /* hide body when collapsed */
-    z-index: 1000;
-    transition: width 0.3s ease, padding 0.3s ease;
-    font-size: 14px;                /* base font size for lozenges */
-}
+/* -----------------------------
+   Collapsible Palettes
+   ----------------------------- */
+   .collapsible-palette .vertical-header {
+     writing-mode: vertical-rl;
+     transform: rotate(180deg);       /* keep text upright */
+     width: 40px;
+     cursor: pointer;
+     display: flex;
+     align-items: flex-end;           /* pushes text toward the “right” of rotated header */
+     justify-content: flex-start;     /* keeps text at the top of the vertical header */
+     background: #ddd;
+     border-right: 1px solid #aaa;
+     padding: 6px;
+     flex-shrink: 0;
+     text-align: right;               /* ensures text lines are right-aligned in the narrow header */
+   }
 
-/* Vertical header for toggling collapse */
-.palette .vertical-header {
+/* Vertical header always visible and draggable */
+.collapsible-palette .vertical-header {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     background-color: #ddd;
@@ -25,112 +28,40 @@
     flex-shrink: 0;
     cursor: pointer;
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
-}
-
-/* Palette header (title bar above lozenges if needed) */
-.palette .palette-header {
-    background-color: #ddd;
-    padding: 6px 10px;
-    font-weight: bold;
-    cursor: move;
-    border-bottom: 1px solid #aaa;
+    align-items: center;
+    justify-content: center;
     user-select: none;
 }
-.palette .palette-body {
+
+/* Palette body containing lozenges */
+.collapsible-palette .palette-body,
+.collapsible-palette > div[id$="-content"] { /* generic for places-content, tags-content, etc. */
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     padding: 6px 10px;
-    overflow-x: auto;               /* horizontal scrolling */
+    overflow-x: auto;
     max-width: 360px;
     max-height: 500px;
     transition: width 0.3s ease, padding 0.3s ease;
 }
 
-/* Collapse the palette body */
-.palette.collapsed .palette-body {
+/* Collapsed palette body */
+.collapsible-palette.collapsed .palette-body,
+.collapsible-palette.collapsed > div[id$="-content"] {
     width: 0;
     padding: 0;
     overflow: hidden;
 }
 
-/* Collapse the entire palette to vertical header */
-.palette.collapsed {
+/* Collapse entire palette to header width */
+.collapsible-palette.collapsed {
     width: 40px;
 }
-.palette .lozenge,
-.palette .area-lozenge,
-.palette .tag-lozenge,
-.palette .resource-lozenge,
-.palette .place-lozenge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    white-space: nowrap;
-    padding: 4px 8px;             /* smaller and uniform */
-    height: auto;
-    font-size: 13px;
-    border-radius: 15px;
-    cursor: grab;
-    margin: 2px;
-    flex-shrink: 0;
-    box-sizing: border-box;
-}
 
-.palette .area-lozenge { background-color: #d4edda; }
-.palette .tag-lozenge { background-color: #fff3cd; }
-.palette .resource-lozenge { background-color: #f8d7da; }
-.palette .place-lozenge { background-color: #d1ecf1; }
-
-/* Selected state */
-.palette .lozenge-selected {
-    outline: 2px solid #1890ff;
-    background-color: #cceeff !important;
-    box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
-}
-
-/* Compact style when dropped */
-.palette .lozenge.dropped,
-.palette .area-lozenge.dropped,
-.palette .tag-lozenge.dropped,
-.palette .resource-lozenge.dropped,
-.palette .place-lozenge.dropped {
-    font-size: 10px;
-    padding: 2px 6px;
-    margin: 1px 0;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.palette.collapsed {
-    width: 40px; /* only show vertical header */
-}
-
-.palette.collapsed .palette-body {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-}
-
-.vertical-header {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    width: 40px;
-    flex-shrink: 0;        /* don’t shrink when palette collapses */
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #ddd;
-    border-right: 1px solid #aaa;
-    padding: 6px;
-}
-
-
-/* Lozenges */
-/* Base lozenge style for all types */
+/* -----------------------------
+   Lozenges
+   ----------------------------- */
 .lozenge,
 .area-lozenge,
 .tag-lozenge,
@@ -140,38 +71,41 @@
     align-items: center;
     justify-content: center;
     white-space: nowrap;
-    padding: 4px 12px;       /* reasonable default padding */
-    height: auto !important; /* override old fixed height */
-    font-size: 14px !important;
+    padding: 4px 12px;
+    height: auto;
+    font-size: 14px;
     line-height: 1.2;
     flex-shrink: 0;
     cursor: pointer;
     box-sizing: border-box;
     margin: 2px;
-    border-radius: 15px;      /* pill shape */
-    font-weight: bold;
+    border-radius: 15px;
 }
 
-/* Optional: selected state */
+/* Specific colors */
+.area-lozenge { background-color: #d4edda; }
+.tag-lozenge { background-color: #fff3cd; }
+.resource-lozenge { background-color: #f8d7da; }
+.place-lozenge { background-color: #d1ecf1; }
+
+/* Selected state */
 .lozenge-selected {
     outline: 2px solid #1890ff;
     background-color: #cceeff !important;
     box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
 }
 
-/* Dropped/compact style */
-.lozenge.dropped {
+/* Compact style for dropped/mini lozenges */
+.lozenge.dropped,
+.area-lozenge.dropped,
+.tag-lozenge.dropped,
+.resource-lozenge.dropped,
+.place-lozenge.dropped {
     font-size: 10px;
     padding: 2px 6px;
     margin: 1px 0;
     line-height: 1;
 }
-
-/* Specific lozenge colors */
-.area-lozenge { background-color: #d4edda; }
-.tag-lozenge { background-color: #fff3cd; }
-.resource-lozenge { background-color: #f8d7da; }
-.place-lozenge { background-color: #d1ecf1; }
 
 
 .election-day-cell {

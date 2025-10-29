@@ -52,35 +52,31 @@ h2 {
   <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
   <!-- Resource -->
   <!-- Existing Resource Palette -->
-  <div id="resource-palette" class="palette floating-palette" style="top: 460px; right: 50px;">
-    <div id="resource-handle" class="vertical-header">Who - Resources</div>
-    <div id="resource-content">
-    </div>
+  <!-- Resource Palette -->
+  <div id="resource-palette" class="collapsible-palette floating-palette" style="top: 50px; right: 50px;">
+    <div class="vertical-header">Resources</div>
+    <div class="palette-body" id="resource-content"></div>
   </div>
 
-  <!-- New areas Palette -->
-  <div id="areas-palette" class="palette floating-palette"style="top: 100px; right: 50px;" >
-    <div id="areas-handle" class="vertical-header">Where - Areas</div>
-    <div id="areas-content">
-    </div>
+  <!-- Areas Palette -->
+  <div id="areas-palette" class="collapsible-palette floating-palette" style="top: 150px; right: 50px;">
+    <div class="vertical-header">Areas</div>
+    <div class="palette-body" id="areas-content"></div>
   </div>
 
-  <!-- New Task Tags Palette -->
-  <div id="tags-palette" class="palette floating-palette" style="top: 250px; right: 50px;">
-    <div id="tags-handle" class="vertical-header">What - Activities</div>
-    <div id="tags-content">
-    </div>
+  <!-- Tags Palette -->
+  <div id="tags-palette" class="collapsible-palette floating-palette" style="top: 250px; right: 50px;">
+    <div class="vertical-header">Activities</div>
+    <div class="palette-body" id="tags-content"></div>
+  </div>
+
+  <!-- Places Palette -->
+  <div id="places-palette" class="collapsible-palette floating-palette" style="top: 350px; right: 50px;">
+    <div class="vertical-header">Places</div>
+    <div class="palette-body" id="places-content"></div>
   </div>
 
 
-  <!-- New Places Palette -->
-  <div id="places-palette" class="palette floating-palette" style="top: 300px; right: 50px;">
-    <div id="places-handle" class="vertical-header">Where - Places</div>
-    <div id="places-content" class="palette-group">
-
-    </div>
-  </div>
-    </div>
 
 
 
@@ -737,28 +733,47 @@ console.log("Injected areas:", {{ areas | tojson }});
 
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Build all palettes
   buildResourcePalette("resource-content");
   buildAreaPalette("areas-content");
   buildTaskTagsPalette("tags-content");
   buildPlacesPalette("places-content");
 
-  let currentZIndex = 1000; // start at a safe base
+  document.querySelectorAll(".collapsible-palette").forEach(palette => {
+  const header = palette.querySelector(".vertical-header");
+  if (!header) return;
 
-  // Attach to all palette headers
-  document.querySelectorAll('.vertical-header').forEach(header => {
-    header.addEventListener('mousedown', () => {
-      const palette = header.closest('.palette');
-      palette.style.zIndex = ++currentZIndex;
-    });
+  // Make drag state per-palette
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  header.addEventListener("mousedown", e => {
+    palette.style.zIndex = ++currentZIndex;
+    isDragging = true;
+    dragOffsetX = e.clientX - palette.offsetLeft;
+    dragOffsetY = e.clientY - palette.offsetTop;
+    document.body.style.userSelect = "none";
   });
 
-});
+  document.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    palette.style.left = `${e.clientX - dragOffsetX}px`;
+    palette.style.top = `${e.clientY - dragOffsetY}px`;
+  });
 
-// Enable draggable behavior on all three palettes
-makePaletteDraggable("resource-palette", "resource-handle");
-makePaletteDraggable("areas-palette", "areas-handle");
-makePaletteDraggable("tags-palette", "tags-handle");
-makePaletteDraggable("places-palette", "places-handle");
+  document.addEventListener("mouseup", e => {
+    isDragging = false;
+    document.body.style.userSelect = "";
+  });
+
+  header.addEventListener("click", e => {
+    if (Math.abs(e.movementX) < 3 && Math.abs(e.movementY) < 3) {
+      palette.classList.toggle("collapsed");
+    }
+  });
+});
+});
 
 
 //if (!isDev) {
