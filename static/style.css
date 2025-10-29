@@ -32,99 +32,6 @@
   max-width: 360px;
   max-height: 500px;
 }
-#places-palette {
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    z-index: 1000;
-    width: 360px;           /* fixed max width */
-    max-height: 600px;      /* palette grows until this height, then scrolls */
-    background: rgba(255,255,255,0.95);
-    border: 2px solid #666;
-    border-radius: 6px;
-    padding: 10px;
-    font-family: Arial, sans-serif;
-    box-shadow: 2px 2px 8px rgba(0,0,0,0.3);
-    cursor: move;
-    overflow-y: auto;       /* scroll vertically if content exceeds max-height */
-}
-
-
-#places-palette {
-    display: flex;
-    flex-direction: row; /* horizontal layout */
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    z-index: 1000;
-    background: rgba(255,255,255,0.95);
-    border: 2px solid #666;
-    border-radius: 6px;
-    overflow: hidden;       /* clip body when collapsed */
-    transition: width 0.3s ease;
-}
-
-/* vertical header stays visible */
-.vertical-header {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    width: 40px;
-    flex-shrink: 0; /* prevent shrinking */
-    cursor: pointer;
-}
-
-/* body lozenges flex container */
-#places-body {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 6px 10px;
-    overflow-x: auto;
-    transition: width 0.3s ease, padding 0.3s ease;
-}
-
-/* collapsed state: hide the body */
-#places-palette.collapsed #places-body {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-}
-
-.palette-body::-webkit-scrollbar {
-  height: 6px;
-}
-
-.palette-body::-webkit-scrollbar-thumb {
-  background-color: #aaa;
-  border-radius: 4px;
-}
-
-
-/* The pill-shaped lozenge */
-.lozenge {
-  display: inline-flex;
-  align-items: center;         /* ✅ vertical centering */
-  justify-content: center;     /* ✅ horizontal centering */
-  white-space: nowrap;
-  padding: 0 1em;
-  height: 3em;             /* horizontal padding only */
-  background-color: #e0e0e0;
-  border-radius: 9999px;       /* pill shape */
-  font-size: 2em;
-  line-height: normal;         /* ✅ let flexbox do the centering */
-  flex-shrink: 0;
-  cursor: grab;
-  box-sizing: border-box;      /* ✅ ensures padding doesn't break height */
-}
-
-
-
-.lozenge-selected {
-  outline: 2px solid #1890ff;
-  background-color: #cceeff !important;
-  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
-}
-
 .vertical-header {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
@@ -154,45 +61,49 @@
   width: 200px;
 }
 
-.election-day-cell {
-  border: 3px double red !important;
+#places-palette {
+    display: flex;
+    flex-direction: row;       /* horizontal layout */
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.95);
+    border: 2px solid #666;
+    border-radius: 6px;
+    overflow: hidden;          /* clip body when collapsed */
+    width: auto;               /* natural width with body */
+    transition: width 0.3s ease;
 }
 
-
-.calendar-grid {
-  margin-top: 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* vertical header stays visible */
+.vertical-header {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    width: 40px;
+    flex-shrink: 0;            /* prevent shrinking */
+    cursor: pointer;
 }
 
-.election-highlight {
-  border: 2px double red;!important;
-  box-sizing: border-box;
+/* body lozenges flex container */
+#places-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+    overflow-x: auto;
+    transition: width 0.3s ease, padding 0.3s ease;
 }
 
-.today-highlight {
-  border: 2px double blue;!important;
-  box-sizing: border-box;
+/* collapsed state: shrink entire palette */
+#places-palette.collapsed {
+    width: 40px;               /* only show vertical header */
 }
 
-
-.week-row {
-  display: flex;
-  gap: 2px;
-}
-
-.day-column, .empty-day {
-  width: 120px;
-  height: 300px;
-  border: 1px solid #ddd;
-  background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-}
-
-.day-column.today-cell {
-border: 4px double #007BFF !important;
+#places-palette.collapsed #places-body {
+    width: 0;                  /* hide contents */
+    padding: 0;
+    overflow: hidden;
 }
 
 #palette-container {
@@ -348,6 +259,73 @@ border: 4px double #007BFF !important;
   color: white;!important;
 }
 
+
+/* The pill-shaped lozenge */
+.lozenge {
+  display: inline-flex;
+  align-items: center;         /* ✅ vertical centering */
+  justify-content: center;     /* ✅ horizontal centering */
+  white-space: nowrap;
+  padding: 0 1em;
+  height: 3em;             /* horizontal padding only */
+  background-color: #e0e0e0;
+  border-radius: 9999px;       /* pill shape */
+  font-size: 2em;
+  line-height: normal;         /* ✅ let flexbox do the centering */
+  flex-shrink: 0;
+  cursor: grab;
+  box-sizing: border-box;      /* ✅ ensures padding doesn't break height */
+}
+
+
+
+.lozenge-selected {
+  outline: 2px solid #1890ff;
+  background-color: #cceeff !important;
+  box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
+}
+
+
+.election-day-cell {
+  border: 3px double red !important;
+}
+
+
+.calendar-grid {
+  margin-top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.election-highlight {
+  border: 2px double red;!important;
+  box-sizing: border-box;
+}
+
+.today-highlight {
+  border: 2px double blue;!important;
+  box-sizing: border-box;
+}
+
+
+.week-row {
+  display: flex;
+  gap: 2px;
+}
+
+.day-column, .empty-day {
+  width: 120px;
+  height: 300px;
+  border: 1px solid #ddd;
+  background-color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.day-column.today-cell {
+border: 4px double #007BFF !important;
+}
 
 #combined-content {
     display: flex;

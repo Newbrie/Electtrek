@@ -13,7 +13,18 @@
       font-family: sans-serif;
       margin: 20px;
     }
-
+/* Availability levels: 0 (none) to 10 (max) */
+.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
+.slot[data-availability="1"] { background-color: #e6f0ff; }
+.slot[data-availability="2"] { background-color: #cce0ff; }
+.slot[data-availability="3"] { background-color: #b3d1ff; }
+.slot[data-availability="4"] { background-color: #99c2ff; }
+.slot[data-availability="5"] { background-color: #80b3ff; }
+.slot[data-availability="6"] { background-color: #66a3ff; }
+.slot[data-availability="7"] { background-color: #4d94ff; }
+.slot[data-availability="8"] { background-color: #3385ff; }
+.slot[data-availability="9"] { background-color: #1a75ff; }
+.slot[data-availability="10"] { background-color: #0066ff; } /* max */
 
 h2 {
   position: fixed;
