@@ -18,18 +18,18 @@
 
 /* Vertical header always visible and draggable */
 .collapsible-palette .vertical-header {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);       /* keep text upright */
-  width: 40px;
-  cursor: pointer;
-  display: flex;
-  align-items: flex-end;           /* pushes text toward the “right” of rotated header */
-  justify-content: flex-start;     /* keeps text at the top of the vertical header */
-  background: #ddd;
-  border-right: 1px solid #aaa;
-  padding: 6px;
-  flex-shrink: 0;
-  text-align: right;               /* ensures text lines are right-aligned in the narrow header */
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    background-color: #ddd;
+    border-right: 1px solid #aaa;
+    padding: 10px;
+    width: 40px;                    /* always visible */
+    flex-shrink: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
 }
 
 /* Palette body containing lozenges */
