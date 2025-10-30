@@ -2,6 +2,34 @@
 /* -----------------------------
    Collapsible Palettes
    ----------------------------- */
+
+ .fixed-buttons {
+   position: fixed;
+   top: 10px;
+   right: 10px;
+   display: flex;
+   flex-direction: column;
+   gap: 8px;            /* space between buttons */
+   z-index: 2000;       /* keep above everything else */
+ }
+
+ .fixed-buttons button {
+   background-color: #007bff;
+   color: white;
+   border: none;
+   padding: 8px 12px;
+   border-radius: 4px;
+   font-size: 14px;
+   cursor: pointer;
+   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+   transition: background-color 0.2s;
+ }
+
+ .fixed-buttons button:hover {
+   background-color: #0056b3;
+ }
+
+
 .collapsible-palette {
     display: flex;                  /* header + body horizontally */
     flex-direction: row;
@@ -121,9 +149,9 @@
 .resource-lozenge.dropped,
 .place-lozenge.dropped {
     font-size: 10px;
-    padding: 2px 6px;
+    padding: 1px 1px;
     margin: 1px 0;
-    line-height: 1;
+    line-height: 1em;
 }
 
 
@@ -158,23 +186,47 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   background-color: #fafafa;
-  overflow-y: auto;
   box-sizing: border-box;
-  padding: 2px; /* just a tiny top padding for aesthetics */
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 2px 4px;
+  gap: 1px 3px;
+
+  /* acts like a paragraph of lozenges */
+  line-height: 1em;
 }
 
 .slot-label {
   position: absolute;
   top: 2px;
-  left: 2px;
+  left: 4px;
   font-size: 0.75em;
   color: #666;
   pointer-events: none;
   z-index: 2;
-  background: rgba(255,255,255,0.8);
-  border-radius: 1px;
-  padding: 0 2px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 3px;
+  padding: 0 4px;
 }
+
+/* ✅ the “first line” offset */
+.slot::before {
+  content: "";
+  flex-basis: 33%;   /* ≈ one-third of slot width reserved */
+  height: 0;         /* no visible height */
+}
+
+
+.slot .lozenge {
+  margin: 0;                /* no extra outer spacing */
+  padding: 1px 4px;         /* minimal internal padding */
+  font-size: 0.8em;
+  line-height: 1em;         /* ✅ keeps vertical spacing tight */
+  display: inline-block;    /* behave like text for wrapping */
+}
+
 
 .lozenge-container {
   display: inline-flex;
@@ -191,13 +243,6 @@
   height: 1px;
 }
 
-/* Optional: reduce margin on individual lozenges */
-.slot .lozenge {
-  display: inline-block;
-  padding: 1px 2px;
-  font-size: clamp(0.6em, 1vw, 0.85em); /* min, preferred, max */
-  white-space: nowrap;
-}
 
 .slot:hover {
   background-color: #cce5ff;
