@@ -557,10 +557,16 @@ Object.entries(plan.slots).forEach(([key, slotData]) => {
 
   // Re-add the time label
   const slotTime = key.split("_")[1]; // e.g., "9 AM"
+  // --- Fixed overlay label ---
   const timeLabel = document.createElement("div");
   timeLabel.className = "slot-label";
-  timeLabel.textContent = slotTime;
-  slot.appendChild(timeLabel);
+  timeLabel.textContent = slotName;
+  slotDiv.appendChild(timeLabel);
+
+  // --- Create lozenge container ---
+  let lozengeContainer = document.createElement("div");
+  lozengeContainer.className = "lozenge-container";
+  slotDiv.appendChild(lozengeContainer);
 
   // Re-add lozenges
   // Add lozenges
@@ -672,6 +678,28 @@ Object.entries(slots).forEach(([key, slot]) => {
 return table;
 }
 
+function scaleSlotLozenges(slot) {
+  const lozenges = Array.from(slot.querySelectorAll(".lozenge"));
+  if (lozenges.length === 0) return;
+
+  let scale = 1;
+  const slotHeight = slot.clientHeight - 4; // buffer
+
+  // Reset previous transforms
+  lozenges.forEach(l => l.style.transform = "scale(1)");
+
+  // Calculate total height of lozenges
+  let totalHeight = slot.scrollHeight;
+
+  if (totalHeight > slotHeight) {
+    scale = slotHeight / totalHeight;
+    lozenges.forEach(l => {
+      l.style.transformOrigin = "top left";
+      l.style.transform = `scale(${scale})`;
+    });
+  }
+}
+
 
 // 🔹 Module: Process lozenges for one slot
 function processLozenges(lozenges, areas, places, tags) {
@@ -739,41 +767,66 @@ document.addEventListener("DOMContentLoaded", () => {
   buildTaskTagsPalette("tags-content");
   buildPlacesPalette("places-content");
 
+  let currentZIndex = 1000; // ensures palettes can be raised above others
+
   document.querySelectorAll(".collapsible-palette").forEach(palette => {
-  const header = palette.querySelector(".vertical-header");
-  if (!header) return;
+    const header = palette.querySelector(".vertical-header");
+    if (!header) return;
 
-  // Make drag state per-palette
-  let isDragging = false;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
+    // Each palette tracks its own drag state
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
 
-  header.addEventListener("mousedown", e => {
-    palette.style.zIndex = ++currentZIndex;
-    isDragging = true;
-    dragOffsetX = e.clientX - palette.offsetLeft;
-    dragOffsetY = e.clientY - palette.offsetTop;
-    document.body.style.userSelect = "none";
-  });
+    header.addEventListener("mousedown", e => {
+      if (e.button !== 0) return; // only left-click
+      isDragging = true;
+      palette.style.zIndex = ++currentZIndex;
 
-  document.addEventListener("mousemove", e => {
-    if (!isDragging) return;
-    palette.style.left = `${e.clientX - dragOffsetX}px`;
-    palette.style.top = `${e.clientY - dragOffsetY}px`;
-  });
+      // Compute offset from top-left corner
+      const rect = palette.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
 
-  document.addEventListener("mouseup", e => {
-    isDragging = false;
-    document.body.style.userSelect = "";
-  });
+      document.body.style.userSelect = "none";
+      palette.classList.add("dragging");
 
-  header.addEventListener("click", e => {
-    if (Math.abs(e.movementX) < 3 && Math.abs(e.movementY) < 3) {
+      e.stopPropagation();
+    });
+
+    window.addEventListener("mousemove", e => {
+      if (!isDragging) return;
+
+      e.preventDefault();
+
+      // Move palette with mouse
+      palette.style.left = `${e.clientX - dragOffsetX}px`;
+      palette.style.top = `${e.clientY - dragOffsetY}px`;
+
+      // Keep within window bounds
+      const rect = palette.getBoundingClientRect();
+      if (rect.left < 0) palette.style.left = "0px";
+      if (rect.top < 0) palette.style.top = "0px";
+    });
+
+    window.addEventListener("mouseup", e => {
+      if (!isDragging) return;
+      isDragging = false;
+      palette.classList.remove("dragging");
+      document.body.style.userSelect = "";
+    });
+
+    // Collapse / expand palette
+    header.addEventListener("click", e => {
+      // Ignore if dragging happened
+      if (palette.classList.contains("dragging")) return;
+
       palette.classList.toggle("collapsed");
-    }
+      e.stopPropagation();
+    });
   });
 });
-});
+
 
 
 //if (!isDev) {
@@ -789,7 +842,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // ─── Config ──────────────────────────────────────────────────────────────
   const daysToShow = 45;
-  const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM"];
+  const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM"];
 
   // ─── Date Setup ─────────────────────────────────────────────────────────
   const today = new Date();
@@ -870,103 +923,67 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Create slot divs
     for (const slotName of slots) {
-      const slotDiv = document.createElement("div");
-      slotDiv.className = "slot";
-      slotDiv.setAttribute("data-availability", "0");
-      slotDiv.setAttribute("title", `0 resources available`);
-      slotDiv.setAttribute("data-time", slotName);
+    const slotDiv = document.createElement("div");
+    slotDiv.className = "slot";
+    slotDiv.setAttribute("data-availability", "0");
+    slotDiv.setAttribute("title", `0 resources available`);
+    slotDiv.setAttribute("data-time", slotName);
 
-      // ✅ Set unique ID used by extract/load
-      const localDateStr = date.toLocaleDateString('en-CA'); // gives YYYY-MM-DD
-      slotDiv.id = `slot-${localDateStr}_${slotName}`;
+    // ✅ Unique ID (YYYY-MM-DD format)
+    const localDateStr = date.toLocaleDateString("en-CA");
+    slotDiv.id = `slot-${localDateStr}_${slotName}`;
 
-      const timeLabel = document.createElement("div");
-      timeLabel.className = "slot-label";
-      timeLabel.textContent = slotName;
+    // --- Fixed overlay label ---
 
-      // Drag/drop event listeners...
-      slotDiv.addEventListener("dragover", (e) => {
-        e.preventDefault(); // Allow dropping
-        slotDiv.classList.add("slot-hover");
-      });
+    // --- Fixed overlay label ---
+    const timeLabel = document.createElement("div");
+    timeLabel.className = "slot-label";
+    timeLabel.textContent = slotName;
+    slotDiv.appendChild(timeLabel);
 
-      slotDiv.addEventListener("dragleave", () => {
-        slotDiv.classList.remove("slot-hover");
-      });
-      slotDiv.addEventListener("drop", (e) => {
-        e.preventDefault();
-        slotDiv.classList.remove("slot-hover");
+    // --- Lozenge container (flex inline flow) ---
+    const lozengeContainer = document.createElement("div");
+    lozengeContainer.className = "lozenge-container";
+    slotDiv.appendChild(lozengeContainer);
 
-        const id = e.dataTransfer.getData("text/plain");
-        const lozenge = document.getElementById(id);
+    // --- Drag/drop visuals ---
+    slotDiv.addEventListener("dragover", e => {
+      e.preventDefault();
+      slotDiv.classList.add("slot-hover");
+    });
 
-        if (!lozenge) {
-          console.warn("⛔ Lozenge not found");
-          return;
-        }
+    slotDiv.addEventListener("dragleave", () => {
+      slotDiv.classList.remove("slot-hover");
+    });
 
-        const label = slotDiv.querySelector(".slot-label");
-        if (label && label.nextSibling) {
-          slotDiv.insertBefore(lozenge, label.nextSibling);
-        } else {
-          slotDiv.appendChild(lozenge);
-        }
-      });
+    slotDiv.addEventListener("drop", e => {
+      e.preventDefault();
+      slotDiv.classList.remove("slot-hover");
 
-      slotDiv.addEventListener("drop", (e) => {
-        e.preventDefault();
-        slotDiv.classList.remove("slot-hover");
+      const data = e.dataTransfer.getData("text/plain");
+      const lozenge = document.getElementById(data);
+      if (!lozenge) {
+        console.warn("❌ Lozenge not found:", data);
+        return;
+      }
 
-        const data = e.dataTransfer.getData("text/plain"); // ID of dragged element
-        console.log("🎯 Dropped dataTransfer value:", data);
+      // ✅ Prevent dropping on the label
+      if (e.target.classList.contains("slot-label")) return;
 
-        const label = slotDiv.querySelector(".slot-label");
-        if (label && label.contains(e.target)) {
-          console.warn("⛔ Tried to drop on label");
-          return;
-        }
+      const dropped = lozenge.cloneNode(true);
+      dropped.classList.add("dropped");
+      dropped.removeAttribute("id");
+      dropped.removeAttribute("title");
 
-        const lozenge = document.getElementById(data);
-        if (!lozenge) {
-          console.warn("❌ Lozenge not found:", data);
-          return;
-        }
+      dropped.addEventListener("click", () => dropped.remove());
 
-        // Clone it or move it depending on your app logic
-        const dropped = lozenge.cloneNode(true);
-        dropped.classList.add("dropped");
+      // ✅ Append to the lozenge container
+      lozengeContainer.appendChild(dropped);
+    });
+    scaleSlotLozenges(slotDiv);
+    dayDiv.appendChild(slotDiv);
+  }
 
-        // Optional: prevent duplicate IDs
-        dropped.removeAttribute("id");
-
-        // Remove tooltip and click listeners if needed
-        dropped.removeAttribute("title");
-        dropped.addEventListener("click", () => dropped.remove());
-
-        // ✅ Insert dropped lozenge after the slot-label
-        if (label && label.nextSibling) {
-          slotDiv.insertBefore(dropped, label.nextSibling);
-        } else {
-          const existingLozenges = slotDiv.querySelectorAll(".lozenge");
-
-          if (existingLozenges.length === 0) {
-            // First dropped lozenge — insert right after label
-            const label = slotDiv.querySelector(".slot-label");
-            if (label && label.nextSibling) {
-              slotDiv.insertBefore(dropped, label.nextSibling);
-            } else {
-              slotDiv.appendChild(dropped);
-            }
-          } else {
-            // Subsequent lozenges — just append
-            slotDiv.appendChild(dropped);
-          }
-        }
-      });
-
-      slotDiv.appendChild(timeLabel);
-      dayDiv.appendChild(slotDiv);
-    }
 
 
     weekRow.appendChild(dayDiv);
@@ -993,40 +1010,49 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Slots: accept all groups
   document.querySelectorAll(".slot").forEach(slot => {
-  Sortable.create(slot, {
-    group: {
-      name: "calendar",
-      put: ["resource", "areas", "tags", "places"]
-    },
-    animation: 150,
-    onAdd: evt => {
-      const el = evt.item;
-      const slot = evt.to;
-      const newCode = el.getAttribute("data-code");
-      const alreadyExists = [...slot.children].some(child =>
-        child !== el && child.getAttribute("data-code") === newCode
-  //          && child.textContent === el.textContent
-      );
+    Sortable.create(slot, {
+      group: {
+        name: "calendar",
+        put: ["resource", "areas", "tags", "places"]
+      },
+      animation: 150,
+      // 👇 Prevent dragging labels or any non-lozenge elements
+      filter: ".slot-label",
+      onMove: evt => {
+        if (evt.related && evt.related.classList.contains("slot-label")) {
+          return false;
+        }
+      },
+      onAdd: evt => {
+        const el = evt.item;
+        const slot = evt.to;
 
+        // Skip label entirely
+        if (el.classList.contains("slot-label")) return;
 
-      if (alreadyExists) {
-        el.remove();
-        return;
+        const newCode = el.getAttribute("data-code");
+        const alreadyExists = [...slot.children].some(
+          child => child !== el && child.getAttribute("data-code") === newCode
+        );
+
+        if (alreadyExists) {
+          el.remove();
+          return;
+        }
+
+        el.classList.add("dropped");
+        el.setAttribute("draggable", false);
+
+        el.addEventListener("click", () => {
+          el.remove();
+          updateSlotAvailability(slot);
+        });
+
+        updateSlotAvailability(slot);
       }
-
-      el.classList.add('dropped');
-      el.setAttribute('draggable', false);
-
-      el.addEventListener('click', () => {
-        el.remove();
-        updateSlotAvailability(slot);  // 👈 Recalculate on removal
-      });
-
-      updateSlotAvailability(slot);  // 👈 Recalculate on add
-    }
+    });
   });
 
-  });
 
   document.querySelectorAll(".slot").forEach(slot => {
   updateSlotAvailability(slot);

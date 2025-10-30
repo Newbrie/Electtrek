@@ -586,19 +586,3 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
 
    return div;
   }
-
-  // Ensure createLozengeElement is loaded first
-window.addPlaceToPalette = function(code, label, options = {}) {
-    const paletteBody = document.getElementById('places-content');
-    if (!paletteBody) return;
-
-    if (!window.places) window.places = {};
-    window.places[code] = window.places[code] || { tooltip: label };
-
-    const lozenge = window.createLozengeElement(
-        { type: "place", code, info: label },
-        { selectable: options.selectable || false, removable: options.removable || false }
-    );
-
-    paletteBody.appendChild(lozenge);
-};

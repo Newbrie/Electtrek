@@ -16,6 +16,16 @@
     font-size: 14px;                /* base font size for lozenges */
 }
 
+.collapsible-palette.floating-palette {
+  position: absolute;
+  z-index: 9999; /* ✅ ensure above calendar grid */
+  cursor: grab;
+}
+
+.collapsible-palette.floating-palette:active {
+  cursor: grabbing;
+}
+
 /* Vertical header always visible and draggable */
 .collapsible-palette .vertical-header {
     writing-mode: vertical-rl;
@@ -30,6 +40,8 @@
     align-items: center;
     justify-content: center;
     user-select: none;
+    cursor: grab;
+    text-align: right;
 }
 
 /* Palette body containing lozenges */
@@ -53,9 +65,17 @@
     overflow: hidden;
 }
 
+.collapsible-palette.collapsed .palette-body {
+  display: none;
+}
 /* Collapse entire palette to header width */
 .collapsible-palette.collapsed {
     width: 40px;
+}
+
+.collapsible-palette.dragging {
+  cursor: grabbing;
+  opacity: 0.95;
 }
 
 /* -----------------------------
@@ -70,10 +90,10 @@
     align-items: center;
     justify-content: center;
     white-space: nowrap;
-    padding: 4px 12px;
+    padding: 2px 6px;
     height: auto;
     font-size: 14px;
-    line-height: 1.2;
+    line-height: 1;
     flex-shrink: 0;
     cursor: pointer;
     box-sizing: border-box;
@@ -118,6 +138,72 @@
   flex-direction: column;
   gap: 10px;
 }
+.empty-day {
+  background-color: #fff;
+  border: none;
+}
+
+.day-header {
+  background-color: #e0e0e0;
+  padding: 4px;
+  text-align: center;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+}
+
+.slot {
+  position: relative;
+  height: 90px;
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #fafafa;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 2px; /* just a tiny top padding for aesthetics */
+}
+
+.slot-label {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  font-size: 0.75em;
+  color: #666;
+  pointer-events: none;
+  z-index: 2;
+  background: rgba(255,255,255,0.8);
+  border-radius: 1px;
+  padding: 0 2px;
+}
+
+.lozenge-container {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 1px; /* smaller gap between lozenges */
+  position: relative;
+}
+
+/* Only reserve space for the label on the first line */
+.lozenge-container::before {
+  content: '';
+  display: inline-block;
+  width: 40px; /* width of the time label */
+  height: 1px;
+}
+
+/* Optional: reduce margin on individual lozenges */
+.slot .lozenge {
+  display: inline-block;
+  padding: 1px 2px;
+  font-size: clamp(0.6em, 1vw, 0.85em); /* min, preferred, max */
+  white-space: nowrap;
+}
+
+.slot:hover {
+  background-color: #cce5ff;
+  cursor: pointer;
+}
+
 
 .election-highlight {
   border: 2px double red;!important;

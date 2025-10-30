@@ -1858,11 +1858,9 @@ class TreeNode:
 
         # --- Floating “Places Palette” (lozenge-based) ---
         places_palette_html = """
-        <div id="palette-container">
-          <div class="palette floating-palette" id="places-palette" style="top: 300px; right: 50px;">
-            <div class="palette-header vertical-header" id="places-handle">📍 Places</div>
-            <div class="palette-body" id="places-body">(No pins yet)</div>
-          </div>
+        <div id="places-palette" class="collapsible-palette floating-palette" style="top: 300px; right: 50px;">
+            <div class="vertical-header">📍 Places</div>
+            <div class="palette-body" id="places-content"></div>
         </div>
 
         <script src="https://unpkg.com/@popperjs/core@2"></script>
@@ -1871,60 +1869,118 @@ class TreeNode:
         <script>
         window.places = window.places || {};
 
-        function dragElement(el) {
-            var pos1=0,pos2=0,pos3=0,pos4=0;
-            el.onmousedown=dragMouseDown;
-            function dragMouseDown(e){
-                e=e||window.event; e.preventDefault();
-                pos3=e.clientX; pos4=e.clientY;
-                document.onmouseup=closeDragElement;
-                document.onmousemove=elementDrag;
+        // Drag the palette by its header
+        function dragElement(handle, target) {
+            let pos1=0,pos2=0,pos3=0,pos4=0;
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e = e || window.event;
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
             }
-            function elementDrag(e){
-                e=e||window.event; e.preventDefault();
-                pos1=pos3-e.clientX; pos2=pos4-e.clientY;
-                pos3=e.clientX; pos4=e.clientY;
-                el.style.top=(el.offsetTop-pos2)+"px";
-                el.style.left=(el.offsetLeft-pos1)+"px";
+
+            function elementDrag(e) {
+                e = e || window.event;
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                target.style.top = (target.offsetTop - pos2) + "px";
+                target.style.left = (target.offsetLeft - pos1) + "px";
             }
-            function closeDragElement(){
-                document.onmouseup=null;
-                document.onmousemove=null;
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
             }
         }
 
-
-        // Attach drag behavior AFTER element exists
+        // Attach drag and collapse behavior
         const palette = document.getElementById("places-palette");
         if (palette) {
-            dragElement(palette);
-            const header = palette.querySelector(".palette-header");
-            // Toggle collapse on header click
-            header.addEventListener("click", () => {
-                palette.classList.toggle("collapsed");
+            const header = palette.querySelector(".vertical-header");
+            dragElement(header, palette);
+
+            header.addEventListener("click", e => {
+                if(Math.abs(e.movementX) < 3 && Math.abs(e.movementY) < 3){
+                    palette.classList.toggle("collapsed");
+                }
             });
         } else {
             console.warn("⚠️ #places-palette not found");
         }
 
-        // Function to add lozenges
-        function addPlaceToPalette(prefix, address, postcode, lat, lng) {
-            const body = document.getElementById("places-body");
+        // Reverse geocode using Nominatim
+        async function reverseGeocode(lat, lng) {
+              const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`;
+
+              try {
+                const response = await fetch(url, {
+                  headers: { "User-Agent": "YourAppName/1.0" }
+                });
+                const data = await response.json();
+
+                const address = data.display_name || "Unknown location";
+                const postcode = data.address?.postcode || "N/A";
+
+                console.log(`Reverse geocode → address: ${address}, postcode: ${postcode}`);
+                return { address, postcode };
+
+              } catch (err) {
+                console.error("Reverse geocoding failed:", err);
+                return { address: "Unknown", postcode: "N/A" };
+              }
+            }
+
+
+        // Add a place to the palette, auto-fetching address & postcode
+        async function addPlaceToPalette(prefix, lat, lng, address = null, postcode = null) {
+            const body = document.getElementById("places-content");
             if (body.innerHTML === "(No pins yet)") body.innerHTML = "";
 
-            const code = prefix + "_" + Math.random().toString(36).substring(2, 8);
-            window.places[code] = { tooltip: `<b>${address}</b><br>${postcode}`, lat, lng };
+            // Fetch address & postcode if not provided
+            if (!address || !postcode) {
+                ({ address, postcode } = await reverseGeocode(lat, lng));
+            }
 
+            // Keep asking for a new prefix if it already exists
+            let originalPrefix = prefix;
+            while (body.querySelector(`.place-lozenge[data-code="${prefix}"]`)) {
+                prefix = prompt(`The prefix "${prefix}" already exists. Enter a different prefix or Cancel to abort:`, originalPrefix);
+                if (prefix === null) {
+                    console.log("Place addition cancelled by user.");
+                    return; // User cancelled
+                }
+                prefix = prefix.trim();
+                if (!prefix) prefix = originalPrefix;
+            }
+
+            // Register in global store
+            window.places[prefix] = { tooltip: `<b>${address}</b><br>${postcode}`, lat, lng };
+
+            // Create lozenge
             if (typeof createLozengeElement === "function") {
                 const loz = createLozengeElement({ type: "place", code: prefix }, { selectable: true, removable: false });
-                loz.addEventListener("click", () => { if(window.fmap) window.fmap.setView([lat, lng], 15); });
+                loz.dataset.code = prefix; // ensure the DOM has the correct data-code
+                loz.addEventListener("click", () => {
+                    if (window.fmap) window.fmap.setView([lat, lng], 15);
+                });
                 body.appendChild(loz);
             } else {
                 console.warn("⚠️ createLozengeElement not found!");
             }
         }
+
+
         </script>
         """
+
+
 
         FolMap.get_root().html.add_child(folium.Element(places_palette_html))
 
@@ -1982,34 +2038,39 @@ class TreeNode:
             }
             window.pinMarker = L.marker([lat, lng]).addTo(fmap);
 
-            fetch(`/reverse_geocode?lat=${lat}&lng=${lng}`)
-                .then(response => response.json())
-                .then(data => {
+            // 🔹 Use JS-based reverse geocoding instead of backend
+            reverseGeocode(lat, lng)
+                .then(({ address, postcode }) => {
                     var prefix = prompt("Enter a prefix for this location:", "");
                     if (!prefix) prefix = "(no prefix)";
+
                     var popupText = `<b>Prefix:</b> ${prefix}<br>
-                                     <b>Address:</b> ${data.Address1}<br>
-                                     <b>Postcode:</b> ${data.Postcode}`;
+                                     <b>Address:</b> ${address}<br>
+                                     <b>Postcode:</b> ${postcode}`;
                     window.pinMarker.bindPopup(popupText).openPopup();
 
-                    // Add to floating palette as a lozenge
-                    addPlaceToPalette(prefix, data.Address1, data.Postcode, lat, lng);
+                    // 🔹 Add to floating palette as a lozenge
+                    addPlaceToPalette(prefix, lat, lng);
 
-                    // Send data back to server
-                    fetch(`/add_marker`, {
+                    // 🔹 Optionally still send data to your Flask backend
+                    fetch('/add_marker', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             lat: lat,
                             lng: lng,
-                            address: data.Address1,
-                            postcode: data.Postcode,
+                            address: address,
+                            postcode: postcode,
                             prefix: prefix
                         })
                     }).catch(err => console.error(err));
                 })
-                .catch(err => alert('Error: ' + err));
+                .catch(err => {
+                    console.error('Reverse geocoding failed:', err);
+                    alert('Error fetching address for this location.');
+                });
         }
+
         """
 
         fscript = f"""
