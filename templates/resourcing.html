@@ -347,10 +347,12 @@ function setupPaletteSelection() {
 
 
 
+
     function makePaletteDraggable(paletteId, handleId) {
     const palette = document.getElementById(paletteId);
     const handle = document.getElementById(handleId);
     let isDragging = false, offsetX = 0, offsetY = 0;
+
 
     handle.addEventListener("mousedown", e => {
       isDragging = true;
@@ -960,27 +962,37 @@ document.addEventListener("DOMContentLoaded", async () => {
       e.preventDefault();
       slotDiv.classList.remove("slot-hover");
 
-      const data = e.dataTransfer.getData("text/plain");
-      const lozenge = document.getElementById(data);
-      if (!lozenge) {
-        console.warn("❌ Lozenge not found:", data);
+      // ✅ 1️⃣ Retrieve the lozenge data from drag event
+      const dataStr = e.dataTransfer.getData("application/json");
+      if (!dataStr) {
+        console.warn("⚠️ No lozenge data in drop");
         return;
       }
 
-      // ✅ Prevent dropping on the label
+      let loz;
+      try {
+        loz = JSON.parse(dataStr); // { type, code }
+      } catch (err) {
+        console.error("❌ Failed to parse drop data:", err);
+        return;
+      }
+
+      // ✅ 2️⃣ Prevent dropping on the time label
       if (e.target.classList.contains("slot-label")) return;
 
-      const dropped = lozenge.cloneNode(true);
-      dropped.classList.add("dropped");
-      dropped.removeAttribute("id");
-      dropped.removeAttribute("title");
+      // ✅ 3️⃣ Create a *new* dropped lozenge
+      const dropped = createLozengeElement(loz, { removable: true });
 
-      dropped.addEventListener("click", () => dropped.remove());
-
-      // ✅ Append to the lozenge container
-      lozengeContainer.appendChild(dropped);
+      // ✅ 4️⃣ Append it just after the label if present
+      const label = slotDiv.querySelector(".slot-label");
+      if (label && label.nextSibling) {
+        slotDiv.insertBefore(dropped, label.nextSibling);
+      } else {
+        slotDiv.appendChild(dropped);
+      }
+      scaleSlotLozenges(slotDiv);
+      console.log("✅ Dropped lozenge:", loz.type, loz.code);
     });
-    scaleSlotLozenges(slotDiv);
     dayDiv.appendChild(slotDiv);
   }
 

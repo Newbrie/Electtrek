@@ -525,9 +525,22 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
    div.className = `lozenge ${loz.type}-lozenge`;
    if (!selectable) div.classList.add("dropped");
    div.textContent = loz.code;
+
    div.addEventListener("dragstart", (e) => {
-     e.dataTransfer.setData("text/plain", div.id);
+     const payload = {
+       type: loz.type,
+       code: loz.code
+     };
+
+     // Always send JSON (the drop handler expects "application/json")
+     e.dataTransfer.setData("application/json", JSON.stringify(payload));
+
+     // Optional: visually highlight
+     e.dataTransfer.effectAllowed = "copy";
+     div.classList.add("dragging");
    });
+
+
 
    // Decide tooltip content for tippy
    let tooltipContent = null;
