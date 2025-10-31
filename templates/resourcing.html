@@ -1,16 +1,11 @@
 {% extends "base.html" %}
 {% block body %}
-<link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
-<script src="https://unpkg.com/@popperjs/core@2"></script>
-<script src="https://unpkg.com/tippy.js@6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-  <meta charset="UTF-8">
-  <title>44-Day Calendar (Aligned Weeks)</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-    }
+
+<style>
+.body {
+  font-family: sans-serif;
+  margin: 20px;
+}
 /* Availability levels: 0 (none) to 10 (max) */
 .slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
 .slot[data-availability="1"] { background-color: #e6f0ff; }
@@ -33,60 +28,69 @@ h2 {
   padding: 4px 8px;
   margin: 0;
 }
+#summary-report {
+  max-width: 100%;           /* never exceed container */
+  width: auto;               /* shrink to fit content */
+  overflow-x: auto;          /* horizontal scroll if needed */
+}
+
+#summary-report table {
+  width: 100%;               /* fill container width */
+  border-collapse: collapse;
+}
+</style>
 
 
-  </style>
-</head>
-<body>
+  <div class="container-fluid py-3">
+    <h2 class="text-center mb-4">{{current_election}} Campaigns Calendar</h2>
 
-  <h2>{{current_election}} Elections Calendar </h2>
-  <div id="fixed-buttons">
-    <button id="save-calendar-btn">💾 Save Calendar</button>
-    <button id="generate-summary-btn">📋 Generate Calendar/Table</button>
-    <button id="export-html-btn">🔐 Export Protected HTML</button>
+    <!-- Fixed Buttons (top-right on desktop, stacked on mobile) -->
+    <div id="calendar-controls" class="fixed-buttons">
+      <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+      <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Calendar/Table</button>
+      <button id="export-html-btn" class="btn btn-info">🔐 Export Protected HTML</button>
+    </div>
+
+    <!-- Palettes Container -->
+    <div id="palette-container">
+
+      <!-- Tooltip (hidden by default) -->
+      <div id="tooltip"
+           style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px;
+                  border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;">
+      </div>
+
+      <!-- Resource Palette -->
+      <div id="resource-palette" class="collapsible-palette floating-palette">
+        <div class="vertical-header">Resources</div>
+        <div class="palette-body" id="resource-content"></div>
+      </div>
+
+      <!-- Areas Palette -->
+      <div id="areas-palette" class="collapsible-palette floating-palette">
+        <div class="vertical-header">Areas</div>
+        <div class="palette-body" id="areas-content"></div>
+      </div>
+    </div>
+
+    <!-- Tags Palette -->
+    <div id="tags-palette" class="collapsible-palette floating-palette" style="top: 250px; right: 50px;">
+      <div class="vertical-header">Activities</div>
+      <div class="palette-body" id="tags-content"></div>
+    </div>
+
+    <!-- Places Palette -->
+    <div id="places-palette" class="collapsible-palette floating-palette" style="top: 350px; right: 50px;">
+      <div class="vertical-header">Places</div>
+      <div class="palette-body" id="places-content"></div>
+    </div>
+
+    <!-- Calendar and Summary -->
+    <div id="calendar-grid" class="calendar-grid mt-5"></div>
+    <div id="summary-report" class="mt-4"></div>
   </div>
 
 
-  <div id="palette-container">
-
-  <div id="tooltip" style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px; border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;"></div>
-  <!-- Resource -->
-  <!-- Existing Resource Palette -->
-  <!-- Resource Palette -->
-  <div id="resource-palette" class="collapsible-palette floating-palette" style="top: 50px; right: 50px;">
-    <div class="vertical-header">Resources</div>
-    <div class="palette-body" id="resource-content"></div>
-  </div>
-
-  <!-- Areas Palette -->
-  <div id="areas-palette" class="collapsible-palette floating-palette" style="top: 150px; right: 50px;">
-    <div class="vertical-header">Areas</div>
-    <div class="palette-body" id="areas-content"></div>
-  </div>
-
-  <!-- Tags Palette -->
-  <div id="tags-palette" class="collapsible-palette floating-palette" style="top: 250px; right: 50px;">
-    <div class="vertical-header">Activities</div>
-    <div class="palette-body" id="tags-content"></div>
-  </div>
-
-  <!-- Places Palette -->
-  <div id="places-palette" class="collapsible-palette floating-palette" style="top: 350px; right: 50px;">
-    <div class="vertical-header">Places</div>
-    <div class="palette-body" id="places-content"></div>
-  </div>
-
-
-
-
-
-  <!-- Your calendar grid -->
-  <div class="calendar-grid" id="calendar-grid"></div>
-
-  <h3>📋 Calendar Summary Table</h3>
-<div id="calendar-summary"></div>
-
-</body>
 <script>
 
 const USER_ID = localStorage.getItem("user_id") || crypto.randomUUID();
@@ -177,7 +181,7 @@ function buildPlacesPalette(containerId) {
           allowHTML: true,
           trigger: 'click',
           interactive: true,
-          theme: 'light', // optional
+          theme: 'light b', // optional
           appendTo: document.body,
         });
       }
@@ -234,31 +238,38 @@ function buildPlacesPalette(containerId) {
 
   function generateSummaryReport() {
     const summaryContainer = document.getElementById("summary-report");
-    summaryContainer.innerHTML = ""; // Clear previous report
+    summaryContainer.innerHTML = "";
 
-    const state = extractCalendarPlan();
-    if (!state?.slots) return;
+    const calendarGrid = document.querySelector(".calendar-grid");
+    const gridWidth = calendarGrid?.offsetWidth || 800; // fallback width
 
     const table = document.createElement("table");
     table.className = "summary-table";
+    table.style.width = gridWidth + "px"; // match calendar width
+    table.style.maxWidth = "100%";
 
+    const state = extractCalendarPlan(); // fallback if you have a JS calendar state
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    table.className = "summary-table";
+
+    // Header
     const headerRow = document.createElement("tr");
-    ["Date + Time", "Who", "What", "Where"].forEach(headerText => {
+    ["Date + Time", "Who", "What", "Where"].forEach(text => {
       const th = document.createElement("th");
-      th.textContent = headerText;
+      th.textContent = text;
       headerRow.appendChild(th);
     });
     table.appendChild(headerRow);
 
-    const dayColumns = [...document.querySelectorAll(".day-column")];
+    // Iterate slots either from state or DOM
+    const slots = state?.slots || {};
 
-    Object.entries(state.slots).forEach(([key, slot]) => {
+    Object.entries(slots).forEach(([key, slot]) => {
       const [dateStr, time] = key.split("_");
 
-      // Format nicely (optional)
       const [year, month, day] = dateStr.split("-").map(Number);
-      const dateObj = new Date(year, month - 1, day); // month is 0-based!
-
+      const dateObj = new Date(year, month - 1, day);
       const formattedDate = dateObj.toLocaleDateString(undefined, {
         weekday: "short",
         year: "numeric",
@@ -266,14 +277,28 @@ function buildPlacesPalette(containerId) {
         day: "numeric"
       });
 
+      // Safe lozenge array: try state first, fallback to DOM
+      let lozenges = slot.lozenges;
+      if (!lozenges) {
+        const slotDiv = document.getElementById(`slot-${dateStr}_${time}`);
+        if (slotDiv) {
+          lozenges = Array.from(slotDiv.querySelectorAll(".lozenge")).map(l => ({
+            type: l.dataset.type,
+            code: l.dataset.code
+          }));
+        } else {
+          lozenges = [];
+        }
+      }
+
       // WHO = resources
-      const who = slot.lozenges
+      const who = lozenges
         .filter(l => l.type === "resource")
         .map(l => l.code)
         .join(", ");
 
       // WHAT = task + tag
-      const taskTags = slot.lozenges
+      const taskTags = lozenges
         .filter(l => l.type === "task" || l.type === "tag")
         .map(l => {
           const desc = window.task_tags?.[l.code] || "(no description)";
@@ -282,16 +307,14 @@ function buildPlacesPalette(containerId) {
         .join(", ");
 
       // WHERE = area + place
-      const areaItems = slot.lozenges
+      const areaItems = lozenges
         .filter(l => l.type === "area")
         .map(l => {
           const area = window.areas?.[l.code];
-          return area && area.streets?.length
-            ? `${l.code}: ${area.streets.join("; ")}`
-            : l.code;
+          return area?.streets?.length ? `${l.code}: ${area.streets.join("; ")}` : l.code;
         });
 
-      const placeItems = slot.lozenges
+      const placeItems = lozenges
         .filter(l => l.type === "place")
         .map(l => {
           const place = window.places?.find(p => p.code === l.code);
@@ -316,6 +339,7 @@ function buildPlacesPalette(containerId) {
 
     summaryContainer.appendChild(table);
   }
+
 
 
 function updateSlotAvailability(slot) {
@@ -415,6 +439,37 @@ function setupPaletteSelection() {
     });
 }
 
+function updateTodayHighlight() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Remove old highlight
+  document.querySelectorAll(".today-cell").forEach(cell => {
+    cell.classList.remove("today-cell");
+  });
+
+  // Find matching cell
+  const allDayColumns = document.querySelectorAll(".day-column");
+  allDayColumns.forEach(col => {
+    const header = col.querySelector(".day-header");
+    if (!header) return;
+
+    // Extract the date from the header text
+    const parts = header.textContent.split(" ");
+    const dayNumber = parseInt(parts[1], 10);
+
+    // Find the date based on global calendar start
+    const startDate = new Date(window.calendarStartDate);
+    const daysOffset = Array.from(allDayColumns).indexOf(col);
+    const colDate = new Date(startDate);
+    colDate.setDate(startDate.getDate() + daysOffset);
+    colDate.setHours(0, 0, 0, 0);
+
+    if (colDate.toDateString() === today.toDateString()) {
+      col.classList.add("today-cell");
+    }
+  });
+}
 
 
 function pingUser() {
@@ -540,48 +595,50 @@ try {
 
 
 function loadCalendarPlan(plan) {
-console.log("📦 Loaded plan:", plan);
+  console.log("📦 Loaded plan:", plan);
 
-Object.entries(plan.slots).forEach(([key, slotData]) => {
-  const slotId = `slot-${key}`; // e.g., "slot-2025-10-12_9 AM"
-  const slot = document.getElementById(slotId);
+  if (!plan?.slots) return;
 
-  if (!slot) {
-    console.warn("⚠️ Slot not found for ID:", slotId);
-    return;
-  }
+  Object.entries(plan.slots).forEach(([key, slotData]) => {
+    // key example: "2025-10-12_9 AM"
+    const slotId = `slot-${key}`;
+    const slotDiv = document.getElementById(slotId);
 
-  // Set availability
-  slot.setAttribute("data-availability", slotData.availability || 0);
+    if (!slotDiv) {
+      console.warn("⚠️ Slot not found for ID:", slotId);
+      return;
+    }
 
-  // Clear existing content
-  slot.innerHTML = '';
+    // Set availability attribute
+    slotDiv.setAttribute("data-availability", slotData.availability || 0);
+    slotDiv.setAttribute("title", `${slotData.availability || 0} resources available`);
 
-  // Re-add the time label
-  const slotTime = key.split("_")[1]; // e.g., "9 AM"
-  // --- Fixed overlay label ---
-  const timeLabel = document.createElement("div");
-  timeLabel.className = "slot-label";
-  timeLabel.textContent = slotName;
-  slotDiv.appendChild(timeLabel);
+    // Clear existing lozenges but keep the label
+    const timeLabel = slotDiv.querySelector(".slot-label");
+    const lozengeContainer = slotDiv.querySelector(".lozenge-container");
 
-  // --- Create lozenge container ---
-  let lozengeContainer = document.createElement("div");
-  lozengeContainer.className = "lozenge-container";
-  slotDiv.appendChild(lozengeContainer);
+    if (!lozengeContainer) {
+      console.warn("⚠️ Slot missing lozenge container:", slotId);
+      return;
+    }
 
-  // Re-add lozenges
-  // Add lozenges
-  slotData.lozenges.forEach(loz => {
-    const slotLoz = createLozengeElement(loz, { removable: true });
-    slot.appendChild(slotLoz);
-    updateSlotAvailability(slot);
+    // Clear previous lozenges
+    lozengeContainer.innerHTML = "";
 
+    // Re-add lozenges
+    slotData.lozenges?.forEach(loz => {
+      const lozEl = createLozengeElement(loz, { removable: true });
+      lozengeContainer.appendChild(lozEl);
+    });
+
+    // Optional: update availability display (like coloring)
+    updateSlotAvailability(slotDiv);
+
+    // Optional: rescale lozenges if too many
+    scaleSlotLozenges(slotDiv);
   });
-
-});
-
 }
+
 
 function createStandaloneHTML() {
   const doctype = "<!DOCTYPE html>\n";
@@ -704,47 +761,53 @@ function scaleSlotLozenges(slot) {
 
 
 // 🔹 Module: Process lozenges for one slot
-function processLozenges(lozenges, areas, places, tags) {
-const resourceList = [];
-const activityList = [];
-const placeList = [];
+function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
+  const resourceList = [];
+  const activityList = [];
+  const placeList = [];
 
-lozenges.forEach(loz => {
-  switch (loz.type) {
-    case "resource":
-      resourceList.push(loz.code);
-      break;
+  lozenges?.forEach(loz => {
+    if (!loz?.type || !loz?.code) {
+      console.warn("Skipping invalid lozenge:", loz);
+      return;
+    }
+
+    switch (loz.type) {
+      case "resource":
+        resourceList.push(loz.code);
+        break;
 
       case "area": {
-        const areaInfo = areas?.[loz.code];
-        if (areaInfo) {
-          const fullArea = `Area: ${loz.code} – ${areaInfo.streets.join(", ")}`;
-          placeList.push(fullArea);
+        const areaInfo = areas[loz.code];
+        if (areaInfo?.streets?.length) {
+          placeList.push(`Area: ${loz.code} – ${areaInfo.streets.join(", ")}`);
         } else {
           placeList.push(`Area: ${loz.code}`);
         }
         break;
       }
 
-    case "place": {
-      const tooltip = places[loz.code] || "(place unknown)";
-      placeList.push(`${loz.code} – ${tooltip}`);
-      break;
+      case "place": {
+        const placeInfo = places[loz.code];
+        const tooltip = placeInfo?.tooltip || "(place unknown)";
+        placeList.push(`${loz.code} – ${tooltip}`);
+        break;
+      }
+
+      case "tag": {
+        const desc = tags[loz.code] || "(no description)";
+        activityList.push(`${loz.code} – ${desc}`);
+        break;
+      }
+
+      default:
+        console.warn("Unknown lozenge type:", loz.type);
     }
+  });
 
-    case "tag": {
-      const desc = tags[loz.code] || "";
-      activityList.push(`${loz.code} – ${desc}`);
-      break;
-    }
-
-    default:
-      console.warn("Unknown lozenge type:", loz.type);
-  }
-});
-
-return { resourceList, activityList, placeList };
+  return { resourceList, activityList, placeList };
 }
+
 
 
 const DEVURLS = {{ DEVURLS | tojson }} ;
@@ -771,62 +834,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentZIndex = 1000; // ensures palettes can be raised above others
 
-  document.querySelectorAll(".collapsible-palette").forEach(palette => {
-    const header = palette.querySelector(".vertical-header");
-    if (!header) return;
+  const BUTTONS_HEIGHT = 120; // total height of your fixed buttons + margin
+const PALETTE_SPACING = 30; // vertical gap between palettes
 
-    // Each palette tracks its own drag state
-    let isDragging = false;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
+document.querySelectorAll(".collapsible-palette").forEach((palette, index) => {
+  const header = palette.querySelector(".vertical-header");
+  if (!header) return;
 
-    header.addEventListener("mousedown", e => {
-      if (e.button !== 0) return; // only left-click
-      isDragging = true;
-      palette.style.zIndex = ++currentZIndex;
+  // ─── Set initial palette position below the buttons ─────────────────
+  palette.style.position = "absolute";         // ensure draggable positioning
+  palette.style.top = `${BUTTONS_HEIGHT + index * (palette.offsetHeight + PALETTE_SPACING)}px`;
+  palette.style.right = "10px";                 // default left offset
+  palette.style.zIndex = 1000;
 
-      // Compute offset from top-left corner
-      const rect = palette.getBoundingClientRect();
-      dragOffsetX = e.clientX - rect.left;
-      dragOffsetY = e.clientY - rect.top;
+  // Each palette tracks its own drag state
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
 
-      document.body.style.userSelect = "none";
-      palette.classList.add("dragging");
+  header.addEventListener("mousedown", e => {
+    if (e.button !== 0) return; // only left-click
+    isDragging = true;
+    palette.style.zIndex = ++currentZIndex;
 
-      e.stopPropagation();
-    });
+    const rect = palette.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
 
-    window.addEventListener("mousemove", e => {
-      if (!isDragging) return;
-
-      e.preventDefault();
-
-      // Move palette with mouse
-      palette.style.left = `${e.clientX - dragOffsetX}px`;
-      palette.style.top = `${e.clientY - dragOffsetY}px`;
-
-      // Keep within window bounds
-      const rect = palette.getBoundingClientRect();
-      if (rect.left < 0) palette.style.left = "0px";
-      if (rect.top < 0) palette.style.top = "0px";
-    });
-
-    window.addEventListener("mouseup", e => {
-      if (!isDragging) return;
-      isDragging = false;
-      palette.classList.remove("dragging");
-      document.body.style.userSelect = "";
-    });
-
-    // Collapse / expand palette
-    header.addEventListener("click", e => {
-      // Ignore if dragging happened
-      if (palette.classList.contains("dragging")) return;
-
-      palette.classList.toggle("collapsed");
-      e.stopPropagation();
-    });
+    document.body.style.userSelect = "none";
+    palette.classList.add("dragging");
+    e.stopPropagation();
   });
+
+  window.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    e.preventDefault();
+
+    palette.style.left = `${e.clientX - dragOffsetX}px`;
+    palette.style.top = `${e.clientY - dragOffsetY}px`;
+
+    // Keep within window bounds
+    const rect = palette.getBoundingClientRect();
+    if (rect.left < 0) palette.style.left = "0px";
+    if (rect.top < 0) palette.style.top = "0px";
+  });
+
+  window.addEventListener("mouseup", e => {
+    if (!isDragging) return;
+    isDragging = false;
+    palette.classList.remove("dragging");
+    document.body.style.userSelect = "";
+  });
+
+  header.addEventListener("click", e => {
+    if (palette.classList.contains("dragging")) return;
+    palette.classList.toggle("collapsed");
+    e.stopPropagation();
+  });
+});
+
 });
 
 
@@ -838,6 +904,19 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(pingUser, 25000);
   pingUser(); // Initial ping
 //}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const buttons = document.querySelector(".button-container");
+  const buttonRect = buttons?.getBoundingClientRect();
+  const topOffset = (buttonRect?.bottom || 100) + 10;
+
+  document.querySelectorAll(".collapsible-palette").forEach((palette, index) => {
+    palette.style.position = "fixed";
+    palette.style.top = `${topOffset + index * 40}px`; // stagger vertically
+    palette.style.left = "20px"; // or adjust based on screen width
+  });
+});
+
 
 document.addEventListener("DOMContentLoaded", async () => {
   // set up the calendar slots and the palettes of lozenges and fill the slots
@@ -1017,6 +1096,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           sort: false,
           animation: 150,
         });
+
+  updateTodayHighlight(); // initial check
+
+  // Set up a timer to re-check every hour
+  setInterval(() => {
+    updateTodayHighlight();
+  }, 60 * 60 * 1000); // every 1 hour
+
   });
 
 
@@ -1126,7 +1213,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const summaryTable = buildSummaryTable(summary.slots, areas, places, tags);
 
-  const container = document.getElementById("calendar-summary");
+  const container = document.getElementById("summary-report");
   container.innerHTML = ""; // Clear previous content
   container.appendChild(summaryTable);
 });
@@ -1136,5 +1223,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </script>
 
-</body>
 {% endblock %}

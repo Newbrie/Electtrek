@@ -163,8 +163,28 @@
 .calendar-grid {
   margin-top: 80px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap; /* ✅ allow wrapping on small screens */
   gap: 10px;
+}
+.day-column {
+  flex: 1 0 150px; /* ✅ minimum width per day, wraps if screen too small */
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  min-width: 120px; /* ensures a reasonable size on small screens */
+}
+
+@media (max-width: 768px) {
+  .calendar-grid {
+    flex-direction: row;
+    overflow-x: auto; /* ✅ horizontal scroll if too many days */
+  }
+
+  .day-column {
+    flex: 0 0 80%; /* show one day at a time on narrow screens */
+    min-width: 250px;
+  }
 }
 .empty-day {
   background-color: #fff;
