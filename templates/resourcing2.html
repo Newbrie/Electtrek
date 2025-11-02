@@ -1,0 +1,1227 @@
+{% extends "base.html" %}
+{% block body %}
+
+<style>
+.body {
+  font-family: sans-serif;
+  margin: 20px;
+}
+/* Availability levels: 0 (none) to 10 (max) */
+.slot[data-availability="0"] { background-color: #ffffff; } /* white / no availability */
+.slot[data-availability="1"] { background-color: #e6f0ff; }
+.slot[data-availability="2"] { background-color: #cce0ff; }
+.slot[data-availability="3"] { background-color: #b3d1ff; }
+.slot[data-availability="4"] { background-color: #99c2ff; }
+.slot[data-availability="5"] { background-color: #80b3ff; }
+.slot[data-availability="6"] { background-color: #66a3ff; }
+.slot[data-availability="7"] { background-color: #4d94ff; }
+.slot[data-availability="8"] { background-color: #3385ff; }
+.slot[data-availability="9"] { background-color: #1a75ff; }
+.slot[data-availability="10"] { background-color: #0066ff; } /* max */
+
+h2 {
+  position: fixed;
+  top: 20px;
+  left: 50px; /* adjust as needed */
+  z-index: 1000;
+  background: white; /* so it doesn’t overlap with content weirdly */
+  padding: 4px 8px;
+  margin: 0;
+}
+#summary-report {
+  max-width: 100%;           /* never exceed container */
+  width: auto;               /* shrink to fit content */
+  overflow-x: auto;          /* horizontal scroll if needed */
+}
+
+#summary-report table {
+  width: 100%;               /* fill container width */
+  border-collapse: collapse;
+}
+</style>
+
+
+  <div class="container-fluid">
+    <h2 class="text-center mb-4">{{current_election}} Campaigns Calendar</h2>
+
+    <!-- Fixed Buttons (top-right on desktop, stacked on mobile) -->
+    <div id="calendar-controls" class="fixed-buttons">
+      <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+      <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Calendar/Table</button>
+      <button id="export-html-btn" class="btn btn-info">🔐 Export Protected HTML</button>
+    </div>
+
+    <!-- Palettes Container -->
+    <div id="palette-container">
+
+      <!-- Tooltip (hidden by default) -->
+      <div id="tooltip"
+           style="display:none; position:absolute; background:#fff; border:1px solid #aaa; padding:5px 8px;
+                  border-radius:4px; box-shadow:0 0 5px rgba(0,0,0,0.2); font-size:12px; z-index:1000;">
+      </div>
+
+      <!-- Resource Palette -->
+      <div id="resource-palette" class="collapsible-palette floating-palette">
+        <div class="vertical-header">Resources</div>
+        <div class="palette-body" id="resource-content"></div>
+      </div>
+
+      <!-- Areas Palette -->
+      <div id="areas-palette" class="collapsible-palette floating-palette">
+        <div class="vertical-header">Areas</div>
+        <div class="palette-body" id="areas-content"></div>
+      </div>
+    </div>
+
+    <!-- Tags Palette -->
+    <div id="tags-palette" class="collapsible-palette floating-palette" style="top: 250px; right: 50px;">
+      <div class="vertical-header">Activities</div>
+      <div class="palette-body" id="tags-content"></div>
+    </div>
+
+    <!-- Places Palette -->
+    <div id="places-palette" class="collapsible-palette floating-palette" style="top: 350px; right: 50px;">
+      <div class="vertical-header">Places</div>
+      <div class="palette-body" id="places-content"></div>
+    </div>
+
+    <!-- Calendar and Summary -->
+    <div id="calendar-grid" class="calendar-grid mt-5"></div>
+    <div id="summary-report" class="mt-4"></div>
+  </div>
+
+
+<script>
+
+const USER_ID = localStorage.getItem("user_id") || crypto.randomUUID();
+localStorage.setItem("user_id", USER_ID);
+const DISPLAY_NAME = prompt("Enter your name:") || USER_ID.slice(0, 6);
+console.log("📅 Started User pinging - USER_ID:", USER_ID);
+
+
+function buildResourcePalette(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = ""; // clear existing content if any
+
+  Object.entries(window.resources).forEach(([key, value]) => {
+    const loz = {
+      type: "resource",
+      code: key,
+      info: `${value.Firstname} ${value.Surname} ${value.Status}`,
+    };
+    const el = createLozengeElement(loz, { selectable: true });
+    container.appendChild(el);
+  });
+}
+
+function buildAreaPalette(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = "";
+  Object.entries(window.areas).forEach(([code, areaData], i) => {
+    // code = "K13", areaData = { tooltip_html: "...", streets: [...] }
+    const loz = {
+      type: "area",
+      code: code,
+      info: areaData,
+    };
+    const el = createLozengeElement(loz, { selectable: true });
+    container.appendChild(el);
+    });
+}
+
+function buildTaskTagsPalette(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  Object.entries(window.task_tags).forEach(([code, desc], i) => {
+    const loz = {
+      type: "tag",
+      code: code,
+      info: desc,
+    };
+    const el = createLozengeElement(loz, { selectable: true });
+    container.appendChild(el);
+  });
+}
+
+function buildPlacesPalette(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  Object.entries(window.places).forEach(([code, place], i) => {
+    const loz = {
+      type: "place",
+      code: code,
+      info: place.tooltip,
+    };
+    const el = createLozengeElement(loz, { selectable: true });
+    container.appendChild(el);
+  });
+}
+
+  function setupAreaLozengeTooltips() {
+    const areaLozenges = document.querySelectorAll('.area-lozenge');
+
+    areaLozenges.forEach(loz => {
+      const code = loz.textContent.trim();  // e.g., "K01"
+      const areaInfo = window.areas?.[code];
+
+      if (areaInfo?.tooltip_html) {
+        tippy(loz, {
+          content: areaInfo.tooltip_html,
+          hideOnClick: true,
+          allowHTML: true,
+          trigger: 'click',
+          interactive: true,
+          theme: 'light b', // optional
+          appendTo: document.body,
+        });
+      }
+    });
+  }
+  function setupPlaceLozengeTooltips() {
+    const placeLozenges = document.querySelectorAll('.place-lozenge.dropped');
+
+    placeLozenges.forEach(loz => {
+      const code = loz.textContent.trim();  // e.g., "K01"
+      const placeInfo = window.places?.[code];
+
+      if (placeInfo?.tooltip) {
+        tippy(loz, {
+          content: placeInfo.tooltip,
+          hideOnClick: true,
+          allowHTML: true,
+          trigger: 'click',
+          interactive: true,
+          theme: 'light', // optional
+          appendTo: document.body,
+        });
+      }
+    });
+  }
+
+  function setupResourceLozengeTooltips() {
+    const resourceLozenges = document.querySelectorAll('.resource-lozenge.dropped');
+    console.log("Found resource lozenges:", document.querySelectorAll('.resource-lozenge.dropped').length);
+
+    resourceLozenges.forEach(loz => {
+      const Code = loz.textContent.trim();  // e.g., "MN"
+      const resourceInfo = resourceDetails?.[Code];
+
+      const tooltip = resourceInfo.Firstname + " " + resourceInfo.Surname;
+      console.log("Resource Info...",tooltip);
+
+      if (tooltip) {
+        tippy(loz, {
+          content: tooltip,
+          hideOnClick: true,
+          allowHTML: true,
+          trigger: 'click',
+          interactive: true,
+          theme: 'light', // optional
+          appendTo: document.body,
+        });
+      }
+    });
+  }
+
+
+
+
+  function generateSummaryReport() {
+    const summaryContainer = document.getElementById("summary-report");
+    summaryContainer.innerHTML = "";
+
+    const calendarGrid = document.querySelector(".calendar-grid");
+    const gridWidth = calendarGrid?.offsetWidth || 800; // fallback width
+
+    const table = document.createElement("table");
+    table.className = "summary-table";
+    table.style.width = gridWidth + "px"; // match calendar width
+    table.style.maxWidth = "100%";
+
+    const state = extractCalendarPlan(); // fallback if you have a JS calendar state
+    const dayColumns = [...document.querySelectorAll(".day-column")];
+
+    table.className = "summary-table";
+
+    // Header
+    const headerRow = document.createElement("tr");
+    ["Date + Time", "Who", "What", "Where"].forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    // Iterate slots either from state or DOM
+    const slots = state?.slots || {};
+
+    Object.entries(slots).forEach(([key, slot]) => {
+      const [dateStr, time] = key.split("_");
+
+      const [year, month, day] = dateStr.split("-").map(Number);
+      const dateObj = new Date(year, month - 1, day);
+      const formattedDate = dateObj.toLocaleDateString(undefined, {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      });
+
+      // Safe lozenge array: try state first, fallback to DOM
+      let lozenges = slot.lozenges;
+      if (!lozenges) {
+        const slotDiv = document.getElementById(`slot-${dateStr}_${time}`);
+        if (slotDiv) {
+          lozenges = Array.from(slotDiv.querySelectorAll(".lozenge")).map(l => ({
+            type: l.dataset.type,
+            code: l.dataset.code
+          }));
+        } else {
+          lozenges = [];
+        }
+      }
+
+      // WHO = resources
+      const who = lozenges
+        .filter(l => l.type === "resource")
+        .map(l => l.code)
+        .join(", ");
+
+      // WHAT = task + tag
+      const taskTags = lozenges
+        .filter(l => l.type === "task" || l.type === "tag")
+        .map(l => {
+          const desc = window.task_tags?.[l.code] || "(no description)";
+          return `${l.code}${l.type === "tag" ? `: ${desc}` : ""}`;
+        })
+        .join(", ");
+
+      // WHERE = area + place
+      const areaItems = lozenges
+        .filter(l => l.type === "area")
+        .map(l => {
+          const area = window.areas?.[l.code];
+          return area?.streets?.length ? `${l.code}: ${area.streets.join("; ")}` : l.code;
+        });
+
+      const placeItems = lozenges
+        .filter(l => l.type === "place")
+        .map(l => {
+          const place = window.places?.find(p => p.code === l.code);
+          return place ? `${place.code}: ${place.tooltip}` : l.code;
+        });
+
+      const whereParts = [];
+      if (areaItems.length) whereParts.push(`Area: ${areaItems.join(" | ")}`);
+      if (placeItems.length) whereParts.push(`Place: ${placeItems.join(" | ")}`);
+      const where = whereParts.join(" | ");
+
+      // Build row
+      const row = document.createElement("tr");
+      [ `${formattedDate}, ${time}`, who, taskTags, where ].forEach(cellText => {
+        const td = document.createElement("td");
+        td.textContent = cellText;
+        row.appendChild(td);
+      });
+
+      table.appendChild(row);
+    });
+
+    summaryContainer.appendChild(table);
+  }
+
+
+
+function updateSlotAvailability(slot) {
+  const resourceCount = [...slot.children].filter(child =>
+    child.classList.contains('resource-lozenge')
+  ).length;
+
+  const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
+
+  slot.setAttribute("data-availability", availabilityLevel);
+  slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
+}
+
+
+function setupPaletteSelection() {
+  document.body.addEventListener('click', function (e) {
+    if (
+      e.target.classList.contains('area-lozenge') ||
+      e.target.classList.contains('tag-lozenge') ||
+      e.target.classList.contains('resource-lozenge') ||
+      e.target.classList.contains('place-lozenge')
+    ) {
+      e.stopPropagation();
+      e.target.classList.toggle('lozenge-selected');
+    }
+  });
+}
+
+
+
+
+
+    function makePaletteDraggable(paletteId, handleId) {
+    const palette = document.getElementById(paletteId);
+    const handle = document.getElementById(handleId);
+    let isDragging = false, offsetX = 0, offsetY = 0;
+
+
+    handle.addEventListener("mousedown", e => {
+      isDragging = true;
+      offsetX = e.clientX - palette.offsetLeft;
+      offsetY = e.clientY - palette.offsetTop;
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (isDragging) {
+        palette.style.left = `${e.clientX - offsetX}px`;
+        palette.style.top = `${e.clientY - offsetY}px`;
+      }
+    });
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+      document.body.style.userSelect = "auto";
+    });
+  }
+
+
+  function updateUserPalette() {
+  fetch(`${API}/api/active-users`)
+    .then(res => res.json())
+    .then(users => {
+      const container = document.getElementById("resource-palette");
+
+      users.forEach(u => {
+        const userId = u.name; // or u.id if available
+
+        // Check if a lozenge with this user ID already exists
+        const exists = container.querySelector(`[data-code="${userId}"]`);
+        if (exists) return; // Skip if already present
+
+        // Split name into first and last
+        const parts = userId.split(" ");
+        const Firstname = parts[0];
+        const Surname = parts[1] || "";
+
+        // Add to window.resources so tooltip lookup works
+        window.resources = window.resources || {};
+        window.resources[userId] = {
+          Firstname,
+          Surname,
+          Status: "Active User"
+        };
+
+        const loz = {
+          type: "resource",
+          code: userId,
+          info: `User: ${Firstname} ${Surname} - Active User`
+        };
+
+        const el = createLozengeElement(loz, { selectable: true });
+        container.appendChild(el);
+      });
+    })
+    .catch(err => {
+      console.error("Failed to fetch active users:", err);
+    });
+}
+
+function updateTodayHighlight() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Remove old highlight
+  document.querySelectorAll(".today-cell").forEach(cell => {
+    cell.classList.remove("today-cell");
+  });
+
+  // Find matching cell
+  const allDayColumns = document.querySelectorAll(".day-column");
+  allDayColumns.forEach(col => {
+    const header = col.querySelector(".day-header");
+    if (!header) return;
+
+    // Extract the date from the header text
+    const parts = header.textContent.split(" ");
+    const dayNumber = parseInt(parts[1], 10);
+
+    // Find the date based on global calendar start
+    const startDate = new Date(window.calendarStartDate);
+    const daysOffset = Array.from(allDayColumns).indexOf(col);
+    const colDate = new Date(startDate);
+    colDate.setDate(startDate.getDate() + daysOffset);
+    colDate.setHours(0, 0, 0, 0);
+
+    if (colDate.toDateString() === today.toDateString()) {
+      col.classList.add("today-cell");
+    }
+  });
+}
+
+
+function pingUser() {
+
+  if (!USER_ID) {
+    console.warn("USER_ID not found in localStorage");
+    return;
+  }
+  fetch(`${API}/api/user-ping`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: USER_ID, display_name: DISPLAY_NAME }),
+  });
+}
+
+function extractCalendarPlan() {
+const calendarPlan = { slots: {} };
+
+document.querySelectorAll(".slot").forEach(slotDiv => {
+  const slotId = slotDiv.id; // e.g. "slot-2025-10-13_9 AM"
+  if (!slotId || !slotId.startsWith("slot-")) return;
+
+  const slotKey = slotId.replace("slot-", ""); // e.g. "2025-10-13_9 AM"
+  const availability = parseInt(slotDiv.getAttribute("data-availability")) || 0;
+
+  const lozenges = Array.from(
+    slotDiv.querySelectorAll(
+      ".lozenge, .area-lozenge, .resource-lozenge, .tag-lozenge, .place-lozenge"
+    )
+  ).map(el => {
+    return {
+      type: el.dataset.type,
+      code: el.dataset.code || el.textContent.trim()
+    };
+  });
+
+  // ✅ Only store slot if it has lozenges or availability
+  if (availability > 0 || lozenges.length > 0) {
+    calendarPlan.slots[slotKey] = {
+      availability,
+      lozenges
+    };
+  }
+});
+
+return calendarPlan;
+}
+
+
+// Your calendar initialization code here...
+async function getCalendarUpdate() {
+try {
+  const response = await fetch(`${API}/current-election`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch plan: ${response.status} ${response.statusText}`);
+  }
+
+  const plan = await response.json();
+  if (plan) {
+    loadCalendarPlan(plan);
+
+  } else {
+    console.warn("No plan loaded.");
+  }
+
+} catch (error) {
+  console.error("Error fetching calendar plan:", error);
+  return null;
+}
+
+};
+
+
+async function fetchCurrentPlan() {
+try {
+  const response = await fetch(`${API}/current-election`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch plan: ${response.status} ${response.statusText}`);
+  }
+
+  const Plan = await response.json();
+
+  return Plan;
+} catch (error) {
+  console.error("Error fetching calendar plan:", error);
+  return null;
+}
+}
+
+
+
+async function saveCalendarPlan() {
+const btn = document.getElementById("save-calendar-btn");
+btn.disabled = true;
+btn.textContent = "💾 Saving...";
+
+const calendarData = extractCalendarPlan();
+
+try {
+  const response = await fetch(`${API}/current-election`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(calendarData)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Server responded with status ${response.status}`);
+  }
+
+  btn.textContent = "✅ Saved!";
+} catch (err) {
+  console.error("❌ Failed to save calendar plan:", err);
+  btn.textContent = "❌ Save Failed";
+} finally {
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = "Save Calendar";
+  }, 2000);
+}
+}
+
+
+function loadCalendarPlan(plan) {
+  console.log("📦 Loaded plan:", plan);
+
+  if (!plan?.slots) return;
+
+  Object.entries(plan.slots).forEach(([key, slotData]) => {
+    // key example: "2025-10-12_9 AM"
+    const slotId = `slot-${key}`;
+    const slotDiv = document.getElementById(slotId);
+
+    if (!slotDiv) {
+      console.warn("⚠️ Slot not found for ID:", slotId);
+      return;
+    }
+
+    // Set availability attribute
+    slotDiv.setAttribute("data-availability", slotData.availability || 0);
+    slotDiv.setAttribute("title", `${slotData.availability || 0} resources available`);
+
+    // Clear existing lozenges but keep the label
+    const timeLabel = slotDiv.querySelector(".slot-label");
+    const lozengeContainer = slotDiv.querySelector(".lozenge-container");
+
+    if (!lozengeContainer) {
+      console.warn("⚠️ Slot missing lozenge container:", slotId);
+      return;
+    }
+
+    // Clear previous lozenges
+    lozengeContainer.innerHTML = "";
+
+    // Re-add lozenges
+    slotData.lozenges?.forEach(loz => {
+      const lozEl = createLozengeElement(loz, { removable: true });
+      lozengeContainer.appendChild(lozEl);
+    });
+
+    // Optional: update availability display (like coloring)
+    updateSlotAvailability(slotDiv);
+
+    // Optional: rescale lozenges if too many
+    scaleSlotLozenges(slotDiv);
+  });
+}
+
+
+function createStandaloneHTML() {
+  const doctype = "<!DOCTYPE html>\n";
+
+  // ✅ Clone once
+  const clone = document.documentElement.cloneNode(true);
+
+  // ✅ Remove duplicate calendar content
+  const calendar = clone.querySelector("#calendar-grid");
+  if (calendar) {
+    calendar.innerHTML = "";
+  }
+
+  // ✅ Serialize the edited clone
+  let htmlString = doctype + clone.outerHTML;
+
+  // ✅ Replace placeholder with final API URL
+  const FINAL_API_URL = DEVURLS['prod'];
+  htmlString = htmlString.replace(/__REPLACE_WITH_API_URL__/g, FINAL_API_URL);
+
+  return htmlString;
+}
+
+// 🔹 Module: Build table element
+function buildSummaryTable(slots, areas, places, tags) {
+const table = document.createElement("table");
+table.className = "summary-table";
+table.innerHTML = `
+  <thead>
+    <tr>
+      <th>Date & Time</th>
+      <th>Activities</th>
+      <th>Resources</th>
+      <th>Places</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+`;
+
+const tbody = table.querySelector("tbody");
+
+Object.entries(slots).forEach(([key, slot]) => {
+  const [dateStr, timeStr] = key.split("_");
+
+  let formattedDateTime = "Invalid Date";
+
+  if (dateStr && timeStr) {
+    // Parse the date parts
+    const [year, month, day] = dateStr.split("-").map(Number);
+
+    // Parse the time (e.g., "9 AM" or "9:30 PM")
+    const timeParts = timeStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (year && month && day && timeParts) {
+      let [, hourStr, minuteStr, period] = timeParts;
+      let hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr || "0", 10);
+
+      // Convert to 24-hour time
+      if (period.toUpperCase() === "PM" && hour !== 12) hour += 12;
+      if (period.toUpperCase() === "AM" && hour === 12) hour = 0;
+
+      // Note: months are 0-indexed in JS Date
+      const date = new Date(year, month - 1, day, hour, minute);
+
+      formattedDateTime = date.toLocaleString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } else {
+      console.warn("⚠️ Invalid time format in slot key:", key);
+    }
+  } else {
+    console.warn("⚠️ Invalid slot key format:", key);
+  }
+
+  const {
+    resourceList,
+    activityList,
+    placeList
+  } = processLozenges(slot.lozenges, areas, places, tags);
+
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${formattedDateTime}</td>
+    <td>${activityList.join("<br>")}</td>
+    <td>${resourceList.join(", ")}</td>
+    <td>${placeList.join("<br>")}</td>
+  `;
+  tbody.appendChild(row);
+});
+
+return table;
+}
+
+function scaleSlotLozenges(slot) {
+  const lozenges = Array.from(slot.querySelectorAll(".lozenge"));
+  if (lozenges.length === 0) return;
+
+  let scale = 1;
+  const slotHeight = slot.clientHeight - 4; // buffer
+
+  // Reset previous transforms
+  lozenges.forEach(l => l.style.transform = "scale(1)");
+
+  // Calculate total height of lozenges
+  let totalHeight = slot.scrollHeight;
+
+  if (totalHeight > slotHeight) {
+    scale = slotHeight / totalHeight;
+    lozenges.forEach(l => {
+      l.style.transformOrigin = "top left";
+      l.style.transform = `scale(${scale})`;
+    });
+  }
+}
+
+
+// 🔹 Module: Process lozenges for one slot
+function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
+  const resourceList = [];
+  const activityList = [];
+  const placeList = [];
+
+  lozenges?.forEach(loz => {
+    if (!loz?.type || !loz?.code) {
+      console.warn("Skipping invalid lozenge:", loz);
+      return;
+    }
+
+    switch (loz.type) {
+      case "resource":
+        resourceList.push(loz.code);
+        break;
+
+      case "area": {
+        const areaInfo = areas[loz.code];
+        if (areaInfo?.streets?.length) {
+          placeList.push(`Area: ${loz.code} – ${areaInfo.streets.join(", ")}`);
+        } else {
+          placeList.push(`Area: ${loz.code}`);
+        }
+        break;
+      }
+
+      case "place": {
+        const placeInfo = places[loz.code];
+        const tooltip = placeInfo?.tooltip || "(place unknown)";
+        placeList.push(`${loz.code} – ${tooltip}`);
+        break;
+      }
+
+      case "tag": {
+        const desc = tags[loz.code] || "(no description)";
+        activityList.push(`${loz.code} – ${desc}`);
+        break;
+      }
+
+      default:
+        console.warn("Unknown lozenge type:", loz.type);
+    }
+  });
+
+  return { resourceList, activityList, placeList };
+}
+
+
+
+const DEVURLS = {{ DEVURLS | tojson }} ;
+const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
+const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
+
+
+console.log("API :",API)
+
+// Make backend data available to JS
+window.resources = {{ resources | tojson }};
+window.task_tags = {{ task_tags | tojson }};
+window.places = {{ places | tojson }};
+window.areas = {{ areas | tojson }};
+console.log("Injected areas:", {{ areas | tojson }});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Build all palettes
+  buildResourcePalette("resource-content");
+  buildAreaPalette("areas-content");
+  buildTaskTagsPalette("tags-content");
+  buildPlacesPalette("places-content");
+
+  let currentZIndex = 1000; // ensures palettes can be raised above others
+
+  const BUTTONS_HEIGHT = 120; // total height of your fixed buttons + margin
+const PALETTE_SPACING = 30; // vertical gap between palettes
+
+document.querySelectorAll(".collapsible-palette").forEach((palette, index) => {
+  const header = palette.querySelector(".vertical-header");
+  if (!header) return;
+
+  // ─── Set initial palette position below the buttons ─────────────────
+  palette.style.position = "absolute";         // ensure draggable positioning
+  palette.style.top = `${BUTTONS_HEIGHT + index * (palette.offsetHeight + PALETTE_SPACING)}px`;
+  palette.style.right = "10px";                 // default left offset
+  palette.style.zIndex = 1000;
+  palette.classList.add("collapsed");
+
+  // Each palette tracks its own drag state
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  header.addEventListener("mousedown", e => {
+    if (e.button !== 0) return; // only left-click
+    isDragging = true;
+    palette.style.zIndex = ++currentZIndex;
+
+    const rect = palette.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    document.body.style.userSelect = "none";
+    palette.classList.add("dragging");
+    e.stopPropagation();
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    e.preventDefault();
+
+    palette.style.left = `${e.clientX - dragOffsetX}px`;
+    palette.style.top = `${e.clientY - dragOffsetY}px`;
+
+    // Keep within window bounds
+    const rect = palette.getBoundingClientRect();
+    if (rect.left < 0) palette.style.left = "0px";
+    if (rect.top < 0) palette.style.top = "0px";
+  });
+
+  window.addEventListener("mouseup", e => {
+    if (!isDragging) return;
+    isDragging = false;
+    palette.classList.remove("dragging");
+    document.body.style.userSelect = "";
+  });
+
+  header.addEventListener("click", e => {
+    if (palette.classList.contains("dragging")) return;
+    palette.classList.toggle("collapsed");
+    e.stopPropagation();
+  });
+});
+
+});
+
+
+
+//if (!isDev) {
+  setInterval(updateUserPalette, 5000);
+  updateUserPalette();
+  // Ping every 25 seconds
+  setInterval(pingUser, 25000);
+  pingUser(); // Initial ping
+//}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const buttons = document.querySelector(".button-container");
+  const buttonRect = buttons?.getBoundingClientRect();
+  const topOffset = (buttonRect?.bottom || 100) + 10;
+
+  document.querySelectorAll(".collapsible-palette").forEach((palette, index) => {
+    palette.style.position = "fixed";
+    palette.style.top = `${topOffset + index * 40}px`; // stagger vertically
+    palette.style.left = "20px"; // or adjust based on screen width
+  });
+});
+
+
+document.addEventListener("DOMContentLoaded", async () => {
+  // set up the calendar slots and the palettes of lozenges and fill the slots
+
+  // ─── Config ──────────────────────────────────────────────────────────────
+  const daysToShow = 45;
+  const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM"];
+
+  // ─── Date Setup ─────────────────────────────────────────────────────────
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // ⬇️ Find Monday of the previous week
+  const dayOfWeek = today.getDay(); // 0 (Sun) to 6 (Sat)
+  const daysSinceMonday = (dayOfWeek + 6) % 7 + 7;
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - daysSinceMonday);
+
+  // ✅ Store globally for access elsewhere
+  window.calendarStartDate = new Date(startDate);
+
+
+  // ─── Election Date (optional) ────────────────────────────────────────────
+  let electionDate = null;
+  const electionDateStr = window.parent?.document?.getElementById('electiondate')?.value;
+
+  if (electionDateStr) {
+    const [year, month, day] = electionDateStr.split("-");
+    electionDate = new Date(year, month - 1, day);
+    electionDate.setHours(0, 0, 0, 0);
+    console.log("📅 Election date parsed as:", electionDate.toDateString());
+  } else {
+    console.warn("⚠️ No election date found");
+  }
+
+  // ─── Init UI ─────────────────────────────────────────────────────────────
+  document.getElementById("save-calendar-btn").addEventListener("click", saveCalendarPlan);
+  setupPaletteSelection();
+
+  const container = document.getElementById("calendar-grid");
+
+  // ─── Create Calendar Grid ────────────────────────────────────────────────
+  let weekRow = document.createElement("div");
+  weekRow.className = "week-row";
+
+  // Align first row to Monday
+  const startDayOfWeek = startDate.getDay(); // 0 = Sunday
+  const offset = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
+
+  for (let i = 0; i < offset; i++) {
+    const empty = document.createElement("div");
+    empty.className = "empty-day";
+    weekRow.appendChild(empty);
+  }
+
+  for (let i = 0; i < daysToShow; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+
+    const dayNumber = date.getDate();
+    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+    const dayOfWeek = date.getDay();
+
+    const dayDiv = document.createElement("div");
+    dayDiv.className = "day-column";
+
+    const header = document.createElement("div");
+    header.className = "day-header";
+    header.textContent = `${weekday} ${dayNumber}`;
+
+    const cellDate = new Date(date);
+    cellDate.setHours(0, 0, 0, 0);
+
+    // Highlight today
+    if (cellDate.toDateString() === today.toDateString()) {
+      dayDiv.classList.add("today-cell");
+    }
+
+    // Highlight election day
+    if (electionDate && cellDate.toDateString() === electionDate.toDateString()) {
+      dayDiv.classList.add("election-day-cell");
+    }
+
+    dayDiv.appendChild(header);
+
+    // Create slot divs
+    for (const slotName of slots) {
+    const slotDiv = document.createElement("div");
+    slotDiv.className = "slot";
+    slotDiv.setAttribute("data-availability", "0");
+    slotDiv.setAttribute("title", `0 resources available`);
+    slotDiv.setAttribute("data-time", slotName);
+
+    // ✅ Unique ID (YYYY-MM-DD format)
+    const localDateStr = date.toLocaleDateString("en-CA");
+    slotDiv.id = `slot-${localDateStr}_${slotName}`;
+
+    // --- Fixed overlay label ---
+
+    // --- Fixed overlay label ---
+    const timeLabel = document.createElement("div");
+    timeLabel.className = "slot-label";
+    timeLabel.textContent = slotName;
+    slotDiv.appendChild(timeLabel);
+
+    // --- Lozenge container (flex inline flow) ---
+    const lozengeContainer = document.createElement("div");
+    lozengeContainer.className = "lozenge-container";
+    slotDiv.appendChild(lozengeContainer);
+
+    // --- Drag/drop visuals ---
+    slotDiv.addEventListener("dragover", e => {
+      e.preventDefault();
+      slotDiv.classList.add("slot-hover");
+    });
+
+    slotDiv.addEventListener("dragleave", () => {
+      slotDiv.classList.remove("slot-hover");
+    });
+
+    slotDiv.addEventListener("drop", e => {
+      e.preventDefault();
+      slotDiv.classList.remove("slot-hover");
+
+      // ✅ 1️⃣ Retrieve the lozenge data from drag event
+      const dataStr = e.dataTransfer.getData("application/json");
+      if (!dataStr) {
+        console.warn("⚠️ No lozenge data in drop");
+        return;
+      }
+
+      let loz;
+      try {
+        loz = JSON.parse(dataStr); // { type, code }
+      } catch (err) {
+        console.error("❌ Failed to parse drop data:", err);
+        return;
+      }
+
+      // ✅ 2️⃣ Prevent dropping on the time label
+      if (e.target.classList.contains("slot-label")) return;
+
+      // ✅ 3️⃣ Create a *new* dropped lozenge
+      const dropped = createLozengeElement(loz, { removable: true });
+
+      // ✅ 4️⃣ Append it just after the label if present
+      const label = slotDiv.querySelector(".slot-label");
+      if (label && label.nextSibling) {
+        slotDiv.insertBefore(dropped, label.nextSibling);
+      } else {
+        slotDiv.appendChild(dropped);
+      }
+      scaleSlotLozenges(slotDiv);
+      console.log("✅ Dropped lozenge:", loz.type, loz.code);
+    });
+    dayDiv.appendChild(slotDiv);
+  }
+
+
+
+    weekRow.appendChild(dayDiv);
+
+    // Wrap week row on Sunday or final day
+    if (dayOfWeek === 0 || i === daysToShow - 1) {
+      container.appendChild(weekRow);
+      weekRow = document.createElement("div");
+      weekRow.className = "week-row";
+    }
+  }
+    // Make each slot droppable
+    // Setup Sortable group behavior
+    // Palettes: distinct groups with clone pull, no put
+  ["resource-content", "areas-content", "tags-content", "places-content"].forEach((id) => {
+      const groupName = id.split("-")[0]; // 'resource', 'areas', or 'tags'
+      Sortable.create(document.getElementById(id), {
+          group: { name: groupName, pull: "clone", put: false },
+          sort: false,
+          animation: 150,
+        });
+
+  updateTodayHighlight(); // initial check
+
+  // Set up a timer to re-check every hour
+  setInterval(() => {
+    updateTodayHighlight();
+  }, 60 * 60 * 1000); // every 1 hour
+
+  });
+
+
+  // Slots: accept all groups
+  document.querySelectorAll(".slot").forEach(slot => {
+    Sortable.create(slot, {
+      group: {
+        name: "calendar",
+        put: ["resource", "areas", "tags", "places"]
+      },
+      animation: 150,
+      // 👇 Prevent dragging labels or any non-lozenge elements
+      filter: ".slot-label",
+      onMove: evt => {
+        if (evt.related && evt.related.classList.contains("slot-label")) {
+          return false;
+        }
+      },
+      onAdd: evt => {
+        const el = evt.item;
+        const slot = evt.to;
+
+        // Skip label entirely
+        if (el.classList.contains("slot-label")) return;
+
+        const newCode = el.getAttribute("data-code");
+        const alreadyExists = [...slot.children].some(
+          child => child !== el && child.getAttribute("data-code") === newCode
+        );
+
+        if (alreadyExists) {
+          el.remove();
+          return;
+        }
+
+        el.classList.add("dropped");
+        el.setAttribute("draggable", false);
+
+        el.addEventListener("click", () => {
+          el.remove();
+          updateSlotAvailability(slot);
+        });
+
+        updateSlotAvailability(slot);
+      }
+    });
+  });
+
+
+  document.querySelectorAll(".slot").forEach(slot => {
+  updateSlotAvailability(slot);
+  });
+
+  document.getElementById("save-calendar-btn").disabled = false;
+
+  getCalendarUpdate();
+
+  document.getElementById("export-html-btn").addEventListener("click", async () => {
+    await saveCalendarPlan();
+    const btn = document.getElementById("export-html-btn");
+    btn.disabled = true;
+    btn.textContent = "🔄 Exporting...";
+
+    try {
+      // Create a standalone HTML document
+
+      const htmlContent = createStandaloneHTML();
+
+      // Create a Blob and FormData to send as 'file'
+      const blob = new Blob([htmlContent], { type: "text/html" });
+      const formData = new FormData();
+      formData.append("file", blob, "calendar.html");
+
+      // Upload to development backend
+      const response = await fetch("/api/upload-and-protect", {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || "Upload failed");
+      }
+
+      btn.textContent = "✅ Exported & Protected";
+    } catch (err) {
+      console.error("Export failed:", err);
+      btn.textContent = "❌ Failed";
+    } finally {
+      setTimeout(() => {
+        btn.textContent = "🔐 Export Protected HTML";
+        btn.disabled = false;
+      }, 1500);
+    }
+  });
+
+  document.getElementById("generate-summary-btn").addEventListener("click", () => {
+  const summary = extractCalendarPlan();
+  const areas = window.areas || {};
+  const places = window.places || {};
+  const tags = window.task_tags || {};
+
+//  const places = Object.fromEntries(
+//    Object.entries(places).map(([code, info]) => [code, info.tooltip])
+//  );
+
+  const summaryTable = buildSummaryTable(summary.slots, areas, places, tags);
+
+  const container = document.getElementById("summary-report");
+  container.innerHTML = ""; // Clear previous content
+  container.appendChild(summaryTable);
+});
+
+});
+
+
+</script>
+
+{% endblock %}

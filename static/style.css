@@ -106,6 +106,64 @@
   opacity: 0.95;
 }
 
+/* ========== Floating Palette Containers ========== */
+.collapsible-palette {
+  position: fixed; /* keeps them in place even when scrolling */
+  background: #f8f9fa; /* soft light background */
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease-in-out;
+  z-index: 1000;
+  width: 120px; /* adjust as needed */
+}
+
+.collapsible-palette:hover {
+  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+}
+
+/* ========== Palette Header (Draggable Area) ========== */
+.vertical-header {
+  background: #004080; /* dark blue */
+  color: white;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px 10px;
+  cursor: grab;
+  border-bottom: 1px solid #002d5a;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.vertical-header:active {
+  cursor: grabbing;
+}
+
+/* ========== Palette Body (Content) ========== */
+.palette-body {
+  background: white;
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Collapsed state */
+.collapsible-palette.collapsed .palette-body {
+  display: none;
+}
+
+/* Optional: subtle animation when expanding */
+.collapsible-palette:not(.collapsed) .palette-body {
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* -----------------------------
    Lozenges
    ----------------------------- */
@@ -163,16 +221,22 @@
 .calendar-grid {
   margin-top: 80px;
   display: flex;
-  flex-wrap: wrap; /* ✅ allow wrapping on small screens */
+  flex-direction: column;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow-x: auto;
   gap: 10px;
 }
+
+
 .day-column {
-  flex: 1 0 150px; /* ✅ minimum width per day, wraps if screen too small */
+  flex: 1 1 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid #ccc;
   border-radius: 4px;
-  min-width: 120px; /* ensures a reasonable size on small screens */
+  min-width: 40px; /* ensures a reasonable size on small screens */
 }
 
 @media (max-width: 768px) {
@@ -186,6 +250,24 @@
     min-width: 250px;
   }
 }
+@media (max-width: 768px) {
+  .floating-palette {
+    position: fixed;
+    right: 5px;
+    left: auto;
+    width: 90%;
+    max-width: 300px;
+    top: auto;
+    bottom: 10px;
+    z-index: 2000;
+  }
+
+  /* Optional: stack palettes with small gaps */
+  #areas-palette { bottom: 160px; }
+  #places-palette { bottom: 310px; }
+  #tags-palette { bottom: 460px; }
+}
+
 .empty-day {
   background-color: #fff;
   border: none;
@@ -197,6 +279,26 @@
   text-align: center;
   font-weight: bold;
   border-bottom: 1px solid #ccc;
+}
+
+/* Base styles for all accordions */
+.floating-accordion {
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+/* Only fix them for large desktops */
+@media (min-width: 992px) {
+  .floating-accordion {
+    position: fixed;
+    right: 10px;
+    width: 280px;
+    z-index: 1000;
+  }
+  #resourcesAccordion { top: 120px; }
+  #areasAccordion { top: 280px; }
+  #tagsAccordion { top: 440px; }
+  #placesAccordion { top: 600px; }
 }
 
 .slot {
@@ -1188,6 +1290,7 @@ h2 {
 	text-align: center;
 	font-size: 10pt;
 	font-weight: bold;
+  z-index: 10;
 }
 
 h3 {

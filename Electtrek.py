@@ -6461,8 +6461,10 @@ def login():
     global layeritems
     global CurrentElection
 
-    current_election = session.get('current_election',"DEMO")
-    if current_election:
+    current_node = get_current_node(session)
+
+    current_election = get_current_election(session)
+    if current_node.value != "UNITED_KINGDOM":
         flash("User already logged in:", session['username'], " at ", current_node.value)
         print("_______ROUTE/Already logged in:", session['username'], " at ", current_node.value)
         return redirect(url_for('firstpage'))
