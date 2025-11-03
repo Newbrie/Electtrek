@@ -282,23 +282,41 @@
 }
 
 /* Base styles for all accordions */
+
+/* Default: stacked layout (mobile-first) */
 .floating-accordion {
-  margin-bottom: 1rem;
+  position: relative;
   width: 100%;
+  margin-bottom: 1rem;
+  z-index: 1;
 }
 
-/* Only fix them for large desktops */
+/* Desktop layout: float right column of accordions */
 @media (min-width: 992px) {
   .floating-accordion {
     position: fixed;
-    right: 10px;
-    width: 280px;
+    right: 20px;
+    width: 320px;
     z-index: 1000;
   }
+
   #resourcesAccordion { top: 120px; }
   #areasAccordion { top: 280px; }
   #tagsAccordion { top: 440px; }
   #placesAccordion { top: 600px; }
+}
+
+/* Ensure headers and content stay together visually */
+.floating-accordion .accordion-item {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  background: #fff;
+}
+
+.accordion-button {
+  background: #f8f9fa;
+  font-weight: 600;
 }
 
 .slot {
