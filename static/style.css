@@ -182,10 +182,11 @@
     gap: 6px; /* vertical gap between week rows */
   }
 
+  /* Default: desktop */
   .week-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 2px; /* horizontal gap */
+    gap: 1px; /* reduce horizontal/vertical spacing */
   }
 
   .slot {
@@ -235,7 +236,7 @@
     @media (orientation: portrait) {
       .week-row {
         grid-template-columns: 1fr;
-        gap: 6px;
+        gap: 1px; /* smaller vertical gap */
       }
       .slot {
         width: 100%;
@@ -249,7 +250,7 @@
     @media (orientation: landscape) {
       .week-row {
         grid-template-columns: repeat(7, 1fr);
-        gap: 4px;
+        gap: 1px; /* smaller horizontal gap */
       }
       .slot {
         width: auto;
@@ -259,7 +260,6 @@
       }
     }
   }
-
 
 .nav-link.active {
   background-color: #007bff;
