@@ -239,11 +239,6 @@
   min-width: 40px; /* ensures a reasonable size on small screens */
 }
 
-@media (max-width: 768px) {
-  .calendar-grid {
-    flex-direction: row;
-    overflow-x: auto; /* ✅ horizontal scroll if too many days */
-  }
 
   .day-column {
     flex: 0 0 80%; /* show one day at a time on narrow screens */
@@ -360,10 +355,12 @@
 border: 4px double #007BFF !important;
 }
 
+
 /* Make calendar display as a 7-column grid */
 #calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(80px, auto);
   gap: 6px;
 }
 
@@ -371,6 +368,7 @@ border: 4px double #007BFF !important;
 @media (max-width: 768px) {
   #calendar-grid {
     grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: minmax(80px, auto);
     transform: scale(0.85);
     transform-origin: top left;
   }
@@ -387,6 +385,7 @@ border: 4px double #007BFF !important;
   #calendar-grid {
     transform: scale(0.7);
     transform-origin: top left;
+    grid-auto-rows: minmax(80px, auto);
   }
 
   .slot {
