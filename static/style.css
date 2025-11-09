@@ -239,6 +239,11 @@
   min-width: 40px; /* ensures a reasonable size on small screens */
 }
 
+@media (max-width: 768px) {
+  .calendar-grid {
+    flex-direction: row;
+    overflow-x: auto; /* ✅ horizontal scroll if too many days */
+  }
 
   .day-column {
     flex: 0 0 80%; /* show one day at a time on narrow screens */
@@ -354,40 +359,42 @@
 .day-column.today-cell {
 border: 4px double #007BFF !important;
 }
-
-
-/* Make calendar display as a 7-column grid */
+/* ✅ Main calendar grid */
 #calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   grid-auto-rows: minmax(80px, auto);
   gap: 6px;
+  justify-items: stretch;
+  align-items: start;
 }
 
-/* Slightly smaller text and tighter layout on mobile */
-@media (max-width: 768px) {
+/* ✅ Desktop: always 7 columns (if screen is wide enough) */
+@media (min-width: 992px) {
   #calendar-grid {
     grid-template-columns: repeat(7, 1fr);
-    grid-auto-rows: minmax(80px, auto);
-    transform: scale(0.85);
-    transform-origin: top left;
-  }
-
-  .slot {
-    height: 70px;
-    font-size: 0.75em;
-    padding: 1px 4px;
   }
 }
 
-/* Special case for landscape phones — make it all fit */
+/* ✅ Tablet / smaller screens */
+@media (max-width: 991px) {
+  #calendar-grid {
+    grid-template-columns: repeat(7, minmax(70px, 1fr));
+  }
+  .slot {
+    height: 70px;
+    font-size: 0.8em;
+    padding: 2px 4px;
+  }
+}
+
+/* ✅ Landscape phones (short height) */
 @media (max-height: 500px) and (orientation: landscape) {
   #calendar-grid {
-    transform: scale(0.7);
+    grid-template-columns: repeat(7, minmax(60px, 1fr));
+    transform: scale(0.8);
     transform-origin: top left;
-    grid-auto-rows: minmax(80px, auto);
   }
-
   .slot {
     height: 60px;
     font-size: 0.7em;
