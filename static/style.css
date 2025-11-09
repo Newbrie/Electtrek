@@ -356,48 +356,68 @@ border: 4px double #007BFF !important;
   gap: 6px;
 }
 
-/* Slot styling */
+/* Slots */
 .slot {
-  height: 80px;
-  font-size: 0.85em;
+  height: 90px;
   padding: 2px 6px;
   border: 1px solid #ddd;
   border-radius: 4px;
   background-color: #fafafa;
   box-sizing: border-box;
+  overflow: hidden;
+  font-size: 0.85em;
 }
+
 
 /* Mobile portrait — one column (one day per row) */
 @media (max-width: 900px) and (orientation: portrait) {
   .week-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr; /* each day full width */
   }
   .slot {
+    width: 90%;       /* fill the screen */
     height: 70px;
     font-size: 0.75em;
+    background-color: #ffe6ea; /* optional indicator */
   }
 }
 
 /* Mobile landscape — 7 columns, scaled down to fit */
 @media (max-width: 900px) and (orientation: landscape) {
   .week-row {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, 1fr); /* maintain 7 columns */
   }
   .slot {
+    width: auto;        /* allow grid to control width */
     height: 55px;
     font-size: 0.7em;
-    padding: 1px 4px;
+    background-color: #e6f0ff; /* optional indicator */
   }
 }
 
-
-
-/* Optional: weekRow if you create rows explicitly */
-.weekRow {
+/* Base: desktop / wide screens */
+.week-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 2px; /* smaller gap for desktop */
 }
+
+/* Mobile portrait — full width slots */
+@media (max-width: 900px) and (orientation: portrait) {
+  .week-row {
+    grid-template-columns: 1fr;
+    gap: 6px; /* bigger gap is okay for single column */
+  }
+}
+
+/* Mobile landscape — 7 columns */
+@media (max-width: 900px) and (orientation: landscape) {
+  .week-row {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px; /* slightly bigger than desktop, fits narrow screen */
+  }
+}
+
 
 .nav-link.active {
   background-color: #007bff;
