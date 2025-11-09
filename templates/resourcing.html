@@ -614,7 +614,7 @@ function redrawSlot(slotId, data = {}) {
     { type: "activity", code: data.activity },
     ...(data.resources || []).map(r => ({ type: "resource", code: r })),
     { type: "place", code: data.place },
-    { type: "area", code: data.area }
+    ...(data.areas || []).map(r => ({ type: "area", code: r })),
   ].filter(l => l.code);
 
   lozenges.forEach(l => {
@@ -683,10 +683,11 @@ async function handleSaveSlot() {
 
   const activity = document.getElementById("activitySelect").value;
   const place = document.getElementById("placeSelect").value;
-  const area = document.getElementById("areaSelect").value;
+//  const area = document.getElementById("areaSelect").value;
+  const areas = Array.from(document.getElementById("areaSelect").selectedOptions).map(o => o.value);
   const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions).map(o => o.value);
 
-  calendarData[currentSlotId] = { activity, place, area, resources };
+  calendarData[currentSlotId] = { activity, place, areas, resources };
 
   redrawSlot(currentSlotId, calendarData[currentSlotId]);
   console.log(`💾 Slot ${currentSlotId} saved.`, calendarData[currentSlotId]);
