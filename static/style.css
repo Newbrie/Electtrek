@@ -388,9 +388,9 @@ border: 4px double #007BFF !important;
     grid-template-columns: repeat(7, minmax(70px, 1fr));
   }
   .slot {
-    height: 70px;
-    font-size: 0.8em;
-    padding: 2px 4px;
+    height: 60px;
+    font-size: 0.75em;
+    padding: 1px 3px;
   }
 }
 
@@ -398,23 +398,31 @@ border: 4px double #007BFF !important;
 /* Force 7 columns even on small screens */
 @media (max-width: 768px) {
   #calendar-grid {
-    grid-template-columns: repeat(7, minmax(40px, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));  /* 7 columns in landscape */
     transform: scale(0.9);
     transform-origin: top left;
   }
+
+  .slot {
+  height: 60px;
+  font-size: 0.75em;
+  padding: 1px 3px;
+}
+}
 
 
 /* Landscape phones */
 @media (max-height: 500px) and (orientation: landscape) {
   #calendar-grid {
-    grid-template-columns: repeat(7, minmax(35px, 1fr));
     transform: scale(0.8);
     transform-origin: top left;
+    grid-template-columns: repeat(7, minmax(0, 1fr));  /* 7 columns in landscape */
   }
 
   .slot {
-    height: 50px;
-    font-size: 0.7em;
+    height: 60px;
+    font-size: 0.75em;
+    padding: 1px 3px;
   }
 }
 
