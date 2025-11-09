@@ -346,14 +346,14 @@ border: 4px double #007BFF !important;
 #calendar-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 6px; /* vertical gap between week rows */
 }
 
-/* Each week is a 7-column grid */
+/* Base: desktop / wide screens */
 .week-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 2px; /* horizontal gap between slots */
 }
 
 /* Slots */
@@ -368,14 +368,14 @@ border: 4px double #007BFF !important;
   font-size: 0.85em;
 }
 
-
 /* Mobile portrait — one column (one day per row) */
 @media (max-width: 900px) and (orientation: portrait) {
   .week-row {
-    grid-template-columns: 1fr; /* each day full width */
+    grid-template-columns: 1fr;
+    gap: 6px; /* vertical gap between slots */
   }
   .slot {
-    width: 90%;       /* fill the screen */
+    width: 100%;      /* fill the screen */
     height: 70px;
     font-size: 0.75em;
     background-color: #ffe6ea; /* optional indicator */
@@ -385,36 +385,14 @@ border: 4px double #007BFF !important;
 /* Mobile landscape — 7 columns, scaled down to fit */
 @media (max-width: 900px) and (orientation: landscape) {
   .week-row {
-    grid-template-columns: repeat(7, 1fr); /* maintain 7 columns */
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px; /* slightly larger than desktop, fits narrow screen */
   }
   .slot {
-    width: auto;        /* allow grid to control width */
+    width: auto;        /* grid handles width */
     height: 55px;
     font-size: 0.7em;
     background-color: #e6f0ff; /* optional indicator */
-  }
-}
-
-/* Base: desktop / wide screens */
-.week-row {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px; /* smaller gap for desktop */
-}
-
-/* Mobile portrait — full width slots */
-@media (max-width: 900px) and (orientation: portrait) {
-  .week-row {
-    grid-template-columns: 1fr;
-    gap: 6px; /* bigger gap is okay for single column */
-  }
-}
-
-/* Mobile landscape — 7 columns */
-@media (max-width: 900px) and (orientation: landscape) {
-  .week-row {
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px; /* slightly bigger than desktop, fits narrow screen */
   }
 }
 
