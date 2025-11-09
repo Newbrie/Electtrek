@@ -393,9 +393,8 @@ border: 4px double #007BFF !important;
     grid-template-columns: 1fr;
   }
   .slot {
-    height: 70px;
-    font-size: 0.75em;
-    padding: 1px 4px;
+    min-width: 0;       /* allow shrinking below default auto */
+    box-sizing: border-box; /* include padding/border in width */
   }
 }
 
@@ -405,9 +404,8 @@ border: 4px double #007BFF !important;
     grid-template-columns: repeat(7, 1fr);
   }
   .slot {
-    height: 50-60px;
-    font-size: 0.65-0.7em;
-    padding: 1px 2px;
+    min-width: 0;       /* allow shrinking below default auto */
+    box-sizing: border-box; /* include padding/border in width */
   }
 }
 
