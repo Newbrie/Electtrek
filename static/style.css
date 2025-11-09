@@ -381,6 +381,8 @@ border: 4px double #007BFF !important;
   border-radius: 4px;
   background-color: #fafafa;
   height: 60px; /* can adjust per media query */
+  flex: 1 1 auto;       /* only relevant if you switch to flex temporarily */
+  box-sizing: border-box;
 }
 
 
