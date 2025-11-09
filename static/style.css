@@ -3,181 +3,144 @@
    Collapsible Palettes
    ----------------------------- */
 
- .fixed-buttons {
-   position: fixed;
-   top: 10px;
-   right: 10px;
-   display: flex;
-   flex-direction: column;
-   gap: 8px;            /* space between buttons */
-   z-index: 2000;       /* keep above everything else */
- }
+   /* ===============================
+     Fixed Buttons
+     =============================== */
+  .fixed-buttons {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 2000;
+  }
 
- .fixed-buttons button {
-   background-color: #007bff;
-   color: white;
-   border: none;
-   padding: 8px 12px;
-   border-radius: 4px;
-   font-size: 14px;
-   cursor: pointer;
-   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-   transition: background-color 0.2s;
- }
+  .fixed-buttons button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: background-color 0.2s;
+  }
 
- .fixed-buttons button:hover {
-   background-color: #0056b3;
- }
+  .fixed-buttons button:hover {
+    background-color: #0056b3;
+  }
 
 
-.collapsible-palette {
-    display: flex;                  /* header + body horizontally */
+  /* ===============================
+     Collapsible/Floating Palette
+     =============================== */
+  .collapsible-palette {
+    position: fixed;
+    display: flex;
     flex-direction: row;
-    position: fixed;                /* float above content */
-    background-color: #f9f9f9;
-    border: 2px solid #aaa;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    overflow: hidden;               /* hide body when collapsed */
+    background: #f8f9fa;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    overflow: hidden;
+    font-size: 14px;
+    width: 120px;
     z-index: 1000;
-    transition: width 0.3s ease, padding 0.3s ease;
-    font-size: 14px;                /* base font size for lozenges */
-}
+    transition: all 0.3s ease;
+  }
 
-.collapsible-palette.floating-palette {
-  position: absolute;
-  z-index: 9999; /* ✅ ensure above calendar grid */
-  cursor: grab;
-}
+  .collapsible-palette:hover {
+    box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+  }
 
-.collapsible-palette.floating-palette:active {
-  cursor: grabbing;
-}
+  .collapsible-palette.floating-palette {
+    position: absolute;
+    z-index: 9999;
+    cursor: grab;
+  }
 
-/* Vertical header always visible and draggable */
-.collapsible-palette .vertical-header {
+  .collapsible-palette.dragging {
+    cursor: grabbing;
+    opacity: 0.95;
+  }
+
+  .collapsible-palette.collapsed {
+    width: 40px;
+  }
+
+  .collapsible-palette.collapsed .palette-body,
+  .collapsible-palette.collapsed > div[id$="-content"] {
+    display: none;
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  /* Palette header */
+  .collapsible-palette .vertical-header,
+  .vertical-header {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
-    background-color: #ddd;
-    border-right: 1px solid #aaa;
-    padding: 10px;
-    width: 40px;                    /* always visible */
+    background-color: #004080;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    padding: 8px 10px;
+    cursor: grab;
+    border-bottom: 1px solid #002d5a;
+    font-size: 14px;
+    letter-spacing: 0.5px;
     flex-shrink: 0;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     user-select: none;
-    cursor: grab;
-    text-align: right;
-}
+  }
 
-/* Palette body containing lozenges */
-.collapsible-palette .palette-body,
-.collapsible-palette > div[id$="-content"] { /* generic for places-content, tags-content, etc. */
+  .vertical-header:active {
+    cursor: grabbing;
+  }
+
+  /* Palette body */
+  .collapsible-palette .palette-body,
+  .collapsible-palette > div[id$="-content"] {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     padding: 6px 10px;
-    overflow-x: auto;
+    background: white;
     max-width: 360px;
     max-height: 500px;
-    transition: width 0.3s ease, padding 0.3s ease;
-}
+    overflow-x: auto;
+    overflow-y: auto;
+    transition: all 0.3s ease;
+  }
 
-/* Collapsed palette body */
-.collapsible-palette.collapsed .palette-body,
-.collapsible-palette.collapsed > div[id$="-content"] {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-}
+  .collapsible-palette:not(.collapsed) .palette-body {
+    animation: fadeIn 0.25s ease-in-out;
+  }
 
-.collapsible-palette.collapsed .palette-body {
-  display: none;
-}
-/* Collapse entire palette to header width */
-.collapsible-palette.collapsed {
-    width: 40px;
-}
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 
-.collapsible-palette.dragging {
-  cursor: grabbing;
-  opacity: 0.95;
-}
 
-/* ========== Floating Palette Containers ========== */
-.collapsible-palette {
-  position: fixed; /* keeps them in place even when scrolling */
-  background: #f8f9fa; /* soft light background */
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-  overflow: hidden;
-  transition: box-shadow 0.2s ease-in-out;
-  z-index: 1000;
-  width: 120px; /* adjust as needed */
-}
-
-.collapsible-palette:hover {
-  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
-}
-
-/* ========== Palette Header (Draggable Area) ========== */
-.vertical-header {
-  background: #004080; /* dark blue */
-  color: white;
-  font-weight: bold;
-  text-align: center;
-  padding: 8px 10px;
-  cursor: grab;
-  border-bottom: 1px solid #002d5a;
-  font-size: 14px;
-  letter-spacing: 0.5px;
-}
-
-.vertical-header:active {
-  cursor: grabbing;
-}
-
-/* ========== Palette Body (Content) ========== */
-.palette-body {
-  background: white;
-  padding: 8px;
-  max-height: 300px;
-  overflow-y: auto;
-  transition: all 0.2s ease-in-out;
-}
-
-/* Collapsed state */
-.collapsible-palette.collapsed .palette-body {
-  display: none;
-}
-
-/* Optional: subtle animation when expanding */
-.collapsible-palette:not(.collapsed) .palette-body {
-  animation: fadeIn 0.25s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* -----------------------------
-   Lozenges
-   ----------------------------- */
-.lozenge,
-.area-lozenge,
-.tag-lozenge,
-.resource-lozenge,
-.place-lozenge {
+  /* ===============================
+     Lozenges
+     =============================== */
+  .lozenge,
+  .area-lozenge,
+  .tag-lozenge,
+  .resource-lozenge,
+  .place-lozenge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     white-space: nowrap;
     padding: 2px 6px;
-    height: auto;
     font-size: 14px;
     line-height: 1;
     flex-shrink: 0;
@@ -185,216 +148,117 @@
     box-sizing: border-box;
     margin: 2px;
     border-radius: 15px;
-}
+  }
 
-/* Specific colors */
-.area-lozenge { background-color: #d4edda; }
-.tag-lozenge { background-color: #fff3cd; }
-.resource-lozenge { background-color: #f8d7da; }
-.place-lozenge { background-color: #d1ecf1; }
+  .area-lozenge { background-color: #d4edda; }
+  .tag-lozenge { background-color: #fff3cd; }
+  .resource-lozenge { background-color: #f8d7da; }
+  .place-lozenge { background-color: #d1ecf1; }
 
-/* Selected state */
-.lozenge-selected {
+  .lozenge-selected {
     outline: 2px solid #1890ff;
     background-color: #cceeff !important;
-    box-shadow: 0 0 5px rgba(0, 136, 255, 0.6);
-}
+    box-shadow: 0 0 5px rgba(0,136,255,0.6);
+  }
 
-/* Compact style for dropped/mini lozenges */
-.lozenge.dropped,
-.area-lozenge.dropped,
-.tag-lozenge.dropped,
-.resource-lozenge.dropped,
-.place-lozenge.dropped {
+  .lozenge.dropped,
+  .area-lozenge.dropped,
+  .tag-lozenge.dropped,
+  .resource-lozenge.dropped,
+  .place-lozenge.dropped {
     font-size: 10px;
     padding: 1px 1px;
     margin: 1px 0;
     line-height: 1em;
-}
-
-
-.election-day-cell {
-  border: 3px double red !important;
-}
-
-
-.calendar-grid {
-  margin-top: 80px;
-  display: flex;
-  flex-direction: column;
-  flex-wrap: wrap;
-  max-width: 100%;
-  overflow-x: auto;
-  gap: 10px;
-}
-
-
-.day-column {
-  flex: 1 1 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  min-width: 40px; /* ensures a reasonable size on small screens */
-}
-
-  /* Optional: stack palettes with small gaps */
-  #areas-palette { bottom: 160px; }
-  #places-palette { bottom: 310px; }
-  #tags-palette { bottom: 460px; }
-}
-
-.empty-day {
-  background-color: #fff;
-  border: none;
-}
-
-.day-header {
-  background-color: #e0e0e0;
-  padding: 4px;
-  text-align: center;
-  font-weight: bold;
-  border-bottom: 1px solid #ccc;
-}
-
-/* Base styles for all accordions */
-
-/* Default: stacked layout (mobile-first) */
-.floating-accordion {
-  position: relative;
-  width: 100%;
-  margin-bottom: 1rem;
-  z-index: 1;
-}
-
-/* Desktop layout: float right column of accordions */
-@media (min-width: 992px) {
-  .floating-accordion {
-    position: fixed;
-    right: 20px;
-    width: 320px;
-    z-index: 1000;
   }
 
-  #resourcesAccordion { top: 120px; }
-  #areasAccordion { top: 280px; }
-  #tagsAccordion { top: 440px; }
-  #placesAccordion { top: 600px; }
-}
 
-/* Ensure headers and content stay together visually */
-.floating-accordion .accordion-item {
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  background: #fff;
-}
+  /* ===============================
+     Calendar Grid
+     =============================== */
+  #calendar-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px; /* vertical gap between week rows */
+  }
 
-.accordion-button {
-  background: #f8f9fa;
-  font-weight: 600;
-}
-
-
-.lozenge-container {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 1px; /* smaller gap between lozenges */
-  position: relative;
-}
-
-/* Only reserve space for the label on the first line */
-.lozenge-container::before {
-  content: '';
-  display: inline-block;
-  width: 40px; /* width of the time label */
-  height: 1px;
-}
-
-
-.slot:hover {
-  background-color: #cce5ff;
-  cursor: pointer;
-}
-
-
-.week-row {
-  display: flex;
-  gap: 2px;
-}
-
-.day-column, .empty-day {
-  width: 120px;
-  height: 300px;
-  border: 1px solid #ddd;
-  background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-}
-
-.day-column.today-cell {
-border: 4px double #007BFF !important;
-}
-/* ✅ Main calendar grid */
-/* === Base calendar grid === */
-<style>
-/* Base calendar grid */
-/* Parent calendar grid */
-/* Base calendar grid */
-/* Container for all weeks */
-#calendar-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px; /* vertical gap between week rows */
-}
-
-/* Base: desktop / wide screens */
-.week-row {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px; /* horizontal gap between slots */
-}
-
-/* Slots */
-.slot {
-  height: 90px;
-  padding: 2px 6px;
-  border: 1px solid #ddd;
-  border-radius: 1px;
-  background-color: #fafafa;
-  box-sizing: border-box;
-  overflow: hidden;
-  font-size: 0.85em;
-}
-
-/* Mobile portrait — one column (one day per row) */
-@media (max-width: 900px) and (orientation: portrait) {
   .week-row {
-    grid-template-columns: 1fr;
-    gap: 1px; /* vertical gap between slots */
-  }
-  .slot {
-    width: 100%;      /* fill the screen */
-    height: 70px;
-    font-size: 0.75em;
-    background-color: #ffe6ea; /* optional indicator */
-  }
-}
-
-/* Mobile landscape — 7 columns, scaled down to fit */
-@media (max-width: 900px) and (orientation: landscape) {
-  .week-row {
+    display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 1px; /* slightly larger than desktop, fits narrow screen */
+    gap: 2px; /* horizontal gap */
   }
+
   .slot {
-    width: auto;        /* grid handles width */
-    height: 55px;
-    font-size: 0.7em;
-    background-color: #e6f0ff; /* optional indicator */
+    height: 90px;
+    padding: 2px 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fafafa;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-size: 0.85em;
   }
-}
+
+  .slot:hover {
+    background-color: #cce5ff;
+    cursor: pointer;
+  }
+
+  .day-column, .empty-day {
+    width: 120px;
+    height: 300px;
+    border: 1px solid #ddd;
+    background-color: #f5f5f5;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .day-column.today-cell {
+    border: 4px double #007BFF !important;
+  }
+
+  .day-header {
+    background-color: #e0e0e0;
+    padding: 4px;
+    text-align: center;
+    font-weight: bold;
+    border-bottom: 1px solid #ccc;
+  }
+
+
+  /* ===============================
+     Mobile Media Queries
+     =============================== */
+  @media (max-width: 900px) {
+
+    /* Portrait: one column per week */
+    @media (orientation: portrait) {
+      .week-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .slot {
+        width: 100%;
+        height: 70px;
+        font-size: 0.75em;
+        background-color: #ffe6ea;
+      }
+    }
+
+    /* Landscape: 7 columns scaled down */
+    @media (orientation: landscape) {
+      .week-row {
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .slot {
+        width: auto;
+        height: 55px;
+        font-size: 0.7em;
+        background-color: #e6f0ff;
+      }
+    }
+  }
 
 
 .nav-link.active {
