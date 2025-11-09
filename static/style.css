@@ -367,53 +367,26 @@ border: 4px double #007BFF !important;
   box-sizing: border-box;
 }
 
-
-body::before {
-  content: "Default";
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  background: #ccc;
-  color: black;
-  padding: 4px 8px;
-  font-size: 14px;
-  z-index: 9999;
-}
-
-/* Portrait indicator */
+/* Mobile portrait — one column (one day per row) */
 @media (max-width: 900px) and (orientation: portrait) {
-  body::before {
-    content: "PORTRAIT MODE ACTIVE";
-    display: block;        /* make it visible */
-    position: fixed;       /* fixed on screen */
-    top: 0;
-    left: 0;
-    width: 100%;
-    padding: 10px;
-    color: black;
-    background: pink;
-    font-weight: bold;
-    text-align: center;
-    z-index: 9999;         /* above everything */
-    background-color: yellow;
+  .week-row {
+    grid-template-columns: 1fr;
+  }
+  .slot {
+    height: 70px;
+    font-size: 0.75em;
   }
 }
-/* Landscape indicator */
+
+/* Mobile landscape — 7 columns, scaled down to fit */
 @media (max-width: 900px) and (orientation: landscape) {
-  body::before {
-    content: "LANDSCAPE MODE ACTIVE";
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    padding: 10px;
-    color: black;
-    background: lightblue;
-    font-weight: bold;
-    text-align: center;
-    z-index: 9999;
-    background-color: blue;
+  .week-row {
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .slot {
+    height: 55px;
+    font-size: 0.7em;
+    padding: 1px 4px;
   }
 }
 
