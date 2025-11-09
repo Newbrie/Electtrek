@@ -361,7 +361,7 @@ border: 4px double #007BFF !important;
   height: 90px;
   padding: 2px 6px;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 1px;
   background-color: #fafafa;
   box-sizing: border-box;
   overflow: hidden;
@@ -372,7 +372,7 @@ border: 4px double #007BFF !important;
 @media (max-width: 900px) and (orientation: portrait) {
   .week-row {
     grid-template-columns: 1fr;
-    gap: 6px; /* vertical gap between slots */
+    gap: 1px; /* vertical gap between slots */
   }
   .slot {
     width: 100%;      /* fill the screen */
@@ -386,7 +386,7 @@ border: 4px double #007BFF !important;
 @media (max-width: 900px) and (orientation: landscape) {
   .week-row {
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px; /* slightly larger than desktop, fits narrow screen */
+    gap: 1px; /* slightly larger than desktop, fits narrow screen */
   }
   .slot {
     width: auto;        /* grid handles width */
