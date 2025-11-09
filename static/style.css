@@ -360,14 +360,18 @@
 border: 4px double #007BFF !important;
 }
 /* ✅ Main calendar grid */
+/* === Base calendar grid === */
 #calendar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(7, 1fr);  /* 7 columns, fixed */
   grid-auto-rows: minmax(80px, auto);
   gap: 6px;
   justify-items: stretch;
   align-items: start;
+  width: 100%;
+  box-sizing: border-box;
 }
+
 
 /* ✅ Desktop: always 7 columns (if screen is wide enough) */
 @media (min-width: 992px) {
