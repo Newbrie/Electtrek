@@ -361,46 +361,42 @@ border: 4px double #007BFF !important;
 }
 /* ✅ Main calendar grid */
 /* === Base calendar grid === */
+
+
 #calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);  /* 7 columns, fixed */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   grid-auto-rows: minmax(80px, auto);
   gap: 6px;
-  justify-items: stretch;
-  align-items: start;
   width: 100%;
   box-sizing: border-box;
 }
 
-
-/* ✅ Desktop: always 7 columns (if screen is wide enough) */
-@media (min-width: 992px) {
+/* Force 7 columns even on small screens */
+@media (max-width: 768px) {
   #calendar-grid {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(40px, 1fr));
+    transform: scale(0.9);
+    transform-origin: top left;
   }
-}
 
-/* ✅ Tablet / smaller screens */
-@media (max-width: 991px) {
-  #calendar-grid {
-    grid-template-columns: repeat(7, minmax(70px, 1fr));
-  }
   .slot {
-    height: 70px;
-    font-size: 0.8em;
-    padding: 2px 4px;
+    height: 60px;
+    font-size: 0.75em;
+    padding: 1px 3px;
   }
 }
 
-/* ✅ Landscape phones (short height) */
+/* Landscape phones */
 @media (max-height: 500px) and (orientation: landscape) {
   #calendar-grid {
-    grid-template-columns: repeat(7, minmax(60px, 1fr));
+    grid-template-columns: repeat(7, minmax(35px, 1fr));
     transform: scale(0.8);
     transform-origin: top left;
   }
+
   .slot {
-    height: 60px;
+    height: 50px;
     font-size: 0.7em;
   }
 }
@@ -409,6 +405,12 @@ border: 4px double #007BFF !important;
     display: flex;
     flex-direction: column;
     gap: 2rem;
+}
+
+.weekRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
 }
 
 .nav-link.active {
