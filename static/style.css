@@ -365,56 +365,102 @@ border: 4px double #007BFF !important;
 /* Base calendar grid */
 /* Parent calendar grid */
 /* Base calendar grid */
+/* Container for all weeks */
 #calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-auto-rows: minmax(60px, auto);
-  gap: 4px;
-  width: 100%;
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
+/* Each week is a 7-column grid */
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+/* Slot styling */
 .slot {
-  min-width: 0; /* crucial for iOS */
-  box-sizing: border-box;
+  height: 80px;
+  font-size: 0.85em;
+  padding: 2px 6px;
   border: 1px solid #ddd;
   border-radius: 4px;
   background-color: #fafafa;
-  height: 60px; /* can adjust per media query */
-  flex: 1 1 auto;       /* only relevant if you switch to flex temporarily */
   box-sizing: border-box;
 }
 
-
-/* Mobile portrait: 1 column per day */
+/* Mobile portrait — one column (one day per row) */
 @media (max-width: 768px) and (orientation: portrait) {
-  #calendar-grid {
+  .week-row {
     grid-template-columns: 1fr;
   }
   .slot {
-    min-width: 0;       /* allow shrinking below default auto */
-    box-sizing: border-box; /* include padding/border in width */
+    height: 70px;
+    font-size: 0.75em;
   }
 }
 
-/* Mobile landscape: 7 columns in one row */
+/* Mobile landscape — 7 columns, scaled down to fit */
 @media (max-width: 768px) and (orientation: landscape) {
-  #calendar-grid {
-    display: grid;
+  .week-row {
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
   }
-
-  /* Calculate the width of each slot explicitly */
   .slot {
-    width: calc((100% - 6 * 4px) / 7); /* 7 columns, 4px gaps */
-    height: 60px; /* fixed height for landscape */
+    height: 55px;
     font-size: 0.7em;
-    padding: 1px 3px;
-    min-width: 0; /* important for Safari/iOS */
-    box-sizing: border-box;
+    padding: 1px 4px;
   }
 }
+
+body::before {
+  content: "Default";
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: #ccc;
+  color: black;
+  padding: 4px 8px;
+  font-size: 14px;
+  z-index: 9999;
+}
+
+/* Portrait indicator */
+@media (max-width: 900px) and (orientation: portrait) {
+  body::before {
+    content: "PORTRAIT MODE ACTIVE";
+    display: block;        /* make it visible */
+    position: fixed;       /* fixed on screen */
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px;
+    color: black;
+    background: pink;
+    font-weight: bold;
+    text-align: center;
+    z-index: 9999;         /* above everything */
+  }
+}
+
+/* Landscape indicator */
+@media (max-width: 900px) and (orientation: landscape) {
+  body::before {
+    content: "LANDSCAPE MODE ACTIVE";
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px;
+    color: black;
+    background: lightblue;
+    font-weight: bold;
+    text-align: center;
+    z-index: 9999;
+  }
+}
+
 
 
 /* Optional: weekRow if you create rows explicitly */

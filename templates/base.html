@@ -1,43 +1,49 @@
-<!DOCTYPE html>
 <!-- Template by Guildfoss.com -->
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <link rel="stylesheet" href = {{ url_for('static', filename='style.css') }} media="screen"/>
-  <link rel="stylesheet" href = {{ url_for('static', filename='print.css') }} media="print"/>
+  <!-- 🧩 Character encoding must come first -->
+  <meta charset="utf-8">
+
+  <!-- 📱 Proper mobile viewport for scaling -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- 🧾 Favicons and basic styles -->
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+  <!-- 🎨 Core stylesheets -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" media="screen">
+  <link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}" media="print">
+
+  <!-- 🌐 External libraries (CSS first) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-{% block map %}
-{% endblock %}
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css">
+
+  <!-- 🗺️ Optional map or per-page head block -->
+  {% block map %}{% endblock %}
+
+  <!-- 🎨 Page-specific inline CSS (calendar, etc.) -->
+  {% block styles %}{% endblock %}
 </head>
-<script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
-<script src="https://unpkg.com/@popperjs/core@2"></script>
-<script src="https://unpkg.com/tippy.js@6"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-<meta charset="UTF-8">
+
 <body>
+  <!-- 🌍 Main content blocks -->
+  {% block body %}{% endblock %}
+  {% block log %}{% endblock %}
+  {% block nav %}{% endblock %}
+  {% block captains %}{% endblock %}
 
+  <!-- ⚙️ Core JavaScript libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-  {% block body %}
+  <!-- 🗺️ Custom site scripts (after libs so dependencies exist) -->
+  <script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 
-  {% endblock %}
-
-  {% block log %}
-
-  {% endblock %}
-
-  {% block nav %}
-
-  {% endblock %}
-
-  {% block captains %}
-
-  {% endblock %}
+  <!-- 🧩 Optional JS override for per-page logic -->
+  {% block scripts %}{% endblock %}
 </body>
-
-
 </html>
