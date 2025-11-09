@@ -398,13 +398,22 @@ border: 4px double #007BFF !important;
 /* Mobile landscape: 7 columns in one row */
 @media (max-width: 768px) and (orientation: landscape) {
   #calendar-grid {
+    display: grid;
     grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
   }
+
+  /* Calculate the width of each slot explicitly */
   .slot {
-    min-width: 0;       /* allow shrinking below default auto */
-    box-sizing: border-box; /* include padding/border in width */
+    width: calc((100% - 6 * 4px) / 7); /* 7 columns, 4px gaps */
+    height: 60px; /* fixed height for landscape */
+    font-size: 0.7em;
+    padding: 1px 3px;
+    min-width: 0; /* important for Safari/iOS */
+    box-sizing: border-box;
   }
 }
+
 
 /* Optional: weekRow if you create rows explicitly */
 .weekRow {
