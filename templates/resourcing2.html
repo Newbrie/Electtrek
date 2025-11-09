@@ -341,17 +341,26 @@ function buildPlacesPalette(containerId) {
   }
 
 
+  function updateSlotAvailability(slot) {
+    // Count children with the Bootstrap resource lozenge class
+    const resourceCount = [...slot.children].filter(child =>
+      child.classList.contains('badge') && child.classList.contains('resource-lozenge')
+    ).length;
 
-function updateSlotAvailability(slot) {
-  const resourceCount = [...slot.children].filter(child =>
-    child.classList.contains('resource-lozenge')
-  ).length;
+    const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
 
-  const availabilityLevel = Math.min(10, Math.ceil(resourceCount / 2));
+    // Set a data attribute for styling or logic
+    slot.setAttribute("data-availability", availabilityLevel);
 
-  slot.setAttribute("data-availability", availabilityLevel);
-  slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
-}
+    // Update tooltip text (Bootstrap tooltip)
+    slot.setAttribute("title", `${availabilityLevel * 2} resources available`);
+
+    // If using Bootstrap tooltips, refresh them
+    if (slot._tooltipInstance) {
+      slot._tooltipInstance.dispose(); // Remove old tooltip
+    }
+    slot._tooltipInstance = new bootstrap.Tooltip(slot); // Reinitialize tooltip
+  }
 
 
 function setupPaletteSelection() {
@@ -519,26 +528,7 @@ return calendarPlan;
 }
 
 
-// Your calendar initialization code here...
-async function getCalendarUpdate() {
-try {
-  const response = await fetch(`${API}/current-election`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch plan: ${response.status} ${response.statusText}`);
-  }
 
-  const plan = await response.json();
-  if (plan) {
-    loadCalendarPlan(plan);
-
-  } else {
-    console.warn("No plan loaded.");
-  }
-
-} catch (error) {
-  console.error("Error fetching calendar plan:", error);
-  return null;
-}
 
 };
 
@@ -638,126 +628,30 @@ function loadCalendarPlan(plan) {
     scaleSlotLozenges(slotDiv);
   });
 }
-
-
-function createStandaloneHTML() {
-  const doctype = "<!DOCTYPE html>\n";
-
-  // ✅ Clone once
-  const clone = document.documentElement.cloneNode(true);
-
-  // ✅ Remove duplicate calendar content
-  const calendar = clone.querySelector("#calendar-grid");
-  if (calendar) {
-    calendar.innerHTML = "";
+// Your calendar initialization code here...
+async function getCalendarUpdate() {
+try {
+  const response = await fetch(`${API}/current-election`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch plan: ${response.status} ${response.statusText}`);
   }
 
-  // ✅ Serialize the edited clone
-  let htmlString = doctype + clone.outerHTML;
+  const plan = await response.json();
+  if (plan) {
+    loadCalendarPlan(plan);
 
-  // ✅ Replace placeholder with final API URL
-  const FINAL_API_URL = DEVURLS['prod'];
-  htmlString = htmlString.replace(/__REPLACE_WITH_API_URL__/g, FINAL_API_URL);
+  } else {
+    console.warn("No plan loaded.");
+  }
 
-  return htmlString;
+} catch (error) {
+  console.error("Error fetching calendar plan:", error);
+  return null;
 }
+
+
 
 // 🔹 Module: Build table element
-function buildSummaryTable(slots, areas, places, tags) {
-const table = document.createElement("table");
-table.className = "summary-table";
-table.innerHTML = `
-  <thead>
-    <tr>
-      <th>Date & Time</th>
-      <th>Activities</th>
-      <th>Resources</th>
-      <th>Places</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-`;
-
-const tbody = table.querySelector("tbody");
-
-Object.entries(slots).forEach(([key, slot]) => {
-  const [dateStr, timeStr] = key.split("_");
-
-  let formattedDateTime = "Invalid Date";
-
-  if (dateStr && timeStr) {
-    // Parse the date parts
-    const [year, month, day] = dateStr.split("-").map(Number);
-
-    // Parse the time (e.g., "9 AM" or "9:30 PM")
-    const timeParts = timeStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
-    if (year && month && day && timeParts) {
-      let [, hourStr, minuteStr, period] = timeParts;
-      let hour = parseInt(hourStr, 10);
-      const minute = parseInt(minuteStr || "0", 10);
-
-      // Convert to 24-hour time
-      if (period.toUpperCase() === "PM" && hour !== 12) hour += 12;
-      if (period.toUpperCase() === "AM" && hour === 12) hour = 0;
-
-      // Note: months are 0-indexed in JS Date
-      const date = new Date(year, month - 1, day, hour, minute);
-
-      formattedDateTime = date.toLocaleString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } else {
-      console.warn("⚠️ Invalid time format in slot key:", key);
-    }
-  } else {
-    console.warn("⚠️ Invalid slot key format:", key);
-  }
-
-  const {
-    resourceList,
-    activityList,
-    placeList
-  } = processLozenges(slot.lozenges, areas, places, tags);
-
-  const row = document.createElement("tr");
-  row.innerHTML = `
-    <td>${formattedDateTime}</td>
-    <td>${activityList.join("<br>")}</td>
-    <td>${resourceList.join(", ")}</td>
-    <td>${placeList.join("<br>")}</td>
-  `;
-  tbody.appendChild(row);
-});
-
-return table;
-}
-
-function scaleSlotLozenges(slot) {
-  const lozenges = Array.from(slot.querySelectorAll(".lozenge"));
-  if (lozenges.length === 0) return;
-
-  let scale = 1;
-  const slotHeight = slot.clientHeight - 4; // buffer
-
-  // Reset previous transforms
-  lozenges.forEach(l => l.style.transform = "scale(1)");
-
-  // Calculate total height of lozenges
-  let totalHeight = slot.scrollHeight;
-
-  if (totalHeight > slotHeight) {
-    scale = slotHeight / totalHeight;
-    lozenges.forEach(l => {
-      l.style.transformOrigin = "top left";
-      l.style.transform = `scale(${scale})`;
-    });
-  }
-}
 
 
 // 🔹 Module: Process lozenges for one slot
@@ -794,7 +688,8 @@ function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
         break;
       }
 
-      case "tag": {
+      case "activity": {
+        // For backward compatibility, fall back to tags if available
         const desc = tags[loz.code] || "(no description)";
         activityList.push(`${loz.code} – ${desc}`);
         break;
@@ -954,127 +849,51 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ─── Init UI ─────────────────────────────────────────────────────────────
-  document.getElementById("save-calendar-btn").addEventListener("click", saveCalendarPlan);
-  setupPaletteSelection();
+  document.getElementById("saveSlotBtn").addEventListener("click", () => {
+  const activity = document.getElementById("activitySelect").value;
+  const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions)
+                        .map(o => o.value);
+  const place = document.getElementById("placeSelect").value;
+  const area = document.getElementById("areaSelect").value;
 
-  const container = document.getElementById("calendar-grid");
+  const lozenges = [];
 
-  // ─── Create Calendar Grid ────────────────────────────────────────────────
-  let weekRow = document.createElement("div");
-  weekRow.className = "week-row";
+  if (activity) lozenges.push({ type: "activity", code: activity });
+  resources.forEach(r => lozenges.push({ type: "resource", code: r }));
+  if (place) lozenges.push({ type: "place", code: place });
+  if (area) lozenges.push({ type: "area", code: area });
 
-  // Align first row to Monday
-  const startDayOfWeek = startDate.getDay(); // 0 = Sunday
-  const offset = (startDayOfWeek === 0) ? 6 : startDayOfWeek - 1;
+  calendarData[currentSlotId] = {
+    availability: 1, // or whatever logic you use
+    lozenges
+  };
 
-  for (let i = 0; i < offset; i++) {
-    const empty = document.createElement("div");
-    empty.className = "empty-day";
-    weekRow.appendChild(empty);
+  // Render merged content with time label at front
+  const td = document.querySelector(`.slot[data-id="${currentSlotId}"]`);
+  const timeLabel = td.querySelector(".slot-label")?.textContent || "";
+
+  const contentText = lozenges.map(l => {
+    switch(l.type) {
+      case "activity": return `what: ${l.code}`;
+      case "resource": return `who: ${l.code}`;
+      case "place": return `where: ${l.code}`;
+      case "area": return `zone: ${l.code}`;
+      default: return l.code;
+    }
+  }).join(". ");
+
+  let contentDiv = td.querySelector(".slot-content");
+  if (!contentDiv) {
+    contentDiv = document.createElement("div");
+    contentDiv.className = "slot-content";
+    td.appendChild(contentDiv);
   }
 
-  for (let i = 0; i < daysToShow; i++) {
-    const date = new Date(startDate);
-    date.setDate(startDate.getDate() + i);
+  contentDiv.textContent = timeLabel + " " + contentText;
 
-    const dayNumber = date.getDate();
-    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
-    const dayOfWeek = date.getDay();
+  bootstrap.Modal.getInstance(document.getElementById("slotModal")).hide();
+});
 
-    const dayDiv = document.createElement("div");
-    dayDiv.className = "day-column";
-
-    const header = document.createElement("div");
-    header.className = "day-header";
-    header.textContent = `${weekday} ${dayNumber}`;
-
-    const cellDate = new Date(date);
-    cellDate.setHours(0, 0, 0, 0);
-
-    // Highlight today
-    if (cellDate.toDateString() === today.toDateString()) {
-      dayDiv.classList.add("today-cell");
-    }
-
-    // Highlight election day
-    if (electionDate && cellDate.toDateString() === electionDate.toDateString()) {
-      dayDiv.classList.add("election-day-cell");
-    }
-
-    dayDiv.appendChild(header);
-
-    // Create slot divs
-    for (const slotName of slots) {
-    const slotDiv = document.createElement("div");
-    slotDiv.className = "slot";
-    slotDiv.setAttribute("data-availability", "0");
-    slotDiv.setAttribute("title", `0 resources available`);
-    slotDiv.setAttribute("data-time", slotName);
-
-    // ✅ Unique ID (YYYY-MM-DD format)
-    const localDateStr = date.toLocaleDateString("en-CA");
-    slotDiv.id = `slot-${localDateStr}_${slotName}`;
-
-    // --- Fixed overlay label ---
-
-    // --- Fixed overlay label ---
-    const timeLabel = document.createElement("div");
-    timeLabel.className = "slot-label";
-    timeLabel.textContent = slotName;
-    slotDiv.appendChild(timeLabel);
-
-    // --- Lozenge container (flex inline flow) ---
-    const lozengeContainer = document.createElement("div");
-    lozengeContainer.className = "lozenge-container";
-    slotDiv.appendChild(lozengeContainer);
-
-    // --- Drag/drop visuals ---
-    slotDiv.addEventListener("dragover", e => {
-      e.preventDefault();
-      slotDiv.classList.add("slot-hover");
-    });
-
-    slotDiv.addEventListener("dragleave", () => {
-      slotDiv.classList.remove("slot-hover");
-    });
-
-    slotDiv.addEventListener("drop", e => {
-      e.preventDefault();
-      slotDiv.classList.remove("slot-hover");
-
-      // ✅ 1️⃣ Retrieve the lozenge data from drag event
-      const dataStr = e.dataTransfer.getData("application/json");
-      if (!dataStr) {
-        console.warn("⚠️ No lozenge data in drop");
-        return;
-      }
-
-      let loz;
-      try {
-        loz = JSON.parse(dataStr); // { type, code }
-      } catch (err) {
-        console.error("❌ Failed to parse drop data:", err);
-        return;
-      }
-
-      // ✅ 2️⃣ Prevent dropping on the time label
-      if (e.target.classList.contains("slot-label")) return;
-
-      // ✅ 3️⃣ Create a *new* dropped lozenge
-      const dropped = createLozengeElement(loz, { removable: true });
-
-      // ✅ 4️⃣ Append it just after the label if present
-      const label = slotDiv.querySelector(".slot-label");
-      if (label && label.nextSibling) {
-        slotDiv.insertBefore(dropped, label.nextSibling);
-      } else {
-        slotDiv.appendChild(dropped);
-      }
-      scaleSlotLozenges(slotDiv);
-      console.log("✅ Dropped lozenge:", loz.type, loz.code);
-    });
-    dayDiv.appendChild(slotDiv);
-  }
 
 
 
@@ -1154,6 +973,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
 
+
+
   document.querySelectorAll(".slot").forEach(slot => {
   updateSlotAvailability(slot);
   });
@@ -1161,6 +982,29 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("save-calendar-btn").disabled = false;
 
   getCalendarUpdate();
+
+
+  function createStandaloneHTML() {
+    const doctype = "<!DOCTYPE html>\n";
+
+    // ✅ Clone once
+    const clone = document.documentElement.cloneNode(true);
+
+    // ✅ Remove duplicate calendar content
+    const calendar = clone.querySelector("#calendar-grid");
+    if (calendar) {
+      calendar.innerHTML = "";
+    }
+
+    // ✅ Serialize the edited clone
+    let htmlString = doctype + clone.outerHTML;
+
+    // ✅ Replace placeholder with final API URL
+    const FINAL_API_URL = DEVURLS['prod'];
+    htmlString = htmlString.replace(/__REPLACE_WITH_API_URL__/g, FINAL_API_URL);
+
+    return htmlString;
+  }
 
   document.getElementById("export-html-btn").addEventListener("click", async () => {
     await saveCalendarPlan();
@@ -1201,6 +1045,104 @@ document.addEventListener("DOMContentLoaded", async () => {
       }, 1500);
     }
   });
+
+  function scaleSlotLozenges(slot) {
+    const lozenges = Array.from(slot.querySelectorAll(".lozenge"));
+    if (lozenges.length === 0) return;
+
+    let scale = 1;
+    const slotHeight = slot.clientHeight - 4; // buffer
+
+    // Reset previous transforms
+    lozenges.forEach(l => l.style.transform = "scale(1)");
+
+    // Calculate total height of lozenges
+    let totalHeight = slot.scrollHeight;
+
+    if (totalHeight > slotHeight) {
+      scale = slotHeight / totalHeight;
+      lozenges.forEach(l => {
+        l.style.transformOrigin = "top left";
+        l.style.transform = `scale(${scale})`;
+      });
+    }
+  }
+
+  function buildSummaryTable(slots, areas, places, tags) {
+  const table = document.createElement("table");
+  table.className = "summary-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Date & Time</th>
+        <th>Activities</th>
+        <th>Resources</th>
+        <th>Places</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  Object.entries(slots).forEach(([key, slot]) => {
+    const [dateStr, timeStr] = key.split("_");
+
+    let formattedDateTime = "Invalid Date";
+
+    if (dateStr && timeStr) {
+      // Parse the date parts
+      const [year, month, day] = dateStr.split("-").map(Number);
+
+      // Parse the time (e.g., "9 AM" or "9:30 PM")
+      const timeParts = timeStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+      if (year && month && day && timeParts) {
+        let [, hourStr, minuteStr, period] = timeParts;
+        let hour = parseInt(hourStr, 10);
+        const minute = parseInt(minuteStr || "0", 10);
+
+        // Convert to 24-hour time
+        if (period.toUpperCase() === "PM" && hour !== 12) hour += 12;
+        if (period.toUpperCase() === "AM" && hour === 12) hour = 0;
+
+        // Note: months are 0-indexed in JS Date
+        const date = new Date(year, month - 1, day, hour, minute);
+
+        formattedDateTime = date.toLocaleString(undefined, {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } else {
+        console.warn("⚠️ Invalid time format in slot key:", key);
+      }
+    } else {
+      console.warn("⚠️ Invalid slot key format:", key);
+    }
+
+    const {
+      resourceList,
+      activityList,
+      placeList
+    } = processLozenges(slot.lozenges, areas, places, tags);
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${formattedDateTime}</td>
+      <td>${activityList.join("<br>")}</td>
+      <td>${resourceList.join(", ")}</td>
+      <td>${placeList.join("<br>")}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  return table;
+  }
+
+
 
   document.getElementById("generate-summary-btn").addEventListener("click", () => {
   const summary = extractCalendarPlan();

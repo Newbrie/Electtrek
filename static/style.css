@@ -319,54 +319,6 @@
   font-weight: 600;
 }
 
-.slot {
-  position: relative;
-  height: 90px;
-  width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background-color: #fafafa;
-  box-sizing: border-box;
-
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  padding: 2px 4px;
-  gap: 1px 3px;
-
-  /* acts like a paragraph of lozenges */
-  line-height: 1em;
-}
-
-.slot-label {
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 0.75em;
-  color: #666;
-  pointer-events: none;
-  z-index: 2;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 3px;
-  padding: 0 4px;
-}
-
-/* ✅ the “first line” offset */
-.slot::before {
-  content: "";
-  flex-basis: 33%;   /* ≈ one-third of slot width reserved */
-  height: 0;         /* no visible height */
-}
-
-
-.slot .lozenge {
-  margin: 0;                /* no extra outer spacing */
-  padding: 1px 4px;         /* minimal internal padding */
-  font-size: 0.8em;
-  line-height: 1em;         /* ✅ keeps vertical spacing tight */
-  display: inline-block;    /* behave like text for wrapping */
-}
-
 
 .lozenge-container {
   display: inline-flex;
@@ -390,17 +342,6 @@
 }
 
 
-.election-highlight {
-  border: 2px double red;!important;
-  box-sizing: border-box;
-}
-
-.today-highlight {
-  border: 2px double blue;!important;
-  box-sizing: border-box;
-}
-
-
 .week-row {
   display: flex;
   gap: 2px;
@@ -417,6 +358,41 @@
 
 .day-column.today-cell {
 border: 4px double #007BFF !important;
+}
+
+/* Make calendar display as a 7-column grid */
+#calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+/* Slightly smaller text and tighter layout on mobile */
+@media (max-width: 768px) {
+  #calendar-grid {
+    grid-template-columns: repeat(7, 1fr);
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+
+  .slot {
+    height: 70px;
+    font-size: 0.75em;
+    padding: 1px 4px;
+  }
+}
+
+/* Special case for landscape phones — make it all fit */
+@media (max-height: 500px) and (orientation: landscape) {
+  #calendar-grid {
+    transform: scale(0.7);
+    transform-origin: top left;
+  }
+
+  .slot {
+    height: 60px;
+    font-size: 0.7em;
+  }
 }
 
 #combined-content {

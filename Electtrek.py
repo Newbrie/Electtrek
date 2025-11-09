@@ -1265,8 +1265,8 @@ class TreeNode:
         Overlaps = {
         "country" : 1,
         "nation" : 0.1,
-        "county" : 0.009,
-        "constituency" : 0.0035,
+        "county" : 0.001,
+        "constituency" : 0.0005,
         "ward" : 0.00005,
         "division" : 0.00001,
         "walk" : 0.005,
@@ -1432,7 +1432,7 @@ class TreeNode:
                 streets_html = build_street_list_html(datablock2)  # your existing function
                 areas[walkname] = {
                     "code": walkname,
-                    "streets": streets,
+                    "details": streets,
                     "tooltip_html": streets_html
                 }
         elif self.level == 3:
@@ -1449,8 +1449,37 @@ class TreeNode:
                 walks_html = build_area_list_html(datablock2)
                 areas[areaname] = {
                     "code": areaname,
-                    "walks": walks,
+                    "details": walks,
                     "tooltip_html": walks_html
+                }
+        elif self.level == 2:
+            print(f"caldata for {self.value} of length {len(datablock)} cols:{datablock.columns} ")
+            constitnodes = self.children
+            for conname in [x.value for x in constitnodes]:
+                print(f"_____Area Name: {conname} ")
+
+                if not conname:
+                    continue
+                wardnodes = [child for node in constitnodes for child in node.children if node.type == 'ward']
+                wardnames = [w.value for w in wardnodes]
+                ward_df = pd.DataFrame([
+                    {
+                        "Election": node.election,
+                        "Lat": node.centroid[0],
+                        "Long": node.centroid[1],
+                        "ENOP": node.electorate,
+                        "Zone": node.col
+                    }
+                    for node in wardnodes
+                ])
+
+                print(ward_df.head())
+                print(f" under {route()} in Level 2 create_area_cal with datablock {len(ward_df)}")
+                wards_html = build_area_list_html(ward_df)
+                areas[conname] = {
+                    "code": conname,
+                    "details": wards,
+                    "tooltip_html": wards_html
                 }
         # share input and outcome tags
         valid_tags = CElection['tags']
@@ -1676,7 +1705,6 @@ class TreeNode:
                     }
                 }
 
-                // Allow Enter key to trigger search
                 const input = document.getElementById("searchInput");
                 input.addEventListener("keydown", function (e) {
                     if (e.key === "Enter") {
@@ -1693,11 +1721,7 @@ class TreeNode:
                         acceptNode: function (node) {
                             const parent = node.parentNode;
                             const style = window.getComputedStyle(parent);
-                            if (
-                                style &&
-                                style.visibility !== 'hidden' &&
-                                style.display !== 'none'
-                            ) {
+                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
                                 return NodeFilter.FILTER_ACCEPT;
                             }
                             return NodeFilter.FILTER_REJECT;
@@ -1712,10 +1736,44 @@ class TreeNode:
                 return visibleText.trim();
             }
 
-            function searchMap() {
-                const query = document.getElementById("searchInput").value.toLowerCase().trim();
+            async function searchMap() {
+                const query = document.getElementById("searchInput").value.trim();
                 if (!query) return;
 
+                // --- 1️⃣ Check if query looks like a UK postcode ---
+                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+                if (postcodePattern.test(query)) {
+                    const cleanPostcode = query.replace(/\s+/g, '');
+                    const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error("Network error");
+                        const data = await res.json();
+
+                        if (data.status === "match" && data.data) {
+                            const { latitude, longitude } = data.data;
+                            map.setView([latitude, longitude], 17);
+
+                            L.marker([latitude, longitude])
+                                .addTo(map)
+                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
+                                .openPopup();
+                            return;
+                        } else {
+                            alert("Postcode not found.");
+                            return;
+                        }
+                    } catch (err) {
+                        console.error("Postcode lookup failed:", err);
+                        // Only alert if the map didn’t already move
+                        if (!map.getCenter()) alert("Error looking up postcode.");
+                        return;
+                    }
+
+                }
+
+                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
+                const normalizedQuery = query.toLowerCase();
                 let found = false;
 
                 map.eachLayer(function (layer) {
@@ -1724,7 +1782,6 @@ class TreeNode:
                     // ✅ Search Popups with <b data-name="...">
                     if (layer.getPopup && layer.getPopup()) {
                         let bElements = [];
-
                         const content = layer.getPopup().getContent();
 
                         if (content instanceof HTMLElement) {
@@ -1735,26 +1792,17 @@ class TreeNode:
                             bElements = doc.querySelectorAll('b[data-name]');
                         }
 
-                        console.log("Found b[data-name] elements:", bElements.length);
-
                         for (let b of bElements) {
                             const dataName = b.getAttribute('data-name');
                             const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
-                            if (normalizedDataName.includes(query)) {
-                                console.log('✅ Match found:', dataName);
-
+                            if (normalizedDataName.includes(normalizedQuery)) {
                                 let latlng = null;
-                                if (typeof layer.getLatLng === 'function') {
-                                    latlng = layer.getLatLng();
-                                } else if (typeof layer.getBounds === 'function') {
-                                    latlng = layer.getBounds().getCenter();
-                                }
+                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
 
                                 if (latlng) {
                                     map.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') {
-                                        layer.openPopup();
-                                    }
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
                                     found = true;
                                     return;
                                 }
@@ -1765,13 +1813,10 @@ class TreeNode:
                     // ✅ Search Tooltips
                     if (!found && layer.getTooltip && layer.getTooltip()) {
                         const tooltipContent = layer.getTooltip().getContent();
-                        if (tooltipContent && tooltipContent.toLowerCase().includes(query)) {
+                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
                             let latlng = null;
-                            if (typeof layer.getLatLng === 'function') {
-                                latlng = layer.getLatLng();
-                            } else if (typeof layer.getBounds === 'function') {
-                                latlng = layer.getBounds().getCenter();
-                            }
+                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
 
                             if (latlng) {
                                 map.setView(latlng, 17);
@@ -1781,27 +1826,16 @@ class TreeNode:
                         }
                     }
 
-                    // ✅ Search DivIcons (custom markers)
+                    // ✅ Search DivIcons
                     if (!found && layer instanceof L.Marker) {
                         if (layer.options.icon instanceof L.DivIcon) {
                             const iconContent = layer.options.icon.options.html;
-                            if (iconContent.toLowerCase().includes(query)) {
-                                let latlng = null;
-                                if (typeof layer.getLatLng === 'function') {
-                                    latlng = layer.getLatLng();
-                                }
-
+                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
+                                const latlng = layer.getLatLng();
                                 if (latlng) {
                                     map.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') {
-                                        layer.openPopup();
-                                    }
-
-                                    // Optional: highlight the DivIcon marker visually
-                                    if (layer._icon) {
-                                        layer._icon.style.border = "2px solid red";
-                                    }
-
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
+                                    if (layer._icon) layer._icon.style.border = "2px solid red";
                                     found = true;
                                     return;
                                 }
@@ -1814,11 +1848,8 @@ class TreeNode:
                     alert("No matching location found.");
                 }
             }
-
-
-
-
             </script>
+
             """
 
 
@@ -6150,36 +6181,54 @@ def election_report():
 @app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
-    global CurrentElection
-    global OPTIONS
-    global constants
-    global TREK_NODES
-    global Treepolys
-    restore_from_persist(session)
-# so change current_election and return current election constants and options
-    data = request.get_json()
-    current_node = get_current_node(session)
-    current_election = get_current_election(session)
-    session['current_election'] = data.get("election")
-    print(f"____switching from election: {current_election} to {data.get('election')}")
-    current_election = data.get("election")
-    CurrentElection = get_election_data(current_election)
-    if CurrentElection:
-        CurrentElection['previousParty'] = current_node.party
-        print(f"____CurrentElection: at {current_node.value} for {current_election} path:{CurrentElection['territory']} details:{CurrentElection} " )
-        mapfile = CurrentElection['territory']
-        current_node = current_node.ping_node(current_election,mapfile)
-        visit_node(current_node,current_election,CurrentElection,mapfile)
+    try:
+        global CurrentElection, OPTIONS, constants, TREK_NODES, Treepolys
+        import json
 
+        def make_json_serializable(obj):
+            if isinstance(obj, dict):
+                return {k: make_json_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_serializable(i) for i in obj]
+            elif isinstance(obj, (str, int, float, bool)) or obj is None:
+                return obj
+            else:
+                return str(obj)
+
+        restore_from_persist(session)
+        data = request.get_json(force=True)  # <-- ensure JSON parsing
+        if not data or "election" not in data:
+            return jsonify(success=False, error="No election provided"), 400
+
+        current_node = get_current_node(session)
+        current_election = get_current_election(session)
+        session['current_election'] = data["election"]
+        current_election = data["election"]
+
+        CurrentElection = get_election_data(current_election)
+        if not CurrentElection:
+            return jsonify(success=False, error="Election not found", current_election=current_election), 404
+
+        CurrentElection['previousParty'] = current_node.party
+        mapfile = CurrentElection['territory']
+
+        current_node = current_node.ping_node(current_election, mapfile)
+        visit_node(current_node, current_election, CurrentElection, mapfile)
         persist(current_node)
-        print(f"____Route/set_election/success: at {current_node.value} for {current_election} constants:{CurrentElection} path:{CurrentElection['territory']}" )
+
+#        safe_constants = make_json_serializable(CurrentElection)
         return jsonify({
+            'success': True,
             'constants': CurrentElection,
             'options': OPTIONS,
             'current_election': current_election
         })
-    print("____Route/set_election/failure" , current_election, CurrentElection)
-    return jsonify(success=False, error="Election not found", current_election=current_election)
+
+    except Exception as e:
+        print("____Route/set-election/exception", e)
+        import traceback
+        traceback.print_exc()
+        return jsonify(success=False, error=str(e)), 500
 
 # GET /current-election
 @app.route('/current-election', methods=['GET'])
@@ -7420,8 +7469,6 @@ def get_table(table_name):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    mask = allelectors['Election'] == current_election
-    areaelectors = allelectors[mask]
 
     # Table mapping
     table_map = {
@@ -7443,7 +7490,7 @@ def get_table(table_name):
         elif table_name.endswith("_xref"):
             lev = current_node.level+1
             path = current_node.dir+"/"+current_node.file
-            tabtype = gettypeoflevel(path,current_node.level+1)
+            tabtype = gettypeoflevel(path,lev)
             print(f"____NODEXREF type {tabtype} level {lev} ")
             [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODEXREF -COLS {column_headers} ROWS {rows} TITLE {title}")
