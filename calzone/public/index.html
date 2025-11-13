@@ -44,7 +44,7 @@ body {
   border-radius: 4px;
   background-color: #fafafa;
   box-sizing: border-box;
-  padding: 2px 6px;
+  padding: 1px 6px;
   overflow: hidden;
   font-size: 0.85em;
   line-height: 1.2em;
@@ -640,7 +640,7 @@ function redrawSlot(slotId, data = {}) {
     { type: "activity", code: data.activity },
     ...(data.resources || []).map(r => ({ type: "resource", code: r })),
     { type: "place", code: data.place },
-    { type: "area", code: data.area }
+    ...(data.areas || []).map(r => ({ type: "area", code: r })),
   ].filter(l => l.code);
 
   lozenges.forEach(l => {
@@ -673,7 +673,12 @@ const DEVURLS = {"dev": "http://127.0.0.1:5000", "prod": "https://electtrek.com"
 const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
 const API = isDev ? DEVURLS["dev"] : "https://electtrek.com";
 
-
+if (!isDev) {
+    const btn = document.getElementById("export-html-btn");
+    if (btn) {
+        btn.style.display = "none";
+    }
+}
 const calendarData = {};
 const startHour = 9, endHour = 21, slotDuration = 2;
 
@@ -709,10 +714,11 @@ async function handleSaveSlot() {
 
   const activity = document.getElementById("activitySelect").value;
   const place = document.getElementById("placeSelect").value;
-  const area = document.getElementById("areaSelect").value;
+//  const area = document.getElementById("areaSelect").value;
+  const areas = Array.from(document.getElementById("areaSelect").selectedOptions).map(o => o.value);
   const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions).map(o => o.value);
 
-  calendarData[currentSlotId] = { activity, place, area, resources };
+  calendarData[currentSlotId] = { activity, place, areas, resources };
 
   redrawSlot(currentSlotId, calendarData[currentSlotId]);
   console.log(`💾 Slot ${currentSlotId} saved.`, calendarData[currentSlotId]);

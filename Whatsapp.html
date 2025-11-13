@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WhatsApp Login Test</title>
+<style>
+  body { font-family: sans-serif; padding: 2rem; }
+  input, button { padding: 0.5rem; margin: 0.5rem 0; }
+  #log { margin-top: 1rem; white-space: pre-wrap; }
+  .success { color: green; }
+  .error { color: red; }
+</style>
+</head>
+<body>
+
+<h1>WhatsApp Login Test</h1>
+
+<input type="text" id="phone-input" placeholder="Enter phone number (e.g. 14155552671)">
+<button id="send-btn">Send Code</button>
+
+<div id="log"></div>
+
+<script>
+  const API_BASE = "https://electtrek.com/api"; // replace with your Worker URL
+  const logEl = document.getElementById("log");
+
+  function log(message, type = "") {
+    logEl.textContent = message;
+    logEl.className = type;
+  }
+
+  async function sendCode(phone) {
+    log("Sending code...", "");
+    try {
+      const res = await fetch(`${API_BASE}/send-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        log(`✅ Success: ${data.message}`, "success");
+      } else {
+        log(`❌ Error: ${data.message}`, "error");
+      }
+
+    } catch (err) {
+      log(`❌ Fetch error: ${err.message}`, "error");
+      console.error(err);
+    }
+  }
+
+  document.getElementById("send-btn").addEventListener("click", () => {
+    const phone = document.getElementById("phone-input").value.trim();
+    if (!phone) {
+      log("❌ Please enter a phone number", "error");
+      return;
+    }
+    sendCode(phone);
+  });
+</script>
+
+</body>
+</html>

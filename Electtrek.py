@@ -1357,6 +1357,7 @@ class TreeNode:
             place_lozenges = []
 
             for idx, row in enumerate(markerframe):
+                print(f"___build_place_loz - index: {idx} row: {row}")
                 prefix = row.get('AddressPrefix')
                 if not prefix:
                     continue
@@ -1380,12 +1381,13 @@ class TreeNode:
                 place_lozenges.append({
                     'code': code,
                     'tooltip': full_address,
-                    'lat': row.get('lat'),
-                    'lon': row.get('lon')
+                    'lat': row.get('Lat'),
+                    'lon': row.get('Long')
                 })
 
                     # Convert list of places to dict keyed by code
             place_details_dict = {p['code']: p for p in place_lozenges}
+            print(f"___place_lozenges: {place_details_dict}")
 
             return place_details_dict
 
@@ -1509,6 +1511,7 @@ class TreeNode:
     def create_area_map(self, flayers, CE, CEdata):
         global SERVER_PASSWORD
         global STATICSWITCH
+        global markerframe
         from folium import IFrame
         from branca.element import Element
 
@@ -1517,142 +1520,6 @@ class TreeNode:
         import hashlib
         import re
         from pathlib import Path
-
-        def inject_password_protection(html_path: str, password: str):
-            """
-            Inject a password overlay + JS into a folium HTML file.
-            Does NOT hide the folium map div (so no invalidateSize needed).
-            """
-            password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
-            html_p = Path(html_path)
-            html = html_p.read_text(encoding="utf-8")
-
-            # find the folium map div id
-            m = re.search(r'<div class="folium-map" id="([^"]+)"', html)
-            if not m:
-                raise ValueError('Could not find folium map container in HTML (looking for <div="folium-map" id="...").')
-            map_div_id = m.group(1)
-
-            # --- NOTE: Do NOT set display:none on the map div.
-            # Remove any previous attempts to hide it (defensive)
-            html = re.sub(
-                rf'(<div class="folium-map" id="{re.escape(map_div_id)}")\s*style="[^"]*"',
-                rf'\1',
-                html,
-                count=1
-            )
-
-            # injection HTML + JS (no display:none, overlay covers map)
-            injection = f"""
-        <!-- PASSWORD OVERLAY + UNLOCK SCRIPT (injected) -->
-        <style>
-          /* ensure page & map can fill viewport */
-          html, body {{ height: 100%; margin: 0; padding: 0; }}
-          .folium-map {{ /* ensure map container has height if missing */ height: 100% !important; }}
-
-          #password-overlay {{
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(255,255,255,0.92); /* slightly transparent so you can see if tiles load */
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }}
-          #password-overlay .box {{
-            text-align: center;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
-            max-width: 92vw;
-            background: rgba(255,255,255,0.96);
-          }}
-          #password-overlay input {{
-            font-size: 14px;
-            padding: 8px;
-            margin-right: 8px;
-          }}
-        </style>
-
-        <div id="password-overlay" role="dialog" aria-modal="true" aria-label="Password required">
-          <div class="box">
-            <div>
-              <input id="password-input" type="password" placeholder="Enter password" />
-              <button id="password-submit">Submit</button>
-            </div>
-            <p id="error-message" style="color: tomato; display: none; margin-top: 8px;">Incorrect password</p>
-          </div>
-        </div>
-
-        <script>
-        async function sha256(str) {{
-          const utf8 = new TextEncoder().encode(str);
-          const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
-          const hashArray = Array.from(new Uint8Array(hashBuffer));
-          return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-        }}
-
-        async function checkPassword() {{
-          console.debug("checkPassword() called");
-          const input = document.getElementById("password-input").value || "";
-          const error = document.getElementById("error-message");
-          try {{
-            const hash = await sha256(input);
-            console.debug("computed hash:", hash);
-            if (hash === "{password_hash}") {{
-              console.info("Password correct — removing overlay");
-              const overlay = document.getElementById("password-overlay");
-              if (overlay) overlay.remove();
-              try {{ sessionStorage.setItem("map_access_granted", "1"); }} catch(e){{/* ignore */}}
-            }} else {{
-              console.warn("Incorrect password");
-              if (error) error.style.display = "block";
-            }}
-          }} catch (e) {{
-            console.error("Password check failed:", e);
-            if (error) error.style.display = "block";
-          }}
-        }}
-
-        // wire events
-        document.addEventListener("DOMContentLoaded", function() {{
-          // Restore prior session if present
-          try {{
-            if (sessionStorage.getItem("map_access_granted") === "1") {{
-              const overlay = document.getElementById("password-overlay");
-              if (overlay) overlay.remove();
-            }}
-          }} catch(e){{/* ignore */}}
-
-          const btn = document.getElementById("password-submit");
-          if (btn) btn.addEventListener("click", checkPassword);
-
-          const input = document.getElementById("password-input");
-          if (input) {{
-            input.addEventListener("keydown", function(ev) {{
-              if (ev.key === "Enter") {{
-                ev.preventDefault();
-                checkPassword();
-              }}
-            }});
-          }}
-        }});
-
-        // small safety: do not rely on L to exist at parse-time in other injected scripts.
-        // Guard usage of L in other injected JS.
-        </script>
-        """
-
-            # Insert injection just before </body>
-            if "</body>" in html:
-                html = html.replace("</body>", injection + "\n</body>")
-            else:
-                html = html + injection
-
-            html_p.write_text(html, encoding="utf-8")
-            print(f"Injected password protection into {html_path}; map div id = {map_div_id}")
-            return
 
 
 
@@ -1684,17 +1551,30 @@ class TreeNode:
                 padding: 5px;
                 border: 1px solid #ccc;
                 font-size: 14px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            #customSearchBox input {
+                padding: 4px 6px;
+                font-size: 14px;
+            }
+            #customSearchBox button {
+                padding: 4px 8px;
+                font-size: 14px;
+                cursor: pointer;
             }
             </style>
 
             <div id="customSearchBox">
                 <input type="text" id="searchInput" placeholder="Search..." />
                 <button onclick="searchMap()">Search</button>
+                <button id="backToCalendarBtn">📅 Calendar</button>
             </div>
 
             <script>
             document.addEventListener("DOMContentLoaded", function () {
-                // Try to detect map variable dynamically
+                // Detect map variable dynamically
                 for (const key in window) {
                     if (window.hasOwnProperty(key)) {
                         const val = window[key];
@@ -1707,9 +1587,12 @@ class TreeNode:
 
                 const input = document.getElementById("searchInput");
                 input.addEventListener("keydown", function (e) {
-                    if (e.key === "Enter") {
-                        searchMap();
-                    }
+                    if (e.key === "Enter") searchMap();
+                });
+
+                // Calendar button
+                document.getElementById("backToCalendarBtn").addEventListener("click", function() {
+                    window.parent.postMessage('showCalendar', '*');
                 });
             });
 
@@ -2021,7 +1904,9 @@ class TreeNode:
 
         # Prepare a list of place entries
         places_list = []
+        print(f"___area markeframe {markerframe}")
         for entry in markerframe:
+            print(entry['Lat'], entry['Long'], type(entry['Lat']))
             event_date = entry.get('EventDate') or default_date
             prefix = entry['AddressPrefix']
             address = f"{entry['Address1']} / {entry['Address2']}"
@@ -2039,6 +1924,7 @@ class TreeNode:
 
         # Serialize to JSON
         places_json = json.dumps(places_list)
+        print(f"___on map create places_json {places_json}")
 
         # JS to preload palette safely
         places_preload_js = f"""
@@ -2054,6 +1940,23 @@ class TreeNode:
 
         # Inject into Folium map
         FolMap.get_root().html.add_child(folium.Element(places_preload_js))
+
+        # Inject button and JS before closing </body>
+        cal_html = """
+        <div style="position: fixed; top: 10px; right: 10px; z-index: 9999;">
+            <button id="back-to-calendar-btn" style="padding:10px 15px; font-size:16px; cursor:pointer;">
+                📅 Back to Calendar
+            </button>
+        </div>
+
+        <script>
+        document.getElementById("back-to-calendar-btn").addEventListener("click", () => {
+            window.location.href = "calendar.html";
+        });
+        </script>
+        """
+
+        FolMap.get_root().html.add_child(folium.Element(cal_html))
 
 
         # --- Updated click JS ---
@@ -2161,8 +2064,6 @@ class TreeNode:
         target = self.locfilepath(self.file)
         FolMap.save(target)
 
-        if STATICSWITCH:
-            inject_password_protection_generic(target, SERVER_PASSWORD)
         print("Centroid raw:", self.centroid)
         print(f" ✅ _____saved map file in route: {route()}", target, len(flayers), self.value, self.dir, self.file)
 
@@ -3480,8 +3381,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             # --- Main unified loop ---
             for i, row in enumerate(markerframe):
                 # --- LAT/LONG validation ---
-                lat = row.get("Lat")
-                lng = row.get("Long")
+                lat = row.get("Lat", mean_lat)
+                lng = row.get("Long",mean_lng)
                 if not (isinstance(lat, (int, float)) and not math.isnan(lat)):
                     lat = mean_lat
                 if not (isinstance(lng, (int, float)) and not math.isnan(lng)):
@@ -4791,155 +4692,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         progress["message"] = f"Error: {str(e)}"
 
 
-import hashlib
-import re
-from pathlib import Path
-from typing import Optional
-
-def inject_password_protection_generic(html_path: str, password: str, content_selector: Optional[str] = None):
-    """
-    Inject a password overlay + JS into any HTML file.
-
-    - html_path: path to the HTML file to modify
-    - password: plaintext password to hash & embed (client will hash & compare)
-    - content_selector: optional CSS selector (e.g. "#main-content" or ".calendar-grid")
-        If provided, the script will try to UNHIDE that element after correct password.
-        If not provided, overlay simply removes itself and reveals page as-is.
-
-    This is safe to call on both Folium map HTML and your CAL.html.
-    """
-    password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    p = Path(html_path)
-    html = p.read_text(encoding="utf-8")
-
-    # Defensive: remove any previous inline display:none on a folium map div if present
-    m = re.search(r'<div class="folium-map" id="([^"]+)"', html)
-    map_div_id = None
-    if m:
-        map_div_id = m.group(1)
-        # remove earlier style attributes on this div (defensive)
-        html = re.sub(
-            rf'(<div class="folium-map" id="{re.escape(map_div_id)}")\s*style="[^"]*"',
-            rf'\1',
-            html,
-            count=1
-        )
-
-    # choose the selector that the injected script will unhide (map div takes precedence)
-    if map_div_id:
-        unhide_selector_js = f'document.getElementById("{map_div_id}")'
-    elif content_selector:
-        # ensure the selector string is safely embedded in JS
-        sel_js = content_selector.replace('"', '\\"')
-        unhide_selector_js = f'document.querySelector("{sel_js}")'
-    else:
-        unhide_selector_js = "null"  # overlay will simply remove itself
-
-    injection = f"""
-<!-- PASSWORD OVERLAY + UNLOCK SCRIPT (injected) -->
-<style>
-  /* minimal overlay styles */
-  #password-overlay {{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background: rgba(255,255,255,0.95);
-    z-index: 99999;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }}
-  #password-overlay .box {{
-    background: #fff;
-    padding: 14px;
-    border-radius: 8px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.14);
-    max-width: 92vw;
-  }}
-  #password-overlay input {{ font-size:14px; padding:8px; }}
-</style>
-
-<div id="password-overlay" role="dialog" aria-modal="true" aria-label="Password required">
-  <div class="box">
-    <div style="margin-bottom:8px; font-weight:700;">Protected content</div>
-    <div style="margin-bottom:8px;">
-      <input id="password-input" type="password" placeholder="Enter password" />
-      <button id="password-submit">Unlock</button>
-    </div>
-    <div id="password-error" style="color:#c00; display:none;">Incorrect password</div>
-    <div style="margin-top:8px; font-size:12px; color:#666;">This is client-side gating only.</div>
-  </div>
-</div>
-
-<script>
-(async function() {{
-  const expectedHash = "{password_hash}";
-
-  async function sha256(str) {{
-    const utf8 = new TextEncoder().encode(str);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-  }}
-
-  async function unlock() {{
-    const input = document.getElementById('password-input');
-    const err = document.getElementById('password-error');
-    err.style.display = 'none';
-    const val = (input && input.value) ? input.value : '';
-    try {{
-      const h = await sha256(val);
-      if (h === expectedHash) {{
-        // remove overlay
-        const ov = document.getElementById('password-overlay');
-        if (ov) ov.remove();
-
-        // optionally unhide a content element (map or provided selector)
-        try {{
-          const toShow = {unhide_selector_js};
-          if (toShow) {{
-            // if element was hidden via display:none, remove that inline style
-            toShow.style.display = '';
-          }}
-        }} catch(e) {{ /* ignore */ }}
-
-        try {{ sessionStorage.setItem("map_access_granted", "1"); }} catch(e){{}}
-      }} else {{
-        err.style.display = 'block';
-      }}
-    }} catch(e) {{
-      console.error('Password check failed', e);
-      err.style.display = 'block';
-    }}
-  }}
-
-  document.getElementById('password-submit').addEventListener('click', unlock);
-  const pw = document.getElementById('password-input');
-  pw && pw.addEventListener('keydown', function(ev) {{ if (ev.key === 'Enter') {{ ev.preventDefault(); unlock(); }} }});
-
-  // restore prior session
-  try {{
-    if (sessionStorage.getItem("map_access_granted") === "1") {{
-      const ov = document.getElementById('password-overlay');
-      if (ov) ov.remove();
-      const toShow = {unhide_selector_js};
-      if (toShow) toShow.style.display = '';
-    }}
-  }} catch(e){{}}
-}})();
-</script>
-"""
-
-    # insert just before </body>
-    if "</body>" in html:
-        html = html.replace("</body>", injection + "\n</body>")
-    else:
-        html = html + injection
-
-    p.write_text(html, encoding="utf-8")
-    print(f"Injected password protection into {html_path} (map_div_id={map_div_id}, selector={content_selector})")
-    return
-
 
 from flask_cors import CORS
 # ____XXXXX create and configure the app
@@ -5149,7 +4901,7 @@ def unauthorized_callback():            # In call back url we can specify where 
 def reverse_geocode():
     lat = request.args.get("lat")
     lng = request.args.get("lng")
-
+    print(f"____Route/reverse_geocode - {lat}:{lng} ")
     url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&addressdetails=1"
     response = requests.get(url, headers={"User-Agent": "YourAppName"})
     data = response.json()
@@ -6569,89 +6321,53 @@ def login():
 @app.route('/get_location')
 @login_required
 def get_location():
-
     return render_template_string("""
     <!DOCTYPE html>
     <html lang="en">
     <head>
-        <meta charset="UTF-8">
-        <title>Locating You...</title>
-         <style>
-            body {
-                background: #00bed6;
-                color: white;
-                font-family: sans-serif;
-                text-align: center;
-            height: 100%;
-            margin: 0;
-            padding: 0;}
-
-            .road {
-                position: relative;
-                width: 100%;
-                height: 100vh;
-                margin: 0 auto;
-                background: #00bed6;
-                overflow: hidden;
-            }
-
-            .footprint {
-                position: absolute;
-                width: 40px;
-                opacity: 0;
-                animation: stepFade 4s ease-in-out infinite;
-            }
-
-            .left {
-                left: 45%;
-                transform: rotate(-12deg);
-            }
-
-            .right {
-                left: 52%;
-                transform: rotate(12deg);
-            }
-
-            @keyframes stepFade {
-            0%   { opacity: 1; }
-            10%  { opacity: 1; }
-            70%  { opacity: 0; }
-            100% { opacity: 0; }
-            }
-        </style>
+    <meta charset="UTF-8">
+    <title>Locating You...</title>
+    <style>
+    body { margin:0; padding:0; height:100%; background:#00bed6; color:white; font-family:sans-serif; text-align:center; }
+    .road { position:relative; width:100%; height:100vh; overflow:hidden; }
+    .footprint { position:absolute; width:40px; opacity:0; animation:stepFade 4s ease-in-out infinite; }
+    .left { left:45%; transform:rotate(-12deg); }
+    .right { left:52%; transform:rotate(12deg); }
+    @keyframes stepFade { 0%,10%{opacity:1;} 70%,100%{opacity:0;} }
+    </style>
     </head>
     <body>
-        <h2>elecTrek is finding democracy in your area ...</h2>
-        <div class="road">
+    <h2>elecTrek is finding democracy in your area ...</h2>
+    <div class="road">
     {% for i in range(8) %}
     {% set is_left = i % 2 == 0 %}
     <img src="{{ url_for('static', filename='left_foot.svg') if is_left else url_for('static', filename='right_foot.svg') }}"
          class="footprint {{ 'left' if is_left else 'right' }}"
-         style="
-            top: {{ 800 - i * 100 }}px;
-            animation-delay: {{ i * 0.7 }}s;
-         ">
-         {% endfor %}
-        </div>
-
-<script>
-navigator.geolocation.getCurrentPosition(
-    function(pos) {
-        console.log("Location received");
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        window.location.href = `/firstpage?lat=${lat}&lon=${lon}`;
-    },
-    function(err) {
-        console.error("Geolocation error:", err);
-        alert("Location access denied.");
+         style="top: {{ 10 + i*10 }}%; animation-delay: {{ i*0.7 }}s;">
+    {% endfor %}
+    </div>
+    <script>
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                window.location.href = `/firstpage?lat=${lat}&lon=${lon}`;
+            },
+            function(err) {
+                alert("Location access denied.");
+                window.location.href = "/firstpage";
+            }
+        );
+    } else {
+        alert("Geolocation not supported.");
         window.location.href = "/firstpage";
     }
-);
-</script>
+    </script>
     </body>
     </html>
     """)
+
 
 @app.route('/logout', methods=['POST', 'GET'])
 @login_required
@@ -8003,7 +7719,7 @@ def firstpage():
 
     lat = request.args.get('lat')
     lon = request.args.get('lon')
-
+    sourcepath = current_node.dir+"/"+current_node.file
 #    lat = 53.2730 - Runcorn
 #    lon = -2.7694 - Runcorn
     if lat and lon:
@@ -8038,7 +7754,7 @@ def firstpage():
         [step,Treepolys['constituency'],Fullpolys['constituency']] = intersectingArea(config.workdirectories['bounddir']+"/"+"Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",'PCON24NM',here,Treepolys['county'], config.workdirectories['bounddir']+"/"+"Constituency_Boundaries.geojson")
         sourcepath = sourcepath+"/"+step
         [step,Treepolys['ward'],Fullpolys['ward']] = intersectingArea(config.workdirectories['bounddir']+"/"+"Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",'WD24NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Ward_Boundaries.geojson")
-        sourcepath = sourcepath+"/"+step+"-MAP.html"
+        sourcepath = sourcepath+"/WARDS/"+step+"/"+step+"-MAP.html"
         [step,Treepolys['division'],Fullpolys['division']] = intersectingArea(config.workdirectories['bounddir']+"/"+"County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",'CED23NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Division_Boundaries.geojson")
 
         with open(TREEPOLY_FILE, 'wb') as f:
@@ -8380,13 +8096,6 @@ def upload_and_protect():
     except Exception as e:
         current_app.logger.exception("Failed saving uploaded file")
         return jsonify({"ok": False, "error": "save_failed"}), 500
-
-    # Now call your injector to inject overlay & JS and overwrite in place
-    try:
-        inject_password_protection_generic(str(save_path), SERVER_PASSWORD)
-    except Exception as e:
-        current_app.logger.exception("inject failed")
-        return jsonify({"ok": False, "error": str(e)}), 500
 
     # Option: return JSON with saved path or a download URL
     return jsonify({"ok": True, "path": str(save_path), "filename": orig_filename})

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElectTrek Index</title>
+    <!-- Optional: Add any global CSS or favicon here -->
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .redirect-msg {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="redirect-msg">
+        <h1>Welcome to ElectTrek</h1>
+        <p>Redirecting to the calendar...</p>
+        <p>If you are not redirected automatically, <a href="calendar.html">click here</a>.</p>
+    </div>
+
+    <script>
+        // Automatically redirect to calendar.html
+        window.location.href = "calendar.html";
+        // Optional: delay redirect
+        // setTimeout(() => window.location.href = "calendar.html", 1000);
+    </script>
+</body>
+</html>

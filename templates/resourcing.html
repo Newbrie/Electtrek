@@ -5,151 +5,203 @@
 body {
     font-family: sans-serif;
     margin: 20px;
-  }
-  .calendar-grid {
-    margin-top: 100px;
-  }
-
-  .slot {
-  position: relative;
-  height: 90px;
-  width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background-color: #fafafa;
-  box-sizing: border-box;
-  padding: 2px 6px;
-  overflow: hidden;
-  font-size: 0.85em;
-  line-height: 1.2em;
 }
 
-.slot-time {
-  font-size: 0.75em;
-  font-weight: 600;
-  color: #666;
-  margin-right: 0.4em;
-  vertical-align: baseline;
+/* Calendar container initially hidden */
+#calendar {
+    display: none;
 }
 
-.slot-content {
-  display: inline;
-  word-break: break-word;
+/* Login screen */
+#loginScreen {
+    display: block;
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+    text-align: center;
 }
 
-
-.slot small {
-    color: #555;
-    display: block;        /* new line for resource list */
-  }
-
-.slot-label {
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 0.75em;
-  color: #666;
-  pointer-events: none;
-  z-index: 2;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 3px;
-  padding: 0 4px;
-  white-space: nowrap;
-
-  /* dynamically measure label width */
-  --label-width: calc(100% + 8px);
+/* Map iframe, initially hidden */
+#mapFrame {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    border: none;
+    z-index: 9999;
 }
 
-/* ✅ indent based on label width */
-.slot::before {
-  content: "";
-  display: block;
-  width: calc(var(--label-width, 3em) + 6px); /* auto + small gap */
-  height: 0;
-  flex: 0 0 auto;
-}
-
-/* Lozenges act like inline text */
-.slot .lozenge {
-  margin: 0;
-  padding: 0px 4px;
-  font-size: 0.8em;
-  line-height: 1em;
-  display: inline-block;
-  border-radius: 4px;
-  white-space: nowrap;
-  opacity: 1;
-}
-
-.slot .lozenge[data-type="activity"] { background: rgba(204, 229, 255, 0.9); }
-.slot .lozenge[data-type="resource"] { background: rgba(212, 237, 218, 0.9); }
-.slot .lozenge[data-type="place"]    { background: rgba(255, 243, 205, 0.9); }
-.slot .lozenge[data-type="area"]     { background: rgba(248, 215, 218, 0.9); }
-
-
-.election-highlight {
-  border: 2px double red;!important;
-  box-sizing: border-box;
-}
-
-.today-highlight {
-  border: 2px double blue;!important;
-  box-sizing: border-box;
-}
-
+/* Calendar styles (unchanged) */
+.calendar-grid { margin-top: 100px; }
+.slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
+.slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }
+.slot-content { display: inline; word-break: break-word; }
+.slot small { color: #555; display: block; }
+.slot-label { position: absolute; top: 2px; left: 4px; font-size: 0.75em; color: #666; pointer-events: none; z-index: 2; background: rgba(255,255,255,0.85); border-radius: 3px; padding: 0 4px; white-space: nowrap; --label-width: calc(100% + 8px); }
+.slot::before { content:""; display:block; width:calc(var(--label-width,3em)+6px); height:0; flex:0 0 auto; }
+.slot .lozenge { margin:0; padding:0 4px; font-size:0.8em; line-height:1em; display:inline-block; border-radius:4px; white-space:nowrap; opacity:1; }
+.slot .lozenge[data-type="activity"] { background: rgba(204,229,255,0.9); }
+.slot .lozenge[data-type="resource"] { background: rgba(212,237,218,0.9); }
+.slot .lozenge[data-type="place"] { background: rgba(255,243,205,0.9); }
+.slot .lozenge[data-type="area"] { background: rgba(248,215,218,0.9); }
+.election-highlight { border: 2px double red !important; box-sizing: border-box; }
+.today-highlight { border: 2px double blue !important; box-sizing: border-box; }
 </style>
 
-<div class="container-fluid">
-  <h2 class="text-center mb-4">{{ current_election }} Campaigns Calendar</h2>
+<!-- Login Screen -->
+<div id="loginScreen">
+    <h2>Login</h2>
+    <input type="password" id="password" placeholder="Enter password" class="form-control mb-2">
+    <button id="loginBtn" class="btn btn-primary mb-2">Login</button>
+    <div id="loginMessage"></div>
+</div>
 
-  <div id="calendar-controls" class="mb-3">
-    <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
-    <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
-    <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
-  </div>
+<!-- Calendar Container -->
+<div id="calendar">
+    <div class="container-fluid">
+        <h2 class="text-center mb-4">{{ current_election }} Campaigns Calendar</h2>
 
-  <div id="calendar-grid" class="calendar-grid mt-4"></div>
+        <div id="calendar-controls" class="mb-3">
+            <button id="view-map-btn" class="btn btn-success">🗺️ View Map</button>
+            <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+            <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
+            <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
+        </div>
 
-  <!-- Modal -->
-  <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Edit Slot</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form id="slotForm">
-          <div class="mb-2">
-            <label>Activity</label>
-            <select id="activitySelect" class="form-select"></select>
-          </div>
-          <div class="mb-2">
-            <label>Resources</label>
-            <select id="resourcesSelect" class="form-select" multiple></select>
-          </div>
-          <div class="mb-2">
-            <label>Place</label>
-            <select id="placeSelect" class="form-select"></select>
-          </div>
-          <div class="mb-2">
-            <label>Area</label>
-            <select id="areaSelect" class="form-select" multiple></select>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
-        <button class="btn btn-primary" id="saveSlotBtn">Save</button>
-      </div>
+        <div id="calendar-grid" class="calendar-grid mt-4"></div>
+
+        <!-- Modal (unchanged) -->
+        <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit Slot</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="slotForm">
+                            <div class="mb-2">
+                                <label>Activity</label>
+                                <select id="activitySelect" class="form-select"></select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Resources</label>
+                                <select id="resourcesSelect" class="form-select" multiple></select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Place</label>
+                                <select id="placeSelect" class="form-select"></select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Area</label>
+                                <select id="areaSelect" class="form-select" multiple></select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
+                        <button class="btn btn-primary" id="saveSlotBtn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="summary-report" class="mt-4"></div>
     </div>
-  </div>
 </div>
 
-<div id="summary-report" class="mt-4"></div>
+<!-- Map iframe -->
+<iframe id="mapFrame" src="{{ CurrentElection.territory }}" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; border:none; z-index:1000;"></iframe>
 
-</div>
+<script>
+// === Simple Password Check ===
+const PASSWORD = "mySecret";  // replace with secure retrieval in production
+const loginBtn = document.getElementById("loginBtn");
+const loginMessage = document.getElementById("loginMessage");
+
+loginBtn.addEventListener("click", () => {
+    const val = document.getElementById("password").value;
+    if (val === PASSWORD) {
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("calendar").style.display = "block";
+    } else {
+        loginMessage.innerHTML = "❌ Wrong password!";
+    }
+});
+
+// === Map Toggle Logic ===
+const viewMapBtn = document.getElementById("view-map-btn");
+const calendarDiv = document.getElementById("calendar");
+const mapFrame = document.getElementById("mapFrame");
+
+viewMapBtn.addEventListener("click", () => {
+    calendarDiv.style.display = "none";
+    mapFrame.style.display = "block";
+});
+
+// === Listen for iframe message to return to calendar ===
+window.addEventListener("message", (event) => {
+    if (event.data === "showCalendar") {
+        mapFrame.style.display = "none";
+        calendarDiv.style.display = "block";
+    }
+});
+</script>
+
+<script>
+
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const loginBtn = document.getElementById("loginBtn");
+    const passwordInput = document.getElementById("password");
+    const msg = document.getElementById("loginMessage");
+    const loginScreen = document.getElementById("loginScreen");
+    const calendar = document.getElementById("calendar");
+
+
+  // Reset state on page load
+    loginScreen.style.display = "block";
+    calendar.style.display = "none";
+    msg.textContent = "";
+
+    loginBtn.addEventListener("click", async () => {
+      const password = passwordInput.value;
+
+      try {
+        const res = await fetch('https://electtrek.com/api/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+
+        const data = await res.json();
+
+        if (data.success) {
+          msg.textContent = "✅ Access granted!";
+          // Hide login, show calendar
+          loginScreen.style.display = "none";
+          calendar.style.display = "block";
+        } else {
+          msg.textContent = "❌ Wrong password!";
+        }
+
+      } catch (err) {
+        console.error("Fetch failed:", err);
+        msg.textContent = `⚠️ Login request failed: ${err.message}`;
+      }
+    });
+  });
+
+</script>
+
 
 <script>
 
@@ -174,6 +226,11 @@ body {
 
     return htmlString;
   }
+
+
+  document.getElementById("view-map-btn").addEventListener("click", () => {
+      window.location.href = "map.html";
+  });
 
   document.getElementById("export-html-btn").addEventListener("click", async () => {
     await saveCalendarPlan();
@@ -647,7 +704,12 @@ const DEVURLS = {{ DEVURLS | tojson }} ;
 const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
 const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
 
-
+if (!isDev) {
+    const btn = document.getElementById("export-html-btn");
+    if (btn) {
+        btn.style.display = "none";
+    }
+}
 const calendarData = {};
 const startHour = 9, endHour = 21, slotDuration = 2;
 

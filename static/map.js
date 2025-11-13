@@ -557,6 +557,7 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
          tooltipContent = placeInfo?.tooltip;
          console.log("Place Tooltip ",loz.code,placeInfo);
          console.log("placeDetails keys:", Object.keys(window.places));
+         console.log("placeDetails values:", window.places);
    } else if (loz.type === "tag") {
          const tagInfo = window.task_tags?.[loz.code];
          tooltipContent = tagInfo;
