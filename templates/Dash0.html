@@ -521,12 +521,6 @@ function fetchTableData(tableName) {
     );
   };
 
-  function refreshTableData(selectedTable) {
-    window.parent.postMessage({
-    type: "update-table",
-    stable: selectedTable
-    }, "*"); // Replace * with specific origin if needed
-  }
 
   window.addEventListener("message", function(event) {
     // optionally check event.origin === "https://yourdomain.com"
@@ -939,6 +933,15 @@ function updateConstantsUI(constants, options) {
 
 
   document.addEventListener("DOMContentLoaded", () => {
+
+    window.refreshTableData = function(id) {
+    console.log("Refreshing table for", id);
+    window.parent.postMessage({
+    type: "update-table",
+    stable: selectedTable
+    }, "*"); // Replace * with specific origin if needed
+}
+
     const tableSelector = document.getElementById("tableSelector");
     const toggle = document.getElementById("resources-toggle");
     const container = document.getElementById("resources-container");

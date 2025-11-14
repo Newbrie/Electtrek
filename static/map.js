@@ -31,13 +31,6 @@ var showMore = function (msg,area, type) {
       /* When the user clicks on the button,
       toggle between hiding and showing the dropdown content */
 
-  function refreshTableData(selectedTable) {
-    window.parent.postMessage({
-    type: "update-table",
-    stable: selectedTable
-    }, "*"); // Replace * with specific origin if needed
-  }
-
 
   async function getVIData(path) {
 
