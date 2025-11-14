@@ -1,69 +1,5 @@
 {% extends "base.html" %}
 {% block map %}
-<div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" onload="refreshTableData('nodelist_xref')"> </iframe>
-    <!-- Login Screen -->
-    <div id="loginScreen">
-        <h2>Login</h2>
-        <input type="password" id="password" placeholder="Enter password" class="form-control mb-2">
-        <button id="loginBtn" type="button" class="btn btn-primary mb-2">Login</button>
-        <div id="loginMessage"></div>
-    </div>
-
-    <!-- Calendar Container -->
-    <div id="calendar">
-        <div class="container-fluid">
-            <h2 class="text-center mb-4">{{ current_election }} Campaigns Calendar</h2>
-
-            <div id="calendar-controls" class="mb-3">
-                <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
-                <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
-                <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
-            </div>
-
-            <div id="calendar-grid" class="calendar-grid mt-4"></div>
-
-            <!-- Modal (unchanged) -->
-            <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Edit Slot</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="slotForm">
-                                <div class="mb-2">
-                                    <label>Activity</label>
-                                    <select id="activitySelect" class="form-select"></select>
-                                </div>
-                                <div class="mb-2">
-                                    <label>Resources</label>
-                                    <select id="resourcesSelect" class="form-select" multiple></select>
-                                </div>
-                                <div class="mb-2">
-                                    <label>Place</label>
-                                    <select id="placeSelect" class="form-select"></select>
-                                </div>
-                                <div class="mb-2">
-                                    <label>Area</label>
-                                    <select id="areaSelect" class="form-select" multiple></select>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
-                            <button class="btn btn-primary" id="saveSlotBtn">Save</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="summary-report" class="mt-4"></div>
-        </div>
-    </div>
-</div>
 <style>
   /* Container to align label and switch */
   .toggle-container {
@@ -175,6 +111,71 @@
   .slot .lozenge[data-type="area"] { background: rgba(248,215,218,0.9); }
   .election-highlight { border: 2px double red !important; box-sizing: border-box; }
   .today-highlight { border: 2px double blue !important; box-sizing: border-box; }
+</style>
+<div id="mapwin" class="innertube">
+    <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" > </iframe>
+    <!-- Login Screen -->
+    <div id="loginScreen">
+        <h2>Login</h2>
+        <input type="password" id="password" placeholder="Enter password" class="form-control mb-2">
+        <button id="loginBtn" type="button" class="btn btn-primary mb-2">Login</button>
+        <div id="loginMessage"></div>
+    </div>
+
+    <!-- Calendar Container -->
+    <div id="calendar">
+        <div class="container-fluid">
+            <h2 class="text-center mb-4">{{ current_election }} Campaigns Calendar</h2>
+
+            <div id="calendar-controls" class="mb-3">
+                <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+                <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
+                <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
+            </div>
+
+            <div id="calendar-grid" class="calendar-grid mt-4"></div>
+
+            <!-- Modal (unchanged) -->
+            <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Edit Slot</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="slotForm">
+                                <div class="mb-2">
+                                    <label>Activity</label>
+                                    <select id="activitySelect" class="form-select"></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Resources</label>
+                                    <select id="resourcesSelect" class="form-select" multiple></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Place</label>
+                                    <select id="placeSelect" class="form-select"></select>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Area</label>
+                                    <select id="areaSelect" class="form-select" multiple></select>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
+                            <button class="btn btn-primary" id="saveSlotBtn">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="summary-report" class="mt-4"></div>
+        </div>
+    </div>
+</div>
 
 <script >
   // Listen to message from child window
@@ -206,7 +207,7 @@
       });
 
 </script>
-<script src="https://https://newbrie.github.io/Electtrek/static/resourcing.js"></script>
+<script src="https://newbrie.github.io/Electtrek/static/resourcing.js"></script>
 
 {% endblock map %}
 
@@ -938,9 +939,34 @@ function updateConstantsUI(constants, options) {
     console.log("Refreshing table for", id);
     window.parent.postMessage({
     type: "update-table",
-    stable: selectedTable
+    stable: 'nodelist_xref'
     }, "*"); // Replace * with specific origin if needed
 }
+
+
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const iframe = document.getElementById("iframe1");
+        const toggleBtn = document.getElementById("b9");
+
+        toggleBtn.addEventListener("click", () => {
+            let currentURL = iframe.src;
+
+            // If currently pointing at the calendar → switch to map
+            if (currentURL.endsWith("-CAL.html")) {
+                iframe.src = mapFile;
+                toggleBtn.textContent = "📅 View Calendar";
+            }
+            // Else currently showing map → switch to calendar
+            else {
+                iframe.src = calFile;
+                toggleBtn.textContent = "🗺️ View Map";
+            }
+        });
+    });
+
+    </script>
+
 
     const tableSelector = document.getElementById("tableSelector");
     const toggle = document.getElementById("resources-toggle");
@@ -976,8 +1002,7 @@ function updateConstantsUI(constants, options) {
       b5: "{{ url_for('kanban') }}",
       b6: "{{ url_for('telling') }}",
       b7: "{{ url_for('search') }}",
-      b8: "{{ url_for('dashboard') }}",
-      b9: "{{ url_for('calendar') }}"
+      b8: "{{ url_for('dashboard') }}"
     };
 
     Object.entries(iframeButtons).forEach(([id, url]) => {

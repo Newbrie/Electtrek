@@ -58,6 +58,27 @@ document.addEventListener("DOMContentLoaded", () => {
             loginMessage.style.color = "orange";
         }
     });
+
+      console.log("📅 Building calendar…");
+
+      // Build the grid and load data
+      buildCalendarGrid("calendar-grid", 45);
+      populateDropdowns();
+      await getCalendarUpdate();
+      console.log("✅ Calendar initialized.");
+
+      // Buttons (use correct IDs)
+      const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
+      const generateSummaryBtn = document.getElementById("generate-summary-btn");
+      const saveSlotBtn = document.getElementById("saveSlotBtn");
+      const clearSlotBtn = document.getElementById("clearSlotBtn");
+
+      // Attach button event handlers
+      saveCalendarBtn.addEventListener("click", saveCalendarPlan);
+      generateSummaryBtn.addEventListener("click", generateSummaryReport);
+      saveSlotBtn.addEventListener("click", handleSaveSlot);
+      clearSlotBtn.addEventListener("click", handleClearSlot);
+
 });
 
 
@@ -566,30 +587,6 @@ if (!isDev) {
 }
 const calendarData = {};
 const startHour = 9, endHour = 21, slotDuration = 2;
-
-
-
-document.addEventListener("DOMContentLoaded", async () => {
-  console.log("📅 Building calendar…");
-
-  // Build the grid and load data
-  buildCalendarGrid("calendar-grid", 45);
-  populateDropdowns();
-  await getCalendarUpdate();
-  console.log("✅ Calendar initialized.");
-
-  // Buttons (use correct IDs)
-  const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
-  const generateSummaryBtn = document.getElementById("generate-summary-btn");
-  const saveSlotBtn = document.getElementById("saveSlotBtn");
-  const clearSlotBtn = document.getElementById("clearSlotBtn");
-
-  // Attach button event handlers
-  saveCalendarBtn.addEventListener("click", saveCalendarPlan);
-  generateSummaryBtn.addEventListener("click", generateSummaryReport);
-  saveSlotBtn.addEventListener("click", handleSaveSlot);
-  clearSlotBtn.addEventListener("click", handleClearSlot);
-});
 
 
 
