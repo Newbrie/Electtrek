@@ -57,7 +57,7 @@ body {
 <div id="loginScreen">
     <h2>Login</h2>
     <input type="password" id="password" placeholder="Enter password" class="form-control mb-2">
-    <button id="loginBtn" class="btn btn-primary mb-2">Login</button>
+    <button id="loginBtn" type="button" class="btn btn-primary mb-2">Login</button>
     <div id="loginMessage"></div>
 </div>
 
@@ -120,20 +120,33 @@ body {
 <iframe id="mapFrame" src="{{ CurrentElection.territory }}" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; border:none; z-index:1000;"></iframe>
 
 <script>
-// === Simple Password Check ===
-const PASSWORD = "mySecret";  // replace with secure retrieval in production
-const loginBtn = document.getElementById("loginBtn");
-const loginMessage = document.getElementById("loginMessage");
+  const PASSWORD = "mySecret";
 
-loginBtn.addEventListener("click", () => {
-    const val = document.getElementById("password").value;
-    if (val === PASSWORD) {
-        document.getElementById("loginScreen").style.display = "none";
-        document.getElementById("calendar").style.display = "block";
-    } else {
-        loginMessage.innerHTML = "❌ Wrong password!";
-    }
-});
+  const loginBtn = document.getElementById("loginBtn");
+  const loginMessage = document.getElementById("loginMessage");
+  const pw = document.getElementById("password");
+
+  loginMessage.innerHTML = ""; // Start blank
+
+  pw.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+          e.preventDefault();
+          loginBtn.click();
+      }
+  });
+
+  loginBtn.addEventListener("click", () => {
+      loginMessage.innerHTML = "";  // Stop flicker immediately
+
+      const val = pw.value;
+
+      if (val === PASSWORD) {
+          document.getElementById("loginScreen").style.display = "none";
+          document.getElementById("calendar").style.display = "block";
+      } else {
+          loginMessage.innerHTML = "❌ Wrong password!";
+      }
+  });
 
 // === Map Toggle Logic ===
 const viewMapBtn = document.getElementById("view-map-btn");

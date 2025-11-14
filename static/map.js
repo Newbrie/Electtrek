@@ -484,27 +484,6 @@ var showMore = function (msg,area, type) {
     row.style.backgroundColor = "";
 }
 
-async function sha256(str) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function checkPassword() {
-  const password = document.getElementById("passwordInput").value;
-  const hash = await sha256(password);
-
-  // Replace this hash with your own
-  const correctHash = "92523985e558a2af5170a766a41a7482081a0753c7d4ef6336c0ecd43dc71dad";
-
-  if (hash === correctHash) {
-    document.body.classList.add("unlocked");
-    document.getElementById("login").style.display = "none";
-    document.getElementById("content").style.display = "block";
-  } else {
-    document.getElementById("error").textContent = "Incorrect password.";
-  }
-}
-
 window.highlightLozenge = function highlightLozenge(loz) {
 document.querySelectorAll('.lozenge.selected').forEach(el => {
   el.classList.remove('selected');

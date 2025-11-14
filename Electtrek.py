@@ -1347,6 +1347,7 @@ class TreeNode:
         import re
         from collections import defaultdict
 
+
         def generate_place_code(prefix):
             """Generate a code from the first letter of each word in the address prefix."""
             words = re.findall(r'\b\w', prefix)
@@ -1512,6 +1513,7 @@ class TreeNode:
         global SERVER_PASSWORD
         global STATICSWITCH
         global markerframe
+
         from folium import IFrame
         from branca.element import Element
 
@@ -1521,7 +1523,8 @@ class TreeNode:
         import re
         from pathlib import Path
 
-
+        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+            markerframe = json.load(f)
 
         # --- CSS to adjust popup styling
         move_close_button_css = """
@@ -1896,7 +1899,6 @@ class TreeNode:
 
 
 
-        FolMap.get_root().html.add_child(folium.Element(places_palette_html))
 
 
         # Default date for markers with missing EventDate
@@ -1926,13 +1928,33 @@ class TreeNode:
         places_json = json.dumps(places_list)
         print(f"___on map create places_json {places_json}")
 
+        FolMap.get_root().html.add_child(folium.Element(places_palette_html))
+
         # JS to preload palette safely
         places_preload_js = f"""
         <script>
         document.addEventListener('DOMContentLoaded', () => {{
             const placesData = {places_json};
-            placesData.forEach(p => {{
-                addPlaceToPalette(p.prefix, p.address, p.postcode, p.lat, p.lng);
+            const paletteBody = document.getElementById("places-content");
+
+            if (!paletteBody) {{
+                console.warn("⚠️ places-content element not found! Palette may not be loaded yet.");
+                return;
+            }}
+
+            placesData.forEach((p, i) => {{
+                console.log('Preloading place:', p.prefix, p.lat, p.lng, p.address, p.postcode);
+
+                if (p.lat == null || p.lng == null) {{
+                    console.error("❌ Null coordinates at index", i, p);
+                    return; // skip this entry
+                }}
+
+                if (typeof addPlaceToPalette === "function") {{
+                    addPlaceToPalette(p.prefix, p.lat, p.lng, p.address, p.postcode);
+                }} else {{
+                    console.warn("⚠️ addPlaceToPalette function not available yet.");
+                }}
             }});
         }});
         </script>
