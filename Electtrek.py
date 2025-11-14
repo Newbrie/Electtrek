@@ -4964,8 +4964,7 @@ def calendar():
     fileending = "-"+calfile.split("-").pop()
     current_node.file = subending(current_node.file,fileending)
     calfile = current_node.create_area_cal(current_election,CurrentElection,areaelectors)
-    print(f"Created new calfile:{calfile} in {route()}")
-    visit_node(current_node,current_election,CurrentElection,calfile)
+    print(f"Created new calfile:{calfile} in {route()} with mapfile = {CurrentElection['territory']}")
     return send_from_directory(app.config['UPLOAD_FOLDER'],calfile, as_attachment=False)
 
 
