@@ -1,0 +1,90 @@
+<div id="calendar">
+    <div class="container-fluid">
+        <h2 class="text-center mb-4">{{ current_election }} Campaigns Calendar</h2>
+
+        <!-- Calendar Controls -->
+        <div id="calendar-controls" class="mb-3">
+            <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+            <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
+            <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div id="calendar-grid" class="calendar-grid mt-4">
+            {% if CurrentElection.calendar_plan.slots %}
+                {% for slot_time, slot_data in CurrentElection.calendar_plan.slots.items() %}
+                    <div class="calendar-slot card mb-2 p-2" data-id="{{ slot_time }}">
+                        <div><strong>Time:</strong> {{ slot_time }}</div>
+                        <div><strong>Availability:</strong> {{ slot_data.availability }}</div>
+                        <div><strong>Lozenges:</strong>
+                            {% if slot_data.lozenges %}
+                                {{ slot_data.lozenges | join(', ') }}
+                            {% else %}
+                                None
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No calendar slots available.</p>
+            {% endif %}
+        </div>
+
+        <!-- Slot Modal -->
+        <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit Slot</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="slotForm">
+                            <div class="mb-2">
+                                <label>Activity</label>
+                                <select id="activitySelect" class="form-select">
+                                    {% for tag, desc in CurrentElection.tags.items() %}
+                                        <option value="{{ tag }}">{{ desc }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Resources</label>
+                                <select id="resourcesSelect" class="form-select" multiple>
+                                    {% for r in resources %}
+                                        <option value="{{ r.code }}">{{ r.Firstname }} {{ r.Surname }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Place</label>
+                                <select id="placeSelect" class="form-select">
+                                    {% for p in places %}
+                                        <option value="{{ p.code }}">{{ p.tooltip }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label>Area</label>
+                                <select id="areaSelect" class="form-select" multiple>
+                                  {% for a in areas.keys() %}
+                                    <option value="{{ a }}">{{ a }}</option>
+                                  {% endfor %}
+
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
+                        <button class="btn btn-primary" id="saveSlotBtn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Report -->
+        <div id="summary-report" class="mt-4"></div>
+    </div>
+</div>

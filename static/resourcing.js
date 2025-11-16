@@ -1,85 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const loginBtn = document.getElementById("loginBtn");
-    const passwordInput = document.getElementById("password");
-    const loginMessage = document.getElementById("loginMessage");
-    const loginScreen = document.getElementById("loginScreen");
-    const calendar = document.getElementById("calendar");
 
-    // Initial state
-    loginScreen.style.display = "block";
-    calendar.style.display = "none";
-    loginMessage.textContent = "";
-
-    // Pressing Enter triggers login
-    passwordInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            loginBtn.click();
-        }
-    });
-
-    loginBtn.addEventListener("click", async () => {
-        loginMessage.textContent = ""; // clear immediately
-        const password = passwordInput.value;
-
-        try {
-            const res = await fetch('https://electtrek.com/api/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password }),
-            });
-
-            if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-
-            const data = await res.json();
-
-            if (data.success) {
-                loginMessage.textContent = "✅ Access granted!";
-                loginMessage.style.color = "blue";
-
-                // Trigger fade-in
-                loginMessage.classList.add("show");
-
-                // Short delay to switch screens
-                setTimeout(() => {
-                    loginScreen.style.display = "none";
-                    calendar.style.display = "block";
-                }, 500); // matches fade duration
-            } else {
-                loginMessage.textContent = "❌ Wrong password!";
-                loginMessage.style.color = "red";
-                loginMessage.classList.add("show");
-            }
-
-
-        } catch (err) {
-            console.error("Fetch failed:", err);
-            loginMessage.textContent = `⚠️ Login request failed: ${err.message}`;
-            loginMessage.style.color = "orange";
-        }
-    });
-
-      console.log("📅 Building calendar…");
-
-      // Build the grid and load data
-      buildCalendarGrid("calendar-grid", 45);
-      populateDropdowns();
-      await getCalendarUpdate();
-      console.log("✅ Calendar initialized.");
-
-      // Buttons (use correct IDs)
-      const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
-      const generateSummaryBtn = document.getElementById("generate-summary-btn");
-      const saveSlotBtn = document.getElementById("saveSlotBtn");
-      const clearSlotBtn = document.getElementById("clearSlotBtn");
-
-      // Attach button event handlers
-      saveCalendarBtn.addEventListener("click", saveCalendarPlan);
-      generateSummaryBtn.addEventListener("click", generateSummaryReport);
-      saveSlotBtn.addEventListener("click", handleSaveSlot);
-      clearSlotBtn.addEventListener("click", handleClearSlot);
-
-});
 
 
   function createStandaloneHTML() {
@@ -564,32 +483,6 @@ function redrawSlot(slotId, data = {}) {
 }
 
 
-// 🧱 Safe variable injection
-window.task_tags = {{ task_tags | default([]) | tojson }};
-window.resources = {{ resources | default([]) | tojson }};
-window.places = {{ places | default([]) | tojson }};
-window.areas = {{ areas | default([]) | tojson }};
-
-console.log("Injected task_tags:", window.task_tags);
-console.log("Injected resources:", window.resources);
-console.log("Injected places:", window.places);
-console.log("Injected areas:", window.areas);
-
-const DEVURLS = {{ DEVURLS | tojson }} ;
-const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
-const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
-
-if (!isDev) {
-    const btn = document.getElementById("export-html-btn");
-    if (btn) {
-        btn.style.display = "none";
-    }
-}
-const calendarData = {};
-const startHour = 9, endHour = 21, slotDuration = 2;
-
-
-
 // --- Slot Modal Handlers ---
 async function handleSaveSlot() {
   if (!currentSlotId) return;
@@ -710,27 +603,6 @@ function openSlotModal(slotId) {
   const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
   modalInstance.show();
 
-}
-
-
-async function getCalendarUpdate() {
-  try {
-    const response = await fetch(`${API}/current-election`);
-    const data = await response.json();
-    console.log("📦 Raw backend response:", data); // 👈 Add this
-
-    const plan = data.calendar_plan || data; // Handles both structures
-    console.log("📋 Parsed plan object:", plan); // 👈 Add this too
-
-    if (plan?.slots) {
-      loadCalendarPlan(plan);
-      console.log("✅ Calendar plan loaded into UI");
-    } else {
-      console.warn("⚠️ No slots found in backend data");
-    }
-  } catch (error) {
-    console.error("🚨 Error fetching calendar plan:", error);
-  }
 }
 
 

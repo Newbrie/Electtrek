@@ -55,6 +55,7 @@ import locale
 from shapely.ops import nearest_points
 import logging
 from flask import has_request_context
+import html
 
 
 
@@ -1336,62 +1337,17 @@ class TreeNode:
         return fam_nodes
 
 
-    def create_area_cal(self,CE,CElection, datablock):
+    def create_area_cal(self,CE,CElection, ctype):
         global current_node
         global allelectors
         global layeritems
         global markerframe
         global TREK_NODES
         global resources
+        global places
 
         import re
         from collections import defaultdict
-
-
-        def generate_place_code(prefix):
-            """Generate a code from the first letter of each word in the address prefix."""
-            words = re.findall(r'\b\w', prefix)
-            return ''.join(words).upper()
-
-        def build_place_lozenges(markerframe):
-            code_counts = defaultdict(int)
-            place_lozenges = []
-
-            for idx, row in enumerate(markerframe):
-                print(f"___build_place_loz - index: {idx} row: {row}")
-                prefix = row.get('AddressPrefix')
-                if not prefix:
-                    continue
-
-                # Generate base code (e.g., Grand Hotel → GH)
-                base_code = generate_place_code(prefix)
-
-                # Track and disambiguate duplicates
-                code_counts[base_code] += 1
-                code = base_code if code_counts[base_code] == 1 else f"{base_code}{code_counts[base_code]}"
-
-                # Build full address for tooltip
-                address_parts = filter(None, [
-                    row.get('AddressPrefix'),
-                    row.get('Address1'),
-                    row.get('Address2'),
-                    row.get('Postcode')
-                ])
-                full_address = ', '.join(address_parts)
-
-                place_lozenges.append({
-                    'code': code,
-                    'tooltip': full_address,
-                    'lat': row.get('Lat'),
-                    'lon': row.get('Long')
-                })
-
-                    # Convert list of places to dict keyed by code
-            place_details_dict = {p['code']: p for p in place_lozenges}
-            print(f"___place_lozenges: {place_details_dict}")
-
-            return place_details_dict
-
 
 
         with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
@@ -1401,7 +1357,7 @@ class TreeNode:
             markerframe = json.load(f)
 
         # Track used IDs across both existing and new entries
-        places = build_place_lozenges(markerframe)
+#        places = build_place_lozenges(markerframe)
 
 #        restore_from_persist(session=session)
 #        current_node = get_current_node(session)
@@ -1414,76 +1370,11 @@ class TreeNode:
 
 
         print(f"___resources in election {CE} self node: {self.value} Resources: {selectedResources} ")
-        print(f"number of records {len(datablock)} ")
 
-        areas = {}
 
-        if self.level == 4:
-            mask = datablock['Area'] == self.value
-            datablock = datablock[mask]
-            print(f"caldata for {self.value} of length {len(datablock)} ")
-            for walkname in set(datablock.WalkName.values):
-                print(f" under {route()} in walk {walkname}  create_area_cal with datablock {len(datablock)} and columns {datablock.columns}")
+        print(f"caldata for {self.value} of length {len(Featurelayers[ctype].areashtml)} ")
+        areas = Featurelayers[ctype].areashtml
 
-                if not walkname:
-                    continue
-                mask1 = datablock['WalkName'] == walkname
-                streets = datablock[mask1]["StreetName"].unique().tolist()
-                datablock2 = datablock[mask1]
-                print(f" under {route()} in walk {walkname}  create_area_cal with datablock {len(datablock)} and columns {datablock.columns}")
-
-                streets_html = build_street_list_html(datablock2)  # your existing function
-                areas[walkname] = {
-                    "code": walkname,
-                    "details": streets,
-                    "tooltip_html": streets_html
-                }
-        elif self.level == 3:
-            print(f"caldata for {self.value} of length {len(datablock)} cols:{datablock.columns} ")
-            for areaname in set(datablock.Area.values):
-                print(f"_____Area Name: {areaname} ")
-
-                if not areaname:
-                    continue
-                mask2 = datablock['Area'] == areaname
-                walks = datablock[mask2]["WalkName"].unique().tolist()
-                datablock2 = datablock[mask2]
-                print(f" under {route()} in Level 3 create_area_cal with datablock {len(datablock)}")
-                walks_html = build_area_list_html(datablock2)
-                areas[areaname] = {
-                    "code": areaname,
-                    "details": walks,
-                    "tooltip_html": walks_html
-                }
-        elif self.level == 2:
-            print(f"caldata for {self.value} of length {len(datablock)} cols:{datablock.columns} ")
-            constitnodes = self.children
-            for conname in [x.value for x in constitnodes]:
-                print(f"_____Area Name: {conname} ")
-
-                if not conname:
-                    continue
-                wardnodes = [child for node in constitnodes for child in node.children if node.type == 'ward']
-                wardnames = [w.value for w in wardnodes]
-                ward_df = pd.DataFrame([
-                    {
-                        "Election": node.election,
-                        "Lat": node.centroid[0],
-                        "Long": node.centroid[1],
-                        "ENOP": node.electorate,
-                        "Zone": node.col
-                    }
-                    for node in wardnodes
-                ])
-
-                print(ward_df.head())
-                print(f" under {route()} in Level 2 create_area_cal with datablock {len(ward_df)}")
-                wards_html = build_area_list_html(ward_df)
-                areas[conname] = {
-                    "code": conname,
-                    "details": wards,
-                    "tooltip_html": wards_html
-                }
         # share input and outcome tags
         valid_tags = CElection['tags']
         task_tags = {}
@@ -1517,6 +1408,13 @@ class TreeNode:
         from folium import IFrame
         from branca.element import Element
 
+        print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
+
+
+#        maptype = flayers[0].key
+#        calfile = self.create_area_cal(CE,CEdata, maptype)
+#        print(f"___AFTER cal creation: in route {route()} created file: ", calfile)
+
         print(f"___BEFORE map creation: in route {route()} creating file: ", self.file)
 
         import hashlib
@@ -1525,6 +1423,7 @@ class TreeNode:
 
         with open(MARKER_FILE, 'r', encoding="utf-8") as f:
             markerframe = json.load(f)
+
 
         # --- CSS to adjust popup styling
         move_close_button_css = """
@@ -2398,6 +2297,30 @@ class TreeNode:
 
 from collections import defaultdict
 
+def build_nodemap_list_html(herenode):
+    """
+    Build HTML tooltip listing all children of a node.
+    Returns a string of safe HTML.
+    """
+
+    if not herenode or not getattr(herenode, "children", None):
+        return "<em>No children</em>"
+
+    items_html = []
+
+    for child in herenode.children:
+        # Safely escape for HTML
+        label = getattr(child, "name", None) or getattr(child, "value", "") or "Unnamed"
+        label = html.escape(str(label))
+
+        items_html.append(f"<li>{label}</li>")
+
+    # Wrap in tooltip-friendly minimal markup
+    tooltip_html = "<ul style='margin:0; padding-left:1em;'>" + "".join(items_html) + "</ul>"
+
+    return tooltip_html
+
+
 def build_street_list_html(streets_df):
     # Voting intention map
     VID = {
@@ -2545,57 +2468,7 @@ def build_street_list_html(streets_df):
     return html
 
 
-def build_area_list_html(datablock):
-    html = '''
-    <div style="
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 10px;
-        background-color: black !important;
-        color: white !important;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-        max-width: 500px;
-        overflow-x: auto;
-        font-family: sans-serif;
-        font-size: 9pt;
-        white-space: nowrap;
-    ">
-        <table style="border-collapse: collapse; width: 100%;">
-            <thead>
-                <tr>
-                    <th style="text-align:left; padding: 4px;">Area Name</th>
-                    <th style="text-align:left; padding: 4px;"># Walks</th>
-                    <th style="text-align:left; padding: 4px;"># Streets</th>
-                    <th style="text-align:left; padding: 4px;"># Electors</th>
-                </tr>
-            </thead>
-            <tbody>
-    '''
 
-    grouped = datablock.groupby("Area")
-    print(f"___area_list_html data {len(grouped)}")
-
-    for area_name, group in grouped:
-        num_walks = group['WalkName'].nunique()
-        num_streets = group["StreetName"].nunique()
-        num_electors = len(group)
-
-        html += f'''
-        <tr>
-            <td style="padding: 4px;">{area_name}</td>
-            <td style="padding: 4px;">{num_walks}</td>
-            <td style="padding: 4px;">{num_streets}</td>
-            <td style="padding: 4px;">{num_electors}</td>
-        </tr>
-        '''
-
-    html += '''
-            </tbody>
-        </table>
-    </div>
-    '''
-
-    return html
 
 
 
@@ -2605,10 +2478,12 @@ class ExtendedFeatureGroup(FeatureGroup):
         super().__init__(name=name, overlay=overlay, control=control, show=show, **kwargs)
         self.name = name
         self.id = id
+        self.areashtml = {}
 
     def reset(self):
         # This clears internal children before rendering
         self._children.clear()
+        self.areashtml = {}
         print("____reset the layer",len(self._children), self)
         return self
 
@@ -2762,7 +2637,15 @@ class ExtendedFeatureGroup(FeatureGroup):
 #                        'AddressPrefix': lambda x: ','.join(x.dropna().astype(str))
 #                        }
 #                    Streetsdf = Streetsdf0.groupby(['StreetName']).agg(g).reset_index()
+#    build the area html for dropdowns and tooltips
                     streetstag = build_street_list_html(Streetsdf)
+                    streets = Streetsdf["StreetName"].unique().tolist()
+                    self.areashtml[matched_child.value] = {
+                                        "code": matched_child.value,
+                                        "details": streets,
+                                        "tooltip_html": streetstag
+                                        }
+
                     print ("______Voronoi Streetsdf:",len(Streetsdf), streetstag)
                     print (f" {len(Streetsdf)} streets exist in {target_node.value} under {c_election} election for the {shapecolumn[vtype]} column with this value {child.value}")
 
@@ -3227,6 +3110,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def create_layer(self, c_election, node, intention_type, static=False):
         global allelectors
+        global places
         CurrentElection = get_election_data(c_election)
         print(f"__Layer id:{self.id} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
         entrylen = len(self._children)
@@ -3267,6 +3151,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
     def add_genmarkers(self,node,type, static):
+        global places
         def compute_font_size(days):
             if days <= -35:
                 return 10
@@ -3367,6 +3252,11 @@ class ExtendedFeatureGroup(FeatureGroup):
             return [round(Lat, 6), round(Long, 6)]
 
         def process_marker_file(MARKER_FILE):
+            def generate_place_code(prefix):
+                """Generate a code from the first letter of each word in the address prefix."""
+                words = re.findall(r'\b\w', prefix)
+                return ''.join(words).upper()
+
             print("___MARKER_FILE:", MARKER_FILE)
 
             # --- Validate file existence ---
@@ -3400,6 +3290,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             sorted_indices = sorted(range(len(parsed_dates)), key=lambda i: (parsed_dates[i] - today).days)
             ranks = {i: rank + 1 for rank, i in enumerate(sorted_indices)}
 
+            code_counts = defaultdict(int)
+            place_lozenges = []
             # --- Main unified loop ---
             for i, row in enumerate(markerframe):
                 # --- LAT/LONG validation ---
@@ -3442,6 +3334,35 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 print(f"→ Marker: {tag}, Date={row['EventDate']}, DaysTo={row['DaysTo']}, Lat={lat}, Lng={lng}")
 
+                # place Lozenge creation
+                print(f"___build_place_loz - index: {i} row: {row}")
+                prefix = row.get('AddressPrefix')
+                if not prefix:
+                    continue
+
+                # Generate base code (e.g., Grand Hotel → GH)
+                base_code = generate_place_code(prefix)
+
+                # Track and disambiguate duplicates
+                code_counts[base_code] += 1
+                code = base_code if code_counts[base_code] == 1 else f"{base_code}{code_counts[base_code]}"
+
+                # Build full address for tooltip
+                address_parts = filter(None, [
+                    row.get('AddressPrefix'),
+                    row.get('Address1'),
+                    row.get('Address2'),
+                    row.get('Postcode')
+                ])
+                full_address = ', '.join(address_parts)
+
+                place_lozenges.append({
+                    'code': code,
+                    'tooltip': full_address,
+                    'lat': row.get('Lat'),
+                    'lon': row.get('Long')
+                })
+
                 # --- Add to map ---
                 self.add_child(folium.Marker(
                     location=[lat, lng],
@@ -3465,9 +3386,12 @@ class ExtendedFeatureGroup(FeatureGroup):
             except Exception as e:
                 print(f"❌ Failed to write marker file: {e}")
 
-            return
+            place_details_dict = {p['code']: p for p in place_lozenges}
+            print(f"___place_lozenges: {place_details_dict}")
 
-        process_marker_file(MARKER_FILE)
+            return place_details_dict
+
+        places = process_marker_file(MARKER_FILE)
 
         if  not os.path.exists(MARKER_FILE) or os.path.getsize(MARKER_FILE) == 0:
             raise FileNotFoundError(f"MARKER_FILE not found: {MARKER_FILE}")
@@ -3592,10 +3516,18 @@ class ExtendedFeatureGroup(FeatureGroup):
         global levelcolours
         global Con_Results_data
 
+        childlist = herenode.childrenoftype(type)
+        nodeshtml = build_nodemap_list_html(herenode)
+        details = [c.value for c in childlist]
+        self.areashtml[herenode.value] = {
+                            "code": herenode.value,
+                            "details": details,
+                            "tooltip_html": nodeshtml
+                            }
 
-        print("_________Nodemap:",herenode.value,type, [x.type for x in herenode.children],len(herenode.children), len(herenode.childrenoftype(type)))
+        print("_________Nodemap:",herenode.value,type, [x.type for x in childlist],len(herenode.children), len(childlist))
 
-        for c in herenode.childrenoftype(type):
+        for c in childlist:
             print("______Display children:",herenode.value, c.value,type)
 #            layerfids = [x.fid for x in self._children if x.type == type]
 #            if c.fid not in layerfids:
@@ -3723,6 +3655,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     pathref = c.mapfile()
                     mapfile = '/transfer/'+pathref
 
+
                     if not static:
                         self.add_child(folium.Marker(
                              location=here,
@@ -3770,6 +3703,15 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_nodemarks (self,herenode,type,static):
         global levelcolours
+
+        childlist = herenode.childrenoftype(type)
+        nodeshtml = build_nodemap_list_html(herenode)
+        details = [c.value for c in childlist]
+        self.areashtml[herenode.value] = {
+                            "code": herenode.value,
+                            "details": details,
+                            "tooltip_html": nodeshtml
+                            }
         num = len(herenode.childrenoftype(type))
         print(f"___creating {num} add_nodemarks of type {type} for {herenode.value} at level {herenode.level}")
 
@@ -4772,6 +4714,9 @@ Featurelayers = {
 "marker": ExtendedFeatureGroup(name='Special Markers', overlay=True, control=True, show=False, id='UNITED_KINGDOM')
 }
 
+for key, layer in Featurelayers.items():
+    layer.key = key
+
 
 # Setup logger
 logging.basicConfig(
@@ -4942,30 +4887,6 @@ def add_marker():
     markerframe[key] = data
     print(f"Markerframe updated: {markerframe}")  # for debug
     return jsonify({'status': 'ok', 'id': key})
-
-@app.route('/calendar', methods=['GET'])
-@login_required
-def calendar():
-    global allelectors
-    print(">>> Route/calendar called")
-    current_node = get_current_node(session)
-    restore_from_persist(session)
-    current_election = get_current_election(session)
-    CurrentElection = get_election_data(current_election)
-    mapfile = CurrentElection['territory']
-    calfile = subending(mapfile,"-CAL.html")
-    mask = (
-        (allelectors['Election'] == current_election)
-    )
-    areaelectors = allelectors.loc[mask].copy()  # important to avoid SettingWithCopyWarning
-    flash(f"Creating new calfile:{calfile}", "info")
-    print(f"Creating new calfile:{calfile} in elec {current_election} node: {current_node.value} under {len(areaelectors)}")
-    current_node = current_node.ping_node(current_election,calfile)
-    fileending = "-"+calfile.split("-").pop()
-    current_node.file = subending(current_node.file,fileending)
-    calfile = current_node.create_area_cal(current_election,CurrentElection,areaelectors)
-    print(f"Created new calfile:{calfile} in {route()} with mapfile = {CurrentElection['territory']}")
-    return send_from_directory(app.config['UPLOAD_FOLDER'],calfile, as_attachment=False)
 
 
 @app.route('/reassign_parent', methods=['POST'])
@@ -6213,31 +6134,6 @@ def update_territory():
     return jsonify(success=True, constants=CurrentElection)
 
 
-@app.route("/", methods=['POST', 'GET'])
-def index():
-    global TREK_NODES
-    global streamrag
-    global TABLE_TYPES
-
-
-    ELECTIONS = get_election_names()
-    if 'username' in session:
-        flash("__________Session Alive:"+ session['username'])
-        print("__________Session Alive:"+ session['username'])
-        formdata = {}
-        streamrag = getstreamrag()
-        restore_from_persist(session=session)
-        current_node = get_current_node(session)
-        current_election = get_current_election(session)
-        CurrentElection = get_election_data(current_election)
-        mapfile = current_node.mapfile()
-        calfile = current_node.calfile()
-#        redirect(url_for('captains'))
-
-        return render_template("Dash0.html",  formdata=formdata,table_types=TABLE_TYPES,current_election=current_election, ELECTIONS=ELECTIONS, group=allelectors ,streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
-
-    return render_template("index.html")
-
 
 @app.route('/validate_tags', methods=['POST'])
 @login_required
@@ -6273,6 +6169,83 @@ def validate_tags():
     else:
         return jsonify(valid=True)
 
+
+@app.route("/", methods=['POST', 'GET'])
+def index():
+    global TREK_NODES
+    global streamrag
+    global TABLE_TYPES
+
+
+    ELECTIONS = get_election_names()
+    if 'username' in session:
+        flash("__________Session Alive:"+ session['username'])
+        print("__________Session Alive:"+ session['username'])
+        formdata = {}
+        streamrag = getstreamrag()
+        restore_from_persist(session=session)
+        current_node = get_current_node(session)
+        current_election = get_current_election(session)
+        CElection = get_election_data(current_election)
+        mapfile = current_node.mapfile()
+        calfile = current_node.calfile()
+
+        ctype = gettypeoflevel(mapfile, current_node.level + 1)
+
+        from collections import defaultdict
+
+
+        with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
+            resources = json.load(f)
+
+        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+            markerframe = json.load(f)
+
+        # Track used IDs across both existing and new entries
+    #        places = build_place_lozenges(markerframe)
+
+    #        restore_from_persist(session=session)
+    #        current_node = get_current_node(session)
+    #        CE = get_current_election(session)
+
+        selectedResources = {
+                k: v for k, v in resources.items()
+                if k in CElection['resources']
+            }
+
+
+        print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
+
+        areas = Featurelayers[ctype].areashtml
+        print(f"caldata for {current_node.value} of length {len(areas)} ")
+
+        # share input and outcome tags
+        valid_tags = CElection['tags']
+        task_tags = {}
+        outcome_tags = {}
+
+        for tag, description in valid_tags.items():
+            if tag.startswith('L'):
+                task_tags[tag] = description
+            elif tag.startswith('M'):
+                outcome_tags[tag] = description
+        print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
+
+
+        return render_template(
+            "Dash0.html",
+            table_types=TABLE_TYPES,
+            current_election=current_election,
+            CurrentElection=CElection,
+            places=places,
+            resources=selectedResources,
+            task_tags=task_tags,
+            areas=Featurelayers[ctype].areashtml,
+            mapfile=mapfile,
+            calfile=calfile,
+            DEVURLS=config.DEVURLS
+        )
+    return render_template("index.html")
 
 #login
 @app.route('/login', methods=['POST', 'GET'])
@@ -6405,7 +6378,7 @@ def logout():
     # Clear the entire session to remove 'username', 'user_id', etc.
     session.clear()
 
-    return redirect(url_for('index'))
+    return redirect(url_for('login'))
 
 @app.route('/dashboard', methods=['GET','POST'])
 @login_required
@@ -7481,6 +7454,73 @@ def register():
         session['current_node_id'] = current_node.fid
         return redirect(url_for('get_location'))
 
+
+@app.route("/calendar_partial/<path:path>")
+@login_required
+def calendar_partial(path):
+    global places, resources
+
+    restore_from_persist(session=session)
+    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CElection = get_election_data(current_election)
+    ctype = gettypeoflevel(path, current_node.level + 1)
+
+    from collections import defaultdict
+
+
+    with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
+        resources = json.load(f)
+
+    with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+        markerframe = json.load(f)
+
+    # Track used IDs across both existing and new entries
+#        places = build_place_lozenges(markerframe)
+
+#        restore_from_persist(session=session)
+#        current_node = get_current_node(session)
+#        CE = get_current_election(session)
+
+    selectedResources = {
+            k: v for k, v in resources.items()
+            if k in CElection['resources']
+        }
+
+
+    print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
+
+    areas = Featurelayers[ctype].areashtml
+    print(f"caldata for {current_node.value} of length {len(areas)} ")
+
+    # share input and outcome tags
+    valid_tags = CElection['tags']
+    task_tags = {}
+    outcome_tags = {}
+
+    for tag, description in valid_tags.items():
+        if tag.startswith('L'):
+            task_tags[tag] = description
+        elif tag.startswith('M'):
+            outcome_tags[tag] = description
+    print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
+
+
+    return render_template(
+        "Dash0.html",
+        table_types=TABLE_TYPES,
+        current_election=current_election,
+        CurrentElection=CElection,
+        places=places,
+        resources=selectedResources,
+        task_tags=task_tags,
+        areas=Featurelayers[ctype].areashtml,
+        mapfile=mapfile,
+        calfile=calfile,
+        DEVURLS=config.DEVURLS
+    )
+
+
 @app.route('/thru/<path:path>', methods=['GET','POST'])
 @login_required
 def thru(path):
@@ -7820,8 +7860,63 @@ def firstpage():
         calfile = current_node.calfile()
         print(f"🧪 current election 3 {current_election} - current_node mapfile:{mapfile}")
 
-        return render_template("Dash0.html", table_types=TABLE_TYPES,VID_json=VID_json, current_election=current_election, ELECTIONS=ELECTIONS, formdata=formdata,mapfile=mapfile,calfile=calfile)
+        current_election = get_current_election(session)
+        CElection = get_election_data(current_election)
+        ctype = gettypeoflevel(mapfile, current_node.level + 1)
 
+        from collections import defaultdict
+
+
+        with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
+            resources = json.load(f)
+
+        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
+            markerframe = json.load(f)
+
+        # Track used IDs across both existing and new entries
+    #        places = build_place_lozenges(markerframe)
+
+    #        restore_from_persist(session=session)
+    #        current_node = get_current_node(session)
+    #        CE = get_current_election(session)
+
+        selectedResources = {
+                k: v for k, v in resources.items()
+                if k in CElection['resources']
+            }
+
+
+        print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
+
+        areas = Featurelayers[ctype].areashtml
+        print(f"caldata for {current_node.value} of length {len(areas)} ")
+
+        # share input and outcome tags
+        valid_tags = CElection['tags']
+        task_tags = {}
+        outcome_tags = {}
+
+        for tag, description in valid_tags.items():
+            if tag.startswith('L'):
+                task_tags[tag] = description
+            elif tag.startswith('M'):
+                outcome_tags[tag] = description
+        print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
+
+
+        return render_template(
+            "Dash0.html",
+            table_types=TABLE_TYPES,
+            current_election=current_election,
+            CurrentElection=CElection,
+            places=places,
+            resources=selectedResources,
+            task_tags=task_tags,
+            areas=Featurelayers[ctype].areashtml,
+            mapfile=mapfile,
+            calfile=calfile,
+            DEVURLS=config.DEVURLS
+        )
     else:
         return redirect(url_for('login'))
 

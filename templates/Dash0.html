@@ -64,37 +64,48 @@
       margin: 20px;
   }
 
-  /* Calendar container initially hidden */
-  #calendar {
-      display: none;
-  }
-
-  /* Login screen */
-  #loginScreen {
-      display: block;
-      max-width: 400px;
-      margin: 100px auto;
-      padding: 20px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      background-color: #f9f9f9;
-      text-align: center;
-  }
-
-
-  /* add to your CSS */
-  #loginScreen.fade-out {
-      opacity: 0;
-      transition: opacity 0.3s ease;
-  }
-
-    #loginMessage {
-      transition: opacity 0.5s ease-in-out;
-      opacity: 0; /* start hidden */
+    /* Keep iframe visible and in normal flow when map shown */
+    #iframe1 {
+        visibility: hidden;
+        position: relative;
+        z-index: 1;
     }
-    #loginMessage.show {
-      opacity: 1; /* fade in */
+
+    /* Calendar hidden by default but stays in document flow */
+    #calendar {
+        visibility: hidden;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
     }
+
+    /* Login screen on top of everything initially */
+    #loginScreen {
+        visibility: visible;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 20px;
+        z-index: 3;
+    }
+
+    /* add to your CSS */
+    #loginScreen.fade-out {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+      #loginMessage {
+        transition: opacity 0.5s ease-in-out;
+        opacity: 0; /* start hidden */
+      }
+      #loginMessage.show {
+        opacity: 1; /* fade in */
+      }
 
   /* Calendar styles (unchanged) */
   .calendar-grid { margin-top: 100px; }
@@ -112,6 +123,162 @@
   .election-highlight { border: 2px double red !important; box-sizing: border-box; }
   .today-highlight { border: 2px double blue !important; box-sizing: border-box; }
 </style>
+<script>
+
+  // 🧱 Safe variable injection
+  window.task_tags = {{ task_tags | default([]) | tojson }};
+  window.resources = {{ resources | default([]) | tojson }};
+  window.places = {{ places | default([]) | tojson }};
+  window.areas = {{ areas | default([]) | tojson }};
+
+  console.log("Injected task_tags:", window.task_tags);
+  console.log("Injected resources:", window.resources);
+  console.log("Injected places:", window.places);
+  console.log("Injected areas:", window.areas);
+
+  const DEVURLS = {{ DEVURLS | tojson }} ;
+  const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
+  const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
+
+  if (!isDev) {
+      const btn = document.getElementById("export-html-btn");
+      if (btn) {
+          btn.style.display = "none";
+      }
+  }
+  const calendarData = {};
+  const startHour = 9, endHour = 21, slotDuration = 2;
+
+
+  /* ---------------------------------------------------------
+   * UPDATE CONSTANTS FORM UI
+   * --------------------------------------------------------- */
+  window.updateConstantsUI = function (constants, options) {
+      if (!constants) return;
+
+      // populate basic fields
+      for (const key of Object.keys(constants)) {
+          const el = document.getElementById(key);
+          if (!el) continue;
+
+          if (el.tagName === "SELECT") {
+              if (el.multiple && Array.isArray(constants[key])) {
+                  Array.from(el.options).forEach(opt =>
+                      opt.selected = constants[key].includes(opt.value)
+                  );
+              } else {
+                  el.value = constants[key];
+              }
+          }
+      }
+
+      // populate special selects
+      ["candidate", "campaignMgr"].forEach(key => {
+          const el = document.getElementById(key);
+          if (!el) return;
+
+          el.innerHTML = "";
+          const resources = constants.resources || [];
+
+          resources.forEach(code => {
+              const person = options?.resources?.[code];
+              if (!person) return;
+
+              const opt = document.createElement("option");
+              opt.value = code;
+              opt.textContent = `${person.Firstname} ${person.Surname}`;
+              if (constants[key] === code) opt.selected = true;
+
+              el.appendChild(opt);
+          });
+      });
+  }
+
+
+  // ----------------------------
+  // Iframe & Toggle
+  // ----------------------------
+  window.changeIframeSrc = function(url) {
+    const logWindow = document.getElementById("logwin");
+    const li = document.createElement("li");
+    li.textContent = `Retrieving area ${url}`;
+    logWindow.appendChild(li);
+    logWindow.scrollTop = logWindow.scrollHeight;
+
+    iframeEl.src = url;
+  }
+
+  window.selectElection = function(electionName) {
+  console.log("Selecting election:", electionName);
+
+  // Remove 'active' from all tabs
+  document.querySelectorAll(".election-tab").forEach(tab => {
+    tab.classList.remove("active");
+  });
+
+  // Add 'active' to the clicked tab
+  const clickedTab = Array.from(document.querySelectorAll(".election-tab"))
+    .find(tab => tab.dataset.election === electionName);
+
+  if (clickedTab) {
+    clickedTab.classList.add("active");
+    clickedTab.classList.add("nav-link", "active");
+    console.log("Tab activated for election:", electionName);
+  } else {
+    console.warn("No tab found for election:", electionName);
+  }
+
+  // Proceed with backend election switch
+  fetch("/set-election", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ election: electionName })
+  })
+  .then(res => {
+    console.log("Fetch response status:", res.status, res.statusText);
+    return res.text(); // use text first to debug invalid JSON
+  })
+  .then(text => {
+    console.log("Raw response text:", text);
+    let data;
+    try {
+      data = JSON.parse(text);
+      console.log("Parsed JSON response:", data);
+    } catch (e) {
+      console.error("JSON parse failed:", e);
+      console.log("Response text causing parse error:", text);
+      return; // stop here if parse fails
+    }
+
+    if (!data || !data.constants) {
+      console.warn("Missing constants in response:", data);
+      return;
+    }
+
+    // Update constants UI
+    console.log("Updating constants UI with:", data.constants);
+    updateConstantsUI(data.constants, data.options);
+
+    // Extract mapfile
+    const mapfile = data.constants.territory;
+    if (mapfile) {
+      console.log("Changing iframe source to mapfile:", mapfile);
+      changeIframeSrc(`/thru/${mapfile}`);
+    } else {
+      console.warn("No territory/mapfile found in constants:", data.constants);
+    }
+
+    // Refresh table data
+    console.log("Fetching table data for 'nodelist_xref'");
+    fetchTableData('nodelist_xref');
+  })
+  .catch(err => {
+    console.error("Fetch failed:", err);
+  });
+}
+
+</script>
 <div id="mapwin" class="innertube">
     <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" > </iframe>
     <!-- Login Screen -->
@@ -176,38 +343,6 @@
         </div>
     </div>
 </div>
-
-<script >
-  // Listen to message from child window
-  const pessages = [];
-  var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
-
-  for (let x in pack) {
-  pessages.push(pack[x]);
-  };
-
-  var iframeEl = document.getElementById('iframe1');
-
-  function bindEvent( element, eventName, eventHandler) {
-   if (element.addEventListener){
-       element.addEventListener(eventName, eventHandler, false);
-   } else if (element.attachEvent) {
-       element.attachEvent('on' + eventName, eventHandler);
-   };
-  };
-
-  bindEvent( window, 'message', function (e) {
-    pessages.pop();
-    pessages.push(e.data);
-    var logWindow = document.getElementById("logwin");
-    var li = document.createElement("li");
-    li.appendChild(document.createTextNode(e.data));
-    logWindow.appendChild(li);
-    logWindow.scrollTop = logWindow.scrollHeight;
-      });
-
-</script>
-<script src="https://newbrie.github.io/Electtrek/static/resourcing.js"></script>
 
 {% endblock map %}
 
@@ -388,815 +523,641 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+<script >
+  // ----------------------------
+  // Message Handling
+  // ----------------------------
+  const messages = JSON.parse('{{ get_flashed_messages()|tojson|safe }}') || [];
+  const iframeEl = document.getElementById('iframe1');
 
-<script>
+  function bindEvent(element, eventName, eventHandler) {
+    element.addEventListener(eventName, eventHandler, false);
+  }
 
+  bindEvent(window, 'message', (e) => {
+    messages.pop();
+    messages.push(e.data);
 
-function fetchTableData(tableName) {
-  const VCO = {
+    const logWindow = document.getElementById("logwin");
+    const li = document.createElement("li");
+    li.textContent = e.data;
+    logWindow.appendChild(li);
+    logWindow.scrollTop = logWindow.scrollHeight;
+  });
+
+  // ----------------------------
+  // Table Fetching
+  // ----------------------------
+  const PARTY_COLORS = {
     O: "brown", R: "cyan", C: "blue", S: "red",
     LD: "yellow", G: "limegreen", I: "indigo",
     PC: "darkred", SD: "orange", Z: "lightgray",
     W: "white", X: "darkgray"
   };
 
-  const table = document.getElementById("captains-table");
-  const tabtitle = document.getElementById("selectedTitle");
-  const tabletitle = document.getElementById("tabletitle");
+  async function fetchTableData(tableName) {
+    const table = document.getElementById("captains-table");
+    const tabTitle = document.getElementById("selectedTitle");
 
-  if (!table || !tabtitle) {
-    console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
-    return;
-  }
-
-  const tabhead = table.querySelector("thead");
-  const tabbody = table.querySelector("tbody");
-
-  if (!tabhead || !tabbody) {
-    console.error("❌ Table structure invalid: missing <thead> or <tbody>");
-    return;
-  }
-
-  console.log(`📥 Fetching data for table: ${tableName}`);
-
-  fetch(`/get_table/${tableName}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin"
-  })
-  .then(response => {
-    if (!response.ok) throw new Error(`Server returned ${response.status}`);
-    return response.json();
-  })
-  .then(data => {
-    if (!Array.isArray(data) || data.length < 3) {
-      console.error("❌ Invalid data format received:", data);
+    if (!table || !tabTitle) {
+      console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
       return;
     }
 
-    const [columnHeaders, rows, title] = data;
+    const tabHead = table.querySelector("thead");
+    const tabBody = table.querySelector("tbody");
 
-    // Clear and set title
-    tabtitle.textContent = title;
-    tabhead.innerHTML = "";
-    tabbody.innerHTML = "";
+    if (!tabHead || !tabBody) {
+      console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+      return;
+    }
 
-    // Create table head
-    const headRow = document.createElement("tr");
-    const checkboxHeader = document.createElement("th");
-    checkboxHeader.textContent = "?";
-    headRow.appendChild(checkboxHeader);
+    console.log(`📥 Fetching data for table: ${tableName}`);
 
-    columnHeaders.forEach(header => {
-      const th = document.createElement("th");
-      th.textContent = header.toUpperCase();
-      headRow.appendChild(th);
-    });
-    tabhead.appendChild(headRow);
+    try {
+      const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
 
-    // Try to get the current party selector if it exists
-    const yourpartyEl = document.getElementById("yourparty");
-    const selectedParty = yourpartyEl ? yourpartyEl.value : null;
+      if (!Array.isArray(data) || data.length < 3) {
+        console.error("❌ Invalid data format received:", data);
+        return;
+      }
 
-    rows.forEach(record => {
-      const row = document.createElement("tr");
+      const [columnHeaders, rows, title] = data;
+      tabTitle.textContent = title;
+      tabHead.innerHTML = "";
+      tabBody.innerHTML = "";
 
-      // Add checkbox cell
-      const checkboxCell = document.createElement("td");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.name = "selectRow[]";
-      checkbox.classList.add("selectRow");
-      checkboxCell.appendChild(checkbox);
-      row.appendChild(checkboxCell);
+      // Table header
+      const headRow = document.createElement("tr");
+      headRow.innerHTML = `<th>?</th>` + columnHeaders.map(h => `<th>${h.toUpperCase()}</th>`).join('');
+      tabHead.appendChild(headRow);
 
-      columnHeaders.forEach(header => {
-        const cell = document.createElement("td");
-        const value = record[header] !== undefined ? record[header] : "";
+      const selectedParty = document.getElementById("yourparty")?.value;
 
-        cell.innerHTML = value;
-
-        // Highlight cell based on party
-        if (selectedParty && header === selectedParty) {
-          const color = VCO[selectedParty] || "inherit";
-          cell.style.backgroundColor = color;
-        }
-
-        row.appendChild(cell);
+      // Table body
+      rows.forEach(record => {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td><input type="checkbox" class="selectRow" name="selectRow[]"></td>` +
+          columnHeaders.map(h => {
+            const value = record[h] ?? "";
+            const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+            return `<td style="background-color:${color}">${value}</td>`;
+          }).join('');
+        tabBody.appendChild(row);
       });
 
-      tabbody.appendChild(row);
-    });
-
-    console.log(`✅ Table "${tableName}" populated with ${rows.length} rows.`);
-  })
-  .catch(error => {
-    console.error("❌ Error fetching table data:", error);
-  });
-}
+      console.log(`✅ Table "${tableName}" populated with ${rows.length} rows.`);
+    } catch (err) {
+      console.error("❌ Error fetching table data:", err);
+    }
+  }
 
 
   function handleToggle(el) {
-    if (el.checked) {
-      console.log("Switch is ON");
-    } else {
-      console.log("Switch is OFF");
-    }
+    console.log(`Switch is ${el.checked ? 'ON' : 'OFF'}`);
   }
 
-
-  function changeIframeSrc(newurl) {
-    var msg = "Retrieving area "+newurl;
-    var logWindow = document.getElementById("logwin");
-    var li = document.createElement("li");
-    li.appendChild(document.createTextNode(msg));
-    logWindow.appendChild(li);
-    logWindow.scrollTop = logWindow.scrollHeight;
-    document.getElementById("iframe1").src = newurl;
-      };
-
+  // ----------------------------
+  // String Utilities
+  // ----------------------------
   function toUpperCase(str) {
-    return str.replace(
-      /\w\S*/g,
-      text => text.charAt(0).toUpperCase() + text.substring(1).toUpperCase()
-    );
-  };
+    return str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.slice(1).toUpperCase());
+  }
 
+  function subending(filename, ending) {
+    const endings = [".XLSX", ".xlsx", ".CSV", ".csv", "-PRINT.html", "-MAP.html", "-WALKS.html", "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"];
+    let stem = filename;
 
-  window.addEventListener("message", function(event) {
-    // optionally check event.origin === "https://yourdomain.com"
-    if (event.data.type === "update-table") {
-        const stable = document.getElementById(event.data.stable);
-        if (stable) {
-          console.log("Received message to updateTable: " + event.data.stable);
-            fetchTableData(stable);
-        }
-    }
-});
+    for (const suffix of endings) if (filename.endsWith(suffix)) { stem = filename.slice(0, -suffix.length); break; }
 
-function subending(filename, ending) {
-  const endings = [
-    ".XLSX", ".xlsx", ".CSV", ".csv",
-    "-PRINT.html", "-MAP.html", "-WALKS.html",
-    "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"
-  ];
+    const result = stem + ending;
+    console.log(`____Subending test: from ${filename} to ${result}`);
+    return result;
+  }
 
-  let stem = filename;
+  // ----------------------------
+  // Chart Utilities
+  // ----------------------------
+  function createOrUpdateChart(labels, data, rags) {
+    const ragColors = { red: 'rgba(255,99,132,0.9)', amber: 'rgba(255,159,64,0.9)', limegreen: 'rgba(50,205,50,0.9)' };
+    const backgroundColors = rags.map(rag => ragColors[rag]);
 
-  for (const suffix of endings) {
-    if (filename.endsWith(suffix)) {
-      stem = filename.slice(0, -suffix.length);
-      break;
+    const canvas = document.getElementById('streamChart');
+    if (!canvas) return console.error('streamChart canvas not found.');
+
+    const ctx = canvas.getContext('2d');
+
+    if (window.streamChart) {
+      window.streamChart.data.labels = labels;
+      window.streamChart.data.datasets[0].data = data;
+      window.streamChart.data.datasets[0].backgroundColor = backgroundColors;
+      window.streamChart.update();
+    } else {
+      Chart.register(ChartDataLabels);
+      window.streamChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ label: 'Electors in Stream', data, backgroundColor: backgroundColors, borderColor: '#fff', borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Stream Loading Status' }, datalabels: { color: '#000', font: { size: 14, weight: 'bold' }, formatter: val => val.toLocaleString() } } },
+        plugins: [ChartDataLabels]
+      });
     }
   }
 
-  const result = stem + ending;
-  console.log(`____Subending test: from ${filename} to ${result}`);
-  return result;
-}
-
-function createOrUpdateChart(labels, data, rags) {
-  const ragColors = {
-    red: 'rgba(255, 99, 132, 0.9)',
-    amber: 'rgba(255, 159, 64, 0.9)',
-    limegreen: 'rgba(50, 205, 50, 0.9)'
-  };
-
-  const backgroundColors = rags.map(rag => ragColors[rag]);
-
-  // Get canvas element safely in case this is triggered late
-  const canvas = document.getElementById('streamChart');
-  if (!canvas) {
-    console.error('streamChart canvas not found.');
-    return;
+  async function fetchAndUpdateChart() {
+    try {
+      const { streamrag } = await (await fetch('/streamrag_api')).json();
+      const labels = Object.keys(streamrag);
+      const data = labels.map(l => streamrag[l].Elect);
+      const rags = labels.map(l => streamrag[l].RAG);
+      createOrUpdateChart(labels, data, rags);
+    } catch (err) {
+      console.error('Failed to fetch streamrag data:', err);
+    }
   }
 
-  const ctx = canvas.getContext('2d');
+  // ----------------------------
+  // Constants UI
+  // ----------------------------
+  function attachListenersToConstantFields(constants) {
+    Object.keys(constants).forEach(key => {
+      const el = document.getElementById(key);
+      if (!el) return;
 
-  if (streamChart) {
-    // Update existing chart
-    streamChart.data.labels = labels;
-    streamChart.data.datasets[0].data = data;
-    streamChart.data.datasets[0].backgroundColor = backgroundColors;
-    streamChart.update();
-  } else {
-    // First-time chart creation
-    Chart.register(ChartDataLabels); // Only needed once
-    streamChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Electors in Stream',
-          data: data,
-          backgroundColor: backgroundColors,
-          borderColor: '#fff',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          title: {
-            display: true,
-            text: 'Stream Loading Status'
-          },
-          datalabels: {
-            color: '#000',
-            font: { size: 14, weight: 'bold' },
-            formatter: (value) => value.toLocaleString()
-          }
-        }
-      },
-      plugins: [ChartDataLabels]
+      const listener = () => refreshConstantsUI();
+      el.removeEventListener("change", listener);
+      el.removeEventListener("input", listener);
+
+      if (el.tagName === "SELECT" && el.multiple) el.addEventListener("blur", listener);
+      else { el.addEventListener("change", listener); el.addEventListener("input", listener); }
     });
   }
-};
 
-function updateChart(newLabels, newData, newRags) {
-  const ragColors = {
-    red: 'rgba(255, 99, 132, 0.2)',
-    amber: 'rgba(255, 159, 64, 0.2)',
-    green: 'rgba(75, 192, 192, 0.2)'
-  };
+  function updateConstantsUI(constants, options) {
+    Object.entries(constants).forEach(([key, value]) => {
+      const el = document.getElementById(key);
+      if (!el) return;
+      const optsObj = options[key] || {};
+      el.innerHTML = "";
 
-  if (!streamChart) {
-    console.warn("Chart not initialized.");
-    return;
-  }
-
-  streamChart.data.labels = newLabels;
-  streamChart.data.datasets[0].data = newData;
-  streamChart.data.datasets[0].backgroundColor = newRags.map(rag => ragColors[rag] || 'gray');
-
-  streamChart.update();
-};
-
-async function fetchAndUpdateChart() {
-try {
-  const response = await fetch('/streamrag_api');
-  const receiveddata = await response.json();
-  const streamrag = receiveddata.streamrag
-  const html = receiveddata.html
-
-  const labels = Object.keys(streamrag);
-  const data = labels.map(label => streamrag[label].Elect);
-  const rags = labels.map(label => streamrag[label].RAG);
-
-  createOrUpdateChart(labels, data, rags);
-} catch (error) {
-  console.error('Failed to fetch streamrag data:', error);
-}
-};
-
-// Attach listeners to constant fields dynamically
-function attachListenersToConstantFields(constants) {
-Object.keys(constants).forEach(key => {
-  const el = document.getElementById(key);
-  if (!el) return;
-
-  const listener = () => refreshConstantsUI();
-  el.removeEventListener("change", listener);
-  el.removeEventListener("input", listener);
-
-  if (el.tagName === "SELECT" && el.multiple) {
-    el.addEventListener("blur", listener);
-  } else {
-    el.addEventListener("change", listener);
-    el.addEventListener("input", listener);
-  }
-});
-}
-
-
-function updateConstantsUI(constants, options) {
-  console.log(`Update to constants: ${Object.keys(constants)} : ${Object.entries(options)}`);
-  Object.entries(constants).forEach(([key, value]) => {
-    const el = document.getElementById(key);
-    if (!el) return;
-
-    const optsObj = options[key] || {};
-    el.innerHTML = ""; // Clear current options
-    if (options[key] && typeof options[key] === 'object') {
-        console.log(`Update to constant: ${key} ${constants[key]} :`, Object.entries(options[key]));
-      } else {
-        console.log(`Update to constant: ${key} ${constants[key]} : (no options available)`);
-      }
-
-    if (el.tagName === "SELECT") {
-
-      if (key === "resources") {
+      if (el.tagName === "SELECT") {
         // Multi-select for resources
-        Object.entries(options.resources || {}).forEach(([code, person]) => {
-          const option = document.createElement("option");
-          option.value = code;
-          option.textContent = `${person.Firstname} ${person.Surname}`;
-          if (Array.isArray(value) && value.includes(code)) {
-            option.selected = true;
-          }
-          el.appendChild(option);
-        });
-
-      } else if (key === "candidate" || key === "campaignMgr") {
-        // Candidate/compaignMgr filtered by selected resources
-        const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
-        selectedResources.forEach(code => {
-          const person = options.resources?.[code];
-          if (person) {
+        if (key === "resources") {
+          Object.entries(options.resources || {}).forEach(([code, person]) => {
             const option = document.createElement("option");
-            const email = document.getElementById("campaignMgremail");
             option.value = code;
             option.textContent = `${person.Firstname} ${person.Surname}`;
-            if (value === code) { option.selected = true;
-               email.value = `${person.campaignMgremail}`;
-             };
+            if (Array.isArray(value) && value.includes(code)) option.selected = true;
             el.appendChild(option);
+          });
+        } else if (key === "candidate" || key === "campaignMgr") {
+          const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
+          selectedResources.forEach(code => {
+            const person = options.resources?.[code];
+            if (!person) return;
+            const option = document.createElement("option");
+            option.value = code;
+            option.textContent = `${person.Firstname} ${person.Surname}`;
+            if (value === code) { option.selected = true; document.getElementById("campaignMgremail").value = person.campaignMgremail; }
+            el.appendChild(option);
+          });
+        } else if (key === "mapfiles") {
+          if (Array.isArray(value)) {
+            value.forEach((mapPath, idx) => {
+              const o = document.createElement("option");
+              o.value = mapPath;
+              o.textContent = `Map ${idx+1}: ${mapPath.split("/").pop()}`;
+              if (idx === value.length-1) o.selected = true;
+              el.appendChild(o);
+            });
           }
-        });
-
-      } else if (key === "mapfiles") {
-        // ✔ Correct mapfiles handling
-        if (Array.isArray(value)) {
-          value.forEach((mapPath, index) => {
+          el.onchange = () => changeIframeSrc(`/thru/${el.value}`);
+        } else {
+          Object.entries(optsObj).forEach(([optValue, optLabel]) => {
             const o = document.createElement("option");
-            o.value = mapPath;
-            o.textContent = `Map ${index + 1}: ${mapPath.split("/").pop()}`;
-            if (index === value.length - 1) {
-              o.selected = true;
-            }
+            o.value = optValue;
+            o.textContent = `${optValue}: ${optLabel}`;
+            if (optValue === value) o.selected = true;
             el.appendChild(o);
           });
         }
+      } else el.value = value;
 
-        // Add listener to change iframe when user selects
-        el.onchange = () => {
-          const selectedMap = el.value;
-          console.log("🗺️ Selected map:", selectedMap);
-          if (selectedMap) {
-            changeIframeSrc(`/thru/${selectedMap}`);
-          }
-        };
+      // Auto-update backend on input/change
+      el.oninput = () => {
+        let newVal = el.type === "number" ? parseFloat(el.value) : el.type === "checkbox" ? el.checked : el.value;
+        if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
 
-      } else if (key === "streams") {
-        // Do nothing as streams is populated elsewhere
-      }
-       else {
-        // Generic SELECT fields C: Conservative , W:Westminster etc
-        Object.entries(optsObj).forEach(([optValue, optLabel]) => {
-          const o = document.createElement("option");
-          o.value = optValue;
-          o.textContent = `${optValue}: ${optLabel}`;
-          if (optValue === value) o.selected = true;
-          el.appendChild(o);
+        fetch("/set-constant", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ election: document.querySelector(".election-tab.active")?.dataset.election || "", name: key, value: newVal })
+        }).then(res => res.json()).then(resp => {
+          if (!resp.success) alert("Failed to update: " + resp.error);
         });
-      }
-    } else {
-      // Non-SELECT elements
-      el.value = value;
-    }
-
-    // General input handler (select, input, etc.)
-    el.oninput = () => {
-      let newVal = el.value;
-      if (el.type === "number") newVal = parseFloat(newVal);
-      if (el.type === "checkbox") newVal = el.checked;
-      if (el.multiple) newVal = Array.from(el.selectedOptions).map(opt => opt.value);
-
-      fetch("/set-constant", {
-        method: "POST",
-        credentials: 'same-origin',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          election: document.querySelector(".election-tab.active")?.dataset.election || "",
-          name: key,
-          value: newVal
-        })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-//            fetchTableData('nodelist_xref');
-        } else {
-          alert("Failed to update: " + resp.error);
-        }
-      });
-    };
-  });
-  attachListenersToConstantFields(constants);
-}
-
-
-  function selectElection(electionName) {
-  console.log("Selecting election:", electionName);
-
-  // Remove 'active' from all tabs
-  document.querySelectorAll(".election-tab").forEach(tab => {
-    tab.classList.remove("active");
-  });
-
-  // Add 'active' to the clicked tab
-  const clickedTab = Array.from(document.querySelectorAll(".election-tab"))
-    .find(tab => tab.dataset.election === electionName);
-
-  if (clickedTab) {
-    clickedTab.classList.add("active");
-    clickedTab.classList.add("nav-link", "active");
-    console.log("Tab activated for election:", electionName);
-  } else {
-    console.warn("No tab found for election:", electionName);
+      };
+    });
+    attachListenersToConstantFields(constants);
   }
 
-  // Proceed with backend election switch
-  fetch("/set-election", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ election: electionName })
-  })
-  .then(res => {
-    console.log("Fetch response status:", res.status, res.statusText);
-    return res.text(); // use text first to debug invalid JSON
-  })
-  .then(text => {
-    console.log("Raw response text:", text);
-    let data;
-    try {
-      data = JSON.parse(text);
-      console.log("Parsed JSON response:", data);
-    } catch (e) {
-      console.error("JSON parse failed:", e);
-      console.log("Response text causing parse error:", text);
-      return; // stop here if parse fails
-    }
-
-    if (!data || !data.constants) {
-      console.warn("Missing constants in response:", data);
-      return;
-    }
-
-    // Update constants UI
-    console.log("Updating constants UI with:", data.constants);
-    updateConstantsUI(data.constants, data.options);
-
-    // Extract mapfile
-    const mapfile = data.constants.territory;
-    if (mapfile) {
-      console.log("Changing iframe source to mapfile:", mapfile);
-      changeIframeSrc(`/thru/${mapfile}`);
-    } else {
-      console.warn("No territory/mapfile found in constants:", data.constants);
-    }
-
-    // Refresh table data
-    console.log("Fetching table data for 'nodelist_xref'");
-    fetchTableData('nodelist_xref');
-  })
-  .catch(err => {
-    console.error("Fetch failed:", err);
-  });
-}
-
-
-
-
+  // ----------------------------
+  // Election Management
+  // ----------------------------
   function syncStreamsSelectWithTabs() {
-      const tabs = document.querySelectorAll('.election-tab');
-      const streamsSelect = document.getElementById('streams');
-
-      // Clear existing options
-      streamsSelect.innerHTML = '';
-
-      // Add each tab as an option
-      tabs.forEach(tab => {
-          const election = tab.dataset.election;
-          const option = document.createElement('option');
-          option.value = election;
-          option.textContent = `Election ${election}`;
-          streamsSelect.appendChild(option);
-      });
-
-      // Set the selected option to match the active tab
-      const activeTab = document.querySelector('.election-tab.active');
-      if (activeTab) {
-          streamsSelect.value = activeTab.dataset.election;
-      }
+    const streamsSelect = document.getElementById('streams');
+    streamsSelect.innerHTML = '';
+    document.querySelectorAll('.election-tab').forEach(tab => {
+      const opt = document.createElement('option');
+      opt.value = tab.dataset.election;
+      opt.textContent = `Election ${tab.dataset.election}`;
+      streamsSelect.appendChild(opt);
+    });
+    streamsSelect.value = document.querySelector('.election-tab.active')?.dataset.election || '';
   }
 
-
-  function deleteElection(electionName) {
+  window.deleteElection = async function(electionName) {
     if (!confirm(`Delete "${electionName}"? This cannot be undone.`)) return;
-
-    fetch("/delete-election", {
+    const res = await fetch("/delete-election", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ election: electionName })
-    })
-    .then(res => res.json())
-    .then(resp => {
-      if (resp.success && resp.electiontabs_html) {
-        document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-        fetchTableData('nodelist_xref');
-        syncStreamsSelectWithTabs();
-        // ✅ All onclick bindings are preserved because they come from server-rendered HTML
-      } else {
-        alert("Could not delete election: " + (resp.error || "Unknown error"));
-      }
     });
+    const resp = await res.json();
+    if (resp.success && resp.electiontabs_html) {
+      document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
+      fetchTableData('nodelist_xref');
+      syncStreamsSelectWithTabs();
+    } else alert("Could not delete election: " + (resp.error || "Unknown error"));
   }
 
-  function addElection() {
+  window.addElection = async function() {
     const newName = prompt("Enter name for new election:");
     if (!newName) return;
-
-    fetch("/add-election", {
+    const res = await fetch("/add-election", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ election: newName })
-    })
-    .then(res => res.json())
-    .then(resp => {
-      if (resp.success && resp.electiontabs_html) {
-        document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-        syncStreamsSelectWithTabs();
-        updateConstantsUI(resp.constants, resp.options);
-        fetchTableData('nodelist_xref');
-        // ✅ Onclick handlers already embedded
-
-      } else {
-        alert("Error adding election: " + resp.error);
-      }
     });
+    const resp = await res.json();
+    if (resp.success && resp.electiontabs_html) {
+      document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
+      syncStreamsSelectWithTabs();
+      updateConstantsUI(resp.constants, resp.options);
+      fetchTableData('nodelist_xref');
+    } else alert("Error adding election: " + resp.error);
   }
 
-
-  document.addEventListener("DOMContentLoaded", () => {
-
-    window.refreshTableData = function(id) {
-    console.log("Refreshing table for", id);
-    window.parent.postMessage({
-    type: "update-table",
-    stable: 'nodelist_xref'
-    }, "*"); // Replace * with specific origin if needed
-}
-
-
-
-    document.addEventListener("DOMContentLoaded", () => {
-        const iframe = document.getElementById("iframe1");
-        const toggleBtn = document.getElementById("b9");
-
-        toggleBtn.addEventListener("click", () => {
-            let currentURL = iframe.src;
-
-            // If currently pointing at the calendar → switch to map
-            if (currentURL.endsWith("-CAL.html")) {
-                iframe.src = mapFile;
-                toggleBtn.textContent = "📅 View Calendar";
-            }
-            // Else currently showing map → switch to calendar
-            else {
-                iframe.src = calFile;
-                toggleBtn.textContent = "🗺️ View Map";
-            }
-        });
-    });
-
-    </script>
-
-
-    const tableSelector = document.getElementById("tableSelector");
-    const toggle = document.getElementById("resources-toggle");
-    const container = document.getElementById("resources-container");
-    const tabContainer = document.getElementById("election-tabs");
-
-    // Helper functions
-    const getActiveElectionTab = () => document.querySelector(".election-tab.active");
-    const changeIframe = (url) => changeIframeSrc(url);
-
-    const refreshConstantsUI = (callback) => {
-      fetch("/get-constants", { credentials: "same-origin" })
-        .then(res => res.json())
-        .then(data => {
-          updateConstantsUI(data.constants, data.options);
-          if (callback) callback(data);
-        });
-    };
-
-    // Fetch table on selection
-    if (tableSelector) {
-      tableSelector.addEventListener("change", e => {
-        const selectedTable = e.target.value;
-        fetchTableData(selectedTable);
-        console.log("selectedTable:", selectedTable);
-      });
-    }
-
-    // Generic button-to-iframe mapping
-    const iframeButtons = {
-      b3: "{{ url_for('stream_input') }}",
-      b4: "{{ url_for('leafletting') }}",
-      b5: "{{ url_for('kanban') }}",
-      b6: "{{ url_for('telling') }}",
-      b7: "{{ url_for('search') }}",
-      b8: "{{ url_for('dashboard') }}"
-    };
-
-    Object.entries(iframeButtons).forEach(([id, url]) => {
-      const btn = document.getElementById(id);
-      if (btn) btn.addEventListener("click", () => changeIframe(url));
-    });
-
-    // Logout button
-    document.getElementById("logout-button")?.addEventListener("click", () => {
-      window.location.href = "/logout";
-    });
-
-    // Resource toggle
-    toggle?.addEventListener("click", () => {
-      const isVisible = container.style.display === "block";
-      container.style.display = isVisible ? "none" : "block";
-      toggle.textContent = isVisible ? "Resources ⬇" : "Resources ⬆";
-    });
-
-    // Initial fetch for constants
-    fetch("/get-constants", { credentials: 'same-origin' })
-      .then(res => res.json())
-      .then(data => {
-        updateConstantsUI(data.constants, data.options);
-        const mapfile = data.constants?.mapfiles?.slice(-1)[0];
-        if (mapfile) changeIframe(`/thru/${mapfile}`);
-      });
-
-    // Set election for active tab on load
-    const activeTab = getActiveElectionTab();
-    if (activeTab) {
-      fetch("/set-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: activeTab.dataset.election })
-      })
-      .then(res => res.text()) // get raw text first
-      .then(text => {
-        console.log("Raw /set-election response:", text);
-        let resp;
-        try {
-          resp = JSON.parse(text); // try parse JSON
-        } catch (e) {
-          console.error("JSON parse failed:", e);
-          return; // stop here if invalid JSON
-        }
-
-        if (resp.success) {
-          refreshConstantsUI(data => {
-            const mapfile = data.constants?.mapfiles?.slice(-1)[0];
-            if (mapfile) changeIframe(`/thru/${mapfile}`);
-          });
-        } else {
-          console.warn("/set-election returned success=false:", resp);
-        }
-      })
-      .catch(err => console.error("Fetch error:", err));
-    }
-
-
-    // Sync dropdowns with tabs
-    syncStreamsSelectWithTabs();
-
-    // Update territory
-    document.getElementById("update-territory-btn")?.addEventListener("click", () => {
-      const activeTab = getActiveElectionTab();
-      if (!activeTab) return alert("No election selected.");
-
-      fetch("/update-territory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: activeTab.dataset.election })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) {
-          refreshConstantsUI(data => {
-            const mapfile = data.constants?.territory;
-            if (mapfile) changeIframe(`/thru/${mapfile}`);
-            fetchTableData('nodelist_xref');
-          });
-        }
-      });
-    });
-
-    // Election tab click delegation
-    document.addEventListener('click', e => {
-      if (!e.target.classList.contains('election-tab')) return;
-      document.querySelectorAll('.election-tab').forEach(tab => tab.classList.remove('active'));
-      e.target.classList.add('active');
-      syncStreamsSelectWithTabs();
-    });
-
-    // Resources select blur/update
-    document.getElementById('resources')?.addEventListener('blur', () => {
-      const el = document.getElementById('resources');
-      const selected = Array.from(el.selectedOptions).map(opt => opt.value);
-      const activeTab = getActiveElectionTab();
-      if (!activeTab) return;
-
-      fetch("/set-constant", {
-        method: "POST",
-        credentials: 'same-origin',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ election: activeTab.dataset.election, name: "resources", value: selected })
-      })
-      .then(res => res.json())
-      .then(resp => {
-        if (resp.success) refreshConstantsUI();
-        else alert("Failed to update resources: " + resp.error);
-      });
-    });
-
-
-
-    // Parent dropdown reassignment
-    document.addEventListener('change', e => {
-      const select = e.target;
-      if (!select.classList.contains('parent-dropdown')) return;
-
-      const subject = select.dataset.subject;
-      const oldParent = select.dataset.oldValue;
-      const newParent = select.value;
-
-      if (!subject) return console.error("⚠ Missing subject for parent reassignment");
-
-      fetch('/reassign_parent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, old_parent: oldParent, new_parent: newParent })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          console.log("✅ Reassignment complete:", data.message);
-          window.location.href = data.mapfile;
-        } else {
-          console.error("❌ Reassignment failed:", data.message);
-        }
-      })
-      .catch(err => console.error("❌ Network/server error:", err));
-    });
-
-    // Update constants UI and dependent selects
-    function updateConstantsUI(constants, options) {
-      if (!constants || !options) return;
-
-      Object.keys(constants).forEach(key => {
-        const el = document.getElementById(key);
-        if (!el) return;
-
-        if (el.tagName === "SELECT") {
-          if (el.multiple && Array.isArray(constants[key])) {
-            Array.from(el.options).forEach(opt => opt.selected = constants[key].includes(opt.value));
-          } else {
-            el.value = constants[key];
-          }
-        } else if ("value" in el) {
-          el.value = constants[key];
-        }
-      });
-
-      ["candidate", "campaignMgr"].forEach(key => {
-        const el = document.getElementById(key);
-        if (!el) return;
-
-        el.innerHTML = "";
-        const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
-        selectedResources.forEach(code => {
-          const person = options.resources?.[code];
-          if (!person) return;
-
-          const option = document.createElement("option");
-          option.value = code;
-          option.textContent = `${person.Firstname ?? "?"} ${person.Surname ?? "?"}`.trim();
-          if (constants[key] === code) option.selected = true;
-
-          el.appendChild(option);
-        });
-
-        if (!el.options.length) {
-          const placeholder = document.createElement("option");
-          placeholder.value = "";
-          placeholder.textContent = "No available options";
-          el.appendChild(placeholder);
-        }
-      });
-    }
+  // ----------------------------
+  // Message Listener for Table Updates
+  // ----------------------------
+  window.addEventListener("message", (event) => {
+    if (event.data.type === "update-table") fetchTableData(event.data.stable);
   });
 
 
+    document.addEventListener("DOMContentLoaded", async () => {
+
+      /* ---------------------------------------------------------
+       * expose refreshTableData so iframe can call the parent
+       * --------------------------------------------------------- */
+      window.refreshTableData = function(id) {
+          console.log("Refreshing table for", id);
+          window.parent.postMessage(
+              { type: "update-table", stable: "nodelist_xref" },
+              "*"
+          );
+      }
+      /* ---------------------------------------------------------
+       * expose refreshTableData so iframe can call the parent
+       * --------------------------------------------------------- */
+
+      async function getCalendarUpdate () {
+              try {
+                const response = await fetch(`${API}/current-election`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                console.log("📦 Raw backend response:", data);
+
+                // Handle possible nested structures
+                const plan = data.calendar_plan || data;
+                console.log("📋 Parsed plan object:", plan);
+
+                if (plan?.slots) {
+                  loadCalendarPlan(plan);
+                  console.log("✅ Calendar plan loaded into UI");
+                } else {
+                  console.warn("⚠️ No slots found in backend data");
+                }
+              } catch (error) {
+                console.error("🚨 Error fetching calendar plan:", error);
+              }
+            };
+      /* ---------------------------------------------------------
+   * CALENDAR LOGIN AND CALENDAR BUILD
+   * --------------------------------------------------------- */
+
+  // elements
+  const iframe = document.getElementById("iframe1");
+  const calendar = document.getElementById("calendar");
+  const loginScreen = document.getElementById("loginScreen");
+  const loginBtn = document.getElementById("loginBtn");
+  const passwordInput = document.getElementById("password");
+  const loginMessage = document.getElementById("loginMessage");
+
+  // Initial state — hide map + calendar, show login
+  iframe.style.visibility = "hidden";
+  calendar.style.visibility = "hidden";
+  loginScreen.style.visibility = "visible";
+
+  // ENTER triggers login
+  passwordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+          e.preventDefault();
+          loginBtn.click();
+      }
+  });
+
+  loginBtn.addEventListener("click", async () => {
+
+      loginMessage.textContent = "";
+      const password = passwordInput.value;
+
+      try {
+          const res = await fetch("/api/", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ password })
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+              loginMessage.textContent = "Access granted";
+
+              setTimeout(() => {
+                  loginScreen.style.visibility = "hidden";
+                  calendar.style.visibility = "visible";
+              }, 300);
+          } else {
+              loginMessage.textContent = "Wrong password!";
+          }
+
+      } catch (err) {
+          console.error(err);
+          loginMessage.textContent = "Login failed";
+      }
+  });
+
+  /* ---------------------------------------------------------
+   * CALENDAR <-> MAP TOGGLE
+   * --------------------------------------------------------- */
+
+  const toggleBtn = document.getElementById("b9");
+
+  toggleBtn.addEventListener("click", async () => {
+
+      // Do nothing if login screen still visible
+      if (loginScreen.style.visibility === "visible") return;
+
+      // Toggle from calendar → map
+      if (calendar.style.visibility === "visible") {
+          calendar.style.visibility = "hidden";
+          calendar.style.position = "absolute";   // remove from layout so iframe is fully visible
+          iframe.style.visibility = "visible";
+          toggleBtn.textContent = "📅 View Calendar";
+      }
+
+      // Toggle from map → calendar
+      else {
+          iframe.style.visibility = "hidden";
+          calendar.style.position = "static";
+          calendar.style.visibility = "visible";
+
+          // Load calendar only once
+          if (!calendar.dataset.loaded) {
+              await getCalendarUpdate();
+              calendar.dataset.loaded = "true";
+          }
+
+          toggleBtn.textContent = "🗺️ View Map";
+      }
+  });
+
+
+      /* ---------------------------------------------------------
+       * GENERAL ELEMENTS
+       * --------------------------------------------------------- */
+      const tableSelector = document.getElementById("tableSelector");
+      const resourcesToggle = document.getElementById("resources-toggle");
+      const resourcesContainer = document.getElementById("resources-container");
+
+      const electionTabs = document.querySelectorAll(".election-tab");
+
+      const getActiveElectionTab = () =>
+          document.querySelector(".election-tab.active");
+
+      const changeIframe = (url) => changeIframeSrc(url);
+
+
+      /* ---------------------------------------------------------
+       * FETCH CONSTANTS + UPDATE UI
+       * --------------------------------------------------------- */
+      function refreshConstantsUI(callback) {
+          fetch("/get-constants", { credentials: "same-origin" })
+              .then(res => res.json())
+              .then(data => {
+                  updateConstantsUI(data.constants, data.options);
+                  if (callback) callback(data);
+              });
+      }
+
+
+      /* ---------------------------------------------------------
+       * TABLE SELECTOR
+       * --------------------------------------------------------- */
+      if (tableSelector) {
+          tableSelector.addEventListener("change", (e) => {
+              fetchTableData(e.target.value);
+          });
+      }
+
+
+      /* ---------------------------------------------------------
+       * BUTTON → IFRAME ROUTING
+       * --------------------------------------------------------- */
+      const iframeButtons = {
+          b3: "{{ url_for('stream_input') }}",
+          b4: "{{ url_for('leafletting') }}",
+          b5: "{{ url_for('kanban') }}",
+          b6: "{{ url_for('telling') }}",
+          b7: "{{ url_for('search') }}",
+          b8: "{{ url_for('dashboard') }}"
+      };
+
+      for (const [id, url] of Object.entries(iframeButtons)) {
+          const btn = document.getElementById(id);
+          if (btn) btn.addEventListener("click", () => changeIframe(url));
+      }
+
+
+      /* ---------------------------------------------------------
+       * LOGOUT
+       * --------------------------------------------------------- */
+      document.getElementById("logout-button")?.addEventListener("click", () => {
+          window.location.href = "/logout";
+      });
+
+
+      /* ---------------------------------------------------------
+       * RESOURCES TOGGLE
+       * --------------------------------------------------------- */
+      resourcesToggle?.addEventListener("click", () => {
+          const visible = resourcesContainer.style.display === "block";
+          resourcesContainer.style.display = visible ? "none" : "block";
+          resourcesToggle.textContent = visible ? "Resources ⬇" : "Resources ⬆";
+      });
+
+
+      /* ---------------------------------------------------------
+       * INITIAL CONSTANTS + LOAD MAP
+       * --------------------------------------------------------- */
+      fetch("/get-constants", { credentials: "same-origin" })
+          .then(res => res.json())
+          .then(data => {
+              updateConstantsUI(data.constants, data.options);
+
+              const latestMap = data.constants?.mapfiles?.slice(-1)[0];
+              if (latestMap) changeIframe(`/thru/${latestMap}`);
+          });
+
+
+      /* ---------------------------------------------------------
+       * SET ACTIVE ELECTION ON LOAD
+       * --------------------------------------------------------- */
+      const activeTab = getActiveElectionTab();
+
+      if (activeTab) {
+          fetch("/set-election", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ election: activeTab.dataset.election })
+          })
+              .then(r => r.text())
+              .then(txt => {
+                  let resp;
+                  try { resp = JSON.parse(txt); }
+                  catch { return console.error("Bad JSON:", txt); }
+
+                  if (resp.success) {
+                      refreshConstantsUI(data => {
+                          const latest = data.constants?.mapfiles?.slice(-1)[0];
+                          if (latest) changeIframe(`/thru/${latest}`);
+                      });
+                  }
+              });
+      }
+
+
+      /* ---------------------------------------------------------
+       * TAB CLICK HANDLER
+       * --------------------------------------------------------- */
+      document.addEventListener("click", (e) => {
+          if (!e.target.classList.contains("election-tab")) return;
+
+          electionTabs.forEach(t => t.classList.remove("active"));
+          e.target.classList.add("active");
+
+          syncStreamsSelectWithTabs();
+      });
+
+
+      /* ---------------------------------------------------------
+       * RESOURCES UPDATE
+       * --------------------------------------------------------- */
+      const resourcesSelect = document.getElementById("resources");
+
+      resourcesSelect?.addEventListener("blur", () => {
+          const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
+          const tab = getActiveElectionTab();
+          if (!tab) return;
+
+          fetch("/set-constant", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({
+                  election: tab.dataset.election,
+                  name: "resources",
+                  value: selected
+              })
+          })
+              .then(res => res.json())
+              .then(resp => {
+                  if (resp.success) refreshConstantsUI();
+              });
+      });
+
+
+      /* ---------------------------------------------------------
+       * PARENT-DROPDOWN REASSIGNMENT
+       * --------------------------------------------------------- */
+      document.addEventListener("change", (e) => {
+          if (!e.target.classList.contains("parent-dropdown")) return;
+
+          const select = e.target;
+          const subject = select.dataset.subject;
+
+          fetch("/reassign_parent", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                  subject,
+                  old_parent: select.dataset.oldValue,
+                  new_parent: select.value
+              })
+          })
+              .then(r => r.json())
+              .then(data => {
+                  if (data.status === "success") {
+                      window.location.href = data.mapfile;
+                  }
+              });
+      });
+
+
+
+        console.log("📅 Building calendar…");
+
+        // Build the grid and load data
+        buildCalendarGrid("calendar-grid", 45);
+        populateDropdowns();
+        await getCalendarUpdate();
+        console.log("✅ Calendar initialized.");
+
+        // Buttons (use correct IDs)
+        const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
+        const generateSummaryBtn = document.getElementById("generate-summary-btn");
+        const saveSlotBtn = document.getElementById("saveSlotBtn");
+        const clearSlotBtn = document.getElementById("clearSlotBtn");
+
+        // Attach button event handlers
+        saveCalendarBtn.addEventListener("click", saveCalendarPlan);
+        generateSummaryBtn.addEventListener("click", generateSummaryReport);
+        saveSlotBtn.addEventListener("click", handleSaveSlot);
+        clearSlotBtn.addEventListener("click", handleClearSlot);
+
+  });
+
+
+
 </script>
+<script src="https://newbrie.github.io/Electtrek/static/resourcing.js"></script>
 
 
 {% endblock captains %}
