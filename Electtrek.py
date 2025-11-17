@@ -1494,7 +1494,7 @@ class TreeNode:
 
                 // Calendar button
                 document.getElementById("backToCalendarBtn").addEventListener("click", function() {
-                    window.parent.postMessage('showCalendar', '*');
+                    window.parent.postMessage('toggleView', '*');
                 });
             });
 
@@ -1861,23 +1861,6 @@ class TreeNode:
 
         # Inject into Folium map
         FolMap.get_root().html.add_child(folium.Element(places_preload_js))
-
-        # Inject button and JS before closing </body>
-        cal_html = """
-        <div style="position: fixed; top: 10px; right: 10px; z-index: 9999;">
-            <button id="back-to-calendar-btn" style="padding:10px 15px; font-size:16px; cursor:pointer;">
-                📅 Back to Calendar
-            </button>
-        </div>
-
-        <script>
-        document.getElementById("back-to-calendar-btn").addEventListener("click", () => {
-            window.location.href = "calendar.html";
-        });
-        </script>
-        """
-
-        FolMap.get_root().html.add_child(folium.Element(cal_html))
 
 
         # --- Updated click JS ---
@@ -5928,7 +5911,7 @@ def set_election():
 @app.route('/current-election', methods=['GET'])
 @login_required
 def retrieve_current_election():
-    current_election = get_current_election(session)
+    current_election = request.args.get("election")
     CurrentElection = get_election_data(current_election)
     calendar_plan = CurrentElection['calendar_plan']
     print(f"____Route/GET current-election: {current_election} ", json.dumps(calendar_plan) )
@@ -5941,15 +5924,23 @@ def update_current_election():
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
     CurrentElection = get_election_data(current_election)
+
     try:
         data = request.get_json()
-        # You could add validation here if needed
-        CurrentElection['calendar_plan'] = data
-        print("____Route/POST current-election", data )
-        save_election_data(current_election,CurrentElection)
+        print("____Route/POST current-election incoming:", data)
+
+        # FIX: unwrap nested calendar_plan if present
+        plan = data.get("calendar_plan", data)
+
+        CurrentElection['calendar_plan'] = plan
+
+        print("____Route/POST current-election saving:", plan)
+        save_election_data(current_election, CurrentElection)
+
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/get-constants', methods=["GET"])
 @login_required
@@ -6107,6 +6098,43 @@ def add_election():
         'electiontabs_html':formdata['electiontabs_html']
     })
 
+
+@app.route("/last-election")
+@login_required
+def last_election():
+    ELECTIONS_DIR = config.workdirectories['workdir']
+    """
+    Return the most recently accessed election file.
+    Fallback: session-stored current election or first available election.
+    """
+    # 1. Try session first
+    last = session.get('current_election')
+
+    # 2. List elections from filesystem and sort by last access time
+    election_files = get_election_names()  # returns list of election names
+    if election_files:
+        # map names to full paths
+        paths = [os.path.join(ELECTIONS_DIR, f"{name}.json") for name in election_files]
+        # filter out missing files just in case
+        paths = [p for p in paths if os.path.exists(p)]
+        if paths:
+            # sort descending by access time
+            paths.sort(key=lambda p: os.path.getatime(p), reverse=True)
+            latest_name = os.path.splitext(os.path.basename(paths[0]))[0]
+            # Override session if latest exists
+            last = last or latest_name
+
+    # 3. Final fallback
+    if not last and election_files:
+        last = election_files[0]
+
+    print(f"____last election: {last}")
+
+    return jsonify(last)
+
+
+
+
 @app.route("/update-territory", methods=["POST"])
 @login_required
 def update_territory():
@@ -6235,6 +6263,7 @@ def index():
         return render_template(
             "Dash0.html",
             table_types=TABLE_TYPES,
+            ELECTIONS=ELECTIONS,
             current_election=current_election,
             CurrentElection=CElection,
             places=places,
@@ -7509,6 +7538,7 @@ def calendar_partial(path):
     return render_template(
         "Dash0.html",
         table_types=TABLE_TYPES,
+        ELECTIONS=ELECTIONS,
         current_election=current_election,
         CurrentElection=CElection,
         places=places,
@@ -7832,10 +7862,6 @@ def firstpage():
         print('_______ROUTE/firstpage at :',current_node.value )
 
         mapfile = sourcepath
-        capped_append(CurrentElection['mapfiles'],mapfile)
-
-
-        session['next'] = mapfile
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
         current_node = MapRoot.ping_node(current_election,mapfile)
 
@@ -7907,6 +7933,7 @@ def firstpage():
         return render_template(
             "Dash0.html",
             table_types=TABLE_TYPES,
+            ELECTIONS=ELECTIONS,
             current_election=current_election,
             CurrentElection=CElection,
             places=places,

@@ -401,8 +401,11 @@ function extractCalendarPlan() {
   return calendarPlan;
 }
 
+
 function loadCalendarPlan(plan) {
   console.log("📦 Loaded plan:", plan);
+  if (plan.calendar_plan) plan = plan.calendar_plan;
+
 
   if (!plan?.slots) return;
 
@@ -565,44 +568,45 @@ async function saveCalendarPlan() {
 }
 
 function openSlotModal(slotId) {
-  currentSlotId = slotId;
-  const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
-  const data = calendarData[slotId] || {}; // reference, not copy
+    currentSlotId = slotId;
+    const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
 
-  // Fill dropdowns
-  fillSelect("activitySelect", window.task_tags);
-  fillSelect("resourcesSelect", window.resources);
-  fillSelect("placeSelect", window.places);
-  fillSelect("areaSelect", window.areas);
+    // Ensure slot exists in calendarData
+    if (!calendarData[slotId]) calendarData[slotId] = {};
+    const data = calendarData[slotId]; // Reference, not copy
 
-  // Infer from lozenges if data is empty
-  if (slotDiv && (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length))) {
-    data.resources = [];
-    const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
-    lozenges.forEach(l => {
-      switch (l.dataset.type) {
-        case "activity": data.activity = l.dataset.code; break;
-        case "place": data.place = l.dataset.code; break;
-        case "area": data.area = l.dataset.code; break;
-        case "resource": data.resources.push(l.dataset.code); break;
-      }
+    // Fill dropdowns
+    fillSelect("activitySelect", window.task_tags);
+    fillSelect("resourcesSelect", window.resources);
+    fillSelect("placeSelect", window.places);
+    fillSelect("areaSelect", window.areas);
+
+    // Infer from lozenges if data is empty
+    if (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length)) {
+        data.resources = [];
+        const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
+        lozenges.forEach(l => {
+            switch (l.dataset.type) {
+                case "activity": data.activity = l.dataset.code; break;
+                case "place": data.place = l.dataset.code; break;
+                case "area": data.area = l.dataset.code; break;
+                case "resource": data.resources.push(l.dataset.code); break;
+            }
+        });
+    }
+
+    // Pre-select dropdowns
+    document.getElementById("activitySelect").value = data.activity || "";
+    document.getElementById("placeSelect").value = data.place || "";
+    document.getElementById("areaSelect").value = data.area || "";
+    const resSel = document.getElementById("resourcesSelect");
+    Array.from(resSel.options).forEach(opt => {
+        opt.selected = data.resources?.includes(opt.value) || false;
     });
-  }
 
-
-  // Pre-select dropdowns
-  document.getElementById("activitySelect").value = data.activity || "";
-  document.getElementById("placeSelect").value = data.place || "";
-  document.getElementById("areaSelect").value = data.area || "";
-  const resSel = document.getElementById("resourcesSelect");
-  Array.from(resSel.options).forEach(opt => {
-    opt.selected = data.resources?.includes(opt.value) || false;
-  });
-
-  // Show modal
-  const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
-  modalInstance.show();
-
+    // Show modal
+    const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
+    modalInstance.show();
 }
 
 
