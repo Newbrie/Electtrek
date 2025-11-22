@@ -2,7 +2,7 @@
 toggle between hiding and showing the dropdown content */
 
 var moveDown = function (msg, area, type) {
-    window.parent.postMessage(`Drilling down to ${type} level within ${area}`, '*');
+    window.parent.postMessage({ type: `Drilling down to ${type} level within ${area}`}, '*');
 
     const ul = parent.document.getElementById("logwin");
     if (ul) ul.scrollTop = ul.scrollHeight;
@@ -14,7 +14,7 @@ var moveDown = function (msg, area, type) {
 
 var moveUp = function (msg,area, type) {
   // Send a message to the parent
-      window.parent.postMessage("Moving up to "+ area + " "+ type+ " level ", '*');
+      window.parent.postMessage({ type:"Moving up to "+ area + " "+ type+ " level "}, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
@@ -22,7 +22,7 @@ var moveUp = function (msg,area, type) {
       };
 var showMore = function (msg,area, type) {
   // Send a message to the parent
-      window.parent.postMessage("Showing the "+type+ " level within "+ area, '*');
+      window.parent.postMessage({ type: "Showing the "+type+ " level within "+ area}, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
@@ -350,7 +350,7 @@ var showMore = function (msg,area, type) {
 //        console.log(filename);
         var htmlpath = path.replace("-SDATA.csv","-PRINT.html").replace("-WDATA.csv","-PRINT.html");
         getVIData(htmlpath);
-        window.parent.postMessage("Refreshing summary data set ", '*');
+        window.parent.postMessage({type:"Refreshing summary data set"}, '*');
         };
 
   function inputVI(VI) {

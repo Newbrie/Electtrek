@@ -1435,55 +1435,69 @@ class TreeNode:
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
-            <style>
-            #customSearchBox {
-                position: fixed;
-                top: 60px;
-                left: 100px;
-                z-index: 1100;
-                background: white;
-                padding: 5px;
-                border: 1px solid #ccc;
-                font-size: 14px;
-                display: flex;
-                gap: 8px;
-                align-items: center;
-            }
-            #customSearchBox input {
-                padding: 4px 6px;
-                font-size: 14px;
-            }
-            #customSearchBox button {
-                padding: 4px 8px;
-                font-size: 14px;
-                cursor: pointer;
-            }
-            </style>
+        <style>
+        #customSearchBox {
+            position: fixed;
+            top: 60px;
+            left: 100px;
+            z-index: 1100;
+            background: white;
+            padding: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        #customSearchBox input {
+            padding: 4px 6px;
+            font-size: 14px;
+        }
+        #customSearchBox button {
+            padding: 4px 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        </style>
 
-            <div id="customSearchBox">
-                <input type="text" id="searchInput" placeholder="Search..." />
-                <button onclick="searchMap()">Search</button>
-                <button id="backToCalendarBtn">📅 Calendar</button>
-            </div>
+        <div id="customSearchBox">
+            <input type="text" id="searchInput" placeholder="Search..." />
+            <button id="searchBtn">Search</button>
+            <button id="backToCalendarBtn">📅 Calendar</button>
+        </div>
 
-            <script>
+        <script>
+        // Wrap in a safe namespace to avoid leaking globals
+        (function () {
+
+            console.log("🔍 Search bar script injected safely");
+
             document.addEventListener("DOMContentLoaded", function () {
-                // Detect map variable dynamically
-                for (const key in window) {
-                    if (window.hasOwnProperty(key)) {
+
+                // --- SAFELY detect Leaflet map instance ---
+                window.map = null;
+                for (const key of Object.keys(window)) {
+                    try {
                         const val = window[key];
-                        if (val && val instanceof L.Map) {
+                        if (val && typeof val === "object" && val instanceof L.Map) {
                             window.map = val;
+                            console.log("🗺️ Found map instance:", key);
                             break;
                         }
+                    } catch (err) {
+                        // Skip cross-origin or protected properties
                     }
                 }
 
-                const input = document.getElementById("searchInput");
-                input.addEventListener("keydown", function (e) {
+                // --- Bind search button ---
+                document.getElementById("searchBtn").addEventListener("click", searchMap);
+
+                // --- Bind Enter key ---
+                document.getElementById("searchInput").addEventListener("keydown", (e) => {
                     if (e.key === "Enter") searchMap();
                 });
 
+                // --- Back-to-calendar button ---
                 document.getElementById("backToCalendarBtn").addEventListener("click", () => {
                     console.log("🟧 iframe: Calendar button clicked → sending toggleView");
                     window.parent.postMessage({ type: "toggleView" }, "*");
@@ -1491,96 +1505,96 @@ class TreeNode:
 
             });
 
+            // -------------------------------
+            // Search Helpers
+            // -------------------------------
             function extractVisibleText(element) {
                 const walker = document.createTreeWalker(
                     element,
                     NodeFilter.SHOW_TEXT,
                     {
-                        acceptNode: function (node) {
-                            const parent = node.parentNode;
-                            const style = window.getComputedStyle(parent);
-                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
-                                return NodeFilter.FILTER_ACCEPT;
-                            }
-                            return NodeFilter.FILTER_REJECT;
+                        acceptNode: (node) => {
+                            const style = window.getComputedStyle(node.parentNode);
+                            return (style.visibility !== "hidden" && style.display !== "none")
+                                ? NodeFilter.FILTER_ACCEPT
+                                : NodeFilter.FILTER_REJECT;
                         }
                     }
                 );
 
-                let visibleText = '';
+                let visibleText = "";
                 while (walker.nextNode()) {
-                    visibleText += walker.currentNode.nodeValue + ' ';
+                    visibleText += walker.currentNode.nodeValue + " ";
                 }
                 return visibleText.trim();
             }
 
+            // -------------------------------
+            // Main Search Function
+            // -------------------------------
             async function searchMap() {
+                if (!window.map) {
+                    console.warn("❗ Map not ready for search");
+                    return;
+                }
+
                 const query = document.getElementById("searchInput").value.trim();
                 if (!query) return;
 
-                // --- 1️⃣ Check if query looks like a UK postcode ---
-                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+                // 1️⃣ Check UK postcode
+                const postcodePattern = /^[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}$/i;
                 if (postcodePattern.test(query)) {
-                    const cleanPostcode = query.replace(/\s+/g, '');
+                    const cleanPostcode = query.replace(/\\s+/g, "");
                     const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
+
                     try {
                         const res = await fetch(url);
-                        if (!res.ok) throw new Error("Network error");
                         const data = await res.json();
 
-                        if (data.status === "match" && data.data) {
+                        if (data.status === "match") {
                             const { latitude, longitude } = data.data;
-                            map.setView([latitude, longitude], 17);
 
+                            map.setView([latitude, longitude], 17);
                             L.marker([latitude, longitude])
                                 .addTo(map)
-                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
+                                .bindPopup("<b>" + query.toUpperCase() + "</b><br>Lat: "
+                                           + latitude.toFixed(5) + ", Lon: " + longitude.toFixed(5))
                                 .openPopup();
                             return;
-                        } else {
-                            alert("Postcode not found.");
-                            return;
                         }
-                    } catch (err) {
-                        console.error("Postcode lookup failed:", err);
-                        // Only alert if the map didn’t already move
-                        if (!map.getCenter()) alert("Error looking up postcode.");
-                        return;
-                    }
 
+                        alert("Postcode not found.");
+                    } catch (err) {
+                        console.error("Postcode lookup error:", err);
+                        alert("Error looking up postcode.");
+                    }
+                    return;
                 }
 
-                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
+                // 2️⃣ Search other map elements
                 const normalizedQuery = query.toLowerCase();
                 let found = false;
 
                 map.eachLayer(function (layer) {
                     if (found) return;
 
-                    // ✅ Search Popups with <b data-name="...">
+                    // --- popup search ---
                     if (layer.getPopup && layer.getPopup()) {
-                        let bElements = [];
-                        const content = layer.getPopup().getContent();
+                        let content = layer.getPopup().getContent();
+                        let doc = null;
 
-                        if (content instanceof HTMLElement) {
-                            bElements = content.querySelectorAll('b[data-name]');
-                        } else if (typeof content === 'string') {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(content, 'text/html');
-                            bElements = doc.querySelectorAll('b[data-name]');
+                        if (typeof content === "string") {
+                            doc = new DOMParser().parseFromString(content, "text/html");
+                        } else if (content instanceof HTMLElement) {
+                            doc = content;
                         }
 
-                        for (let b of bElements) {
-                            const dataName = b.getAttribute('data-name');
-                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
-                            if (normalizedDataName.includes(normalizedQuery)) {
-                                let latlng = null;
-                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
-
-                                if (latlng) {
-                                    map.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
+                        if (doc) {
+                            const elems = doc.querySelectorAll("b[data-name]");
+                            for (let el of elems) {
+                                const name = el.getAttribute("data-name").toLowerCase().replace(/_/g, " ");
+                                if (name.includes(normalizedQuery)) {
+                                    centerLayer(layer);
                                     found = true;
                                     return;
                                 }
@@ -1588,47 +1602,46 @@ class TreeNode:
                         }
                     }
 
-                    // ✅ Search Tooltips
+                    // --- tooltip search ---
                     if (!found && layer.getTooltip && layer.getTooltip()) {
-                        const tooltipContent = layer.getTooltip().getContent();
-                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                            let latlng = null;
-                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
+                        const text = layer.getTooltip().getContent();
+                        if (text && text.toLowerCase().includes(normalizedQuery)) {
+                            centerLayer(layer);
+                            found = true;
+                            return;
+                        }
+                    }
 
-                            if (latlng) {
-                                map.setView(latlng, 17);
+                    // --- DivIcon search ---
+                    if (!found && layer instanceof L.Marker) {
+                        const icon = layer?.options?.icon;
+                        if (icon instanceof L.DivIcon) {
+                            const html = icon.options.html.toLowerCase();
+                            if (html.includes(normalizedQuery)) {
+                                centerLayer(layer);
                                 found = true;
                                 return;
                             }
                         }
                     }
-
-                    // ✅ Search DivIcons
-                    if (!found && layer instanceof L.Marker) {
-                        if (layer.options.icon instanceof L.DivIcon) {
-                            const iconContent = layer.options.icon.options.html;
-                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
-                                const latlng = layer.getLatLng();
-                                if (latlng) {
-                                    map.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
-                                    if (layer._icon) layer._icon.style.border = "2px solid red";
-                                    found = true;
-                                    return;
-                                }
-                            }
-                        }
-                    }
                 });
 
-                if (!found) {
-                    alert("No matching location found.");
-                }
+                if (!found) alert("No matching location found.");
             }
-            </script>
 
-            """
+            function centerLayer(layer) {
+                const latlng = layer.getLatLng
+                    ? layer.getLatLng()
+                    : layer.getBounds().getCenter();
+
+                map.setView(latlng, 17);
+                if (layer.openPopup) layer.openPopup();
+            }
+
+        })();
+        </script>
+        """
+
 
 
         # --- Title for the map
