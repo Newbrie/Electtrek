@@ -15,7 +15,7 @@ GENESYS_FILE =  os.path.join(workdirectories['workdir'],'static','data','Runcorn
 ELECTOR_FILE = os.path.join(workdirectories['workdir'],'static','data','allelectors.csv')
 TREKNODE_FILE = os.path.join(workdirectories['workdir'],'static','data','Treknodes.pkl')
 FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','data','Fullpolys.pkl')
-MARKER_FILE = os.path.join(workdirectories['workdir'],'static','data','Markers.json')
-RESOURCE_FILE = os.path.join(workdirectories['workdir'],'static','data','Resources.json')
+MARKER_FILE = os.path.join(workdirectories['workdir'],'Markers.json')
+RESOURCE_FILE = os.path.join(workdirectories['workdir'],'Resources.json')
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }

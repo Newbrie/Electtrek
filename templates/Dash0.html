@@ -29,6 +29,12 @@
     height: 0;
   }
 
+  .stay-on-top {
+    z-index: 999999 !important;
+    position: relative !important;
+}
+
+
   .slider {
     position: absolute;
     cursor: pointer;
@@ -59,27 +65,69 @@
     transform: translateX(22px);
   }
 
-  body {
-      font-family: sans-serif;
-      margin: 20px;
-  }
 
-    /* Keep iframe visible and in normal flow when map shown */
-    #iframe1 {
-        position: absolute;
-        visibility: hidden;
-        z-index: 1;
-    }
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;   /* prevent page scrolling */
+}
+
+#iframe-container {
+    position: absolute;
+    visibility: hidden;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1; /* low */
+}
+
+#iframe1 {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
 
     /* Calendar hidden by default but stays in document flow */
-    #calendar {
-        visibility: hidden;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 2;
+
+    /* Mapwin = fixed-size container (height of screen minus margins) */
+    #mapwin {
+        position: relative;
+        height: calc(100vh - 40px);
+/*        overflow: hidden;    prevents outer scrolling */
+        border: 1px solid #ddd;
     }
+
+
+    #calendar {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        display: flex;
+        flex-direction: column;
+        background: white;
+        visibility: visible;   /* toggle via JS */
+        z-index: 100;          /* HIGHER than iframe */
+    }
+
+
+    #calendar-header {
+        flex: 0 0 auto; /* fixed height */
+        background: white;
+        padding: 10px 0;
+        border-bottom: 1px solid #ccc;
+        z-index: 10;
+    }
+
+    /* Only this scrolls */
+    #calendar-scroll {
+        position: relative;
+        flex: 1 1 auto;   /* fills remaining space */
+        height: 1000px;     /* critical! allows scrolling */
+        overflow-y: auto;  /* scrolling enabled */
+        padding: 5px;
+        /* remove height: 100% */
+    }
+
 
     /* Login screen on top of everything initially */
     #loginScreen {
@@ -126,10 +174,11 @@
 <script>
 
   // 🧱 Safe variable injection
-  window.task_tags = {{ task_tags | default([]) | tojson }};
-  window.resources = {{ resources | default([]) | tojson }};
-  window.places = {{ places | default([]) | tojson }};
-  window.areas = {{ areas | default([]) | tojson }};
+  {% set _options = options or {} %}
+  window.task_tags = {{ _options.get('task_tags', []) | tojson }};
+  window.resources = {{ _options.get('resources', []) | tojson }};
+  window.places = {{ _options.get('places', []) | tojson }};
+  window.areas = {{ _options.get('areas', []) | tojson }};
 
   console.log("Injected task_tags:", window.task_tags);
   console.log("Injected resources:", window.resources);
@@ -156,8 +205,11 @@
 
 
 </script>
+
 <div id="mapwin" class="innertube">
-    <iframe id="iframe1" src= {{ url_for('thru',path=mapfile) }} width="1200" height="800" > </iframe>
+  <div id="iframe-container">
+    <iframe id="iframe1" src="{{ url_for('thru', path=mapfile) }}" width="1200" height="800"></iframe>
+  </div>
     <!-- Login Screen -->
     <div id="loginScreen">
         <h2>Login</h2>
@@ -168,67 +220,121 @@
 
     <!-- Calendar Container -->
     <div id="calendar">
-        <div class="container-fluid">
-            <h2 id="calendar-title" class="text-center mb-4">
+        <div id="calendar-header" class="container-fluid text-center">
+            <h2 id="calendar-title" class="mb-2">
                 {{ current_election }} Campaigns Calendar
             </h2>
 
-            <div id="calendar-controls" class="mb-3">
-              <button id="switch-tomap-btn" class="btn btn-tomap">🧭 Map</button>
-              <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
+            <div id="calendar-controls" class="d-flex justify-content-center gap-2 flex-wrap mb-2">
+                <button id="switch-tomap-btn" class="btn btn-tomap">🧭 Map</button>
+                <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
                 <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
                 <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
             </div>
+        </div>
 
+        <div id="calendar-scroll" class="container-fluid">
             <div id="calendar-grid" class="calendar-grid mt-4"></div>
-
             <div id="summary-report" class="mt-4"></div>
         </div>
     </div>
 </div>
 
-{% endblock map %}
 
+{% endblock map %}
 {% block modals %}
-<!-- Modal (unchanged) -->
+<!-- Modal -->
 <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
+
+            <!-- Modal header -->
+            <div id="modalPopup" class="modal-header">
                 <h5 class="modal-title">Edit Slot</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+
+            <!-- Modal body -->
             <div class="modal-body">
+
+                <!-- Main slot form -->
                 <form id="slotForm">
+
+                    <!-- Activity -->
                     <div class="mb-2">
                         <label>Activity</label>
                         <select id="activitySelect" class="form-select"></select>
+                        <button id="addTaskTagBtn" type="button" class="btn btn-sm btn-primary mt-1">➕ Add Task Tag</button>
                     </div>
+
+                    <!-- Hidden mini-form for adding a task tag -->
+                    <div id="addTaskTagForm" class="border p-2 mt-2 d-none">
+                        <h6>New Task Tag</h6>
+                        <input id="newTagCode" class="form-control mb-1" placeholder="Tag code">
+                        <input id="newTagLabel" class="form-control mb-1" placeholder="Tag label">
+                        <button id="saveNewTag" type="button" class="btn btn-success btn-sm mt-1">Save Tag</button>
+                    </div>
+
+                    <!-- Resources -->
                     <div class="mb-2">
                         <label>Resources</label>
                         <select id="resourcesSelect" class="form-select" multiple></select>
+                        <button id="addResourceBtn" type="button" class="btn btn-sm btn-primary mt-1">➕ Add Resource</button>
                     </div>
+
+                    <!-- Hidden mini-form for adding a resource -->
+                    <div id="addResourceForm" class="border p-2 mt-2 d-none">
+                        <h6>New Resource</h6>
+                        <input id="newResFirst" class="form-control mb-1" placeholder="First name">
+                        <input id="newResLast" class="form-control mb-1" placeholder="Surname">
+                        <input id="newResEmail" class="form-control mb-1" placeholder="Email">
+                        <button id="saveNewResource" type="button" class="btn btn-success btn-sm mt-1">Save Resource</button>
+                    </div>
+
+                    <!-- Place -->
                     <div class="mb-2">
                         <label>Place</label>
                         <select id="placeSelect" class="form-select"></select>
+                        <button id="addPlaceBtn" type="button" class="btn btn-sm btn-primary mt-1">
+                            ➕ Add Place
+                        </button>
                     </div>
+
+                    <!-- Hidden mini-form for adding a place -->
+                    <div id="addPlaceForm" class="border p-2 mt-2 d-none">
+                        <h6>New Place</h6>
+                        <input id="newPlacePrefix" class="form-control mb-1" placeholder="Prefix (e.g., Four Points Hotel)">
+                        <input id="newPlaceAddress1" class="form-control mb-1" placeholder="Address line 1">
+                        <input id="newPlaceAddress2" class="form-control mb-1" placeholder="City / Town">
+                        <input id="newPlacePostcode" class="form-control mb-1" placeholder="Postcode">
+                        <input id="newPlaceURL" class="form-control mb-1" placeholder="Website URL (optional)">
+                        <button id="saveNewPlace" type="button" class="btn btn-success btn-sm mt-1">Save Place</button>
+                    </div>
+
+                    <!-- Area -->
                     <div class="mb-2">
                         <label>Area</label>
                         <select id="areaSelect" class="form-select" multiple></select>
                     </div>
+
                 </form>
+
             </div>
+
+            <!-- Modal footer -->
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
                 <button class="btn btn-primary" id="saveSlotBtn">Save</button>
             </div>
+
         </div>
     </div>
 </div>
 
-{% endblock modals %}
 
+
+{% endblock modals %}
 {% block log %}
 
 <div id="logwin" class="innertube">
@@ -254,6 +360,7 @@
 
 
 {% block nav %}
+
 <div id="nav" >
   <h3>Election Dashboard</h3>
   <ul class="centred" >user: {{ session['username'] }}</ul>
@@ -384,6 +491,7 @@
     </div>
   </div>
 {% endblock nav %}
+
 {% block captains %}
 
 <div id="tabletitle" class="innertube">
@@ -584,72 +692,728 @@
     });
   }
 
-  function updateConstantsUI(constants, options) {
-    Object.entries(constants).forEach(([key, value]) => {
-      const el = document.getElementById(key);
-      if (!el) return;
-      const optsObj = options[key] || {};
-      el.innerHTML = "";
 
-      if (el.tagName === "SELECT") {
-        // Multi-select for resources
-        if (key === "resources") {
-          Object.entries(options.resources || {}).forEach(([code, person]) => {
-            const option = document.createElement("option");
-            option.value = code;
-            option.textContent = `${person.Firstname} ${person.Surname}`;
-            if (Array.isArray(value) && value.includes(code)) option.selected = true;
-            el.appendChild(option);
-          });
-        } else if (key === "candidate" || key === "campaignMgr") {
-          const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
-          selectedResources.forEach(code => {
-            const person = options.resources?.[code];
-            if (!person) return;
-            const option = document.createElement("option");
-            option.value = code;
-            option.textContent = `${person.Firstname} ${person.Surname}`;
-            if (value === code) { option.selected = true; document.getElementById("campaignMgremail").value = person.campaignMgremail; }
-            el.appendChild(option);
-          });
-        } else if (key === "mapfiles") {
-          if (Array.isArray(value)) {
-            value.forEach((mapPath, idx) => {
-              const o = document.createElement("option");
-              o.value = mapPath;
-              o.textContent = `Map ${idx+1}: ${mapPath.split("/").pop()}`;
-              if (idx === value.length-1) o.selected = true;
-              el.appendChild(o);
-            });
-          }
-          el.onchange = () => changeIframeSrc(`/thru/${el.value}`);
-        } else {
-          Object.entries(optsObj).forEach(([optValue, optLabel]) => {
-            const o = document.createElement("option");
-            o.value = optValue;
-            o.textContent = `${optValue}: ${optLabel}`;
-            if (optValue === value) o.selected = true;
-            el.appendChild(o);
-          });
-        }
-      } else el.value = value;
 
-      // Auto-update backend on input/change
-      el.oninput = () => {
-        let newVal = el.type === "number" ? parseFloat(el.value) : el.type === "checkbox" ? el.checked : el.value;
-        if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
 
-        fetch("/set-constant", {
-          method: "POST",
-          credentials: 'same-origin',
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ election: document.querySelector(".election-tab.active")?.dataset.election || "", name: key, value: newVal })
-        }).then(res => res.json()).then(resp => {
-          if (!resp.success) alert("Failed to update: " + resp.error);
-        });
-      };
+
+
+  document.addEventListener("DOMContentLoaded", async () => {
+
+  let selectedPlaceData = null; // Store data from the map
+  let preventModalClose = false;
+  let addPlaceActive = false;
+
+
+  let mapIsReady = false;
+
+  const modal = document.getElementById("modalPopup");
+
+  // Bootstrap tries to close the modal → we intercept it
+  modal.addEventListener("hide.bs.modal", function (e) {
+      if (preventModalClose) {
+          console.warn("⛔ Prevented modal from closing — add-place mode active");
+          e.preventDefault();
+      }
+  });
+
+  /* ---------------------------------------------------------
+   * CALENDAR <-> MAP TOGGLE
+   * --------------------------------------------------------- */
+   window.toggleView = async function () {
+     console.log(`📥 Xtoggling view`);
+     console.log(`📥 loginScreen.style.visibility`,loginScreen.style.visibility);
+
+     if (loginScreen.style.visibility === "visible") return;
+
+     // Calendar → Map
+     if (calendar.style.visibility === "visible") {
+         calendar.style.visibility = "hidden";
+         calendar.style.position = "absolute";
+
+         iframeContainer.style.visibility = "visible";
+         iframe.style.visibility = "visible";
+         toggleBtn.textContent = "📅 View Calendar";
+
+         console.log(`📥 map: ${iframe.style.visibility}`);
+     }
+     // Map → Calendar
+     else {
+         iframe.style.visibility = "hidden";
+         iframeContainer.style.visibility = "hidden";
+
+         calendar.style.position = "static";
+         calendar.style.visibility = "visible";
+         toggleBtn.textContent = "🧭 View Map";
+
+         console.log(`📥 calendar: ${calendar.style.visibility}`);
+     }
+ };
+
+ window.addEventListener("message", async (event) => {
+   const data = event.data;
+   const iframe = document.getElementById("iframe1");
+
+   console.log("📩 Parent received message:", data, "from", event.origin);
+   // -----------------------------------------------------
+   // toggleView
+   // -----------------------------------------------------
+   if (data?.type === "toggleView" || data === "toggleView") {
+       console.log("📩 Received toggleView from iframe");
+       await window.toggleView();
+       return;
+   }
+
+
+   // -----------------------------------------------------
+   // MAP READY
+   // -----------------------------------------------------
+   if (data?.type === "mapReady") {
+       console.log("🟢 Parent: Map is ready for interaction");
+       mapIsReady = true;
+       return;
+   }
+
+   // -----------------------------------------------------
+   // TABLE UPDATE
+   // -----------------------------------------------------
+   if (data?.type === "update-table" || data === "update-table") {
+       fetchTableData(data.stable);
+       return;
+   }
+
+   // -----------------------------------------------------
+   // SHOW MAP FOR ADD-PLACE
+   // -----------------------------------------------------
+   if (data === "showMapForAddPlace") {
+       console.log("📌 Handling showMapForAddPlace");
+
+       iframe.style.visibility = "visible";
+       iframe.classList.remove("dimmed");
+
+       document
+           .getElementById("modalPopup")
+           .classList.add("stay-on-top");
+
+       // Resize map only when ready
+       if (mapIsReady && iframe.contentWindow?.fmap) {
+           iframe.contentWindow.fmap.invalidateSize(true);
+           console.log("🗺️ Map size fixed after showing");
+       } else {
+           console.log("⏳ Waiting to fix size until mapReady");
+       }
+
+       return;
+   }
+
+   // -----------------------------------------------------
+   // NEW PLACE CREATED
+   // -----------------------------------------------------
+   if (data?.type === "newPlaceCreated") {
+       console.log("📌 Handling newPlaceCreated", data);
+
+       // Save for later processing
+       selectedPlaceData = data;
+       console.log("📦 Stored selectedPlaceData:", selectedPlaceData);
+
+       // Fill mini-form in modal
+       document.getElementById("newPlacePrefix").value = data.prefix || "";
+       document.getElementById("newPlaceAddress1").value = "";
+       document.getElementById("newPlaceAddress2").value = "";
+       document.getElementById("newPlacePostcode").value = data.postcode || "";
+       document.getElementById("newPlaceURL").value = "";
+
+       // Store lat/lng
+       const form = document.getElementById("addPlaceForm");
+       form.dataset.lat = data.lat;
+       form.dataset.lng = data.lng;
+
+       console.log("📌 Stored hidden lat/lng:", data.lat, data.lng);
+
+       // Show the form
+       form.classList.remove("d-none");
+       console.log("➡️ addPlaceForm is now VISIBLE");
+
+       // Dim the map
+       iframe.classList.add("dimmed");
+
+       // Allow modal to be closed normally again
+       preventModalClose = false;
+       addPlaceActive = false;
+
+       console.log("⚠️ Modal remains visible and active!");
+
+       return;
+   }
+});
+
+
+
+    // ------------------------------
+    // Add Place button handler
+    // ------------------------------
+    document.getElementById("addPlaceBtn").addEventListener("click", () => {
+        addPlaceActive = true;
+
+        // Show map
+        window.postMessage({ type: "showMapForAddPlace"}, "*");
+
+        // Tell iframe to prepare
+        document.getElementById("iframe1").contentWindow.postMessage(
+            { type: "enableAddPlace" },
+            "*"
+        );
     });
-    attachListenersToConstantFields(constants);
+
+
+
+
+    // ------------------------------
+    // Save button handler
+    // ------------------------------
+    document.getElementById("saveNewPlace").addEventListener("click", () => {
+        const form = document.getElementById("addPlaceForm");
+
+        const prefix = document.getElementById("newPlacePrefix").value.trim();
+        const address1 = document.getElementById("newPlaceAddress1").value.trim();
+        const address2 = document.getElementById("newPlaceAddress2").value.trim();
+        const postcode = document.getElementById("newPlacePostcode").value.trim();
+        const url = document.getElementById("newPlaceURL").value.trim();
+        const lat = form.dataset.lat;
+        const lng = form.dataset.lng;
+
+        if (!prefix || !address1 || !address2) {
+            alert("Prefix, Address line 1, and City/Town are required.");
+            return;
+        }
+
+        const newPlace = {
+            AddressPrefix: prefix,
+            Address1: address1,
+            Address2: address2,
+            Postcode: postcode,
+            url: url,
+            Lat: lat,
+            Long: lng
+        };
+
+        // Add to dropdown
+        const opt = document.createElement("option");
+        opt.value = prefix;
+        opt.textContent = `${prefix} — ${address1}, ${address2}`;
+        document.getElementById("placeDropdown").appendChild(opt);
+
+        // Hide mini-place form and restore map visibility
+        form.classList.add("d-none");
+        iframe.classList.remove("dimmed");
+        iframe.style.visibility = "hidden";
+
+        console.log("New place added:", newPlace);
+    });
+
+
+
+    // ------------------------------
+    // Handle Save button for new place
+    // ------------------------------
+    document.getElementById("saveNewPlace").addEventListener("click", () => {
+        const form = document.getElementById("addPlaceForm");
+
+        if (!selectedPlaceData) return alert("Select a place on the map first.");
+
+        const prefix = document.getElementById("newPlacePrefix").value.trim();
+        if (!prefix) return alert("Please enter a prefix.");
+
+        // Add to dropdown
+        const opt = document.createElement("option");
+        opt.value = prefix;
+        opt.textContent = `${prefix} — ${document.getElementById("newPlaceAddress1").value} ${document.getElementById("newPlaceAddress2").value}`;
+        document.getElementById("placeDropdown").appendChild(opt);
+
+        // Hide mini-form and undim map
+        form.classList.add("d-none");
+        document.getElementById("iframe1").classList.remove("dimmed");
+
+        // Clear global selection
+        selectedPlaceData = null;
+
+        // Optional: reset form fields
+        form.reset();
+    });
+
+
+
+
+
+    // Show iframe first
+    document.getElementById("iframe1").style.display = "block";
+
+    // Then, trigger Leaflet to invalidate size
+    const iframeMapWindow = document.getElementById("iframe1").contentWindow;
+    if (iframeMapWindow && iframeMapWindow.map) {
+        iframeMapWindow.map.invalidateSize(true);
+    }
+
+
+
+    // Show add-resource form
+    document.getElementById("addResourceBtn").addEventListener("click", () => {
+        document.getElementById("addResourceForm").classList.remove("d-none");
+    });
+
+    // Save new resource
+    document.getElementById("saveNewResource").addEventListener("click", () => {
+        const first = newResFirst.value.trim();
+        const last  = newResLast.value.trim();
+        const email = newResEmail.value.trim();
+
+        if (!first || !last) {
+            alert("Firstname and surname required");
+            return;
+        }
+
+        const code = (first[0] + last).toUpperCase();
+
+        const resourceObj = {
+            Firstname: first,
+            Surname: last,
+            campaignMgremail: email
+        };
+
+        // Update global state
+        window.resources[code] = resourceObj;
+
+        // ALSO update latestOptions (otherwise UI resets)
+        window.latestOptions.resources[code] = resourceObj;
+
+        populateDropdowns();
+        updateConstantsUI(window.latestConstants, window.latestOptions);
+
+        addResourceForm.classList.add("d-none");
+    });
+
+
+    // Show add-task-tag form
+    document.getElementById("addTaskTagBtn").addEventListener("click", () => {
+        document.getElementById("addTaskTagForm").classList.remove("d-none");
+    });
+
+    // Save new tag
+    document.getElementById("saveNewTag").addEventListener("click", () => {
+        const code  = newTagCode.value.trim();
+        const label = newTagLabel.value.trim();
+
+        if (!code || !label) {
+            alert("Both code and label required");
+            return;
+        }
+
+        // Update global
+        window.task_tags[code] = label;
+
+        // ALSO update options so updateConstantsUI does not overwrite
+        window.latestOptions.task_tags[code] = label;
+
+        // Refresh UI
+        populateDropdowns();
+        updateConstantsUI(window.latestConstants, window.latestOptions);
+
+        addTaskTagForm.classList.add("d-none");
+    });
+
+
+
+
+    function openAddResourceForm() {
+    const id = prompt("Enter new resource code (unique ID like R101):");
+    if (!id) return;
+
+    const Firstname = prompt("Enter first name:");
+    const Surname = prompt("Enter surname:");
+    const campaignMgremail = prompt("Enter campaign manager email (optional):") || "";
+
+    if (!Firstname || !Surname) return alert("Firstname and Surname are required");
+
+    // Create resource object
+    window.resources[id] = {
+        Firstname,
+        Surname,
+        campaignMgremail
+    };
+
+    console.log("Added new resource:", window.resources[id]);
+
+    // Rerender UI
+    updateConstantsUI(window.latestConstants, window.latestOptions);
+
+    alert("Resource added!");
+}
+
+function openAddTaskTagForm() {
+    const tag = prompt("Enter new task tag code (e.g., L5):");
+    if (!tag) return;
+
+    if (window.task_tags[tag]) {
+        return alert("This task tag already exists!");
+    }
+
+    const description = prompt("Enter task tag description:");
+    if (!description) return;
+
+    window.task_tags[tag] = description;
+
+    console.log("Added new task tag:", tag, description);
+
+    updateConstantsUI(window.latestConstants, window.latestOptions);
+
+    alert("Task tag added!");
+}
+
+    window.updateConstantsUI = function (constants, options) {
+      if (!constants) return;
+
+      // =====================================================
+      // ⭐ Make global objects
+      // =====================================================
+      window.areas      = options?.areas      || {};
+      window.places     = options?.places     || {};
+      window.resources  = options?.resources  || {};
+      window.task_tags  = options?.task_tags  || {};
+
+      console.log("Global areas:", window.areas);
+      console.log("Global places:", window.places);
+      console.log("Global resources:", window.resources);
+      console.log("Global task_tags:", window.task_tags);
+
+      // =====================================================
+      // ⭐ Iterate through all constants and populate UI
+      // =====================================================
+      Object.entries(constants).forEach(([key, value]) => {
+          const el = document.getElementById(key);
+          if (!el) return;
+
+          const optsObj = options[key] || {}; // used for dynamic select building
+          el.innerHTML = "";
+
+          // ------------------------------------------
+          // SELECT HANDLING
+          // ------------------------------------------
+          if (el.tagName === "SELECT") {
+
+              //
+              // 1️⃣ MULTI-SELECT "resources"
+              //
+              if (key === "resources") {
+                  Object.entries(options.resources || {}).forEach(([code, person]) => {
+                      const o = document.createElement("option");
+                      o.value = code;
+                      o.textContent = `${person.Firstname} ${person.Surname}`;
+                      if (Array.isArray(value) && value.includes(code)) o.selected = true;
+                      el.appendChild(o);
+                  });
+              }
+
+              //
+              // 2️⃣ candidate / campaignMgr selectors
+              //
+              else if (key === "candidate" || key === "campaignMgr") {
+                  const selectedResources = Array.isArray(constants.resources)
+                      ? constants.resources
+                      : [];
+
+                  selectedResources.forEach(code => {
+                      const person = options.resources?.[code];
+                      if (!person) return;
+
+                      const o = document.createElement("option");
+                      o.value = code;
+                      o.textContent = `${person.Firstname} ${person.Surname}`;
+
+                      if (value === code) {
+                          o.selected = true;
+
+                          // support the old behaviour where campaignMgr updates email field
+                          if (key === "campaignMgr") {
+                              const emailField = document.getElementById("campaignMgremail");
+                              if (emailField) emailField.value = person.campaignMgremail;
+                          }
+                      }
+
+                      el.appendChild(o);
+                  });
+              }
+
+              //
+              // 3️⃣ mapfiles logic (loads into iframe)
+              //
+              else if (key === "mapfiles") {
+                  if (Array.isArray(value)) {
+                      value.forEach((path, idx) => {
+                          const o = document.createElement("option");
+                          o.value = path;
+                          o.textContent = `Map ${idx + 1}: ${path.split("/").pop()}`;
+                          if (idx === value.length - 1) o.selected = true;
+                          el.appendChild(o);
+                      });
+                  }
+
+                  el.onchange = () => {
+                      changeIframeSrc(`/thru/${el.value}`);
+                  };
+              }
+
+              //
+              // 4️⃣ Generic SELECT population
+              //
+              else {
+                  Object.entries(optsObj).forEach(([optValue, optLabel]) => {
+                      const o = document.createElement("option");
+                      o.value = optValue;
+                      o.textContent = `${optValue}: ${optLabel}`;
+                      if (optValue === value) o.selected = true;
+                      el.appendChild(o);
+                  });
+              }
+
+          }
+          // ------------------------------------------
+          // NON-SELECT INPUTS
+          // ------------------------------------------
+          else {
+              el.value = value;
+          }
+
+          // =====================================================
+          // ⭐ Auto backend update on change (old behaviour kept)
+          // =====================================================
+          el.oninput = () => {
+              let newVal;
+
+              if (el.type === "number") newVal = parseFloat(el.value);
+              else if (el.type === "checkbox") newVal = el.checked;
+              else newVal = el.value;
+
+              if (el.multiple) {
+                  newVal = Array.from(el.selectedOptions).map(o => o.value);
+              }
+
+              fetch("/set-constant", {
+                  method: "POST",
+                  credentials: "same-origin",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                      election:
+                          document.querySelector(".election-tab.active")?.dataset.election ||
+                          "",
+                      name: key,
+                      value: newVal
+                  })
+              })
+                  .then(res => res.json())
+                  .then(resp => {
+                      if (!resp.success) alert("Failed to update: " + resp.error);
+                  });
+          };
+      });
+
+      // Keep the old behaviour
+      if (typeof attachListenersToConstantFields === "function") {
+          attachListenersToConstantFields(constants);
+      }
+  };
+
+
+
+    const getActiveElectionTab = () =>
+        document.querySelector("button.election-tab.active");
+
+    console.log("🔀 places on DOM relaod :", places);
+    console.log("🔀 resources on DOM relaod :", resources);
+    console.log("🔀 areas on DOM relaod :", areas);
+    console.log("🔀 task_tags on DOM relaod :", task_tags);
+
+
+      async function ensureTabsReady() {
+          while (document.querySelectorAll(".election-tab").length === 0) {
+              await new Promise(r => requestAnimationFrame(r));
+          }
+      }
+
+      async function ensureOneTabActive() {
+        const tabs = document.querySelectorAll(".election-tab");
+        let active = document.querySelector(".election-tab.active");
+
+        if (!active && tabs.length > 0) {
+
+            // Fetch last-used election (correct JSON way)
+            let lastElection = null;
+            try {
+                const res = await fetch("/last-election", { credentials: "same-origin" });
+                const json = await res.json();
+                lastElection = json.last_election;   // <-- THIS WAS THE FIX
+            } catch (e) {
+                console.warn("Could not fetch last election");
+            }
+
+            // Try selecting that tab
+            if (lastElection) {
+                const lastTab = [...tabs].find(t => t.dataset.election === lastElection);
+                if (lastTab) {
+                    lastTab.classList.add("active");
+                    return lastTab;
+                }
+            }
+
+            // Fallback: first tab
+            tabs[0].classList.add("active");
+            return tabs[0];
+        }
+
+        return active;
+    }
+
+    async function setActiveElectionOnStartup() {
+        const activeTab = await ensureOneTabActive();
+        const electionName = activeTab.dataset.election || activeTab.textContent.trim();
+        console.log("📩 setting startup active tab::", electionName);
+        if (!electionName) {
+            console.error("No election name found for active tab!", activeTab);
+            return;
+        }
+
+        try {
+            const res = await fetch("/set-election", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ election: electionName })
+            });
+
+            const data = await res.json();
+            window.latestConstants = data.constants;
+            window.latestOptions = data.options;
+
+            updateConstantsUI(data.constants, data.options);
+
+            console.log("📩  startup (set-election returned data:", data);
+            console.log("🔀 startup places on DOM reload :", window.places);
+            console.log("🔀 startup resources on DOM reload :", window.resources);
+            console.log("🔀 startup areas on DOM reload :", window.areas);
+            console.log("🔀 startup task_tags on DOM reload :", window.task_tags);
+
+           window.plan = data.constants?.calendar_plan;
+           console.log("📩 calendar_plan::", plan);
+        } catch (e) {
+            console.error("Failed to set active election:", e);
+        }
+    }
+
+
+    // Call this function on startup to tell backend which election is active
+
+
+      // 1. Wait for tabs
+      await ensureTabsReady();
+      // 2️⃣ Tell backend which election is active
+      await setActiveElectionOnStartup();
+
+      await refreshConstantsUI();
+
+      // 4. Build calendar UI BEFORE loading calendar data
+      console.log("📅 Building calendar UI…");
+      buildCalendarGrid("calendar-grid", 45);
+      populateDropdowns();
+      console.log("📅 Calendar UI ready.");
+
+      // 5. NOW load plan into fully created calendar
+      await getCalendarUpdate();
+      console.log("📅 Calendar data loaded.");
+
+      /* ---------------------------------------------------------
+       * expose refreshTableData so iframe can call the parent
+       * --------------------------------------------------------- */
+      window.refreshTableData = function(id) {
+          console.log("Refreshing table for", id);
+          window.parent.postMessage(
+              { type: "update-table", stable: "nodelist_xref" },
+              "*"
+          );
+      };
+      /* ---------------------------------------------------------
+       * expose refreshTableData so iframe can call the parent
+       * --------------------------------------------------------- */
+
+       async function getCalendarUpdate() {
+           const currentTab = getActiveElectionTab();
+           if (!currentTab) return;
+
+           try {
+               const election = currentTab.dataset.election;
+               console.log("📦 Fetching election:", election);
+
+               const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
+               if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+               const data = await response.json();
+               console.log("📦 Backend response:", data);
+
+               window.plan = data.calendar_plan;
+
+               updateConstantsUI(data.constants, data.options);
+               console.log("📩 update calendar_plan::", plan);
+               console.log("🔀 update places on DOM relaod :", places);
+               console.log("🔀 update resources on DOM relaod :", resources);
+               console.log("🔀 update areas on DOM relaod :", areas);
+               console.log("🔀 update task_tags on DOM relaod :", task_tags);
+
+              window.plan = data.constants?.calendar_plan;
+               if (!window.plan || !window.plan.slots) {
+                   console.warn("⚠️ No slots found in calendar_plan");
+                   return;
+               }
+
+               loadCalendarPlan(window.plan);
+               console.log("✅ Calendar plan loaded into UI");
+
+           } catch (err) {
+               console.error("🚨 Error fetching calendar plan:", err);
+           }
+       }
+
+
+      /* ---------------------------------------------------------
+   * CALENDAR LOGIN AND CALENDAR BUILD
+   * --------------------------------------------------------- */
+
+  // elements
+  const iframeContainer = document.getElementById("iframe-container");
+  const iframe = document.getElementById("iframe1"); // the actual iframe element
+  const calendar = document.getElementById("calendar");
+  const loginScreen = document.getElementById("loginScreen");
+  const loginBtn = document.getElementById("loginBtn");
+  const passwordInput = document.getElementById("password");
+  const loginMessage = document.getElementById("loginMessage");
+  const toggleBtn = document.getElementById("b9");
+
+
+  // Initial state — hide map + calendar, show login unless in dev mode
+  if (isDev) {
+      console.warn("⚠ DEV MODE: Skipping login screen");
+
+      loginScreen.style.visibility = "hidden";
+      calendar.style.visibility = "hidden"; // hide calendar initially
+      iframe.style.visibility = "visible";  // show map initially
+      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+      calendar.dataset.loaded = "true";    // avoid duplicate fetches
+
+      window.loggedIn = true;
+
+  } else {
+      // Normal login behaviour
+      loginScreen.style.visibility = "visible";
+      calendar.style.visibility = "hidden";  // hide calendar
+      iframe.style.visibility = "visible";   // show map by default
+      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+      window.loggedIn = false;
   }
 
   // ----------------------------
@@ -703,194 +1467,6 @@
 
 
 
-  document.addEventListener("DOMContentLoaded", async () => {
-
-    const getActiveElectionTab = () =>
-        document.querySelector("button.election-tab.active");
-
-
-
-      async function ensureTabsReady() {
-          while (document.querySelectorAll(".election-tab").length === 0) {
-              await new Promise(r => requestAnimationFrame(r));
-          }
-      }
-
-      async function ensureOneTabActive() {
-        const tabs = document.querySelectorAll(".election-tab");
-        let active = document.querySelector(".election-tab.active");
-
-        if (!active && tabs.length > 0) {
-
-            // Fetch last-used election (correct JSON way)
-            let lastElection = null;
-            try {
-                const res = await fetch("/last-election", { credentials: "same-origin" });
-                const json = await res.json();
-                lastElection = json.last_election;   // <-- THIS WAS THE FIX
-            } catch (e) {
-                console.warn("Could not fetch last election");
-            }
-
-            // Try selecting that tab
-            if (lastElection) {
-                const lastTab = [...tabs].find(t => t.dataset.election === lastElection);
-                if (lastTab) {
-                    lastTab.classList.add("active");
-                    return lastTab;
-                }
-            }
-
-            // Fallback: first tab
-            tabs[0].classList.add("active");
-            return tabs[0];
-        }
-
-        return active;
-    }
-
-    async function setActiveElectionOnStartup() {
-        const activeTab = await ensureOneTabActive();
-        const electionName = activeTab.dataset.election || activeTab.textContent.trim();
-
-        if (!electionName) {
-            console.error("No election name found for active tab!", activeTab);
-            return;
-        }
-
-        try {
-            const res = await fetch("/set-election", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "same-origin",
-                body: JSON.stringify({ election: electionName })
-            });
-
-            const data = await res.json();
-            console.log("✅ Set active election:", data);
-        } catch (e) {
-            console.error("Failed to set active election:", e);
-        }
-    }
-
-
-    // Call this function on startup to tell backend which election is active
-
-
-      // 1. Wait for tabs
-      await ensureTabsReady();
-      // 2️⃣ Tell backend which election is active
-      await setActiveElectionOnStartup();
-
-      await refreshConstantsUI();
-
-      // 4. Build calendar UI BEFORE loading calendar data
-      console.log("📅 Building calendar UI…");
-      buildCalendarGrid("calendar-grid", 45);
-      populateDropdowns();
-      console.log("📅 Calendar UI ready.");
-
-      // 5. NOW load plan into fully created calendar
-      await getCalendarUpdate();
-      console.log("📅 Calendar data loaded.");
-
-      /* ---------------------------------------------------------
-       * expose refreshTableData so iframe can call the parent
-       * --------------------------------------------------------- */
-      window.refreshTableData = function(id) {
-          console.log("Refreshing table for", id);
-          window.parent.postMessage(
-              { type: "update-table", stable: "nodelist_xref" },
-              "*"
-          );
-      };
-      /* ---------------------------------------------------------
-       * expose refreshTableData so iframe can call the parent
-       * --------------------------------------------------------- */
-
-       async function getCalendarUpdate() {
-           const currentTab = getActiveElectionTab();
-           if (!currentTab) return;
-
-           try {
-               const election = currentTab.dataset.election;
-               console.log("📦 Raw election:", election);
-
-               const response = await fetch(
-                   `${API}/current-election?election=${encodeURIComponent(election)}`
-               );
-
-               if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-               const data = await response.json();
-               console.log("📦 Raw backend response:", data);
-
-               // ----- FIX: STRICT EXTRACTION OF PLAN -----
-               let plan = data?.calendar_plan;
-
-               if (!plan) {
-                   console.warn("⚠️ No calendar_plan in backend response");
-                   return;
-               }
-
-               // Flatten nested calendar_plan.calendar_plan if needed
-               if (plan.calendar_plan) {
-                   plan = plan.calendar_plan;
-               }
-
-               console.log("📋 Final extracted plan:", plan);
-
-               // Load into UI
-               if (plan.slots) {
-                   loadCalendarPlan(plan);
-                   console.log("✅ Calendar plan loaded into UI");
-               } else {
-                   console.warn("⚠️ No slots found in plan");
-               }
-
-           } catch (error) {
-               console.error("🚨 Error fetching calendar plan:", error);
-           }
-       }
-
-      /* ---------------------------------------------------------
-   * CALENDAR LOGIN AND CALENDAR BUILD
-   * --------------------------------------------------------- */
-
-  // elements
-  const iframe = document.getElementById("iframe1");
-  const calendar = document.getElementById("calendar");
-  const loginScreen = document.getElementById("loginScreen");
-  const loginBtn = document.getElementById("loginBtn");
-  const passwordInput = document.getElementById("password");
-  const loginMessage = document.getElementById("loginMessage");
-  const toggleBtn = document.getElementById("b9");
-
-
-  // Initial state — hide map + calendar, show login unless in dev mode
-  if (isDev) {
-      console.warn("⚠ DEV MODE: Skipping login screen");
-
-      loginScreen.style.visibility = "hidden";
-      calendar.style.visibility = "hidden"; // hide calendar initially
-      iframe.style.visibility = "visible";  // show map initially
-      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
-      calendar.dataset.loaded = "true";    // avoid duplicate fetches
-
-      window.loggedIn = true;
-
-  } else {
-      // Normal login behaviour
-      loginScreen.style.visibility = "visible";
-      calendar.style.visibility = "hidden";  // hide calendar
-      iframe.style.visibility = "visible";   // show map by default
-      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
-      window.loggedIn = false;
-  }
-
-
-
-
   // ENTER triggers login
   passwordInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -899,46 +1475,7 @@
       }
   });
 
-  window.updateConstantsUI = function (constants, options) {
-      if (!constants) return;
 
-      // populate basic fields
-      for (const key of Object.keys(constants)) {
-          const el = document.getElementById(key);
-          if (!el) continue;
-
-          if (el.tagName === "SELECT") {
-              if (el.multiple && Array.isArray(constants[key])) {
-                  Array.from(el.options).forEach(opt =>
-                      opt.selected = constants[key].includes(opt.value)
-                  );
-              } else {
-                  el.value = constants[key];
-              }
-          }
-      }
-
-      // populate special selects
-      ["candidate", "campaignMgr"].forEach(key => {
-          const el = document.getElementById(key);
-          if (!el) return;
-
-          el.innerHTML = "";
-          const resources = constants.resources || [];
-
-          resources.forEach(code => {
-              const person = options?.resources?.[code];
-              if (!person) return;
-
-              const opt = document.createElement("option");
-              opt.value = code;
-              opt.textContent = `${person.Firstname} ${person.Surname}`;
-              if (constants[key] === code) opt.selected = true;
-
-              el.appendChild(opt);
-          });
-      });
-  };
 
 
   // ----------------------------
@@ -981,8 +1518,25 @@
 
     const data = await res.json();
     window.latestConstants = data.constants;
-
+    window.latestOptions = data.options;
     updateConstantsUI(data.constants, data.options);
+
+   window.plan = data.constants?.calendar_plan;
+
+   console.log("📩 set calendar_plan::", window.plan);
+   console.log("🔀 set places on DOM relaod :", window.places);
+   console.log("🔀 set resources on DOM relaod :", window.resources);
+   console.log("🔀 set areas on DOM relaod :", window.areas);
+   console.log("🔀 set task_tags on DOM relaod :", window.task_tags);
+
+   if (!window.plan || !window.plan.slots) {
+       console.warn("⚠️ No slots found in calendar_plan");
+       return;
+   }
+
+   loadCalendarPlan(window.plan);
+   console.log("✅ Calendar plan loaded into UI");
+
 
     if (data.constants?.territory) {
         changeIframeSrc(`/thru/${data.constants.territory}`);
@@ -990,71 +1544,24 @@
 
     fetchTableData("nodelist_xref");
 
-    // Update calendar for new election
-    // Always refresh the calendar for the new election
-    await getCalendarUpdate();
 
 
 };
 
 
-// ----------------------------
-// Message Listener for Table Updates
-// ----------------------------
-window.addEventListener("message", (event) => {
-    // Optional security: ensure the message comes from your own site
-    // if (event.origin !== window.location.origin) return;
-
-    const data = event.data;
-
-    // Case 1 — iframe requests table refresh
-    if (data && data.type === "update-table") {
-        fetchTableData(data.stable);
-        return;
-    }
-
-    // Case 2 — iframe requests view toggle
-    if (data === "toggleView") {
-        console.log("📩 Received toggleView from iframe");
-        toggleView();
-        return;
-    }
-});
 
 
 
-  /* ---------------------------------------------------------
-   * CALENDAR <-> MAP TOGGLE
-   * --------------------------------------------------------- */
-   async function toggleView() {
-       console.log(`📥 toggling view`);
-       if (loginScreen.style.visibility === "visible") return;
-
-       // Calendar → Map
-       if (calendar.style.visibility === "visible") {
-           calendar.style.visibility = "hidden";
-           calendar.style.position = "absolute";
-           iframe.style.visibility = "visible";
-           toggleBtn.textContent = "📅 View Calendar";
-           console.log(`📥 map: ${iframe.style.visibility}`);
-
-       }
-       // Map → Calendar
-       else {
-           iframe.style.visibility = "hidden";
-           calendar.style.position = "static";
-           calendar.style.visibility = "visible";
-           console.log(`📥 calendar: ${calendar.style.visibility}`);
-
-           toggleBtn.textContent = "🧭 View Map";
-       }
-   }
 
 
 
-  toggleBtn.addEventListener("click", async () => {
-    toggleView();
-  });
+
+
+
+   toggleBtn.addEventListener("click", async () => {
+       await window.toggleView();
+   });
+
 
       /* ---------------------------------------------------------
        * GENERAL ELEMENTS
@@ -1073,11 +1580,13 @@ window.addEventListener("message", (event) => {
        * FETCH CONSTANTS + UPDATE UI
        * --------------------------------------------------------- */
        function refreshConstantsUI(callback) {
+          console.log("📩 refreshing constants");
            return fetch("/get-constants", { credentials: "same-origin" })
                .then(res => res.json())
                .then(data => {
                    window.latestConstants = data.constants;
-                   updateConstantsUI(data.constants, data.options);
+                   window.latestOptions = data.options;
+                   window.updateConstantsUI(data.constants, data.options);
                    if (callback) callback(data);
                    return data.constants;
                });
@@ -1137,6 +1646,7 @@ window.addEventListener("message", (event) => {
            if (!e.target.classList.contains("election-tab")) return;
 
            const electionName = e.target.dataset.election;
+           console.log("📩 Switching to:", electionName);
            await switchElection(electionName);
 
            // Optional: keep any extra tab sync logic
@@ -1211,7 +1721,7 @@ window.addEventListener("message", (event) => {
         const clearSlotBtn = document.getElementById("clearSlotBtn");
 
         // Attach button event handlers
-        switchToMapBtn.addEventListener("click", toggleView);
+        switchToMapBtn.addEventListener("click", window.toggleView);
         saveCalendarBtn.addEventListener("click", saveCalendarPlan);
         generateSummaryBtn.addEventListener("click", generateSummaryReport);
         saveSlotBtn.addEventListener("click", handleSaveSlot);

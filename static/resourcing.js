@@ -182,46 +182,46 @@
 
 // Fill s
 function populateDropdowns() {
-  fillSelect("activitySelect", window.task_tags);
-  fillSelect("resourcesSelect", window.resources);
-  fillSelect("placeSelect", window.places);
-  fillSelect("areaSelect", window.areas);
+    fillSelect("activitySelect", window.task_tags);   // ✔ correct
+    fillSelect("resourcesSelect", window.resources);
+    fillSelect("placeSelect", window.places);
+    fillSelect("areaSelect", window.areas);
 }
 
 
 function fillSelect(selectId, items) {
-  const sel = document.getElementById(selectId);
-  sel.innerHTML = '<option value="">-- Select --</option>';
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
 
-  let arr = [];
+    sel.innerHTML = '<option value="">-- Select --</option>';
 
-  if (Array.isArray(items)) {
-    // Case: resources is an array of { key, value: {...} }
-    arr = items.map(it => ({
-      key: it.key ?? "",
-      value: it.value?.Firstname
-              ? `${it.value.Firstname} (${it.key})`
-              : it.value?.name ?? it.key
-    }));
-  } else if (typeof items === "object" && items !== null) {
-    // Case: task_tags, places, areas
-    arr = Object.entries(items).map(([k, v]) => ({
-      key: k,
-      value: typeof v === "string"
-        ? v
-        : v.name ?? v.code ?? k
-    }));
-  }
+    let arr = [];
 
-  console.log(`Populating ${selectId}:`, arr);
+    if (Array.isArray(items)) {
+        arr = items.map(it => ({
+            key: it.key ?? "",
+            value: it.value?.Firstname
+                    ? `${it.value.Firstname} ${it.value.Surname}`
+                    : it.value?.name ?? it.key
+        }));
+    }
+    else if (typeof items === "object" && items !== null) {
+        arr = Object.entries(items).map(([k, v]) => ({
+            key: k,
+            value: typeof v === "string"
+                ? v                     // task_tags style (TAG1: "Leafleting")
+                : v.name ?? v.code ?? k // areas, places
+        }));
+    }
 
-  arr.forEach(it => {
-    const opt = document.createElement("option");
-    opt.value = it.key;
-    opt.textContent = it.value;
-    sel.appendChild(opt);
-  });
+    arr.forEach(({ key, value }) => {
+        const opt = document.createElement("option");
+        opt.value = key;
+        opt.textContent = value;
+        sel.appendChild(opt);
+    });
 }
+
 
 function updateSlotAvailability(slot) {
   // Count children with the Bootstrap resource lozenge class
@@ -403,9 +403,16 @@ function extractCalendarPlan() {
 
 
 function loadCalendarPlan(plan) {
+  const calendarGrid = document.getElementById('calendar-grid');
+
+  // Clear UI
+  calendarGrid.innerHTML = '';
+
+  // Reset calendar data to avoid carrying over entries
+  calendarData = {}; // << reset for new calendar
+
   console.log("📦 Loaded plan:", plan);
   if (plan.calendar_plan) plan = plan.calendar_plan;
-
 
   if (!plan?.slots) return;
 
@@ -437,13 +444,13 @@ function loadCalendarPlan(plan) {
       lozengeContainer.appendChild(document.createTextNode(" "));
     });
 
-    // Optional: store in calendarData for quick access
+    // Store slot data for this calendar
     calendarData[key] = slotData;
 
-    // Optional visual updates
     updateSlotAvailability(slotDiv);
   });
 }
+
 
 function redrawSlot(slotId, data = {}) {
   const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
@@ -580,7 +587,7 @@ function openSlotModal(slotId) {
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
     fillSelect("areaSelect", window.areas);
-
+    console.log("💾 filled resources:", window.resources);
     // Infer from lozenges if data is empty
     if (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length)) {
         data.resources = [];

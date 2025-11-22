@@ -528,7 +528,7 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
      tooltipContent = areaInfo?.tooltip_html || loz.info || null;
    } else if (loz.type === "resource") {
      const resourceInfo = window.resources?.[loz.code];
-     tooltipContent = resourceInfo.Firstname + " " + resourceInfo.Surname;
+     tooltipContent = resourceInfo?.Firstname; + " " + resourceInfo?.Surname;
      console.log("Resource Tooltips",tooltipContent);
    } else if (loz.type === "place") {
          const placeInfo = window.places?.[loz.code];
