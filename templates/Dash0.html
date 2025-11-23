@@ -115,17 +115,18 @@
         background: white;
         padding: 10px 0;
         border-bottom: 1px solid #ccc;
-        z-index: 10;
+        z-index: 100;
     }
 
     /* Only this scrolls */
     #calendar-scroll {
         position: relative;
         flex: 1 1 auto;   /* fills remaining space */
-        height: 1000px;     /* critical! allows scrolling */
+        height: 800px;     /* critical! allows scrolling */
         overflow-y: auto;  /* scrolling enabled */
         padding: 5px;
         /* remove height: 100% */
+        z-index: 100;
     }
 
 
@@ -156,7 +157,7 @@
       }
 
   /* Calendar styles (unchanged) */
-  .calendar-grid { margin-top: 100px; }
+  .calendar-grid { margin-top: 90px; }
   .slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
   .slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }
   .slot-content { display: inline; word-break: break-word; }
@@ -1302,8 +1303,6 @@ function openAddTaskTagForm() {
       // 2️⃣ Tell backend which election is active
       await setActiveElectionOnStartup();
 
-      await refreshConstantsUI();
-
       // 4. Build calendar UI BEFORE loading calendar data
       console.log("📅 Building calendar UI…");
       buildCalendarGrid("calendar-grid", 45);
@@ -1357,7 +1356,7 @@ function openAddTaskTagForm() {
                    return;
                }
 
-//               loadCalendarPlan(window.plan);
+               loadCalendarPlan(window.plan);
                console.log("✅ Calendar plan loaded into UI");
 
            } catch (err) {
