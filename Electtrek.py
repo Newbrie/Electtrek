@@ -1398,7 +1398,7 @@ class TreeNode:
         global OPTIONS
 
         from folium import IFrame
-        from folium import Element
+
 
         print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
 
@@ -1435,166 +1435,151 @@ class TreeNode:
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
-        <style>
-        #customSearchBox {
-            position: fixed;
-            top: 60px;
-            left: 100px;
-            z-index: 1100;
-            background: white;
-            padding: 5px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        #customSearchBox input {
-            padding: 4px 6px;
-            font-size: 14px;
-        }
-        #customSearchBox button {
-            padding: 4px 8px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        </style>
+            <style>
+            #customSearchBox {
+                position: fixed;
+                top: 60px;
+                left: 100px;
+                z-index: 1100;
+                background: white;
+                padding: 5px;
+                border: 1px solid #ccc;
+                font-size: 14px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            #customSearchBox input {
+                padding: 4px 6px;
+                font-size: 14px;
+            }
+            #customSearchBox button {
+                padding: 4px 8px;
+                font-size: 14px;
+                cursor: pointer;
+            }
+            </style>
 
-        <div id="customSearchBox">
-            <input type="text" id="searchInput" placeholder="Search..." />
-            <button id="searchBtn">Search</button>
-            <button id="backToCalendarBtn">📅 Calendar</button>
-        </div>
+            <div id="customSearchBox">
+                <input type="text" id="searchInput" placeholder="Search..." />
+                <button onclick="searchMap()">Search</button>
+                <button id="backToCalendarBtn">📅 Calendar</button>
+            </div>
 
-        <script>
-        // Wrap in a safe namespace to avoid leaking globals
-        (function () {
-
-            console.log("🔍 Search bar script injected safely");
-
+            <script>
             document.addEventListener("DOMContentLoaded", function () {
-
-                // --- SAFELY detect Leaflet map instance ---
-                window.map = null;
-                for (const key of Object.keys(window)) {
-                    try {
+                // Detect map variable dynamically
+                for (const key in window) {
+                    if (window.hasOwnProperty(key)) {
                         const val = window[key];
-                        if (val && typeof val === "object" && val instanceof L.Map) {
+                        if (val && val instanceof L.Map) {
                             window.map = val;
-                            console.log("🗺️ Found map instance:", key);
                             break;
                         }
-                    } catch (err) {
-                        // Skip cross-origin or protected properties
                     }
                 }
 
-                // --- Bind search button ---
-                document.getElementById("searchBtn").addEventListener("click", searchMap);
-
-                // --- Bind Enter key ---
-                document.getElementById("searchInput").addEventListener("keydown", (e) => {
+                const input = document.getElementById("searchInput");
+                input.addEventListener("keydown", function (e) {
                     if (e.key === "Enter") searchMap();
                 });
 
-                // --- Back-to-calendar button ---
-                document.getElementById("backToCalendarBtn").addEventListener("click", () => {
-                    console.log("🟧 iframe: Calendar button clicked → sending toggleView");
+                // Calendar button
+                document.getElementById("backToCalendarBtn").addEventListener("click", function() {
                     window.parent.postMessage({ type: "toggleView" }, "*");
                 });
-
             });
 
-            // -------------------------------
-            // Search Helpers
-            // -------------------------------
             function extractVisibleText(element) {
                 const walker = document.createTreeWalker(
                     element,
                     NodeFilter.SHOW_TEXT,
                     {
-                        acceptNode: (node) => {
-                            const style = window.getComputedStyle(node.parentNode);
-                            return (style.visibility !== "hidden" && style.display !== "none")
-                                ? NodeFilter.FILTER_ACCEPT
-                                : NodeFilter.FILTER_REJECT;
+                        acceptNode: function (node) {
+                            const parent = node.parentNode;
+                            const style = window.getComputedStyle(parent);
+                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                            return NodeFilter.FILTER_REJECT;
                         }
                     }
                 );
 
-                let visibleText = "";
+                let visibleText = '';
                 while (walker.nextNode()) {
-                    visibleText += walker.currentNode.nodeValue + " ";
+                    visibleText += walker.currentNode.nodeValue + ' ';
                 }
                 return visibleText.trim();
             }
 
-            // -------------------------------
-            // Main Search Function
-            // -------------------------------
             async function searchMap() {
-                if (!window.map) {
-                    console.warn("❗ Map not ready for search");
-                    return;
-                }
-
                 const query = document.getElementById("searchInput").value.trim();
                 if (!query) return;
 
-                // 1️⃣ Check UK postcode
-                const postcodePattern = /^[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}$/i;
+                // --- 1️⃣ Check if query looks like a UK postcode ---
+                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
                 if (postcodePattern.test(query)) {
-                    const cleanPostcode = query.replace(/\\s+/g, "");
+                    const cleanPostcode = query.replace(/\s+/g, '');
                     const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
-
                     try {
                         const res = await fetch(url);
+                        if (!res.ok) throw new Error("Network error");
                         const data = await res.json();
 
-                        if (data.status === "match") {
+                        if (data.status === "match" && data.data) {
                             const { latitude, longitude } = data.data;
-
                             map.setView([latitude, longitude], 17);
+
                             L.marker([latitude, longitude])
                                 .addTo(map)
-                                .bindPopup("<b>" + query.toUpperCase() + "</b><br>Lat: "
-                                           + latitude.toFixed(5) + ", Lon: " + longitude.toFixed(5))
+                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
                                 .openPopup();
                             return;
+                        } else {
+                            alert("Postcode not found.");
+                            return;
                         }
-
-                        alert("Postcode not found.");
                     } catch (err) {
-                        console.error("Postcode lookup error:", err);
-                        alert("Error looking up postcode.");
+                        console.error("Postcode lookup failed:", err);
+                        // Only alert if the map didn’t already move
+                        if (!map.getCenter()) alert("Error looking up postcode.");
+                        return;
                     }
-                    return;
+
                 }
 
-                // 2️⃣ Search other map elements
+                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
                 const normalizedQuery = query.toLowerCase();
                 let found = false;
 
                 map.eachLayer(function (layer) {
                     if (found) return;
 
-                    // --- popup search ---
+                    // ✅ Search Popups with <b data-name="...">
                     if (layer.getPopup && layer.getPopup()) {
-                        let content = layer.getPopup().getContent();
-                        let doc = null;
+                        let bElements = [];
+                        const content = layer.getPopup().getContent();
 
-                        if (typeof content === "string") {
-                            doc = new DOMParser().parseFromString(content, "text/html");
-                        } else if (content instanceof HTMLElement) {
-                            doc = content;
+                        if (content instanceof HTMLElement) {
+                            bElements = content.querySelectorAll('b[data-name]');
+                        } else if (typeof content === 'string') {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(content, 'text/html');
+                            bElements = doc.querySelectorAll('b[data-name]');
                         }
 
-                        if (doc) {
-                            const elems = doc.querySelectorAll("b[data-name]");
-                            for (let el of elems) {
-                                const name = el.getAttribute("data-name").toLowerCase().replace(/_/g, " ");
-                                if (name.includes(normalizedQuery)) {
-                                    centerLayer(layer);
+                        for (let b of bElements) {
+                            const dataName = b.getAttribute('data-name');
+                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
+                            if (normalizedDataName.includes(normalizedQuery)) {
+                                let latlng = null;
+                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
+
+                                if (latlng) {
+                                    map.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
                                     found = true;
                                     return;
                                 }
@@ -1602,46 +1587,47 @@ class TreeNode:
                         }
                     }
 
-                    // --- tooltip search ---
+                    // ✅ Search Tooltips
                     if (!found && layer.getTooltip && layer.getTooltip()) {
-                        const text = layer.getTooltip().getContent();
-                        if (text && text.toLowerCase().includes(normalizedQuery)) {
-                            centerLayer(layer);
-                            found = true;
-                            return;
-                        }
-                    }
+                        const tooltipContent = layer.getTooltip().getContent();
+                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
+                            let latlng = null;
+                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
 
-                    // --- DivIcon search ---
-                    if (!found && layer instanceof L.Marker) {
-                        const icon = layer?.options?.icon;
-                        if (icon instanceof L.DivIcon) {
-                            const html = icon.options.html.toLowerCase();
-                            if (html.includes(normalizedQuery)) {
-                                centerLayer(layer);
+                            if (latlng) {
+                                map.setView(latlng, 17);
                                 found = true;
                                 return;
                             }
                         }
                     }
+
+                    // ✅ Search DivIcons
+                    if (!found && layer instanceof L.Marker) {
+                        if (layer.options.icon instanceof L.DivIcon) {
+                            const iconContent = layer.options.icon.options.html;
+                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
+                                const latlng = layer.getLatLng();
+                                if (latlng) {
+                                    map.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
+                                    if (layer._icon) layer._icon.style.border = "2px solid red";
+                                    found = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
                 });
 
-                if (!found) alert("No matching location found.");
+                if (!found) {
+                    alert("No matching location found.");
+                }
             }
+            </script>
 
-            function centerLayer(layer) {
-                const latlng = layer.getLatLng
-                    ? layer.getLatLng()
-                    : layer.getBounds().getCenter();
-
-                map.setView(latlng, 17);
-                if (layer.openPopup) layer.openPopup();
-            }
-
-        })();
-        </script>
-        """
-
+            """
 
 
         # --- Title for the map
@@ -1744,66 +1730,37 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
 
 
-        js_map_name = FolMap.get_name()   # ← THIS is the official Folium map variable
+        # --- Updated click JS ---
+        js_map_name = FolMap.get_name()
 
         add_place_js = f"""
         <script>
-        console.log("📌 iframe: add-place script injected. Folium map variable: {js_map_name}");
-
         (function() {{
-            // Ensure fmap is correctly set to Folium's internal map
-            window.fmap = {js_map_name};
-            console.log("🗺️ window.fmap set to {js_map_name}", window.fmap);
-
             window.awaitingNewPlace = false;
             window.pinMarker = null;
 
-            // ---------------------------------------------------
-            // 1. Immediately tell parent that map is ready
-            // ---------------------------------------------------
-            window.parent.postMessage({{ type: "mapReady" }}, "*");
-            console.log("📨 iframe -> parent: mapReady sent");
+            const mapName = "{js_map_name}";
 
-            // ---------------------------------------------------
-            // 2. Handle map click for new place selection
-            // ---------------------------------------------------
             function handleMapClick(e) {{
-                if (!window.awaitingNewPlace) {{
-                    console.log("⌛ Click ignored: not awaiting new place");
-                    return;
-                }}
-
-                console.log("📍 Map clicked for new place");
+                if (!window.awaitingNewPlace) return;
 
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
 
                 const prefix = prompt("Enter a prefix for this location:", "");
-                if (!prefix) {{
-                    console.log("❌ Prefix missing, cancelling place creation");
-                    return;
-                }}
+                if (!prefix) return;
 
-                // Remove previous temporary marker
-                if (window.pinMarker) {{
-                    window.fmap.removeLayer(window.pinMarker);
-                }}
+                if (window.pinMarker) window.fmap.removeLayer(window.pinMarker);
 
-                // Create custom icon
                 const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
                 window.pinMarker = L.marker([lat, lng], {{ icon: icon }}).addTo(window.fmap);
 
-                // Reverse geocode
                 window.reverseGeocode(lat, lng)
-                    .then(function(data) {{
-                        const address = data.address;
-                        const postcode = data.postcode;
-
-                        console.log("📨 iframe -> parent: newPlaceCreated");
-
+                    .then(({{
+                        address, postcode
+                    }}) => {{
                         window.awaitingNewPlace = false;
 
-                        // Notify parent page
                         window.parent.postMessage({{
                             type: "newPlaceCreated",
                             prefix: prefix,
@@ -1813,45 +1770,47 @@ class TreeNode:
                             postcode: postcode
                         }}, "*");
 
-                        // Optional visual confirmation
-                        window.pinMarker.bindPopup("<b>" + prefix + "</b><br>" + address).openPopup();
+                        window.pinMarker.bindPopup(`<b>${{prefix}}</b><br>${{address}}`).openPopup();
                     }})
-                    .catch(function(err) {{
+                    .catch(err => {{
                         console.error("Reverse geocode error:", err);
-                        alert("Error fetching address.");
+                        alert("Error fetching address for this location.");
                     }});
             }}
 
-            // Bind click handler immediately (map always ready)
-            window.fmap.on("click", handleMapClick);
-            console.log("🖱️ Map click handler bound to fmap");
+            function waitForMap() {{
+                const m = window[mapName];
+                if (!m) {{
+                    console.log("⏳ Waiting for Folium map...");
+                    setTimeout(waitForMap, 50);
+                    return;
+                }}
 
-            // ---------------------------------------------------
-            // 3. Handle messages from parent
-            // ---------------------------------------------------
-            window.addEventListener("message", function(event) {{
-                console.log("📨 iframe received:", event.data);
+                console.log("🗺️ Folium map ready:", m);
+                window.fmap = m;
+                window.fmap.on("click", handleMapClick);
+            }}
+            waitForMap();
 
-                if (event.data && event.data.type === "enableAddPlace") {{
-                    console.log("🟡 enableAddPlace received — awaiting user click");
+            window.addEventListener("message", (event) => {{
+                if (!event.data) return;
+                if (event.data.type === "enableAddPlace") {{
+                    console.log("🟡 enableAddPlace received from parent");
                     window.awaitingNewPlace = true;
-
-                    // Only alert once map is visibly shown
-                    setTimeout(() => {{
-                        alert("Click on the map to select a new place.");
-                    }}, 150);
+                    alert("Click on the map to select a new place.");
                 }}
             }});
-
         }})();
         </script>
         """
 
+
+
+
+
+        # Inject into Folium map
+        from folium import Element
         FolMap.get_root().html.add_child(Element(add_place_js))
-
-
-
-        FolMap.get_root().html.add_child(folium.Element(add_place_js))
 
 
 

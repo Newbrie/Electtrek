@@ -195,7 +195,7 @@
           btn.style.display = "none";
       }
   }
-  const calendarData = {};
+
   const startHour = 9, endHour = 21, slotDuration = 2;
 
 
@@ -534,7 +534,7 @@
 
     const logWindow = document.getElementById("logwin");
     const li = document.createElement("li");
-    li.textContent = e.data;
+    li.textContent = e.data.type;
     logWindow.appendChild(li);
     logWindow.scrollTop = logWindow.scrollHeight;
   });
@@ -704,7 +704,7 @@
   let addPlaceActive = false;
 
 
-  let mapIsReady = false;
+
 
   const modal = document.getElementById("modalPopup");
 
@@ -719,35 +719,49 @@
   /* ---------------------------------------------------------
    * CALENDAR <-> MAP TOGGLE
    * --------------------------------------------------------- */
-   window.toggleView = async function () {
-     console.log(`📥 Xtoggling view`);
-     console.log(`📥 loginScreen.style.visibility`,loginScreen.style.visibility);
+   window.toggleView = function () {
 
-     if (loginScreen.style.visibility === "visible") return;
+       if (loginScreen.style.visibility === "visible") return;
 
-     // Calendar → Map
-     if (calendar.style.visibility === "visible") {
-         calendar.style.visibility = "hidden";
-         calendar.style.position = "absolute";
+       const mapVisible = iframeContainer.style.visibility === "visible";
 
-         iframeContainer.style.visibility = "visible";
-         iframe.style.visibility = "visible";
-         toggleBtn.textContent = "📅 View Calendar";
+       // Map → Calendar
+       if (mapVisible) {
 
-         console.log(`📥 map: ${iframe.style.visibility}`);
-     }
-     // Map → Calendar
-     else {
-         iframe.style.visibility = "hidden";
-         iframeContainer.style.visibility = "hidden";
+           // Hide map iframe non-destructively
+           iframeContainer.style.visibility = "hidden";
+           iframeContainer.style.pointerEvents = "none";
+           iframeContainer.style.zIndex = "1";
 
-         calendar.style.position = "static";
-         calendar.style.visibility = "visible";
-         toggleBtn.textContent = "🧭 View Map";
+           iframe.style.visibility = "hidden";
+           iframe.style.pointerEvents = "none";
 
-         console.log(`📥 calendar: ${calendar.style.visibility}`);
-     }
- };
+           // Show calendar safely
+           calendar.style.opacity = "1";
+           calendar.style.pointerEvents = "auto";
+
+           toggleBtn.textContent = "🧭 View Map";
+       }
+
+       // Calendar → Map
+       else {
+
+           // Hide calendar safely
+           calendar.style.opacity = "0";
+           calendar.style.pointerEvents = "none";
+
+           // Show map
+           iframeContainer.style.visibility = "visible";
+           iframeContainer.style.pointerEvents = "auto";
+           iframeContainer.style.zIndex = "1000";
+
+           iframe.style.visibility = "visible";
+           iframe.style.pointerEvents = "auto";
+
+           toggleBtn.textContent = "📅 View Calendar";
+       }
+   };
+
 
  window.addEventListener("message", async (event) => {
    const data = event.data;
@@ -764,14 +778,6 @@
    }
 
 
-   // -----------------------------------------------------
-   // MAP READY
-   // -----------------------------------------------------
-   if (data?.type === "mapReady") {
-       console.log("🟢 Parent: Map is ready for interaction");
-       mapIsReady = true;
-       return;
-   }
 
    // -----------------------------------------------------
    // TABLE UPDATE
@@ -794,13 +800,7 @@
            .getElementById("modalPopup")
            .classList.add("stay-on-top");
 
-       // Resize map only when ready
-       if (mapIsReady && iframe.contentWindow?.fmap) {
-           iframe.contentWindow.fmap.invalidateSize(true);
-           console.log("🗺️ Map size fixed after showing");
-       } else {
-           console.log("⏳ Waiting to fix size until mapReady");
-       }
+
 
        return;
    }
@@ -845,7 +845,6 @@
        return;
    }
 });
-
 
 
     // ------------------------------
@@ -939,19 +938,6 @@
         // Optional: reset form fields
         form.reset();
     });
-
-
-
-
-
-    // Show iframe first
-    document.getElementById("iframe1").style.display = "block";
-
-    // Then, trigger Leaflet to invalidate size
-    const iframeMapWindow = document.getElementById("iframe1").contentWindow;
-    if (iframeMapWindow && iframeMapWindow.map) {
-        iframeMapWindow.map.invalidateSize(true);
-    }
 
 
 
@@ -1356,14 +1342,14 @@ function openAddTaskTagForm() {
                const data = await response.json();
                console.log("📦 Backend response:", data);
 
-               window.plan = data.calendar_plan;
+//               window.plan = data.calendar_plan;
 
-               updateConstantsUI(data.constants, data.options);
+  //             updateConstantsUI(data.constants, data.options);
                console.log("📩 update calendar_plan::", plan);
-               console.log("🔀 update places on DOM relaod :", places);
-               console.log("🔀 update resources on DOM relaod :", resources);
-               console.log("🔀 update areas on DOM relaod :", areas);
-               console.log("🔀 update task_tags on DOM relaod :", task_tags);
+//               console.log("🔀 update places on DOM relaod :", places);
+//               console.log("🔀 update resources on DOM relaod :", resources);
+//               console.log("🔀 update areas on DOM relaod :", areas);
+//               console.log("🔀 update task_tags on DOM relaod :", task_tags);
 
               window.plan = data.constants?.calendar_plan;
                if (!window.plan || !window.plan.slots) {
@@ -1371,7 +1357,7 @@ function openAddTaskTagForm() {
                    return;
                }
 
-               loadCalendarPlan(window.plan);
+//               loadCalendarPlan(window.plan);
                console.log("✅ Calendar plan loaded into UI");
 
            } catch (err) {
@@ -1400,9 +1386,9 @@ function openAddTaskTagForm() {
       console.warn("⚠ DEV MODE: Skipping login screen");
 
       loginScreen.style.visibility = "hidden";
-      calendar.style.visibility = "hidden"; // hide calendar initially
-      iframe.style.visibility = "visible";  // show map initially
-      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+      calendar.style.visibility = "visible"; // hide calendar initially
+      iframe.style.visibility = "hidden";  // show map initially
+      toggleBtn.textContent = "📅 View Map"; // button shows calendar option
       calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
       window.loggedIn = true;
@@ -1410,9 +1396,9 @@ function openAddTaskTagForm() {
   } else {
       // Normal login behaviour
       loginScreen.style.visibility = "visible";
-      calendar.style.visibility = "hidden";  // hide calendar
-      iframe.style.visibility = "visible";   // show map by default
-      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+      calendar.style.visibility = "visible";  // hide calendar
+      iframe.style.visibility = "hidden";   // show map by default
+      toggleBtn.textContent = "📅 View Map"; // button shows calendar option
       window.loggedIn = false;
   }
 
@@ -1523,17 +1509,18 @@ function openAddTaskTagForm() {
 
    window.plan = data.constants?.calendar_plan;
 
-   console.log("📩 set calendar_plan::", window.plan);
    console.log("🔀 set places on DOM relaod :", window.places);
    console.log("🔀 set resources on DOM relaod :", window.resources);
    console.log("🔀 set areas on DOM relaod :", window.areas);
    console.log("🔀 set task_tags on DOM relaod :", window.task_tags);
+   console.log("📩 set calendar_plan::", window.plan);
 
    if (!window.plan || !window.plan.slots) {
        console.warn("⚠️ No slots found in calendar_plan");
        return;
    }
-
+   buildCalendarGrid("calendar-grid", 45);
+   populateDropdowns();
    loadCalendarPlan(window.plan);
    console.log("✅ Calendar plan loaded into UI");
 

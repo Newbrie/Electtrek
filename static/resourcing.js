@@ -95,7 +95,7 @@
 
     // ─── Election Date (optional) ────────────────────────────────────────────
     let electionDate = null;
-    const electionDateStr = window.parent?.document?.getElementById('electiondate')?.value;
+    const electionDateStr = window.document?.getElementById('electiondate')?.value;
 
     if (electionDateStr) {
       const [year, month, day] = electionDateStr.split("-");
@@ -162,6 +162,7 @@
           slotDiv.addEventListener("click", () => openSlotModal(slotId));
           dayDiv.appendChild(slotDiv);
         }
+
       }
 
       weekRow.appendChild(dayDiv);
@@ -177,6 +178,8 @@
     if (weekRow.children.length) {
       container.appendChild(weekRow);
     }
+    console.log("📅 Calendar-Grid:", container);
+
   }
 
 
@@ -406,7 +409,6 @@ function loadCalendarPlan(plan) {
   const calendarGrid = document.getElementById('calendar-grid');
 
   // Clear UI
-  calendarGrid.innerHTML = '';
 
   // Reset calendar data to avoid carrying over entries
   calendarData = {}; // << reset for new calendar
@@ -448,6 +450,7 @@ function loadCalendarPlan(plan) {
     calendarData[key] = slotData;
 
     updateSlotAvailability(slotDiv);
+    calendarGrid.appendChild(slotDiv);
   });
 }
 
