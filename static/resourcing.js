@@ -413,7 +413,7 @@ function loadCalendarPlan(plan) {
   // Reset calendar data to avoid carrying over entries
   calendarData = {}; // << reset for new calendar
 
-  console.log("📦 Loaded plan:", plan);
+  console.log("📦 Loading plan:", plan);
   if (plan.calendar_plan) plan = plan.calendar_plan;
 
   if (!plan?.slots) return;
@@ -450,8 +450,9 @@ function loadCalendarPlan(plan) {
     calendarData[key] = slotData;
 
     updateSlotAvailability(slotDiv);
-    calendarGrid.appendChild(slotDiv);
-  });
+    });
+    console.log("📦 Loaded plan:", calendarGrid);
+
 }
 
 
