@@ -2,7 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,MARKER_FILE,RESOURCE_FILE, DEVURLS
+from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
 from normalised import normz
 #import normz
 import folium
@@ -56,6 +56,7 @@ from shapely.ops import nearest_points
 import logging
 from flask import has_request_context
 import html
+from folium import Map, Element
 
 
 
@@ -100,13 +101,13 @@ def move_item(lst, from_index, to_index):
     return lst
 
 def capped_append(lst, item):
-    max_size = 3
+    max_size = 7
     if not isinstance(lst, list):
         return
-    if item not in lst:
-        lst.append(item)
+    lst.append(item)
     if len(lst) > max_size:
         lst.pop(0)  # Remove oldest
+    return lst
 
 def get_creation_date(filepath):
     if filepath == "":
@@ -432,7 +433,7 @@ def get_election_data(current_election):
             print(f"___Loaded CurrentElection Data:{ current_election }: {CurrentElection }" )
             return CurrentElection
         except Exception as e:
-            print(f"❌ Failed to read {filepath} Election JSON: {e}")
+            print(f"❌ Failed to read {file_path} Election JSON: {e}")
     else:
         file_path = ELECTIONS_FILE.replace(".json",f"-DEMO.json")
         try:
@@ -441,7 +442,7 @@ def get_election_data(current_election):
             print(f"___Loaded CurrentElection Data:{ current_election }: {CurrentElection }" )
             return CurrentElection
         except Exception as e:
-            print(f"❌ Failed to read {filepath} Election JSON: {e}")
+            print(f"❌ Failed to read {file_path} Election JSON: {e}")
     return None
 
 def save_election_data (c_election,ELECTION):
@@ -460,8 +461,45 @@ def save_election_data (c_election,ELECTION):
         print(f"❌ Failed to write Election JSON: {e}")
     return
 
+def get_counters(session=None, session_data=None):
+
+    try:
+        if not session or 'gtagno_counters' not in session:
+            counters = {}
+        elif not session_data or 'gtagno_counters' not in session_data:
+            counters = {}
+    except Exception as e:
+        counters = {}
+        print(f"___System error: No session or current_node: {e} ")
+    """
+    Returns the current node from TREK_NODES using either the Flask session or passed-in session_data.
+    """
+
+    if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
+        with open(TREKNODE_FILE, 'rb') as f:
+            TREK_NODES = pickle.load(f)
+
+    if session and 'gtagno_counters' in session:
+        counters = session['gtagno_counters']
+        print("[Main Thread] gtagno_counters from session:", session.get('gtagno_counters',{}))
+    elif session_data and 'gtagno_counters' in session_data and session_data.get('gtagno_counters',{}):
+        counters = session_data['gtagno_counters']
+        print("[Background Thread] gtagno_counters from session_data:", session_data.get('gtagno_counters',{}))
+        counters = session_data.get('gtagno_counters',{})
+    else:
+        counters = {}
+        node = None
+        print("⚠️ gtagno_counters not found in session or session_data:so counters = ",{} )
+
+    if counters == {}:
+        for etype in Featurelayers.keys():
+            counters[etype] = 0
+    return counters
+
+
 def get_current_node(session=None, session_data=None):
     global TREK_NODES
+
     try:
         if not session or 'current_node_id' not in session:
             node = None
@@ -526,9 +564,6 @@ def restore_from_persist(session=None,session_data=None):
     if  os.path.exists(FULLPOLY_FILE) and os.path.getsize(FULLPOLY_FILE) > 0:
         with open(FULLPOLY_FILE, 'rb') as f:
             Fullpolys = pickle.load(f)
-    if  os.path.exists(MARKER_FILE) and os.path.getsize(MARKER_FILE) > 0:
-        with open(MARKER_FILE, 'r',encoding="utf-8") as f:
-            markerframe = json.load(f)
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
             OPTIONS = json.load(f)
@@ -563,7 +598,6 @@ def persist(node):
     global TREK_NODES
 
     global allelectors
-    global markerframe
     global Treepolys
     global Fullpolys
 
@@ -662,6 +696,7 @@ class TreeNode:
         self.election = elect
         self.col = levelcolours["C"+str(self.level+4)]
         self.tagno = 1
+        self.gtagno = 1
         self.centroid = roid
         self.bbox = []
         self.VR = VIC.copy()
@@ -851,7 +886,6 @@ class TreeNode:
 
     def getselectedlayers(self,this_election,path):
         global Featurelayers
-        global markerframe
         global OPTIONS
 #add children layer(level+1), eg wards,constituencies, counties
         print(f"_____layerstest0 type:{self.value},{self.type} path: {path}")
@@ -885,7 +919,7 @@ class TreeNode:
         markerlayer = Featurelayers['marker']
         print(f"_____layerstest401 {markerlayer} markers layers: {list(reversed(selected))}")
         selected.append(markerlayer)
-        print(f"_____layerstest4 {self.findnodeat_Level(2).value} markers layers: {list(reversed(selected))}")
+        print(f"_____layerstest4 {self.findnodeat_Level(2).value} - len {len(markerlayer._children)} markers layers: {list(reversed(selected))}")
         return list(reversed(selected))
 
 
@@ -1327,74 +1361,11 @@ class TreeNode:
         return fam_nodes
 
 
-    def create_area_cal(self,CE,CElection, ctype):
-        global current_node
-        global allelectors
-        global layeritems
-        global markerframe
-        global TREK_NODES
-        global OPTIONS
-        global places
-        global constants
-
-        import re
-        from collections import defaultdict
-
-
-        with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
-            OPTIONS = json.load(f)
-
-        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-            markerframe = json.load(f)
-
-        # Track used IDs across both existing and new entries
-#        places = build_place_lozenges(markerframe)
-
-#        restore_from_persist(session=session)
-#        current_node = get_current_node(session)
-#        CE = get_current_election(session)
-
-        selectedResources = {
-                k: v for k, v in OPTIONS['resources'].items()
-                if k in CElection['resources']
-            }
-
-
-        print(f"___resources in election {CE} self node: {self.value} Resources: {selectedResources} ")
-
-
-        print(f"caldata for {self.value} of length {len(Featurelayers[ctype].areashtml)} ")
-        areas = Featurelayers[ctype].areashtml
-
-        # share input and outcome tags
-        valid_tags = CElection['tags']
-        task_tags = {}
-        outcome_tags = {}
-
-        for tag, description in valid_tags.items():
-            if tag.startswith('L'):
-                task_tags[tag] = description
-            elif tag.startswith('M'):
-                outcome_tags[tag] = description
-        print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
-
-        calendar_html = render_template('resourcing.html', current_election=CE,constants=CElection,places=places,options=OPTIONS, task_tags=valid_tags, areas=areas, DEVURLS=config.DEVURLS )
-
-        calendar_filename = subending(self.file,"-CAL.html")
-        target = self.locfilepath(calendar_filename)
-        # Save to file
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(calendar_html)
-
-        calendar = self.dir+"/"+calendar_filename
-
-        return calendar
 
 
     def create_area_map(self, flayers, CE, CEdata):
         global SERVER_PASSWORD
         global STATICSWITCH
-        global markerframe
         global OPTIONS
 
         from folium import IFrame
@@ -1413,8 +1384,7 @@ class TreeNode:
         import re
         from pathlib import Path
 
-        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-            markerframe = json.load(f)
+
 
 
         # --- CSS to adjust popup styling
@@ -1458,7 +1428,15 @@ class TreeNode:
                 font-size: 14px;
                 cursor: pointer;
             }
+
+            /* Change cursor to crosshair when in add-place mode */
+            .leaflet-container.add-place-mode {
+                cursor: crosshair;
+            }
+
+
             </style>
+
 
             <div id="customSearchBox">
                 <input type="text" id="searchInput" placeholder="Search..." />
@@ -1467,27 +1445,36 @@ class TreeNode:
             </div>
 
             <script>
+
+
             document.addEventListener("DOMContentLoaded", function () {
-                // Detect map variable dynamically
-                for (const key in window) {
-                    if (window.hasOwnProperty(key)) {
-                        const val = window[key];
-                        if (val && val instanceof L.Map) {
-                            window.map = val;
-                            break;
+
+
+                function waitForMap() {
+                    for (const key in window) {
+                        if (window.hasOwnProperty(key)) {
+                            const val = window[key];
+                            if (val && val instanceof L.Map) {
+                                window.fmap = val;  // assign fmap here
+                                return;
+                            }
                         }
                     }
+                    setTimeout(waitForMap, 100);
                 }
 
-                const input = document.getElementById("searchInput");
-                input.addEventListener("keydown", function (e) {
-                    if (e.key === "Enter") searchMap();
-                });
+                waitForMap();
 
-                // Calendar button
-                document.getElementById("backToCalendarBtn").addEventListener("click", function() {
-                    window.parent.postMessage({ type: "toggleView" }, "*");
-                });
+
+            });
+
+            document.getElementById("backToCalendarBtn").addEventListener("click", () => {
+                console.log("📤 Sending back-to-calendar message to parent");
+
+                window.parent.postMessage(
+                    { type: "toggleView" },
+                    "*"
+                );
             });
 
             function extractVisibleText(element) {
@@ -1529,10 +1516,10 @@ class TreeNode:
 
                         if (data.status === "match" && data.data) {
                             const { latitude, longitude } = data.data;
-                            map.setView([latitude, longitude], 17);
+                            fmap.setView([latitude, longitude], 17);
 
                             L.marker([latitude, longitude])
-                                .addTo(map)
+                                .addTo(fmap)
                                 .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
                                 .openPopup();
                             return;
@@ -1542,8 +1529,8 @@ class TreeNode:
                         }
                     } catch (err) {
                         console.error("Postcode lookup failed:", err);
-                        // Only alert if the map didn’t already move
-                        if (!map.getCenter()) alert("Error looking up postcode.");
+                        // Only alert if the fmap didn’t already move
+                        if (!fmap.getCenter()) alert("Error looking up postcode.");
                         return;
                     }
 
@@ -1553,7 +1540,7 @@ class TreeNode:
                 const normalizedQuery = query.toLowerCase();
                 let found = false;
 
-                map.eachLayer(function (layer) {
+                fmap.eachLayer(function (layer) {
                     if (found) return;
 
                     // ✅ Search Popups with <b data-name="...">
@@ -1578,7 +1565,7 @@ class TreeNode:
                                 else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
 
                                 if (latlng) {
-                                    map.setView(latlng, 17);
+                                    fmap.setView(latlng, 17);
                                     if (typeof layer.openPopup === 'function') layer.openPopup();
                                     found = true;
                                     return;
@@ -1596,7 +1583,7 @@ class TreeNode:
                             else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
 
                             if (latlng) {
-                                map.setView(latlng, 17);
+                                fmap.setView(latlng, 17);
                                 found = true;
                                 return;
                             }
@@ -1610,7 +1597,7 @@ class TreeNode:
                             if (iconContent.toLowerCase().includes(normalizedQuery)) {
                                 const latlng = layer.getLatLng();
                                 if (latlng) {
-                                    map.setView(latlng, 17);
+                                    fmap.setView(latlng, 17);
                                     if (typeof layer.openPopup === 'function') layer.openPopup();
                                     if (layer._icon) layer._icon.style.border = "2px solid red";
                                     found = true;
@@ -1653,29 +1640,120 @@ class TreeNode:
             control=True
         ).add_to(FolMap)
 
+        # Add all layers
+        for layer in flayers:
+            layer.add_to(FolMap)
+
+
+            if layer.areashtml != {}:
+                OPTIONS['areas'] = layer.areashtml
+
         # --- Inject custom HTML and JS into map
 
-        FolMap.add_child(folium.LatLngPopup())
+#        FolMap.add_child(folium.LatLngPopup())
 
 
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
-        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+
+        # Add the LatLngPopup plugin
+        FolMap.add_child(folium.LatLngPopup())
 
 
+        fmap_tags_js = r"""
+                <script>
+                (function() {
+
+                    console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
+
+                    window.fmap = null;
+                    window.MarkerLayer = null;
+
+                    let pollAttempts = 0;
+                    const MAX_ATTEMPTS = 100; // 10 seconds timeout
+
+                    // ---------------------------------------------------------
+                    // 1️⃣ Stage 1: Detect the Folium map object
+                    // ---------------------------------------------------------
+                    function detectFoliumMap() {
+                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                            setTimeout(detectFoliumMap, 100);
+                            return;
+                        }
+
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            if (key.startsWith("map_") && val instanceof L.Map) {
+                                window.fmap = val;
+                                startLayerPolling();
+                                return;
+                            }
+                        }
+                        setTimeout(detectFoliumMap, 100);
+                    }
+
+                    // ---------------------------------------------------------
+                    // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
+                    // ---------------------------------------------------------
+                    function findTargetLayer() {
+                        pollAttempts++;
+
+                        if (pollAttempts > MAX_ATTEMPTS) {
+                            console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                            clearInterval(poll_interval_id);
+                            return;
+                        }
+
+                        // --- Search for the Layer Control's internal dictionary ---
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
+                            if (key.startsWith("layer_control_") && val && val.overlays) {
+
+                                // Check if the target layer ("marker") is inside the overlays
+                                if (val.overlays.marker) {
+                                    window.MarkerLayer = val.overlays.marker;
+
+                                    console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
+                                    console.log(`Marker Layer stored in window.MarkerLayer.`);
+
+                                    clearInterval(poll_interval_id);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    let poll_interval_id;
+                    function startLayerPolling() {
+                        poll_interval_id = setInterval(findTargetLayer, 100);
+                    }
+
+                    document.addEventListener("DOMContentLoaded", detectFoliumMap);
+
+                })();
+                </script>
+                """
+
+        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
+
+
+        # Inject canvas icon JS
         canvas_icon_js = """
         <script>
         window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
             const size = 40;
             const radius = 18;
 
-            // Create canvas
             const canvas = document.createElement("canvas");
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext("2d");
 
-            // Draw circle
             ctx.beginPath();
             ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
             ctx.fillStyle = color;
@@ -1684,23 +1762,152 @@ class TreeNode:
             ctx.strokeStyle = "#000";
             ctx.stroke();
 
-            // Draw prefix text
             ctx.fillStyle = "#fff";
             ctx.font = "bold 16px sans-serif";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(prefix, size/2, size/2);
 
+            console.log("📍 canvas icon:");
+
             return L.icon({
                 iconUrl: canvas.toDataURL(),
                 iconSize: [size, size],
-                iconAnchor: [size/2, size], // anchor at bottom
+                iconAnchor: [size/2, size],
                 popupAnchor: [0, -size/2]
             });
         };
         </script>
         """
-        FolMap.get_root().html.add_child(folium.Element(canvas_icon_js))
+        FolMap.get_root().html.add_child(Element(canvas_icon_js))
+
+        # Add LatLngPopup
+        FolMap.add_child(folium.LatLngPopup())
+
+        # Inject JS to replace default popup with canvas marker
+        custom_click_js = r"""
+            <script>
+            (function () {
+
+                console.log("📌 custom_click_js loaded");
+
+                // State
+                window.awaitingNewPlace = false;
+                window.pinMarker = null;
+
+                // --- The Layer Polling Mechanism (For the initial click) ---
+                // If the layer isn't found on the first click, this function will wait for it.
+                function tryAddMarkerToLayer(marker, lat, lng, prefix) {
+                    if (window.MarkerLayer) {
+                        window.MarkerLayer.addLayer(marker);
+                        console.log("📌 Marker added to FeatureGroup 'marker'");
+                        // Now safe to do the final geocoding/messaging
+
+                        // Trigger the rest of the original logic here
+                        window.reverseGeocode(lat, lng)
+                            .then(({ address, house_number, road, suburb, city, postcode }) => {
+                                console.log("Raw reverse geocode result:", house_number, road, suburb, city, postcode);
+                                window.awaitingNewPlace = false;
+
+                                window.parent.postMessage({
+                                    type: "newPlaceCreated",
+                                    prefix, lat, lng, house_number, road, suburb, city, postcode
+                                }, "*");
+
+                                marker.bindPopup(`<b>${prefix}</b><br>${address}`).openPopup();
+                                window.fmap.getContainer().classList.remove("add-place-mode");
+                                console.log("📍 newPlaceCreated message sent");
+                            })
+                            .catch(err => {
+                                console.error("Reverse geocode error:", err);
+                                // Important: If geocoding fails, you may want to remove the marker or handle the error gracefully
+                                if (window.fmap.hasLayer(marker)) window.fmap.removeLayer(marker);
+                                window.awaitingNewPlace = false;
+                                window.fmap.getContainer().classList.remove("add-place-mode");
+                            });
+
+                    } else if (window.fmap) {
+                        // Safety Fallback (Should only run if polling failed)
+                        marker.addTo(window.fmap);
+                        console.warn("📌 Marker added directly to fmap (Layer not yet found, using fallback).");
+
+                        // To prevent code duplication and complexity, if the layer is not found,
+                        // we add it to the map but skip the reverseGeocode logic here
+                        // or simplify it to prevent errors.
+
+                        // You need to decide if the rest of the logic should run without the target layer.
+                        // For now, let's keep the original logic flow focused on success.
+
+                    } else {
+                        console.error("Critical Error: Map object (fmap) is null.");
+                    }
+                }
+
+
+                // --------------------------------------------------------------------
+                // Click handler — only fires when awaitingNewPlace === true
+                // --------------------------------------------------------------------
+                function handleMapClick(e) {
+                    if (!window.awaitingNewPlace || !window.fmap) return;
+
+                    const lat = e.latlng.lat;
+                    const lng = e.latlng.lng;
+
+                    const prefix = prompt("Enter a prefix for this new place:", "");
+                    if (!prefix) return;
+
+                    // Remove previous pinMarker
+                    if (window.pinMarker) {
+                        // Check if it's on the MarkerLayer or directly on the map
+                        if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
+                            window.MarkerLayer.removeLayer(window.pinMarker);
+                        } else if (window.fmap.hasLayer(window.pinMarker)) {
+                            window.fmap.removeLayer(window.pinMarker);
+                        }
+                    }
+
+                    // Create canvas-based prefix icon (Assumes window.makePrefixMarkerIcon exists)
+                    const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
+                    window.pinMarker = L.marker([lat, lng], { icon });
+
+                    // Use the consolidated function to handle adding the marker and reverse geocoding
+                    // Note: The original geocoding/messaging logic is now moved INTO tryAddMarkerToLayer
+                    tryAddMarkerToLayer(window.pinMarker, lat, lng, prefix);
+                }
+
+                // --------------------------------------------------------------------
+                // Turn on add-place mode when parent sends enableAddPlace
+                // --------------------------------------------------------------------
+                window.addEventListener("message", (event) => {
+                    if (event.data?.type === "enableAddPlace") {
+                        console.log("🟡 enableAddPlace received");
+                        window.awaitingNewPlace = true;
+
+                        if (window.fmap) {
+                            window.fmap.getContainer().classList.add("add-place-mode");
+                        }
+
+                        alert("Click on the map to select a new place.");
+                    }
+                });
+
+                // --------------------------------------------------------------------
+                // Attach click handler when fmap is ready
+                // --------------------------------------------------------------------
+                window.addEventListener("fmap-ready", (ev) => {
+                    const fmap = ev.detail;
+                    // Double-check window.fmap is set if the event didn't set it (good practice)
+                    window.fmap = fmap;
+
+                    console.log("🎯 custom_click_js attaching click handler to fmap");
+                    fmap.on("click", handleMapClick);
+                });
+
+            })();
+            </script>
+            """
+
+        FolMap.get_root().html.add_child(Element(custom_click_js))
 
         reverse_geocode_js = """
         <script>
@@ -1721,104 +1928,26 @@ class TreeNode:
 
             return {
                 address: data.display_name || "Unknown address",
+                house_number: data.address?.house_number || "",
+                road: data.address?.road || "",
+                suburb: data.address?.suburb || "",
+                city: data.address?.city || data.address?.town || data.address?.village || "",
                 postcode: data.address?.postcode || ""
             };
+
         };
         </script>
         """
 
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
 
-
-        # --- Updated click JS ---
-        js_map_name = FolMap.get_name()
-
-        add_place_js = f"""
-        <script>
-        (function() {{
-            window.awaitingNewPlace = false;
-            window.pinMarker = null;
-
-            const mapName = "{js_map_name}";
-
-            function handleMapClick(e) {{
-                if (!window.awaitingNewPlace) return;
-
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
-
-                const prefix = prompt("Enter a prefix for this location:", "");
-                if (!prefix) return;
-
-                if (window.pinMarker) window.fmap.removeLayer(window.pinMarker);
-
-                const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
-                window.pinMarker = L.marker([lat, lng], {{ icon: icon }}).addTo(window.fmap);
-
-                window.reverseGeocode(lat, lng)
-                    .then(({{
-                        address, postcode
-                    }}) => {{
-                        window.awaitingNewPlace = false;
-
-                        window.parent.postMessage({{
-                            type: "newPlaceCreated",
-                            prefix: prefix,
-                            lat: lat,
-                            lng: lng,
-                            address: address,
-                            postcode: postcode
-                        }}, "*");
-
-                        window.pinMarker.bindPopup(`<b>${{prefix}}</b><br>${{address}}`).openPopup();
-                    }})
-                    .catch(err => {{
-                        console.error("Reverse geocode error:", err);
-                        alert("Error fetching address for this location.");
-                    }});
-            }}
-
-            function waitForMap() {{
-                const m = window[mapName];
-                if (!m) {{
-                    console.log("⏳ Waiting for Folium map...");
-                    setTimeout(waitForMap, 50);
-                    return;
-                }}
-
-                console.log("🗺️ Folium map ready:", m);
-                window.fmap = m;
-                window.fmap.on("click", handleMapClick);
-            }}
-            waitForMap();
-
-            window.addEventListener("message", (event) => {{
-                if (!event.data) return;
-                if (event.data.type === "enableAddPlace") {{
-                    console.log("🟡 enableAddPlace received from parent");
-                    window.awaitingNewPlace = true;
-                    alert("Click on the map to select a new place.");
-                }}
-            }});
-        }})();
-        </script>
-        """
+    #    FolMap.get_root().html.add_child(folium.Element(add_place_js))
 
 
 
+        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
 
 
-        # Inject into Folium map
-        from folium import Element
-        FolMap.get_root().html.add_child(Element(add_place_js))
-
-
-
-        # Add all layers
-        for layer in flayers:
-            FolMap.add_child(layer)
-            if layer.areashtml != {}:
-                OPTIONS['areas'] = layer.areashtml
 
         # Ensure there's only one LayerControl
         if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
@@ -1939,8 +2068,20 @@ class TreeNode:
         child_node.type = etype
         child_node.level = child_node.parent.level + 1
         child_node.dir = child_node.parent.dir+"/"+child_node.value
-        child_node.tagno = len([ x for x in self.children if x.type == etype])
+        child_node.tagno = len([x for x in self.children if etype == x.type])
+        # --- Logic during node addition (Run for each HTTP call) ---
 
+        counters = get_counters(session)
+        # Ensure the counter for this type exists and starts at 0 for 1-based indexing
+        if etype not in counters:
+            raise Exception("layerCounter type does not exist!")
+
+        # 1. Calculate gtagno (1-based)
+        counters[etype] += 1
+        child_node.gtagno = counters[etype]
+
+        # The session object automatically saves the updated counters
+        # when the response is sent.
         if etype == 'nation':
             child_node.file = child_node.value+"-MAP.html"
         elif etype == 'county':
@@ -2344,9 +2485,124 @@ def build_street_list_html(streets_df):
 
     return html
 
+def parse_slot_key(slot_key):
+    """
+    Convert keys like '2025-04-15_9 AM' to a Python datetime object.
+    """
+    date_str, time_str = slot_key.split("_")
+    time_str = time_str.replace(" ", "")  # "9 AM" → "9AM"
+
+    try:
+        if ":" in time_str:
+            dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %I:%M%p")
+        else:
+            dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %I%p")
+        return dt
+    except Exception as e:
+        print(f"❌ Could not parse slot key {slot_key}: {e}")
+        return None
 
 
+def process_lozenges(lozenges, CE):
+    """
+    Convert lozenges from calendar slots into readable forms.
+    """
 
+    activities = []
+    resources = []
+    tasks = []
+    places = []
+    areas = []  # kept separate in case area → place mapping is added later
+
+
+    CE_resources = OPTIONS['resources']
+    CE_task_tags = OPTIONS['task_tags']
+    CE_areas = OPTIONS['areas']
+    CE_places = CE.get("places", {})
+    print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
+    for loz in lozenges:
+        ltype = loz.get("type")
+        code = loz.get("code")
+
+        # AREA ---------------
+        if ltype == "area" and code in CE_areas:
+            activities.append(CE_areas[code])
+
+        # RESOURCES ----------
+        elif ltype == "resource" and code in CE_resources:
+            resources.append(code)
+
+        # TASKS --------------
+        elif ltype == "task" and code in CE_task_tags:
+            tasks.append(CE_task_tags[code])
+
+        # PLACES -------------
+        elif ltype == "place" and code in CE_places:
+            places.append({
+                "code": code,
+                "prefix": CE_places[code].get("AddressPrefix"),
+                "lat": CE_places[code].get("Lat"),
+                "lng": CE_places[code].get("Long"),
+                "url": CE_places[code].get("url")
+            })
+
+
+    return activities, resources, tasks, places, areas
+
+
+def build_eventlist_dataframe(c_election):
+    """
+    Produce an eventlist dataframe matching the intent of the JS summary.
+    """
+    CurrentElection = get_election_data(c_election)
+
+    slots = CurrentElection["calendar_plan"]["slots"]
+    rows = []
+    print("__Building events from slots:",slots)
+    for key, slot in slots.items():
+        dt = parse_slot_key(key)
+
+        activities, resources, tasks, places, areas = process_lozenges(
+            slot.get("lozenges", []),
+            CurrentElection
+        )
+        if places == "" or places == []:
+            continue
+        print("datetime", dt,
+        "date", dt.date() if dt else None,
+        "time", dt.time() if dt else None,
+        "places", places,   # contains lat/lng/url etc.
+        "areas", areas)
+
+        rows.append({
+            "datetime": dt,
+            "date": dt.date() if dt else None,
+            "time": dt.time() if dt else None,
+            "activities": activities,
+            "resources": resources,
+            "tasks": tasks,
+            "places": places,   # contains lat/lng/url etc.
+            "areas": areas,     # kept separate
+            "availability": slot.get("availability"),
+            "raw_key": key,
+            "lozenges": slot.get("lozenges", [])
+        })
+
+
+    df = pd.DataFrame(rows, columns=["datetime",
+                "date",
+                "time",
+                "activities",
+                "resources",
+                "tasks",
+                "places",
+                "areas",
+                "availability",
+                "raw_key",
+                "lozenges"])
+    df.sort_values("datetime", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    return df
 
 
 class ExtendedFeatureGroup(FeatureGroup):
@@ -2988,19 +3244,20 @@ class ExtendedFeatureGroup(FeatureGroup):
     def create_layer(self, c_election, node, intention_type, static=False):
         global allelectors
         global places
+        global OPTIONS
         CurrentElection = get_election_data(c_election)
         print(f"__Layer id:{self.id} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
+        if intention_type == 'marker':
+            # always regen markers if CurrentElection['accumulate'] is false
+            if not CurrentElection['accumulate']:
+                self._children.clear()
+            entrylen = len(self._children)
+            print("Markers . . ACCUMULATING from",entrylen)
+            self.id = node.fid
+            self.add_genmarkers(c_election,node,'marker',static)
+            return len(self._children) - entrylen
         entrylen = len(self._children)
         if len(node.children) > 0:
-            if intention_type == 'marker':
-                # always regen markers if CurrentElection['accumulate'] is false
-                if not CurrentElection['accumulate']:
-                    self._children.clear()
-                entrylen = len(self._children)
-                print("Markers . . ACCUMULATING from",entrylen)
-                self.id = node.fid
-                self.add_genmarkers(node,'marker',static)
-                return len(self._children) - entrylen
     # each layer content is identified by the node id at which it created, so new node new content, same node old content
             if self.id != node.value: # new node new content
                 if not CurrentElection['accumulate']:
@@ -3020,7 +3277,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print("Markers 2 ACCUMULATING from",entrylen)
                     self.add_genmarkers(node,'marker',static)
                 else:
-                    self.add_nodemaps(node, intention_type, static)
+                    self.add_nodemaps(node, intention_type, static, ACC=OPTIONS['ACC'])
             else: #no change - same node old content
             # each layer content is identified by the node id at which it created, so new node new content, same node old content
                 self.id = 0
@@ -3029,51 +3286,48 @@ class ExtendedFeatureGroup(FeatureGroup):
         return len(self._children) - entrylen
 
 
-    def add_genmarkers(self, node, type, static):
-        global markerframe
+    def add_genmarkers(self, c_election, node, type, static):
 
-        # ---------------------------------------------------
-        # ✔ CREATE MARKERS
-        # ---------------------------------------------------
+        eventlist = build_eventlist_dataframe(c_election)
+        print(f" ___GenMarkers: from {c_election} to {eventlist}")
+        for _, row in eventlist.iterrows():
 
-        for row in markerframe:
-            lat, lng = row["Lat"], row["Long"]
-            tag = row.get("AddressPrefix", "")
-            num = row["DaysTo"]
-            fontsize = compute_font_size(num)
-            tooltip_text = f"{tag} ({datetime.strptime(row['EventDate'], '%d%b%y').strftime('%Y-%m-%d')})"
-            mapfile = row.get("url", "#")
+            for place in row["places"]:
+                lat = place["lat"]
+                lng = place["lng"]
+                tag = place["prefix"]
+                url = place["url"]
 
-            self.add_child(folium.Marker(
-                location=[lat, lng],
-                tooltip=tooltip_text,
-                icon=folium.DivIcon(html=f"""
-                    <a href='{mapfile}' data-name='{tag}'>
-                        <div style="color:yellow;font-weight:bold;text-align:center;padding:2px;">
-                            <span style="font-size:{fontsize}px;background:red;padding:1px 2px;border-radius:5px;border:2px solid black;">
-                                {num}
-                            </span> {tag}
-                        </div>
-                    </a>
-                """)
-            ))
+                days_to = (row["date"] - datetime.today().date()).days
+                fontsize = compute_font_size(days_to)
 
-        # ---------------------------------------------------
-        # SAVE CLEANED OUTPUT
-        # ---------------------------------------------------
+                tooltip = f"{tag} ({row['date']})"
+                print(f"___layer marker: {tag} at {lat},{lng} on {row['date']}")
 
-        with open(MARKER_FILE, "w", encoding="utf-8") as f:
-            json.dump(markerframe, f, indent=2)
+                self.add_child(folium.Marker(
+                    location=[lat, lng],
+                    tooltip=tooltip,
+                    icon=folium.DivIcon(html=f"""
+                        <a href='{url}' data-name='{tag}'>
+                            <div style="color:yellow;font-weight:bold;text-align:center;padding:2px;">
+                                <span style="font-size:{fontsize}px;background:red;padding:1px 2px;
+                                             border-radius:5px;border:2px solid black;">
+                                    {days_to}
+                                </span> {tag}
+                            </div>
+                        </a>
+                    """)
+                ))
 
-        return place_lozenges
+        return eventlist
 
 
 
-
-    def add_nodemaps (self,herenode,type,static):
+    def add_nodemaps (self,herenode,type,static, ACC=False):
         global Treepolys
         global levelcolours
         global Con_Results_data
+        global OPTIONS
 
         childlist = herenode.childrenoftype(type)
         nodeshtml = build_nodemap_list_html(herenode)
@@ -3172,7 +3426,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
                     party = "("+c.party+")"
-                    num = str(c.tagno)
+                    if not OPTIONS['ACC']:
+                        num = str(c.tagno)
+                    else:
+                        num = str(c.gtagno)
+
                     tag = str(c.value)
                     numtag = str(c.value)+party
 
@@ -3207,7 +3465,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "color": bcol,      # Same for the border color
                             "dashArray": "5, 5",
                             "weight": 3,
-                            "fillOpacity": 0.4
+                            "fillOpacity": 0.2
                         }
                     ).add_to(self)
 
@@ -3664,12 +3922,13 @@ def register_node(node):
 
 def visit_node(v_node, c_elect,CurrEL, mapfile):
     # Access the first key from the dictionary
-    print("___visiting mapfile:", mapfile,c_elect,CurrEL)
-    capped_append(CurrEL['mapfiles'], mapfile)
-    save_election_data(c_elect, CurrEL)
+    print(f"___under {c_elect} visiting mapfile:", mapfile,CurrEL['mapfiles'])
+    CurrEL2 = CurrEL
+    CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], mapfile)
+    save_election_data(c_elect, CurrEL2)
     session['current_election'] = c_elect
     session['current_node_id'] = v_node.fid
-    print("___visited mapfile:", mapfile)
+    print(f"___under {c_elect} changed from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
     return
 
 
@@ -3762,7 +4021,7 @@ def route():
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
-    global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress, markerframe
+    global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress
 
     from sklearn.metrics.pairwise import haversine_distances
 
@@ -4077,7 +4336,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
 
-            territory_path = CurrentElection['territory'] # this is the node at which the imported data is to be filtered through
+            territory_path = CurrentElection['mapfiles'][-1] # this is the node at which the imported data is to be filtered through
             Territory_node = current_node.ping_node(current_election,territory_path)
             ttype = gettypeoflevel(territory_path,Territory_node.level)
             #        Territory_node = self
@@ -4280,85 +4539,6 @@ def get_latlong(postcode, lat, lon):
 def generate_place_code(prefix):
     return ''.join(re.findall(r'\b\w', prefix)).upper()
 
-# ---------------------------------------------------
-# ✔ Restored PROCESS_MARKER_FILE, CLEAN & CORRECT
-# ---------------------------------------------------
-
-def process_marker_file():
-    """Load marker JSON, compute coordinates, return `places` dict with both JS & lozenge info."""
-
-
-    if os.path.exists(MARKER_FILE) and os.path.getsize(MARKER_FILE) > 0:
-
-        with open(MARKER_FILE, "r", encoding="utf-8") as f:
-            rows = json.load(f)
-
-    today = datetime.today().date()
-    places = {}  # final object for JS palette + lozenge/calendar
-    code_counts = defaultdict(int)
-
-    print(f"Processing {len(rows)} marker rows from file")
-
-    # parse dates
-    for r in rows:
-        try:
-            r["_parsed"] = datetime.strptime(str(r.get("EventDate","")).strip(), "%d%b%y").date()
-        except Exception as e:
-            print(f"Warning: could not parse EventDate '{r.get('EventDate')}', using fallback. Error: {e}")
-            r["_parsed"] = today + timedelta(days=35)
-
-    # rank
-    ranked = sorted(rows, key=lambda r: (r["_parsed"] - today).days)
-    for i, r in enumerate(ranked, start=1):
-        r["ProximityRank"] = i
-
-    # main loop
-    for idx, r in enumerate(rows):
-        postcode = r.get("Postcode")
-        raw_lat = r.get("Lat")
-        raw_lng = r.get("Long")
-
-        lat, lng = get_latlong(postcode, raw_lat, raw_lng)
-        lat, lng = offset_latlong(lat, lng, r.get("Off", 0), 200)
-        r["Lat"], r["Long"] = lat, lng
-
-        print(f"Row {idx} ({r.get('AddressPrefix')}): raw_lat={raw_lat}, raw_lng={raw_lng}, resolved lat={lat}, lng={lng}, postcode={postcode}")
-
-        r["EventDate"] = r["_parsed"].strftime("%d%b%y")
-        r["DaysTo"] = (r["_parsed"] - today).days
-
-        prefix = r.get("AddressPrefix", "")
-        if prefix:
-            address = " / ".join(filter(None, [r.get("Address1"), r.get("Address2")]))
-            postcode = r.get("Postcode", "")
-
-            # generate code for lozenge/calendar
-            code = ''.join(re.findall(r'\b\w', prefix)).upper()
-            code_counts[code] += 1
-            code = code if code_counts[code] == 1 else f"{code}{code_counts[code]}"
-
-            tooltip = f"{prefix}, {address}, {postcode}"
-
-            # single unified object
-            places[prefix] = {
-                "prefix": prefix,
-                "address": address,
-                "postcode": postcode,
-                "lat": lat,
-                "lng": lng,
-                "code": code,
-                "tooltip": tooltip
-            }
-
-            if lat is None or lng is None:
-                print(f"⚠️ Null coordinates detected for prefix '{prefix}', postcode='{postcode}'")
-
-    # cleanup temp
-    for r in rows:
-        r.pop("_parsed", None)
-
-    print(f"Completed processing. Generated {len(places)} places entries.")
-    return places, rows
 
 
 
@@ -4424,6 +4604,7 @@ current_election = "DEMO"
 CurrentElection = get_election_data(current_election)
 #election constants and event values are now loaded up
 constants = CurrentElection
+places =  CurrentElection['places']
 print("🔍 constants:", constants)
 
 # the general list of elections and election data file proessing streams
@@ -4443,7 +4624,6 @@ current_election = get_election_data(current_election)
 
 # override if OPTIONS(.json) exists because it contains memorised data
 OPTIONS = {}
-places = {}
 resources = {}
 task_tags ={}
 areas = {}
@@ -4452,7 +4632,6 @@ if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         OPTIONS = json.load(f)
     resources = OPTIONS['resources']
     areas =  OPTIONS['areas']
-    places =  OPTIONS['places']
     task_tags =  OPTIONS['task_tags']
 # eventually extract calendar areas directly from the associated MAP
 
@@ -4469,19 +4648,16 @@ if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
 # eventally want to make OPTIONS election specific , not generic
 
 
-# override if MARKER_FILE(.csv) exists because it initialises resources
-if  os.path.exists(MARKER_FILE) and os.path.getsize(MARKER_FILE) > 0:
-    places, markerframe = process_marker_file()
-# eventually want to extract places from # OPTIONS['places'] and markerframe from CurrentElection['calendar_plan']
+# eventually want to extract places from # OPTIONS['places']  from CurrentElection['calendar_plan']
 selectedResources = resources
 # OPTIONS spells out the options for the event and constant values in the election calendar plan
 OPTIONS = {
+    "ACC": False,
     "territories": ElectionTypes,
     "yourparty": VID,
     "previousParty": VID,
     "resources" : resources,
     'areas' : areas,
-    'places': places,
     "candidate" : selectedResources,
     "chair" : selectedResources,
     "tags": CurrentElection['tags'],
@@ -4519,21 +4695,24 @@ LEVEL_ZOOM_MAP = {
 }
 
 Featurelayers = {
-"country": ExtendedFeatureGroup(name='Countries', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"nation": ExtendedFeatureGroup(name='Nations', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"county": ExtendedFeatureGroup(name='Counties', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"constituency": ExtendedFeatureGroup(name='Constituencies', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"ward": ExtendedFeatureGroup(name='Wards', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"division": ExtendedFeatureGroup(name='Divisions', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"polling_district": ExtendedFeatureGroup(name='Polling Districts', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"walk": ExtendedFeatureGroup(name='Walks', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"walkleg": ExtendedFeatureGroup(name='Walklegs', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"street": ExtendedFeatureGroup(name='Streets', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"result": ExtendedFeatureGroup(name='Results', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"target": ExtendedFeatureGroup(name='Targets', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"data": ExtendedFeatureGroup(name='Data', overlay=True, control=True, show=False, id='UNITED_KINGDOM'),
-"marker": ExtendedFeatureGroup(name='Special Markers', overlay=True, control=True, show=False, id='UNITED_KINGDOM')
+"marker": ExtendedFeatureGroup(name='marker', options={'mytag': 'marker'},overlay=True, control=True, show=False),
+"country": ExtendedFeatureGroup(name='country', options={'mytag': 'country'},overlay=True, control=True, show=False),
+"nation": ExtendedFeatureGroup(name='nation', options={'mytag': 'nation'},overlay=True, control=True, show=False),
+"county": ExtendedFeatureGroup(name='county', options={'mytag': 'county'},overlay=True, control=True, show=False),
+"constituency": ExtendedFeatureGroup(name='constituency', options={'mytag': 'consituency'},overlay=True, control=True, show=False),
+"ward": ExtendedFeatureGroup(name='ward', overlay=True, options={'mytag': 'ward'},control=True, show=False),
+"division": ExtendedFeatureGroup(name='division', options={'mytag': 'division'},overlay=True, control=True, show=False),
+"polling_district": ExtendedFeatureGroup(name='polling_district', options={'mytag': 'polling_district'},overlay=True, control=True, show=False),
+"walk": ExtendedFeatureGroup(name='walk', options={'mytag': 'walk'},overlay=True, control=True, show=False),
+"walkleg": ExtendedFeatureGroup(name='walkleg', options={'mytag': 'walkleg'},overlay=True, control=True, show=False),
+"street": ExtendedFeatureGroup(name='street', options={'mytag': 'street'},overlay=True, control=True, show=False),
+"result": ExtendedFeatureGroup(name='result', options={'mytag': 'result'},overlay=True, control=True, show=False),
+"target": ExtendedFeatureGroup(name='target', options={'mytag': 'target'},overlay=True, control=True, show=False),
+"data": ExtendedFeatureGroup(name='data', options={'mytag': 'data'},overlay=True, control=True, show=False)
 }
+counters = {}
+for etype in Featurelayers.keys():
+    counters[etype] = 0
 
 for key, layer in Featurelayers.items():
     layer.key = key
@@ -4551,7 +4730,7 @@ logger = logging.getLogger(__name__)
 STATICSWITCH = False
 TABLE_TYPES  = {
     "resources": "Resources",
-    "markerframe": "Event Markers",
+    "events": "Event Markers",
     "report_data": "Report Data",
     "stream_table": "Import Data Streams",
     "nodelist_xref" : "Nodelist xref",
@@ -4665,9 +4844,9 @@ def reverse_geocode():
 @login_required
 def add_marker():
     data = request.get_json()
-    key = len(markerframe) + 1
-    markerframe[key] = data
-    print(f"Markerframe updated: {markerframe}")  # for debug
+    key = len(places) + 1
+    places[key] = data
+    print(f"Places updated: {places}")  # for debug
     return jsonify({'status': 'ok', 'id': key})
 
 
@@ -4897,12 +5076,12 @@ def kanban():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = current_node.ping_node(current_election,CurrentElection['territory'])
+    current_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
     session['current_node_id'] = current_node.fid
     mask = (allelectors['Election'] == current_election)
 
     areaelectors = allelectors[mask]
-    print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, allelectors.shape, areaelectors.shape, CurrentElection['territory'] )
+    print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, allelectors.shape, areaelectors.shape, CurrentElection['mapfiles'][-1] )
     print("Sample of areaelectors:", areaelectors.head())
     print("Sample raw Tags values:")
     print(areaelectors['Tags'].dropna().head(10).tolist())
@@ -5026,7 +5205,7 @@ def update_walk_kanban():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    Territory_node = current_node.ping_node(current_election,Current_Election['territory'])
+    Territory_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
     mask = (
             (allelectors['Election'] == current_election) &
             (allelectors['WalkName'] == walk_name)
@@ -5468,7 +5647,7 @@ def deactivate_stream():
         return jsonify({'status': 'error', 'message': 'Election does not exist','html':html}), 400
     CurrentElection = get_election_data(election)
     current_node = get_current_node(session)
-    delete_path = CurrentElection['territory']
+    delete_path = CurrentElection['mapfiles'][-1]
     delete_node = current_node.ping_node(election,delete_path)
 
     before_count = len(allelectors)
@@ -5495,7 +5674,6 @@ def deactivate_stream():
 def reset_Elections():
     global streamrag
     global allelectors
-    global markerframe
     global current_node
     global layeritems
     global DQstats
@@ -5542,15 +5720,11 @@ def reset_Elections():
 @login_required
 def election_report():
     global OPTIONS
-    global OPTIONS
-    global markerframe
     global report_data
     resources = OPTIONS['resources']
     # Define the absolute path to the 'static/data' directory
     elections_dir = os.path.join(config.workdirectories['workdir'], 'static', 'data')
     report_data = []
-    markerframe = []
-
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
@@ -5586,7 +5760,9 @@ def election_report():
                 campaignMgremail = campaign_mgr.get('campaignMgremail')
                 mobile = campaign_mgr.get('Mobile')
 
-                territory_path = data.get("territory", "")
+                mapfiles = data.get("mapfiles", [])
+                territory_path = mapfiles[-1] if mapfiles else ""
+
                 if territory_path:
                     # Extract only the filename (no directories)
                     territory_filename = os.path.basename(territory_path)
@@ -5618,16 +5794,7 @@ def election_report():
                     election_date = f"{ordinal(dt.day)} {dt.strftime('%b')}"  # e.g. "16th Oct"
                 except ValueError:
                     election_date = "Invalid Date"
-                markerframe.append({
-                        'EventDate': election_date,
-                        'AddressPrefix': election_name +":"+ territory_filename,
-                        'Address1': candidate_name,
-                        'Address2': campaign_mgr_name,
-                        'Postcode': "",
-                        'url': "",
-                        'Lat': election_node.centroid[0],
-                        'Long': election_node.centroid[1]
-                        })
+
                 report_data.append({
                     "name": election_name,
                     "territory": territory_filename,  # Updated territory field with filename only
@@ -5641,12 +5808,10 @@ def election_report():
             except Exception as e:
                 print(f"⚠️ Error reading {filename}: {e}")
 
-    with open(MARKER_FILE, "w", encoding="utf-8") as f:
-        json.dump(markerframe, f, indent=2)
 
-
+    print(f"XXXXMarkers at election {current_election} at node {current_node.value}")
     Featurelayers['marker'].create_layer(current_election,current_node,'marker')
-    flash("No marker data for the selected election available!")
+#    flash("No marker data for the selected election available!")
     selectedlayers = current_node.getselectedlayers(current_election,reportfile)
     current_node.create_area_map(selectedlayers, current_election, CurrentElection)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
@@ -5659,8 +5824,6 @@ def election_report():
 def set_election():
     global CurrentElection, OPTIONS, constants, TREK_NODES, Treepolys, Featurelayers
     import json
-    with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-        markerframe = json.load(f)
 
     try:
         def make_json_serializable(obj):
@@ -5689,7 +5852,7 @@ def set_election():
             return jsonify(success=False, error="Election not found", current_election=current_election), 404
 
         CurrentElection['previousParty'] = current_node.party
-        mapfile = CurrentElection['territory']
+        mapfile = CurrentElection['mapfiles'][-1]
 
         current_node = current_node.ping_node(current_election, mapfile)
         visit_node(current_node, current_election, CurrentElection, mapfile)
@@ -5713,14 +5876,14 @@ def set_election():
 @app.route('/current-election', methods=['GET'])
 @login_required
 def get_current_election_data():
-    global markerframe
     global OPTIONS
+
     resources = OPTIONS['resources']
     current_node = get_current_node(session)
     restore_from_persist(session)
     current_election = request.args.get("election")
     CurrentElection = get_election_data(current_election)
-    target_node = current_node.ping_node(current_election,CurrentElection['territory'])
+    target_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
 
     plan = CurrentElection.get("calendar_plan", {})
 
@@ -5800,16 +5963,26 @@ def set_constant():
 
     global OPTIONS
     global current_node
+    global Featurelayers
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
+    current_node = get_current_node(session)
     current_election = data.get("election")
 
     print("____Back End1 election constants update:",current_election,":",name,"-",value)
 
     CurrentElection = get_election_data(current_election)
+    counters = get_counters(session)
 
     if name in CurrentElection:
+        if name == "ACC":
+            # Assuming you want to reset to 0 for the 1-based indexing logic (0 -> 1)
+            for layer_instance in Featurelayers.values():
+                layer_instance.reset()
+            counters = get_counters(session)
+
+
         print("____Back End2:",name,"-",value)
         if name == 'mapfiles':
             move_item(CurrentElection['mapfiles'],int(value),len(CurrentElection['mapfiles']))
@@ -5897,7 +6070,7 @@ def add_election():
 
     CurrentElection = get_election_data("DEMO")
 
-    CurrentElection['territory'] = current_node.mapfile()
+    mapfile = CurrentElection['mapfiles'][-1]
 
     CurrentElection['previousParty'] = current_node.party
 
@@ -5977,15 +6150,13 @@ def update_territory():
     CurrentElection = get_election_data(current_election)
     # mapfiles last entry is what we need to bookmark.
 
-    CurrentElection['territory'] = CurrentElection['mapfiles'][-1]
-
-    new_path = CurrentElection['territory']
+    new_path = CurrentElection['mapfiles'][-1]
 
     current_node = current_node.ping_node(current_election, new_path)
     mapfile = current_node.mapfile()
 
     save_election_data(current_election,CurrentElection)
-    print("______election: {current_election} Updated-territory:",mapfile)
+    print(f"______election:{current_election} Bookmarks : {CurrentElection['mapfiles']} Updated-territory: {new_path}")
 
     return jsonify(success=True, constants=CurrentElection)
 
@@ -6050,8 +6221,6 @@ def index():
 
         from collections import defaultdict
 
-        with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-            markerframe = json.load(f)
 
     #       Track used IDs across both existing and new entries
     #        places = build_place_lozenges(markerframe)
@@ -6085,6 +6254,10 @@ def login():
     global CurrentElection
 
     current_node = get_current_node(session)
+
+    if 'gtagno_counters' not in session:
+        session['gtagno_counters'] = {}
+        # Example: {'marker': 0, 'country': 0, ...}
 
     current_election = get_current_election(session)
     if current_node.value != "UNITED_KINGDOM":
@@ -6231,7 +6404,7 @@ def dashboard():
             current_node = TREK_NODES.get(next(iter(TREK_NODES), None)).findnodeat_Level(0)
         streamrag = getstreamrag()
         print ("allelectors len after streamrag: ",len(allelectors))
-        path = CurrentElection['territory']
+        path = CurrentElection['mapfiles'][-1]
         previous_node = current_node
         print ("____Dashboard CurrentElection: ",path, previous_node.value)
         # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
@@ -6607,7 +6780,7 @@ def STupdate(path):
     # Get JSON data from request
 #        VIdata = request.get_json()  # Expected format: {'viData': [{...}, {...}]}
         try:
-            print(f"📥 Incoming request to update street: {path} (from all {len(allelectors)} in terr {CurrentElection['territory']}) with source data {len(streetelectors)} ")
+            print(f"📥 Incoming request to update street: {path} (from all {len(allelectors)} in terr {CurrentElection['mapfiles'][-1]}) with source data {len(streetelectors)} ")
 
             # ✅ Print raw request data (useful for debugging)
             print("📄 Raw request data:", request.data)
@@ -6978,11 +7151,11 @@ def wardreport(path):
 def get_table(table_name):
     global OPTIONS
     global report_data
-    global markerframe
     global stream_table
     global layertable
     global VCO
     global VNORM
+
 
     def get_resources_table():
         return pd.DataFrame(resources)
@@ -6995,30 +7168,28 @@ def get_table(table_name):
             report_data = pd.DataFrame()
         return pd.DataFrame(report_data)
 
-    def get_markers_table():
-        print(f"Markerframe type: {type(markerframe)}")
-        print(f"Markerframe content: {markerframe}")
+    def get_places_table():
+        print(f"Places content: {places}")
         print(f"pd.DataFrame: {pd.DataFrame}, type: {type(pd.DataFrame)}")
-        if markerframe is None or not markerframe:
-            raise ValueError("markerframe is not defined")
+        if places is None or not places:
+            raise ValueError("places is not defined")
 
-        # Check if markerframe is a dictionary or a list
-        if isinstance(markerframe, dict):
-            return pd.DataFrame.from_dict(markerframe, orient='index')
+        # Check if places is a dictionary or a list
+        if isinstance(places, dict):
+            return pd.DataFrame.from_dict(places, orient='index')
 
-        elif isinstance(markerframe, list):
+        elif isinstance(places, list):
             # Ensure each item in the list is a dictionary (if it's a list of dicts)
-            if all(isinstance(item, dict) for item in markerframe):
-                return pd.DataFrame(markerframe)
+            if all(isinstance(item, dict) for item in places):
+                return pd.DataFrame(places)
             else:
-                raise ValueError("Each item in markerframe list must be a dictionary.")
+                raise ValueError("Each item in places list must be a dictionary.")
 
         else:
-            raise TypeError("markerframe must be either a dictionary or a list.")
+            raise TypeError("places must be either a dictionary or a list.")
 
     def get_stream_table():
-        print(f"Markerframe type: {type(stream_table)}")
-        print(f"Markerframe content: {stream_table}")
+        print(f"Stream_table content: {stream_table}")
         if isinstance(stream_table, dict):
             return pd.DataFrame.from_dict(stream_table, orient='index')
         else:
@@ -7032,7 +7203,7 @@ def get_table(table_name):
     table_map = {
         "report_data" : get_report_table,
         "resources" : get_resources_table,
-        "markerframe" : get_markers_table,
+        "places" : get_places_table,
         "stream_table" : get_stream_table
     }
     print(f"____Get Table {table_name}")
@@ -7071,24 +7242,24 @@ def get_table(table_name):
 @app.route('/displayareas', methods=['POST', 'GET'])
 @login_required
 def displayareas():
+    #calc values in displayed table
     global TREK_NODES
     global layeritems
     global formdata
 
-    global markerframe
-
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
     CurrentElection = get_election_data(current_election)
+    places = CurrentElection['places']
     print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
-        if len(markerframe) > 0:
+        if len(places) > 0:
             formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
-            layeritems = get_layer_table(pd.DataFrame(markerframe) ,formdata['tabledetails'])
-            print(f" Number of displayed markframe items - {len(markerframe)} ")
+            layeritems = get_layer_table(pd.DataFrame(places) ,formdata['tabledetails'])
+            print(f" Number of displayed markframe items - {len(places)} ")
         else:
             formdata['tabledetails'] = "No data to display - please upload"
-            layeritems = get_layer_table(pd.DataFrame(markerframe),formdata['tabledetails'])
+            layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'])
     else:
         path = current_node.dir+"/"+current_node.file
         ctype = gettypeoflevel(path, current_node.level+1)
@@ -7322,8 +7493,6 @@ def calendar_partial(path):
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
         OPTIONS = json.load(f)
 
-    with open(MARKER_FILE, 'r', encoding="utf-8") as f:
-        markerframe = json.load(f)
 
     # Track used IDs across both existing and new entries
 #        places = build_place_lozenges(markerframe)
@@ -7386,7 +7555,7 @@ def thru(path):
 
     flash ("_________ROUTE/thru:"+path)
     print ("_________ROUTE/thru:",path, CurrentElection)
-
+    current_node = current_node.ping_node(current_election,path)
     if os.path.exists(os.path.join(config.workdirectories['workdir'],path)):
         flash(f"Using existing file: {path}", "info")
         print(f"Using existing file: {path} and CurrentElection: {CurrentElection}")
@@ -7395,7 +7564,6 @@ def thru(path):
     else:
         flash(f"Creating new mapfile:{path}", "info")
         print(f"Creating new mapfile:{path}")
-        current_node = current_node.ping_node(current_election,path)
         fileending = "-"+path.split("-").pop()
         current_node.file = subending(current_node.file,fileending)
         current_node.create_area_map(current_node.getselectedlayers(current_election,path), current_election,CurrentElection)
@@ -7614,7 +7782,6 @@ def firstpage():
     global environment
     global layeritems
     global streamrag
-    global markerframe
     global CurrentElection
     global TABLE_TYPES
     global OPTIONS
@@ -7695,6 +7862,10 @@ def firstpage():
         atype = gettypeoflevel(mapfile,current_node.level+1)
     # the map under the selected node map needs to be configured
     # the selected  boundary options need to be added to the layer
+
+        Featurelayers['marker'].create_layer(current_election,current_node,'marker')
+        print(f"XXXXMarkers {len(Featurelayers['marker']._children)} at election {current_election} at node {current_node.value}")
+
         Featurelayers[atype].create_layer(current_election,current_node,atype)
         print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
         streamrag = getstreamrag()

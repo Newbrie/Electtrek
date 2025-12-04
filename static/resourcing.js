@@ -376,6 +376,18 @@ function buildSummaryTable(slots, areas, places, tags) {
   return wrapper; // return the responsive wrapper
 }
 
+function generateSummaryReport() {
+  const summary = extractCalendarPlan();
+  const areas = window.areas || {};
+  const places = window.places || {};
+  const tags = window.task_tags || {};
+
+  const summaryTable = buildSummaryTable(summary.slots, areas, places, tags);
+  const container = document.getElementById("summary-report");
+  container.innerHTML = "";
+  container.appendChild(summaryTable);
+}
+
 function extractCalendarPlan() {
   const calendarPlan = { slots: {} };
 
@@ -527,17 +539,7 @@ async function handleClearSlot() {
   bootstrap.Modal.getInstance(document.getElementById("slotModal")).hide();
 }
 
-function generateSummaryReport() {
-  const summary = extractCalendarPlan();
-  const areas = window.areas || {};
-  const places = window.places || {};
-  const tags = window.task_tags || {};
 
-  const summaryTable = buildSummaryTable(summary.slots, areas, places, tags);
-  const container = document.getElementById("summary-report");
-  container.innerHTML = "";
-  container.appendChild(summaryTable);
-}
 
 
 

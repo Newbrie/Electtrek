@@ -368,11 +368,11 @@ body.unlocked #login { display: none; }
 }
 
 #mapwin {
-	z-index: 8;
-	position: absolute;
-	top: 0;
-	left: 0px;
-	width: 1200px;
+    position: relative;
+    /* Let the height be determined by the parent layout container */
+    height: 100%;
+    /* The mapwin will now only take 100% of the grid cell height, not the whole viewport */
+    border: 1px solid #ddd;
 }
 
 #tabletitle {

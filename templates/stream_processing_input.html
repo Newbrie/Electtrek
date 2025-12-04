@@ -491,9 +491,13 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
 function populateElectionDropdowns() {
 const parentSelect = window.parent.document.getElementById("streams");
 const electionNames = Array.from(parentSelect.options).map(opt => opt.value);
-
+console.log(`__Stream_Processing elections ${electionNames} drop down from parentSelect:`,  parentSelect.options)
 // 🆕 Access the election-to-territory mapping
-const territoryEL = window.parent.document.getElementById('territory');
+const mapfilesSelect = window.parent.document.getElementById("mapfiles");
+const territoryEL =
+    mapfilesSelect?.options?.length
+        ? mapfilesSelect.options[mapfilesSelect.options.length - 1].value
+        : null;
 
 const allElectionDropdowns = document.querySelectorAll('.editable.election');
 
@@ -510,7 +514,9 @@ allElectionDropdowns.forEach(select => {
     option.textContent = electionName;
 
     // 🧠 Add data-territory to each option
-    option.dataset.territory = territoryEL.value || '';
+
+    option.dataset.territory = territoryEL || '';
+
 
     if (electionName === currentValue) {
       option.selected = true;

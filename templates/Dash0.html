@@ -15,6 +15,11 @@
     color: #333;
   }
 
+  #calendar-scroll.add-place-active {
+      opacity: 0 !important;
+      pointer-events: none !important;
+  }
+
   /* Switch styling */
   .switch {
     position: relative;
@@ -87,6 +92,19 @@
     border: none;
 }
 
+/* When iframe is active */
+#iframe1.map-active {
+    position: relative !important;
+    z-index: 99999 !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+}
+
+/* When dimming modal */
+.dimmed {
+    opacity: 0.35 !important;
+    pointer-events: none !important;
+}
 
     /* Calendar hidden by default but stays in document flow */
 
@@ -119,16 +137,24 @@
     }
 
     /* Only this scrolls */
+
     #calendar-scroll {
         position: relative;
-        flex: 1 1 auto;   /* fills remaining space */
-        height: 800px;     /* critical! allows scrolling */
-        overflow-y: auto;  /* scrolling enabled */
+
+        /* 1. Allows it to fill the remaining space below the header */
+        flex: 1 1 auto;
+
+        /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
+           to fit the container's calculated height, rather than the height
+           of its content. */
+        min-height: 0;
+
+        /* 3. Enables vertical scrolling if content is too tall */
+        overflow-y: auto;
+
         padding: 5px;
-        /* remove height: 100% */
         z-index: 100;
     }
-
 
     /* Login screen on top of everything initially */
     #loginScreen {
@@ -156,6 +182,57 @@
         opacity: 1; /* fade in */
       }
 
+
+    /* Fullscreen overlay */
+    #map-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9998; /* ABOVE bootstrap modal (modal = 1050) */
+        pointer-events: none; /* allows clicks to pass through */
+    }
+
+    /* Container that holds the iframe */
+    #map-overlay-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        pointer-events: auto; /* container still receives events */
+    }
+
+    /* Fullscreen map iframe */
+    #overlay-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        pointer-events: auto;
+    }
+
+    /* Close button */
+    #close-overlay {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999 /* above iframe */
+        padding: 5px 10px;
+        background: white;
+        border: 1px solid #333;
+        border-radius: 4px;
+        pointer-events: auto;
+    }
+
+    #close-overlay:hover {
+        cursor: pointer;
+        background: #f0f0f0;
+    }
+
+
+
+
+
   /* Calendar styles (unchanged) */
   .calendar-grid { margin-top: 90px; }
   .slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
@@ -176,9 +253,10 @@
 
   // 🧱 Safe variable injection
   {% set _options = options or {} %}
+  {% set _constants = constants or {} %}
   window.task_tags = {{ _options.get('task_tags', []) | tojson }};
   window.resources = {{ _options.get('resources', []) | tojson }};
-  window.places = {{ _options.get('places', []) | tojson }};
+  window.places = {{ _constants.get('places', []) | tojson }};
   window.areas = {{ _options.get('areas', []) | tojson }};
 
   console.log("Injected task_tags:", window.task_tags);
@@ -239,8 +317,14 @@
             <div id="summary-report" class="mt-4"></div>
         </div>
     </div>
-</div>
 
+</div>
+<div id="map-overlay" class="map-overlay">
+<div id="map-overlay-container" class="map-overlay-container">
+    <iframe id="overlay-iframe" class="overlay-iframe" src=""></iframe>
+    <button id="close-overlay" class="overlay-close-btn">Close Map</button>
+</div>
+</div>
 
 {% endblock map %}
 {% block modals %}
@@ -386,14 +470,11 @@
 
       <div id="constants-container">
       <ul>
-        <li class="righted">
+        <li class="righted" hidden>
           <select class="righted"name="streams" id="streams" ></select><br>
       </li>
       <li class="righted">
         Type of Election: <select class="righted"name="territories" id="territories"></select><br>
-      </li>
-      <li class="righted">
-        Territory: <input class="righted" type="text" name="territory" id="territory" readonly><br>
       </li>
       <li class="righted">
       Party selected: <select class="righted" name="yourparty" id="yourparty"></select><br>
@@ -453,7 +534,7 @@
 </div>
         <div class = "grid-container">
           <div class="grid-item">
-          <button type="button" id="update-territory-btn" class="small_btn">BOOKMARK<br>TERRITORY</button>
+          <button type="button" id="b0" class="small_btn">SPARE<br>SPARE</button>
           </div>
             <div class="grid-item">
               <button type = "button" id = "b1" class = "small_btn" onclick="setActionForm('filelist',filelist='maps')">Boundary<br>Maps</button>
@@ -754,7 +835,7 @@
            // Show map
            iframeContainer.style.visibility = "visible";
            iframeContainer.style.pointerEvents = "auto";
-           iframeContainer.style.zIndex = "1000";
+
 
            iframe.style.visibility = "visible";
            iframe.style.pointerEvents = "auto";
@@ -788,81 +869,160 @@
        return;
    }
 
-   // -----------------------------------------------------
-   // SHOW MAP FOR ADD-PLACE
-   // -----------------------------------------------------
-   if (data === "showMapForAddPlace") {
-       console.log("📌 Handling showMapForAddPlace");
-
-       iframe.style.visibility = "visible";
-       iframe.classList.remove("dimmed");
-
-       document
-           .getElementById("modalPopup")
-           .classList.add("stay-on-top");
-
-
-
-       return;
-   }
 
    // -----------------------------------------------------
    // NEW PLACE CREATED
    // -----------------------------------------------------
-   if (data?.type === "newPlaceCreated") {
-       console.log("📌 Handling newPlaceCreated", data);
+   function fillAddPlaceForm(data) {
+       const mapping = {
+           prefix: "newPlacePrefix",
+           house_number: "newPlaceAddress1",
+           road: "newPlaceAddress1",
+           suburb: "newPlaceAddress2",
+           city: "newPlaceAddress2",
+           postcode: "newPlacePostcode",
+           url: "newPlaceURL"
+       };
 
-       // Save for later processing
-       selectedPlaceData = data;
-       console.log("📦 Stored selectedPlaceData:", selectedPlaceData);
+       // First, clear form fields
+       Object.values(mapping).forEach(id => {
+           const el = document.getElementById(id);
+           if (el) el.value = "";
+       });
 
-       // Fill mini-form in modal
-       document.getElementById("newPlacePrefix").value = data.prefix || "";
-       document.getElementById("newPlaceAddress1").value = "";
-       document.getElementById("newPlaceAddress2").value = "";
-       document.getElementById("newPlacePostcode").value = data.postcode || "";
-       document.getElementById("newPlaceURL").value = "";
+       // Fill fields
+       for (const key in data) {
+           if (!data.hasOwnProperty(key)) continue;
+           const fieldId = mapping[key];
+           if (!fieldId) continue;
 
-       // Store lat/lng
+           const el = document.getElementById(fieldId);
+           if (!el) continue;
+
+           if (fieldId === "newPlaceAddress1") {
+               // Combine house_number + road
+               el.value = ((data.house_number || "") + " " + (data.road || "")).trim();
+           } else if (fieldId === "newPlaceAddress2") {
+               // Combine suburb + city
+               el.value = ((data.suburb || "") + " " + (data.city || "")).trim();
+           } else {
+               el.value = data[key] || "";
+           }
+       }
+
+       // Save lat/lng in dataset
        const form = document.getElementById("addPlaceForm");
        form.dataset.lat = data.lat;
        form.dataset.lng = data.lng;
 
-       console.log("📌 Stored hidden lat/lng:", data.lat, data.lng);
-
-       // Show the form
        form.classList.remove("d-none");
-       console.log("➡️ addPlaceForm is now VISIBLE");
-
-       // Dim the map
-       iframe.classList.add("dimmed");
-
-       // Allow modal to be closed normally again
-       preventModalClose = false;
-       addPlaceActive = false;
-
-       console.log("⚠️ Modal remains visible and active!");
-
-       return;
    }
+
+
+     if (event.data?.type === "newPlaceCreated") {
+         document.getElementById("map-overlay").style.display = "none";
+         deactivateMapAfterPlaceSelected();
+
+         selectedPlaceData = event.data;
+         console.log("📦 Stored selectedPlaceData:", selectedPlaceData);
+
+         fillAddPlaceForm(selectedPlaceData); // your existing function to fill the modal
+
+         // --- Append new place to window.places ---
+         if (!window.places) window.places = {};
+
+         // Use prefix as key, can be adjusted
+         const key = selectedPlaceData.prefix || `place_${Date.now()}`;
+
+         // Store object with whatever structure fillSelect expects
+         window.places[key] = {
+             name: `${selectedPlaceData.house_number || ""} ${selectedPlaceData.road || ""}, ${selectedPlaceData.suburb || ""} ${selectedPlaceData.city || ""}`.trim(),
+             lat: selectedPlaceData.lat,
+             lng: selectedPlaceData.lng,
+             postcode: selectedPlaceData.postcode
+         };
+
+         // --- Refresh the select dropdown ---
+         fillSelect("placeSelect", window.places);
+
+         window.latestConstants.places[key] = window.places[key];
+
+         updateConstantsUI(window.latestConstants, window.latestOptions);
+
+//         iframe.classList.add("dimmed");
+         preventModalClose = false;
+         addPlaceActive = false;
+     }
+
+
+
 });
+
+function activateMapForAddPlace() {
+    const iframe = document.getElementById("iframe1");
+    const modal = document.getElementById("slot-modal");
+    const calendarScroll = document.getElementById("calendar-scroll");
+
+    addPlaceActive = true;         // your existing state variable
+    preventModalClose = true;      // stops accidental closing
+
+    iframe.classList.add("map-active");
+
+    // Dim everything else but keep modal visually visible
+    if (modal) {
+        modal.classList.add("dimmed");
+    }
+
+    if (calendarScroll) {
+        calendarScroll.classList.add("dimmed");
+    }
+
+    console.log("🗺️ Map activated for Add Place.");
+}
+
+function deactivateMapAfterPlaceSelected() {
+    const iframe = document.getElementById("iframe1");
+    const modal = document.getElementById("slot-modal");
+    const calendarScroll = document.getElementById("calendar-scroll");
+
+    iframe.classList.remove("map-active");
+
+    if (modal) {
+        modal.classList.remove("dimmed");
+    }
+
+    if (calendarScroll) {
+        calendarScroll.classList.remove("dimmed");
+    }
+
+    addPlaceActive = false;
+    preventModalClose = false;
+
+    console.log("📅 Map overlay deactivated; modal restored.");
+}
+
 
 
     // ------------------------------
     // Add Place button handler
     // ------------------------------
     document.getElementById("addPlaceBtn").addEventListener("click", () => {
-        addPlaceActive = true;
 
-        // Show map
-        window.postMessage({ type: "showMapForAddPlace"}, "*");
+        const overlay = document.getElementById("map-overlay");
+        const overlayIframe = document.getElementById("overlay-iframe");
 
-        // Tell iframe to prepare
-        document.getElementById("iframe1").contentWindow.postMessage(
-            { type: "enableAddPlace" },
-            "*"
-        );
+        overlayIframe.src = document.getElementById("iframe1").src;
+        overlay.style.display = "block";
+
+        overlayIframe.onload = () => {
+            console.log("📌 Iframe loaded — sending enableAddPlace");
+            overlayIframe.contentWindow.postMessage(
+                { type: "enableAddPlace" },
+                "*"
+            );
+        };
     });
+
 
 
 
@@ -870,75 +1030,57 @@
     // ------------------------------
     // Save button handler
     // ------------------------------
-    document.getElementById("saveNewPlace").addEventListener("click", () => {
-        const form = document.getElementById("addPlaceForm");
+    // ------------------------------
+    // Save button handler
+    // ------------------------------
+    // ------------------------------
+// Save button handler
+// ------------------------------
+document.getElementById("saveNewPlace").addEventListener("click", () => {
+    const form = document.getElementById("addPlaceForm");
 
-        const prefix = document.getElementById("newPlacePrefix").value.trim();
-        const address1 = document.getElementById("newPlaceAddress1").value.trim();
-        const address2 = document.getElementById("newPlaceAddress2").value.trim();
-        const postcode = document.getElementById("newPlacePostcode").value.trim();
-        const url = document.getElementById("newPlaceURL").value.trim();
-        const lat = form.dataset.lat;
-        const lng = form.dataset.lng;
+    // Use the currently selected place data
+    const newPlace = selectedPlaceData;
+    if (!newPlace) {
+        console.error("No place data to save!");
+        return;
+    }
 
-        if (!prefix || !address1 || !address2) {
-            alert("Prefix, Address line 1, and City/Town are required.");
-            return;
-        }
+    // Ensure places dict exists
+    if (!window.places) window.places = {};
+    window.places[newPlace.prefix] = newPlace;
 
-        const newPlace = {
-            AddressPrefix: prefix,
-            Address1: address1,
-            Address2: address2,
-            Postcode: postcode,
-            url: url,
-            Lat: lat,
-            Long: lng
-        };
+    // Update dropdown (only prefix)
+    fillSelect("placeSelect", window.places);
 
-        // Add to dropdown
-        const opt = document.createElement("option");
-        opt.value = prefix;
-        opt.textContent = `${prefix} — ${address1}, ${address2}`;
-        document.getElementById("placeDropdown").appendChild(opt);
+    // Add marker permanently to FeatureGroup if available
+    const markerGroup = window.Featurelayers?.['marker'];
+    if (markerGroup && window.pinMarker) {
+        markerGroup.addLayer(window.pinMarker);
 
-        // Hide mini-place form and restore map visibility
-        form.classList.add("d-none");
+        // Optionally track by prefix for later reference
+        if (!window.permanentMarkers) window.permanentMarkers = {};
+        window.permanentMarkers[newPlace.prefix] = window.pinMarker;
+
+        // Clear temporary pointer
+        window.pinMarker = null;
+    }
+
+    console.log("📌 New place saved:", newPlace);
+    console.log("📌 Updated places dict:", window.places);
+
+    // Hide mini-place form and restore overlay/iframe
+    form.classList.add("d-none");
+    const iframe = document.getElementById("overlay-iframe");
+    if (iframe) {
         iframe.classList.remove("dimmed");
         iframe.style.visibility = "hidden";
+    }
 
-        console.log("New place added:", newPlace);
-    });
+    // Reset awaitingNewPlace flag
+    window.awaitingNewPlace = false;
+});
 
-
-
-    // ------------------------------
-    // Handle Save button for new place
-    // ------------------------------
-    document.getElementById("saveNewPlace").addEventListener("click", () => {
-        const form = document.getElementById("addPlaceForm");
-
-        if (!selectedPlaceData) return alert("Select a place on the map first.");
-
-        const prefix = document.getElementById("newPlacePrefix").value.trim();
-        if (!prefix) return alert("Please enter a prefix.");
-
-        // Add to dropdown
-        const opt = document.createElement("option");
-        opt.value = prefix;
-        opt.textContent = `${prefix} — ${document.getElementById("newPlaceAddress1").value} ${document.getElementById("newPlaceAddress2").value}`;
-        document.getElementById("placeDropdown").appendChild(opt);
-
-        // Hide mini-form and undim map
-        form.classList.add("d-none");
-        document.getElementById("iframe1").classList.remove("dimmed");
-
-        // Clear global selection
-        selectedPlaceData = null;
-
-        // Optional: reset form fields
-        form.reset();
-    });
 
 
 
@@ -1062,7 +1204,7 @@ function openAddTaskTagForm() {
       // ⭐ Make global objects
       // =====================================================
       window.areas      = options?.areas      || {};
-      window.places     = options?.places     || {};
+      window.places     = constants?.places     || {};
       window.resources  = options?.resources  || {};
       window.task_tags  = options?.task_tags  || {};
 
@@ -1524,9 +1666,12 @@ function openAddTaskTagForm() {
    console.log("✅ Calendar plan loaded into UI");
 
 
-    if (data.constants?.territory) {
-        changeIframeSrc(`/thru/${data.constants.territory}`);
+   const lastMapFile = data.constants?.mapfiles?.slice(-1)[0];
+
+    if (lastMapFile) {
+       changeIframeSrc(`/thru/${lastMapFile}`);
     }
+
 
     fetchTableData("nodelist_xref");
 
@@ -1613,6 +1758,30 @@ function openAddTaskTagForm() {
        * --------------------------------------------------------- */
       document.getElementById("logout-button")?.addEventListener("click", () => {
           window.location.href = "/logout";
+      });
+
+
+      /* ---------------------------------------------------------
+       * RESET-ELECTION TERRITORY
+       * --------------------------------------------------------- */
+
+      document.getElementById("b0")?.addEventListener("click", () => {
+        const tab = getActiveElectionTab();
+        if (!tab) return;
+
+        fetch("/update-territory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+                election: tab.dataset.election
+            })
+        })
+            .then(res => res.json())
+            .then(resp => {
+                if (resp.success) refreshConstantsUI();
+            });
+
       });
 
 
