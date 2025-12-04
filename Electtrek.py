@@ -1632,6 +1632,17 @@ class TreeNode:
             crs='EPSG3857'
         )
 
+        # Inject custom CSS
+        css = """
+        <style>
+        .leaflet-control-layers {
+            margin-right: 300px !important; /* move left by increasing the right margin */
+            /* or use left:50px; right:auto; for absolute positioning */
+        }
+        </style>
+        """
+        FolMap.get_root().html.add_child(Element(css))
+
         folium.TileLayer(
             tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
             name='OPNVKarte (Public Transport)',
