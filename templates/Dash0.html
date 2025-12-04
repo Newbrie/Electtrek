@@ -576,23 +576,26 @@
 
 {% block captains %}
 
-<div id="tabletitle" class="innertube">
-  <span id="selectedTitle">Table Details</span>
+<div class="table-header innertube">
+  <h2 id="selectedTitle">Table Details</h2>
+
+  <label for="tableSelector" class="table-selector-label">Select Table:</label>
   <select id="tableSelector">
     {% for key, value in table_types.items() %}
-    <option value="{{ key }}">{{ value }}</option>
-  {% endfor %}
+      <option value="{{ key }}">{{ value }}</option>
+    {% endfor %}
   </select>
 </div>
 
-<div id="datawin" class="innertube">
-  <div style="overflow-x: auto; width: 100%; height: 100%;">
-    <table id="captains-table" style="width: 100%; table-layout: fixed;">
+<div class="table-container innertube">
+  <div class="table-scroll">
+    <table id="captains-table">
       <thead></thead>
       <tbody></tbody>
     </table>
   </div>
 </div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
