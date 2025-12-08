@@ -139,7 +139,8 @@ def stepify(path):
     if last.find("-PRINT.html"):#only works for street-leaf nodes, not -WALKS etc nodes
         leaf = subending(last,"").split("--").pop()
         parts.append(leaf) #eg SMITH_STREET
-        print("____LEAFNODE:", path,parts)
+    parts = list(dict.fromkeys(parts))
+    print("____LEAFNODE:", path,parts)
     return parts
 
 def get_resources_json(election_data, resources):
@@ -214,7 +215,7 @@ def getchildtype(parent):
 #    matches = [index for index, x in enumerate(levels) if x.find(parent) > -1  ]
 #    return levels[matches[0]+1]
 
-def gettypeoflevel(path,level):
+def gettypeoflevel(estyle,path,level):
 # returns the correct type for nodes at a given level along a given path
 # the level will give type options , which are resolved by looking at the path content
     global levels
@@ -231,36 +232,31 @@ def gettypeoflevel(path,level):
     type = levels[level] # could have type options that need to be resolved
 
     if type == 'ward/division':
-        if path.find("/WARDS/") >= 0:
-            type = 'ward'
-        elif path.find("/DIVS/") >= 0:
+        if estyle == 'C' or estyle == 'U':
             type = 'division'
-        elif level+1 >= len(deststeps) and moretype != "":
-        # if desired level is greater than path level then use 'new' override
-            print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
-            type = moretype # this is the type override syntax if level is new - ie desired level great than path level
         else:
-            type = 'ward' # default
+            type = 'ward'
     elif type == 'polling_district/walk':
         if path.find("/PDS/") >= 0 or path.endswith("-PDS.html"):
             type = 'polling_district'
-        elif path.find("/WALKS/") >= 0 or path.endswith("-WALKS.html"):
+        elif path.find("/WALKS/") >= 0 or path.endswith("-WALKS.html") or path.endswith("-MAP.html"):
             type = 'walk'
         elif level+1 >= len(deststeps) and moretype != "":
             print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
             type = moretype # this is the type override syntax if level is new - ie desired level great than path level
         else:
-            type = 'polling_district' #default
+            type = 'walk'
+            print('XXStrange polling_district/walk Type discoveredXX')
     elif type == 'street/walkleg':
         if path.find("/PDS/") >= 0:
             type = 'street'
-        elif path.find("/WALKS/") >= 0:
+        elif path.find("/WALKS/") >= 0 or path.endswith("-MAP.html"):
             type = 'walkleg'
         elif level+1 >= len(deststeps) and moretype != "":
             print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
             type = moretype # this is the type override syntax if level is new - ie desired level great than path level
         else:
-            type = 'street' #default
+            raise Exception('XXStrange street/walkleg Type discoveredXX')
 
 
     return type
@@ -288,8 +284,8 @@ def get_layer_table(nodelist,title):
         for x in nodelist:
             dfy.loc[i,'LV'] = dflev
             dfy.loc[i,'No']= x.tagno
-            options = x.VI
-            for party in options:
+            VIoptions = x.VI
+            for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
                 dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
@@ -556,8 +552,6 @@ def restore_from_persist(session=None,session_data=None):
     global OPTIONS
     global CurrentElection
 
-    OPTIONS = {}
-
     if  os.path.exists(TREEPOLY_FILE) and os.path.getsize(TREEPOLY_FILE) > 0:
         with open(TREEPOLY_FILE, 'rb') as f:
             Treepolys = pickle.load(f)
@@ -620,7 +614,7 @@ def persist(node):
 def restore_fullpolys(node_type):
     global Fullpolys
     global Treepolys
-    global current_node
+
 
     if  os.path.exists(TREEPOLY_FILE) and os.path.getsize(TREEPOLY_FILE) > 0:
         with open(TREEPOLY_FILE, 'rb') as f:
@@ -707,6 +701,15 @@ class TreeNode:
         self.target = 1
         self.party = "O"
 
+    def renumber(self, etype):
+        # Filter only children of the matching type
+        nodelist = [x for x in self.children if x.type == etype]
+
+        # Proper enumerated loop
+        for i, child_node in enumerate(nodelist, start=1):
+            child_node.tagno = i
+
+        return
 
 
     def upto(self,deststeps):
@@ -725,7 +728,7 @@ class TreeNode:
         return self.dir+"/"+subending(self.file,"-CAL.html")
 
 
-    def ping_node(self, c_election, dest_path):
+    def ping_node(self, estyle, c_election, dest_path):
         global Treepolys
         global Fullpolys
         global levels
@@ -825,7 +828,7 @@ class TreeNode:
 
         for part in down_path:
             next_level = node.level + 1
-            ntype = gettypeoflevel(raw_path_for_types, next_level)
+            ntype = gettypeoflevel(estyle, raw_path_for_types, next_level)
 
             print(f"   ➡️ under {route()} Looking for part: '{part}' at level {next_level} (ntype={ntype})")
 
@@ -854,7 +857,7 @@ class TreeNode:
         print(f"✅ under {route()} Reached destination node: {node.value} (level {node.level})")
         # Step 6: Populate children of destination node
         final_level = node.level
-        final_ntype = gettypeoflevel(raw_path_for_types, final_level + 1)
+        final_ntype = gettypeoflevel(estyle, raw_path_for_types, final_level + 1)
 
         print(f"   🌿 Expanding children of path {raw_path_for_types} final node '{node.value}' (level {final_level}) with type '{final_ntype}'")
 
@@ -884,14 +887,14 @@ class TreeNode:
 
 
 
-    def getselectedlayers(self,this_election,path):
+    def getselectedlayers(self,estyle,this_election,path):
         global Featurelayers
         global OPTIONS
 #add children layer(level+1), eg wards,constituencies, counties
         print(f"_____layerstest0 type:{self.value},{self.type} path: {path}")
 
         selected = []
-        childtype = gettypeoflevel(path,self.level+1)
+        childtype = gettypeoflevel(estyle,path,self.level+1)
         if childtype == 'elector':
             selected = []
         else:
@@ -957,7 +960,8 @@ class TreeNode:
 #        print(f"____Turnout in {current_election} with Election data {CurrentElection}" )
         print ("_____current_election:",current_election)
         print("____CurrentElection:",CurrentElection)
-        if CurrentElection['territories'] == 'W':
+        estyle = CurrentElection['territories']
+        if estyle == 'W':
 #cascade last constituency turnout figure to all wards(children) and streets(children)
 
 # electorate is for a constituency is derived from wards is derived from streets (if you have electoral roll uploaded )
@@ -968,7 +972,7 @@ class TreeNode:
                 for l in range(origin.level):
                     casnode.parent.turnout = .25
                     i=1
-                    for x in casnode.parent.childrenoftype(gettypeoflevel(casnode.dir,casnode.level)):
+                    for x in casnode.parent.childrenoftype(gettypeoflevel(estyle,casnode.dir,casnode.level)):
                         casnode.parent.turnout = (casnode.parent.turnout + x.turnout)/i
                         print ("_____NatTurnoutlevel:",i,casnode.value,casnode.level,casnode.turnout)
                         i = i+1
@@ -989,7 +993,7 @@ class TreeNode:
                 for l in range(origin.level):
                     casnode.parent.turnout = 0
                     i=1
-                    for x in casnode.parent.childrenoftype(gettypeoflevel(casnode.dir,casnode.level)):
+                    for x in casnode.parent.childrenoftype(gettypeoflevel(estyle,casnode.dir,casnode.level)):
                         casnode.parent.turnout = (casnode.parent.turnout + x.turnout)/i
 #                        print ("_____LGTurnoutlevel:",casnode.level,casnode.value,casnode.turnout)
                         i = i+1
@@ -1044,7 +1048,7 @@ class TreeNode:
             for l in range(origin.level):
                 sumnode.parent.electorate = 0
                 i=1
-                for x in sumnode.parent.childrenoftype(gettypeoflevel(sumnode.dir,sumnode.level)):
+                for x in sumnode.parent.childrenoftype(gettypeoflevel(estyle,sumnode.dir,sumnode.level)):
                     sumnode.parent.electorate = sumnode.parent.electorate + x.electorate
                     print ("_____Electoratelevel:",x.level,x.value,x.electorate,sumnode.electorate)
                     i = i+1
@@ -1077,7 +1081,7 @@ class TreeNode:
         for l in range(origin.level):
             sumnode.parent.houses = 0
             i=1
-            for x in sumnode.parent.childrenoftype(gettypeoflevel(sumnode.dir,sumnode.level)):
+            for x in sumnode.parent.childrenoftype(gettypeoflevel(estyle,sumnode.dir,sumnode.level)):
                 sumnode.parent.houses = sumnode.parent.houses + x.houses
                 print ("_____Houseslevel:",x.level,x.value,x.houses,sumnode.houses)
                 i = i+1
@@ -1141,7 +1145,7 @@ class TreeNode:
             namepoints, geometry=geometry
             )
         fam_nodes = self.childrenoftype(nodetype)
-        [self.bbox, self.centroid] = self.get_bounding_box(block)
+        [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
 
         if 'Zone' not in namepoints.columns:
             print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
@@ -1155,7 +1159,7 @@ class TreeNode:
                 newnode = TreeNode(normalname(limb['Name']),datafid, (limb['Lat'],limb['Long']),self.level+1,elect )
                 egg = self.add_Tchild(newnode, nodetype,elect)
                 egg.file = subending(egg.file,ending)
-                egg.bbox = self.bbox
+                [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
                 egg.col = zonecolour.get(limb['Zone'],'black')
                 print(f"🎨 Assigned color '{egg.col}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
 
@@ -1285,20 +1289,9 @@ class TreeNode:
         global Treepolys
         global Fullpolys
         global TREK_NODES
+        global Overlaps
 
         current_election = c_election
-        Overlaps = {
-        "country" : 1,
-        "nation" : 0.1,
-        "county" : 0.001,
-        "constituency" : 0.0005,
-        "ward" : 0.00005,
-        "division" : 0.00001,
-        "walk" : 0.005,
-        "polling_district" : 0.005,
-        "street" : 0.005,
-        "walkleg" : 0.005
-        }
         block = pd.DataFrame()
         parent_poly = Treepolys[self.type]
 #        parent_geom = parent_poly[parent_poly["FID"] == self.fid].geometry.values[0]
@@ -1321,7 +1314,7 @@ class TreeNode:
         else:
             # If geometry was found, proceed with the matching geometry
             parent_geom = parent_geom.geometry.values[0]
-        [self.bbox, self.centroid] = self.get_bounding_box(block)
+        [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
 
         ChildPolylayer = Treepolys[electtype]
 
@@ -1340,7 +1333,7 @@ class TreeNode:
                 egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
                 print ("________limb selected and added:",electtype,newname, self.level+1)
                 egg = self.add_Tchild(egg, electtype, c_election)
-                [egg.bbox, centroid] = egg.get_bounding_box(block)
+                [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
                 print (f"________bbox [{egg.bbox}] - child of type:{electtype} at lev {self.level+1} of {self.value}")
                 fam_nodes.append(egg)
                 egg.updateParty()
@@ -2016,11 +2009,11 @@ class TreeNode:
       print("______Bounding Box:",longmin,latmin,longmax,latmax)
       return [Point(latmin,longmin),Point(latmax,longmax)]
 
-    def get_bounding_box(self, block):
+    def get_bounding_box(self, ntype,block):
         global Treepolys
 
         if self.level < 3:
-            pfile = Treepolys[gettypeoflevel(self.dir, self.level)]
+            pfile = Treepolys[ntype]
             pb = pfile[pfile['FID'] == self.fid]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
             pad_lat = (maxy - miny) / 5
@@ -2032,7 +2025,7 @@ class TreeNode:
             roid = pb.dissolve().centroid.iloc[0]
 
         elif self.level < 5:
-            pfile = Treepolys[gettypeoflevel(self.dir, self.level)]
+            pfile = Treepolys[ntype]
             pb = pfile[pfile['FID'] == self.fid]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
             swne = [(miny, minx), (maxy, maxx)]
@@ -3256,11 +3249,12 @@ class ExtendedFeatureGroup(FeatureGroup):
         global allelectors
         global places
         global OPTIONS
+        global constants
         CurrentElection = get_election_data(c_election)
-        print(f"__Layer id:{self.id} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
+        print(f"__Layer id:{self.name} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
         if intention_type == 'marker':
-            # always regen markers if CurrentElection['accumulate'] is false
-            if not CurrentElection['accumulate']:
+            # always regen markers if OPTIONS['ACC'] is false
+            if not OPTIONS['ACC']:
                 self._children.clear()
             entrylen = len(self._children)
             print("Markers . . ACCUMULATING from",entrylen)
@@ -3271,7 +3265,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         if len(node.children) > 0:
     # each layer content is identified by the node id at which it created, so new node new content, same node old content
             if self.id != node.value: # new node new content
-                if not CurrentElection['accumulate']:
+                if not OPTIONS['ACC']:
                     self._children.clear()
                 entrylen = len(self._children)
                 print("ACCUMULATING from",entrylen)
@@ -3288,7 +3282,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print("Markers 2 ACCUMULATING from",entrylen)
                     self.add_genmarkers(node,'marker',static)
                 else:
-                    self.add_nodemaps(node, intention_type, static, ACC=OPTIONS['ACC'])
+                    self.add_nodemaps(node, intention_type, static)
             else: #no change - same node old content
             # each layer content is identified by the node id at which it created, so new node new content, same node old content
                 self.id = 0
@@ -3334,7 +3328,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_nodemaps (self,herenode,type,static, ACC=False):
+    def add_nodemaps (self,herenode,type,static):
         global Treepolys
         global levelcolours
         global Con_Results_data
@@ -3473,7 +3467,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         popup_keep_highlighted=False,
                         style_function=lambda x: {
                             "fillColor": x['properties']['col'],  # Access 'col' in the properties for the fill color
-                            "color": bcol,      # Same for the border color
+                            "color": 'indigo',      # Same for the border color
                             "dashArray": "5, 5",
                             "weight": 3,
                             "fillOpacity": 0.2
@@ -3525,7 +3519,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                                        )
 
 
-        print("________Layer map polys",herenode.value,herenode.level, len(Featurelayers[gettypeoflevel(herenode.dir,herenode.level+1)]._children))
 
         return self._children
 
@@ -3749,86 +3742,201 @@ def get_versioned_filename(base_path, base_name, extension):
 
     return new_filepath
 
-def filterArea(source,sourcekey,roid,destination):
+def filterArea(source, sourcekey, destination,roid=None,name=None):
+    """
+    If name is provided → lookup by polygon NAME.
+    Otherwise → lookup by lat/lon from roid.
+    """
+
     nodestep = None
-# create destination Geojson file of polys which contain a lat long from source file
+
+    # Load source GeoJSON
     gdf = gpd.read_file(source)
 
-# Step 3: Define your lat/lon point
-    latitude =roid[0]
-    longitude = roid[1]
-    point = Point(longitude, latitude)  # Note: Point(long, lat) for Shapely
-
-# Step 4: Ensure same CRS
+    # ----- CRS FIX ------------------------------------------------------
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
     elif gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs(epsg=4326)
 
-    gdf = gdf.rename(columns= {sourcekey: 'NAME'})
+    # Standardize field names
+    gdf = gdf.rename(columns={sourcekey: 'NAME'})
     if 'OBJECTID' in gdf.columns:
-        gdf = gdf.rename(columns = {'OBJECTID': 'FID'})
-    print(" gdf cols:",gdf.columns)
+        gdf = gdf.rename(columns={'OBJECTID': 'FID'})
 
-# Step 5: Find matching polygon(s)
-    matched = gdf[gdf.contains(point)]
-#    print("____are data:",matched, point,gdf)
-# Step 6: Save to new GeoJSON if found
+    print("gdf cols:", gdf.columns)
+    for n in gdf["NAME"].unique():
+        print(repr(n))
+    # ----- LOOKUP BY NAME ----------------------------------------------
+    if name is not None:
+        matched = gdf[normalname(gdf["NAME"]) == normalname(name)]
+
+    else:
+        # ----- LOOKUP BY LAT/LON ---------------------------------------
+        latitude = roid[0]
+        longitude = roid[1]
+        point = Point(longitude, latitude)  # (lon, lat)
+
+        matched = gdf[gdf.contains(point)]
+
+    # ----- SAVE IF MATCHED ---------------------------------------------
     if not matched.empty:
         nodestep = normalname(matched['NAME'].values[0])
         output_path = destination
 
         matched.to_file(output_path, driver="GeoJSON")
         print(f"Found {len(matched)} matching feature(s). Saved to {output_path}")
-
     else:
-        print("No matching country found for that lat/lon.")
-    return [nodestep,matched,gdf]
+        if name:
+            print(f'No match found for name "{name}".')
+        else:
+            print("No matching polygon found for that lat/lon.")
 
-def intersectingArea(source,sourcekey,roid,parent_gdf,destination):
-    nodestep = None
-# create destination Geojson file of polys which contain a lat long from source file
+    return [nodestep, matched, gdf]
+
+
+def intersectingArea(source, sourcekey, parent_type, destination, roid=None, name=None):
+    """
+    Returns a tuple:
+        (
+            selected_child_name,
+            child_polygons_within_parent,
+            all_child_polygons
+        )
+
+    selected_child_name:
+        The NAME of the polygon matched by child name or point, or chosen by fallback.
+
+    child_polygons_within_parent:
+        All polygons from the source layer that intersect the selected parent polygon
+        after applying area threshold filtering.
+
+    all_child_polygons:
+        All polygons from the source layer (unfiltered).
+    """
+
+    global Treepolys, Overlaps
+
+    # ----------------------------------------------------------------------
+    # 1. Load all parent polygons of this type
+    # ----------------------------------------------------------------------
+    parent_all = Treepolys[parent_type]
+
+    # ----------------------------------------------------------------------
+    # 2. Load all child polygons from the source layer
+    # ----------------------------------------------------------------------
     gdf = gpd.read_file(source)
-    latitude =roid[0]
-    longitude = roid[1]
-    point = Point(longitude, latitude)  # Note: Point(long, lat) for Shapely
-# Step 1: Ensure same CRS
+
+    # Fix CRS
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
     elif gdf.crs.to_epsg() != 4326:
-        gdf = gdf.to_crs(epsg=4326)
-    gdf = gdf.rename(columns= {sourcekey: 'NAME'})
-    if 'OBJECTID' in gdf.columns:
-        gdf = gdf.rename(columns = {'OBJECTID': 'FID'})
-    print(" gdf cols:",gdf.columns)
+        gdf = gdf.to_crs(4326)
 
-    # Step 2: Find parent intersecting polygon(s)
-    parent_geom = parent_gdf.union_all()
+    # Standardise field names
+    gdf = gdf.rename(columns={sourcekey: "NAME"})
+    if "OBJECTID" in gdf.columns:
+        gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
-    # Step 3 Ensure CRS match
-    if gdf.crs != parent_gdf.crs:
-        parent_geom = gpd.GeoSeries([parent_geom], crs=parent_gdf.crs).to_crs(gdf.crs).iloc[0]
+    all_child_polygons = gdf     # ← for clarity
 
-    # Step 4: Spatial filter using intersects (fast)
-    candidates = gdf[gdf.geometry.intersects(parent_geom)]
-    matched = gdf[gdf.contains(point)]
-    # Step 5: Accurate intersection area filter
-    threshold = 0.0001
-    filtered = candidates[candidates.geometry.intersection(parent_geom).area > threshold]
+    # ----------------------------------------------------------------------
+    # 3. Determine parent geometry (via path or via coordinate)
+    # ----------------------------------------------------------------------
+    if name is not None:
+        # Convert path → steps
+        steps = list(reversed(stepify(name)))
+        child_name = steps[0]
+        parent_name = steps[1]
 
-#  print("____are data:",matched, point,gdf)
-# Step 7: Save to new GeoJSON if found
-    if not matched.empty:
-        nodestep = normalname(matched['NAME'].values[0])
-        output_path = destination
+        # Match parent polygon by name
+        parent_match = parent_all[parent_all["NAME"].apply(normalname) == normalname(parent_name)]
+        if parent_match.empty:
+            print(f'WARNING: Parent "{parent_name}" not found in {parent_type}.')
+            return (None, gpd.GeoDataFrame(), all_child_polygons)
 
-# Step 6: Export to GeoJSON
-        filtered.to_file(output_path)
-        print(f"Found {len(filtered)} matching feature(s). Saved to {output_path}")
+        parent_geom = parent_match.union_all()
+
+        # Match child polygon by name
+        matched_child = gdf[gdf["NAME"].apply(normalname) == normalname(child_name)]
+
+    elif roid is not None:
+        lat, lon = roid
+        point = Point(lon, lat)
+
+        # Parent by point location
+        parent_match = parent_all[parent_all.contains(point)]
+        if parent_match.empty:
+            print("WARNING: No parent polygon contains the given point.")
+            return (None, gpd.GeoDataFrame(), all_child_polygons)
+
+        parent_geom = parent_match.union_all()
+
+        # Child polygon by point location
+        matched_child = gdf[gdf.contains(point)]
 
     else:
-        print("No poly found to intersect with parent")
-    return [nodestep,filtered,gdf]
+        print("ERROR: Must provide either name path or roid.")
+        return (None, gpd.GeoDataFrame(), all_child_polygons)
+
+    # ----------------------------------------------------------------------
+    # 4. Reproject parent_geom if needed
+    # ----------------------------------------------------------------------
+    if gdf.crs != parent_all.crs:
+        parent_geom = gpd.GeoSeries([parent_geom], crs=parent_all.crs).to_crs(gdf.crs).iloc[0]
+
+    # ----------------------------------------------------------------------
+    # 5. INTERSECTION FILTERING
+    # ----------------------------------------------------------------------
+    threshold = Overlaps[parent_type]
+
+    # Fast intersect candidates
+    candidates = gdf[gdf.geometry.intersects(parent_geom)]
+
+    # Area-based intersection
+    child_polygons_within_parent = candidates[
+        candidates.intersection(parent_geom).area > threshold
+    ]
+
+    # ----------------------------------------------------------------------
+    # 6. SELECT CHILD NAME (with fallbacks)
+    # ----------------------------------------------------------------------
+    selected_child_name = None
+
+    if not matched_child.empty:
+        # Best case
+        selected_child_name = normalname(matched_child.iloc[0]["NAME"])
+
+    elif not child_polygons_within_parent.empty:
+        # Next best case
+        selected_child_name = normalname(child_polygons_within_parent.iloc[0]["NAME"])
+        print(f"No direct match — using first filtered intersection: {selected_child_name}")
+
+    elif not candidates.empty:
+        # Last fallback
+        selected_child_name = normalname(candidates.iloc[0]["NAME"])
+        print(f"No filtered results — using first candidate: {selected_child_name}")
+
+    else:
+        print("No polygons matched in any way.")
+        return (None, child_polygons_within_parent, all_child_polygons)
+
+    # ----------------------------------------------------------------------
+    # 7. Save filtered set to file
+    # ----------------------------------------------------------------------
+    child_polygons_within_parent.to_file(destination)
+    print(f"Saved {len(child_polygons_within_parent)} intersecting feature(s) to {destination}")
+
+    # ----------------------------------------------------------------------
+    # 8. Return renamed tuple
+    # ----------------------------------------------------------------------
+    return (
+        selected_child_name,
+        child_polygons_within_parent,
+        all_child_polygons
+    )
+
+
 
 
 def getstreamrag():
@@ -4348,8 +4456,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
 
             territory_path = CurrentElection['mapfiles'][-1] # this is the node at which the imported data is to be filtered through
-            Territory_node = current_node.ping_node(current_election,territory_path)
-            ttype = gettypeoflevel(territory_path,Territory_node.level)
+            Territory_node = current_node.ping_node(estyle,current_election,territory_path)
+            ttype = gettypeoflevel(estyle,territory_path,Territory_node.level)
             #        Territory_node = self
             #        ttype = electtype
             pfile = Treepolys[ttype]
@@ -4383,7 +4491,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                             'ward'  # Default if no match found
                             )
                         tpath = territory_path +" "+ areatype
-                        Territory_node.ping_node(current_election,tpath)
+                        Territory_node.ping_node(estyle,current_election,tpath)
                         Area = get_L4area(Territory_node.childrenoftype(areatype),spot)
                     else:
                         Area = Territory_node.value
@@ -4608,6 +4716,23 @@ kanban_options = [
     {"code": "T", "label": "Telling"}
 ]
 
+Overlaps = {
+"country" : 1,
+"nation" : 0.1,
+"county" : 0.001,
+"constituency" : 0.0005,
+"ward" : 0.00005,
+"division" : 0.0001,
+"walk" : 0.005,
+"polling_district" : 0.005,
+"street" : 0.005,
+"walkleg" : 0.005
+}
+
+# this is for creating a new mapfile from any direction when one does not exist - only downbut creates a new file.
+TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
+
+
 # All Election Settings
 ELECTIONS = get_election_names()
 
@@ -4624,7 +4749,17 @@ if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
     with open(TABLE_FILE, "r") as f:
         stream_table = json.load(f)
 
-
+resources = {}
+task_tags ={}
+areas = {}
+# override if RESOURCES_FILE(.csv) exists because it initialises resources if options file deleted
+resourcesdf = pd.DataFrame()
+if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
+    with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
+        resources = json.load(f)
+    selectResources = resources
+    print("____Resources file read in")
+    # need to save to ELECTIONS)
 
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
@@ -4633,42 +4768,16 @@ VID_json = json.dumps(VID)  # Convert to JSON string
 current_node = get_current_node(session)
 current_election = get_election_data(current_election)
 
-# override if OPTIONS(.json) exists because it contains memorised data
-OPTIONS = {}
-resources = {}
-task_tags ={}
-areas = {}
-if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
-    with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
-        OPTIONS = json.load(f)
-    resources = OPTIONS['resources']
-    areas =  OPTIONS['areas']
-    task_tags =  OPTIONS['task_tags']
-# eventually extract calendar areas directly from the associated MAP
+# OPTIONS template
 
-
-# override if RESOURCES_FILE(.csv) exists because it initialises resources
-resourcesdf = pd.DataFrame()
-if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
-    with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
-        resources = json.load(f)
-    print("____Resources file read in")
-    # need to save to ELECTIONS)
-    OPTIONS['resources'] = resources
-# eventually want to extract resources from # OPTIONS['resources']
-# eventally want to make OPTIONS election specific , not generic
-
-
-# eventually want to extract places from # OPTIONS['places']  from CurrentElection['calendar_plan']
 selectedResources = resources
-# OPTIONS spells out the options for the event and constant values in the election calendar plan
 OPTIONS = {
     "ACC": False,
     "territories": ElectionTypes,
     "yourparty": VID,
     "previousParty": VID,
     "resources" : resources,
-    'areas' : areas,
+    "areas" : areas,
     "candidate" : selectedResources,
     "chair" : selectedResources,
     "tags": CurrentElection['tags'],
@@ -4680,7 +4789,15 @@ OPTIONS = {
     "stream_table": stream_table
     # Add more mappings here if needed
 }
+# override if OPTIONS(.json) exists because it contains memorised option for areas, resources and tags data
+if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
+    with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
+        OPTIONS = json.load(f)
+    areas =  OPTIONS['areas']
+    task_tags =  OPTIONS['task_tags']
+    resources = OPTIONS['resources']
 
+# eventually extract calendar areas directly from the associated MAP
 
 def find_children_at(level):
     [x.value for x in current_node.childrenoftype('walk')]
@@ -4864,6 +4981,8 @@ def add_marker():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
+    global OPTIONS
+    global constants
     print(">>> /reassign_parent called")
     current_node = get_current_node(session)
 
@@ -4874,6 +4993,7 @@ def reassign_parent():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     print(f"✔ Current election: {current_election if current_election else 'None'}")
 
     data = request.get_json()
@@ -4930,85 +5050,100 @@ def reassign_parent():
     )
     oldparentelectors = allelectors.loc[mask1].copy()  # important to avoid SettingWithCopyWarning
 
-    if allelectors[allelectors['Election'] == current_election].empty:
-        print(f"❌ No rows found in allelectors with election '{current_election}'")
-        return jsonify({'status': 'error', 'message': f"No rows found for '{current_election}' in allelectors"}), 404
+    if subject_node.level > 4:
+        if allelectors[allelectors['Election'] == current_election].empty:
+            print(f"❌ No rows found in allelectors with election '{current_election}'")
+            return jsonify({'status': 'error', 'mapfile': f"{mapfile1}", 'message': f"No rows found for '{current_election}' in allelectors"}), 404
 
-    if oldparentelectors.empty:
-        print(f"❌ No rows found in allelectors with old parent '{current_election}{old_parent_name}'")
-        return jsonify({'status': 'error', 'message': f"No rows found for '{current_election}{old_parent_name}' in allelectors"}), 404
+        if oldparentelectors.empty:
+            print(f"❌ No rows found in allelectors with old parent '{current_election}{old_parent_name}'")
+            return jsonify({'status': 'error','mapfile': f"{mapfile0}", 'message': f"No rows found for '{current_election}{old_parent_name}' in allelectors"}), 404
 
-    mask2 = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['WalkName'] == new_parent_name)
-    )
-    newparentelectors = allelectors.loc[mask2].copy()
+        mask2 = (
+            (allelectors['Election'] == current_election) &
+            (allelectors['WalkName'] == new_parent_name)
+        )
+        newparentelectors = allelectors.loc[mask2].copy()
 
-    if newparentelectors.empty:
-        print(f"❌ No rows found in allelectors with new parent '{new_parent_name}'")
-        return jsonify({'status': 'error', 'message': f"No rows found for '{new_parent_name}' in allelectors"}), 404
+        if newparentelectors.empty:
+            print(f"❌ No rows found in allelectors with new parent '{new_parent_name}'")
+            return jsonify({'status': 'error', 'message': f"No rows found for '{new_parent_name}' in allelectors"}), 404
 
-    print("____oldparentelectors beforeX:", len(oldparentelectors))
-    print("____newparentelectors beforeX:", len(newparentelectors))
+        print("____oldparentelectors beforeX:", len(oldparentelectors))
+        print("____newparentelectors beforeX:", len(newparentelectors))
 
-    # Change parent for the subject_node in allelectors
-    # Filter only those rows that match the subject node
-    # Mask for rows corresponding to the subject node under the old parent
-    subject_mask = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['WalkName'] == old_parent_name) &
-        (allelectors['StreetName'] == subject_name)
-    )
+        # Change parent for the subject_node in allelectors
+        # Filter only those rows that match the subject node
+        # Mask for rows corresponding to the subject node under the old parent
+        subject_mask = (
+            (allelectors['Election'] == current_election) &
+            (allelectors['WalkName'] == old_parent_name) &
+            (allelectors['StreetName'] == subject_name)
+        )
 
-    # Debug before update
-    print("✅ Rows before update:")
-    print(allelectors.loc[subject_mask, ['StreetName', 'WalkName']])
+        # Debug before update
+        print("✅ Rows before update:")
+        print(allelectors.loc[subject_mask, ['StreetName', 'WalkName']])
 
-    # Update 'WalkName' to new parent
-    allelectors.loc[subject_mask, 'WalkName'] = new_parent_name
-    print("____Modified WalkName for subject in allelectors")
+        # Update 'WalkName' to new parent
+        allelectors.loc[subject_mask, 'WalkName'] = new_parent_name
+        print("____Modified WalkName for subject in allelectors")
 
-    # Recalculate masks after update
-    mask1_after = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['WalkName'] == old_parent_name)
-    )
-    mask2_after = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['WalkName'] == new_parent_name)
-    )
+        # Recalculate masks after update
+        mask1_after = (
+            (allelectors['Election'] == current_election) &
+            (allelectors['WalkName'] == old_parent_name)
+        )
+        mask2_after = (
+            (allelectors['Election'] == current_election) &
+            (allelectors['WalkName'] == new_parent_name)
+        )
 
-    print("____oldparentelectors afterX:", len(allelectors.loc[mask1_after]))
-    print("____newparentelectors afterX:", len(allelectors.loc[mask2_after]))
+        print("____oldparentelectors afterX:", len(allelectors.loc[mask1_after]))
+        print("____newparentelectors afterX:", len(allelectors.loc[mask2_after]))
 
-    # Confirm moved rows
-    moved_rows = allelectors[
-        (allelectors['Election'] == current_election) &
-        (allelectors['StreetName'] == subject_name)
-    ]
-    print("✅ Moved row(s):")
-    print(moved_rows[['StreetName', 'WalkName']])
+        # Confirm moved rows
+        moved_rows = allelectors[
+            (allelectors['Election'] == current_election) &
+            (allelectors['StreetName'] == subject_name)
+        ]
+        print("✅ Moved row(s):")
+        print(moved_rows[['StreetName', 'WalkName']])
 
 
     # Regenerate maps
-    print(f"🔁 Regenerating map for grand parent: {mapfile0}")
-    old_parent_node.parent.create_area_map(old_parent_node.parent.getselectedlayers(current_election,mapfile0), current_election, CurrentElection)
-
+    print(f"🔁 Regenerating layer for old parent: {mapfile1}")
+    etype = gettypeoflevel(estyle,mapfile1, old_parent_node.level+1)
+    old_parent_node.renumber(etype)
+    new_parent_node.renumber(etype)
+    Featurelayers[etype].reset()
+    Featurelayers[etype].create_layer(current_election,old_parent_node,etype)
     print(f"🔁 Regenerating map for old parent: {mapfile1}")
-    old_parent_node.create_area_map(old_parent_node.getselectedlayers(current_election,mapfile1), current_election, CurrentElection)
+    old_parent_node.create_area_map(old_parent_node.getselectedlayers(estyle,current_election,mapfile1), current_election, CurrentElection)
 
+
+    print(f"🔁 Regenerating layer for new parent: {mapfile2}")
+    etype = gettypeoflevel(estyle,mapfile2, new_parent_node.level+1)
+    Featurelayers[etype].reset()
+    Featurelayers[etype].create_layer(current_election,new_parent_node,etype)
     print(f"🔁 Regenerating map for new parent: {mapfile2}")
-    new_parent_node.create_area_map(new_parent_node.getselectedlayers(current_election,mapfile2), current_election, CurrentElection)
+    new_parent_node.create_area_map(new_parent_node.getselectedlayers(estyle,current_election,mapfile2), current_election, CurrentElection)
+
+    print(f"🔁 Regenerating layer for grand parent: {mapfile0}")
+    etype = gettypeoflevel(estyle,mapfile0, old_parent_node.parent.level+1)
+    Featurelayers[etype].create_layer(current_election,old_parent_node.parent,etype)
+    print(f"🔁 Regenerating map for grand parent: {mapfile0}")
+    old_parent_node.parent.create_area_map(old_parent_node.parent.getselectedlayers(estyle,current_election,mapfile0), current_election, CurrentElection)
 
     # Update session and persist
 
-    persist(new_parent_node.parent)
+    persist(old_parent_node.parent)
     visit_node(old_parent_node.parent, current_election,CurrentElection, mapfile0)
 
     print("✅ Reassignment complete")
     return jsonify({
         'status': 'success',
-        'mapfile': f"{mapfile0}",
+        'mapfile': f"{url_for('thru',path=mapfile1)}",# goto edited old map
         'message': f"Node '{subject_name}' reassigned from '{old_parent_name}' to '{new_parent_name}'"
     })
 
@@ -5049,7 +5184,7 @@ def active_users_list():
 @app.route('/updateResourcing', methods=['POST'])
 @login_required
 def update_walk():
-    global current_node
+
     global allelectors
     global layeritems
 
@@ -5087,7 +5222,8 @@ def kanban():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
+    estyle = CurrentElection['territories']
+    current_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
     session['current_node_id'] = current_node.fid
     mask = (allelectors['Election'] == current_election)
 
@@ -5216,7 +5352,8 @@ def update_walk_kanban():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    Territory_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
+    estyle = CurrentElection['territories']
+    Territory_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
     mask = (
             (allelectors['Election'] == current_election) &
             (allelectors['WalkName'] == walk_name)
@@ -5454,7 +5591,7 @@ def search_electors(df, query):
 @app.route('/api/search', methods=['GET'])
 @login_required
 def search_api():
-    global current_node, allelectors
+    global allelectors
 
     current_node = get_current_node(session)
     current_election = get_current_election(session)
@@ -5521,7 +5658,7 @@ def search_api():
 @app.route('/search', methods=['GET', 'POST'])
 @login_required
 def search():
-    global current_node
+
     global allelectors
     results = []
     query = request.form.get('query', '')
@@ -5659,7 +5796,8 @@ def deactivate_stream():
     CurrentElection = get_election_data(election)
     current_node = get_current_node(session)
     delete_path = CurrentElection['mapfiles'][-1]
-    delete_node = current_node.ping_node(election,delete_path)
+    estyle = CurrentElection['territories']
+    delete_node = current_node.ping_node(estyle,election,delete_path)
 
     before_count = len(allelectors)
     allelectors = allelectors[allelectors['Election'] != election]
@@ -5667,7 +5805,7 @@ def deactivate_stream():
     print(f"Deactivated election {election}. Removed {before_count - after_count} electors.")
 
     # remove the  child data nodes under the delete nodes
-    ttype = gettypeoflevel(delete_path,delete_node.level+1)
+    ttype = gettypeoflevel(estyle,delete_path,delete_node.level+1)
     Featurelayers[ttype].reset()
     for datanode in delete_node.children:
         delete_node.children.remove(datanode)
@@ -5685,7 +5823,7 @@ def deactivate_stream():
 def reset_Elections():
     global streamrag
     global allelectors
-    global current_node
+
     global layeritems
     global DQstats
     global progress
@@ -5740,8 +5878,10 @@ def election_report():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     reportfile = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY-MAP.html"
-    current_node = current_node.ping_node(current_election,reportfile)
+    estyle = CurrentElection['territories']
+    current_node = current_node.ping_node(estyle,current_election,reportfile)
 
 
     # Check if the elections directory exists
@@ -5784,7 +5924,7 @@ def election_report():
                             territory_filename = territory_filename[:-len(suffix)]
 
                 # In your route handler
-                election_node = current_node.ping_node("DEMO",territory_path)
+                election_node = current_node.ping_node(estyle,"DEMO",territory_path)
                 print(f"____election territory path:{territory_path} elect:{election_node.value}")
                 # Get full party name from the abbreviation
                 selected_party_key = election_node.party
@@ -5823,7 +5963,7 @@ def election_report():
     print(f"XXXXMarkers at election {current_election} at node {current_node.value}")
     Featurelayers['marker'].create_layer(current_election,current_node,'marker')
 #    flash("No marker data for the selected election available!")
-    selectedlayers = current_node.getselectedlayers(current_election,reportfile)
+    selectedlayers = current_node.getselectedlayers(estyle,current_election,reportfile)
     current_node.create_area_map(selectedlayers, current_election, CurrentElection)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
 
@@ -5833,7 +5973,7 @@ def election_report():
 @app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
-    global CurrentElection, OPTIONS, constants, TREK_NODES, Treepolys, Featurelayers
+    global constants, OPTIONS, constants, TREK_NODES, Treepolys, Featurelayers
     import json
 
     try:
@@ -5857,6 +5997,7 @@ def set_election():
         session['current_election'] = current_election
 
         CurrentElection = get_election_data(current_election)
+        estyle = CurrentElection['territories']
         print("____Route/set-election/constantsX", current_election, CurrentElection)
 
         if not CurrentElection:
@@ -5865,14 +6006,14 @@ def set_election():
         CurrentElection['previousParty'] = current_node.party
         mapfile = CurrentElection['mapfiles'][-1]
 
-        current_node = current_node.ping_node(current_election, mapfile)
+        current_node = current_node.ping_node(estyle,current_election, mapfile)
         visit_node(current_node, current_election, CurrentElection, mapfile)
         persist(current_node)
-        ctype = gettypeoflevel(mapfile, current_node.level+1)
+        ctype = gettypeoflevel(estyle,mapfile, current_node.level+1)
         safe_constants = make_json_serializable(CurrentElection)
         return jsonify({
             'success': True,
-            'constants': CurrentElection,
+            'constants': safe_constants,
             'options': OPTIONS,
             'current_election': current_election
         })
@@ -5894,7 +6035,8 @@ def get_current_election_data():
     restore_from_persist(session)
     current_election = request.args.get("election")
     CurrentElection = get_election_data(current_election)
-    target_node = current_node.ping_node(current_election,CurrentElection['mapfiles'][-1])
+    estyle = CurrentElection['territories']
+    target_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
 
     plan = CurrentElection.get("calendar_plan", {})
 
@@ -5917,6 +6059,7 @@ def get_current_election_data():
 def update_current_election():
     current_election = get_current_election(session=session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
 
     try:
         data = request.get_json()
@@ -5953,6 +6096,7 @@ def get_constants():
     current_node = get_current_node(session=session)
     current_election = get_current_election(session=session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
             OPTIONS = json.load(f)
@@ -5973,7 +6117,7 @@ def get_constants():
 def set_constant():
 
     global OPTIONS
-    global current_node
+
     global Featurelayers
     data = request.get_json()
     name = data.get("name")
@@ -5984,10 +6128,12 @@ def set_constant():
     print("____Back End1 election constants update:",current_election,":",name,"-",value)
 
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     counters = get_counters(session)
 
     if name in CurrentElection:
         if name == "ACC":
+            OPTIONS['ACC'] = value
             # Assuming you want to reset to 0 for the 1-based indexing logic (0 -> 1)
             for layer_instance in Featurelayers.values():
                 layer_instance.reset()
@@ -6080,6 +6226,7 @@ def add_election():
     current_election = get_current_election(session)
 
     CurrentElection = get_election_data("DEMO")
+    estyle = CurrentElection['territories']
 
     mapfile = CurrentElection['mapfiles'][-1]
 
@@ -6159,11 +6306,12 @@ def update_territory():
     current_node = get_current_node(session)
     current_election = data.get("election")
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     # mapfiles last entry is what we need to bookmark.
 
     new_path = CurrentElection['mapfiles'][-1]
 
-    current_node = current_node.ping_node(current_election, new_path)
+    current_node = current_node.ping_node(estyle,current_election, new_path)
     mapfile = current_node.mapfile()
 
     save_election_data(current_election,CurrentElection)
@@ -6182,6 +6330,7 @@ def validate_tags():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     # Ensure the valid tags list is a list of strings
     tags_data = CurrentElection['tags']
     print("____Standard Tag options for election",tags_data)
@@ -6227,6 +6376,7 @@ def index():
         current_node = get_current_node(session)
         current_election = get_current_election(session)
         CElection = get_election_data(current_election)
+        estyle = CElection['territories']
         mapfile = current_node.mapfile()
         calfile = current_node.calfile()
 
@@ -6240,7 +6390,7 @@ def index():
     #        current_node = get_current_node(session)
     #        CE = get_current_election(session)
 
-        print(f"🧪 Index level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
+        print(f"🧪 Index level {current_election} - current_node mapfile:{mapfile}")
 
         return render_template(
             "Dash0.html",
@@ -6284,6 +6434,7 @@ def login():
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
     # Check if it exists
@@ -6406,6 +6557,7 @@ def dashboard():
     current_election = "DEMO"
 
     CurrentElection = get_election_data("DEMO")
+    estyle = CurrentElection['territories']
     print ("___Route/Dashboard allelectors len: ",len(allelectors))
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
@@ -6419,14 +6571,14 @@ def dashboard():
         previous_node = current_node
         print ("____Dashboard CurrentElection: ",path, previous_node.value)
         # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-        current_node = previous_node.ping_node(current_election,path)
+        current_node = previous_node.ping_node(estyle,current_election,path)
         print ("allelectors len after ping: ",len(allelectors))
 
         mapfile = current_node.mapfile()
         print ("___Dashboard persisted filename: ",mapfile)
         persist(current_node)
         if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-            selectedlayers = current_node.getselectedlayers(current_election,mapfile)
+            selectedlayers = current_node.getselectedlayers(estyle,current_election,mapfile)
             current_node.create_area_map(selectedlayers,current_election,CurrentElection)
 
 #        redirect(url_for('captains'))
@@ -6446,13 +6598,15 @@ def downbut(path):
     global Fullpolys
     global Featurelayers
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
+    global TypeMaker
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     formdata = {}
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
@@ -6461,23 +6615,24 @@ def downbut(path):
 # the selected node has to be found from the selected button URL
 
     if current_node.level < 4:
-        restore_fullpolys(gettypeoflevel(path,current_node.level+1))
-        print(f"____Maxing up Treepoly to Fullpolys for :{gettypeoflevel(path,current_node.level+1)}")
+        restore_fullpolys(gettypeoflevel(estyle,path,current_node.level+1))
+        print(f"____Maxing up Treepoly to Fullpolys for :{gettypeoflevel(estyle,path,current_node.level+1)}")
     previous_node = current_node
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(current_election,path)
+    current_node = previous_node.ping_node(estyle,current_election,path)
 
     print("____Route/downbut:",previous_node.value,current_node.value, path)
-    atype = gettypeoflevel(path,current_node.level+1)
+    atype = gettypeoflevel(estyle,path,current_node.level+1)
     FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
     current_node.file = subending(current_node.file,FACEENDING[atype]) # face is driven by intention type
     print(f" target type: {atype} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[current_node.type]}")
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
+
     Featurelayers[atype].create_layer(current_election,current_node,atype)
     print(f"____/DOWN OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-    selectedlayers = current_node.getselectedlayers(current_election,path)
+    selectedlayers = current_node.getselectedlayers(estyle,current_election,path)
     current_node.create_area_map(selectedlayers,current_election,CurrentElection)
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
 
@@ -6506,19 +6661,20 @@ def transfer(path):
     global layeritems
     global formdata
     global CurrentElection
-    TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
+    global Typemaker
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     formdata = {}
 # transfering to another any other node with siblings listed below
     previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = previous_node.ping_node(current_election,path)
+    current_node = previous_node.ping_node(estyle,current_election,path)
 
-    atype = gettypeoflevel(path, current_node.level+1)
+    atype = gettypeoflevel(estyle,path, current_node.level+1)
 
     mapfile = current_node.mapfile()
     CurrentElection = get_election_data(current_election)
@@ -6542,7 +6698,7 @@ def downPDbut(path):
     global areaelectors
     global filename
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
 
     restore_from_persist(session=session)
@@ -6550,10 +6706,12 @@ def downPDbut(path):
     current_election = (session)
 
     previous_node = current_node
-    current_node = previous_node.ping_node(current_election,path) #aligns with election data and takes you to the clicked node
+    CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
+    current_node = previous_node.ping_node(estyle,current_election,path) #aligns with election data and takes you to the clicked node
     session['current_node_id'] = current_node.fid
     current_node.file = subending(current_node.file,"-PDS.html") # forces looking for PDs file
-    CurrentElection = get_election_data(current_election)
+
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
@@ -6575,7 +6733,7 @@ def downPDbut(path):
             Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
             mapfile = current_node.mapfile()
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
-            current_node.create_area_map(current_node.getselectedlayers(current_election,mapfile),current_election,CurrentElection)
+            current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
             flash("________PDs added:  "+str(len(Featurelayers['polling_district']._children)))
             print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
 
@@ -6586,7 +6744,7 @@ def downPDbut(path):
     if not os.path.exists(PDpathfile):
         print ("_________New PD mapfile/",current_node.value, mapfile)
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-        current_node.create_area_map(current_node.getselectedlayers(current_election,mapfile),current_election,CurrentElection)
+        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
     print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
 
     persist(current_node)
@@ -6604,7 +6762,7 @@ def downWKbut(path):
     global areaelectors
     global filename
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
@@ -6614,8 +6772,10 @@ def downWKbut(path):
     print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
+    CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(current_election,path)
+    current_node = previous_node.ping_node(estyle,current_election,path)
 
     current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
@@ -6643,7 +6803,7 @@ def downWKbut(path):
 
             mapfile = current_node.mapfile()
             print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-            current_node.create_area_map(current_node.getselectedlayers(current_election,path),current_election,CurrentElection)
+            current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
             flash("________Walks added:  "+str(len(Featurelayers['walk']._children)))
             print("________After map created Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
 
@@ -6658,7 +6818,7 @@ def downWKbut(path):
         print(f"____/DOWN OPTIONS23 areas for calendar node {current_node.value} are {Featurelayers['constituency'].areashtml} ")
 
     #        current_node.file = face_file
-        current_node.create_area_map(current_node.getselectedlayers(current_election,mapfile),current_election,CurrentElection)
+        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
 
     #    moredata = importVI(allelectors.copy())
     #    if len(moredata) > 0:
@@ -6682,7 +6842,7 @@ def downMWbut(path):
     global areaelectors
     global filename
     global layeritems
-    global CurrentElection
+    global constants
     global STATICSWITCH
     global OPTIONS
 # so this is the button which creates the nodes and map of equal sized walks for the troops
@@ -6691,11 +6851,12 @@ def downMWbut(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(current_election,path)
+    current_node = previous_node.ping_node(estyle,current_election,path)
 
     current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
@@ -6719,7 +6880,7 @@ def downMWbut(path):
 
             print("_______just before Static Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
             STATICSWITCH = True
-            current_node.create_area_map(current_node.getselectedlayers(current_election,path),current_election,CurrentElection)
+            current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
             STATICSWITCH = False
             flash("________Static Walks added:  "+str(len(Featurelayers['walk']._children)))
             print("________After map created Static Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
@@ -6732,7 +6893,7 @@ def downMWbut(path):
         Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
 
         STATICSWITCH = True
-        current_node.create_area_map(current_node.getselectedlayers(current_election,path),current_election,CurrentElection)
+        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
         STATICSWITCH = False
     #    moredata = importVI(allelectors.copy())
     #    if len(moredata) > 0:
@@ -6763,7 +6924,7 @@ def STupdate(path):
     current_node = get_current_node(session)
     current_election = (session)
     CurrentElection = get_election_data(current_election)
-
+    estyle = CurrentElection['territories']
 #    steps = path.split("/")
 #    filename = steps.pop()
 #    current_node = selected_childnode(current_node,steps[-1])
@@ -6773,7 +6934,7 @@ def STupdate(path):
 
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
-    current_node = current_node.ping_node(current_election,path)
+    current_node = current_node.ping_node(estyle,current_election,path)
     session['current_node_id'] = current_node.fid
     print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
@@ -6916,18 +7077,18 @@ def PDdownST(path):
     global environment
     global filename
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = (session)
     CurrentElection = get_election_data(current_election)
-
+    estyle = CurrentElection['territories']
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(current_election,path)
+    current_node = current_node.ping_node(estyle,current_election,path)
 
     PD_node = current_node
 
@@ -6962,7 +7123,7 @@ def PDdownST(path):
 
 #           only create a map if the branch does not already exist
 
-        PD_node.create_area_map(PD_node.getselectedlayers(current_election,path),current_election,CurrentElection)
+        PD_node.create_area_map(PD_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
     mapfile = PD_node.mapfile()
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -6993,12 +7154,13 @@ def LGdownST(path):
     current_node = get_current_node(session)
     current_election = (session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
     T_level = CurrentElection['level']
 
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
     current_node = current_node.findnodeat_Level(T_level)
 
-    current_node = current_node.ping_node(current_election,path)
+    current_node = current_node.ping_node(estyle,current_election,path)
     session['current_node_id'] = current_node.fid
 
     PD_node = current_node
@@ -7009,7 +7171,7 @@ def LGdownST(path):
     PDelectors = areaelectors[mask2]
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
-        atype = gettypeoflevel(path, current_node.level)
+        atype = gettypeoflevel(estyle,path, current_node.level)
         Featurelayers['street'].create_layer(current_election,PD_node,'street')
 
         flash("No data for the selected election available!")
@@ -7026,7 +7188,7 @@ def LGdownST(path):
             streetelectors = PDelectors[mask]
             street_node.create_streetsheet(current_election,streetelectors)
 
-        PD_node.create_area_map(PD_node.getselectedlayers(current_election,path),current_election,CurrentElection)
+        PD_node.create_area_map(PD_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
     mapfile = PD_node.mapfile()
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
@@ -7048,27 +7210,25 @@ def WKdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-
     global TREK_NODES
     global areaelectors
-    global current_node
     global environment
     global filename
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = (session)
     CurrentElection = get_election_data(current_election)
-
+    estyle = CurrentElection['territories']
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(current_election,path) # takes to the clicked node in the territory
+    current_node = current_node.ping_node(estyle,current_election,path) # takes to the clicked node in the territory
     session['current_node_id'] = current_node.fid
 
 
@@ -7095,7 +7255,7 @@ def WKdownST(path):
             streetelectors = walkelectors[mask]
             walkleg_node.create_streetsheet(current_election,streetelectors)
 
-            walk_node.create_area_map(walk_node.getselectedlayers(current_election,path), current_election,CurrentElection)
+            walk_node.create_area_map(walk_node.getselectedlayers(estyle,current_election,path), current_election,CurrentElection)
 
     mapfile = walk_node.mapfile()
 
@@ -7126,7 +7286,8 @@ def wardreport(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = current_node.ping_node(current_election,path)
+    estyle = CurrentElection['territories']
+    current_node = current_node.ping_node(estyle,current_election,path)
     session['current_node_id'] = current_node.fid
 
     flash('_______ROUTE/wardreport')
@@ -7224,13 +7385,16 @@ def get_table(table_name):
             tabtype = table_name.removesuffix("_layer")
             lev = find_level_containing(tabtype)-1
             print(f"____NODELOOKUP {table_name} type {tabtype} level {lev} ")
+            print(f"____NODE: {current_node.findnodeat_Level(lev)} tabtype {tabtype} listNUM {len(current_node.findnodeat_Level(lev).childrenoftype(tabtype))}  ")
             [column_headers,rows, title] = get_layer_table(current_node.findnodeat_Level(lev).childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
+            if column_headers == []:
+                raise Exception("empty nodelist!")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
         elif table_name.endswith("_xref"):
             lev = current_node.level+1
             path = current_node.dir+"/"+current_node.file
-            tabtype = gettypeoflevel(path,lev)
+            tabtype = gettypeoflevel(estyle,path,lev)
             print(f"____NODEXREF type {tabtype} level {lev} ")
             [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODEXREF -COLS {column_headers} ROWS {rows} TITLE {title}")
@@ -7273,13 +7437,13 @@ def displayareas():
             layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'])
     else:
         path = current_node.dir+"/"+current_node.file
-        ctype = gettypeoflevel(path, current_node.level+1)
+        ctype = gettypeoflevel(estyle,path, current_node.level+1)
 
         formdata = current_node.value +getchildtype(current_node.type)+"s"
         tablenodes = current_node.childrenoftype(ctype)
         if len(tablenodes) == 0:
             if current_node.level > 0:
-                ctype = gettypeoflevel(path, current_node.level)
+                ctype = gettypeoflevel(estyle,path, current_node.level)
                 tablenodes = current_node.parent.childrenoftype(ctype)
             else:
                 return jsonify([[], [], "No data"])
@@ -7359,9 +7523,10 @@ def divreport(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
-    current_node = current_node.ping_node(current_election,path)
+    current_node = current_node.ping_node(estyle,current_election,path)
     session['current_node_id'] = current_node.fid
     mapfile = current_node.mapfile()
 
@@ -7405,13 +7570,15 @@ def upbut(path):
     global Featurelayers
     global environment
     global layeritems
-    global CurrentElection
+    global constants
     global OPTIONS
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
+
     flash('_______ROUTE/upbut',path)
     print('_______ROUTE/upbut',path, current_node.value)
     trimmed_path = path
@@ -7425,13 +7592,13 @@ def upbut(path):
 # for PDs the up button should take you to the -PDS file, for walks the -WALKS file
 #
     previous_node = current_node
-    current_node = previous_node.parent.ping_node(current_election,path)
+    current_node = previous_node.parent.ping_node(estyle,current_election,path)
 
     if current_node.level < 3:
         restore_fullpolys(current_node.type)
 
 # the previous node's type determines the 'face' of the destination node
-    atype = gettypeoflevel(path,current_node.level+1) # destination type
+    atype = gettypeoflevel(estyle,path,current_node.level+1) # destination type
     #formdata['username'] = session["username"]
     formdata['country'] = 'UNITED_KINGDOM'
     formdata['electiondate'] = "DD-MMM-YY"
@@ -7447,7 +7614,7 @@ def upbut(path):
 
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
-        current_node.create_area_map(current_node.getselectedlayers(current_election,mapfile), current_election,CurrentElection)
+        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile), current_election,CurrentElection)
 
     print("________chosen node url",mapfile)
     visit_node(previous_node.parent,current_election,CurrentElection,mapfile)
@@ -7496,7 +7663,7 @@ def calendar_partial(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CElection = get_election_data(current_election)
-    ctype = gettypeoflevel(path, current_node.level + 1)
+    ctype = gettypeoflevel(estyle,path, current_node.level + 1)
 
     from collections import defaultdict
 
@@ -7563,24 +7730,21 @@ def thru(path):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
 
     flash ("_________ROUTE/thru:"+path)
     print ("_________ROUTE/thru:",path, CurrentElection)
-    current_node = current_node.ping_node(current_election,path)
+    current_node = current_node.ping_node(estyle,current_election,path)
     if os.path.exists(os.path.join(config.workdirectories['workdir'],path)):
-        flash(f"Using existing file: {path}", "info")
         print(f"Using existing file: {path} and CurrentElection: {CurrentElection}")
         visit_node(current_node,current_election,CurrentElection,path)
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
     else:
-        flash(f"Creating new mapfile:{path}", "info")
         print(f"Creating new mapfile:{path}")
         fileending = "-"+path.split("-").pop()
         current_node.file = subending(current_node.file,fileending)
-        current_node.create_area_map(current_node.getselectedlayers(current_election,path), current_election,CurrentElection)
+        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path), current_election,CurrentElection)
         print(f"____/THRU OPTIONS areas for calendar node {current_node.value} are {Featurelayers['street'].areashtml} ")
-        print(f"____/THRU OPTIONS2 areas for calendar node {current_node.value} are {Featurelayers['walk'].areashtml} ")
-        print(f"____/THRU OPTIONS3 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
 
         visit_node(current_node,current_election,CurrentElection,path)
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
@@ -7774,7 +7938,7 @@ def postcode():
     df1['Long'] = df1['Long'].astype(float)
     lookuplatlong = df1[df1['Postcode'] == postcodeentry]
     here = [float(f"{lookuplatlong.Lat.values[0]:.6f}"), float(f"{lookuplatlong.Long.values[0]:.6f}")]
-    pfile = Treepolys[gettypeoflevel(current_node.dir,current_node.level+1)]
+    pfile = Treepolys[gettypeoflevel(estyle,current_node.dir,current_node.level+1)]
     polylocated = find_boundary(pfile,here)
     flash(f'___The branch that contains this postcode is:{polylocated.NAME}')
 
@@ -7798,10 +7962,15 @@ def firstpage():
     global OPTIONS
     global constants
 
+
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
+
     restore_from_persist(session=session)
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
 
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
@@ -7810,46 +7979,182 @@ def firstpage():
     print("🧪 session keys:", list(session.keys()))
     print("🧪 full session content:", dict(session))
     print("🧪 full currentelection content:", CurrentElection)
+# if the most recently used current election has a territory map reference then use that as the sourcepath
+# otherwise the current election is set to DEMO and the current location is used.
+    Treepolys = {
+        'country': {},
+        'nation': {},
+        'county': {},
+        'constituency':{},
+        'ward': {},
+        'division': {}
+    }
+    Fullpolys = {
+        'country': {},
+        'nation': {},
+        'county': {},
+        'constituency': {},
+        'ward': {},
+        'division': {}
+    }
 
-    lat = request.args.get('lat')
-    lon = request.args.get('lon')
-    sourcepath = current_node.dir+"/"+current_node.file
-#    lat = 53.2730 - Runcorn
-#    lon = -2.7694 - Runcorn
-    if lat and lon:
-        # Use lat/lon to filter data, e.g., find matching region in GeoJSON
-        print(f"Using GPS: lat={lat}, lon={lon}")
-        here = (lat, lon)
-        Treepolys = {
-            'country': {},
-            'nation': {},
-            'county': {},
-            'constituency':{},
-            'ward': {},
-            'division': {}
-        }
-        Fullpolys = {
-            'country': {},
-            'nation': {},
-            'county': {},
-            'constituency': {},
-            'ward': {},
-            'division': {}
-        }
-    # This section of code constructs the homepage sourcepath to ping from a given lat long
+
+    if CurrentElection['mapfiles'][-1]:
+        newpath = ""
+        sourcepath = CurrentElection['mapfiles'][-1]
+        steps = stepify(sourcepath)
+
+        # --- COUNTRY ---
+        [country, Treepolys['country'], Fullpolys['country']] = filterArea(
+            config.workdirectories['bounddir'] + "/World_Countries_(Generalized)_9029012925078512962.geojson",
+            'COUNTRY',
+            config.workdirectories['bounddir'] + "/Country_Boundaries.geojson",
+            name=steps[0]
+        )
+        newpath = country
+
+        # --- NATION ---
+        [nation, Treepolys['nation'], Fullpolys['nation']] = filterArea(
+            config.workdirectories['bounddir'] + "/Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
+            'CTRY21NM',
+            config.workdirectories['bounddir'] + "/Nation_Boundaries.geojson",
+            name=steps[1]
+        )
+        newpath = newpath + "/" + nation
+
+        # --- COUNTY ---
+        [county, Treepolys['county'], Fullpolys['county']] = filterArea(
+            config.workdirectories['bounddir'] + "/Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
+            'CTYUA23NM',
+            config.workdirectories['bounddir'] + "/County_Boundaries.geojson",
+            name=steps[2]
+        )
+        newpath = newpath + "/" + county
+
+        print("___Sourcepath1 :", newpath)
+
+        # --- CONSTITUENCY ---
+        if len(steps) >= 4:
+            [constituency, Treepolys['constituency'], Fullpolys['constituency']] = intersectingArea(
+                config.workdirectories['bounddir'] + "/Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
+                'PCON24NM',
+                'county',
+                config.workdirectories['bounddir'] + "/Constituency_Boundaries.geojson",
+                name=steps[2]+"/"+steps[3]
+            )
+            newpath = newpath + "/" + constituency
+            print("___Sourcepath2 :", newpath, steps)
+
+            # Determine finalstep (if any)
+            finalstep = steps[3]+"/"+steps[4] if len(steps) > 4 else steps[3]+"/XXXXX"
+
+            # --- WARD ---
+            if CurrentElection['territories'] in ['B', 'P']:
+                [ward, Treepolys['ward'], Fullpolys['ward']] = intersectingArea(
+                    config.workdirectories['bounddir'] + "/Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
+                    'WD24NM',
+                    'constituency',
+                    config.workdirectories['bounddir'] + "/Ward_Boundaries.geojson",
+                    name=finalstep
+                )
+                newpath = newpath + "/WARDS/" + ward + "/" + ward + "-WALKS.html"
+                print("___Sourcepath31 :", newpath, ward, steps)
+
+            # --- DIVISION ---
+            elif CurrentElection['territories'] in ['C', 'U']:
+                [division, Treepolys['division'], Fullpolys['division']] = intersectingArea(
+                    config.workdirectories['bounddir'] + "/County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",
+                    'CED23NM',
+                    'constituency',
+                    config.workdirectories['bounddir'] + "/Division_Boundaries.geojson",
+                    name=finalstep
+                )
+                newpath = newpath + "/DIVS/" + division + "/" + division + "-WALKS.html"
+                print("___Sourcepath32 :", newpath, division, steps)
+
+            else:
+                newpath = newpath + "/" + steps[3] + "-MAP.html"
+                print("___Sourcepath33 :", newpath, steps)
+
+    else:
+        lat = request.args.get('lat')
+        lon = request.args.get('lon')
+
+        if lat and lon:
+            here = (float(lat), float(lon))
+            print(f"Using GPS: lat={lat}, lon={lon}")
 
         step = ""
-        [step,Treepolys['country'],Fullpolys['country']] = filterArea(config.workdirectories['bounddir']+"/"+"World_Countries_(Generalized)_9029012925078512962.geojson",'COUNTRY',here, config.workdirectories['bounddir']+"/"+"Country_Boundaries.geojson")
-        sourcepath = step
-        [step,Treepolys['nation'],Fullpolys['nation']] = filterArea(config.workdirectories['bounddir']+"/"+"Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",'CTRY21NM',here, config.workdirectories['bounddir']+"/"+"Nation_Boundaries.geojson")
-        sourcepath = sourcepath+"/"+step
-        [step,Treepolys['county'],Fullpolys['county']] = filterArea(config.workdirectories['bounddir']+"/"+"Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",'CTYUA23NM',here, config.workdirectories['bounddir']+"/"+"County_Boundaries.geojson")
-        sourcepath = sourcepath+"/"+step
-        [step,Treepolys['constituency'],Fullpolys['constituency']] = intersectingArea(config.workdirectories['bounddir']+"/"+"Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",'PCON24NM',here,Treepolys['county'], config.workdirectories['bounddir']+"/"+"Constituency_Boundaries.geojson")
-        sourcepath = sourcepath+"/"+step
-        [step,Treepolys['ward'],Fullpolys['ward']] = intersectingArea(config.workdirectories['bounddir']+"/"+"Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",'WD24NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Ward_Boundaries.geojson")
-        sourcepath = sourcepath+"/WARDS/"+step+"/"+step+"-MAP.html"
-        [step,Treepolys['division'],Fullpolys['division']] = intersectingArea(config.workdirectories['bounddir']+"/"+"County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",'CED23NM',here,Treepolys['constituency'], config.workdirectories['bounddir']+"/"+"Division_Boundaries.geojson")
+
+        # --- COUNTRY ---
+        [step, Treepolys['country'], Fullpolys['country']] = filterArea(
+            config.workdirectories['bounddir'] + "/World_Countries_(Generalized)_9029012925078512962.geojson",
+            'COUNTRY',
+            config.workdirectories['bounddir'] + "/Country_Boundaries.geojson",
+            roid=here
+        )
+        newpath = step
+
+        # --- NATION ---
+        [step, Treepolys['nation'], Fullpolys['nation']] = filterArea(
+            config.workdirectories['bounddir'] + "/Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
+            'CTRY21NM',
+            config.workdirectories['bounddir'] + "/Nation_Boundaries.geojson",
+            roid=here
+        )
+        newpath = newpath + "/" + step
+
+        # --- COUNTY ---
+        [step, Treepolys['county'], Fullpolys['county']] = filterArea(
+            config.workdirectories['bounddir'] + "/Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
+            'CTYUA23NM',
+            config.workdirectories['bounddir'] + "/County_Boundaries.geojson",
+            roid=here
+        )
+        newpath = newpath + "/" + step
+
+        # --- CONSTITUENCY ---
+        [step, Treepolys['constituency'], Fullpolys['constituency']] = intersectingArea(
+            config.workdirectories['bounddir'] + "/Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
+            'PCON24NM',
+            'county',
+            config.workdirectories['bounddir'] + "/Constituency_Boundaries.geojson",
+            roid=here
+        )
+        newpath = newpath + "/" + step
+
+        # --- Optional final layer ---
+        if CurrentElection['territories'] in ['B', 'P']:
+            [step, Treepolys['ward'], Fullpolys['ward']] = intersectingArea(
+                config.workdirectories['bounddir'] + "/Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
+                'WD24NM',
+                'constituency',
+                config.workdirectories['bounddir'] + "/Ward_Boundaries.geojson",
+                roid=here
+            )
+            newpath = newpath + "/WARDS/" + step + "/" + step + "-WARDS.html"
+
+        elif CurrentElection['territories'] in ['C', 'U']:
+            [step, Treepolys['division'], Fullpolys['division']] = intersectingArea(
+                config.workdirectories['bounddir'] + "/County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",
+                'CED23NM',
+                'constituency',
+                config.workdirectories['bounddir'] + "/Division_Boundaries.geojson",
+                roid=here
+            )
+            newpath = newpath + "/DIVS/" + step + "/" + step + "-DIVS.html"
+
+        else:
+            newpath = newpath + "/" + step + "-MAP.html"
+
+        # Save updated polys
+        with open(TREEPOLY_FILE, 'wb') as f:
+            pickle.dump(Treepolys, f)
+        with open(FULLPOLY_FILE, 'wb') as f:
+            pickle.dump(Fullpolys, f)
+
+        print(f"🧪 current election 0 {current_election} - current_node:{current_node.value}")
+
 
         with open(TREEPOLY_FILE, 'wb') as f:
             pickle.dump(Treepolys, f)
@@ -7857,56 +8162,53 @@ def firstpage():
             pickle.dump(Fullpolys, f)
         print(f"🧪 current election 0 {current_election} - current_node:{current_node.value}")
 
-# geolocation has determined the mapfile (and node ) the you are at.
-    if current_user.is_authenticated:
-        formdata = {}
-        formdata['country'] = "UNITED_KINGDOM"
-        flash('_______ROUTE/firstpage')
-        print('_______ROUTE/firstpage at :',current_node.value )
 
-        mapfile = sourcepath
+    formdata = {}
+    formdata['country'] = "UNITED_KINGDOM"
+    flash('_______ROUTE/firstpage')
+    print('_______ROUTE/firstpage at :',current_node.value )
+
+    mapfile = sourcepath
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-        current_node = current_node.ping_node(current_election,mapfile)
+    current_node = current_node.ping_node(estyle,current_election,mapfile)
 
-        print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
-        print("____Firstpage Mapfile",mapfile, current_node.value)
-        atype = gettypeoflevel(mapfile,current_node.level+1)
-    # the map under the selected node map needs to be configured
-    # the selected  boundary options need to be added to the layer
+    print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
+    print("____Firstpage Mapfile",mapfile, current_node.value)
+    atype = gettypeoflevel(estyle,mapfile,current_node.level+1)
+# the map under the selected node map needs to be configured
+# the selected  boundary options need to be added to the layer
 
-        Featurelayers['marker'].create_layer(current_election,current_node,'marker')
-        print(f"XXXXMarkers {len(Featurelayers['marker']._children)} at election {current_election} at node {current_node.value}")
+    Featurelayers['marker'].create_layer(current_election,current_node,'marker')
+    print(f"XXXXMarkers {len(Featurelayers['marker']._children)} at election {current_election} at node {current_node.value}")
 
-        Featurelayers[atype].create_layer(current_election,current_node,atype)
-        print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-        streamrag = getstreamrag()
-        print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(mapfile, current_node.level)].name} - areas: {Featurelayers[gettypeoflevel(mapfile, current_node.level)].areashtml}")
-        flayers = current_node.getselectedlayers(current_election,mapfile)
-        current_node.create_area_map(flayers, current_election,CurrentElection)
-        print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
+    Featurelayers[atype].create_layer(current_election,current_node,atype)
+    print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
+    streamrag = getstreamrag()
+    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].name} - areas: {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].areashtml}")
+    flayers = current_node.getselectedlayers(estyle,current_election,mapfile)
+    current_node.create_area_map(flayers, current_election,CurrentElection)
+    print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
 
 #        CurrentElection['mapfiles'][-1] = mapfile
 
-        ELECTIONS = get_election_names()
+    ELECTIONS = get_election_names()
 
-        visit_node(current_node,current_election, CurrentElection, mapfile)
-        persist(current_node)
-        calfile = current_node.calfile()
-        print(f"🧪 firstpage level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
+    visit_node(current_node,current_election, CurrentElection, mapfile)
+    persist(current_node)
+    calfile = current_node.calfile()
+    print(f"🧪 firstpage level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
 
-        return render_template(
-            "Dash0.html",
-            table_types=TABLE_TYPES,
-            ELECTIONS=ELECTIONS,
-            current_election=current_election,
-            options=OPTIONS,
-            constants=CurrentElection,
-            mapfile=mapfile,
-            calfile=calfile,
-            DEVURLS=config.DEVURLS
-        )
-    else:
-        return redirect(url_for('login'))
+    return render_template(
+        "Dash0.html",
+        table_types=TABLE_TYPES,
+        ELECTIONS=ELECTIONS,
+        current_election=current_election,
+        options=OPTIONS,
+        constants=CurrentElection,
+        mapfile=mapfile,
+        calfile=calfile,
+        DEVURLS=config.DEVURLS
+    )
 
 
 

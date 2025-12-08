@@ -418,6 +418,48 @@ gap: 1rem;
   opacity: 0.8;
 	height: 800px;
 }
+
+/* Layout container holding: left column (map + data) + nav */
+#mainLayout {
+    position: fixed;
+    top: 110px;
+    bottom: 10px;
+    left: 20px;
+    right: 240px;
+    display: flex;
+    gap: 10px;
+}
+
+/* Left side: mapwin on top, datawin under it */
+#leftColumn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* map window on top */
+#mapwin {
+    flex: 2;           /* Takes 2/3 of vertical space – adjust as needed */
+    border: 1px solid #ddd;
+}
+
+/* data window below map */
+#datawin {
+    flex: 1;           /* Takes 1/3 of vertical space – adjust as needed */
+    border: 1px solid #aaa;
+    overflow-y: auto;
+}
+
+/* nav stays on the right */
+#nav {
+    width: 310px;
+    background: #DAE9BC;
+    overflow-y: auto;
+    border-radius: 3px;
+    padding: 5px;
+}
+
 #chartContainer {
   width: 250px;
   height: 250px;

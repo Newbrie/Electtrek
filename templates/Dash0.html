@@ -758,6 +758,15 @@
     }
   }
 
+
+
+  document.addEventListener("DOMContentLoaded", async () => {
+
+  let selectedPlaceData = null; // Store data from the map
+  let preventModalClose = false;
+  let addPlaceActive = false;
+
+
   // ----------------------------
   // Constants UI
   // ----------------------------
@@ -774,19 +783,6 @@
       else { el.addEventListener("change", listener); el.addEventListener("input", listener); }
     });
   }
-
-
-
-
-
-
-  document.addEventListener("DOMContentLoaded", async () => {
-
-  let selectedPlaceData = null; // Store data from the map
-  let preventModalClose = false;
-  let addPlaceActive = false;
-
-
 
 
   const modal = document.getElementById("modalPopup");
@@ -1681,15 +1677,6 @@ function openAddTaskTagForm() {
 };
 
 
-
-
-
-
-
-
-
-
-
    toggleBtn.addEventListener("click", async () => {
        await window.toggleView();
    });
@@ -1860,7 +1847,8 @@ function openAddTaskTagForm() {
               .then(r => r.json())
               .then(data => {
                   if (data.status === "success") {
-                      window.location.href = data.mapfile;
+                      console.log(`${data.message}`);
+                      changeIframeSrc(`${data.mapfile}`);
                   }
               });
       });
