@@ -375,6 +375,16 @@ body.unlocked #login { display: none; }
     border: 1px solid #ddd;
 }
 
+
+#selectedTitle {
+  font-weight: bold;
+}
+
+#tableSelector {
+  padding: 0.3rem;
+  font-size: 1rem;
+}
+/* Bottom panel */
 #datawin {
     position: absolute;
     bottom: 0;
@@ -382,12 +392,10 @@ body.unlocked #login { display: none; }
     width: 1200px;
     height: 230px;
     background: white;
-    overflow: auto;
     z-index: 12;
     display: flex;
     flex-direction: column;
 }
-
 #datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
 #datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
 #datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
@@ -398,30 +406,38 @@ body.unlocked #login { display: none; }
     overflow: hidden;
     white-space: nowrap; /* Prevents text from wrapping */
 }
+
+/* Title stays fixed at top */
 #tabletitle {
     flex: 0 0 auto;
     height: 32px;
-    display: flex;
-    align-items: center;
-    padding-left: 8px;
+    padding: 5px 10px;
     background: white;
     border-bottom: 1px solid #ddd;
-    font-size: 1.3em;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.2em;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 20;
 }
 
-
-#selectedTitle {
-  font-weight: bold;
-}
-
-#tableSelector {
-  padding: 0.3rem;
-  font-size: 1rem;
-}
-
-#captains-table {
+/* Scrolling container for table */
+.table-container {
     flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Table header stays fixed while scrolling */
+#captains-table thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 15;
+    border-bottom: 1px solid #ccc;
 }
 
 #nav {
