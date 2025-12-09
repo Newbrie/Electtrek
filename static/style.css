@@ -376,6 +376,7 @@ body.unlocked #login { display: none; }
   font-size: 1rem;
 }
 /* Bottom panel */
+
 #datawin {
     position: absolute;
     left: 0;
@@ -383,11 +384,12 @@ body.unlocked #login { display: none; }
     width: 100%;
     height: 230px;
     background: white;
-    z-index: 1900;
+    z-index: 12;
     display: flex;
-    flex-direction: column;
+    flex-direction: column; /* column so title on top, table scrolls below */
     border-top: 1px solid #ccc;
 }
+
 /* Container to align label and switch */
 .toggle-container {
   display: flex;
@@ -813,7 +815,7 @@ input:checked + .slider:before {
 
 /* Title stays fixed at top */
 #tabletitle {
-    flex: 0 0 35px;      /* fixed height */
+    height: 35px;
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -821,6 +823,7 @@ input:checked + .slider:before {
     background: white;
     border-bottom: 1px solid #ddd;
     z-index: 13;
+    flex-shrink: 0; /* prevent shrinking */
 }
 
 
