@@ -367,15 +367,6 @@ body.unlocked #login { display: none; }
 	background: white;
 }
 
-#mapwin {
-    position: relative;
-    /* Let the height be determined by the parent layout container */
-    height: 100%;
-    /* The mapwin will now only take 100% of the grid cell height, not the whole viewport */
-    border: 1px solid #ddd;
-}
-
-
 #selectedTitle {
   font-weight: bold;
 }
@@ -411,10 +402,7 @@ body.unlocked #login { display: none; }
   color: #333;
 }
 
-#calendar-scroll.add-place-active {
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
+
 
 /* Switch styling */
 .switch {
@@ -504,15 +492,24 @@ html, body {
 
   /* Calendar hidden by default but stays in document flow */
 
+  /* Mapwin = fixed-size container (height of screen minus margins) */
+  #mapwin {
+      position: relative;
+      height: calc(100vh - 40px);
+/*        overflow: hidden;    prevents outer scrolling */
+      border: 1px solid #ddd;
+  }
+
 
   #calendar {
       position: absolute;
+      inset: 0;
       top: 0; left: 0; right: 0; bottom: 0;
       display: flex;
       flex-direction: column;
       background: white;
       visibility: visible;   /* toggle via JS */
-      z-index: 100;          /* HIGHER than iframe */
+      z-index: 20000;           /* HIGHER than iframe */
   }
 
 
@@ -544,7 +541,12 @@ html, body {
       z-index: 100;
   }
 
+  #calendar-scroll.add-place-active {
+      opacity: 0 !important;
+      pointer-events: none !important;
+  }
   /* Login screen on top of everything initially */
+
   #loginScreen {
       visibility: visible;
       position: absolute;
@@ -702,13 +704,6 @@ input:checked + .slider:before {
   transform: translateX(22px);
 }
 
-
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;   /* prevent page scrolling */
-}
 
 #iframe-container {
   position: absolute;
