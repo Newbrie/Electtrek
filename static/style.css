@@ -397,6 +397,489 @@ body.unlocked #login { display: none; }
     flex-direction: column;
     border-top: 1px solid #ccc;
 }
+/* Container to align label and switch */
+.toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* space between label and switch */
+  font-family: sans-serif;
+  margin: 10px 0;
+}
+
+.toggle-label {
+  font-size: 16px;
+  color: #333;
+}
+
+#calendar-scroll.add-place-active {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Switch styling */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.stay-on-top {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0;
+  right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 28px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;   /* prevent page scrolling */
+}
+
+#iframe-container {
+  position: absolute;
+  visibility: hidden;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1; /* low */
+}
+
+#iframe1 {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* When iframe is active */
+#iframe1.map-active {
+  position: relative !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* When dimming modal */
+.dimmed {
+  opacity: 0.35 !important;
+  pointer-events: none !important;
+}
+
+  /* Calendar hidden by default but stays in document flow */
+
+  /* Mapwin = fixed-size container (height of screen minus margins) */
+  #mapwin {
+      position: relative;
+      height: calc(100vh - 40px);
+/*        overflow: hidden;    prevents outer scrolling */
+      border: 1px solid #ddd;
+  }
+
+
+  #calendar {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      visibility: visible;   /* toggle via JS */
+      z-index: 100;          /* HIGHER than iframe */
+  }
+
+
+  #calendar-header {
+      flex: 0 0 auto; /* fixed height */
+      background: white;
+      padding: 10px 0;
+      border-bottom: 1px solid #ccc;
+      z-index: 100;
+  }
+
+  /* Only this scrolls */
+
+  #calendar-scroll {
+      position: relative;
+
+      /* 1. Allows it to fill the remaining space below the header */
+      flex: 1 1 auto;
+
+      /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
+         to fit the container's calculated height, rather than the height
+         of its content. */
+      min-height: 0;
+
+      /* 3. Enables vertical scrolling if content is too tall */
+      overflow-y: auto;
+
+      padding: 5px;
+      z-index: 100;
+  }
+
+  /* Login screen on top of everything initially */
+  #loginScreen {
+      visibility: visible;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      padding: 20px;
+      z-index: 3;
+  }
+
+  /* add to your CSS */
+  #loginScreen.fade-out {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+  }
+
+    #loginMessage {
+      transition: opacity 0.5s ease-in-out;
+      opacity: 0; /* start hidden */
+    }
+    #loginMessage.show {
+      opacity: 1; /* fade in */
+    }
+
+
+  /* Fullscreen overlay */
+  #map-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9998; /* ABOVE bootstrap modal (modal = 1050) */
+      pointer-events: none; /* allows clicks to pass through */
+  }
+
+  /* Container that holds the iframe */
+  #map-overlay-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      pointer-events: auto; /* container still receives events */
+  }
+
+  /* Fullscreen map iframe */
+  #overlay-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      pointer-events: auto;
+  }
+
+  /* Close button */
+  #close-overlay {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999 /* above iframe */
+      padding: 5px 10px;
+      background: white;
+      border: 1px solid #333;
+      border-radius: 4px;
+      pointer-events: auto;
+  }
+
+  #close-overlay:hover {
+      cursor: pointer;
+      background: #f0f0f0;
+  }
+
+
+
+
+
+/* Calendar styles (unchanged) */
+.calendar-grid { margin-top: 90px; }
+.slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
+.slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }
+.slot-content { display: inline; word-break: break-word; }
+.slot small { color: #555; display: block; }
+.slot-label { position: absolute; top: 2px; left: 4px; font-size: 0.75em; color: #666; pointer-events: none; z-index: 2; background: rgba(255,255,255,0.85); border-radius: 3px; padding: 0 4px; white-space: nowrap; --label-width: calc(100% + 8px); }
+.slot::before { content:""; display:block; width:calc(var(--label-width,3em)+6px); height:0; flex:0 0 auto; }
+.slot .lozenge { margin:0; padding:0 4px; font-size:0.8em; line-height:1em; display:inline-block; border-radius:4px; white-space:nowrap; opacity:1; }
+.slot .lozenge[data-type="activity"] { background: rgba(204,229,255,0.9); }
+.slot .lozenge[data-type="resource"] { background: rgba(212,237,218,0.9); }
+.slot .lozenge[data-type="place"] { background: rgba(255,243,205,0.9); }
+.slot .lozenge[data-type="area"] { background: rgba(248,215,218,0.9); }
+.election-highlight { border: 2px double red !important; box-sizing: border-box; }
+.today-highlight { border: 2px double blue !important; box-sizing: border-box; }
+/* Container to align label and switch */
+.toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* space between label and switch */
+  font-family: sans-serif;
+  margin: 10px 0;
+}
+
+.toggle-label {
+  font-size: 16px;
+  color: #333;
+}
+
+#calendar-scroll.add-place-active {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Switch styling */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.stay-on-top {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0;
+  right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 28px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;   /* prevent page scrolling */
+}
+
+#iframe-container {
+  position: absolute;
+  visibility: hidden;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1; /* low */
+}
+
+#iframe1 {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* When iframe is active */
+#iframe1.map-active {
+  position: relative !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* When dimming modal */
+.dimmed {
+  opacity: 0.35 !important;
+  pointer-events: none !important;
+}
+
+  /* Calendar hidden by default but stays in document flow */
+
+
+#calendar {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    visibility: visible;   /* toggle via JS */
+    z-index: 100;          /* HIGHER than iframe */
+}
+
+
+#calendar-header {
+    flex: 0 0 auto; /* fixed height */
+    background: white;
+    padding: 10px 0;
+    border-bottom: 1px solid #ccc;
+    z-index: 100;
+}
+
+/* Only this scrolls */
+
+#calendar-scroll {
+    position: relative;
+
+    /* 1. Allows it to fill the remaining space below the header */
+    flex: 1 1 auto;
+
+    /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
+       to fit the container's calculated height, rather than the height
+       of its content. */
+    min-height: 0;
+
+    /* 3. Enables vertical scrolling if content is too tall */
+    overflow-y: auto;
+
+    padding: 5px;
+    z-index: 100;
+}
+
+/* Login screen on top of everything initially */
+#loginScreen {
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 20px;
+    z-index: 3;
+}
+
+/* add to your CSS */
+#loginScreen.fade-out {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#loginMessage {
+  transition: opacity 0.5s ease-in-out;
+  opacity: 0; /* start hidden */
+}
+#loginMessage.show {
+  opacity: 1; /* fade in */
+}
+
+
+/* Fullscreen overlay */
+#map-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9998; /* ABOVE bootstrap modal (modal = 1050) */
+    pointer-events: none; /* allows clicks to pass through */
+}
+
+/* Container that holds the iframe */
+#map-overlay-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    pointer-events: auto; /* container still receives events */
+}
+
+/* Fullscreen map iframe */
+#overlay-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    pointer-events: auto;
+}
+
+/* Close button */
+#close-overlay {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999 /* above iframe */
+    padding: 5px 10px;
+    background: white;
+    border: 1px solid #333;
+    border-radius: 4px;
+    pointer-events: auto;
+}
+
+#close-overlay:hover {
+    cursor: pointer;
+    background: #f0f0f0;
+}
+
+
+/* Calendar styles (unchanged) */
+.calendar-grid { margin-top: 90px; }
+.slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
+.slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }
+.slot-content { display: inline; word-break: break-word; }
+.slot small { color: #555; display: block; }
+.slot-label { position: absolute; top: 2px; left: 4px; font-size: 0.75em; color: #666; pointer-events: none; z-index: 2; background: rgba(255,255,255,0.85); border-radius: 3px; padding: 0 4px; white-space: nowrap; --label-width: calc(100% + 8px); }
+.slot::before { content:""; display:block; width:calc(var(--label-width,3em)+6px); height:0; flex:0 0 auto; }
+.slot .lozenge { margin:0; padding:0 4px; font-size:0.8em; line-height:1em; display:inline-block; border-radius:4px; white-space:nowrap; opacity:1; }
+.slot .lozenge[data-type="activity"] { background: rgba(204,229,255,0.9); }
+.slot .lozenge[data-type="resource"] { background: rgba(212,237,218,0.9); }
+.slot .lozenge[data-type="place"] { background: rgba(255,243,205,0.9); }
+.slot .lozenge[data-type="area"] { background: rgba(248,215,218,0.9); }
+.election-highlight { border: 2px double red !important; box-sizing: border-box; }
+.today-highlight { border: 2px double blue !important; box-sizing: border-box; }
 
 #datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
 #datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
