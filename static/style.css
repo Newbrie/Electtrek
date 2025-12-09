@@ -379,7 +379,8 @@ body.unlocked #login { display: none; }
 	position: absolute;
 	bottom: 0;
 	left: 0;
-	height: 230px;
+  padding-top: 26px;
+	height: 250px;
 	width: 1200px;
 	overflow: scroll;
 	background: white;
