@@ -374,13 +374,32 @@ body.unlocked #login { display: none; }
     /* The mapwin will now only take 100% of the grid cell height, not the whole viewport */
     border: 1px solid #ddd;
 }
-
+#datawin {
+	z-index: 12;
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	height: 230px;
+	width: 1200px;
+	overflow: scroll;
+	background: white;
+}
+#datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
+#datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
+#datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
+ { /* 2-13 columns */
+    width: 12px;
+    min-width: 12px;
+    max-width: 12px;
+    overflow: hidden;
+    white-space: nowrap; /* Prevents text from wrapping */
+}
 #tabletitle {
 position: absolute;
 height: 25px;
 background: white;
 left: 0;
-bottom: 235px;
+top: 0;
 font-weight: bold;
 font-size: 1.5em;
 display: flex;
@@ -743,26 +762,7 @@ tr:nth-child(even) {
   background-color: #dddddd;
 }
 
-#datawin {
-	z-index: 12;
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	height: 230px;
-	width: 1200px;
-	overflow: scroll;
-	background: white;
-}
-#datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
-#datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
-#datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
- { /* 2-13 columns */
-    width: 12px;
-    min-width: 12px;
-    max-width: 12px;
-    overflow: hidden;
-    white-space: nowrap; /* Prevents text from wrapping */
-}
+
 
 .er-table {
   border-collapse: collapse;
