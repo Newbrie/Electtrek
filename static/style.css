@@ -377,8 +377,7 @@ body.unlocked #login { display: none; }
 
 #tabletitle {
 position: absolute;
-height: 14px;
-width: 1200px;
+height: 25px;
 background: white;
 left: 0;
 bottom: 235px;

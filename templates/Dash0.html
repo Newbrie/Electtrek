@@ -445,12 +445,6 @@
 
 
 {% block nav %}
-<div id="nav" class="collapsible-palette">
-    <div class="vertical-header">NAV</div>
-
-    <div class="palette-body">
-        <!-- your existing nav content goes here -->
-
 
 <div id="nav" >
   <h3>Election Dashboard</h3>
@@ -578,8 +572,6 @@
       <canvas id="streamChart"></canvas>
     </div>
   </div>
-</div>
-</div>
 {% endblock nav %}
 
 {% block captains %}
@@ -587,15 +579,15 @@
 
 
 <div id="datawin" class="innertube">
-  <div id="tabletitle" >
-    <span id="selectedTitle">Table Details</span>
-    <select id="tableSelector">
-      {% for key, value in table_types.items() %}
-      <option value="{{ key }}">{{ value }}</option>
-      {% endfor %}
-    </select>
-  </div>
   <div style="overflow-x: auto; width: 100%; height: 100%;">
+    <div id="tabletitle" >
+      <span id="selectedTitle">Table Details</span>
+      <select id="tableSelector">
+        {% for key, value in table_types.items() %}
+        <option value="{{ key }}">{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <table id="captains-table" style="width: 100%; table-layout: fixed;">
       <thead></thead>
       <tbody></tbody>
@@ -765,6 +757,10 @@
       console.error('Failed to fetch streamrag data:', err);
     }
   }
+
+
+
+
 
 
 

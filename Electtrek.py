@@ -3467,7 +3467,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         popup_keep_highlighted=False,
                         style_function=lambda x: {
                             "fillColor": x['properties']['col'],  # Access 'col' in the properties for the fill color
-                            "color": 'indigo',      # Same for the border color
+                            "color": bcol,      # Same for the border color
                             "dashArray": "5, 5",
                             "weight": 3,
                             "fillOpacity": 0.2
@@ -4729,7 +4729,7 @@ Overlaps = {
 "walkleg" : 0.005
 }
 
-# this is for creating a new mapfile from any direction when one does not exist - only downbut creates a new file.
+# this is for creating a new mapfile when one does not exist.
 TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 
@@ -6239,7 +6239,7 @@ def add_election():
 
     ELECTIONS = get_election_names()
     print("____ELECTIONS:", ELECTIONS)
-    formdata['electiontabs_html'] = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
+    formdata = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
 
     OPTIONS['streams'] = ELECTIONS
 
@@ -6248,13 +6248,13 @@ def add_election():
         json.dump(OPTIONS, f, indent=2)
 
 
-    print("election-tabs:",formdata['electiontabs_html'])
+    print("election-tabs:",formdata)
 
     return jsonify({'success': True,
         'constants': CurrentElection,
         'options': OPTIONS,
         'election_name': new_election,
-        'electiontabs_html':formdata['electiontabs_html']
+        'electiontabs_html':formdata
     })
 
 
@@ -6600,7 +6600,6 @@ def downbut(path):
     global layeritems
     global constants
     global OPTIONS
-    global TypeMaker
 
     restore_from_persist(session=session)
     current_node = get_current_node(session)
@@ -7370,6 +7369,7 @@ def get_table(table_name):
     current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    estyle = CurrentElection['territories']
 
     # Table mapping
     table_map = {
@@ -7388,8 +7388,6 @@ def get_table(table_name):
             print(f"____NODE: {current_node.findnodeat_Level(lev)} tabtype {tabtype} listNUM {len(current_node.findnodeat_Level(lev).childrenoftype(tabtype))}  ")
             [column_headers,rows, title] = get_layer_table(current_node.findnodeat_Level(lev).childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
-            if column_headers == []:
-                raise Exception("empty nodelist!")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
         elif table_name.endswith("_xref"):
             lev = current_node.level+1
@@ -7736,15 +7734,19 @@ def thru(path):
     print ("_________ROUTE/thru:",path, CurrentElection)
     current_node = current_node.ping_node(estyle,current_election,path)
     if os.path.exists(os.path.join(config.workdirectories['workdir'],path)):
+        flash(f"Using existing file: {path}", "info")
         print(f"Using existing file: {path} and CurrentElection: {CurrentElection}")
         visit_node(current_node,current_election,CurrentElection,path)
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
     else:
+        flash(f"Creating new mapfile:{path}", "info")
         print(f"Creating new mapfile:{path}")
         fileending = "-"+path.split("-").pop()
         current_node.file = subending(current_node.file,fileending)
         current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path), current_election,CurrentElection)
         print(f"____/THRU OPTIONS areas for calendar node {current_node.value} are {Featurelayers['street'].areashtml} ")
+        print(f"____/THRU OPTIONS2 areas for calendar node {current_node.value} are {Featurelayers['walk'].areashtml} ")
+        print(f"____/THRU OPTIONS3 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
 
         visit_node(current_node,current_election,CurrentElection,path)
         return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
@@ -8063,8 +8065,8 @@ def firstpage():
             # --- DIVISION ---
             elif CurrentElection['territories'] in ['C', 'U']:
                 [division, Treepolys['division'], Fullpolys['division']] = intersectingArea(
-                    config.workdirectories['bounddir'] + "/County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",
-                    'CED23NM',
+                    config.workdirectories['bounddir'] + "/Surrey_Proposed_Divisions.geojson",
+                    'Division_n',
                     'constituency',
                     config.workdirectories['bounddir'] + "/Division_Boundaries.geojson",
                     name=finalstep
@@ -8106,8 +8108,8 @@ def firstpage():
 
         # --- COUNTY ---
         [step, Treepolys['county'], Fullpolys['county']] = filterArea(
-            config.workdirectories['bounddir'] + "/Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
-            'CTYUA23NM',
+            config.workdirectories['bounddir'] + "/Surrey_Proposed_Divisions.geojson",
+            'Division_n',
             config.workdirectories['bounddir'] + "/County_Boundaries.geojson",
             roid=here
         )
