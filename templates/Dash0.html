@@ -173,32 +173,31 @@
 {% endblock modals %}
 {% block log %}
 
-<div id="logwin" class="collapsible-palette collapsed">
+<div id="logwin" class="collapsible-window horizontal collapsed">
   <div class="window-header">Log</div>
   <div class="window-body">
-    <!-- Log content here -->
-    <div id="logwin" class="innertube">
-      <h3>elecTrek flash messages: </h3>
-      {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul class="flashes">
-          {% for message in messages %}
-            <li>{{ message }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
-    		<h3>elecTrek status messages: </h3>
-          <ul class="flashes" >
-          {% for pessage in pessages %}
-            <li> {{ pessage  }}</li>
-          {% endfor %}
+    <div class="log-content innertube">
+      <!-- Your flash messages and status messages -->
+      <!-- Log content here -->
+        <h3>elecTrek flash messages: </h3>
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flashes">
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
           </ul>
-
+        {% endif %}
+      {% endwith %}
+          <h3>elecTrek status messages: </h3>
+            <ul class="flashes" >
+            {% for pessage in pessages %}
+              <li> {{ pessage  }}</li>
+            {% endfor %}
+            </ul>
     </div>
   </div>
 </div>
-
 
 {% endblock log %}
 
@@ -207,7 +206,7 @@
 
 
 
-<div id="nav" collapsible-window horizontal">
+<div id="nav" class="collapsible-window horizontal">
   <div class="window-header">Nav</div>
   <div class="window-body">
     <!-- Navigation content here -->
@@ -539,6 +538,12 @@
   let selectedPlaceData = null; // Store data from the map
   let preventModalClose = false;
   let addPlaceActive = false;
+
+  document.querySelectorAll('.collapsible-window.horizontal .window-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.parentElement.classList.toggle('collapsed');
+    });
+  });
 
 
   // ----------------------------

@@ -36,50 +36,21 @@
      Collapsible/Floating Palette
      =============================== */
 
-  .collapsible-window.horizontal {
-    position: absolute;
-    bottom: 10px;  /* adjust as needed */
-    right: 0;
-    width: 310px;   /* expanded width */
-    height: 200px;  /* fixed height */
-    display: flex;
-    flex-direction: row;  /* horizontal layout */
-    background: #111;
-    color: #0f0;
-    border: 1px solid #444;
-    border-radius: 3px;
-    overflow: hidden;
-    font-family: monospace;
-    font-size: 1em;
-    z-index: 2000;
-  }
+     .collapsible-window {
+       position: absolute;
+       right: 0;
+       background: #DAE9BC;
+       width: 310px;          /* full width */
+       border-radius: 3px;
+       overflow: hidden;
+       transition: width 0.3s ease;
+     }
 
-  .collapsible-window.horizontal .window-header {
-    width: 40px;  /* header stays visible when collapsed */
-    background: #222;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    user-select: none;
-    flex-shrink: 0;
-  }
 
-  .collapsible-window.horizontal .window-body {
-    flex: 1 1 auto;
-    padding: 5px;
-    overflow-x: auto;
-    overflow-y: auto;
-    transition: width 0.3s ease;
-  }
-
-  /* Collapsed state */
-  .collapsed.horizontal .window-body {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-  }
+     /* Collapsed state */
+     .collapsible-window.collapsed {
+       width: 30px;           /* small width when collapsed */
+     }
 
 
   /* ===============================
@@ -901,9 +872,8 @@ input:checked + .slider:before {
 }
 
 #nav {
-  z-index: 12;
+  z-index: 1000; /* above map */
 	position: absolute;
-	overflow: scroll;
 	top: 0;
 	right: 0;
 	width: 310px;
@@ -918,6 +888,8 @@ input:checked + .slider:before {
   cursor: pointer;
   opacity: 0.8;
 	height: 800px;
+  overflow: hidden;
+
 }
 #chartContainer {
   width: 250px;
@@ -942,18 +914,18 @@ input:checked + .slider:before {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	z-index: 2000;
+	z-index: 999;
 	position: absolute;
 	bottom: 0;
 	right: 0;
 	width: 310px;
 	font-weight: normal;
-
   font-size: 1em;
   border-radius: 3px;
   border-color: indigo;
   cursor: pointer;
   opacity: 0.8;
+   overflow: hidden;
 }
 
 .innertube {
