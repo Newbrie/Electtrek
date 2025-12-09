@@ -626,9 +626,6 @@ html, body {
   }
 
 
-
-
-
 /* Calendar styles (unchanged) */
 .calendar-grid { margin-top: 90px; }
 .slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
@@ -751,71 +748,6 @@ html, body {
 
   /* Calendar hidden by default but stays in document flow */
 
-
-#calendar {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    display: flex;
-    flex-direction: column;
-    background: white;
-    visibility: visible;   /* toggle via JS */
-    z-index: 100;          /* HIGHER than iframe */
-}
-
-
-#calendar-header {
-    flex: 0 0 auto; /* fixed height */
-    background: white;
-    padding: 10px 0;
-    border-bottom: 1px solid #ccc;
-    z-index: 100;
-}
-
-/* Only this scrolls */
-
-#calendar-scroll {
-    position: relative;
-
-    /* 1. Allows it to fill the remaining space below the header */
-    flex: 1 1 auto;
-
-    /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
-       to fit the container's calculated height, rather than the height
-       of its content. */
-    min-height: 0;
-
-    /* 3. Enables vertical scrolling if content is too tall */
-    overflow-y: auto;
-
-    padding: 5px;
-    z-index: 100;
-}
-
-/* Login screen on top of everything initially */
-#loginScreen {
-    visibility: visible;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    padding: 20px;
-    z-index: 3;
-}
-
-/* add to your CSS */
-#loginScreen.fade-out {
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-#loginMessage {
-  transition: opacity 0.5s ease-in-out;
-  opacity: 0; /* start hidden */
-}
-#loginMessage.show {
-  opacity: 1; /* fade in */
-}
 
 
 /* Fullscreen overlay */
@@ -959,49 +891,49 @@ html, body {
   width: 100%;
   height: 100%;
 }
-    #logwin {
-			width: 100%;
-	    height: 200px;  /* Adjust height as needed */
-	    background: #111;
-	    color: #0f0; /* Green text for a terminal look */
-	    padding: 5px 5px;
-	    font-family: monospace;
-	    border: 1px solid #444;
-			overflow-y: auto;
-			display: flex;
-			flex-direction: column;
-			z-index: 11;
-			position: absolute;
-			bottom: 0;
-			right: 0;
-			width: 310px;
-			font-weight: normal;
+#logwin {
+	width: 100%;
+  height: 200px;  /* Adjust height as needed */
+  background: #111;
+  color: #0f0; /* Green text for a terminal look */
+  padding: 5px 5px;
+  font-family: monospace;
+  border: 1px solid #444;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	z-index: 11;
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	width: 310px;
+	font-weight: normal;
 
-		  font-size: 1em;
-		  border-radius: 3px;
-		  border-color: indigo;
-		  cursor: pointer;
-		  opacity: 0.8;
-    }
+  font-size: 1em;
+  border-radius: 3px;
+  border-color: indigo;
+  cursor: pointer;
+  opacity: 0.8;
+}
 
-		.innertube {
-			margin: 5px; /* Provides padding for the content */
-		}
+.innertube {
+	margin: 5px; /* Provides padding for the content */
+}
 
-		p {
-			color: #555;
-		}
+p {
+	color: #555;
+}
 
-		nav ul {
-			list-style-type: square;
-			margin: 0;
-			padding: 0;
-		}
+nav ul {
+	list-style-type: square;
+	margin: 0;
+	padding: 0;
+}
 
-		nav ul a {
-			color: darkgreen;
-			text-decoration: none;
-		}
+nav ul a {
+	color: darkgreen;
+	text-decoration: none;
+}
 .centred {
 	text-align: center;
 }
