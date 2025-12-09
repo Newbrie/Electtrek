@@ -173,31 +173,45 @@
 {% endblock modals %}
 {% block log %}
 
-<div id="logwin" class="innertube">
-  <h3>elecTrek flash messages: </h3>
-  {% with messages = get_flashed_messages() %}
-  {% if messages %}
-    <ul class="flashes">
-      {% for message in messages %}
-        <li>{{ message }}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-{% endwith %}
-		<h3>elecTrek status messages: </h3>
-      <ul class="flashes" >
-      {% for pessage in pessages %}
-        <li> {{ pessage  }}</li>
-      {% endfor %}
-      </ul>
+<div id="logwin" class="collapsible-palette collapsed">
+  <div class="window-header">Log</div>
+  <div class="window-body">
+    <!-- Log content here -->
+    <div id="logwin" class="innertube">
+      <h3>elecTrek flash messages: </h3>
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    		<h3>elecTrek status messages: </h3>
+          <ul class="flashes" >
+          {% for pessage in pessages %}
+            <li> {{ pessage  }}</li>
+          {% endfor %}
+          </ul>
 
+    </div>
+  </div>
 </div>
+
+
 {% endblock log %}
 
 
 {% block nav %}
 
-<div id="nav" >
+
+
+<div id="nav" collapsible-window horizontal">
+  <div class="window-header">Nav</div>
+  <div class="window-body">
+    <!-- Navigation content here -->
+
   <h3>Election Dashboard</h3>
   <ul class="centred" >user: {{ session['username'] }}</ul>
   <ul class="nav nav-tabs" id="election-tabs">
@@ -323,6 +337,7 @@
       <canvas id="streamChart"></canvas>
     </div>
   </div>
+</div>
 {% endblock nav %}
 
 {% block captains %}
