@@ -374,17 +374,20 @@ body.unlocked #login { display: none; }
     /* The mapwin will now only take 100% of the grid cell height, not the whole viewport */
     border: 1px solid #ddd;
 }
+
 #datawin {
-	z-index: 12;
-	position: absolute;
-	bottom: 0;
-	left: 0;
-  padding-top: 26px;
-	height: 250px;
-	width: 1200px;
-	overflow: scroll;
-	background: white;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 1200px;
+    height: 230px;
+    background: white;
+    overflow: auto;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
 }
+
 #datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
 #datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
 #datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
@@ -396,17 +399,16 @@ body.unlocked #login { display: none; }
     white-space: nowrap; /* Prevents text from wrapping */
 }
 #tabletitle {
-position: absolute;
-height: 25px;
-background: white;
-left: 0;
-top: 0;
-font-weight: bold;
-font-size: 1.5em;
-display: flex;
-align-items: center; /* vertically align items */
-gap: 1rem;
+    flex: 0 0 auto;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    font-size: 1.3em;
 }
+
 
 #selectedTitle {
   font-weight: bold;
@@ -417,7 +419,10 @@ gap: 1rem;
   font-size: 1rem;
 }
 
-
+#captains-table {
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
 
 #nav {
   z-index: 12;
