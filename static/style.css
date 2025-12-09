@@ -495,7 +495,7 @@ html, body {
   /* Mapwin = fixed-size container (height of screen minus margins) */
   #mapwin {
       position: relative;
-      height: calc(100vh - 40px);
+      height: 100%;
 /*        overflow: hidden;    prevents outer scrolling */
       border: 1px solid #ddd;
   }
