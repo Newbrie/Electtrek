@@ -24,8 +24,6 @@
   }
 
 
-
-
   document.getElementById("export-html-btn").addEventListener("click", async () => {
     await saveCalendarPlan();
     const btn = document.getElementById("export-html-btn");
