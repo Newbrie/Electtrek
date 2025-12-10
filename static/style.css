@@ -453,108 +453,108 @@ input:checked + .slider:before {
   pointer-events: none !important;
 }
 
-  /* Calendar hidden by default but stays in document flow */
+/* Calendar hidden by default but stays in document flow */
 
-  /* Mapwin = fixed-size container (height of screen minus margins) */
-  #mapwin {
-      position: relative;
-      height: 100%;
+/* Mapwin = fixed-size container (height of screen minus margins) */
+#mapwin {
+    position: relative;
+    height: 100%;
 /*        overflow: hidden;    prevents outer scrolling */
-      border: 1px solid #ddd;
-  }
+    border: 1px solid #ddd;
+}
 
 
-  #calendar {
-      position: absolute;
-      inset: 0;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: flex;
-      flex-direction: column;
-      background: white;
-      visibility: visible;   /* toggle via JS */
-      z-index: 20000;           /* HIGHER than iframe */
-  }
+#calendar {
+    position: absolute;
+    inset: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    visibility: visible;   /* toggle via JS */
+    z-index: 200;           /* HIGHER than iframe */
+}
 
 
-  #calendar-header {
-      flex: 0 0 auto; /* fixed height */
-      background: white;
-      padding: 10px 0;
-      border-bottom: 1px solid #ccc;
-      z-index: 100;
-  }
+#calendar-header {
+    flex: 0 0 auto; /* fixed height */
+    background: white;
+    padding: 10px 0;
+    border-bottom: 1px solid #ccc;
+    z-index: 300;
+}
 
-  /* Only this scrolls */
+/* Only this scrolls */
 
-  #calendar-scroll {
-      position: relative;
+#calendar-scroll {
+    position: relative;
 
-      /* 1. Allows it to fill the remaining space below the header */
-      flex: 1 1 auto;
+    /* 1. Allows it to fill the remaining space below the header */
+    flex: 1 1 auto;
 
-      /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
-         to fit the container's calculated height, rather than the height
-         of its content. */
-      min-height: 0;
+    /* 2. CRITICAL FIX: Allows the flex item to shrink (vertically)
+       to fit the container's calculated height, rather than the height
+       of its content. */
+    min-height: 0;
 
-      /* 3. Enables vertical scrolling if content is too tall */
-      overflow-y: auto;
+    /* 3. Enables vertical scrolling if content is too tall */
+    overflow-y: auto;
 
-      padding: 5px;
-      z-index: 100;
-  }
+    padding: 5px;
+    z-index: 300;
+}
 
-  #calendar-scroll.add-place-active {
-      opacity: 0 !important;
-      pointer-events: none !important;
-  }
-  /* Login screen on top of everything initially */
+#calendar-scroll.add-place-active {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+/* Login screen on top of everything initially */
 
-  #loginScreen {
-      visibility: visible;
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: white;
-      padding: 20px;
-      z-index: 3;
-  }
+#loginScreen {
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 20px;
+    z-index: 400;
+}
 
-  /* add to your CSS */
-  #loginScreen.fade-out {
-      opacity: 0;
-      transition: opacity 0.3s ease;
-  }
+/* add to your CSS */
+#loginScreen.fade-out {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
 
-    #loginMessage {
-      transition: opacity 0.5s ease-in-out;
-      opacity: 0; /* start hidden */
-    }
-    #loginMessage.show {
-      opacity: 1; /* fade in */
-    }
+#loginMessage {
+  transition: opacity 0.5s ease-in-out;
+  opacity: 0; /* start hidden */
+}
+#loginMessage.show {
+  opacity: 1; /* fade in */
+}
 
-  /* Fullscreen map iframe */
-  #overlay-iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      pointer-events: auto;
-  }
+/* Fullscreen map iframe */
+#overlay-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    pointer-events: auto;
+}
 
-  /* Close button */
-  #close-overlay {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 9999; /* above iframe */
-      padding: 5px 10px;
-      background: white;
-      border: 1px solid #333;
-      border-radius: 4px;
-      pointer-events: auto;
-  }
+/* Close button */
+#close-overlay {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999; /* above iframe */
+  padding: 5px 10px;
+  background: white;
+  border: 1px solid #333;
+  border-radius: 4px;
+  pointer-events: auto;
+}
 
 
 /* Calendar styles (unchanged) */
