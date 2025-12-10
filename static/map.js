@@ -117,7 +117,6 @@ var showMore = function (msg,area, type) {
   	};
 
 
-
   function updateMessages() {
     const old = pessages.pop();
     const ul = parent.document.getElementById("logwin");
