@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block map %}
+
 <script>
 
   // 🧱 Safe variable injection
@@ -35,8 +35,9 @@
 
 
 </script>
-
+  {% block map %}
 <div id="mapwin" class="innertube">
+
   <div id="iframe-container">
     <iframe id="iframe1" src="{{ url_for('thru', path=mapfile) }}" width="1200" height="800"></iframe>
   </div>
@@ -68,7 +69,8 @@
             <div id="summary-report" class="mt-4"></div>
         </div>
     </div>
-
+</div>
+{% endblock map %}
 
 <div id="map-overlay" class="map-overlay">
 <div id="map-overlay-container" class="map-overlay-container">
@@ -77,7 +79,8 @@
 </div>
 </div>
 
-{% endblock map %}
+
+
 {% block modals %}
 <!-- Modal -->
 <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
@@ -173,9 +176,8 @@
 {% endblock modals %}
 {% block log %}
 
-<div id="logwin" class="collapsible-window horizontal collapsed">
-  <div class="window-header">Log</div>
-  <div class="window-body">
+<div id="logwin" >
+
     <div class="log-content innertube">
       <!-- Your flash messages and status messages -->
       <!-- Log content here -->
@@ -196,7 +198,7 @@
             {% endfor %}
             </ul>
     </div>
-  </div>
+
 </div>
 
 {% endblock log %}
@@ -206,9 +208,8 @@
 
 
 
-<div id="nav" class="collapsible-window horizontal">
-  <div class="window-header">Nav</div>
-  <div class="window-body">
+<div id="nav">
+
     <!-- Navigation content here -->
 
   <h3>Election Dashboard</h3>
@@ -335,13 +336,10 @@
     <div id="chartContainer" style="width: 300px; height: 300px; position: relative;">
       <canvas id="streamChart"></canvas>
     </div>
-  </div>
 </div>
 {% endblock nav %}
 
 {% block captains %}
-
-
 
 <div id="datawin" class="innertube">
 
@@ -362,7 +360,8 @@
   </div>
 
 </div>
-</div>
+{% endblock captains %}
+
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
@@ -538,12 +537,6 @@
   let selectedPlaceData = null; // Store data from the map
   let preventModalClose = false;
   let addPlaceActive = false;
-
-  document.querySelectorAll('.collapsible-window.horizontal .window-header').forEach(header => {
-    header.addEventListener('click', () => {
-      header.parentElement.classList.toggle('collapsed');
-    });
-  });
 
 
   // ----------------------------
@@ -1303,9 +1296,9 @@ function openAddTaskTagForm() {
       console.warn("⚠ DEV MODE: Skipping login screen");
 
       loginScreen.style.visibility = "hidden";
-      calendar.style.visibility = "visible"; // hide calendar initially
-      iframe.style.visibility = "hidden";  // show map initially
-      toggleBtn.textContent = "📅 View Map"; // button shows calendar option
+      calendar.style.visibility = "hidden"; // hide calendar initially
+      iframe.style.visibility = "visible";  // show map initially
+      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
       calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
       window.loggedIn = true;
@@ -1313,9 +1306,9 @@ function openAddTaskTagForm() {
   } else {
       // Normal login behaviour
       loginScreen.style.visibility = "visible";
-      calendar.style.visibility = "visible";  // hide calendar
+      calendar.style.visibility = "hidden";  // hide calendar
       iframe.style.visibility = "hidden";   // show map by default
-      toggleBtn.textContent = "📅 View Map"; // button shows calendar option
+      toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
       window.loggedIn = false;
   }
 
@@ -1656,6 +1649,3 @@ function openAddTaskTagForm() {
 
 </script>
 <script src="https://newbrie.github.io/Electtrek/static/resourcing.js"></script>
-
-
-{% endblock captains %}
