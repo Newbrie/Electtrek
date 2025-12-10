@@ -173,7 +173,7 @@
      Calendar Grid
      =============================== */
   #calendar-grid {
-    margin-top: 90px; 
+    margin-top: 90px;
     display: flex;
     flex-direction: column;
     gap: 6px; /* vertical gap between week rows */
@@ -314,7 +314,8 @@
 #file-info-table .stream {
     width: 120px;
 }
-body {
+body
+{
 			margin: 0;
 			padding: 0;
 			overflow: auto;
@@ -322,7 +323,7 @@ body {
 			max-height: 100%;
 			font-family:Arial, Helvetica, sans-serif;
 			line-height: 1.5em;
-		}
+}
 body.protected #content { display: none; }
 body.protected #login { display: block; }
 
@@ -384,36 +385,6 @@ body.unlocked #login { display: none; }
     display: flex;
     flex-direction: column; /* column so title on top, table scrolls below */
     border-top: 1px solid #ccc;
-}
-
-/* Container to align label and switch */
-.toggle-container {
-  display: flex;
-  align-items: center;
-  gap: 12px; /* space between label and switch */
-  font-family: sans-serif;
-  margin: 10px 0;
-}
-
-.toggle-label {
-  font-size: 16px;
-  color: #333;
-}
-
-
-
-/* Switch styling */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 28px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
 }
 
 .stay-on-top {
@@ -615,10 +586,6 @@ input:checked + .slider:before {
   color: #333;
 }
 
-#calendar-scroll.add-place-active {
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
 
 /* Switch styling */
 .switch {
@@ -758,7 +725,7 @@ input:checked + .slider:before {
 
 #nav {
   z-index: 1000; /* above map */
-	position: absolute;
+	position: fixed;
 	top: 0;
 	right: 0;
 	width: 310px;
@@ -788,7 +755,6 @@ input:checked + .slider:before {
 }
 
 #logwin {
-	width: 100%;
   height: 200px;  /* Adjust height as needed */
   background: #111;
   color: #0f0; /* Green text for a terminal look */
@@ -798,8 +764,8 @@ input:checked + .slider:before {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	z-index: 999;
-	position: absolute;
+	z-index: 1001;
+	position: fixed;
 	bottom: 0;
 	right: 0;
 	width: 310px;
