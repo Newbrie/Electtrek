@@ -139,10 +139,10 @@ document.getElementById("saveNewPlace").addEventListener("click", () => {
 
     // Hide mini-place form and restore overlay/iframe
     form.classList.add("d-none");
-    const iframe = document.getElementById("overlay-iframe");
-    if (iframe) {
-        iframe.classList.remove("dimmed");
-        iframe.style.visibility = "hidden";
+    const overlayIframe = document.getElementById("overlay-iframe");
+    if (overlayIframe) {
+        overlayIframe.classList.remove("dimmed");
+        overlayIframe.style.visibility = "hidden";
     }
 
     // Reset awaitingNewPlace flag
