@@ -345,6 +345,11 @@
      // =====================================================
      // ⭐ Make global objects
      // =====================================================
+
+     Object.entries(options).forEach(([key, value]) => {
+          window[key] = value;       // global variable for options
+      });
+
      window.areas      = options?.areas      || {};
      window.places     = constants?.places     || {};
      window.resources  = options?.resources  || {};

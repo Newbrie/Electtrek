@@ -4720,9 +4720,9 @@ Overlaps = {
 "country" : 1,
 "nation" : 0.1,
 "county" : 0.001,
-"constituency" : 0.0005,
-"ward" : 0.00005,
-"division" : 0.0001,
+"constituency" : 0.0000005,
+"ward" : 0.000005,
+"division" : 0.000005,
 "walk" : 0.005,
 "polling_district" : 0.005,
 "street" : 0.005,
@@ -4773,6 +4773,7 @@ current_election = get_election_data(current_election)
 selectedResources = resources
 OPTIONS = {
     "ACC": False,
+    "DEVURLS": config.DEVURLS,
     "territories": ElectionTypes,
     "yourparty": VID,
     "previousParty": VID,
@@ -6400,8 +6401,7 @@ def index():
             options=OPTIONS,
             constants=CElection,
             mapfile=mapfile,
-            calfile=calfile,
-            DEVURLS=config.DEVURLS
+            calfile=calfile
         )
     return render_template("index.html")
 
@@ -7710,8 +7710,7 @@ def calendar_partial(path):
         options=OPTIONS,
         constants=CElection,
         mapfile=mapfile,
-        calfile=calfile,
-        DEVURLS=config.DEVURLS
+        calfile=calfile
     )
 
 
@@ -8208,8 +8207,7 @@ def firstpage():
         options=OPTIONS,
         constants=CurrentElection,
         mapfile=mapfile,
-        calfile=calfile,
-        DEVURLS=config.DEVURLS
+        calfile=calfile
     )
 
 

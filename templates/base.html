@@ -46,7 +46,7 @@
       console.log("Injected places:", window.places);
       console.log("Injected areas:", window.areas);
 
-      window.DEVURLS = {{ DEVURLS | tojson }} ;
+      window.DEVURLS = OPTIONS?.DEVURLS || {};
       window.isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
       window.API = window.isDev ? window.DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
 
