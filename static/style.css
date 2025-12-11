@@ -457,8 +457,9 @@ input:checked + .slider:before {
 
 /* Mapwin = fixed-size container (height of screen minus margins) */
 #mapwin {
-    position: relative;
-    height: 100%;
+  position: relative;
+  height: 100vh;     /* FULL screen height */
+  overflow: hidden;
 /*        overflow: hidden;    prevents outer scrolling */
     border: 1px solid #ddd;
 }
@@ -470,9 +471,12 @@ input:checked + .slider:before {
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
     flex-direction: column;
-    background: white;
-    visibility: visible;   /* toggle via JS */
+    background: white;   /* toggle via JS */
     z-index: 200;           /* HIGHER than iframe */
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
 }
 
 

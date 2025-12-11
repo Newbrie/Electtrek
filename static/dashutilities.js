@@ -162,7 +162,7 @@
    * CALENDAR <-> MAP TOGGLE
    * --------------------------------------------------------- */
    window.toggleView = function () {
-  
+
        if (loginScreen.style.visibility === "visible") return;
 
        const mapVisible = iframeContainer.style.visibility === "visible";
@@ -740,6 +740,8 @@ function syncStreamsSelectWithTabs() {
       return fetch("/get-constants", { credentials: "same-origin" })
           .then(res => res.json())
           .then(data => {
+            console.log("DATA RECEIVED:", data);
+            console.log("updateConstantsUI =", window.updateConstantsUI);
               window.latestConstants = data.constants;
               window.latestOptions = data.options;
               window.updateConstantsUI(data.constants, data.options);
