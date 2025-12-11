@@ -215,10 +215,10 @@ document.getElementById("saveNewTag").addEventListener("click", () => {
     addTaskTagForm.classList.add("d-none");
 });
 
-console.log("🔀 places on DOM relaod :", places);
-console.log("🔀 resources on DOM relaod :", resources);
-console.log("🔀 areas on DOM relaod :", areas);
-console.log("🔀 task_tags on DOM relaod :", task_tags);
+console.log("🔀 places on DOM relaod :", window.places);
+console.log("🔀 resources on DOM relaod :", window.resources);
+console.log("🔀 areas on DOM relaod :", window.areas);
+console.log("🔀 task_tags on DOM relaod :", window.task_tags);
 
     // Call this function on startup to tell backend which election is active
 
