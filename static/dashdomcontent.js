@@ -13,14 +13,14 @@
    * --------------------------------------------------------- */
 
   // elements
-  const iframeContainer = document.getElementById("iframe-container");
-  const iframe = document.getElementById("iframe1"); // the actual iframe element
-  const calendar = document.getElementById("calendar");
-  const loginScreen = document.getElementById("loginScreen");
-  const loginBtn = document.getElementById("loginBtn");
-  const passwordInput = document.getElementById("password");
-  const loginMessage = document.getElementById("loginMessage");
-  const toggleBtn = document.getElementById("b9");
+  window.iframeContainer = document.getElementById("iframe-container");
+  window.iframe = document.getElementById("iframe1"); // the actual iframe element
+  window.calendar = document.getElementById("calendar");
+  window.loginScreen = document.getElementById("loginScreen");
+  window.loginBtn = document.getElementById("loginBtn");
+  window.passwordInput = document.getElementById("password");
+  window.loginMessage = document.getElementById("loginMessage");
+  window.toggleBtn = document.getElementById("b9");
 
 
  window.addEventListener("message", async (event) => {
