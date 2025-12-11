@@ -1342,7 +1342,7 @@ class TreeNode:
 
         for index,limb in ChildPolylayer.iterrows():
             fam_values = [x.value for x in fam_nodes]
-            fam_fids = [x.fid for x in fam_fids]
+            fam_fids = [x.fid for x in fam_nodes]
             newname = normalname(limb.NAME)
             centroid_point = limb.geometry.centroid
             here = (centroid_point.y, centroid_point.x)
