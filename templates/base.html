@@ -40,7 +40,7 @@
       window.resources = {{ _options.get('resources', []) | tojson }};
       window.places = {{ _constants.get('places', []) | tojson }};
       window.areas = {{ _options.get('areas', []) | tojson }};
-      window.DEVURLS = {{ _optionsget('DEVURLS', {}) |  tojson }};
+      window.DEVURLS = {{ _options.get('DEVURLS', {}) |  tojson }};
 
       console.log("Injected task_tags:", window.task_tags);
       console.log("Injected resources:", window.resources);
