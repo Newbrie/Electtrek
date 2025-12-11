@@ -1317,7 +1317,7 @@ class TreeNode:
         [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
 
         ChildPolylayer = Treepolys[electtype]
-
+        print("___Childpolylayer for type ",electtype, Treepolys[electtype])
         print(f"____Children of {self.value} bbox:[{self.bbox}] of type {electtype}" )
         index = 0
         i = 0
@@ -1330,7 +1330,6 @@ class TreeNode:
             here = (centroid_point.y, centroid_point.x)
             overlaparea = parent_geom.intersection(limb.geometry).area
             Overlaps[electtype] = round(Overlaps[electtype], 8)  # 6 decimal places
-
             print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
