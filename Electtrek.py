@@ -1348,7 +1348,7 @@ class TreeNode:
 
 
         if len(fam_nodes) == 0:
-            print (f"________no children of type:{electtype} at lev {self.level+1} for {self.value}")
+            print (f"________Xno children of type:{electtype} at lev {self.level+1} for {self.value}")
 
         print (f"___ at {self.value} lev {self.level} revised {electtype} type fam nodes:{fam_nodes}")
 
