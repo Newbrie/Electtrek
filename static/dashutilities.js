@@ -1,25 +1,41 @@
 
+// ----------------------------
+// Flash Message Handling
+// ----------------------------
+const messages = {{ get_flashed_messages()|tojson|safe }} || [];
 
-  // ----------------------------
-  // Message Handling
-  // ----------------------------
-  const messages = JSON.parse('{{ get_flashed_messages()|tojson|safe }}') || [];
-  const iframeEl = document.getElementById('iframe1');
+const logList = document.querySelector("#logwin .flashes");
 
-  function bindEvent(element, eventName, eventHandler) {
-    element.addEventListener(eventName, eventHandler, false);
-  }
+function addMessageToLog(text) {
+    if (!logList) return;
 
-  bindEvent(window, 'message', (e) => {
-    messages.pop();
-    messages.push(e.data);
-
-    const logWindow = document.getElementById("logwin");
     const li = document.createElement("li");
-    li.textContent = e.data.type;
-    logWindow.appendChild(li);
-    logWindow.scrollTop = logWindow.scrollHeight;
-  });
+
+    // Create timestamp
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    const timestamp = `[${hh}:${mm}:${ss}]`;
+
+    li.textContent = `${timestamp} ${text}`;
+    logList.appendChild(li);
+
+    // Auto-scroll
+    logList.scrollTop = logList.scrollHeight;
+}
+
+
+// Show flash messages from Flask (if any)
+messages.forEach(msg => addMessageToLog(msg));
+
+// ----------------------------
+// iframe postMessage handling
+// ----------------------------
+bindEvent(window, "message", (e) => {
+    addMessageToLog(e.data?.type || String(e.data));
+});
+
 
 
   // ----------------------------
