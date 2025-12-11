@@ -253,19 +253,19 @@ if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
     loginScreen.style.visibility = "hidden";
-    calendar.style.visibility = "hidden"; // hide calendar initially
-    iframe.style.visibility = "hidden";  // show map initially
-    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+    calendar.style.visibility = "visible"; // show calendar initially
+    iframe.style.visibility = "hidden";  // hide map initially
+    toggleBtn.textContent = "📅 View Map"; // button shows calendar option
     calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
     window.loggedIn = true;
 
 } else {
     // Normal login behaviour
-    loginScreen.style.visibility = "visible";
-    calendar.style.visibility = "hidden";  // hide calendar
+    loginScreen.style.visibility = "hidden";
+    calendar.style.visibility = "visible";  // hide calendar
     iframe.style.visibility = "hidden";   // show map by default
-    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+    toggleBtn.textContent = "📅 View Map"; // button shows calendar option
     window.loggedIn = false;
 }
 
