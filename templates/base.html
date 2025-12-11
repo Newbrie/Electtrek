@@ -31,6 +31,7 @@
 
 </head>
 <body>
+<script>
     <!-- PAGE CONTENT GOES HERE -->
     // 🧱 Safe variable injection
       {% set _options = options or {} %}
@@ -106,6 +107,7 @@
           b7: "{{ url_for('search') }}",
           b8: "{{ url_for('dashboard') }}"
       };
+    </script>
 
     <main class="container-fluid">
         {% block map %}
