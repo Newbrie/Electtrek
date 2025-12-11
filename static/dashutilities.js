@@ -1,37 +1,3 @@
-
-
-function addMessageToLog(text) {
-    if (!logList) return;
-
-    const li = document.createElement("li");
-
-    // Create timestamp
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-    const timestamp = `[${hh}:${mm}:${ss}]`;
-
-    li.textContent = `${timestamp} ${text}`;
-    logList.appendChild(li);
-
-    // Auto-scroll
-    logList.scrollTop = logList.scrollHeight;
-}
-
-
-// Show flash messages from Flask (if any)
-messages.forEach(msg => addMessageToLog(msg));
-
-// ----------------------------
-// iframe postMessage handling
-// ----------------------------
-bindEvent(window, "message", (e) => {
-    addMessageToLog(e.data?.type || String(e.data));
-});
-
-
-
   // ----------------------------
   // Table Fetching
   // ----------------------------
