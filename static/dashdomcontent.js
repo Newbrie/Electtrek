@@ -312,17 +312,6 @@ passwordInput.addEventListener("keydown", (e) => {
     }
 
 
-    /* ---------------------------------------------------------
-     * BUTTON → IFRAME ROUTING
-     * --------------------------------------------------------- */
-    const iframeButtons = {
-        b3: "{{ url_for('stream_input') }}",
-        b4: "{{ url_for('leafletting') }}",
-        b5: "{{ url_for('kanban') }}",
-        b6: "{{ url_for('telling') }}",
-        b7: "{{ url_for('search') }}",
-        b8: "{{ url_for('dashboard') }}"
-    };
 
     for (const [id, url] of Object.entries(iframeButtons)) {
         const btn = document.getElementById(id);

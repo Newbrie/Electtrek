@@ -346,10 +346,24 @@
 
   const startHour = 9, endHour = 21, slotDuration = 2;
 
+  // ----------------------------
+  // Flash Message Handling
+  // ----------------------------
+  const messages = {{ get_flashed_messages()|tojson|safe }} || [];
+
+  const logList = document.querySelector("#logwin .flashes");
 
   /* ---------------------------------------------------------
-   * UPDATE CONSTANTS FORM UI
+   * BUTTON → IFRAME ROUTING
    * --------------------------------------------------------- */
+  const iframeButtons = {
+      b3: "{{ url_for('stream_input') }}",
+      b4: "{{ url_for('leafletting') }}",
+      b5: "{{ url_for('kanban') }}",
+      b6: "{{ url_for('telling') }}",
+      b7: "{{ url_for('search') }}",
+      b8: "{{ url_for('dashboard') }}"
+  };
 
 
 </script>

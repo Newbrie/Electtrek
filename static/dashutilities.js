@@ -1,10 +1,4 @@
 
-// ----------------------------
-// Flash Message Handling
-// ----------------------------
-const messages = {{ get_flashed_messages()|tojson|safe }} || [];
-
-const logList = document.querySelector("#logwin .flashes");
 
 function addMessageToLog(text) {
     if (!logList) return;
