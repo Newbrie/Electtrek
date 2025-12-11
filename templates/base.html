@@ -40,13 +40,13 @@
       window.resources = {{ _options.get('resources', []) | tojson }};
       window.places = {{ _constants.get('places', []) | tojson }};
       window.areas = {{ _options.get('areas', []) | tojson }};
+      window.DEVURLS = {{ _optionsget('DEVURLS', {}) |  tojson }};
 
       console.log("Injected task_tags:", window.task_tags);
       console.log("Injected resources:", window.resources);
       console.log("Injected places:", window.places);
       console.log("Injected areas:", window.areas);
 
-      window.DEVURLS = OPTIONS?.DEVURLS || {};
       window.isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
       window.API = window.isDev ? window.DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
 
