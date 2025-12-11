@@ -1331,10 +1331,7 @@ class TreeNode:
         [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
 
         ChildPolylayer = Treepolys[electtype]
-        geojson = Treepolys[electtype]
-        columns = ["FID", "NAME"]  # whatever properties you want
-        subset = geojson[columns]
-        print("Childpoly subset:", subset)
+
         print(f"____Children of {self.value} bbox:[{self.bbox}] of type {electtype}" )
         index = 0
         i = 0
@@ -3921,8 +3918,7 @@ def intersectingArea(source, sourcekey, parent_type, destination, roid=None, nam
     child_polygons_within_parent = candidates[
         candidates.intersection(parent_geom).area > threshold
     ]
-    geojson = child_polygons_within_parent
-    print("Childpolys from source:", geojson[["FID", "NAME"]])
+
     # ----------------------------------------------------------------------
     # 6. SELECT CHILD NAME (with fallbacks)
     # ----------------------------------------------------------------------
@@ -7050,11 +7046,6 @@ def STupdate(path):
                 base_path = path2+"/INDATA"
                 base_name = current_node.file.replace("-PRINT.html",fileending.replace(".html",""))
                 changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName'])
-# Example Usage
-# base_path = "/your/output/directory"
-# base_name = "changefile"
-# extension = ".csv"
-
 
                 versioned_filename = get_versioned_filename(base_path, base_name, ".csv")
 
@@ -7074,8 +7065,6 @@ def STupdate(path):
     print("_____Where are we: ", current_node.value, current_node.type, allelectors.columns)
 
 
-    #           only create a map if the branch does not already exist
-#    current_node = current_node.parent
     formdata['tabledetails'] = getchildtype(current_node.parent.type)+ "s street details"
 
 #    url = url_for('newstreet',path=mapfile)
