@@ -1291,6 +1291,20 @@ class TreeNode:
         global TREK_NODES
         global Overlaps
 
+        import random
+
+        def newFid(existing_fids):
+            """
+            Generate a new unique integer FID not in existing_fids.
+            Uses random integers in a large range.
+            """
+            existing_set = set(existing_fids)  # for fast lookup
+            while True:
+                fid = random.randint(1, 2**31 - 1)  # large positive integer
+                if fid not in existing_set:
+                    return fid
+
+
         current_election = c_election
         block = pd.DataFrame()
         parent_poly = Treepolys[self.type]
@@ -1328,6 +1342,7 @@ class TreeNode:
 
         for index,limb in ChildPolylayer.iterrows():
             fam_values = [x.value for x in fam_nodes]
+            fam_fids = [x.fid for x in fam_fids]
             newname = normalname(limb.NAME)
             centroid_point = limb.geometry.centroid
             here = (centroid_point.y, centroid_point.x)
@@ -1336,7 +1351,10 @@ class TreeNode:
             print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
-                egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
+                if limb.FID not in fam_fids:
+                    egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
+                else:
+                    egg = TreeNode(newname, newFid(fam_fids), here,self.level+1,c_election)
                 print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
                 egg = self.add_Tchild(egg, electtype, c_election)
                 [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
