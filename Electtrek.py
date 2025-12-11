@@ -1317,7 +1317,10 @@ class TreeNode:
         [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
 
         ChildPolylayer = Treepolys[electtype]
-        print("___Childpolylayer for type ",electtype, Treepolys[electtype])
+        geojson = Treepolys[electtype]
+        columns = ["FID", "NAME"]  # whatever properties you want
+        subset = geojson[columns]
+        print("Childpoly subset:", subset)
         print(f"____Children of {self.value} bbox:[{self.bbox}] of type {electtype}" )
         index = 0
         i = 0
@@ -3900,7 +3903,8 @@ def intersectingArea(source, sourcekey, parent_type, destination, roid=None, nam
     child_polygons_within_parent = candidates[
         candidates.intersection(parent_geom).area > threshold
     ]
-
+    geojson = child_polygons_within_parent
+    print("Childpolys from source:", geojson[["FID", "NAME"]])
     # ----------------------------------------------------------------------
     # 6. SELECT CHILD NAME (with fallbacks)
     # ----------------------------------------------------------------------
