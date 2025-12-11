@@ -252,7 +252,7 @@ console.log("📅 Calendar data loaded.");
 if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
-    loginScreen.style.visibility = "visible";
+    loginScreen.style.visibility = "hidden";
     calendar.style.visibility = "hidden"; // show calendar initially
     iframe.style.visibility = "visible";  // hide map initially
     toggleBtn.textContent = "📅 View Map"; // button shows calendar option
