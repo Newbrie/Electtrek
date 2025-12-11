@@ -162,8 +162,7 @@
    * CALENDAR <-> MAP TOGGLE
    * --------------------------------------------------------- */
    window.toggleView = function () {
-       const loginScreen = document.getElementById("loginScreen");
-
+  
        if (loginScreen.style.visibility === "visible") return;
 
        const mapVisible = iframeContainer.style.visibility === "visible";
