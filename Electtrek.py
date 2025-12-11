@@ -1331,11 +1331,11 @@ class TreeNode:
             overlaparea = parent_geom.intersection(limb.geometry).area
             Overlaps[electtype] = round(Overlaps[electtype], 8)  # 6 decimal places
 
-            print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype].toFixed(10)}" )
+            print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
                 egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
-                print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype].toFixed(10)}" )
+                print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
                 egg = self.add_Tchild(egg, electtype, c_election)
                 [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
                 print (f"________bbox [{egg.bbox}] - child of type:{electtype} at lev {self.level+1} of {self.value}")
