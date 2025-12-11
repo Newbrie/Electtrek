@@ -248,13 +248,13 @@ console.log("📅 Calendar data loaded.");
 
 
 // Initial state — hide map + calendar, show login unless in dev mode
-alert("isDev"+window.isDev);
+
 if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
-    loginScreen.style.visibility = "hidden";
-    calendar.style.visibility = "visible"; // show calendar initially
-    iframe.style.visibility = "hidden";  // hide map initially
+    loginScreen.style.visibility = "visible";
+    calendar.style.visibility = "hidden"; // show calendar initially
+    iframe.style.visibility = "visible";  // hide map initially
     toggleBtn.textContent = "📅 View Map"; // button shows calendar option
     calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
@@ -262,16 +262,12 @@ if (window.isDev) {
 
 } else {
     // Normal login behaviour
-    loginScreen.style.visibility = "hidden";
-    calendar.style.visibility = "visible";  // hide calendar
-    iframe.style.visibility = "hidden";   // show map by default
+    loginScreen.style.visibility = "visible";
+    calendar.style.visibility = "hidden";  // hide calendar
+    iframe.style.visibility = "visible";   // show map by default
     toggleBtn.textContent = "📅 View Map"; // button shows calendar option
     window.loggedIn = false;
 }
-
-
-
-
 
 
 // ENTER triggers login
