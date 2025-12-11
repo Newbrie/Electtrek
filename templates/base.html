@@ -32,7 +32,9 @@
 </head>
 <body>
     <!-- PAGE CONTENT GOES HERE -->
-
+    {% block initial %}
+    <script src="https://newbrie.github.io/Electtrek/static/initial.js"></script>
+    {% endblock %}
     <main class="container-fluid">
         {% block map %}
         {% endblock %}
