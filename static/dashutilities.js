@@ -697,7 +697,7 @@ function syncStreamsSelectWithTabs() {
 }
 
 
- async function getCalendarUpdate() {
+ async function getCalendarUpdate(API) {
      const currentTab = getActiveElectionTab();
      if (!currentTab) return;
 

@@ -235,7 +235,7 @@ populateDropdowns();
 console.log("📅 Calendar UI ready.");
 
 // 5. NOW load plan into fully created calendar
-await getCalendarUpdate();
+await getCalendarUpdate(window.API);
 console.log("📅 Calendar data loaded.");
 
 
@@ -248,8 +248,8 @@ console.log("📅 Calendar data loaded.");
 
 
 // Initial state — hide map + calendar, show login unless in dev mode
-alert("isDev"+isDev);
-if (isDev) {
+alert("isDev"+window.isDev);
+if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
     loginScreen.style.visibility = "hidden";

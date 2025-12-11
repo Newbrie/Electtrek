@@ -333,11 +333,11 @@
   console.log("Injected places:", window.places);
   console.log("Injected areas:", window.areas);
 
-  const DEVURLS = {{ DEVURLS | tojson }} ;
-  const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
-  const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
+  window.DEVURLS = {{ DEVURLS | tojson }} ;
+  window.isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
+  window.API = window.isDev ? window.DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
 
-  if (!isDev) {
+  if (!window.isDev) {
       const btn = document.getElementById("export-html-btn");
       if (btn) {
           btn.style.display = "none";
