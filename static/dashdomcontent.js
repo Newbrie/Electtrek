@@ -25,7 +25,7 @@
 
  window.addEventListener("message", async (event) => {
    const data = event.data;
-   const iframe = document.getElementById("iframe1");
+
 
    console.log("📩 Parent received message:", data, "from", event.origin);
    // -----------------------------------------------------
@@ -75,7 +75,7 @@
 
          updateConstantsUI(window.latestConstants, window.latestOptions);
 
-//         iframe.classList.add("dimmed");
+//         window.iframe.classList.add("dimmed");
          preventModalClose = false;
          addPlaceActive = false;
      }

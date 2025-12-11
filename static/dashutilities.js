@@ -278,8 +278,7 @@
 
 
    function deactivateMapAfterPlaceSelected() {
-       const iframe = document.getElementById("iframe1");
-       const modal = document.getElementById("slot-modal");
+     const modal = document.getElementById("slot-modal");
        const calendarScroll = document.getElementById("calendar-scroll");
 
        iframe.classList.remove("map-active");
@@ -760,5 +759,5 @@ function syncStreamsSelectWithTabs() {
     logWindow.appendChild(li);
     logWindow.scrollTop = logWindow.scrollHeight;
 
-    iframeEl.src = url;
+    iframe.src = url;
   };
