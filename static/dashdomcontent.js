@@ -254,7 +254,7 @@ if (window.isDev) {
 
     loginScreen.style.visibility = "hidden";
     calendar.style.visibility = "hidden"; // hide calendar initially
-    iframe.style.visibility = "visible";  // show map initially
+    iframe.style.visibility = "hidden";  // show map initially
     toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
     calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
@@ -431,7 +431,7 @@ passwordInput.addEventListener("keydown", (e) => {
             });
     });
 
-      console.log("📅 Building calendar…");
+      console.log("📅 Calendar dropdowns populated…");
 
       // Buttons (use correct IDs)
       const switchToMapBtn = document.getElementById("switch-tomap-btn");
