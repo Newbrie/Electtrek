@@ -1329,6 +1329,7 @@ class TreeNode:
             centroid_point = limb.geometry.centroid
             here = (centroid_point.y, centroid_point.x)
             overlaparea = parent_geom.intersection(limb.geometry).area
+            Overlaps[electtype] = round(Overlaps[electtype], 8)  # 6 decimal places
 
             print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype].toFixed(10)}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
