@@ -7422,6 +7422,7 @@ def get_table(table_name):
         print(f"____TABLENAME {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
         return jsonify([column_headers, rows, title])
     except Exception as e:
+        raise Exception("WINDSOR")
         print(f"[ERROR] Failed to generate table '{table_name}': {e}")
         return jsonify({"error": str(e)}), 500
 
