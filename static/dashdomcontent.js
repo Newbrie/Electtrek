@@ -249,26 +249,56 @@ console.log("📅 Calendar data loaded.");
 
 
 
-
 // Initial state — hide map + calendar, show login unless in dev mode
 
 if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
     loginScreen.style.visibility = "hidden";
-    calendar.style.visibility = "hidden"; // show calendar initially
-    iframe.style.visibility = "visible";  // hide map initially
-    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
-    calendar.dataset.loaded = "true";    // avoid duplicate fetches
+    console.log("Setting initial view: MAP visible");
+
+   // --- Map visible ---
+   iframeContainer.style.visibility = "visible";
+   iframeContainer.style.opacity = "1";
+   iframeContainer.style.pointerEvents = "auto";
+   iframeContainer.style.zIndex = "200";
+
+   iframe.style.visibility = "visible";
+   iframe.style.pointerEvents = "auto";
+
+   // --- Calendar hidden ---
+   calendar.style.visibility = "hidden";
+   calendar.style.opacity = "0";
+   calendar.style.pointerEvents = "none";
+   calendar.style.zIndex = "1";
+
+   // --- Toggle button should switch TO the calendar ---
+   toggleBtn.textContent = "📅 View Calendar";
 
     window.loggedIn = true;
 
 } else {
     // Normal login behaviour
     loginScreen.style.visibility = "visible";
-    calendar.style.visibility = "hidden";  // hide calendar
-    iframe.style.visibility = "visible";   // show map by default
-    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
+    console.log("Setting initial view: MAP visible");
+
+   // --- Map visible ---
+   iframeContainer.style.visibility = "visible";
+   iframeContainer.style.opacity = "1";
+   iframeContainer.style.pointerEvents = "auto";
+   iframeContainer.style.zIndex = "200";
+
+   iframe.style.visibility = "visible";
+   iframe.style.pointerEvents = "auto";
+
+   // --- Calendar hidden ---
+   calendar.style.visibility = "hidden";
+   calendar.style.opacity = "0";
+   calendar.style.pointerEvents = "none";
+   calendar.style.zIndex = "1";
+
+   // --- Toggle button should switch TO the calendar ---
+   toggleBtn.textContent = "📅 View Calendar";
     window.loggedIn = false;
 }
 
