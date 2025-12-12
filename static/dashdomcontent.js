@@ -22,19 +22,6 @@
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
 
-  // Calendar starts visible
-  calendar.style.visibility = "visible";
-  calendar.style.opacity = "1";
-  calendar.style.pointerEvents = "auto";
-  calendar.style.zIndex = "200";
-
-  // Map starts hidden
-  iframeContainer.style.visibility = "hidden";
-  iframeContainer.style.pointerEvents = "none";
-  iframeContainer.style.zIndex = "1";
-
-  iframe.style.visibility = "hidden";
-  iframe.style.pointerEvents = "none";
 
   console.log("Initial view set: calendar visible, map hidden");
 
@@ -271,7 +258,7 @@ if (window.isDev) {
     loginScreen.style.visibility = "hidden";
     calendar.style.visibility = "hidden"; // show calendar initially
     iframe.style.visibility = "visible";  // hide map initially
-    toggleBtn.textContent = "📅 View Map"; // button shows calendar option
+    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
     calendar.dataset.loaded = "true";    // avoid duplicate fetches
 
     window.loggedIn = true;
@@ -281,7 +268,7 @@ if (window.isDev) {
     loginScreen.style.visibility = "visible";
     calendar.style.visibility = "hidden";  // hide calendar
     iframe.style.visibility = "visible";   // show map by default
-    toggleBtn.textContent = "📅 View Map"; // button shows calendar option
+    toggleBtn.textContent = "📅 View Calendar"; // button shows calendar option
     window.loggedIn = false;
 }
 
