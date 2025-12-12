@@ -163,46 +163,50 @@
    * --------------------------------------------------------- */
    window.toggleView = function () {
 
-       if (loginScreen.style.visibility === "visible") return;
+    if (loginScreen.style.visibility === "visible") return;
 
-       const mapVisible = iframeContainer.style.visibility === "visible";
+    const mapVisible = iframeContainer.style.visibility === "visible";
 
-       // Map → Calendar
-       if (mapVisible) {
+    // Map → Calendar
+    if (mapVisible) {
 
-           // Hide map iframe non-destructively
-           iframeContainer.style.visibility = "hidden";
-           iframeContainer.style.pointerEvents = "none";
-           iframeContainer.style.zIndex = "1";
+        // Hide map
+        iframeContainer.style.visibility = "hidden";
+        iframeContainer.style.pointerEvents = "none";
+        iframeContainer.style.zIndex = "1";
 
-           iframe.style.visibility = "hidden";
-           iframe.style.pointerEvents = "none";
+        iframe.style.visibility = "hidden";
+        iframe.style.pointerEvents = "none";
 
-           // Show calendar safely
-           calendar.style.opacity = "1";
-           calendar.style.pointerEvents = "auto";
+        // Show calendar
+        calendar.style.visibility = "visible";
+        calendar.style.opacity = "1";
+        calendar.style.pointerEvents = "auto";
+        calendar.style.zIndex = "200";
 
-           toggleBtn.textContent = "🧭 View Map";
-       }
+        toggleBtn.textContent = "🧭 View Map";
+    }
 
-       // Calendar → Map
-       else {
+    // Calendar → Map
+    else {
 
-           // Hide calendar safely
-           calendar.style.opacity = "0";
-           calendar.style.pointerEvents = "none";
+        // Hide calendar
+        calendar.style.visibility = "hidden";
+        calendar.style.opacity = "0";
+        calendar.style.pointerEvents = "none";
 
-           // Show map
-           iframeContainer.style.visibility = "visible";
-           iframeContainer.style.pointerEvents = "auto";
+        // Show map
+        iframeContainer.style.visibility = "visible";
+        iframeContainer.style.pointerEvents = "auto";
+        iframeContainer.style.zIndex = "200";
 
+        iframe.style.visibility = "visible";
+        iframe.style.pointerEvents = "auto";
 
-           iframe.style.visibility = "visible";
-           iframe.style.pointerEvents = "auto";
+        toggleBtn.textContent = "📅 View Calendar";
+    }
+};
 
-           toggleBtn.textContent = "📅 View Calendar";
-       }
-   };
 
    // -----------------------------------------------------
    // NEW PLACE CREATED
