@@ -22,6 +22,22 @@
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
 
+  // Calendar starts visible
+  calendar.style.visibility = "visible";
+  calendar.style.opacity = "1";
+  calendar.style.pointerEvents = "auto";
+  calendar.style.zIndex = "200";
+
+  // Map starts hidden
+  iframeContainer.style.visibility = "hidden";
+  iframeContainer.style.pointerEvents = "none";
+  iframeContainer.style.zIndex = "1";
+
+  iframe.style.visibility = "hidden";
+  iframe.style.pointerEvents = "none";
+
+  console.log("Initial view set: calendar visible, map hidden");
+
 
  window.addEventListener("message", async (event) => {
    const data = event.data;
