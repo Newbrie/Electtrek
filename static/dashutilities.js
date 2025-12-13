@@ -357,7 +357,7 @@
      window.areas      = options?.areas      || {};
      window.places     = constants?.places     || {};
      window.resources  = options?.resources  || {};
-     window.task_tags  = options?.task_tags  || {};
+     window.task_tags  = constants?.task_tags  || {};
      window.DEVURLS    = options?.DEVURLS || {};
 
      console.log("Global areas:", window.areas);

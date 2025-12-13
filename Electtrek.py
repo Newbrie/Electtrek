@@ -4803,7 +4803,6 @@ OPTIONS = {
     "candidate" : selectedResources,
     "chair" : selectedResources,
     "tags": CurrentElection['tags'],
-    "task_tags": task_tags,
     "autofix" : onoff,
     "VNORM" : VNORM,
     "VCO" : VCO,
