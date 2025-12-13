@@ -381,7 +381,7 @@ body.unlocked #login { display: none; }
     width: 100%;
     height: 230px;
     background: white;
-    z-index: 99;
+    z-index: 200;
     display: flex;
     flex-direction: column; /* column so title on top, table scrolls below */
     border-top: 1px solid #ccc;
@@ -567,7 +567,7 @@ input:checked + .slider:before {
 .slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }
 .slot-content { display: inline; word-break: break-word; }
 .slot small { color: #555; display: block; }
-.slot-label { position: absolute; top: 2px; left: 4px; font-size: 0.75em; color: #666; pointer-events: none; z-index: 2; background: rgba(255,255,255,0.85); border-radius: 3px; padding: 0 4px; white-space: nowrap; --label-width: calc(100% + 8px); }
+.slot-label { position: absolute; top: 2px; left: 4px; font-size: 0.75em; color: #666; pointer-events: none; z-index: 200; background: rgba(255,255,255,0.85); border-radius: 3px; padding: 0 4px; white-space: nowrap; --label-width: calc(100% + 8px); }
 .slot::before { content:""; display:block; width:calc(var(--label-width,3em)+6px); height:0; flex:0 0 auto; }
 .slot .lozenge { margin:0; padding:0 4px; font-size:0.8em; line-height:1em; display:inline-block; border-radius:4px; white-space:nowrap; opacity:1; }
 .slot .lozenge[data-type="activity"] { background: rgba(204,229,255,0.9); }
@@ -698,7 +698,7 @@ input:checked + .slider:before {
     padding: 5px 10px;
     background: white;
     border-bottom: 1px solid #ddd;
-    z-index: 13;
+    z-index: 200;
     flex-shrink: 0; /* prevent shrinking */
 }
 
@@ -719,7 +719,7 @@ input:checked + .slider:before {
     position: sticky;
     top: 0;
     background: white;
-    z-index: 14;
+    z-index: 100;
 }
 
 #datawin > div {
