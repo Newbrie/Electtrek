@@ -681,7 +681,7 @@ async function setActiveElectionOnStartup() {
       console.log("🔀 startup resources on DOM reload :", window.resources);
       console.log("🔀 startup areas on DOM reload :", window.areas);
       console.log("🔀 startup task_tags on DOM reload :", window.task_tags);
-
+      console.log("🔀 startup outcome_tags on DOM reload :", window.outcome_tags);
      window.plan = data.constants?.calendar_plan;
      console.log("📩 calendar_plan::", plan);
   } catch (e) {

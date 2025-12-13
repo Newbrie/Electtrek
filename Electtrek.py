@@ -154,7 +154,7 @@ def get_resources_json(election_data, resources):
 
 
 # share task and outcome tags for each election
-def get_task_tags_json(election_data):
+def get_tags_json(election_data):
     valid_tags = election_data['tags']
     task_tags = {}
     outcome_tags = {}
@@ -164,7 +164,7 @@ def get_task_tags_json(election_data):
         elif tag.startswith('M'):
             outcome_tags[tag] = description
     print(f"___Dash  Task Tags {valid_tags} Outcome Tags: {outcome_tags}")
-    return task_tags
+    return task_tags, outcome_tags
 
 def get_places_json(markers):
     places_dict = {}
@@ -2541,10 +2541,10 @@ def process_lozenges(lozenges, CE):
 
 
     CE_resources = OPTIONS['resources']
-    CE_task_tags = CE.get("task_tags", {})
+    CE_task_tags, CE_outcome_tags = get_tags_json(CE)
     CE_areas = OPTIONS['areas']
     CE_places = CE.get("places", {})
-    print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
+    print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
     for loz in lozenges:
         ltype = loz.get("type")
         code = loz.get("code")
@@ -4757,6 +4757,7 @@ TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downb
 # All Election Settings
 ELECTIONS = get_election_names()
 
+current_node = get_current_node(session)
 current_election = "DEMO"
 CurrentElection = get_election_data(current_election)
 #election constants and event values are now loaded up
@@ -4771,7 +4772,7 @@ if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
         stream_table = json.load(f)
 
 resources = {}
-task_tags ={}
+task_tags, outcome_tags = get_tags_json(CurrentElection)
 areas = {}
 # override if RESOURCES_FILE(.csv) exists because it initialises resources if options file deleted
 resourcesdf = pd.DataFrame()
@@ -4786,10 +4787,6 @@ data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
-current_node = get_current_node(session)
-current_election = get_current_election(session)
-CurrentElection = get_election_data(current_election)
-
 # OPTIONS template
 
 selectedResources = resources
@@ -4803,7 +4800,6 @@ OPTIONS = {
     "areas" : areas,
     "candidate" : selectedResources,
     "chair" : selectedResources,
-    "tags": CurrentElection['tags'],
     "autofix" : onoff,
     "VNORM" : VNORM,
     "VCO" : VCO,
@@ -4816,7 +4812,7 @@ if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
         OPTIONS = json.load(f)
     areas =  OPTIONS['areas']
-    task_tags =  CurrentElection['tags']
+    task_tags, outcome_tags =  get_tags_json(CurrentElection)
     resources = OPTIONS['resources']
 
 # eventually extract calendar areas directly from the associated MAP
@@ -7704,14 +7700,8 @@ def calendar_partial(path):
 
     # share input and outcome tags
     valid_tags = CElection['tags']
-    task_tags = {}
-    outcome_tags = {}
+    task_tags, outcome_tags = get_tags_json(CElection)
 
-    for tag, description in valid_tags.items():
-        if tag.startswith('L'):
-            task_tags[tag] = description
-        elif tag.startswith('M'):
-            outcome_tags[tag] = description
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
     print(f"🧪 calendar partial level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
 
