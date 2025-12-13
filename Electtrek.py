@@ -2541,7 +2541,7 @@ def process_lozenges(lozenges, CE):
 
 
     CE_resources = OPTIONS['resources']
-    CE_task_tags = OPTIONS['task_tags']
+    CE_task_tags = CE.get("task_tags", {})
     CE_areas = OPTIONS['areas']
     CE_places = CE.get("places", {})
     print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
@@ -4787,7 +4787,8 @@ VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
 current_node = get_current_node(session)
-current_election = get_election_data(current_election)
+current_election = get_current_election(session)
+CurrentElection = get_election_data(current_election)
 
 # OPTIONS template
 
@@ -4815,7 +4816,7 @@ if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
         OPTIONS = json.load(f)
     areas =  OPTIONS['areas']
-    task_tags =  OPTIONS['task_tags']
+    task_tags =  CurrentElection['tags']
     resources = OPTIONS['resources']
 
 # eventually extract calendar areas directly from the associated MAP

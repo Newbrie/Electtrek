@@ -33,10 +33,30 @@
 <body>
 <script>
     <!-- PAGE CONTENT GOES HERE -->
+    function deriveTags(tags = {}) {
+        const task_tags = {};
+        const outcome_tags = {};
+
+        Object.entries(tags).forEach(([tag, description]) => {
+            if (tag.startsWith("L")) {
+                task_tags[tag] = description;
+            } else if (tag.startsWith("M")) {
+                outcome_tags[tag] = description;
+            }
+        });
+
+        console.log("___Dash Task Tags:", task_tags, "Outcome Tags:", outcome_tags);
+
+        return { task_tags, outcome_tags };
+    }
+
     // 🧱 Safe variable injection
       {% set _options = options or {} %}
       {% set _constants = constants or {} %}
-      window.task_tags = {{ _options.get('task_tags', []) | tojson }};
+      window.tags = {{ _constants.get('task_tags', []) | tojson }};
+      const { task_tags, outcome_tags } = deriveTags(window.tags)
+      window.task_tags = task_tags;
+      window.outcome_tags = outcome_tags;
       window.resources = {{ _options.get('resources', []) | tojson }};
       window.places = {{ _constants.get('places', []) | tojson }};
       window.areas = {{ _options.get('areas', []) | tojson }};
