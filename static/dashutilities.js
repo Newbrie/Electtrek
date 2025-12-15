@@ -8,6 +8,24 @@
     W: "white", X: "darkgray"
   };
 
+  function getTagsJson(electionTags) {
+    const task_tags = {};
+    const outcome_tags = {};
+
+    Object.entries(electionTags || {}).forEach(([tag, description]) => {
+        if (tag.startsWith("L")) {
+            task_tags[tag] = description;
+        } else if (tag.startsWith("M")) {
+            outcome_tags[tag] = description;
+        }
+    });
+
+    console.log("___Dash Task Tags", task_tags);
+    console.log( "Outcome Tags:", outcome_tags);
+    return { task_tags, outcome_tags };
+}
+
+
   async function fetchTableData(tableName) {
     const table = document.getElementById("captains-table");
     const tabTitle = document.getElementById("selectedTitle");
@@ -357,13 +375,20 @@
      window.areas      = options?.areas      || {};
      window.places     = constants?.places     || {};
      window.resources  = options?.resources  || {};
-     window.task_tags  = constants?.task_tags  || {};
+     window.tags  = constants?.tags  || {};
+     const result = getTagsJson(window.tags);
+     window.task_tags = result.task_tags;
+     window.outcome_tags = result.outcome_tags;
+
+
      window.DEVURLS    = options?.DEVURLS || {};
 
      console.log("Global areas:", window.areas);
      console.log("Global places:", window.places);
      console.log("Global resources:", window.resources);
+     console.log("Global tags:", window.tags);
      console.log("Global task_tags:", window.task_tags);
+     console.log("Global outcome_tags:", window.outcome_tags);
 
      // =====================================================
      // ⭐ Iterate through all constants and populate UI

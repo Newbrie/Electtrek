@@ -154,8 +154,8 @@ def get_resources_json(election_data, resources):
 
 
 # share task and outcome tags for each election
-def get_tags_json(election_data):
-    valid_tags = election_data['tags']
+def get_tags_json(election_tags):
+    valid_tags = election_tags
     task_tags = {}
     outcome_tags = {}
     for tag, description in valid_tags.items():
@@ -2533,7 +2533,6 @@ def process_lozenges(lozenges, CE):
     Convert lozenges from calendar slots into readable forms.
     """
 
-    activities = []
     resources = []
     tasks = []
     places = []
@@ -2541,7 +2540,7 @@ def process_lozenges(lozenges, CE):
 
 
     CE_resources = OPTIONS['resources']
-    CE_task_tags, CE_outcome_tags = get_tags_json(CE)
+    CE_task_tags, CE_outcome_tags = get_tags_json(CE['tags'])
     CE_areas = OPTIONS['areas']
     CE_places = CE.get("places", {})
     print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
@@ -2551,11 +2550,11 @@ def process_lozenges(lozenges, CE):
 
         # AREA ---------------
         if ltype == "area" and code in CE_areas:
-            activities.append(CE_areas[code])
+            areas.append(CE_areas[code])
 
         # RESOURCES ----------
         elif ltype == "resource" and code in CE_resources:
-            resources.append(code)
+            resources.append(CE_resources[code])
 
         # TASKS --------------
         elif ltype == "task" and code in CE_task_tags:
@@ -2572,7 +2571,7 @@ def process_lozenges(lozenges, CE):
             })
 
 
-    return activities, resources, tasks, places, areas
+    return resources, tasks, places, areas
 
 
 def build_eventlist_dataframe(c_election):
@@ -2587,7 +2586,7 @@ def build_eventlist_dataframe(c_election):
     for key, slot in slots.items():
         dt = parse_slot_key(key)
 
-        activities, resources, tasks, places, areas = process_lozenges(
+        resources, tasks, places, areas = process_lozenges(
             slot.get("lozenges", []),
             CurrentElection
         )
@@ -2597,13 +2596,13 @@ def build_eventlist_dataframe(c_election):
         "date", dt.date() if dt else None,
         "time", dt.time() if dt else None,
         "places", places,   # contains lat/lng/url etc.
-        "areas", areas)
+        "areas", areas,
+        "tasks",tasks)
 
         rows.append({
             "datetime": dt,
             "date": dt.date() if dt else None,
             "time": dt.time() if dt else None,
-            "activities": activities,
             "resources": resources,
             "tasks": tasks,
             "places": places,   # contains lat/lng/url etc.
@@ -2617,7 +2616,6 @@ def build_eventlist_dataframe(c_election):
     df = pd.DataFrame(rows, columns=["datetime",
                 "date",
                 "time",
-                "activities",
                 "resources",
                 "tasks",
                 "places",
@@ -3473,9 +3471,18 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # Now you can use limb_geojson as a valid GeoJSON feature
     #                print("GeoJSON Feature:", limb)
 
-                    tcol = get_text_color(to_hex(c.col))
-                    bcol = adjust_boundary_color(to_hex(c.col),0.7)
-                    fcol = invert_black_white(tcol)
+                    def readable_text_color(hex_color, threshold=0.55):
+                        """Return a dark readable colour that contrasts with hex_color"""
+                        hex_color = hex_color.lstrip("#")
+                        r, g, b = [int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4)]
+                        luminance = 0.2126*r + 0.7152*g + 0.0722*b
+
+                        # Always return a DARK tone for consistency
+                        return "#111111" if luminance > threshold else "#000000"
+
+                    tcol = readable_text_color(to_hex(c.col))
+                    fcol = tcol   # unified foreground
+                    bcol = adjust_boundary_color(to_hex(c.col), 0.7)
 
 
                     folium.GeoJson(
@@ -3499,22 +3506,41 @@ class ExtendedFeatureGroup(FeatureGroup):
                     mapfile = '/transfer/'+pathref
 
 
+                    htmlhalo =f'''
+                    <a href="{mapfile}" data-name="{tag}">
+                      <div style="
+                        color: {tcol};
+                        font-size: 10pt;
+                        font-weight: bold;
+                        text-align: center;
+                        padding: 2px;
+                        white-space: nowrap;
+
+                        /* 🗺️ Cartographic halo */
+                        text-shadow:
+                          -1px -1px 0 #fff,
+                           1px -1px 0 #fff,
+                          -1px  1px 0 #fff,
+                           1px  1px 0 #fff,
+                           0px  0px 3px #fff;
+                      ">
+                        <span style="
+                          background: {fcol};
+                          padding: 1px 2px;
+                          border-radius: 5px;
+                          border: 2px solid black;
+                        ">{num}</span>
+                        {numtag}
+                      </div>
+                    </a>
+                    '''
+
+
                     if not static:
                         self.add_child(folium.Marker(
                              location=here,
                              icon = folium.DivIcon(
-                                    html=f'''
-                                    <a href="{mapfile}" data-name="{tag}"><div style="
-                                        color: {tcol};
-                                        font-size: 10pt;
-                                        font-weight: bold;
-                                        text-align: center;
-                                        padding: 2px;
-                                        white-space: nowrap;">
-                                        <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                        border: 2px solid black;">{num}</span>
-                                        {numtag}</div></a>
-                                        ''',
+                                    html=htmlhalo,
                                        )
                                        )
                                        )
@@ -3522,19 +3548,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         self.add_child(folium.Marker(
                              location=here,
                              icon = folium.DivIcon(
-                                    html=f'''
-                                    <a data-name="{tag}">
-                                    <div style="
-                                        color: {tcol};
-                                        font-size: 10pt;
-                                        font-weight: bold;
-                                        text-align: center;
-                                        padding: 2px;
-                                        white-space: nowrap;">
-                                        <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                        border: 2px solid black;">{num}</span>
-                                        {numtag}</div></a>
-                                        ''',
+                                    html=htmlhalo,
                                        )
                                        )
                                        )
@@ -4728,6 +4742,11 @@ VNORM = {"OTHER":"O","REFORM" : "R" , "REFORM_DERBY" : "R" ,"REFORM_UK" : "R" ,"
 VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
 onoff = {"on" : 1, 'off': 0}
 
+data = [0] * len(VID)
+VIC = dict(zip(VID.keys(), data))
+VID_json = json.dumps(VID)  # Convert to JSON string
+
+
 kanban_options = [
     {"code": "R", "label": "Resourcing"},
     {"code": "P", "label": "Post-Bundling"},
@@ -4772,7 +4791,7 @@ if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
         stream_table = json.load(f)
 
 resources = {}
-task_tags, outcome_tags = get_tags_json(CurrentElection)
+task_tags, outcome_tags = get_tags_json(CurrentElection['tags'])
 areas = {}
 # override if RESOURCES_FILE(.csv) exists because it initialises resources if options file deleted
 resourcesdf = pd.DataFrame()
@@ -4783,9 +4802,6 @@ if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
     print("____Resources file read in")
     # need to save to ELECTIONS)
 
-data = [0] * len(VID)
-VIC = dict(zip(VID.keys(), data))
-VID_json = json.dumps(VID)  # Convert to JSON string
 
 # OPTIONS template
 
@@ -4812,7 +4828,7 @@ if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
         OPTIONS = json.load(f)
     areas =  OPTIONS['areas']
-    task_tags, outcome_tags =  get_tags_json(CurrentElection)
+    task_tags, outcome_tags =  get_tags_json(CurrentElection['tags'])
     resources = OPTIONS['resources']
 
 # eventually extract calendar areas directly from the associated MAP
@@ -5729,6 +5745,7 @@ def get_tags():
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
     tags = CurrentElection['tags']
+    task_tags, outcome_tags =  get_tags_json(CurrentElection['tags'])
 
     # tags is assumed to be a dict: { "leafletting1": "FirstLeaflet", ... }
     tag_list = [{"code": code, "label": label} for code, label in tags.items()]
@@ -7700,7 +7717,7 @@ def calendar_partial(path):
 
     # share input and outcome tags
     valid_tags = CElection['tags']
-    task_tags, outcome_tags = get_tags_json(CElection)
+    task_tags, outcome_tags = get_tags_json(CElection['tags'])
 
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
     print(f"🧪 calendar partial level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
