@@ -582,15 +582,18 @@ function openSlotModal(slotId) {
     currentSlotId = slotId;
     const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
 
+
     // Ensure slot exists in calendarData
     if (!calendarData[slotId]) calendarData[slotId] = {};
     const data = calendarData[slotId]; // Reference, not copy
+
+    // 🔽 INJECT AREA ACCORDION HERE
+    populateAreaAccordion(window.areas);
 
     // Fill dropdowns
     fillSelect("activitySelect", window.task_tags);
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
-    fillSelect("areaSelect", window.areas);
     console.log("💾 filled resources:", window.resources);
     // Infer from lozenges if data is empty
     if (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length)) {

@@ -114,11 +114,32 @@
                         <button id="saveNewPlace" type="button" class="btn btn-success btn-sm mt-1">Save Place</button>
                     </div>
 
+
                     <!-- Area -->
                     <div class="mb-2">
                         <label>Area</label>
-                        <select id="areaSelect" class="form-select" multiple></select>
+
+                        <!-- Selected areas summary -->
+                        <select id="areaSelect" class="form-select mb-2" multiple></select>
+
+                        <!-- Accordion container -->
+                        <div id="areaAccordionContainer"
+                             class="border rounded p-2"
+                             style="max-height: 300px; overflow-y: auto;">
+                            <!-- Example of injected HTML -->
+                            <!-- Each area button gets .area-option and data attributes -->
+                            <!-- This will be dynamically populated -->
+                            <!--
+                            <button type="button" class="btn btn-sm btn-outline-primary area-option mb-1"
+                                    data-fid="area1"
+                                    data-name="Downtown">
+                                Downtown
+                            </button>
+                            -->
+                        </div>
                     </div>
+
+
 
                 </form>
 

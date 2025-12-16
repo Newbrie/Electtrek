@@ -8,6 +8,47 @@
     W: "white", X: "darkgray"
   };
 
+
+/**
+ * Populate the area accordion based on your areas dict.
+ * @param {Object} areasDict - Structure: { childId: { node, children: [...] } }
+ */
+function populateAreaAccordion(areasDict) {
+    const container = document.getElementById("areaAccordionContainer");
+    if (!container) return;
+
+    container.innerHTML = ""; // Clear existing content
+
+    Object.values(areasDict).forEach(child => {
+        const childDiv = document.createElement("div");
+        childDiv.classList.add("mb-2", "area-option");
+        childDiv.dataset.fid = child.node.fid;
+        childDiv.dataset.name = child.node.value;
+        childDiv.textContent = child.node.value;
+
+        container.appendChild(childDiv);
+
+        // Optionally, add grandchildren
+        if (child.children && child.children.length) {
+            const subContainer = document.createElement("div");
+            subContainer.style.paddingLeft = "15px";
+
+            child.children.forEach(grand => {
+                const grandDiv = document.createElement("div");
+                grandDiv.classList.add("mb-1", "area-option");
+                grandDiv.dataset.fid = grand.fid;
+                grandDiv.dataset.name = grand.value;
+                grandDiv.textContent = grand.value;
+                subContainer.appendChild(grandDiv);
+            });
+
+            container.appendChild(subContainer);
+        }
+    });
+}
+
+
+
   function getTagsJson(electionTags) {
     const task_tags = {};
     const outcome_tags = {};
@@ -361,6 +402,8 @@
        alert("Task tag added!");
    }
 
+
+
    window.updateConstantsUI = function (constants, options) {
      if (!constants) return;
 
@@ -371,6 +414,8 @@
      Object.entries(options).forEach(([key, value]) => {
           window[key] = value;       // global variable for options
       });
+
+
 
      window.areas      = options?.areas      || {};
      window.places     = constants?.places     || {};

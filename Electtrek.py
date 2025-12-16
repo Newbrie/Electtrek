@@ -529,7 +529,7 @@ def get_current_node(session=None, session_data=None):
         longmean = statistics.mean([-7.57216793459,  1.68153079591])
         latmean = statistics.mean([ 49.959999905, 58.6350001085])
         roid = (latmean,longmean)
-        MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0, "DEMO")
+        MapRoot = TreeNode("UNITED_KINGDOM", roid, 0, "DEMO")
         MapRoot.dir = "UNITED_KINGDOM"
         MapRoot.file = "UNITED_KINGDOM-MAP.html"
         RootPath = MapRoot.dir+"/"+MapRoot.file
@@ -675,15 +675,16 @@ def strip_filename_from_path(path):
 
 
 # This prints a script tag you can paste into your HTML
+import uuid
 
 class TreeNode:
-    def __init__(self, value, fid, roid, lev, elect):
+    def __init__(self, value,roid, lev, elect, fid=None):
         global levelcolours
         self.value = normalname(str(value))
         self.children = []
         self.type = 'country'
         self.parent = None
-        self.fid = fid
+        self.fid = str(uuid.uuid4())   # ← UNIQUE, NO LOOKUP
         self.level = lev
         self.file = self.value+"-MAP.html"
         self.dir = self.value
@@ -700,6 +701,128 @@ class TreeNode:
         self.houses = 0
         self.target = 1
         self.party = "O"
+
+
+    def get_areas(self):
+        """
+        Returns a nested dictionary of areas grouped by their immediate children (regions).
+
+        Example output:
+        {
+            "North Region": { "A1": "North Area 1", "A2": "North Area 2" },
+            "South Region": { "B1": "South Area 1" }
+        }
+        """
+        area_groups = {}
+
+        if not self.children:
+            return {}
+
+        for child in self.children:  # top-level regions
+            # Map grandchildren (areas) as fid -> name
+            areas = {grand.fid: grand.value for grand in child.children} if child.children else {}
+            area_groups[child.value] = areas
+
+        return area_groups
+
+
+    def process_lozenges(self,lozenges, CE):
+        """
+        Convert lozenges from calendar slots into readable forms.
+        """
+
+        resources = []
+        tasks = []
+        places = []
+
+
+        CE_resources = OPTIONS['resources']
+        CE_task_tags, CE_outcome_tags = get_tags_json(CE['tags'])
+        CE_areas = self.get_areas()
+        CE_places = CE.get("places", {})
+        print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
+        for loz in lozenges:
+            ltype = loz.get("type")
+            code = loz.get("code")
+
+            # AREA ---------------
+            if ltype == "area" and code in CE_areas:
+                areas.append(CE_areas[code])
+
+            # RESOURCES ----------
+            elif ltype == "resource" and code in CE_resources:
+                resources.append(CE_resources[code])
+
+            # TASKS --------------
+            elif ltype == "task" and code in CE_task_tags:
+                tasks.append(CE_task_tags[code])
+
+            # PLACES -------------
+            elif ltype == "place" and code in CE_places:
+                places.append({
+                    "code": code,
+                    "prefix": CE_places[code].get("AddressPrefix"),
+                    "lat": CE_places[code].get("Lat"),
+                    "lng": CE_places[code].get("Long"),
+                    "url": CE_places[code].get("url")
+                })
+
+
+        return resources, tasks, places, areas
+
+
+    def build_eventlist_dataframe(self,c_election):
+        """
+        Produce an eventlist dataframe matching the intent of the JS summary.
+        """
+        CurrentElection = get_election_data(c_election)
+
+        slots = CurrentElection["calendar_plan"]["slots"]
+        rows = []
+        print("__Building events from slots:",slots)
+        for key, slot in slots.items():
+            dt = parse_slot_key(key)
+
+            resources, tasks, places, areas = self.process_lozenges(
+                slot.get("lozenges", []),
+                CurrentElection
+            )
+            if places == "" or places == []:
+                continue
+            print("datetime", dt,
+            "date", dt.date() if dt else None,
+            "time", dt.time() if dt else None,
+            "places", places,   # contains lat/lng/url etc.
+            "areas", areas,
+            "tasks",tasks)
+
+            rows.append({
+                "datetime": dt,
+                "date": dt.date() if dt else None,
+                "time": dt.time() if dt else None,
+                "resources": resources,
+                "tasks": tasks,
+                "places": places,   # contains lat/lng/url etc.
+                "areas": areas,     # kept separate
+                "availability": slot.get("availability"),
+                "raw_key": key,
+                "lozenges": slot.get("lozenges", [])
+            })
+
+
+        df = pd.DataFrame(rows, columns=["datetime",
+                    "date",
+                    "time",
+                    "resources",
+                    "tasks",
+                    "places",
+                    "areas",
+                    "availability",
+                    "raw_key",
+                    "lozenges"])
+        df.sort_values("datetime", inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        return df
 
     def renumber(self, etype):
         # Filter only children of the matching type
@@ -1155,8 +1278,7 @@ class TreeNode:
         for index, limb  in namepoints.iterrows():
             fam_values = [x.value for x in fam_nodes]
             if limb['Name'] not in fam_values:
-                datafid = abs(hash(limb['Name']))
-                newnode = TreeNode(normalname(limb['Name']),datafid, (limb['Lat'],limb['Long']),self.level+1,elect )
+                newnode = TreeNode(normalname(limb['Name']), (limb['Lat'],limb['Long']),self.level+1,elect )
                 egg = self.add_Tchild(newnode, nodetype,elect)
                 egg.file = subending(egg.file,ending)
                 [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
@@ -1349,9 +1471,9 @@ class TreeNode:
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
 #                if limb.FID not in fam_fids:
-                egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
+                egg = TreeNode(newname, here,self.level+1,c_election)
 #                else:
-#                    egg = TreeNode(newname, newFid(fam_fids), here,self.level+1,c_election)
+#                    egg = TreeNode(newname, here,self.level+1,c_election)
                 print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
                 egg = self.add_Tchild(egg, electtype, c_election)
                 [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
@@ -2528,105 +2650,6 @@ def parse_slot_key(slot_key):
         return None
 
 
-def process_lozenges(lozenges, CE):
-    """
-    Convert lozenges from calendar slots into readable forms.
-    """
-
-    resources = []
-    tasks = []
-    places = []
-    areas = []  # kept separate in case area → place mapping is added later
-
-
-    CE_resources = OPTIONS['resources']
-    CE_task_tags, CE_outcome_tags = get_tags_json(CE['tags'])
-    CE_areas = OPTIONS['areas']
-    CE_places = CE.get("places", {})
-    print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
-    for loz in lozenges:
-        ltype = loz.get("type")
-        code = loz.get("code")
-
-        # AREA ---------------
-        if ltype == "area" and code in CE_areas:
-            areas.append(CE_areas[code])
-
-        # RESOURCES ----------
-        elif ltype == "resource" and code in CE_resources:
-            resources.append(CE_resources[code])
-
-        # TASKS --------------
-        elif ltype == "task" and code in CE_task_tags:
-            tasks.append(CE_task_tags[code])
-
-        # PLACES -------------
-        elif ltype == "place" and code in CE_places:
-            places.append({
-                "code": code,
-                "prefix": CE_places[code].get("AddressPrefix"),
-                "lat": CE_places[code].get("Lat"),
-                "lng": CE_places[code].get("Long"),
-                "url": CE_places[code].get("url")
-            })
-
-
-    return resources, tasks, places, areas
-
-
-def build_eventlist_dataframe(c_election):
-    """
-    Produce an eventlist dataframe matching the intent of the JS summary.
-    """
-    CurrentElection = get_election_data(c_election)
-
-    slots = CurrentElection["calendar_plan"]["slots"]
-    rows = []
-    print("__Building events from slots:",slots)
-    for key, slot in slots.items():
-        dt = parse_slot_key(key)
-
-        resources, tasks, places, areas = process_lozenges(
-            slot.get("lozenges", []),
-            CurrentElection
-        )
-        if places == "" or places == []:
-            continue
-        print("datetime", dt,
-        "date", dt.date() if dt else None,
-        "time", dt.time() if dt else None,
-        "places", places,   # contains lat/lng/url etc.
-        "areas", areas,
-        "tasks",tasks)
-
-        rows.append({
-            "datetime": dt,
-            "date": dt.date() if dt else None,
-            "time": dt.time() if dt else None,
-            "resources": resources,
-            "tasks": tasks,
-            "places": places,   # contains lat/lng/url etc.
-            "areas": areas,     # kept separate
-            "availability": slot.get("availability"),
-            "raw_key": key,
-            "lozenges": slot.get("lozenges", [])
-        })
-
-
-    df = pd.DataFrame(rows, columns=["datetime",
-                "date",
-                "time",
-                "resources",
-                "tasks",
-                "places",
-                "areas",
-                "availability",
-                "raw_key",
-                "lozenges"])
-    df.sort_values("datetime", inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    return df
-
 
 class ExtendedFeatureGroup(FeatureGroup):
     def __init__(self, name=None, overlay=True, control=True, show=True, type=None, id=None, **kwargs):
@@ -3309,10 +3332,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                 #the exist id = the new id , dont do anything
         return len(self._children) - entrylen
 
-
     def add_genmarkers(self, c_election, node, type, static):
-
-        eventlist = build_eventlist_dataframe(c_election)
+        eventlist = node.build_eventlist_dataframe(c_election)
         print(f" ___GenMarkers: from {c_election} to {eventlist}")
         for _, row in eventlist.iterrows():
 
@@ -4792,7 +4813,7 @@ if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
 
 resources = {}
 task_tags, outcome_tags = get_tags_json(CurrentElection['tags'])
-areas = {}
+areas = current_node.get_areas()
 # override if RESOURCES_FILE(.csv) exists because it initialises resources if options file deleted
 resourcesdf = pd.DataFrame()
 if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
@@ -4827,7 +4848,7 @@ OPTIONS = {
 if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
         OPTIONS = json.load(f)
-    areas =  OPTIONS['areas']
+    areas =  current_node.get_areas()
     task_tags, outcome_tags =  get_tags_json(CurrentElection['tags'])
     resources = OPTIONS['resources']
 
@@ -7344,6 +7365,8 @@ def wardreport(path):
     persist(current_node)
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
 
+
+
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
@@ -7712,7 +7735,7 @@ def calendar_partial(path):
 
     print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
 
-    areas = Featurelayers[ctype].areashtml
+    areas = current_node.get_areas()
     print(f"caldata for {current_node.value} of length {len(areas)} ")
 
     # share input and outcome tags

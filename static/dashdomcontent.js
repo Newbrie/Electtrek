@@ -22,8 +22,57 @@
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
 
+  // Run when DOM is fully loaded
+
+  try {
+      // Fetch areas from backend API
+      const res = await fetch("/get_areas");
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
+      const data = await res.json();
+      // Expected data: { areas: {...} } or your accordion dict
+
+      // Save globally if needed
+      window.AREAS = data.areas || {};
+
+      // Populate the accordion container
+      populateAreaAccordion(window.AREAS);
+
+  } catch (err) {
+      console.error("Failed to fetch areas:", err);
+      const container = document.getElementById("areaAccordionContainer");
+      if (container) {
+          container.innerHTML = '<div class="alert alert-danger">Failed to load areas</div>';
+      }
+  }
 
   console.log("Initial view set: calendar visible, map hidden");
+
+
+  document.addEventListener("click", function (e) {
+      const btn = e.target.closest(".area-option");
+      if (!btn) return;
+
+      const fid = btn.dataset.fid;
+      const name = btn.dataset.name;
+      const select = document.getElementById("areaSelect");
+
+      // toggle selection
+      let existing = [...select.options].find(o => o.value === fid);
+
+      if (existing) {
+          existing.remove();
+          btn.classList.remove("active");
+      } else {
+          const opt = document.createElement("option");
+          opt.value = fid;
+          opt.textContent = name;
+          opt.selected = true;
+          select.appendChild(opt);
+          btn.classList.add("active");
+      }
+  });
+
 
 
  window.addEventListener("message", async (event) => {
