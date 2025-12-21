@@ -13,39 +13,84 @@
  * Populate the area accordion based on your areas dict.
  * @param {Object} areasDict - Structure: { childId: { node, children: [...] } }
  */
-function populateAreaAccordion(areasDict) {
-    const container = document.getElementById("areaAccordionContainer");
-    if (!container) return;
+ function populateAreaAccordion(areasDict) {
+     console.group("📍 populateAreaAccordion");
 
-    container.innerHTML = ""; // Clear existing content
+     console.log("Input areasDict:", areasDict);
 
-    Object.values(areasDict).forEach(child => {
-        const childDiv = document.createElement("div");
-        childDiv.classList.add("mb-2", "area-option");
-        childDiv.dataset.fid = child.node.fid;
-        childDiv.dataset.name = child.node.value;
-        childDiv.textContent = child.node.value;
+     const container = document.getElementById("areaAccordionContainer");
+     if (!container) {
+         console.warn("❌ areaAccordionContainer not found in DOM");
+         console.groupEnd();
+         return;
+     }
 
-        container.appendChild(childDiv);
+     // Clear existing content
+     container.innerHTML = "";
+     console.log("🧹 Cleared existing accordion content");
 
-        // Optionally, add grandchildren
-        if (child.children && child.children.length) {
-            const subContainer = document.createElement("div");
-            subContainer.style.paddingLeft = "15px";
+     const children = Object.values(areasDict || {});
+     console.log(`🔢 Found ${children.length} top-level area(s)`);
 
-            child.children.forEach(grand => {
-                const grandDiv = document.createElement("div");
-                grandDiv.classList.add("mb-1", "area-option");
-                grandDiv.dataset.fid = grand.fid;
-                grandDiv.dataset.name = grand.value;
-                grandDiv.textContent = grand.value;
-                subContainer.appendChild(grandDiv);
-            });
+     children.forEach((child, idx) => {
+         if (!child?.node) {
+             console.warn(`⚠️ Skipping invalid child at index ${idx}:`, child);
+             return;
+         }
 
-            container.appendChild(subContainer);
-        }
-    });
-}
+         console.log(`➡️ Adding child area [${idx}]`, {
+             fid: child.node.nid,
+             name: child.node.value,
+             grandchildren: child.children?.length || 0
+         });
+
+         const childDiv = document.createElement("div");
+         childDiv.classList.add("mb-2", "area-option");
+         childDiv.dataset.fid = child.node.nid;
+         childDiv.dataset.name = child.node.value;
+         childDiv.textContent = child.node.value;
+
+         container.appendChild(childDiv);
+
+         // -----------------------------
+         // Grandchildren
+         // -----------------------------
+         if (child.children && child.children.length) {
+             const subContainer = document.createElement("div");
+             subContainer.style.paddingLeft = "15px";
+
+             console.log(`   ↳ Adding ${child.children.length} sub-area(s)`);
+
+             child.children.forEach((grand, gidx) => {
+                 if (!grand) {
+                     console.warn(`   ⚠️ Skipping invalid grandchild at index ${gidx}`);
+                     return;
+                 }
+
+                 console.log(`   ➕ Sub-area [${gidx}]`, {
+                     fid: grand.nid,
+                     name: grand.value
+                 });
+
+                 const grandDiv = document.createElement("div");
+                 grandDiv.classList.add("mb-1", "area-option");
+                 grandDiv.dataset.fid = grand.nid;
+                 grandDiv.dataset.name = grand.value;
+                 grandDiv.textContent = grand.value;
+
+                 subContainer.appendChild(grandDiv);
+             });
+
+             container.appendChild(subContainer);
+         } else {
+             console.log("   ↳ No sub-areas");
+         }
+     });
+
+     console.log("✅ Area accordion populated successfully");
+     console.groupEnd();
+ }
+
 
 
 

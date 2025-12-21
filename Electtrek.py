@@ -71,15 +71,40 @@ levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "
 
 levels = ['country','nation','county','constituency','ward/division','polling_district/walk','street/walkleg','elector']
 
-def find_level_containing(word):
-    word = word.lower()
-    for i, level in enumerate(levels):
-        if word in level.lower():
-            return i
-    return -1  # Not found
 
-# want to equate levels with certain types, eg 4 is ward and div
+
+def parent_level_for(child_type):
+    """
+    Returns the level index of the node you must be on
+    to list children of `child_type`.
+    """
+    LEVEL_INDEX = {
+        'country': 0,
+        'nation': 1,
+        'county': 2,
+        'constituency': 3,
+        'ward': 4,
+        'division': 4,
+        'polling_district': 5,
+        'walk': 5,
+        'street': 6,
+        'walkleg': 6,
+        'elector': 7
+    }
+
+    if child_type not in LEVEL_INDEX:
+        raise ValueError(f"Unknown node type: {child_type}")
+
+    child_level = LEVEL_INDEX[child_type]
+
+    if child_level == 0:
+        return None
+
+    return child_level - 1
+
+
 # want to look up the level of a type ,and the types in a level
+
 
 def move_item(lst, from_index, to_index):
     """
@@ -420,13 +445,15 @@ def get_current_election(session=None, session_data=None):
     return current_election
 
 def get_election_data(current_election):
+    CurrentElection = {}   # ✅ guarantee existence
     file_path = ELECTIONS_FILE.replace(".json",f"-{current_election}.json")
     print("____Reading CurrentElection File:",file_path)
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r') as f:
                 CurrentElection = json.load(f)
-            print(f"___Loaded CurrentElection Data:{ current_election }: {CurrentElection }" )
+
+            print(f"___Election Loaded  CurrentElection Data:{ current_election }: Data: {CurrentElection }" )
             return CurrentElection
         except Exception as e:
             print(f"❌ Failed to read {file_path} Election JSON: {e}")
@@ -458,6 +485,7 @@ def save_election_data (c_election,ELECTION):
     return
 
 def get_counters(session=None, session_data=None):
+    global TREK_NODES
 
     try:
         if not session or 'gtagno_counters' not in session:
@@ -513,29 +541,21 @@ def get_current_node(session=None, session_data=None):
             TREK_NODES = pickle.load(f)
 
     if session and 'current_node_id' in session:
-        current_node_id = session.get('current_node_id',"UNITED_KINGDOM")
-        print("[Main Thread] current_node_id from session:", session.get('current_node_id'))
+        current_node_id = session.get('current_node_id',None)
+        print("[Main Thread] current_node_id from session:", session.get('current_node_id',"None"))
         node = TREK_NODES.get(current_node_id)
-    elif session_data and 'current_node_id' in session_data and session_data.get('current_node_id',"UNITED_KINGDOM"):
-        print("[Background Thread] current_node_id from session_data:", session_data.get('current_node_id',"UNITED_KINGDOM"))
-        current_node_id = session_data.get('current_node_id',"UNITED_KINGDOM")
+    elif session_data and 'current_node_id' in session_data and session_data.get('current_node_id',"None"):
+        print("[Background Thread] current_node_id from session_data:", session_data.get('current_node_id',"None"))
+        current_node_id = session_data.get('current_node_id',None)
         node = TREK_NODES.get(current_node_id)
     else:
-        current_node_id = 0
-        node = None
+        node = get_root()
         print("⚠️ current_node_id not found in session or session_data:so id = ",238 )
 
     if node == None:
-        longmean = statistics.mean([-7.57216793459,  1.68153079591])
-        latmean = statistics.mean([ 49.959999905, 58.6350001085])
-        roid = (latmean,longmean)
-        MapRoot = TreeNode("UNITED_KINGDOM", roid, 0, "DEMO")
-        MapRoot.dir = "UNITED_KINGDOM"
-        MapRoot.file = "UNITED_KINGDOM-MAP.html"
-        RootPath = MapRoot.dir+"/"+MapRoot.file
-        TREK_NODES = {}
-        register_node(MapRoot)
-        node = MapRoot
+        node = get_root()
+        current_node_id = node.nid
+
         print (f" current_node_id: {current_node_id} not in TREK_NODES:",TREK_NODES)
         print("⚠️ current_node not found in stored TREK_NODES, so starting new MapRoot")
 
@@ -544,7 +564,6 @@ def get_current_node(session=None, session_data=None):
 
 
 def restore_from_persist(session=None,session_data=None):
-    global TREK_NODES
 
     global Treepolys
     global Fullpolys
@@ -589,7 +608,7 @@ def restore_from_persist(session=None,session_data=None):
     return
 
 def persist(node):
-    global TREK_NODES
+
 
     global allelectors
     global Treepolys
@@ -606,8 +625,7 @@ def persist(node):
     allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
     print('___persisting nodes ', node.value)
-    with open(TREKNODE_FILE, 'wb') as f:
-        pickle.dump(TREK_NODES, f)
+    save_nodes()
 
     return
 
@@ -622,9 +640,6 @@ def restore_fullpolys(node_type):
     if  os.path.exists(FULLPOLY_FILE) and os.path.getsize(FULLPOLY_FILE) > 0:
         with open(FULLPOLY_FILE, 'rb') as f:
             Fullpolys = pickle.load(f)
-
-    current_node = get_current_node(session)
-    current_election = get_current_election(session)
 
     Treepolys[node_type] = Fullpolys[node_type]
 
@@ -677,14 +692,59 @@ def strip_filename_from_path(path):
 # This prints a script tag you can paste into your HTML
 import uuid
 
+
+def save_nodes():
+    with open(TREKNODE_FILE, 'wb') as f:
+        pickle.dump(TREK_NODES, f)
+    return
+
+def get_root():
+    for node in TREK_NODES.values():
+        if node.parent is None:
+            print("___Get root1:", node.nid)
+            return node
+    longmean = statistics.mean([-7.57216793459,  1.68153079591])
+    latmean = statistics.mean([ 49.959999905, 58.6350001085])
+    roid = (latmean,longmean)
+    MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0, "DEMO")
+    MapRoot.dir = "UNITED_KINGDOM"
+    MapRoot.file = "UNITED_KINGDOM-MAP.html"
+    RootPath = MapRoot.dir+"/"+MapRoot.file
+    print("___Get root2:", MapRoot.nid)
+    return MapRoot
+
+def get_last(CE):
+    with open(TREKNODE_FILE, 'rb') as f:
+        TREK_NODES = pickle.load(f)
+    print("TREK NODES:",TREK_NODES)
+    cid = CE.get("cid")
+    print("Election cid:",cid)
+    if cid and cid in TREK_NODES:
+        last_node = TREK_NODES[cid]
+        print("___LAST NODE in election:",last_node.value)
+    else:
+        last_node = get_root()
+        CE["cid"] = last_node.nid
+        print("___LAST ROOT NODE in election:",last_node.value)
+    return last_node
+
+def reset_nodes():
+    global TREK_NODES
+    TREK_NODES = {}
+    root = get_root()
+    TREK_NODES[root.nid] = root
+    save_nodes()
+    return
+
 class TreeNode:
-    def __init__(self, value,roid, lev, elect, fid=None):
+    def __init__(self, value, fid, roid, lev, elect):
         global levelcolours
+        self.nid = str(uuid.uuid1())
         self.value = normalname(str(value))
         self.children = []
         self.type = 'country'
         self.parent = None
-        self.fid = str(uuid.uuid4())   # ← UNIQUE, NO LOOKUP
+        self.fid = fid # this is the external file boundary identifier
         self.level = lev
         self.file = self.value+"-MAP.html"
         self.dir = self.value
@@ -720,7 +780,7 @@ class TreeNode:
 
         for child in self.children:  # top-level regions
             # Map grandchildren (areas) as fid -> name
-            areas = {grand.fid: grand.value for grand in child.children} if child.children else {}
+            areas = {grand.nid: grand.value for grand in child.children} if child.children else {}
             area_groups[child.value] = areas
 
         return area_groups
@@ -855,7 +915,7 @@ class TreeNode:
         global Treepolys
         global Fullpolys
         global levels
-        global TREK_NODES
+
         global allelectors
         global areaelectors
         global CurrentElection
@@ -953,7 +1013,7 @@ class TreeNode:
             next_level = node.level + 1
             ntype = gettypeoflevel(estyle, raw_path_for_types, next_level)
 
-            print(f"   ➡️ under {route()} Looking for part: '{part}' at level {next_level} (ntype={ntype})")
+            print(f"   ➡️ under {route()} Looking for part: '{part}' at next level {next_level} (ntype={ntype})")
 
             # Expand children dynamically
             if next_level <= 4:
@@ -1251,7 +1311,7 @@ class TreeNode:
         return target
 
     def create_name_nodes(self,elect,nodetype,namepoints,ending):
-        global TREK_NODES
+
         zonecolour = {
             "ZONE_0": "black", "ZONE_1": "red", "ZONE_2": "lime",
             "ZONE_3": "blue", "ZONE_4": "yellow", "ZONE_5": "cyan",
@@ -1278,8 +1338,9 @@ class TreeNode:
         for index, limb  in namepoints.iterrows():
             fam_values = [x.value for x in fam_nodes]
             if limb['Name'] not in fam_values:
-                newnode = TreeNode(normalname(limb['Name']), (limb['Lat'],limb['Long']),self.level+1,elect )
-                egg = self.add_Tchild(newnode, nodetype,elect)
+                datafid = abs(hash(limb['Name']))
+                newnode = TreeNode(normalname(limb['Name']),datafid, (limb['Lat'],limb['Long']),self.level+1,elect )
+                egg = self.add_Tchild(newnode, nodetype, elect)
                 egg.file = subending(egg.file,ending)
                 [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
                 egg.col = zonecolour.get(limb['Zone'],'black')
@@ -1290,7 +1351,6 @@ class TreeNode:
                 print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
 
                 fam_nodes.append(egg)
-                register_node(egg)
 
     #    self.aggTarget()
         print('______Create Namepoints :',nodetype,namepoints)
@@ -1315,7 +1375,7 @@ class TreeNode:
         global workdirectories
         global Treepolys
         global CurrentElection
-        global TREK_NODES
+
 
 # if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
 # the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
@@ -1410,7 +1470,7 @@ class TreeNode:
     def create_map_branch(self,c_election,electtype):
         global Treepolys
         global Fullpolys
-        global TREK_NODES
+
         global Overlaps
 
         import random
@@ -1461,7 +1521,7 @@ class TreeNode:
 
         for index,limb in ChildPolylayer.iterrows():
             fam_values = [x.value for x in fam_nodes]
-#            fam_fids = [x.fid for x in fam_nodes]
+
             newname = normalname(limb.NAME)
             centroid_point = limb.geometry.centroid
             here = (centroid_point.y, centroid_point.x)
@@ -1470,10 +1530,10 @@ class TreeNode:
             print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
-#                if limb.FID not in fam_fids:
-                egg = TreeNode(newname, here,self.level+1,c_election)
+
+                egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
 #                else:
-#                    egg = TreeNode(newname, here,self.level+1,c_election)
+#                    egg = TreeNode(newname, newFid(fam_fids), here,self.level+1,c_election)
                 print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
                 egg = self.add_Tchild(egg, electtype, c_election)
                 [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
@@ -1482,7 +1542,6 @@ class TreeNode:
                 egg.updateParty()
                 egg.updateTurnout()
                 egg.updateElectorate("0")
-                register_node(egg)
 
             i = i + 1
 
@@ -2207,9 +2266,8 @@ class TreeNode:
         return d
 
     def add_Tchild(self, child_node, etype, elect):
-        global TREK_NODES
+
         # creates parent-child relationship
-        self.child = child_node
         child_node.parent = self
         self.children.append(child_node)
         child_node.type = etype
@@ -2224,6 +2282,9 @@ class TreeNode:
             raise Exception("layerCounter type does not exist!")
 
         # 1. Calculate gtagno (1-based)
+        print("Counters:", counters)
+        print("etype:", etype)
+
         counters[etype] += 1
         child_node.gtagno = counters[etype]
 
@@ -2256,8 +2317,9 @@ class TreeNode:
 
         child_node.election = elect
 
-        print("_________new child node dir:  ",child_node.dir)
-        register_node(child_node)
+        print("REGISTERING NODE:", child_node.nid, child_node.value)
+        TREK_NODES[child_node.nid] = child_node
+        print("REGISTERED OK")
 
         return child_node
 
@@ -3300,18 +3362,18 @@ class ExtendedFeatureGroup(FeatureGroup):
                 self._children.clear()
             entrylen = len(self._children)
             print("Markers . . ACCUMULATING from",entrylen)
-            self.id = node.fid
+            self.id = node.nid
             self.add_genmarkers(c_election,node,'marker',static)
             return len(self._children) - entrylen
         entrylen = len(self._children)
         if len(node.children) > 0:
     # each layer content is identified by the node id at which it created, so new node new content, same node old content
-            if self.id != node.value: # new node new content
+            if self.id != node.nid: # new node new content
                 if not OPTIONS['ACC']:
                     self._children.clear()
                 entrylen = len(self._children)
                 print("ACCUMULATING from",entrylen)
-                self.id = node.fid
+                self.id = node.nid
         # create the content for an existing layer derived from the node children and required type
                 if intention_type == 'street' or intention_type == 'walkleg':
                     self.add_nodemarks(node,intention_type,static)
@@ -4089,31 +4151,20 @@ def getstreamrag():
         print("_____No Active electors file:", election, rag)
     return rag
 
-def register_node(node):
-    global TREK_NODES
-    TREK_NODES[node.fid] = node
-#    print("Trek Nodes:",TREK_NODES)
-    return
+
 
 def visit_node(v_node, c_elect,CurrEL, mapfile):
     # Access the first key from the dictionary
     print(f"___under {c_elect} visiting mapfile:", mapfile,CurrEL['mapfiles'])
     CurrEL2 = CurrEL
+    CurrEL2['cid'] = v_node.nid
     CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], mapfile)
     save_election_data(c_elect, CurrEL2)
     session['current_election'] = c_elect
-    session['current_node_id'] = v_node.fid
+    session['current_node_id'] = v_node.nid
     print(f"___under {c_elect} changed from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
     return
 
-
-
-def reset_nodes():
-    global TREK_NODES
-    TREK_NODES = {}
-    with open(TREKNODE_FILE, 'wb') as f:
-        pickle.dump(TREK_NODES, f)
-    return
 
 
 def get_L4area(nodelist, here):
@@ -4196,7 +4247,7 @@ def route():
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
-    global TREK_NODES, allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress
+    global allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress
 
     from sklearn.metrics.pairwise import haversine_distances
 
@@ -4504,9 +4555,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             mainframe = pd.DataFrame(mainframe,columns=Outcols)
 
             current_election = stream
-            CurrentElection = get_election_data(stream)
-            current_node = get_current_node(session_data)
-
+            CurrentElection = get_election_data(current_election)
+            current_node = get_last(CurrentElection)
             print('___persisting file ', ELECTOR_FILE, len(allelectors))
             allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
@@ -4781,9 +4831,9 @@ Overlaps = {
 "country" : 1,
 "nation" : 0.1,
 "county" : 0.001,
-"constituency" : 0.0000005,
-"ward" : 0.000005,
-"division" : 0.000005,
+"constituency" : 0.0005,
+"ward" : 0.0005,
+"division" : 0.0000005,
 "walk" : 0.005,
 "polling_district" : 0.005,
 "street" : 0.005,
@@ -4793,19 +4843,22 @@ Overlaps = {
 # this is for creating a new mapfile when one does not exist.
 TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
+# add the root TreeNode to the node tree
+reset_nodes()
 
-# All Election Settings
+# Get al the Elections Names
 ELECTIONS = get_election_names()
 
-current_node = get_current_node(session)
 current_election = "DEMO"
 CurrentElection = get_election_data(current_election)
+print("🔍 First election:", CurrentElection)
+current_node = get_last(CurrentElection)
 #election constants and event values are now loaded up
 constants = CurrentElection
 places =  CurrentElection['places']
 print("🔍 constants:", constants)
 
-# the general list of elections and election data file proessing streams
+# the general list of  election data files and proessing streams
 stream_table = {}
 if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
     with open(TABLE_FILE, "r") as f:
@@ -5039,7 +5092,8 @@ def reassign_parent():
     global OPTIONS
     global constants
     print(">>> /reassign_parent called")
-    current_node = get_current_node(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
 
     restore_from_persist(session)
     print("✔ Restored from persist")
@@ -5243,12 +5297,14 @@ def update_walk():
     global allelectors
     global layeritems
 
-    global TREK_NODES
+
     global OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     data = request.json
     walk_name = data.get('walkName')
     new_resource = data.get('newResource')
@@ -5267,19 +5323,20 @@ def kanban():
     global allelectors
     global layeritems
 
-    global TREK_NODES
+
     global areaelectors
     global OPTIONS
 
 # campaign plan is only available to westminster elections at level 3 and others at level 4.
 # every election should acquire an election node(ping to its mapfile) to which this route should take you
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     current_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
     mask = (allelectors['Election'] == current_election)
 
     areaelectors = allelectors[mask]
@@ -5404,9 +5461,11 @@ def update_walk_kanban():
 
     # Restore context
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     Territory_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
     mask = (
@@ -5432,9 +5491,10 @@ def update_walk_kanban():
 @login_required
 def telling():
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
     valid_tags = CurrentElection['tags']
@@ -5485,9 +5545,10 @@ def leafletting():
 def check_enop(enop):
     global CurrentElection
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     # Check if ENOP exists in the DataFrame
     if enop in allelectors['ENOP'].values:
         # Get the current Tags for the ENOP
@@ -5547,9 +5608,11 @@ def update_location_tags():
     global allelectors
     global areaelectors
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
 
@@ -5604,9 +5667,9 @@ def location_search():
     global allelectors
     global areaelectors
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
     query = request.args.get("query", "").strip()
@@ -5648,9 +5711,9 @@ def search_electors(df, query):
 def search_api():
     global allelectors
 
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     if len(allelectors) != 0:
         restore_from_persist(session=session)
 
@@ -5734,9 +5797,9 @@ def search():
 @login_required
 def location():
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
@@ -5779,9 +5842,9 @@ def get_tags():
 def add_tag():
     global CurrentElection
     restore_from_persist(session=session)
-    current_node = get_current_node(session=session)
-    current_election = get_current_election(session=session)
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     try:
         data = request.get_json()
         tag = data.get("tag", "").strip()
@@ -5849,8 +5912,9 @@ def deactivate_stream():
 
     if election not in ELECTIONS.keys():
         return jsonify({'status': 'error', 'message': 'Election does not exist','html':html}), 400
-    CurrentElection = get_election_data(election)
-    current_node = get_current_node(session)
+    current_election = election
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     delete_path = CurrentElection['mapfiles'][-1]
     estyle = CurrentElection['territories']
     delete_node = current_node.ping_node(estyle,election,delete_path)
@@ -5884,18 +5948,20 @@ def reset_Elections():
     global DQstats
     global progress
 
-    global TREK_NODES
+
     global Treepolys
     global Fullpolys
 
     fixed_path = ELECTOR_FILE  # Set your path
     print("____Route/Reset-Election")
 
-    TREK_NODES = {}
-
     if not fixed_path or not os.path.exists(fixed_path):
         return jsonify({'message': 'Elections reset unnessary - no election data '}), 404
-    current_node = get_current_node(session)
+
+    current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     arch_path = fixed_path.replace(".csv", "-ARCHIVE.csv")
     allelectors.to_csv(arch_path,sep='\t', encoding='utf-8', index=False)
     formdata = {}
@@ -5931,9 +5997,9 @@ def election_report():
     elections_dir = os.path.join(config.workdirectories['workdir'], 'static', 'data')
     report_data = []
 
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     reportfile = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY-MAP.html"
     estyle = CurrentElection['territories']
@@ -6029,7 +6095,7 @@ def election_report():
 @app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
-    global constants, OPTIONS, constants, TREK_NODES, Treepolys, Featurelayers
+    global constants, OPTIONS, constants, Treepolys, Featurelayers
     import json
 
     try:
@@ -6048,11 +6114,12 @@ def set_election():
         if not data or "election" not in data:
             return jsonify(success=False, error="No election provided"), 400
 
-        current_node = get_current_node(session)
+
         current_election = data["election"]
         session['current_election'] = current_election
-
         CurrentElection = get_election_data(current_election)
+        current_node = get_last(CurrentElection)
+
         estyle = CurrentElection['territories']
         print("____Route/set-election/constantsX", current_election, CurrentElection)
 
@@ -6087,10 +6154,13 @@ def get_current_election_data():
     global OPTIONS
 
     resources = OPTIONS['resources']
-    current_node = get_current_node(session)
+
     restore_from_persist(session)
     current_election = request.args.get("election")
+
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     target_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
 
@@ -6149,9 +6219,9 @@ def get_constants():
     global OPTIONS
     global CurrentElection
     print("____Route/get_constants" )
-    current_node = get_current_node(session=session)
-    current_election = get_current_election(session=session)
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
@@ -6178,12 +6248,14 @@ def set_constant():
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
-    current_node = get_current_node(session)
+
     current_election = data.get("election")
 
     print("____Back End1 election constants update:",current_election,":",name,"-",value)
 
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     counters = get_counters(session)
 
@@ -6215,7 +6287,7 @@ def set_constant():
 def delete_election():
 # delete selected election if not DEMO, then select DEMO as next election
     global formdata
-    current_node = get_current_node(session)
+
     restore_from_persist(session)
     ELECTIONS = get_election_names()
     data = request.get_json()
@@ -6251,7 +6323,10 @@ def delete_election():
                                         current_election=current_election)
     print("____electiontabs",electiontabs_html)
 
+
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     with open(OPTIONS_FILE, 'w') as f:
         json.dump(OPTIONS, f, indent=2)
 
@@ -6264,7 +6339,7 @@ def add_election():
     global OPTIONS
     global CurrentElection
     restore_from_persist(session)
-    current_node = get_current_node(session)
+
     # no have Current Election data loaded
     # Load existing elections
 
@@ -6279,9 +6354,11 @@ def add_election():
     if not new_election or new_election in ELECTIONS:
         return jsonify(success=False, error="Invalid or duplicate election name.")
 
-    current_election = get_current_election(session)
 
-    CurrentElection = get_election_data("DEMO")
+    current_election = "DEMO"
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 
     mapfile = CurrentElection['mapfiles'][-1]
@@ -6353,15 +6430,15 @@ def last_election():
 @app.route("/update-territory", methods=["POST"])
 @login_required
 def update_territory():
-    global TREK_NODES
+
     global allelectors
     global CurrentElection
     global constants
     global OPTIONS
     data = request.get_json()
-    current_node = get_current_node(session)
-    current_election = data.get("election")
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     # mapfiles last entry is what we need to bookmark.
 
@@ -6383,9 +6460,9 @@ def validate_tags():
 
     global CurrentElection
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     # Ensure the valid tags list is a list of strings
     tags_data = CurrentElection['tags']
@@ -6415,7 +6492,7 @@ def validate_tags():
 
 @app.route("/", methods=['POST', 'GET'])
 def index():
-    global TREK_NODES
+
     global streamrag
     global TABLE_TYPES
     global OPTIONS
@@ -6429,9 +6506,9 @@ def index():
         formdata = {}
         streamrag = getstreamrag()
         restore_from_persist(session=session)
-        current_node = get_current_node(session)
         current_election = get_current_election(session)
-        CElection = get_election_data(current_election)
+        CurrentElection = get_election_data(current_election)
+        current_node = get_last(CurrentElection)
         estyle = CElection['territories']
         mapfile = current_node.mapfile()
         calfile = current_node.calfile()
@@ -6463,19 +6540,21 @@ def index():
 #login
 @app.route('/login', methods=['POST', 'GET'])
 def login():
-    global TREK_NODES
+
     global streamrag
     global environment
     global layeritems
     global CurrentElection
 
-    current_node = get_current_node(session)
+
 
     if 'gtagno_counters' not in session:
         session['gtagno_counters'] = {}
         # Example: {'marker': 0, 'country': 0, ...}
 
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     if current_node.value != "UNITED_KINGDOM":
         flash("User already logged in:", session['username'], " at ", current_node.value)
         print("_______ROUTE/Already logged in:", session['username'], " at ", current_node.value)
@@ -6486,9 +6565,9 @@ def login():
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
@@ -6510,7 +6589,7 @@ def login():
         print("Session after login:", dict(session))  # Print session content
 
 
-        session['current_node_id'] = current_node.fid
+        session['current_node_id'] = current_node.nid
         if 'next' in session:
             next = session['next']
             print("_______ROUTE/login next found", next)
@@ -6601,25 +6680,26 @@ def logout():
 @app.route('/dashboard', methods=['GET','POST'])
 @login_required
 def dashboard():
-    global TREK_NODES
+
     global allelectors
     global streamrag
     global formdata
     global CurrentElection
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = "DEMO"
 
-    CurrentElection = get_election_data("DEMO")
+    current_election = "DEMO"
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     print ("___Route/Dashboard allelectors len: ",len(allelectors))
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
         formdata = {}
-        current_node = TREK_NODES.get(session.get('current_node_id',"UNITED_KINGDOM"))
+        current_node = TREK_NODES.get(CurrentElection['cid'])
         if not current_node:
-            current_node = TREK_NODES.get(next(iter(TREK_NODES), None)).findnodeat_Level(0)
+            raise Exception ("Current Election node does not exist")
         streamrag = getstreamrag()
         print ("allelectors len after streamrag: ",len(allelectors))
         path = CurrentElection['mapfiles'][-1]
@@ -6647,7 +6727,7 @@ def dashboard():
 @app.route('/downbut/<path:path>', methods=['GET','POST'])
 @login_required
 def downbut(path):
-    global TREK_NODES
+
     global formdata
     global Treepolys
     global Fullpolys
@@ -6657,9 +6737,11 @@ def downbut(path):
     global OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     formdata = {}
     mask = allelectors['Election'] == current_election
@@ -6706,7 +6788,7 @@ def downbut(path):
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
 def transfer(path):
-    global TREK_NODES
+
     global Treepolys
     global Fullpolys
     global Featurelayers
@@ -6718,9 +6800,11 @@ def transfer(path):
     global Typemaker
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     formdata = {}
 # transfering to another any other node with siblings listed below
@@ -6748,7 +6832,7 @@ def downPDbut(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global filename
     global layeritems
@@ -6756,14 +6840,15 @@ def downPDbut(path):
     global OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = (session)
 
-    previous_node = current_node
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+    previous_node = current_node
+
     estyle = CurrentElection['territories']
     current_node = previous_node.ping_node(estyle,current_election,path) #aligns with election data and takes you to the clicked node
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
     current_node.file = subending(current_node.file,"-PDS.html") # forces looking for PDs file
 
     mask = allelectors['Election'] == current_election
@@ -6812,7 +6897,7 @@ def downWKbut(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global filename
     global layeritems
@@ -6821,19 +6906,20 @@ def downWKbut(path):
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+    previous_node = current_node
     print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
 
-    previous_node = current_node
-    CurrentElection = get_election_data(current_election)
     estyle = CurrentElection['territories']
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(estyle,current_election,path)
 
     current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
-    CurrentElection = get_election_data(current_election)
+
     mapfile = current_node.mapfile()
     print (f"_________ROUTE/downWKbut2 CE {current_election}",previous_node.value, current_node.value, path)
     flash ("_________ROUTE/downWKbut ")
@@ -6892,7 +6978,7 @@ def downMWbut(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global filename
     global layeritems
@@ -6902,9 +6988,10 @@ def downMWbut(path):
 # so this is the button which creates the nodes and map of equal sized walks for the troops
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
@@ -6967,7 +7054,7 @@ def downMWbut(path):
 def STupdate(path):
     global Treepolys
     global Fullpolys
-    global TREK_NODES
+
     global allelectors
     global environment
     global filename
@@ -6975,9 +7062,11 @@ def STupdate(path):
     global CurrentElection
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = (session)
+
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 #    steps = path.split("/")
 #    filename = steps.pop()
@@ -6989,7 +7078,7 @@ def STupdate(path):
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
     current_node = current_node.ping_node(estyle,current_election,path)
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
     print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
@@ -7108,7 +7197,6 @@ def STupdate(path):
     visit_node(current_node,current_election,CurrentElection,mapfile)
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
-    register_node(current_node)
     persist(current_node)
     return  jsonify({"message": "Success", "file": sheetfile})
 
@@ -7119,7 +7207,7 @@ def PDdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global environment
     global filename
@@ -7128,9 +7216,9 @@ def PDdownST(path):
     global OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = (session)
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
@@ -7190,7 +7278,7 @@ def LGdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global environment
     global filename
@@ -7198,17 +7286,18 @@ def LGdownST(path):
     global CurrentElection
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = (session)
+
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     T_level = CurrentElection['level']
 
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
-    current_node = current_node.findnodeat_Level(T_level)
+
 
     current_node = current_node.ping_node(estyle,current_election,path)
-    session['current_node_id'] = current_node.fid
 
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
@@ -7244,7 +7333,7 @@ def LGdownST(path):
     else:
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
-    register_node(current_node)
+
     persist(current_node)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -7257,7 +7346,7 @@ def WKdownST(path):
     global Treepolys
     global Fullpolys
     global Featurelayers
-    global TREK_NODES
+
     global areaelectors
     global environment
     global filename
@@ -7265,9 +7354,10 @@ def WKdownST(path):
     global constants
     global OPTIONS
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
-    current_election = (session)
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 
     allowed = {"C0" :'indigo',"C1" :'darkred', "C2":'white', "C3":'red', "C4":'blue', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
@@ -7276,7 +7366,7 @@ def WKdownST(path):
 
 
     current_node = current_node.ping_node(estyle,current_election,path) # takes to the clicked node in the territory
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
 
 
     walk_node = current_node
@@ -7324,18 +7414,19 @@ def WKdownST(path):
 @app.route('/wardreport/<path:path>',methods=['GET','POST'])
 @login_required
 def wardreport(path):
-    global TREK_NODES
+
     global layeritems
     global formdata
     global CurrentElection
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     current_node = current_node.ping_node(estyle,current_election,path)
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
 
     flash('_______ROUTE/wardreport')
     print('_______ROUTE/wardreport')
@@ -7416,9 +7507,9 @@ def get_table(table_name):
         else:
             return pd.DataFrame(stream_table)
 
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
 
     # Table mapping
@@ -7433,9 +7524,9 @@ def get_table(table_name):
     try:
         if table_name.endswith("_layer"):
             tabtype = table_name.removesuffix("_layer")
-            lev = find_level_containing(tabtype)-1
-            print(f"____NODELOOKUP {table_name} type {tabtype} level {lev} ")
-            print(f"____NODE: {current_node.findnodeat_Level(lev)} tabtype {tabtype} listNUM {len(current_node.findnodeat_Level(lev).childrenoftype(tabtype))}  ")
+            lev = parent_level_for(tabtype)
+            print(f"____NODELOOKUP  start: {current_node.value} table: {table_name} type {tabtype} level {lev} ")
+            print(f"____NODE: {current_node.findnodeat_Level(lev).value} tabtype {tabtype} listNUM {len(current_node.findnodeat_Level(lev).childrenoftype(tabtype))}  ")
             [column_headers,rows, title] = get_layer_table(current_node.findnodeat_Level(lev).childrenoftype(tabtype), str(tabtype)+"s")
             print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
@@ -7460,19 +7551,31 @@ def get_table(table_name):
         print(f"[ERROR] Failed to generate table '{table_name}': {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/fetch_areas', methods=['POST', 'GET'])
+@login_required
+def fetch_areas():
+
+    current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+    accordian = current_node.get_areas()
+    print(f"_______ Fetch under {current_election} for {current_node} Areas {accordian}")
+
+    return jsonify({ "areas": accordian })
+
 
 
 @app.route('/displayareas', methods=['POST', 'GET'])
 @login_required
 def displayareas():
     #calc values in displayed table
-    global TREK_NODES
+
     global layeritems
     global formdata
 
-    current_node = get_current_node(session=session)
-    current_election = get_current_election(session=session)
+    current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     places = CurrentElection['places']
     print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
@@ -7561,21 +7664,22 @@ def displayareas():
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
 @login_required
 def divreport(path):
-    global TREK_NODES
+
     global layeritems
     global formdata
     global Featurelayers
     global CurrentElection
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
     current_node = current_node.ping_node(estyle,current_election,path)
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
     mapfile = current_node.mapfile()
 
     flash('_______ROUTE/divreport')
@@ -7611,7 +7715,7 @@ def divreport(path):
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
 @login_required
 def upbut(path):
-    global TREK_NODES
+
     global allelectors
     global Treepolys
     global Fullpolys
@@ -7622,9 +7726,10 @@ def upbut(path):
     global OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 
     flash('_______ROUTE/upbut',path)
@@ -7679,13 +7784,14 @@ def register():
     password = request.form['password']
     print("Register", username)
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
 
     user = User.query.filter_by(username=username).first()
     if user:
         print("existinuser", user)
-        session['current_node_id'] = current_node.fid
+        session['current_node_id'] = current_node.nid
         return render_template("index.html",error="User already exists")
     else:
         new_user = User(username=username)
@@ -7698,7 +7804,7 @@ def register():
         flash('Logged in successfully.')
 
         next = request.args.get('next')
-        session['current_node_id'] = current_node.fid
+        session['current_node_id'] = current_node.nid
         return redirect(url_for('get_location'))
 
 
@@ -7708,9 +7814,10 @@ def calendar_partial(path):
     global places, resources, constants, OPTIONS
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     ctype = gettypeoflevel(estyle,path, current_node.level + 1)
 
     from collections import defaultdict
@@ -7761,16 +7868,17 @@ def calendar_partial(path):
 @app.route('/thru/<path:path>', methods=['GET','POST'])
 @login_required
 def thru(path):
-    global TREK_NODES
+
     global CurrentElection
 # map is just a straight transfer to the given path
 #    steps = path.split("/")
 #    last = steps.pop()
 #    current_node = selected_childnode(current_node,last)
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
 
     flash ("_________ROUTE/thru:"+path)
@@ -7797,13 +7905,13 @@ def thru(path):
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required
 def showmore(path):
-    global TREK_NODES
+
     global CurrentElection
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     steps = path.split("/")
     last = steps.pop().split("--")
     current_node = selected_childnode(current_node,last[1])
@@ -7812,7 +7920,7 @@ def showmore(path):
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
 
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
 
     return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
 
@@ -7820,9 +7928,9 @@ def showmore(path):
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     file = request.files.get('file')
     if not file:
         return jsonify({'error': 'No file received'}), 400
@@ -7831,7 +7939,7 @@ def upload_file():
     print("_______After Secure filename check: ",file.filename)
     save_path = os.path.join(config.workdirectories['workdir'], filename)
     file.save(save_path)
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
 
     return jsonify({'message': 'File uploaded', 'path': save_path})
 
@@ -7839,7 +7947,7 @@ def upload_file():
 @app.route('/filelist/<filetype>', methods=['POST','GET'])
 @login_required
 def filelist():
-    global TREK_NODES
+
     global allelectors
     global Treepolys
     global Fullpolys
@@ -7852,9 +7960,9 @@ def filelist():
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
@@ -7920,7 +8028,7 @@ def get_progress():
 @app.route('/walks', methods=['POST','GET'])
 @login_required
 def walks():
-    global TREK_NODES
+
     global allelectors
     global Treepolys
     global Fullpolys
@@ -7931,9 +8039,9 @@ def walks():
 
     global environment
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
 
@@ -7949,7 +8057,7 @@ def walks():
         group = electwalks[0]
 
 #    formdata['username'] = session['username']
-        session['current_node_id'] = current_node.fid
+        session['current_node_id'] = current_node.nid
         calfile = current_node.calfile()
 
         return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=mapfile,calfile=calfile)
@@ -7960,14 +8068,14 @@ def walks():
 def postcode():
 # the idea of this service is to locate people's branches using their postcode.
 # first get lat long, then search through constit boundaries and pull up the NAME of the one that its IN
-    global TREK_NODES
+
     global Treepolys
     global Featurelayers
     global CurrentElection
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
 
     flash('__ROUTE/Findpostcode')
 
@@ -7993,7 +8101,7 @@ def postcode():
 @app.route('/firstpage', methods=['GET', 'POST'])
 @login_required
 def firstpage():
-    global TREK_NODES
+
     global allelectors
     global Treepolys
     global Fullpolys
@@ -8012,9 +8120,9 @@ def firstpage():
         return redirect(url_for('login'))
 
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
     estyle = CurrentElection['territories']
 
     print("🔍 Accessed /firstpage")
@@ -8259,7 +8367,7 @@ def firstpage():
 @app.route('/cards', methods=['POST','GET'])
 @login_required
 def cards():
-    global TREK_NODES
+
     global allelectors
     global Treepolys
     global Fullpolys
@@ -8301,7 +8409,7 @@ def cards():
         else:
             flash ( "Data file does not match selected area!")
             print ( "Data file does not match selected area!")
-    session['current_node_id'] = current_node.fid
+    session['current_node_id'] = current_node.nid
     return redirect(url_for('dashboard'))
 
 @app.route('/save_stream_table', methods=['POST'])
@@ -8341,7 +8449,10 @@ def normalise():
     request_form = request.form.to_dict(flat=True)
     request_files = request.files.to_dict(flat=False)  # Getlist-style access
     restore_from_persist(session=session)
-    current_node = get_current_node(session)
+    current_election = get_current_election(session)
+    CurrentElection = get_election_data(current_election)
+    current_node = get_last(CurrentElection)
+
     stream = str(request_form.get('election')).upper()
     streamrag = getstreamrag()
     if streamrag.get(stream, {}).get('Alive') == True:
@@ -8354,8 +8465,7 @@ def normalise():
 
     session['current_election'] = stream
     print("___TESTING TESTING", session['current_election'], request_form.get('election') )
-    current_election = get_current_election(session)
-    CurrentElection = get_election_data(current_election)
+
 
     session_data = dict(session)
 

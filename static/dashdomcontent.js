@@ -26,17 +26,17 @@
 
   try {
       // Fetch areas from backend API
-      const res = await fetch("/get_areas");
+      const res = await fetch("/fetch_areas");
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
 
       const data = await res.json();
       // Expected data: { areas: {...} } or your accordion dict
 
       // Save globally if needed
-      window.AREAS = data.areas || {};
+      window.areas = data.areas || {};
 
       // Populate the accordion container
-      populateAreaAccordion(window.AREAS);
+      populateAreaAccordion(window.areas);
 
   } catch (err) {
       console.error("Failed to fetch areas:", err);
