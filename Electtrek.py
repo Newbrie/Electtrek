@@ -2,7 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import TABLE_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
+from config import TABLE_FILE,LAST_RESULTS_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
 from normalised import normz
 #import normz
 import folium
@@ -57,6 +57,8 @@ import logging
 from flask import has_request_context
 import html
 from folium import Map, Element
+import state
+from state import LEVEL_ZOOM_MAP, LastResults,load_last_results
 
 
 
@@ -410,17 +412,46 @@ def get_election_names():
 
     return election_files
 
+def lastElection():
+    ELECTIONS_DIR = config.workdirectories['workdir']
+    """
+    Return the most recently accessed election file.
+    Fallback: session-stored current election or first available election.
+    """
+    # 1. Try session first
+    last = "DEMO"
+
+    # 2. List elections from filesystem and sort by last access time
+    election_files = get_election_names()  # returns list of election names
+    print(f"____election files: {election_files}")
+
+    if election_files:
+        # map names to full paths
+        paths = [os.path.join(ELECTIONS_DIR, f"{name}.json") for name in election_files]
+        # filter out missing files just in case
+        paths = [p for p in paths if os.path.exists(p)]
+        if paths:
+            # sort descending by access time
+            paths.sort(key=lambda p: os.path.getatime(p), reverse=True)
+            latest_name = os.path.splitext(os.path.basename(paths[0]))[0]
+            # Override session if latest exists
+            last = last or latest_name
+
+    print(f"____last election: {last}")
+
+    return last
+
 def get_current_election(session=None, session_data=None):
     global CurrentElection
 # the sourc eof current election mu reflect what the user sees as the active tab or what is in session_data
     try:
         if not session or 'current_election' not in session:
-                current_election = last_election()
+                current_election = lastElection()
                 print("/get_election1 data: ",current_election)
                 if not current_election:
                     current_election = "DEMO"
         elif not session_data or 'current_election' not in session_data:
-                current_election = last_election()
+                current_election = lastElection()
                 print("/get_election2 data: ",current_election)
                 if not current_election:
                     current_election = "DEMO"
@@ -444,29 +475,7 @@ def get_current_election(session=None, session_data=None):
 
     return current_election
 
-def get_election_data(current_election):
-    CurrentElection = {}   # ✅ guarantee existence
-    file_path = ELECTIONS_FILE.replace(".json",f"-{current_election}.json")
-    print("____Reading CurrentElection File:",file_path)
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as f:
-                CurrentElection = json.load(f)
 
-            print(f"___Election Loaded  CurrentElection Data:{ current_election }: Data: {CurrentElection }" )
-            return CurrentElection
-        except Exception as e:
-            print(f"❌ Failed to read {file_path} Election JSON: {e}")
-    else:
-        file_path = ELECTIONS_FILE.replace(".json",f"-DEMO.json")
-        try:
-            with open(file_path, 'r') as f:
-                CurrentElection = json.load(f)
-            print(f"___Loaded CurrentElection Data:{ current_election }: {CurrentElection }" )
-            return CurrentElection
-        except Exception as e:
-            print(f"❌ Failed to read {file_path} Election JSON: {e}")
-    return None
 
 def save_election_data (c_election,ELECTION):
     file_path = ELECTIONS_FILE.replace(".json",f"-{c_election}.json")
@@ -485,7 +494,7 @@ def save_election_data (c_election,ELECTION):
     return
 
 def get_counters(session=None, session_data=None):
-    global TREK_NODES
+    global Treepolys, Fullpolys
 
     try:
         if not session or 'gtagno_counters' not in session:
@@ -501,7 +510,7 @@ def get_counters(session=None, session_data=None):
 
     if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
         with open(TREKNODE_FILE, 'rb') as f:
-            TREK_NODES = pickle.load(f)
+            state.TREK_NODES = pickle.load(f)
 
     if session and 'gtagno_counters' in session:
         counters = session['gtagno_counters']
@@ -516,13 +525,13 @@ def get_counters(session=None, session_data=None):
         print("⚠️ gtagno_counters not found in session or session_data:so counters = ",{} )
 
     if counters == {}:
-        for etype in Featurelayers.keys():
+        for etype in Treepolys.keys():
             counters[etype] = 0
     return counters
 
 
 def get_current_node(session=None, session_data=None):
-    global TREK_NODES
+    import state
 
     try:
         if not session or 'current_node_id' not in session:
@@ -538,16 +547,16 @@ def get_current_node(session=None, session_data=None):
 
     if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
         with open(TREKNODE_FILE, 'rb') as f:
-            TREK_NODES = pickle.load(f)
+            state.TREK_NODES = pickle.load(f)
 
     if session and 'current_node_id' in session:
         current_node_id = session.get('current_node_id',None)
         print("[Main Thread] current_node_id from session:", session.get('current_node_id',"None"))
-        node = TREK_NODES.get(current_node_id)
+        node = state.TREK_NODES.get(current_node_id)
     elif session_data and 'current_node_id' in session_data and session_data.get('current_node_id',"None"):
         print("[Background Thread] current_node_id from session_data:", session_data.get('current_node_id',"None"))
         current_node_id = session_data.get('current_node_id',None)
-        node = TREK_NODES.get(current_node_id)
+        node = state.TREK_NODES.get(current_node_id)
     else:
         node = get_root()
         print("⚠️ current_node_id not found in session or session_data:so id = ",238 )
@@ -556,10 +565,30 @@ def get_current_node(session=None, session_data=None):
         node = get_root()
         current_node_id = node.nid
 
-        print (f" current_node_id: {current_node_id} not in TREK_NODES:",TREK_NODES)
+        print (f" current_node_id: {current_node_id} not in TREK_NODES:",state.TREK_NODES)
         print("⚠️ current_node not found in stored TREK_NODES, so starting new MapRoot")
 
     return node
+
+def atomic_pickle_dump(obj, path):
+    import tempfile, os, pickle
+    d = os.path.dirname(path)
+    with tempfile.NamedTemporaryFile(dir=d, delete=False) as tf:
+        pickle.dump(obj, tf)
+        tmp = tf.name
+    os.replace(tmp, path)
+
+def safe_pickle_load(path, default):
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return default
+
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    except (EOFError, pickle.UnpicklingError, AttributeError, ValueError, TypeError) as e:
+        print(f"❌ Pickle load failed for {path}: {e}")
+        return default
 
 
 
@@ -571,12 +600,10 @@ def restore_from_persist(session=None,session_data=None):
     global OPTIONS
     global CurrentElection
 
-    if  os.path.exists(TREEPOLY_FILE) and os.path.getsize(TREEPOLY_FILE) > 0:
-        with open(TREEPOLY_FILE, 'rb') as f:
-            Treepolys = pickle.load(f)
-    if  os.path.exists(FULLPOLY_FILE) and os.path.getsize(FULLPOLY_FILE) > 0:
-        with open(FULLPOLY_FILE, 'rb') as f:
-            Fullpolys = pickle.load(f)
+    safe_pickle_load(TREEPOLY_FILE,Treepolys)
+
+    safe_pickle_load(FULLPOLY_FILE,Fullpolys)
+
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
             OPTIONS = json.load(f)
@@ -608,18 +635,14 @@ def restore_from_persist(session=None,session_data=None):
     return
 
 def persist(node):
-
-
     global allelectors
     global Treepolys
     global Fullpolys
 
     print('___persisting file ', TREEPOLY_FILE)
-    with open(TREEPOLY_FILE, 'wb') as f:
-        pickle.dump(Treepolys, f)
+    atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
     print('___persisting file ', FULLPOLY_FILE)
-    with open(FULLPOLY_FILE, 'wb') as f:
-        pickle.dump(Fullpolys, f)
+    atomic_pickle_dump(Fullpolys,FULLPOLY_FILE)
 
     print('___persisting file ', ELECTOR_FILE, len(allelectors))
     allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
@@ -633,22 +656,15 @@ def restore_fullpolys(node_type):
     global Fullpolys
     global Treepolys
 
+    safe_pickle_load(TREEPOLY_FILE,Treepolys)
 
-    if  os.path.exists(TREEPOLY_FILE) and os.path.getsize(TREEPOLY_FILE) > 0:
-        with open(TREEPOLY_FILE, 'rb') as f:
-            Treepolys = pickle.load(f)
-    if  os.path.exists(FULLPOLY_FILE) and os.path.getsize(FULLPOLY_FILE) > 0:
-        with open(FULLPOLY_FILE, 'rb') as f:
-            Fullpolys = pickle.load(f)
+    safe_pickle_load(FULLPOLY_FILE,Fullpolys)
 
     Treepolys[node_type] = Fullpolys[node_type]
 
     print('___persisting file ', TREEPOLY_FILE)
-    with open(TREEPOLY_FILE, 'wb') as f:
-        pickle.dump(Treepolys, f)
-    print('___persisting file ', FULLPOLY_FILE)
-    with open(FULLPOLY_FILE, 'wb') as f:
-        pickle.dump(Fullpolys, f)
+    atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
+
 
     return
 
@@ -695,64 +711,194 @@ import uuid
 
 def save_nodes():
     with open(TREKNODE_FILE, 'wb') as f:
-        pickle.dump(TREK_NODES, f)
+        pickle.dump(state.TREK_NODES, f)
     return
 
 def get_root():
-    for node in TREK_NODES.values():
+    import state
+    for node in state.TREK_NODES.values():
         if node.parent is None:
             print("___Get root1:", node.nid)
             return node
     longmean = statistics.mean([-7.57216793459,  1.68153079591])
     latmean = statistics.mean([ 49.959999905, 58.6350001085])
     roid = (latmean,longmean)
-    MapRoot = TreeNode("UNITED_KINGDOM",238, roid, 0, "DEMO")
+    MapRoot = TreeNode("UNITED_KINGDOM",238, roid, "DEMO")
     MapRoot.dir = "UNITED_KINGDOM"
     MapRoot.file = "UNITED_KINGDOM-MAP.html"
     RootPath = MapRoot.dir+"/"+MapRoot.file
     print("___Get root2:", MapRoot.nid)
     return MapRoot
 
-def get_last(CE):
-    with open(TREKNODE_FILE, 'rb') as f:
-        TREK_NODES = pickle.load(f)
-    print("TREK NODES:",TREK_NODES)
+
+def get_last(current_election, CE):
+    # --- getting the last visited node(cid) in this election ---
+    global Treepolys, Fullpolys
+    import state
+
+
+    # --- Determine cid and default location ---
     cid = CE.get("cid")
-    print("Election cid:",cid)
-    if cid and cid in TREK_NODES:
-        last_node = TREK_NODES[cid]
-        print("___LAST NODE in election:",last_node.value)
+    cidLat = CE.get("cidLat")
+    cidLong = CE.get("cidLong")
+    here = (cidLat,cidLong)
+    sourcepath = CE.get("mapfiles", [None])[-1]
+
+    if cid in state.TREK_NODES:
+        print("___after apply cid:", cid)
+        last_node = state.TREK_NODES[cid]
     else:
-        last_node = get_root()
-        CE["cid"] = last_node.nid
-        print("___LAST ROOT NODE in election:",last_node.value)
+        # --- Determine sourcepath from election file ---
+
+        print("___Get last Sourcepath:", sourcepath)
+        # --- Edge case: no sourcepath and invalid cid → expect lat/lon from query parameters ---
+        if sourcepath is None and here is None:
+            from flask import request, redirect, url_for
+            lat = request.args.get("lat", type=float)
+            lon = request.args.get("lon", type=float)
+            if lat is not None and lon is not None:
+                here = (lat, lon)
+            else:
+                return redirect(url_for("get_location"))
+        safe_pickle_load(TREEPOLY_FILE, Treepolys)
+        safe_pickle_load(FULLPOLY_FILE, Fullpolys)
+        # --- Load Treepolys with either sourcepath or here ---
+        Treepolys, Fullpolys, basepath = ensure_treepolys(
+            sourcepath=None,
+            here=here
+        )
+
+        # --- Apply terminal layer ---
+        Treepolys, Fullpolys, finalpath = apply_terminal_layer(
+            Treepolys=Treepolys,
+            Fullpolys=Fullpolys,
+            current_election=CE,
+            basepath=basepath,
+            sourcepath=None,
+            here=here
+        )
+        print("___after apply basepath:", basepath)
+        print("___after apply sourcepath:", sourcepath)
+        # --- Determine last_node ---
+        estyle = CE.get("territories")
+        last_node = get_root().ping_node(estyle,current_election,sourcepath)
+    # --- Fallback to root if still None ---
+
+    print(f"___ ELECTION: {current_election} NODE {last_node.value} INVOKED AT: {here} usng source: {sourcepath} ")
     return last_node
 
-def reset_nodes():
-    global TREK_NODES
-    TREK_NODES = {}
+
+
+
+
+
+def get_election_data(current_election):
+    print("____Get election:",current_election)
+    CurrentElection = {}   # ✅ guarantee existence
+    file_path = ELECTIONS_FILE.replace(".json",f"-{current_election}.json")
+    print("____Reading CurrentElection File:",file_path)
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                CurrentElection = json.load(f)
+
+            print(f"___Election Loaded  CurrentElection Data:{ current_election }: Data: {CurrentElection }" )
+        except Exception as e:
+            print(f"❌ Failed to read {file_path} Election JSON: {e}")
+    else:
+        file_path = ELECTIONS_FILE.replace(".json",f"-DEMO.json")
+        try:
+            with open(file_path, 'r') as f:
+                CurrentElection = json.load(f)
+            print(f"___Loaded CurrentElection Data:{ current_election }: {CurrentElection }" )
+
+        except Exception as e:
+            print(f"❌ Failed to read {file_path} Election JSON: {e}")
+
+    return CurrentElection
+
+
+def find_node_by_path(basepath: str, debug=False):
+    import state
+
+    if debug:
+        print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES)}")
+
+    if not basepath:
+        return None
+
+    parts = [normalname(p) for p in basepath.strip("/").split("/") if p]
+    if not parts:
+        return None
+
     root = get_root()
-    TREK_NODES[root.nid] = root
-    save_nodes()
-    return
+    node = root
+
+    if normalname(root.value) != parts[0]:
+        if debug:
+            print("[DEBUG] Root mismatch")
+        return None
+
+    for part in parts[1:]:
+        if debug:
+            print(f"[DEBUG] Descending to: {part}")
+
+        matches = [c for c in node.children if normalname(c.value) == part]
+        if not matches:
+            if debug:
+                print(f"[DEBUG] No child match for '{part}'")
+            return None
+
+        node = matches[0]
+
+    if debug:
+        print(f"[DEBUG] Found node: {node.value} ({node.nid})")
+
+    return node
+
+
+from geopy.distance import geodesic
+
+
+def find_node_by_location(here):
+    """
+    Returns the TREK_NODES entry closest to the given lat/lon (here).
+    """
+    if not here:
+        return None
+
+    closest_node = None
+    min_dist = float('inf')
+
+    for node in state.TREK_NODES.values():
+        if hasattr(node, 'latlongroid') and node.latlongroid:
+            dist = geodesic(here, node.latlongroid).meters
+            if dist < min_dist:
+                min_dist = dist
+                closest_node = node
+
+    return closest_node
+
+
 
 class TreeNode:
-    def __init__(self, value, fid, roid, lev, elect):
+    def __init__(self, value, fid, roid, origin):
         global levelcolours
+        self.origin = origin
         self.nid = str(uuid.uuid1())
         self.value = normalname(str(value))
         self.children = []
         self.type = 'country'
         self.parent = None
         self.fid = fid # this is the external file boundary identifier
-        self.level = lev
+        self.level = self.parent.level + 1 if self.parent else 0
         self.file = self.value+"-MAP.html"
         self.dir = self.value
-        self.election = elect
+        self.election = origin
         self.col = levelcolours["C"+str(self.level+4)]
         self.tagno = 1
         self.gtagno = 1
-        self.centroid = roid
+        self.latlongroid = roid
         self.bbox = []
         self.VR = VIC.copy()
         self.VI = VIC.copy()
@@ -761,6 +907,9 @@ class TreeNode:
         self.houses = 0
         self.target = 1
         self.party = "O"
+
+    def __repr__(self):
+        return f"<TNode {self.value} L{self.level} {self.origin}>"
 
 
     def get_areas(self):
@@ -915,12 +1064,12 @@ class TreeNode:
         global Treepolys
         global Fullpolys
         global levels
-
         global allelectors
         global areaelectors
         global CurrentElection
         global SERVER_PASSWORD
         global OPTIONS
+        from state import LEVEL_ZOOM_MAP
 
 
         def strip_leaf_from_path(path):
@@ -1018,10 +1167,10 @@ class TreeNode:
             # Expand children dynamically
             if next_level <= 4:
                 print(f"      🛠 create_map_branch({ntype})")
-                node.create_map_branch(c_election, ntype)
+                node.create_map_branch(estyle,c_election, ntype)
             elif next_level <= 6:
                 print(f"      🛠 create_data_branch for election {c_election}({ntype})")
-                node.create_data_branch(c_election, ntype)
+                node.create_data_branch(estyle,c_election, ntype)
 
             # Try to find a matching child
             matches = [child for child in node.children if child.value == part]
@@ -1046,10 +1195,10 @@ class TreeNode:
 
         try:
             if final_level < 4:
-                node.create_map_branch(c_election, final_ntype)
+                node.create_map_branch(estyle,c_election, final_ntype)
                 print("   ✅ create_map_branch() called")
             elif final_level < 6:
-                node.create_data_branch(c_election, final_ntype)
+                node.create_data_branch(estyle,c_election, final_ntype)
                 print(f"   ✅ create_data_branch() called for {c_election}({final_ntype})")
             else:
                 print("   ℹ️ No further branching at this level.")
@@ -1084,7 +1233,7 @@ class TreeNode:
             selectc = Featurelayers[childtype]
             selectc.show = True
             selected = [selectc]
-            print(f"_____layerstest1 {self.value} layertype: {childtype} areas html:{OPTIONS['areas']}")
+            print(f"_____layerstest1 {self.value} layertype: {childtype} size: {len(selectc._children)} areas html:{OPTIONS['areas']}")
         if self.level > 0 :
 #add siblings layer = self.level eg constituencies
     #        if len(selects._children) == 0:
@@ -1131,122 +1280,123 @@ class TreeNode:
 #        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
-    def updateTurnout(self):
-        global VNORM
-        global VCO
-        global CurrentElection
+    def updateTurnout(self,electionstyle):
+        from state import LastResults
+
         sname = self.value
-        origin = self
-        casnode = origin
-        current_election = self.election
-        CurrentElection = get_election_data(current_election)
-#        print(f"____Turnout in {current_election} with Election data {CurrentElection}" )
-        print ("_____current_election:",current_election)
-        print("____CurrentElection:",CurrentElection)
-        estyle = CurrentElection['territories']
-        if estyle == 'W':
-#cascade last constituency turnout figure to all wards(children) and streets(children)
+        casnode = self
 
-# electorate is for a constituency is derived from wards is derived from streets (if you have electoral roll uploaded )
-# turnover is fixed for constituency(National) or wards(non-National) - streets inherit from either wards or constituency depending on election type - in set up
+        # --- Base turnout assignment ---
+        if electionstyle == "W":  # national
             if self.level == 3:
-                selected = Con_Results_data.query('NAME == @sname')
-                self.turnout = float('%.6f'%(selected['Turnout'].values[0]))
-                for l in range(origin.level):
-                    casnode.parent.turnout = .25
-                    i=1
-                    for x in casnode.parent.childrenoftype(gettypeoflevel(estyle,casnode.dir,casnode.level)):
-                        casnode.parent.turnout = (casnode.parent.turnout + x.turnout)/i
-                        print ("_____NatTurnoutlevel:",i,casnode.value,casnode.level,casnode.turnout)
-                        i = i+1
-                    casnode = casnode.parent
+                entry = LastResults.get("constituency", {}).get(sname)
+                self.turnout = entry.get("TURNOUT") if entry else None
             elif self.level > 3:
-                casnode.turnout = casnode.parent.turnout
+                self.turnout = self.parent.turnout
 
-            self = origin
-#            print ("___Nat Turnout:",self.value,self.level,self.turnout)
-        else:
-#cascade last council ward turnout figure to all streets(children)
+        else:  # local
             if self.level == 4:
-                selected = Ward_Results_data.query('NAME == @sname')
-                if len(selected) > 0:
-                    self.turnout = float('%.6f'%(selected['TURNOUT'].values[0]))
-                else:
-                    self.turnout = 0
-                for l in range(origin.level):
-                    casnode.parent.turnout = 0
-                    i=1
-                    for x in casnode.parent.childrenoftype(gettypeoflevel(estyle,casnode.dir,casnode.level)):
-                        casnode.parent.turnout = (casnode.parent.turnout + x.turnout)/i
-#                        print ("_____LGTurnoutlevel:",casnode.level,casnode.value,casnode.turnout)
-                        i = i+1
-                    casnode = casnode.parent
+                entry = LastResults.get("ward", {}).get(sname)
+                self.turnout = entry.get("TURNOUT") if entry else None
             elif self.level > 4:
-                casnode.turnout = casnode.parent.turnout
+                self.turnout = self.parent.turnout
 
-            self = origin
-#            print ("___LG Turnout:",self.value,self.turnout)
+        # --- Cascade upward (compute parents from children) ---
+        while casnode.parent:
+            parent = casnode.parent
+            children = parent.childrenoftype(
+                gettypeoflevel(electionstyle, casnode.dir, casnode.level)
+            )
+
+            values = [c.turnout for c in children if c.turnout is not None]
+            parent.turnout = sum(values) / len(values) if values else None
+
+            casnode = parent
+
         return
+
 
     def updateParty(self):
-        global VNORM
-        global VCO
-        sname = self.value
-        pname = self.parent.value
-        dname = sname.removesuffix("_ED")
-        party = "OTHER"
-        selected = []
-        if self.type == 'ward':
-            selected = Level4_Results_data.query('NAME == @sname')
-        elif self.type == 'division':
-            selected = Level4_Results_data.query('NAME == @dname')
-        elif self.type == 'constituency':
-            selected = Con_Results_data.query('NAME == @sname')
-        if len(selected)>0:
-            party = normalname(selected['FIRST'].values[0])
-        else:
-            party = "OTHER"
-        if party not in VNORM.keys():
-            party = "OTHER"
-        party2 = VNORM[party]
-        self.col = VCO[party2]
-        self.party = party2
-        print("______VNORM:",self.type, self.party, self.col, self.parent.value, self.parent.childrenoftype('walk'))
-        print("_______Electorate:", self.value,self.electorate, self.houses)
+        global VNORM, VCO
+        from state import LastResults
 
+        sname = self.value
+        dname = sname.removesuffix("_ED")
+
+        party = "OTHER"
+
+        try:
+            if self.type == "ward":
+                party = LastResults.get("ward", {}).get(sname, {}).get("FIRST", "OTHER")
+            elif self.type == "division":
+                party = LastResults.get("division", {}).get(dname, {}).get("FIRST", "OTHER")
+            elif self.type == "constituency":
+                party = LastResults.get("constituency", {}).get(sname, {}).get("FIRST", "OTHER")
+        except Exception:
+            party = "OTHER"
+
+        party = normalname(party)
+
+        if party not in VNORM:
+            party = "OTHER"
+
+        party2 = VNORM[party]
+        self.col = VCO.get(party2, VCO.get("OTHER"))
+        self.party = party2
+
+        print(
+            "______VNORM:",
+            self.type,
+            self.party,
+            self.col,
+            self.parent.value,
+            self.parent.childrenoftype("walk"),
+        )
+
+        print(
+            "_______Electorate:",
+            self.value,
+            self.electorate,
+            self.houses,
+        )
         return
 
-    def updateElectorate(self,pop):
 
-        global VNORM
-        global VCO
+    def updateElectorate(self, electstyle):
+        from state import LastResults
+
         sname = self.value
-        pop = int(pop)
-        if pop > 0:
-            origin = self
-            sumnode = origin
-            sumnode.electorate = pop
-# electorate is for a constituency is derived from wards is derived from streets (if you have electoral roll uploaded )
-# turnover is fixed for constituency(National) or wards(non-National) - streets inherit from either wards or constituency depending on election type - in set up
-            for l in range(origin.level):
-                sumnode.parent.electorate = 0
-                i=1
-                for x in sumnode.parent.childrenoftype(gettypeoflevel(estyle,sumnode.dir,sumnode.level)):
-                    sumnode.parent.electorate = sumnode.parent.electorate + x.electorate
-                    print ("_____Electoratelevel:",x.level,x.value,x.electorate,sumnode.electorate)
-                    i = i+1
-                sumnode = sumnode.parent
-                self = origin
-        else:
-            if self.type == 'constituency'and sname in Con_Results_data['NAME'].to_list():
-                selected = Con_Results_data.query('NAME == @sname')
-                self.electorate = int(selected['Electorate'].values[0])
-            elif self.type == 'ward' and sname in Ward_Results_data['NAME'].to_list():
-                selected = Ward_Results_data.query('NAME == @sname')
-                self.electorate = int(selected['ELECT'].values[0])
-            print ("___Results:",self.value,self.electorate)
 
-        print ("_____OriginElectorate:",self.findnodeat_Level(0).electorate,self.value,self.type,self.electorate)
+        # --- Base electorate ---
+        entry = LastResults.get(self.type, {}).get(sname)
+        if entry and "ELECTORATE" in entry:
+            self.electorate = entry["ELECTORATE"]
+        elif self.parent:
+            self.electorate = self.parent.electorate
+        else:
+            self.electorate = None
+
+        # --- Aggregate upward only through active boundary type ---
+        casnode = self
+        while casnode.parent:
+            parent = casnode.parent
+
+            child_type = gettypeoflevel(
+                electstyle,
+                casnode.dir,
+                casnode.level
+            )
+
+            children = parent.childrenoftype(child_type)
+
+            values = [
+                c.electorate for c in children
+                if c.electorate is not None
+            ]
+
+            parent.electorate = sum(values) if values else None
+            casnode = parent
+
         return
 
     def updateHouses(self,pop):
@@ -1310,7 +1460,7 @@ class TreeNode:
           os.chdir(dir)
         return target
 
-    def create_name_nodes(self,elect,nodetype,namepoints,ending):
+    def create_name_nodes(self,electstyle,elect,nodetype,namepoints,ending):
 
         zonecolour = {
             "ZONE_0": "black", "ZONE_1": "red", "ZONE_2": "lime",
@@ -1318,6 +1468,8 @@ class TreeNode:
             "ZONE_6": "magenta", "ZONE_7": "orange", "ZONE_8": "purple",
             "ZONE_9": "brown", "ZONE_10": "gray"
         }
+
+
 
         fam_nodes = []
         if namepoints.empty:
@@ -1328,7 +1480,7 @@ class TreeNode:
             namepoints, geometry=geometry
             )
         fam_nodes = self.childrenoftype(nodetype)
-        [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
+        [self.bbox, self.latlongroid] = self.get_bounding_box(self.type,block)
 
         if 'Zone' not in namepoints.columns:
             print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
@@ -1339,15 +1491,15 @@ class TreeNode:
             fam_values = [x.value for x in fam_nodes]
             if limb['Name'] not in fam_values:
                 datafid = abs(hash(limb['Name']))
-                newnode = TreeNode(normalname(limb['Name']),datafid, (limb['Lat'],limb['Long']),self.level+1,elect )
+                newnode = TreeNode(normalname(limb['Name']),datafid, (limb['Lat'],limb['Long']),elect )
                 egg = self.add_Tchild(newnode, nodetype, elect)
                 egg.file = subending(egg.file,ending)
                 [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
                 egg.col = zonecolour.get(limb['Zone'],'black')
                 print(f"🎨 Assigned color '{egg.col}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
 
-                egg.updateTurnout()
-                egg.updateElectorate(limb['ENOP'])
+                egg.updateTurnout(electstyle)
+                egg.updateElectorate(electstyle)
                 print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
 
                 fam_nodes.append(egg)
@@ -1369,7 +1521,7 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self,c_election, electtype):
+    def create_data_branch(self,electstyle,c_election, electtype):
         global allelectors
         global areaelectors
         global workdirectories
@@ -1416,7 +1568,7 @@ class TreeNode:
         # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
                     g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone':'first'}
                     PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                    nodelist = self.create_name_nodes(c_election,'polling_district',PDPtsdf,"-PDS.html") #creating PD_nodes with mean PD pos and elector counts
+                    nodelist = self.create_name_nodes(electstyle,c_election,'polling_district',PDPtsdf,"-PDS.html") #creating PD_nodes with mean PD pos and elector counts
                 elif electtype == 'walk':
                     print("📦 Starting WALK processing")
                     walkdf0 = pd.DataFrame(areaelectors, columns=['Election', 'WalkName', 'ENOP', 'Long', 'Lat', 'Zone'])
@@ -1431,7 +1583,7 @@ class TreeNode:
                     nodeelectors = walkdf1.groupby(['Name']).agg(g).reset_index()
                     print(f"📈 Grouped nodeelectors shape: {nodeelectors.shape}")
 
-                    nodelist = self.create_name_nodes(c_election, 'walk', nodeelectors, "-WALKS.html")
+                    nodelist = self.create_name_nodes(electstyle, c_election, 'walk', nodeelectors, "-WALKS.html")
                     print(f"🧩 Created {len(nodelist)} walk nodes")
 
     #---------------------------------------------------
@@ -1444,7 +1596,7 @@ class TreeNode:
                     g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count','Zone': 'first'}
                     streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Street df: ",streetdf)
-                    nodelist = self.create_name_nodes(c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
+                    nodelist = self.create_name_nodes(electstyle,c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
                 elif electtype == 'walkleg':
                     mask = areaelectors['WalkName'] == self.value
                     walkelectors = areaelectors[mask]
@@ -1455,7 +1607,7 @@ class TreeNode:
                     walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Walkleg df: ",walklegdf)
                     print("____Walkleg elector df: ",walklegdf1)
-                    nodelist = self.create_name_nodes(c_election,'walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
+                    nodelist = self.create_name_nodes(electstyle,c_election,'walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
             except Exception as e:
                 print("❌ Error during data branch generation:", e)
                 return []
@@ -1467,12 +1619,10 @@ class TreeNode:
 
         return nodelist
 
-    def create_map_branch(self,c_election,electtype):
+    def create_map_branch(self,electstyle,c_election,electtype):
         global Treepolys
         global Fullpolys
-
         global Overlaps
-
         import random
 
         def newFid(existing_fids):
@@ -1487,20 +1637,44 @@ class TreeNode:
                     return fid
 
 
-        current_election = c_election
-        block = pd.DataFrame()
+# need to know the CE['territories'] value to determine division or ward
+        # NOW THIS IS SAFE
         parent_poly = Treepolys[self.type]
+
+        print(
+            f"🧭 create_map_branch({self.type}) polys loaded:",
+            parent_poly is not None and not parent_poly.empty
+        )
+
+        # existing logic continues...
+
+
+        block = pd.DataFrame()
+
 #        parent_geom = parent_poly[parent_poly["FID"] == self.fid].geometry.values[0]
 
         # Filter the parent geometry based on the FID
         parent_geom = parent_poly[parent_poly["FID"] == self.fid]
         print(f"geometry for {self.value} FID {self.fid} is ",parent_geom)
+        print(
+            f"map branch type: {self.type} "
+            f"size {len(parent_poly)} "
+            f"parent poly cols: {list(parent_poly.columns)} "
+            f"NID {self.nid}"
+        )
 
         # If no matching geometry is found, handle the case where parent_geom is empty
         if parent_geom.empty or self.level == 0:
             print(f"Adding back in Full {self.type} boundaries for {self.value} FID {self.fid}")
             restore_fullpolys(self.type)
             parent_poly = Treepolys[self.type]
+            print(
+                f"full map branch type: {self.type} "
+                f"size {len(parent_poly)} "
+                f"parent poly cols: {list(parent_poly.columns)} "
+                f"NID {self.nid}"
+            )
+
             parent_geom = parent_poly[parent_poly["FID"] == self.fid]
             # Ensure that parent_geom has the desired geometry after the update
             if parent_geom.empty:
@@ -1510,11 +1684,11 @@ class TreeNode:
         else:
             # If geometry was found, proceed with the matching geometry
             parent_geom = parent_geom.geometry.values[0]
-        [self.bbox, self.centroid] = self.get_bounding_box(self.type,block)
+        [self.bbox, self.latlongroid] = self.get_bounding_box(self.type,block)
 
         ChildPolylayer = Treepolys[electtype]
 
-        print(f"____Children of {self.value} bbox:[{self.bbox}] of type {electtype}" )
+        print(f"____There are {len(ChildPolylayer)} Children of {self.value} bbox:[{self.bbox}] of type {electtype}" )
         index = 0
         i = 0
         fam_nodes = self.childrenoftype(electtype)
@@ -1531,7 +1705,7 @@ class TreeNode:
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and newname not in fam_values:
 
-                egg = TreeNode(newname, limb.FID, here,self.level+1,c_election)
+                egg = TreeNode(newname, limb.FID, here,"ONS_MAPS")
 #                else:
 #                    egg = TreeNode(newname, newFid(fam_fids), here,self.level+1,c_election)
                 print (f"________type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
@@ -1539,9 +1713,9 @@ class TreeNode:
                 [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
                 print (f"________bbox [{egg.bbox}] - child of type:{electtype} at lev {self.level+1} of {self.value}")
                 fam_nodes.append(egg)
-                egg.updateParty()
-                egg.updateTurnout()
-                egg.updateElectorate("0")
+                egg.updateParty() # get the last recorded election result for this node
+                egg.updateTurnout(electstyle) # get the last recorded election turnout for this node
+                egg.updateElectorate(electstyle) # get the current electorate for this node
 
             i = i + 1
 
@@ -1564,6 +1738,8 @@ class TreeNode:
         global OPTIONS
 
         from folium import IFrame
+        from state import LEVEL_ZOOM_MAP
+
 
 
         print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
@@ -1820,7 +1996,7 @@ class TreeNode:
 
         # --- Create the map
         FolMap = folium.Map(
-            location=self.centroid,
+            location=self.latlongroid,
             zoom_start=LEVEL_ZOOM_MAP[self.type],
             width='100%',
             height='800px',
@@ -1849,8 +2025,7 @@ class TreeNode:
         # Add all layers
         for layer in flayers:
             layer.add_to(FolMap)
-
-
+            print(f"layer name: {layer.name} size:{len(layer._children)}")
             if layer.areashtml != {}:
                 OPTIONS['areas'] = layer.areashtml
 
@@ -2182,7 +2357,7 @@ class TreeNode:
 
                 if sw == ne:
                     print("⚠️ BBox corners are identical; using centroid instead")
-                    FolMap.location = self.centroid
+                    FolMap.location = self.latlongroid
                     FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
                 else:
                     print("✅ BBox is valid, applying fit_bounds")
@@ -2197,7 +2372,7 @@ class TreeNode:
         target = self.locfilepath(self.file)
         FolMap.save(target)
 
-        print("Centroid raw:", self.centroid)
+        print("Centroid raw:", self.latlongroid)
         print(f" ✅ _____saved map file in route: {route()}", target, len(flayers), self.value, self.dir, self.file)
 
         return FolMap
@@ -2318,7 +2493,7 @@ class TreeNode:
         child_node.election = elect
 
         print("REGISTERING NODE:", child_node.nid, child_node.value)
-        TREK_NODES[child_node.nid] = child_node
+        state.TREK_NODES[child_node.nid] = child_node
         print("REGISTERED OK")
 
         return child_node
@@ -2522,7 +2697,7 @@ class TreeNode:
         return
 
 
-from collections import defaultdict
+
 
 def build_nodemap_list_html(herenode):
     """
@@ -2787,7 +2962,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         for child in children:
 # these are the centroids that will form the centre of each voronoi field
-            cent = child.centroid
+            cent = child.latlongroid
             if isinstance(cent, (tuple, list)) and len(cent) == 2:
                 lon, lat = cent[1], cent[0]  # Note: [lon, lat] = [x, y]
             elif hasattr(cent, 'x') and hasattr(cent, 'y'):
@@ -2808,7 +2983,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"Point {point} is not in shape {area_shape} so looking at nearest point")
 
 #                for grandchild in child.children:
-#                    cent = grandchild.centroid
+#                    cent = grandchild.latlongroid
 #                    point = Point(cent[1],cent[0])
 #                    if area_shape.contains(point):
 #                        print("___Selecting right child within shape as field centroid", grandchild.dir, point)
@@ -2900,7 +3075,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # Access coordinates
                     centroid_lon = centroid.x
                     centroid_lat = centroid.y
-    #                target_node.centroid = (centroid_lat,centroid_lon)
+    #                target_node.latlongroid = (centroid_lat,centroid_lon)
 
                     # Create a new DataFrame for a single row GeoDataFrame
                     gdf = gpd.GeoDataFrame({
@@ -2921,7 +3096,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     num = str(matched_child.tagno)
                     tag = str(matched_child.value)
                     typetag = "streets in "+str(matched_child.type)+" "+str(matched_child.value)
-            #        here = [float(f"{target_node.centroid[0]:.6f}"), float(f"{target_node.centroid[1]:.6f}")]
+            #        here = [float(f"{target_node.latlongroid[0]:.6f}"), float(f"{target_node.latlongroid[1]:.6f}")]
 
                     popup_html = ""
 
@@ -3183,7 +3358,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         # Access coordinates
         centroid_lon = centroid.x
         centroid_lat = centroid.y
-        herenode.centroid = (centroid_lat,centroid_lon)
+        herenode.latlongroid = (centroid_lat,centroid_lon)
 
         # Create a new DataFrame for a single row GeoDataFrame
         gdf = gpd.GeoDataFrame({
@@ -3226,7 +3401,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         num = str(herenode.tagno)
         tag = str(herenode.value)
         typetag = "streets in "+str(herenode.type)+" "+str(herenode.value)
-        here = [float(f"{herenode.centroid[0]:.6f}"), float(f"{herenode.centroid[1]:.6f}")]
+        here = [float(f"{herenode.latlongroid[0]:.6f}"), float(f"{herenode.latlongroid[1]:.6f}")]
         pathref = herenode.mapfile()
         mapfile = '/transfer/'+pathref
         # Turn into HTML list items
@@ -3542,7 +3717,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     numtag = str(c.value)+party
 
 
-                    here = [float(f"{c.centroid[0]:.6f}"), float(f"{c.centroid[1]:.6f}")]
+                    here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
                     # Convert the first row of the GeoDataFrame to a valid GeoJSON feature
                     limb = limbX.iloc[[0]].__geo_interface__  # Ensure this returns a GeoJSON dictionary for the row
 
@@ -3661,12 +3836,12 @@ class ExtendedFeatureGroup(FeatureGroup):
             numtag = str(c.tagno)+" "+str(c.value)
             num = str(c.tagno)
             tag = str(c.value)
-            here = [float(f"{c.centroid[0]:.6f}"), float(f"{c.centroid[1]:.6f}")]
+            here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
             fill = herenode.col
             pathref = c.mapfile()
             mapfile = '/transfer/'+pathref
 
-            print("______Display childrenx:",c.value, c.level,type,c.centroid )
+            print("______Display childrenx:",c.value, c.level,type,c.latlongroid )
             tcol = get_text_color(to_hex(c.col))
             bcol = adjust_boundary_color(to_hex(c.col),0.7)
             fcol = invert_black_white(tcol)
@@ -3882,14 +4057,18 @@ def filterArea(source, sourcekey, destination,roid=None,name=None):
     if 'OBJECTID' in gdf.columns:
         gdf = gdf.rename(columns={'OBJECTID': 'FID'})
 
-    print("gdf cols:", gdf.columns)
-    for n in gdf["NAME"].unique():
-        print(repr(n))
+
     # ----- LOOKUP BY NAME ----------------------------------------------
     if name is not None:
-        matched = gdf[normalname(gdf["NAME"]) == normalname(name)]
+        target = normalname(name.split("/")[-1])
+        matched = gdf[
+            gdf["NAME"]
+            .astype(str)
+            .apply(normalname)
+            == target
+        ]
 
-    else:
+    elif roid is not None:
         # ----- LOOKUP BY LAT/LON ---------------------------------------
         latitude = roid[0]
         longitude = roid[1]
@@ -3908,153 +4087,172 @@ def filterArea(source, sourcekey, destination,roid=None,name=None):
         if name:
             print(f'No match found for name "{name}".')
         else:
-            print("No matching polygon found for that lat/lon.")
+            print("No matching polygon found for that lat/lon.",roid)
 
     return [nodestep, matched, gdf]
 
 
-def intersectingArea(source, sourcekey, parent_type, destination, roid=None, name=None):
+
+
+def select_parent_geoms(*, Treepolys, parent_key, sourcepath=None, here=None):
+    parents = Treepolys.get(parent_key, gpd.GeoDataFrame())
+    print(f"select_parent: raw Treepolys[{parent_key}] = {parents!r}")
+
+    if parents.empty:
+        return gpd.GeoDataFrame()
+
+    # 1️⃣ Point-in-polygon
+    if here is not None:
+        pt = Point(here[1], here[0])  # (lon, lat)
+        matches = parents[parents.contains(pt)]
+        if not matches.empty:
+            return matches
+
+    # 2️⃣ Sourcepath/name match
+    if sourcepath:
+        steps = stepify(sourcepath)
+        target_name = steps[-1].replace("_", " ")
+        matches = parents[
+            parents["NAME"].apply(normalname) == normalname(target_name)
+        ]
+        if not matches.empty:
+            return matches
+    # 3️⃣ fallback: return all parents
+    return parents
+
+
+
+def intersectingArea(
+    source,
+    sourcekey,
+    parent_type,
+    destination,
+    *,
+    parent_geoms=None,
+    roid=None,
+    select_child_name=None,
+):
     """
-    Returns a tuple:
+    Returns:
         (
             selected_child_name,
             child_polygons_within_parent,
             all_child_polygons
         )
-
-    selected_child_name:
-        The NAME of the polygon matched by child name or point, or chosen by fallback.
-
-    child_polygons_within_parent:
-        All polygons from the source layer that intersect the selected parent polygon
-        after applying area threshold filtering.
-
-    all_child_polygons:
-        All polygons from the source layer (unfiltered).
+    Debug version with detailed logging.
     """
 
     global Treepolys, Overlaps
+    print(f"\n[DEBUG] intersecting Area called for source: {source}")
+    print(f"[DEBUG] parent_type: {parent_type}, roid: {roid}, select_child_name: {select_child_name}")
 
-    # ----------------------------------------------------------------------
-    # 1. Load all parent polygons of this type
-    # ----------------------------------------------------------------------
-    parent_all = Treepolys[parent_type]
-
-    # ----------------------------------------------------------------------
-    # 2. Load all child polygons from the source layer
-    # ----------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 1. Load child layer
+    # ------------------------------------------------------------------
     gdf = gpd.read_file(source)
+    print(f"[DEBUG] Loaded child layer: {len(gdf)} features")
 
-    # Fix CRS
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
+        print("[DEBUG] CRS was None; set to EPSG:4326")
     elif gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs(4326)
+        print(f"[DEBUG] Reprojected child layer to EPSG:4326")
 
-    # Standardise field names
     gdf = gdf.rename(columns={sourcekey: "NAME"})
     if "OBJECTID" in gdf.columns:
         gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
-    all_child_polygons = gdf     # ← for clarity
+    all_child_polygons = gdf
 
-    # ----------------------------------------------------------------------
-    # 3. Determine parent geometry (via path or via coordinate)
-    # ----------------------------------------------------------------------
-    if name is not None:
-        # Convert path → steps
-        steps = list(reversed(stepify(name)))
-        child_name = steps[0]
-        parent_name = steps[1]
+    # ------------------------------------------------------------------
+    # 2. Resolve parent geometries
+    # ------------------------------------------------------------------
+    if parent_geoms is None:
+        parent_geoms = Treepolys.get(parent_type, [])
+        print(f"[DEBUG] parent_geoms obtained from Treepolys: {type(parent_geoms)}")
 
-        # Match parent polygon by name
-        parent_match = parent_all[parent_all["NAME"].apply(normalname) == normalname(parent_name)]
-        if parent_match.empty:
-            print(f'WARNING: Parent "{parent_name}" not found in {parent_type}.')
-            return (None, gpd.GeoDataFrame(), all_child_polygons)
+    # Handle empty or invalid parent_geoms
+    if parent_geoms is None:
+        print(f"[WARNING] parent_geoms is None for {parent_type}")
+        return None, gpd.GeoDataFrame(), all_child_polygons
 
-        parent_geom = parent_match.union_all()
-
-        # Match child polygon by name
-        matched_child = gdf[gdf["NAME"].apply(normalname) == normalname(child_name)]
-
-    elif roid is not None:
-        lat, lon = roid
-        point = Point(lon, lat)
-
-        # Parent by point location
-        parent_match = parent_all[parent_all.contains(point)]
-        if parent_match.empty:
-            print("WARNING: No parent polygon contains the given point.")
-            return (None, gpd.GeoDataFrame(), all_child_polygons)
-
-        parent_geom = parent_match.union_all()
-
-        # Child polygon by point location
-        matched_child = gdf[gdf.contains(point)]
-
+    if isinstance(parent_geoms, gpd.GeoDataFrame):
+        if parent_geoms.empty:
+            print(f"[WARNING] parent_geoms GeoDataFrame is empty for {parent_type}")
+            return None, gpd.GeoDataFrame(), all_child_polygons
+        parent_geom_list = [row.geometry for _, row in parent_geoms.iterrows()]
+    elif isinstance(parent_geoms, list):
+        parent_geom_list = parent_geoms
     else:
-        print("ERROR: Must provide either name path or roid.")
-        return (None, gpd.GeoDataFrame(), all_child_polygons)
+        print(f"[ERROR] parent_geoms is not a GeoDataFrame or list: {type(parent_geoms)}")
+        return None, gpd.GeoDataFrame(), all_child_polygons
 
-    # ----------------------------------------------------------------------
-    # 4. Reproject parent_geom if needed
-    # ----------------------------------------------------------------------
-    if gdf.crs != parent_all.crs:
-        parent_geom = gpd.GeoSeries([parent_geom], crs=parent_all.crs).to_crs(gdf.crs).iloc[0]
+    print(f"[DEBUG] Number of parent geometries: {len(parent_geom_list)}")
 
-    # ----------------------------------------------------------------------
-    # 5. INTERSECTION FILTERING
-    # ----------------------------------------------------------------------
-    threshold = Overlaps[parent_type]
+    # Union parents into a single geometry
+    parent_geom = gpd.GeoSeries(parent_geom_list, crs=gdf.crs).union_all()
+    if isinstance(parent_geom, gpd.GeoSeries):
+        parent_geom = parent_geom.iloc[0]  # ensure single geometry
+    print(f"[DEBUG] Unioned parent geometry created")
 
-    # Fast intersect candidates
+    # ------------------------------------------------------------------
+    # 3. Optional child selection by point or name
+    # ------------------------------------------------------------------
+    matched_child = gpd.GeoDataFrame()
+    if roid is not None:
+        lat, lon = roid
+        pt = Point(lon, lat)
+        matched_child = gdf[gdf.contains(pt)]
+        print(f"[DEBUG] Point selection: {len(matched_child)} match(es) found")
+    elif select_child_name:
+        matched_child = gdf[gdf["NAME"].apply(normalname) == normalname(select_child_name)]
+        print(f"[DEBUG] Name selection: {len(matched_child)} match(es) found for '{select_child_name}'")
+
+    # ------------------------------------------------------------------
+    # 4. Intersection filtering
+    # ------------------------------------------------------------------
+    threshold = Overlaps.get(parent_type, 0)
+    print(f"[DEBUG] Intersection threshold for {parent_type}: {threshold}")
+
     candidates = gdf[gdf.geometry.intersects(parent_geom)]
+    print(f"[DEBUG] Candidates intersecting parent: {len(candidates)}")
 
-    # Area-based intersection
     child_polygons_within_parent = candidates[
         candidates.intersection(parent_geom).area > threshold
     ]
+    print(f"[DEBUG] Children within parent above threshold: {len(child_polygons_within_parent)}")
 
-    # ----------------------------------------------------------------------
-    # 6. SELECT CHILD NAME (with fallbacks)
-    # ----------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 5. Choose selected child name
+    # ------------------------------------------------------------------
     selected_child_name = None
-
     if not matched_child.empty:
-        # Best case
         selected_child_name = normalname(matched_child.iloc[0]["NAME"])
-
+        print(f"[DEBUG] Selected child via match: {selected_child_name}")
     elif not child_polygons_within_parent.empty:
-        # Next best case
         selected_child_name = normalname(child_polygons_within_parent.iloc[0]["NAME"])
-        print(f"No direct match — using first filtered intersection: {selected_child_name}")
-
+        print(f"[DEBUG] Selected child via intersection: {selected_child_name}")
     elif not candidates.empty:
-        # Last fallback
         selected_child_name = normalname(candidates.iloc[0]["NAME"])
-        print(f"No filtered results — using first candidate: {selected_child_name}")
-
+        print(f"[DEBUG] Selected child via fallback: {selected_child_name}")
     else:
-        print("No polygons matched in any way.")
-        return (None, child_polygons_within_parent, all_child_polygons)
+        print("[WARNING] No intersecting child polygons found.")
+        return None, child_polygons_within_parent, all_child_polygons
 
-    # ----------------------------------------------------------------------
-    # 7. Save filtered set to file
-    # ----------------------------------------------------------------------
-    child_polygons_within_parent.to_file(destination)
-    print(f"Saved {len(child_polygons_within_parent)} intersecting feature(s) to {destination}")
+    # ------------------------------------------------------------------
+    # 6. Save results
+    # ------------------------------------------------------------------
+    if not child_polygons_within_parent.empty:
+        child_polygons_within_parent.to_file(destination)
+        print(f"[DEBUG] Saved {len(child_polygons_within_parent)} intersecting feature(s) to {destination}")
+    else:
+        print("[DEBUG] No polygons to save.")
 
-    # ----------------------------------------------------------------------
-    # 8. Return renamed tuple
-    # ----------------------------------------------------------------------
-    return (
-        selected_child_name,
-        child_polygons_within_parent,
-        all_child_polygons
-    )
-
-
+    # ------------------------------------------------------------------
+    # 7. Return
+    # ------------------------------------------------------------------
+    return selected_child_name, child_polygons_within_parent, all_child_polygons
 
 
 def getstreamrag():
@@ -4158,6 +4356,8 @@ def visit_node(v_node, c_elect,CurrEL, mapfile):
     print(f"___under {c_elect} visiting mapfile:", mapfile,CurrEL['mapfiles'])
     CurrEL2 = CurrEL
     CurrEL2['cid'] = v_node.nid
+    CurrEL2['cidLat'] = v_node.latlongroid[0]
+    CurrEL2['cidLong'] = v_node.latlongroid[1]
     CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], mapfile)
     save_election_data(c_elect, CurrEL2)
     session['current_election'] = c_elect
@@ -4556,7 +4756,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
             current_election = stream
             CurrentElection = get_election_data(current_election)
-            current_node = get_last(CurrentElection)
+            current_node = get_last(current_election,CurrentElection)
             print('___persisting file ', ELECTOR_FILE, len(allelectors))
             allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
@@ -4744,7 +4944,7 @@ def get_latlong(postcode, lat, lon):
 
     # Fallback: no postcode → centroid
     if not postcode:
-        return node.centroid
+        return node.latlongroid
 
     # API lookup
     url = f"http://api.getthedata.com/postcode/{postcode.replace(' ', '+')}"
@@ -4759,12 +4959,227 @@ def get_latlong(postcode, lat, lon):
         pass
 
     # Fallback on failure
-    return node.centroid
+    return node.latlongroid
 
 def generate_place_code(prefix):
     return ''.join(re.findall(r'\b\w', prefix)).upper()
 
+def clear_treepolys(from_level=None):
+    global Treepolys, Fullpolys
 
+    if from_level is None:
+        for k in Treepolys:
+            Treepolys[k] = gpd.GeoDataFrame()
+            Fullpolys[k] = gpd.GeoDataFrame()
+    else:
+        for layer in LAYERS[from_level:]:
+            Treepolys[layer["key"]] = gpd.GeoDataFrame()
+            Fullpolys[layer["key"]] = gpd.GeoDataFrame()
+
+def ensure_treepolys(*, sourcepath=None, here=None):
+    """
+    Load all layers into Treepolys and Fullpolys.
+    - sourcepath: hierarchical path (e.g., "UNITED_KINGDOM/ENGLAND/SURREY/FARNHAM_AND_BORDON")
+    - here: (lat, lon) tuple to select polygons by location
+    """
+    global Treepolys, Fullpolys
+    print(f"[DEBUG] Entered ensure treepolys | sourcepath: {sourcepath}, here: {here}")
+
+    steps = stepify(sourcepath) if sourcepath else []
+    newpath = ""
+
+    for idx, layer in enumerate(LAYERS):
+        key = layer["key"]
+        print(f"\n[DEBUG] Processing layer {idx}: '{key}'")
+
+        # Skip if already loaded
+        already_loaded = layer_loaded(key)
+        if already_loaded:
+            print(f"[DEBUG] Layer '{key}' already loaded — will combine results")
+
+            newpath = f"{newpath}/{steps[idx]}" if sourcepath and idx < len(steps) else newpath
+            continue
+
+        src = f"{config.workdirectories['bounddir']}/{layer['src']}"
+        out = f"{config.workdirectories['bounddir']}/{layer['out']}"
+        print(f"[DEBUG] src: {src}")
+        print(f"[DEBUG] out: {out}")
+
+        kwargs = {}
+
+        # Determine selection method
+        if sourcepath:
+            if idx >= len(steps):
+                print(f"[DEBUG] No more steps in sourcepath for this layer. Breaking loop.")
+                break
+            kwargs["name"] = "/".join(steps[: idx + 1])
+            print(f"[DEBUG] Using path-based selection: {kwargs['name']}")
+        elif here is not None:
+            kwargs["roid"] = here
+            print(f"[DEBUG] Using point-based selection: {here}")
+        else:
+            print(f"[DEBUG] Skipping layer '{key}' — no sourcepath or coordinate provided")
+            Treepolys[key] = Fullpolys[key] = gpd.GeoDataFrame()
+            continue
+
+        # Call appropriate method
+        if layer["method"] == "filter":
+            print(f"[DEBUG] Calling filterArea for layer '{key}'")
+
+            name, new_tree, new_full = filterArea(
+                src,
+                layer["field"],
+                out,
+                **kwargs
+            )
+
+#            Treepolys[key] = combine_geodfs(Treepolys.get(key), new_tree)
+            Treepolys[key] = new_tree
+            Fullpolys[key] = new_full
+
+        else:
+            parent_geoms = Treepolys.get(layer["parent"])
+            if isinstance(parent_geoms, gpd.GeoDataFrame):
+                parent_geoms_list = [row.geometry for _, row in parent_geoms.iterrows()]
+            elif isinstance(parent_geoms, list):
+                parent_geoms_list = parent_geoms
+            else:
+                parent_geoms_list = []
+            print(f"[DEBUG] parent_geoms for '{layer['parent']}' -> {len(parent_geoms_list)} geometries")
+
+            print(f"[DEBUG] Calling intersecting Area for layer '{key}'")
+            select_name = steps[idx] if sourcepath and idx < len(steps) else None
+            name, new_tree, new_full = intersectingArea(
+                src,
+                layer["field"],
+                layer["parent"],
+                out,
+                parent_geoms=parent_geoms_list,
+                roid=here,
+                select_child_name=select_name
+            )
+
+#            Treepolys[key] = combine_geodfs(Treepolys.get(key), new_tree)
+            Treepolys[key] = new_tree
+            Fullpolys[key] = new_full
+
+        if name:
+            newpath = f"{newpath}/{name}" if newpath else name
+        print(f"[DEBUG] Finished layer '{key}' | selected name: {name} | newpath: {newpath}")
+        print(f"[DEBUG] Treepolys[{key}] length: {len(Treepolys[key])} | Fullpolys[{key}] length: {len(Fullpolys[key])}")
+
+    # Final summary
+    print("\n[DEBUG] Treepolys summary:")
+    for k in ["nation", "county", "constituency", "division", "ward"]:
+        print(f"[DEBUG] Treeindex: {k}: {len(Treepolys.get(k, gpd.GeoDataFrame()))}")
+
+    return Treepolys, Fullpolys, newpath
+
+
+
+
+def apply_terminal_layer(
+    *,
+    Treepolys: dict,
+    Fullpolys: dict,
+    current_election: dict,
+    basepath: str,
+    sourcepath: str | None = None,
+    here: tuple[float, float] | None = None,
+):
+    """
+    Adds ward or division layer depending on election territories.
+    """
+
+    territory = current_election.get("territories")
+    newpath = basepath
+
+    print("Entered apply_terminal_layer")
+
+    # 🔑 Explicit parent selection
+    parent_geoms = select_parent_geoms(
+        Treepolys=Treepolys,
+        parent_key="constituency",
+        sourcepath=sourcepath,
+        here=here,
+    )
+
+
+    # ✅ Safe check
+    if parent_geoms is None or (hasattr(parent_geoms, "empty") and parent_geoms.empty):
+        print("WARNING: No parent geometries found for the current constituency")
+        return Treepolys, Fullpolys, newpath
+
+    # --- WARD ---
+    if territory in ("B", "P"):
+        key = "ward"
+        name, new_tree, new_full = intersectingArea(
+            config.workdirectories["bounddir"] +
+            "/Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
+            "WD24NM",
+            "constituency",
+            config.workdirectories["bounddir"] + "/Ward_Boundaries.geojson",
+            parent_geoms=parent_geoms,
+            roid=here,  # optional
+        )
+        Treepolys[key] = combine_geodfs(Treepolys.get(key), new_tree)
+        Fullpolys[key] = new_full
+
+        newpath = f"{newpath}/WARDS/{name}/{name}-WARDS.html"
+
+    # --- DIVISION ---
+    elif territory in ("C", "U"):
+        key = "division"
+        name, new_tree, new_full = intersectingArea(
+            config.workdirectories["bounddir"] +
+            "/Surrey_Proposed_Divisions.geojson",
+            "Division_n",
+            "constituency",
+            config.workdirectories["bounddir"] + "/Division_Boundaries.geojson",
+            parent_geoms=parent_geoms,
+            roid=here,  # optional
+        )
+        Treepolys[key] = combine_geodfs(Treepolys.get(key), new_tree)
+        Fullpolys[key] = new_full
+        newpath = f"{newpath}/DIVS/{name}/{name}-DIVS.html"
+
+
+
+
+    # --- DEFAULT FALLBACK ---
+    else:
+        newpath = f"{newpath}-MAP.html"
+
+
+    print("DEBUG territory:", repr(territory))
+    print(f"Treepolys sourcepath:{sourcepath}")
+    print(f"Treepolys newpath:{newpath}")
+    print(f"Treepolys nations:{len(Treepolys['nation'])}")
+    print(f"Treepolys counties:{len(Treepolys['county'])}")
+    print(f"Treepolys constituencies:{len(Treepolys['constituency'])}")
+    print(f"Treepolys divisions:{len(Treepolys['division'])}")
+    print(f"Treepolys wards:{len(Treepolys['ward'])}")
+    return Treepolys, Fullpolys, newpath
+
+def layer_loaded(layer_key):
+    return (
+        layer_key in Treepolys
+        and Treepolys[layer_key] is not None
+        and not Treepolys[layer_key].empty
+    )
+
+def combine_geodfs(existing, new):
+    if existing is None or existing.empty:
+        return new
+    if new is None or new.empty:
+        return existing
+    if existing.crs != new.crs:
+        new = new.to_crs(existing.crs)
+
+    return gpd.GeoDataFrame(
+        pd.concat([existing, new], ignore_index=True),
+        crs=existing.crs
+    )
 
 
 from flask_cors import CORS
@@ -4818,6 +5233,75 @@ VIC = dict(zip(VID.keys(), data))
 VID_json = json.dumps(VID)  # Convert to JSON string
 
 
+ROOT_LEVEL = {
+    "W": 3,
+    "C": 2,
+    "U": 2,
+    "B": 4,
+    "P": 4,
+}
+
+def validate_election_root(root, election):
+    expected = ROOT_LEVEL[election["territories"]]
+    if root.level != expected:
+        raise ValueError(
+            f"Election root level {root.level} "
+            f"does not match territories {election['territories']} "
+            f"(expected {expected})"
+        )
+
+def empty_gdf():
+    return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+
+Treepolys = {
+    'country': empty_gdf(),
+    'nation': empty_gdf(),
+    'county': empty_gdf(),
+    'constituency': empty_gdf(),
+    'ward': empty_gdf(),
+    'division': empty_gdf()
+}
+
+Fullpolys = {
+    k: empty_gdf() for k in Treepolys
+}
+
+
+LAYERS = [
+    {
+        "key": "country",
+        "src": "World_Countries_(Generalized)_9029012925078512962.geojson",
+        "field": "COUNTRY",
+        "out": "Country_Boundaries.geojson",
+        "method": "filter",
+    },
+    {
+        "key": "nation",
+        "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
+        "field": "CTRY21NM",
+        "out": "Nation_Boundaries.geojson",
+        "method": "filter",
+        "parent": "country"
+    },
+    {
+        "key": "county",
+        "src": "Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
+        "field": "CTYUA23NM",
+        "out": "County_Boundaries.geojson",
+        "method": "filter",
+        "parent": "nation"
+    },
+    {
+        "key": "constituency",
+        "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
+        "field": "PCON24NM",
+        "out": "Constituency_Boundaries.geojson",
+        "method": "intersect",
+        "parent": "county"
+    },
+]
+
+
 kanban_options = [
     {"code": "R", "label": "Resourcing"},
     {"code": "P", "label": "Post-Bundling"},
@@ -4831,8 +5315,8 @@ Overlaps = {
 "country" : 1,
 "nation" : 0.1,
 "county" : 0.001,
-"constituency" : 0.0005,
-"ward" : 0.0005,
+"constituency" : 0.00005,
+"ward" : 0.0000005,
 "division" : 0.0000005,
 "walk" : 0.005,
 "polling_district" : 0.005,
@@ -4840,20 +5324,21 @@ Overlaps = {
 "walkleg" : 0.005
 }
 
+
 # this is for creating a new mapfile when one does not exist.
 TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 # add the root TreeNode to the node tree
-reset_nodes()
+state.reset_nodes()
 
 # Get al the Elections Names
 ELECTIONS = get_election_names()
 
-current_election = "DEMO"
+current_election = lastElection()
 CurrentElection = get_election_data(current_election)
-print("🔍 First election:", CurrentElection)
-current_node = get_last(CurrentElection)
-#election constants and event values are now loaded up
+print("🔍 Last election data:", CurrentElection)
+current_node = get_last(current_election,CurrentElection)
+#election constants , nodes, event values are now loaded up
 constants = CurrentElection
 places =  CurrentElection['places']
 print("🔍 constants:", constants)
@@ -4924,11 +5409,8 @@ FILE_SUFFIXES = [
     "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"
 ]
 
-LEVEL_ZOOM_MAP = {
-    'country': 12, 'nation': 13, 'county': 14, 'constituency': 15,
-    'ward': 16, 'division': 16, 'polling_district': 17,
-    'walk': 17, 'walkleg': 18, 'street': 18
-}
+from state import LEVEL_ZOOM_MAP
+
 
 Featurelayers = {
 "marker": ExtendedFeatureGroup(name='marker', options={'mytag': 'marker'},overlay=True, control=True, show=False),
@@ -5003,29 +5485,16 @@ DQ_DATA = {
 
 layeritems = []
 #allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
-
+# need a keyed dict indicating last recorded winning first party name for a given normalised node name
 mapfile = ""
 
-Con_Results_data = pd.read_excel(config.workdirectories['resultdir']+'/'+'HoC-GE2024-results-by-constituency.xlsx')
-#Con_Results_data = pd.read_csv(config.workdirectories['resultdir']+'/'+'HoC_General_Election_2024_Results.csv',sep='\t')
-Con_Results_data['NAME'] = normalname(Con_Results_data['Constituency name'])
-Con_Results_data['FIRST'] = normalname(Con_Results_data['First party'])
 
-Ward_Results_data = pd.read_excel(config.workdirectories['resultdir']+'/'+'LEH-Candidates-2023.xlsx')
-Ward_Results_data.loc[Ward_Results_data['WINNER'] == 1]
-Ward_Results_data['NAME'] = normalname(Ward_Results_data['WARDNAME'])
-Ward_Results_data['FIRST'] = normalname(Ward_Results_data['PARTYNAME'])
-
-Level4_Results_data = pd.read_excel(config.workdirectories['resultdir']+'/'+'opencouncildata_councillors.xlsx')
-Level4_Results_data['NAME'] = normalname(Level4_Results_data['Ward Name'])
-Level4_Results_data['FIRST'] = normalname(Level4_Results_data['Party Name'])
+load_last_results()
 
 
-#        Con_Results_data = Con_Bound_layer.merge(Con_Results_data, how='left', on='NAME' )
-
-print("_________HoC Results data: ",Con_Results_data.columns)
-print("_________HoC Results data: ",Ward_Results_data.columns)
-print("_________HoC Results data: ",Level4_Results_data.columns)
+print("_________HoC Con Results data:", len(LastResults["constituency"]))
+print("_________HoC Ward Results data:", len(LastResults["ward"]))
+print("_________HoC Division Results data:", len(LastResults["division"]))
 
 
 from jinja2 import Environment, FileSystemLoader
@@ -5092,8 +5561,7 @@ def reassign_parent():
     global OPTIONS
     global constants
     print(">>> /reassign_parent called")
-    CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+
 
     restore_from_persist(session)
     print("✔ Restored from persist")
@@ -5102,6 +5570,8 @@ def reassign_parent():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
+    current_node = get_last(current_election,CurrentElection)
+
     estyle = CurrentElection['territories']
     print(f"✔ Current election: {current_election if current_election else 'None'}")
 
@@ -5304,7 +5774,7 @@ def update_walk():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     data = request.json
     walk_name = data.get('walkName')
     new_resource = data.get('newResource')
@@ -5333,7 +5803,7 @@ def kanban():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
     current_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
     session['current_node_id'] = current_node.nid
@@ -5464,7 +5934,7 @@ def update_walk_kanban():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     Territory_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
@@ -5493,7 +5963,7 @@ def telling():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
@@ -5548,7 +6018,7 @@ def check_enop(enop):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     # Check if ENOP exists in the DataFrame
     if enop in allelectors['ENOP'].values:
         # Get the current Tags for the ENOP
@@ -5611,7 +6081,7 @@ def update_location_tags():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
@@ -5669,7 +6139,7 @@ def location_search():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     mask = (allelectors['Election'] == current_election)
     areaelectors = allelectors[mask]
     query = request.args.get("query", "").strip()
@@ -5713,7 +6183,7 @@ def search_api():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     if len(allelectors) != 0:
         restore_from_persist(session=session)
 
@@ -5799,13 +6269,13 @@ def location():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     lat = 54.9783
     long = 1.6178
 
-    current_node.centroid = (lat,long)
+    current_node.latlongroid = (lat,long)
     print(f"Received location: Latitude={lat}, Longitude={lon}")
     return f"Received location: Latitude={lat}, Longitude={lon}"
 
@@ -5844,7 +6314,7 @@ def add_tag():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     try:
         data = request.get_json()
         tag = data.get("tag", "").strip()
@@ -5914,7 +6384,7 @@ def deactivate_stream():
         return jsonify({'status': 'error', 'message': 'Election does not exist','html':html}), 400
     current_election = election
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     delete_path = CurrentElection['mapfiles'][-1]
     estyle = CurrentElection['territories']
     delete_node = current_node.ping_node(estyle,election,delete_path)
@@ -5960,7 +6430,7 @@ def reset_Elections():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     arch_path = fixed_path.replace(".csv", "-ARCHIVE.csv")
     allelectors.to_csv(arch_path,sep='\t', encoding='utf-8', index=False)
@@ -5999,7 +6469,7 @@ def election_report():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
     reportfile = "UNITED_KINGDOM/ENGLAND/SURREY/SURREY-MAP.html"
     estyle = CurrentElection['territories']
@@ -6109,6 +6579,7 @@ def set_election():
             else:
                 return str(obj)
 
+#        clear_treepolys()  # 🔥 FULL RESET
         restore_from_persist(session)
         data = request.get_json(force=True)  # <-- ensure JSON parsing
         if not data or "election" not in data:
@@ -6118,10 +6589,10 @@ def set_election():
         current_election = data["election"]
         session['current_election'] = current_election
         CurrentElection = get_election_data(current_election)
-        current_node = get_last(CurrentElection)
+        current_node = get_last(current_election,CurrentElection)
 
         estyle = CurrentElection['territories']
-        print("____Route/set-election/constantsX", current_election, CurrentElection)
+        print(f"____Route/set-election/constantsX {current_node.value}, election: {current_election} CE data: {CurrentElection}")
 
         if not CurrentElection:
             return jsonify(success=False, error="Election not found", current_election=current_election), 404
@@ -6159,7 +6630,7 @@ def get_current_election_data():
     current_election = request.args.get("election")
 
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     target_node = current_node.ping_node(estyle,current_election,CurrentElection['mapfiles'][-1])
@@ -6221,7 +6692,7 @@ def get_constants():
     print("____Route/get_constants" )
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
@@ -6254,7 +6725,7 @@ def set_constant():
     print("____Back End1 election constants update:",current_election,":",name,"-",value)
 
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     counters = get_counters(session)
@@ -6325,7 +6796,7 @@ def delete_election():
 
 
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     with open(OPTIONS_FILE, 'w') as f:
         json.dump(OPTIONS, f, indent=2)
@@ -6357,7 +6828,7 @@ def add_election():
 
     current_election = "DEMO"
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 
@@ -6394,36 +6865,8 @@ def add_election():
 @app.route("/last-election")
 @login_required
 def last_election():
-    ELECTIONS_DIR = config.workdirectories['workdir']
-    """
-    Return the most recently accessed election file.
-    Fallback: session-stored current election or first available election.
-    """
-    # 1. Try session first
-    last = session.get('current_election')
-
-    # 2. List elections from filesystem and sort by last access time
-    election_files = get_election_names()  # returns list of election names
-    if election_files:
-        # map names to full paths
-        paths = [os.path.join(ELECTIONS_DIR, f"{name}.json") for name in election_files]
-        # filter out missing files just in case
-        paths = [p for p in paths if os.path.exists(p)]
-        if paths:
-            # sort descending by access time
-            paths.sort(key=lambda p: os.path.getatime(p), reverse=True)
-            latest_name = os.path.splitext(os.path.basename(paths[0]))[0]
-            # Override session if latest exists
-            last = last or latest_name
-
-    # 3. Final fallback
-    if not last and election_files:
-        last = election_files[0]
-
-    print(f"____last election: {last}")
-
-    return jsonify(last)
-
+    result = lastElection()
+    return jsonify(result)
 
 
 
@@ -6438,7 +6881,7 @@ def update_territory():
     data = request.get_json()
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
     # mapfiles last entry is what we need to bookmark.
 
@@ -6462,7 +6905,7 @@ def validate_tags():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
     # Ensure the valid tags list is a list of strings
     tags_data = CurrentElection['tags']
@@ -6508,12 +6951,12 @@ def index():
         restore_from_persist(session=session)
         current_election = get_current_election(session)
         CurrentElection = get_election_data(current_election)
-        current_node = get_last(CurrentElection)
+        current_node = get_last(current_election,CurrentElection)
         estyle = CElection['territories']
         mapfile = current_node.mapfile()
         calfile = current_node.calfile()
 
-        from collections import defaultdict
+
 
 
     #       Track used IDs across both existing and new entries
@@ -6552,22 +6995,20 @@ def login():
         session['gtagno_counters'] = {}
         # Example: {'marker': 0, 'country': 0, ...}
 
+    restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
-    if current_node.value != "UNITED_KINGDOM":
-        flash("User already logged in:", session['username'], " at ", current_node.value)
-        print("_______ROUTE/Already logged in:", session['username'], " at ", current_node.value)
-        return redirect(url_for('firstpage'))
-    # Collect info from forms in the login db
+    current_node = get_last(current_election,CurrentElection)
+    if session.get('username'):
+        msg = f"User already logged in: {session['username']} at {current_node.value}"
+        flash(msg)
+        print("_______ROUTE/Already logged in:", session['username'], "at", current_node.value)
+        return redirect(url_for('firstpage'))    # Collect info from forms in the login db
     username = request.form['username']
     password = request.form['password']
     user = User.query.filter_by(username=username).first()
     print("_______ROUTE/login page", username, user)
-    restore_from_persist(session=session)
-    current_election = get_current_election(session)
-    CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+
     estyle = CurrentElection['territories']
     print("Flask Current time:", datetime.utcnow(), " at ", current_node.value)
 
@@ -6612,59 +7053,66 @@ def login():
 @app.route('/get_location')
 @login_required
 def get_location():
+    """
+    Only call this route if there is no sourcepath for the election.
+    It prompts the user for geolocation and redirects to /firstpage
+    with lat/lon as query parameters.
+    """
     return render_template_string("""
     <!DOCTYPE html>
     <html lang="en">
     <head>
-    <meta charset="UTF-8">
-    <title>Locating You...</title>
-    <style>
-    body { margin:0; padding:0; height:100%; background:#00bed6; color:white; font-family:sans-serif; text-align:center; }
-    .road { position:relative; width:100%; height:100vh; overflow:hidden; }
-    .footprint { position:absolute; width:40px; opacity:0; animation:stepFade 4s ease-in-out infinite; }
-    .left { left:45%; transform:rotate(-12deg); }
-    .right { left:52%; transform:rotate(12deg); }
-    @keyframes stepFade { 0%,10%{opacity:1;} 70%,100%{opacity:0;} }
-    </style>
+        <meta charset="UTF-8">
+        <title>Locating You...</title>
+        <style>
+            body { margin:0; padding:0; height:100%; background:#00bed6; color:white; font-family:sans-serif; text-align:center; }
+            .road { position:relative; width:100%; height:100vh; overflow:hidden; }
+            .footprint { position:absolute; width:40px; opacity:0; animation:stepFade 4s ease-in-out infinite; }
+            .left { left:45%; transform:rotate(-12deg); }
+            .right { left:52%; transform:rotate(12deg); }
+            @keyframes stepFade { 0%,10%{opacity:1;} 70%,100%{opacity:0;} }
+        </style>
     </head>
     <body>
-    <h2>elecTrek is finding democracy in your area ...</h2>
-    <div class="road">
-    {% for i in range(8) %}
-    {% set is_left = i % 2 == 0 %}
-    <img src="{{ url_for('static', filename='left_foot.svg') if is_left else url_for('static', filename='right_foot.svg') }}"
-         class="footprint {{ 'left' if is_left else 'right' }}"
-         style="top: {{ 10 + i*10 }}%; animation-delay: {{ i*0.7 }}s;">
-    {% endfor %}
-    </div>
-    <script>
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function(pos) {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                window.location.href = `/firstpage?lat=${lat}&lon=${lon}`;
-            },
-            function(err) {
-                alert("Location access denied.");
+        <h2>elecTrek is finding democracy in your area ...</h2>
+        <div class="road">
+        {% for i in range(8) %}
+            {% set is_left = i % 2 == 0 %}
+            <img src="{{ url_for('static', filename='left_foot.svg') if is_left else url_for('static', filename='right_foot.svg') }}"
+                 class="footprint {{ 'left' if is_left else 'right' }}"
+                 style="top: {{ 10 + i*10 }}%; animation-delay: {{ i*0.7 }}s;">
+        {% endfor %}
+        </div>
+        <script>
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        const lat = pos.coords.latitude;
+                        const lon = pos.coords.longitude;
+                        // Redirect to your page, passing lat/lon
+                        window.location.href = `/firstpage?lat=${lat}&lon=${lon}`;
+                    },
+                    function(err) {
+                        alert("Location access denied. Using default map.");
+                        window.location.href = "/firstpage";
+                    }
+                );
+            } else {
+                alert("Geolocation not supported. Using default map.");
                 window.location.href = "/firstpage";
             }
-        );
-    } else {
-        alert("Geolocation not supported.");
-        window.location.href = "/firstpage";
-    }
-    </script>
+        </script>
     </body>
     </html>
     """)
+
 
 
 @app.route('/logout', methods=['POST', 'GET'])
 @login_required
 def logout():
 
-    current_node = TREK_NODES.get(session.get('current_node_id',"UNITED_KINGDOM"))
+    current_node = state.TREK_NODES.get(session.get('current_node_id',"UNITED_KINGDOM"))
 
     flash("🔓 Logging out user:"+ current_user.get_id())
     print("🔓 Logging out user:", current_user.get_id())
@@ -6690,14 +7138,14 @@ def dashboard():
 
     current_election = "DEMO"
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     print ("___Route/Dashboard allelectors len: ",len(allelectors))
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
         formdata = {}
-        current_node = TREK_NODES.get(CurrentElection['cid'])
+        current_node = state.TREK_NODES.get(CurrentElection['cid'])
         if not current_node:
             raise Exception ("Current Election node does not exist")
         streamrag = getstreamrag()
@@ -6740,7 +7188,7 @@ def downbut(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     formdata = {}
@@ -6803,7 +7251,7 @@ def transfer(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     formdata = {}
@@ -6843,7 +7291,7 @@ def downPDbut(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     previous_node = current_node
 
     estyle = CurrentElection['territories']
@@ -6909,7 +7357,7 @@ def downWKbut(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     previous_node = current_node
     print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
 
@@ -6990,7 +7438,7 @@ def downMWbut(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
@@ -7065,7 +7513,7 @@ def STupdate(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 #    steps = path.split("/")
@@ -7134,8 +7582,8 @@ def STupdate(path):
                     allelectors["ENOP"] = allelectors["ENOP"].astype(str)
                     mask = allelectors["ENOP"] == electID
                     changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file
-                    changefields.loc[i,'Lat'] = street_node.centroid[0]
-                    changefields.loc[i,'Long'] = street_node.centroid[1]
+                    changefields.loc[i,'Lat'] = street_node.latlongroid[0]
+                    changefields.loc[i,'Long'] = street_node.latlongroid[1]
                     changefields.loc[i,'ENOP'] = electID
                     changefields.loc[i,'ElectorName'] = ElectorName
 
@@ -7218,7 +7666,7 @@ def PDdownST(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
@@ -7289,7 +7737,7 @@ def LGdownST(path):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     T_level = CurrentElection['level']
@@ -7356,7 +7804,7 @@ def WKdownST(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 
@@ -7422,7 +7870,7 @@ def wardreport(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
     current_node = current_node.ping_node(estyle,current_election,path)
@@ -7509,7 +7957,7 @@ def get_table(table_name):
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
 
     # Table mapping
@@ -7557,9 +8005,9 @@ def fetch_areas():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     accordian = current_node.get_areas()
-    print(f"_______ Fetch under {current_election} for {current_node} Areas {accordian}")
+    print(f"_______ Fetch under {current_election} for {current_node.value} Areas {accordian}")
 
     return jsonify({ "areas": accordian })
 
@@ -7575,7 +8023,7 @@ def displayareas():
 
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     places = CurrentElection['places']
     print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
@@ -7673,7 +8121,7 @@ def divreport(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
@@ -7728,7 +8176,7 @@ def upbut(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 
@@ -7786,7 +8234,7 @@ def register():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     user = User.query.filter_by(username=username).first()
     if user:
@@ -7816,11 +8264,11 @@ def calendar_partial(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     ctype = gettypeoflevel(estyle,path, current_node.level + 1)
 
-    from collections import defaultdict
+
 
 
     with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
@@ -7877,7 +8325,7 @@ def thru(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     estyle = CurrentElection['territories']
 
@@ -7911,7 +8359,7 @@ def showmore(path):
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     steps = path.split("/")
     last = steps.pop().split("--")
     current_node = selected_childnode(current_node,last[1])
@@ -7930,7 +8378,7 @@ def showmore(path):
 def upload_file():
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     file = request.files.get('file')
     if not file:
         return jsonify({'error': 'No file received'}), 400
@@ -7962,7 +8410,7 @@ def filelist():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
@@ -8041,7 +8489,7 @@ def walks():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     flash('_______ROUTE/walks',session)
     streamrag = getstreamrag()
 
@@ -8075,7 +8523,7 @@ def postcode():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     flash('__ROUTE/Findpostcode')
 
@@ -8122,7 +8570,7 @@ def firstpage():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
     estyle = CurrentElection['territories']
 
     print("🔍 Accessed /firstpage")
@@ -8132,196 +8580,13 @@ def firstpage():
     print("🧪 session keys:", list(session.keys()))
     print("🧪 full session content:", dict(session))
     print("🧪 full currentelection content:", CurrentElection)
-# if the most recently used current election has a territory map reference then use that as the sourcepath
-# otherwise the current election is set to DEMO and the current location is used.
-    Treepolys = {
-        'country': {},
-        'nation': {},
-        'county': {},
-        'constituency':{},
-        'ward': {},
-        'division': {}
-    }
-    Fullpolys = {
-        'country': {},
-        'nation': {},
-        'county': {},
-        'constituency': {},
-        'ward': {},
-        'division': {}
-    }
-
-
-    if CurrentElection['mapfiles'][-1]:
-        newpath = ""
-        sourcepath = CurrentElection['mapfiles'][-1]
-        steps = stepify(sourcepath)
-
-        # --- COUNTRY ---
-        [country, Treepolys['country'], Fullpolys['country']] = filterArea(
-            config.workdirectories['bounddir'] + "/World_Countries_(Generalized)_9029012925078512962.geojson",
-            'COUNTRY',
-            config.workdirectories['bounddir'] + "/Country_Boundaries.geojson",
-            name=steps[0]
-        )
-        newpath = country
-
-        # --- NATION ---
-        [nation, Treepolys['nation'], Fullpolys['nation']] = filterArea(
-            config.workdirectories['bounddir'] + "/Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
-            'CTRY21NM',
-            config.workdirectories['bounddir'] + "/Nation_Boundaries.geojson",
-            name=steps[1]
-        )
-        newpath = newpath + "/" + nation
-
-        # --- COUNTY ---
-        [county, Treepolys['county'], Fullpolys['county']] = filterArea(
-            config.workdirectories['bounddir'] + "/Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
-            'CTYUA23NM',
-            config.workdirectories['bounddir'] + "/County_Boundaries.geojson",
-            name=steps[2]
-        )
-        newpath = newpath + "/" + county
-
-        print("___Sourcepath1 :", newpath)
-
-        # --- CONSTITUENCY ---
-        if len(steps) >= 4:
-            [constituency, Treepolys['constituency'], Fullpolys['constituency']] = intersectingArea(
-                config.workdirectories['bounddir'] + "/Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
-                'PCON24NM',
-                'county',
-                config.workdirectories['bounddir'] + "/Constituency_Boundaries.geojson",
-                name=steps[2]+"/"+steps[3]
-            )
-            newpath = newpath + "/" + constituency
-            print("___Sourcepath2 :", newpath, steps)
-
-            # Determine finalstep (if any)
-            finalstep = steps[3]+"/"+steps[4] if len(steps) > 4 else steps[3]+"/XXXXX"
-
-            # --- WARD ---
-            if CurrentElection['territories'] in ['B', 'P']:
-                [ward, Treepolys['ward'], Fullpolys['ward']] = intersectingArea(
-                    config.workdirectories['bounddir'] + "/Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
-                    'WD24NM',
-                    'constituency',
-                    config.workdirectories['bounddir'] + "/Ward_Boundaries.geojson",
-                    name=finalstep
-                )
-                newpath = newpath + "/WARDS/" + ward + "/" + ward + "-WALKS.html"
-                print("___Sourcepath31 :", newpath, ward, steps)
-
-            # --- DIVISION ---
-            elif CurrentElection['territories'] in ['C', 'U']:
-                [division, Treepolys['division'], Fullpolys['division']] = intersectingArea(
-                    config.workdirectories['bounddir'] + "/Surrey_Proposed_Divisions.geojson",
-                    'Division_n',
-                    'constituency',
-                    config.workdirectories['bounddir'] + "/Division_Boundaries.geojson",
-                    name=finalstep
-                )
-                newpath = newpath + "/DIVS/" + division + "/" + division + "-WALKS.html"
-                print("___Sourcepath32 :", newpath, division, steps)
-
-            else:
-                newpath = newpath + "/" + steps[3] + "-MAP.html"
-                print("___Sourcepath33 :", newpath, steps)
-
-    else:
-        lat = request.args.get('lat')
-        lon = request.args.get('lon')
-
-        if lat and lon:
-            here = (float(lat), float(lon))
-            print(f"Using GPS: lat={lat}, lon={lon}")
-
-        step = ""
-
-        # --- COUNTRY ---
-        [step, Treepolys['country'], Fullpolys['country']] = filterArea(
-            config.workdirectories['bounddir'] + "/World_Countries_(Generalized)_9029012925078512962.geojson",
-            'COUNTRY',
-            config.workdirectories['bounddir'] + "/Country_Boundaries.geojson",
-            roid=here
-        )
-        newpath = step
-
-        # --- NATION ---
-        [step, Treepolys['nation'], Fullpolys['nation']] = filterArea(
-            config.workdirectories['bounddir'] + "/Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
-            'CTRY21NM',
-            config.workdirectories['bounddir'] + "/Nation_Boundaries.geojson",
-            roid=here
-        )
-        newpath = newpath + "/" + step
-
-        # --- COUNTY ---
-        [step, Treepolys['county'], Fullpolys['county']] = filterArea(
-            config.workdirectories['bounddir'] + "/Surrey_Proposed_Divisions.geojson",
-            'Division_n',
-            config.workdirectories['bounddir'] + "/County_Boundaries.geojson",
-            roid=here
-        )
-        newpath = newpath + "/" + step
-
-        # --- CONSTITUENCY ---
-        [step, Treepolys['constituency'], Fullpolys['constituency']] = intersectingArea(
-            config.workdirectories['bounddir'] + "/Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
-            'PCON24NM',
-            'county',
-            config.workdirectories['bounddir'] + "/Constituency_Boundaries.geojson",
-            roid=here
-        )
-        newpath = newpath + "/" + step
-
-        # --- Optional final layer ---
-        if CurrentElection['territories'] in ['B', 'P']:
-            [step, Treepolys['ward'], Fullpolys['ward']] = intersectingArea(
-                config.workdirectories['bounddir'] + "/Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
-                'WD24NM',
-                'constituency',
-                config.workdirectories['bounddir'] + "/Ward_Boundaries.geojson",
-                roid=here
-            )
-            newpath = newpath + "/WARDS/" + step + "/" + step + "-WARDS.html"
-
-        elif CurrentElection['territories'] in ['C', 'U']:
-            [step, Treepolys['division'], Fullpolys['division']] = intersectingArea(
-                config.workdirectories['bounddir'] + "/County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson",
-                'CED23NM',
-                'constituency',
-                config.workdirectories['bounddir'] + "/Division_Boundaries.geojson",
-                roid=here
-            )
-            newpath = newpath + "/DIVS/" + step + "/" + step + "-DIVS.html"
-
-        else:
-            newpath = newpath + "/" + step + "-MAP.html"
-
-        # Save updated polys
-        with open(TREEPOLY_FILE, 'wb') as f:
-            pickle.dump(Treepolys, f)
-        with open(FULLPOLY_FILE, 'wb') as f:
-            pickle.dump(Fullpolys, f)
-
-        print(f"🧪 current election 0 {current_election} - current_node:{current_node.value}")
-
-
-        with open(TREEPOLY_FILE, 'wb') as f:
-            pickle.dump(Treepolys, f)
-        with open(FULLPOLY_FILE, 'wb') as f:
-            pickle.dump(Fullpolys, f)
-        print(f"🧪 current election 0 {current_election} - current_node:{current_node.value}")
-
 
     formdata = {}
     formdata['country'] = "UNITED_KINGDOM"
     flash('_______ROUTE/firstpage')
     print('_______ROUTE/firstpage at :',current_node.value )
 
-    mapfile = sourcepath
+    mapfile = CurrentElection['mapfiles'][-1]
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = current_node.ping_node(estyle,current_election,mapfile)
 
@@ -8337,7 +8602,7 @@ def firstpage():
     Featurelayers[atype].create_layer(current_election,current_node,atype)
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
     streamrag = getstreamrag()
-    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].name} - areas: {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].areashtml}")
+    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level+1)].name} - areas: {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].areashtml}")
     flayers = current_node.getselectedlayers(estyle,current_election,mapfile)
     current_node.create_area_map(flayers, current_election,CurrentElection)
     print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
@@ -8451,7 +8716,7 @@ def normalise():
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(CurrentElection)
+    current_node = get_last(current_election,CurrentElection)
 
     stream = str(request_form.get('election')).upper()
     streamrag = getstreamrag()

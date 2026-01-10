@@ -9,6 +9,7 @@ workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Referenc
 workdirectories['resultdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/AreaIndicators/"
 TABLE_FILE = os.path.join(workdirectories['workdir'],'static','data','stream_data.json')
 OPTIONS_FILE = os.path.join(workdirectories['workdir'],'static','data','options.json')
+LAST_RESULTS_FILE = os.path.join(workdirectories['workdir'],'static','data','LastResults.json')
 ELECTIONS_FILE = os.path.join(workdirectories['workdir'],'static','data','Elections.json')
 TREEPOLY_FILE = os.path.join(workdirectories['workdir'],'static','data','Treepolys.pkl')
 GENESYS_FILE =  os.path.join(workdirectories['workdir'],'static','data','RuncornRegister.xlsx')

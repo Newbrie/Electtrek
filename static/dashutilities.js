@@ -665,12 +665,14 @@
    updateConstantsUI(data.constants, data.options);
 
   window.plan = data.constants?.calendar_plan;
+  const lastMapFile = data.constants?.mapfiles?.slice(-1)[0];
 
-  console.log("🔀 set places on DOM relaod :", window.places);
-  console.log("🔀 set resources on DOM relaod :", window.resources);
-  console.log("🔀 set areas on DOM relaod :", window.areas);
-  console.log("🔀 set task_tags on DOM relaod :", window.task_tags);
+  console.log("🔀 set places on DOM reload :", window.places);
+  console.log("🔀 set resources on DOM reload :", window.resources);
+  console.log("🔀 set areas on DOM reload :", window.areas);
+  console.log("🔀 set task_tags on DOM reload :", window.task_tags);
   console.log("📩 set calendar_plan::", window.plan);
+  console.log("📩 set mapfile::", lastMapFile);
 
   if (!window.plan || !window.plan.slots) {
       console.warn("⚠️ No slots found in calendar_plan");
@@ -682,7 +684,6 @@
   console.log("✅ Calendar plan loaded into UI");
 
 
-  const lastMapFile = data.constants?.mapfiles?.slice(-1)[0];
 
    if (lastMapFile) {
       changeIframeSrc(`/thru/${lastMapFile}`);
