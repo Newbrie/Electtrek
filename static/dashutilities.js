@@ -672,7 +672,7 @@
   console.log("🔀 set areas on DOM reload :", window.areas);
   console.log("🔀 set task_tags on DOM reload :", window.task_tags);
   console.log("📩 set calendar_plan::", window.plan);
-  console.log("📩 set mapfile::", lastMapFile);
+
 
   if (!window.plan || !window.plan.slots) {
       console.warn("⚠️ No slots found in calendar_plan");
@@ -686,7 +686,9 @@
 
 
    if (lastMapFile) {
+     console.log("📩 setting mapfile::", lastMapFile);
       changeIframeSrc(`/thru/${lastMapFile}`);
+      console.log("📩 displayed mapfile::", lastMapFile);
    }
 
 
