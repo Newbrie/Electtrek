@@ -794,7 +794,7 @@ async function setActiveElectionOnStartup() {
 
       updateConstantsUI(data.constants, data.options);
 
-      console.log("📩  startup (set-election returned data:", data);
+      console.log("📩  startup (set-election returned data for:", data.current_election);
       console.log("🔀 startup places on DOM reload :", window.places);
       console.log("🔀 startup resources on DOM reload :", window.resources);
       console.log("🔀 startup areas on DOM reload :", window.areas);

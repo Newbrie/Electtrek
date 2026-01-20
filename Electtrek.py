@@ -53,7 +53,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 import state
 from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults,load_last_results, levelcolours, subending, normalname
 import nodes
-from nodes import restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last
+from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last
 from layers import Featurelayers
 import layers
 from elections import get_election_data, get_tags_json, route
@@ -64,6 +64,18 @@ locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 sys.path
 sys.path.append('/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/Electtrek.py')
 print(sys.path)
+
+def make_json_serializable(obj):
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(i) for i in obj]
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    else:
+        return str(obj)
+
+
 
 
 def child_type_for(parent_type, estyle):
@@ -129,7 +141,7 @@ def lastElection():
 
     # 2. List elections from filesystem and sort by last access time
     election_files = get_election_names()  # returns list of election names
-    print(f"____election files: {election_files}")
+    print(f"____election files: {election_files} under route {route()}")
 
     if election_files:
         # map names to full paths
@@ -187,7 +199,7 @@ def save_election_data (c_election,ELECTION):
     file_path = ELECTIONS_FILE.replace(".json",f"-{c_election}.json")
     try:
         if  os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            print("____Saving Election File:",c_election,"-",file_path)
+            print(f"____Saving Election File under {route()} in elections: {c_election}, for: {file_path}")
             with open(file_path, 'w') as f:
                 json.dump(ELECTION, f, indent=2)
             print(f"✅ JSON written safely  {ELECTION}")
@@ -198,12 +210,6 @@ def save_election_data (c_election,ELECTION):
     except Exception as e:
         print(f"❌ Failed to write Election JSON: {e}")
     return
-
-
-
-
-
-
 
 
 def importVI(electorsVI):
@@ -408,7 +414,7 @@ def visit_node(v_node, c_elect,CurrEL):
     from flask import send_file, abort
     from pathlib import Path
     # Access the first key from the dictionary
-    print(f"___under {c_elect} visiting mapfile:", v_node.mapfile())
+    print(f"___under {route()} for {c_elect} visiting mapfile:", v_node.mapfile())
     CurrEL2 = CurrEL
     CurrEL2['cid'] = v_node.nid
     CurrEL2['cidLat'] = v_node.latlongroid[0]
@@ -831,7 +837,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             #        Territory_node = self
             #        ttype = electtype
             pfile = Treepolys[ttype]
-            Territoryboundary = pfile[pfile['FID']== Territory_node.fid]
+            Territoryboundary = pfile[pfile['FID']== int(Territory_node.fid)]
 
             print(f"____Territory limited to :{territory_path} for election {current_election}")
 
@@ -1385,15 +1391,11 @@ def reassign_parent():
     # --------------------------
     # 6. Save changes
     # --------------------------
-    save_nodes(TREKNODE_FILE)  # persists TREK_NODES_BY_ID and relationships
-    visit_node(old_parent_node, current_election, CurrentElection)
     print("✅ Reassignment complete")
+    save_nodes(TREKNODE_FILE)  # persists TREK_NODES_BY_ID and relationships
+    return visit_node(old_parent_node, current_election, CurrentElection)
 
-    return jsonify({
-        'status': 'success',
-        'mapfile': url_for('thru', path=mapfile_old_parent),
-        'message': f"Node '{subject_name}' reassigned from '{old_parent_name}' to '{new_parent_name}'"
-    })
+
 
 
 
@@ -2237,17 +2239,6 @@ def set_election():
     global constants, OPTIONS, constants, Treepolys, Featurelayers
     import json
 
-
-    def make_json_serializable(obj):
-        if isinstance(obj, dict):
-            return {k: make_json_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [make_json_serializable(i) for i in obj]
-        elif isinstance(obj, (str, int, float, bool)) or obj is None:
-            return obj
-        else:
-            return str(obj)
-
     try:
         print("____Route/set-election/top ")
 
@@ -2283,15 +2274,11 @@ def set_election():
         current_node = current_node.ping_node(estyle,current_election, mapfile)
         print(f"post ping: {current_node.mapfile()}")
         persist(current_node)
-        visit_node(current_node, current_election, CurrentElection)
-
-        safe_constants = make_json_serializable(CurrentElection)
         return jsonify({
-            'success': True,
-            'constants': safe_constants,
-            'options': OPTIONS,
-            'current_election': current_election
-        })
+                'constants': CurrentElection,
+                'options': OPTIONS,
+                'current_election': current_election
+            })
 
     except Exception as e:
         print("____Route/set-election/exception", e)
@@ -2899,6 +2886,8 @@ def downbut(path):
     return visit_node(current_node,current_election,CurrentElection)
 
 
+
+
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
 #        selectedlayers = current_node.getselectedlayers(current_election,mapfile)
 #        current_node.create_area_map(selectedlayers,current_election,CurrentElection)
@@ -2937,6 +2926,7 @@ def transfer(path):
     mapfile = current_node.mapfile()
     CurrentElection = get_election_data(current_election)
     return visit_node(current_node,current_election,CurrentElection)
+
 
 
 @app.route('/downPDbut/<path:path>', methods=['GET','POST'])
@@ -3001,6 +2991,7 @@ def downPDbut(path):
 
     persist(current_node)
     return visit_node(current_node,current_election,CurrentElection)
+
 
 
 @app.route('/downWKbut/<path:path>', methods=['GET','POST'])
@@ -3300,11 +3291,12 @@ def STupdate(path):
 
     sheetfile = current_node.create_streetsheet(current_election,streetelectors)
     mapfile = current_node.dir+"/"+sheetfile
-    return visit_node(current_node,current_election,CurrentElection)
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
     persist(current_node)
-    return  jsonify({"message": "Success", "file": sheetfile})
+    return visit_node(current_node,current_election,CurrentElection)
+
+
 
 
 @app.route('/PDdownST/<path:path>', methods=['GET','POST'])
@@ -3375,6 +3367,7 @@ def PDdownST(path):
     persist(current_node)
 
     return visit_node(current_node,current_election,CurrentElection)
+
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])
 @login_required
@@ -3977,42 +3970,19 @@ def calendar_partial(path):
 @app.route('/thru/<path:path>', methods=['GET','POST'])
 @login_required
 def thru(path):
-
-    global CurrentElection
-# map is just a straight transfer to the given path
-#    steps = path.split("/")
-#    last = steps.pop()
-#    current_node = selected_childnode(current_node,last)
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
-    current_node = get_last(current_election,CurrentElection)
-
     estyle = CurrentElection['territories']
-    mapfile = current_node.mapfile()
+    mapfile = path
     flash ("_________ROUTE/thru:"+mapfile)
     print ("_________ROUTE/thru:",mapfile, CurrentElection)
-    current_node = current_node.ping_node(estyle,current_election,mapfile)
-    if os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-        flash(f"Using existing file: {mapfile}", "info")
-        print(f"Using existing file: {mapfile} and CurrentElection: {CurrentElection}")
-        return visit_node(current_node,current_election,CurrentElection)
-    else:
-        flash(f"Creating new mapfile:{mapfile}", "info")
-        print(f"Creating new mapfile:{mapfile}")
-#        fileending = "-"+mapfile.split("-").pop()
-#        current_node.file = subending(current_node.file,fileending)
-        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile), current_election,CurrentElection)
-        print(f"____/THRU OPTIONS areas for calendar node {current_node.value} are {Featurelayers['street'].areashtml} ")
-        print(f"____/THRU OPTIONS2 areas for calendar node {current_node.value} are {Featurelayers['walk'].areashtml} ")
-        print(f"____/THRU OPTIONS3 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
-        return visit_node(current_node,current_election,CurrentElection)
+    current_node = get_root().ping_node(estyle,current_election,mapfile)
+    return visit_node(current_node,current_election,CurrentElection)
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required
 def showmore(path):
-
-    global CurrentElection
 
     restore_from_persist(session=session)
     current_election = get_current_election(session)
@@ -4259,7 +4229,7 @@ def firstpage():
     Featurelayers[atype].create_layer(current_election,current_node,atype)
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
     streamrag = getstreamrag()
-    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level+1)].name} - areas: {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level)].areashtml}")
+    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[gettypeoflevel(estyle,mapfile, current_node.level+1)].name} ")
     flayers = current_node.getselectedlayers(estyle,current_election,mapfile)
     current_node.create_area_map(flayers, current_election,CurrentElection)
     print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
@@ -4268,7 +4238,7 @@ def firstpage():
 
     ELECTIONS = get_election_names()
 
-#    return visit_node(current_node,current_election, CurrentElection)
+#    visit_node(current_node,current_election, CurrentElection)
 #    persist(current_node)
     print(f"🧪 firstpage level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
 

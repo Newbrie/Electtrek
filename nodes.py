@@ -20,10 +20,42 @@ levels = ['country','nation','county','constituency','ward/division','polling_di
 
 from typing import Dict
 
-TREK_NODES_BY_ID: Dict[str, "TNode"] = {}
-TREK_NODES_BY_VALUE: Dict[str, "TNode"] = {}
 
 allelectors = pd.DataFrame()
+
+TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
+TREK_NODES_BY_VALUE: Dict[str, "TreeNode"] = {}
+
+def create_root_node() -> "TreeNode":
+    return TreeNode(
+        value="UNITED_KINGDOM",
+        fid="238",
+        roid=(51.23228, -0.57630),
+        origin="DEMO",
+        node_type="country"
+    )
+
+def get_root() -> "TreeNode":
+    """Always returns the single root node. Creates it if needed."""
+    global TREK_NODES_BY_ID, TREK_NODES_BY_VALUE
+
+    # If the root already exists, return it
+    for node in TREK_NODES_BY_ID.values():
+        if node.parent is None:
+            return node
+
+    # Otherwise, create the root and store it
+    root = create_root_node()
+    TREK_NODES_BY_ID[root.nid] = root
+    TREK_NODES_BY_VALUE[root.value] = root
+    return root
+
+def first_node() -> "TreeNode":
+    """Return the first inserted node, or the root if empty."""
+    return next(iter(TREK_NODES_BY_ID.values()), get_root())
+
+
+
 def parse_slot_key(slot_key):
     """
     Convert keys like '2025-04-15_9 AM' to a Python datetime object.
@@ -54,18 +86,20 @@ def save_nodes(path):
         )
 
 def load_nodes(path):
+    global TREK_NODES_BY_ID, TREK_NODES_BY_VALUE
+
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         print(f"[WARN] Node file missing or empty: {path}")
-        return {}
-
+        return False
 
     reset_nodes()
+
     with open(path) as f:
         try:
-            return json.load(f)
+            raw_nodes = json.load(f)
         except json.JSONDecodeError as e:
             print(f"[ERROR] Invalid JSON in {path}: {e}")
-            return {}
+            return False
 
     # PASS 1: create nodes
     for data in raw_nodes:
@@ -78,7 +112,7 @@ def load_nodes(path):
         node = TREK_NODES_BY_ID[data["nid"]]
 
         pid = data.get("parent")
-        if pid:
+        if pid is not None:
             parent = TREK_NODES_BY_ID.get(pid)
             if not parent:
                 raise ValueError(
@@ -93,6 +127,8 @@ def load_nodes(path):
                     f"Missing child {cid} for node {node.nid} ({node.value})"
                 )
             node.children.append(child)
+
+    return True
 
 
 
@@ -383,8 +419,6 @@ def get_counters(session=None, session_data=None):
     Returns the current node from TREK_NODES_BY_ID using either the Flask session or passed-in session_data.
     """
 
-    if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
-        load_nodes(TREKNODE_FILE)
 
     if session and 'gtagno_counters' in session:
         counters = session['gtagno_counters']
@@ -406,13 +440,7 @@ def get_counters(session=None, session_data=None):
 
 def get_current_node(session=None, session_data=None):
 
-    MapRoot = get_root(TreeNode(
-                value="UNITED_KINGDOM",
-                fid=238,
-                roid= (54.29750000675,-2.94531856934),
-                origin="DEMO",
-                node_type="country"
-                ))
+    MapRoot = get_root()
     try:
         if not session or 'current_node_id' not in session:
             node = None
@@ -425,9 +453,6 @@ def get_current_node(session=None, session_data=None):
     Returns the current node from TREK_NODES_BY_ID using either the Flask session or passed-in session_data.
     """
 
-    if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
-        load_nodes(TREKNODE_FILE)
-
     if session and 'current_node_id' in session:
         current_node_id = session.get('current_node_id',None)
         print("[Main Thread] current_node_id from session:", session.get('current_node_id',"None"))
@@ -437,11 +462,11 @@ def get_current_node(session=None, session_data=None):
         current_node_id = session_data.get('current_node_id',None)
         node = TREK_NODES_BY_ID.get(current_node_id)
     else:
-        node = get_root(MapRoot)
+        node = get_root()
         print("⚠️ current_node_id not found in session or session_data:so id = ",238 )
 
     if node == None:
-        node = get_root(MapRoot)
+        node = get_root()
         current_node_id = node.nid
 
         print (f" current_node_id: {current_node_id} not in TREK_NODES_BY_ID:",TREK_NODES_BY_ID)
@@ -472,10 +497,7 @@ def safe_pickle_load(path, default):
 
 
 def restore_from_persist(session=None,session_data=None):
-
     from state import Treepolys, Fullpolys
-
-    global allelectors
     global OPTIONS
     global CurrentElection
 
@@ -506,6 +528,10 @@ def restore_from_persist(session=None,session_data=None):
     print('_______allelectors size: ', len(allelectors))
     print('_______resources: ', resources)
 
+    if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
+        load_nodes(TREKNODE_FILE)
+
+    print('_______Trek Nodes: ', TREK_NODES_BY_VALUE, TREK_NODES_BY_ID)
     return
 
 def persist(node):
@@ -629,15 +655,9 @@ def get_last(current_election, CE):
     print("___after apply basepath:", basepath)
 
     # --- 4. Try to resolve node from path ---
-    MapRoot = get_root(TreeNode(
-        value="UNITED_KINGDOM",
-        fid=238,
-        roid=(51.23228, -0.57630),
-        origin="DEMO",
-        node_type="country"
-    ))
+    MapRoot = get_root()
 
-    last_node = get_root(MapRoot).ping_node(
+    last_node = get_root().ping_node(
         estyle,
         current_election,
         sourcepath
@@ -646,7 +666,7 @@ def get_last(current_election, CE):
     # --- 5. Final fallback to root ---
     if not last_node:
         print("⚠️ Falling back to root node")
-        last_node = get_root(MapRoot)
+        last_node = get_root()
 
     print(
         f"___ GET LAST - ELECTION: {current_election} "
@@ -658,34 +678,8 @@ def get_last(current_election, CE):
 
 
 
-def get_root(root_node):
-    import statistics
-
-    # Try to find existing root
-    for node in TREK_NODES_BY_ID.values():
-        if node.parent is None:
-            print("___Get root1:", node.nid)
-            return node
-
-    # Create new root
-    MapRoot = root_node
-
-    # Register root
-    TREK_NODES_BY_ID[MapRoot.nid] = MapRoot
-    TREK_NODES_BY_VALUE[MapRoot.value] = MapRoot
-    print("___Created new root:", MapRoot.nid)
-
-
-    return MapRoot
-
 def find_node_by_path(basepath: str, debug=False):
-    MapRoot = get_root(TreeNode(
-                value="UNITED_KINGDOM",
-                fid=238,
-                roid= (54.29750000675,-2.94531856934),
-                origin="DEMO",
-                node_type="country"
-                ))
+    MapRoot = get_root()
     if debug:
         print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES_BY_ID)}")
 
@@ -696,7 +690,7 @@ def find_node_by_path(basepath: str, debug=False):
     if not parts:
         return None
 
-    root = get_root(MapRoot)
+    root = get_root()
     node = root
 
     if normalname(root.value) != parts[0]:
@@ -805,7 +799,7 @@ class TreeNode:
     def from_dict(cls, data):
         node = cls(
             value=data["value"],
-            fid=data["fid"],
+            fid=data['fid'],
             roid=data["latlongroid"],
             origin=data["origin"],
             node_type=data["node_type"],
@@ -1165,6 +1159,7 @@ class TreeNode:
             matches = [child for child in node.children if child.value == part]
             if not matches:
                 print(f"   ❌ under {route()} No match for '{part}' in node '{node.value}' children. Returning original node: {self.value}")
+                print(f"   ❌ children of self:{[x.value for x in self.children]}")
                 return self
 
             node = matches[0]
@@ -1640,15 +1635,15 @@ class TreeNode:
         gotv_pct = CE['GOTV']
         block = pd.DataFrame()
 
-#        parent_geom = parent_poly[parent_poly["FID"] == self.fid].geometry.values[0]
 
         # Filter the parent geometry based on the FID
-        parent_geom = parent_poly[parent_poly["FID"] == self.fid]
+        parent_geom = parent_poly[parent_poly['FID'] == int(self.fid)]
 
 
         # If no matching geometry is found, handle the case where parent_geom is empty
-        if parent_geom.empty or self.level == 0:
-            print(f"Adding back in Full {self.type} boundaries for {self.value} FID {self.fid}")
+        if parent_geom.empty:
+            print(f"Adding back in Full '{self.type}' boundaries for {self.value} FID {self.fid}")
+            raise Exception ("EMPTY COUNTRY PARENT GEOMETRY")
             restore_fullpolys(self.type)
             parent_poly = Treepolys[self.type]
             print(
@@ -1658,7 +1653,7 @@ class TreeNode:
                 f"NID {self.nid}"
             )
 
-            parent_geom = parent_poly[parent_poly["FID"] == self.fid]
+            parent_geom = parent_poly[parent_poly['FID'] == int(self.fid)]
             # Ensure that parent_geom has the desired geometry after the update
             if parent_geom.empty:
                 print(f"Still no matching geometry found after adding new polygon for FID {self.fid}")
@@ -1693,7 +1688,7 @@ class TreeNode:
             here = (centroid_point.y, centroid_point.x)
             overlaparea = parent_geom.intersection(limb.geometry).area
             Overlaps[electtype] = round(Overlaps[electtype], 8)  # 6 decimal places
-            print (f"________trying type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
+            print (f"________trying map type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
 #            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
             if overlaparea > Overlaps[electtype] and not TREK_NODES_BY_VALUE.get(newname) :
 # if name is already in treknodes ignore
@@ -2381,7 +2376,7 @@ class TreeNode:
 
         if self.level < 3:
             pfile = Treepolys[ntype]
-            pb = pfile[pfile['FID'] == self.fid]
+            pb = pfile[pfile['FID'] == int(self.fid)]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
             pad_lat = (maxy - miny) / 5
             pad_lon = (maxx - minx) / 5
@@ -2393,7 +2388,7 @@ class TreeNode:
 
         elif self.level < 5:
             pfile = Treepolys[ntype]
-            pb = pfile[pfile['FID'] == self.fid]
+            pb = pfile[pfile['FID'] == int(self.fid)]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
             swne = [(miny, minx), (maxy, maxx)]
             roid = pb.dissolve().centroid.iloc[0]

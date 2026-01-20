@@ -270,7 +270,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"🗺️ Loaded polygon file for type '{ttype}', records: {len(pfile)}")
 
         # Select boundary by FID
-        Territory_boundary = pfile[pfile['FID'] == target_node.fid]
+        Territory_boundary = pfile[pfile['FID'] == int(target_node.fid)]
         print(f"🧭 Filtered territory boundary by FID = {target_node.fid}, matches: {len(Territory_boundary)}")
 
         # Get the shapely polygon for area
@@ -975,7 +975,7 @@ class ExtendedFeatureGroup(FeatureGroup):
     #need to select the children boundaries associated with the children nodes - to paint
                 pfile = Treepolys[type]
                 print(f"______Add_Nodemap Treepolys type:{type} size:{len(pfile)}")
-                mask = pfile['FID']==c.fid
+                mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
                 limbX["col"] = to_hex(c.col)
 
