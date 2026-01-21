@@ -503,25 +503,27 @@ input:checked + .slider:before {
 }
 
 /* LOWER SECTION (log + data side-by-side) */
+
 #lower-layout {
     display: flex;
-    height: 30vh;              /* adjust to taste */
-    border-top: 1px solid #ccc;
+    height: 30vh;
+    min-height: 200px;
     overflow: hidden;
 }
 
-/* LOG WINDOW */
+/* LOG PANE */
 #log-area {
-    width: 40%;
+    flex: 0 0 35%;     /* fixed-ish width */
+    min-width: 250px; /* prevents collapse */
     overflow-y: auto;
     border-right: 1px solid #ccc;
-    background: #fafafa;
 }
 
-/* DATA WINDOW */
+/* DATA PANE */
 #data-area {
-    flex: 1;
-    overflow: auto;
+    flex: 1 1 0;      /* 🔑 allow shrinking */
+    min-width: 0;     /* 🔑 CRITICAL for flexbox */
+    overflow: hidden;
 }
 
 

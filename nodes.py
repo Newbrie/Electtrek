@@ -1728,8 +1728,6 @@ class TreeNode:
         from state import LEVEL_ZOOM_MAP
 
 
-
-
         print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
 
         print(f"___BEFORE map creation: in route {route()} creating file: ", self.file)
@@ -1737,9 +1735,6 @@ class TreeNode:
         import hashlib
         import re
         from pathlib import Path
-
-
-
 
         # --- CSS to adjust popup styling
         move_close_button_css = """
@@ -1994,8 +1989,8 @@ class TreeNode:
         }
         </style>
         """
-        FolMap.get_root().html.add_child(Element(css))
-
+#        FolMap.get_root().html.add_child(Element(css))
+# no need for this if map left of nav buttons
         folium.TileLayer(
             tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
             name='OPNVKarte (Public Transport)',
