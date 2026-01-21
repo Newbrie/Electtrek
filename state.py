@@ -191,7 +191,6 @@ def intersectingArea(
     """
 
     from state import Treepolys, Fullpolys
-    from state import Overlaps
     print(f"\n[DEBUG] intersecting Area called for source: {source}")
     print(f"[DEBUG] parent_type: {parent_type}, roid: {roid}, select_child_name: {select_child_name}")
 
@@ -585,7 +584,7 @@ Overlaps = {
 "country" : 1,
 "nation" : 0.1,
 "county" : 0.001,
-"constituency" : 0.00005,
+"constituency" : 0.000005,
 "ward" : 0.000005,
 "division" : 0.000005,
 "walk" : 0.005,

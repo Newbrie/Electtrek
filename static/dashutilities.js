@@ -565,7 +565,7 @@
                      const o = document.createElement("option");
                      o.value = optValue;
                      o.textContent = `${optValue}: ${optLabel}`;
-                     if (optValue === value) o.selected = true;
+                     if (String(optValue) === String(value)) o.selected = true;
                      el.appendChild(o);
                  });
              }
@@ -574,9 +574,11 @@
          // ------------------------------------------
          // NON-SELECT INPUTS
          // ------------------------------------------
-         else {
-             el.value = value;
-         }
+         else if (el.type === "checkbox") {
+                el.checked = Boolean(value);
+            } else {
+                el.value = value ?? "";
+            }
 
          // =====================================================
          // ⭐ Auto backend update on change (old behaviour kept)

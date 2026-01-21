@@ -503,6 +503,7 @@ passwordInput.addEventListener("keydown", (e) => {
             .then(r => r.json())
             .then(data => {
                 if (data.status === "success") {
+                  select.dataset.oldValue = select.value;
                     console.log(`${data.message}`);
                     changeIframeSrc(`${data.mapfile}`);
                 }

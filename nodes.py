@@ -20,8 +20,11 @@ levels = ['country','nation','county','constituency','ward/division','polling_di
 
 from typing import Dict
 
+Outcomes = pd.read_excel(GENESYS_FILE)
+Outcols = Outcomes.columns.to_list()
+allelectors = pd.DataFrame(Outcomes, columns=Outcols)
+allelectors.drop(allelectors.index, inplace=True)
 
-allelectors = pd.DataFrame()
 
 TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
 TREK_NODES_BY_VALUE: Dict[str, "TreeNode"] = {}
@@ -500,6 +503,7 @@ def restore_from_persist(session=None,session_data=None):
     from state import Treepolys, Fullpolys
     global OPTIONS
     global CurrentElection
+    global allelectors
 
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
@@ -508,10 +512,6 @@ def restore_from_persist(session=None,session_data=None):
 
     if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
         print('_______no elector data so creating blank', ELECTOR_FILE)
-        Outcomes = pd.read_excel(GENESYS_FILE)
-        Outcols = Outcomes.columns.to_list()
-        allelectors = pd.DataFrame(Outcomes, columns=Outcols)
-        allelectors.drop(allelectors.index, inplace=True)
         allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
     else:
         print('_______allelectors file exists so reading in ', ELECTOR_FILE)
@@ -886,8 +886,7 @@ class TreeNode:
 
         self.parent = parent
         parent.children.append(self)
-
-
+        save_nodes(TREKNODE_FILE)  # persists TREK_NODES_BY_ID and relationships
 
 
 
@@ -976,28 +975,26 @@ class TreeNode:
         print("__Building events from slots:",slots)
         for key, slot in slots.items():
             dt = parse_slot_key(key)
+            if not dt:
+                print(f"⚠️ Skipping slot with invalid datetime key: {key}")
+                continue
 
             resources, tasks, places, areas = self.process_lozenges(
                 slot.get("lozenges", []),
                 CurrentElection
             )
-            if places == "" or places == []:
+
+            if not places:
                 continue
-            print("datetime", dt,
-            "date", dt.date() if dt else None,
-            "time", dt.time() if dt else None,
-            "places", places,   # contains lat/lng/url etc.
-            "areas", areas,
-            "tasks",tasks)
 
             rows.append({
                 "datetime": dt,
-                "date": dt.date() if dt else None,
-                "time": dt.time() if dt else None,
+                "date": dt.date(),
+                "time": dt.time(),
                 "resources": resources,
                 "tasks": tasks,
-                "places": places,   # contains lat/lng/url etc.
-                "areas": areas,     # kept separate
+                "places": places,
+                "areas": areas,
                 "availability": slot.get("availability"),
                 "raw_key": key,
                 "lozenges": slot.get("lozenges", [])

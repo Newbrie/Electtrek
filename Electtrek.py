@@ -53,7 +53,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 import state
 from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults,load_last_results, levelcolours, subending, normalname
 import nodes
-from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last
+from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last, save_nodes
 from layers import Featurelayers
 import layers
 from elections import get_election_data, get_tags_json, route
@@ -1256,6 +1256,7 @@ def add_marker():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
+    from layers import Featurelayers
     """
     Reassigns a node from one parent to another in the tree.
     Updates TREK_NODES_BY_ID, allelectors, and regenerates relevant maps.
@@ -1305,7 +1306,9 @@ def reassign_parent():
                 return result
         return None
 
-    nodes = find_nodes(current_node)
+    rootx = get_root()
+    nodes = find_nodes(rootx)
+
     if not nodes:
         print(f"❌ Node '{subject_name}' not found or parents mismatch")
         return jsonify({'status': 'error', 'message': f"Node '{subject_name}' not found"}), 404
@@ -1371,29 +1374,26 @@ def reassign_parent():
         (old_parent_node, mapfile_old_parent),
         (new_parent_node, mapfile_new_parent),
     ]:
-        etype_node = gettypeoflevel(estyle, mapfile, node.level)
+        etype_node = gettypeoflevel(estyle, mapfile, node.level+1)
         Featurelayers[etype_node].reset()
         Featurelayers[etype_node].create_layer(current_election, node, etype_node)
         node.create_area_map(node.getselectedlayers(estyle, current_election, mapfile),
                              current_election, CurrentElection)
-        print(f"🔁 Regenerated map for node '{node.value}'")
+        print(f"🔁 Regenerated {etype_node} layer map {mapfile} for node '{node.value}'")
 
-    # Regenerate grandparent layer if exists
-    if mapfile_grandparent:
-        etype_gp = gettypeoflevel(estyle, mapfile_grandparent, old_parent_node.parent.level)
-        Featurelayers[etype_gp].create_layer(current_election, old_parent_node.parent, etype_gp)
-        old_parent_node.parent.create_area_map(
-            old_parent_node.parent.getselectedlayers(estyle, current_election, mapfile_grandparent),
-            current_election, CurrentElection
-        )
-        print(f"🔁 Regenerated map for grandparent '{old_parent_node.parent.value}'")
+    # Regenerate grandparent layer if exists - deleted not required
 
     # --------------------------
     # 6. Save changes
     # --------------------------
+
+    mapfile = old_parent_node.mapfile()
     print("✅ Reassignment complete")
-    save_nodes(TREKNODE_FILE)  # persists TREK_NODES_BY_ID and relationships
-    return visit_node(old_parent_node, current_election, CurrentElection)
+    return jsonify({
+        "status": "success",
+        "message": f"Node '{subject_node.value}' reassigned",
+        "mapfile": url_for("thru", path=mapfile)
+    })
 
 
 

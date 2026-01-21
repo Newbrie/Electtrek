@@ -4,6 +4,7 @@ from folium.utilities import JsCode
 from folium.plugins import MarkerCluster
 from folium import GeoJson, Tooltip, Popup
 import folium
+from datetime import datetime, timedelta, date
 
 from elections import get_election_data, route
 import json
@@ -884,32 +885,27 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_genmarkers(c_election,node,'marker',static)
             return len(self._children) - entrylen
         entrylen = len(self._children)
-        if len(node.children) > 0:
-    # each layer content is identified by the node id at which it created, so new node new content, same node old content
-            if self.id != node.nid: # new node new content
-                if not CurrentElection['accumulate']:
-                    self._children.clear()
-                entrylen = len(self._children)
-                print("ACCUMULATING from",entrylen)
-                self.id = node.nid
-        # create the content for an existing layer derived from the node children and required type
-                if intention_type == 'street' or intention_type == 'walkleg':
-                    self.add_nodemarks(c_election,node,intention_type,static)
-                elif intention_type == 'polling_district' or intention_type == 'walk':
-                    print(f"calling creation of voronoi in {c_election} - node {node.value} type {intention_type}")
-    #                self.add_shapenodes(c_election,node,intention_type)
-                    self.generate_voronoi_with_geovoronoi(c_election,node,intention_type, static)
-                    print(f"created {len(self._children)} voronoi in {c_election} - node {node.value} type {intention_type} static:{static}")
-                elif intention_type == 'marker':
-                    print("Markers 2 ACCUMULATING from",entrylen)
-                    self.add_genmarkers(c_election,node,'marker',static)
-                else:
-                    self.add_nodemaps(c_election,node, intention_type, static)
-            else: #no change - same node old content
-            # each layer content is identified by the node id at which it created, so new node new content, same node old content
-                self.id = 0
-                print("___New Layer with node.value = self.id ie it already exists :", self.id)
-                #the exist id = the new id , dont do anything
+        if len(node.childrenoftype(intention_type)) > 0:
+    # There is one layer of each type layers are identified by the node id at which it created
+            print(f"")
+            if not CurrentElection['accumulate']:
+                self._children.clear()
+            entrylen = len(self._children)
+            print(f"ACCUMULATING {CurrentElection['accumulate']} {not CurrentElection['accumulate']} from:",entrylen, self.id, node.nid, node.value, intention_type)
+            self.id = node.nid
+    # create the content for an existing layer derived from the node children and required type
+            if intention_type == 'street' or intention_type == 'walkleg':
+                self.add_nodemarks(c_election,node,intention_type,static)
+            elif intention_type == 'polling_district' or intention_type == 'walk':
+                print(f"calling creation of voronoi in {c_election} - node {node.value} type {intention_type}")
+#                self.add_shapenodes(c_election,node,intention_type)
+                self.generate_voronoi_with_geovoronoi(c_election,node,intention_type, static)
+                print(f"created {len(self._children)} voronoi in {c_election} - node {node.value} type {intention_type} static:{static}")
+            elif intention_type == 'marker':
+                print("Markers 2 ACCUMULATING from",entrylen)
+                self.add_genmarkers(c_election,node,'marker',static)
+            else:
+                self.add_nodemaps(c_election,node, intention_type, static)
         return len(self._children) - entrylen
 
     def add_genmarkers(self, c_election, node, type, static):
@@ -964,7 +960,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "tooltip_html": nodeshtml
                             }
 
-        print("_________Nodemap:",herenode.value,type, [x.type for x in childlist],len(herenode.children), len(childlist))
+        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{type} they are {[x.value for x in childlist]}" )
 
         for c in childlist:
             print("______Display children:",herenode.value, c.value,type)
