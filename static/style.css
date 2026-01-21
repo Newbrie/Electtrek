@@ -502,6 +502,29 @@ input:checked + .slider:before {
 
 }
 
+/* LOWER SECTION (log + data side-by-side) */
+#lower-layout {
+    display: flex;
+    height: 30vh;              /* adjust to taste */
+    border-top: 1px solid #ccc;
+    overflow: hidden;
+}
+
+/* LOG WINDOW */
+#log-area {
+    width: 40%;
+    overflow-y: auto;
+    border-right: 1px solid #ccc;
+    background: #fafafa;
+}
+
+/* DATA WINDOW */
+#data-area {
+    flex: 1;
+    overflow: auto;
+}
+
+
 
 #calendar {
     position: absolute;

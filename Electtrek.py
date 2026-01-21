@@ -2884,7 +2884,8 @@ def downbut(path):
     current_node.create_area_map(selectedlayers,current_election,CurrentElection)
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     persist(current_node)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
@@ -2920,7 +2921,8 @@ def transfer(path):
     current_node = previous_node.ping_node(estyle,current_election,path)
     mapfile = current_node.mapfile()
     CurrentElection = get_election_data(current_election)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 
@@ -2985,7 +2987,8 @@ def downPDbut(path):
     current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
 
     persist(current_node)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 
@@ -3065,7 +3068,8 @@ def downWKbut(path):
     print("_______writing to file:", mapfile)
 
     persist(current_node)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
@@ -3139,7 +3143,8 @@ def downMWbut(path):
     print("_______writing to file:", walkpathfile)
 
     persist(current_node)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 
@@ -3291,7 +3296,8 @@ def STupdate(path):
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
     persist(current_node)
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 
@@ -3363,7 +3369,8 @@ def PDdownST(path):
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
     persist(current_node)
 
-    return send_file(mapfile, as_attachment=False)
+    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+    return send_file(fullpath, as_attachment=False)
 
 
 

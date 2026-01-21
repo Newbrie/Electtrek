@@ -133,22 +133,28 @@
 
         <!-- MAIN HORIZONTAL LAYOUT -->
         <div id="app-layout">
+        <!-- MAIN CONTENT -->
+        <div id="main-content">
+            {% block map %}{% endblock %}
+        </div>
+        <!-- RIGHT SIDEBAR -->
+        <div id="sidebar">
+            {% block nav %}{% endblock %}
+        </div>
 
-            <!-- LEFT SIDEBAR -->
-            <div id="sidebar">
-                {% block nav %}{% endblock %}
-            </div>
 
-            <!-- MAIN CONTENT -->
-            <div id="main-content">
-                {% block map %}{% endblock %}
+        <!-- LOWER AREA -->
+        <div id="lower-layout">
+            <div id="log-area">
+                {% block log %}{% endblock %}
             </div>
+            <div id="data-area">
+                {% block captains %}{% endblock %}
+            </div>
+        </div>
 
         </div>
 
-        <!-- BELOW THE MAIN AREA -->
-        {% block log %}{% endblock %}
-        {% block captains %}{% endblock %}
 
     </main>
 
