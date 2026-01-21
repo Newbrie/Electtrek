@@ -131,17 +131,16 @@
 
     <main class="container-fluid p-0">
 
-        <!-- MAIN HORIZONTAL LAYOUT -->
+        <!-- TOP AREA -->
         <div id="app-layout">
-        <!-- MAIN CONTENT -->
-        <div id="main-content">
-            {% block map %}{% endblock %}
-        </div>
-        <!-- RIGHT SIDEBAR -->
-        <div id="sidebar">
-            {% block nav %}{% endblock %}
-        </div>
+            <div id="sidebar">
+                {% block nav %}{% endblock %}
+            </div>
 
+            <div id="main-content">
+                {% block map %}{% endblock %}
+            </div>
+        </div>
 
         <!-- LOWER AREA -->
         <div id="lower-layout">
@@ -153,10 +152,8 @@
             </div>
         </div>
 
-        </div>
-
-
     </main>
+
 
 
     <!-- ALL MODALS SHOULD BE HERE -->
