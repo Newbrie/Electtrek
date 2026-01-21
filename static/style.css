@@ -479,7 +479,7 @@ input:checked + .slider:before {
 #mapwin {
   position: relative;
   display: flex;
-  height: 100%;     /* FULL screen height */
+  height: 100vh;     /* FULL screen height */
   overflow: hidden;
 /*        overflow: hidden;    prevents outer scrolling */
     border: 1px solid #ddd;
@@ -517,23 +517,16 @@ input:checked + .slider:before {
 }
 
 
-
-
 #sidebar {
   flex: 0 0 360px;
   display: flex;
   flex-direction: column;
     width: 320px;
     flex-shrink: 0;
-    overflow-y: hidden;
+    overflow-y: auto;
     border-right: 1px solid #ccc;
     background: #f8f9fa;
 }
-
-#sidebar > * {
-    min-height: 0;      /* 🔑 allows flex children to shrink */
-}
-
 /* BOTTOM ROW */
 #lower-layout {
     display: flex;
@@ -542,10 +535,6 @@ input:checked + .slider:before {
     border-top: 1px solid #ccc;
 }
 
-#main-content,
-#sidebar {
-    height: 100%;
-}
 
 #lower-main {
     display: flex;
@@ -841,7 +830,6 @@ input:checked + .slider:before {
     overflow-y: auto;
 }
 
-
 #nav {
   z-index: 1000; /* above map */
 	position: fixed;
@@ -859,8 +847,6 @@ input:checked + .slider:before {
   cursor: pointer;
   opacity: 0.8;
 	height: 800px;
-  flex: 1 1 auto;
-  overflow-y: auto;
 
 }
 #chartContainer {
