@@ -574,9 +574,13 @@
          // ------------------------------------------
          // NON-SELECT INPUTS
          // ------------------------------------------
+
          else if (el.type === "checkbox") {
-                el.checked = Boolean(value);
-            } else {
+             if (!el.matches(":focus")) {
+                 el.checked = Boolean(value);
+             }
+         }
+         else {
                 el.value = value ?? "";
             }
 
