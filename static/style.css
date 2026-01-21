@@ -469,20 +469,9 @@ input:checked + .slider:before {
 /* Mapwin = fixed-size container (height of screen minus margins) */
 
 /* Top-level app layout */
-#app-layout {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-}
 
 /* Sidebar (NAV) */
-#sidebar {
-    width: 320px;
-    flex-shrink: 0;
-    overflow-y: auto;
-    border-right: 1px solid #ccc;
-    background: #f8f9fa;
-}
+
 
 /* Main area (MAP + calendar inside it) */
 #main-content {
@@ -504,12 +493,6 @@ input:checked + .slider:before {
 
 /* LOWER SECTION (log + data side-by-side) */
 
-#lower-layout {
-    display: flex;
-    height: 30vh;
-    min-height: 200px;
-    overflow: hidden;
-}
 
 /* LOG PANE */
 #log-area {
@@ -525,7 +508,46 @@ input:checked + .slider:before {
     min-width: 0;     /* 🔑 CRITICAL for flexbox */
     overflow: hidden;
 }
+/* TOP ROW */
+#app-layout {
+    display: flex;
+    width: 100%;
+    height: 65vh;
+}
 
+#main-content {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+#sidebar {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+    width: 320px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid #ccc;
+    background: #f8f9fa;
+}
+/* BOTTOM ROW */
+#lower-layout {
+    display: flex;
+    width: 100%;
+    height: 35vh;
+    border-top: 1px solid #ccc;
+}
+
+#lower-main {
+    flex: 1 1 0;      /* SAME AS main-content */
+    min-width: 0;
+    overflow: hidden;
+}
+
+#lower-sidebar {
+    flex: 0 0 360px;  /* SAME AS sidebar */
+    overflow: auto;
+}
 
 
 #calendar {

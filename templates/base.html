@@ -145,13 +145,17 @@
 
         <!-- LOWER AREA -->
         <div id="lower-layout">
-            <div id="log-area">
-                {% block log %}{% endblock %}
-            </div>
-            <div id="data-area">
+
+            <div id="lower-main">
                 {% block captains %}{% endblock %}
             </div>
+
+            <div id="lower-sidebar">
+                {% block log %}{% endblock %}
+            </div>
+
         </div>
+
 
     </main>
 
