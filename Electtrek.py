@@ -53,7 +53,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 import state
 from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults,load_last_results, levelcolours, subending, normalname
 import nodes
-from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last, save_nodes
+from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last, save_nodes, get_counters
 from layers import Featurelayers
 import layers
 from elections import get_election_data, get_tags_json, route
@@ -410,7 +410,7 @@ def capped_append(lst, item):
     return lst
 
 
-def visit_node(v_node, c_elect,CurrEL):
+def visit_node(v_node, c_elect,CurrEL, new):
     from flask import send_file, abort
     from pathlib import Path
     # Access the first key from the dictionary
@@ -432,7 +432,7 @@ def visit_node(v_node, c_elect,CurrEL):
     mapfile = v_node.mapfile()
     atype = gettypeoflevel(estyle,mapfile, v_node.level+1)
     fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    if not fullpath.is_file():
+    if new or not fullpath.is_file():
         print("___map Typemaker:",atype, state.TypeMaker[atype] )
         return redirect(url_for(state.TypeMaker[atype],path=mapfile))
     print("___map Exists:", fullpath)
@@ -2877,15 +2877,14 @@ def downbut(path):
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
 
+    Featurelayers[atype].reset()
     Featurelayers[atype].create_layer(current_election,current_node,atype)
     print(f"____/DOWN OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
     selectedlayers = current_node.getselectedlayers(estyle,current_election,mapfile)
     current_node.create_area_map(selectedlayers,current_election,CurrentElection)
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     persist(current_node)
-    return visit_node(current_node,current_election,CurrentElection)
-
-
+    return send_file(mapfile, as_attachment=False)
 
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
@@ -2913,19 +2912,16 @@ def transfer(path):
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
     current_node = get_last(current_election,CurrentElection)
-
     estyle = CurrentElection['territories']
     formdata = {}
 # transfering to another any other node with siblings listed below
     previous_node = current_node
-
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = previous_node.ping_node(estyle,current_election,path)
-
-
     mapfile = current_node.mapfile()
     CurrentElection = get_election_data(current_election)
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
+
 
 
 
@@ -2983,14 +2979,13 @@ def downPDbut(path):
 #    mapfile = current_node.dir+"/"+face_file
 # if this route is from a redirection rather than a service call , then create file if doesnt exist
 
-    if not os.path.exists(PDpathfile):
-        print ("_________New PD mapfile/",current_node.value, mapfile)
-        Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
-    print("________PD markers After importVI  :  "+str(len(Featurelayers['polling_district']._children)))
+
+    print ("_________New PD mapfile/",current_node.value, mapfile)
+    Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
+    current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
 
     persist(current_node)
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
 
 
 
@@ -3051,26 +3046,27 @@ def downWKbut(path):
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
 
-    if not os.path.exists(walkpathfile):
+
 #        simple transfer from another node -
-        print ("_________New WK mapfile/",current_node.value, mapfile)
-        Featurelayers[previous_node.type].create_layer(current_election,current_node,'walk') #from upnode children type of prev node
-        print(f"____/DOWN OPTIONS21 areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-        print(f"____/DOWN OPTIONS22 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
-        print(f"____/DOWN OPTIONS23 areas for calendar node {current_node.value} are {Featurelayers['constituency'].areashtml} ")
+    print ("_________New WK mapfile/",current_node.value, mapfile)
+    Featurelayers[previous_node.type].create_layer(current_election,current_node,'walk') #from upnode children type of prev node
+    print(f"____/DOWN OPTIONS21 areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
+    print(f"____/DOWN OPTIONS22 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
+    print(f"____/DOWN OPTIONS23 areas for calendar node {current_node.value} are {Featurelayers['constituency'].areashtml} ")
 
-    #        current_node.file = face_file
-        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
+#        current_node.file = face_file
+    current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
 
-    #    moredata = importVI(allelectors.copy())
-    #    if len(moredata) > 0:
-    #        allelectors = moredata
+#    moredata = importVI(allelectors.copy())
+#    if len(moredata) > 0:
+#        allelectors = moredata
 
-        print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
-        print("_______writing to file:", mapfile)
+    print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
+    print("_______writing to file:", mapfile)
 
     persist(current_node)
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
+
 
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
 @login_required
@@ -3128,22 +3124,23 @@ def downMWbut(path):
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
 
-    if not os.path.exists(walkpathfile):
-#        simple transfer from another node -
-        print ("_________New MW mapfile/",current_node.value, walkpathfile)
-        Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
 
-        STATICSWITCH = True
-        current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
-        STATICSWITCH = False
-    #    moredata = importVI(allelectors.copy())
-    #    if len(moredata) > 0:
-    #        allelectors = moredata
-        print("________ Static Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
-        print("_______writing to file:", walkpathfile)
+#        simple transfer from another node -
+    print ("_________New MW mapfile/",current_node.value, walkpathfile)
+    Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
+
+    STATICSWITCH = True
+    current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,path),current_election,CurrentElection)
+    STATICSWITCH = False
+#    moredata = importVI(allelectors.copy())
+#    if len(moredata) > 0:
+#        allelectors = moredata
+    print("________ Static Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
+    print("_______writing to file:", walkpathfile)
 
     persist(current_node)
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
+
 
 
 @app.route('/STupdate/<path:path>', methods=['GET','POST'],strict_slashes=False)
@@ -3294,7 +3291,7 @@ def STupdate(path):
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
     persist(current_node)
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
 
 
 
@@ -3366,7 +3363,8 @@ def PDdownST(path):
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
     persist(current_node)
 
-    return visit_node(current_node,current_election,CurrentElection)
+    return send_file(mapfile, as_attachment=False)
+
 
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])
@@ -3875,7 +3873,7 @@ def upbut(path):
 
     print("________chosen node url",mapfile)
     persist(current_node)
-    return visit_node(previous_node.parent,current_election,CurrentElection)
+    return visit_node(previous_node.parent,current_election,CurrentElection,True)
 
 
 #Register user
@@ -3978,7 +3976,7 @@ def thru(path):
     flash ("_________ROUTE/thru:"+mapfile)
     print ("_________ROUTE/thru:",mapfile, CurrentElection)
     current_node = get_root().ping_node(estyle,current_election,mapfile)
-    return visit_node(current_node,current_election,CurrentElection)
+    return visit_node(current_node,current_election,CurrentElection,True)
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required

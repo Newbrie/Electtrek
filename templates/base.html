@@ -129,15 +129,29 @@
       };
     </script>
 
-    <main class="container-fluid">
-        {% block map %}
-        {% endblock %}
+    <main class="container-fluid p-0">
 
-        <!-- 🌍 Main content blocks -->
+        <!-- MAIN HORIZONTAL LAYOUT -->
+        <div id="app-layout">
+
+            <!-- LEFT SIDEBAR -->
+            <div id="sidebar">
+                {% block nav %}{% endblock %}
+            </div>
+
+            <!-- MAIN CONTENT -->
+            <div id="main-content">
+                {% block map %}{% endblock %}
+            </div>
+
+        </div>
+
+        <!-- BELOW THE MAIN AREA -->
         {% block log %}{% endblock %}
-        {% block nav %}{% endblock %}
         {% block captains %}{% endblock %}
+
     </main>
+
 
     <!-- ALL MODALS SHOULD BE HERE -->
     {% block modals %}

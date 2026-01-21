@@ -431,7 +431,18 @@ input:checked + .slider:before {
   top: 0; left: 0;
   width: 100%; height: 100%;
   z-index: 0; /* low */
+  /* iframe container */
+  flex: 1;
+  overflow: hidden;
 }
+
+
+#iframe-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
 
 #iframe1 {
   width: 100%;
@@ -456,12 +467,39 @@ input:checked + .slider:before {
 /* Calendar hidden by default but stays in document flow */
 
 /* Mapwin = fixed-size container (height of screen minus margins) */
+
+/* Top-level app layout */
+#app-layout {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Sidebar (NAV) */
+#sidebar {
+    width: 320px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid #ccc;
+    background: #f8f9fa;
+}
+
+/* Main area (MAP + calendar inside it) */
+#main-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+
 #mapwin {
   position: relative;
+  display: flex;
   height: 100vh;     /* FULL screen height */
   overflow: hidden;
 /*        overflow: hidden;    prevents outer scrolling */
     border: 1px solid #ddd;
+    /* Ensure mapwin fills available space */
+
 }
 
 
