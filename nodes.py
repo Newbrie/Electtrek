@@ -866,6 +866,36 @@ class TreeNode:
         FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
         return f"{self.value}{FACEENDING[self.type]}"
 
+    def render_face(self, c_elect,CurrEL, new):
+    #  create the node html (if it doesnt already exist) and render it.
+        from flask import send_file, abort
+        from pathlib import Path
+        # Access the first key from the dictionary
+        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile())
+        CurrEL2 = CurrEL
+        CurrEL2['cid'] = self.nid
+        CurrEL2['cidLat'] = self.latlongroid[0]
+        CurrEL2['cidLong'] = self.latlongroid[1]
+        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile())
+        save_election_data(c_elect, CurrEL2)
+
+        session['current_election'] = c_elect
+        session['current_node_id'] = self.nid
+        print(f"___under {c_elect} visiting from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
+        print("=== VISIT NODE ===", self.mapfile())
+        print("current children:",
+              [c.value for c in self.children])
+        estyle = CurrEL['territories']
+        mapfile = self.mapfile()
+        atype = gettypeoflevel(estyle,mapfile, self.level+1)
+        fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+        if new:
+            print("___map Typemaker:",atype, state.TypeMaker[atype] )
+            return redirect(url_for(state.TypeMaker[atype],path=mapfile))
+        print("___map Exists:", fullpath)
+        return send_file(fullpath, as_attachment=False)
+
+
 
     def layer_mapfile(self, estyle):
         if estyle in ("C", "U"):  # divisions

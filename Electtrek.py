@@ -410,36 +410,6 @@ def capped_append(lst, item):
     return lst
 
 
-def visit_node(v_node, c_elect,CurrEL, new):
-    from flask import send_file, abort
-    from pathlib import Path
-    # Access the first key from the dictionary
-    print(f"___under {route()} for {c_elect} visiting mapfile:", v_node.mapfile())
-    CurrEL2 = CurrEL
-    CurrEL2['cid'] = v_node.nid
-    CurrEL2['cidLat'] = v_node.latlongroid[0]
-    CurrEL2['cidLong'] = v_node.latlongroid[1]
-    CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], v_node.mapfile())
-    save_election_data(c_elect, CurrEL2)
-
-    session['current_election'] = c_elect
-    session['current_node_id'] = v_node.nid
-    print(f"___under {c_elect} visiting from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
-    print("=== VISIT NODE ===", v_node.mapfile())
-    print("current children:",
-          [c.value for c in v_node.children])
-    estyle = CurrEL['territories']
-    mapfile = v_node.mapfile()
-    atype = gettypeoflevel(estyle,mapfile, v_node.level+1)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    if new or not fullpath.is_file():
-        print("___map Typemaker:",atype, state.TypeMaker[atype] )
-        return redirect(url_for(state.TypeMaker[atype],path=mapfile))
-    print("___map Exists:", fullpath)
-    return send_file(fullpath, as_attachment=False)
-
-
-
 
 def get_L4area(nodelist, here):
     from state import Treepolys, Fullpolys
@@ -2884,8 +2854,7 @@ def downbut(path):
     current_node.create_area_map(selectedlayers,current_election,CurrentElection)
     print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     persist(current_node)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,False)
 
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
@@ -2919,10 +2888,9 @@ def transfer(path):
     previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = previous_node.ping_node(estyle,current_election,path)
-    mapfile = current_node.mapfile()
     CurrentElection = get_election_data(current_election)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,True)
+
 
 
 
@@ -2987,8 +2955,9 @@ def downPDbut(path):
     current_node.create_area_map(current_node.getselectedlayers(estyle,current_election,mapfile),current_election,CurrentElection)
 
     persist(current_node)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+
+    return current_node.render_face(current_election,CurrentElection,True)
+
 
 
 
@@ -3068,8 +3037,8 @@ def downWKbut(path):
     print("_______writing to file:", mapfile)
 
     persist(current_node)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,True)
+
 
 
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
@@ -3140,11 +3109,10 @@ def downMWbut(path):
 #    if len(moredata) > 0:
 #        allelectors = moredata
     print("________ Static Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
-    print("_______writing to file:", walkpathfile)
 
     persist(current_node)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,False)
+
 
 
 
@@ -3296,8 +3264,8 @@ def STupdate(path):
     flash(f"Creating new street/walklegfile:{sheetfile}", "info")
     print(f"Creating new street/walklegfile:{sheetfile}")
     persist(current_node)
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,False)
+
 
 
 
@@ -3369,8 +3337,8 @@ def PDdownST(path):
         flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
     persist(current_node)
 
-    fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
-    return send_file(fullpath, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,False)
+
 
 
 
@@ -3438,7 +3406,7 @@ def LGdownST(path):
 
     persist(current_node)
 
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,False)
 
 
 
@@ -3510,7 +3478,7 @@ def WKdownST(path):
 
 
     persist(current_node)
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return current_node.render_face(current_election,CurrentElection,True)
 
 
 @app.route('/wardreport/<path:path>',methods=['GET','POST'])
@@ -3556,7 +3524,7 @@ def wardreport(path):
         layeritems = [list(temp.columns.values), temp,formdata['tabledetails'] ]
 
     persist(current_node)
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return current_node.parent.render_face(current_election,CurrentElection,False)
 
 
 
@@ -3819,7 +3787,7 @@ def divreport(path):
 
 
     persist(current_node)
-    return send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
+    return current_node.parent.render_face(current_election,CurrentElection,False)
 
 @app.route('/upbut/<path:path>', methods=['GET','POST'])
 @login_required
@@ -3880,7 +3848,7 @@ def upbut(path):
 
     print("________chosen node url",mapfile)
     persist(current_node)
-    return visit_node(previous_node.parent,current_election,CurrentElection,True)
+    return previous_node.parent.render_face(current_election,CurrentElection,True)
 
 
 #Register user
@@ -3983,12 +3951,12 @@ def thru(path):
     flash ("_________ROUTE/thru:"+mapfile)
     print ("_________ROUTE/thru:",mapfile, CurrentElection)
     current_node = get_root().ping_node(estyle,current_election,mapfile)
-    return visit_node(current_node,current_election,CurrentElection,True)
+    return current_node.render_face(current_election,CurrentElection,True)
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required
 def showmore(path):
-
+# is not moving nodes but just changing from wards to div or walks to PD render
     restore_from_persist(session=session)
     current_election = get_current_election(session)
     CurrentElection = get_election_data(current_election)
@@ -3996,14 +3964,12 @@ def showmore(path):
     steps = path.split("/")
     last = steps.pop().split("--")
     current_node = selected_childnode(current_node,last[1])
-
-
     flash ("_________ROUTE/showmore"+path)
     print ("_________showmore",path)
 
     session['current_node_id'] = current_node.nid
 
-    return send_from_directory(app.config['UPLOAD_FOLDER'],path, as_attachment=False)
+    return current_node.parent.render_face(current_election,CurrentElection,True)
 
 
 @app.route('/upload_file', methods=['POST'])
@@ -4243,8 +4209,8 @@ def firstpage():
 
     ELECTIONS = get_election_names()
 
-#    visit_node(current_node,current_election, CurrentElection)
-#    persist(current_node)
+#    render the entire application frame in Dash0 - passing all required data and ensuring mapfile set to last visited place
+
     print(f"🧪 firstpage level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
 
     return render_template(
