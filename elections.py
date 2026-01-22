@@ -8,6 +8,21 @@ def route():
         return request.endpoint
     return None  # or a default string like "no_request_context"
 
+def save_election_data (c_election,ELECTION):
+    file_path = ELECTIONS_FILE.replace(".json",f"-{c_election}.json")
+    try:
+        if  os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            print(f"____Saving Election File under {route()} in elections: {c_election}, for: {file_path}")
+            with open(file_path, 'w') as f:
+                json.dump(ELECTION, f, indent=2)
+            print(f"✅ JSON written safely  {ELECTION}")
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(ELECTION, f, indent=2)
+            print(f"✅ New Election JSON: {ELECTION}")
+    except Exception as e:
+        print(f"❌ Failed to write Election JSON: {e}")
+    return
 
 
 def get_election_data(current_election):

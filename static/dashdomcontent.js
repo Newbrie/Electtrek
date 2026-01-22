@@ -1,6 +1,7 @@
 // -----------------------------------------------------
 // DOM Content Loaded Event XXXXXXXXXXXXXXXXXXXXXXXXXXXX
 // -----------------------------------------------------
+console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 
   document.addEventListener("DOMContentLoaded", async () => {
 
@@ -22,7 +23,21 @@
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
 
-  // Run when DOM is fully loaded
+  /* ---------------------------------------------------------
+   * ENSURE TABLE REFRESH ON PAGE LOAD
+   * --------------------------------------------------------- */
+
+  const params = new URLSearchParams(window.location.search);
+  const table = params.get("loadTable");
+  console.log("___ Table being reloaded ", table);
+  console.log("___ Is Function ? ", typeof fetchTableData);
+  if (table && typeof fetchTableData === "function") {
+      console.log("📊 Auto-loading table:", table);
+      fetchTableData(table);
+  }
+  /* ---------------------------------------------------------
+   * FETCH AREA ACCORDION FOR MODALS
+   * --------------------------------------------------------- */
 
   try {
       // Fetch areas from backend API
@@ -45,6 +60,10 @@
           container.innerHTML = '<div class="alert alert-danger">Failed to load areas</div>';
       }
   }
+
+  /* ---------------------------------------------------------
+   * CALENDAR LOGIN AND CALENDAR BUILD
+   * --------------------------------------------------------- */
 
   console.log("Initial view set: calendar visible, map hidden");
 
@@ -74,6 +93,9 @@
   });
 
 
+  /* ---------------------------------------------------------
+   * AWAIT TOGGLEVIEW OR UPDATE TABLE MESSAGES FROM USER
+   * --------------------------------------------------------- */
 
  window.addEventListener("message", async (event) => {
    const data = event.data;
@@ -134,7 +156,7 @@
 });
 
 // ------------------------------
-// Add Place button handler
+// IN CALENDAR MODAL Add Place button handler
 // ------------------------------
 document.getElementById("addPlaceBtn").addEventListener("click", () => {
 
@@ -154,7 +176,7 @@ document.getElementById("addPlaceBtn").addEventListener("click", () => {
 });
 
 // ------------------------------
-// Save button handler
+// IN CALENDAR MODAL Save button handler
 // ------------------------------
 document.getElementById("saveNewPlace").addEventListener("click", () => {
     const form = document.getElementById("addPlaceForm");
@@ -201,13 +223,18 @@ document.getElementById("saveNewPlace").addEventListener("click", () => {
     window.awaitingNewPlace = false;
 });
 
-
-// Show add-resource form
+// ------------------------------
+// IN CALENDAR MODAL Show add-resource form
+// ------------------------------
+//
 document.getElementById("addResourceBtn").addEventListener("click", () => {
     document.getElementById("addResourceForm").classList.remove("d-none");
 });
 
-// Save new resource
+// ------------------------------
+// IN CALENDAR MODAL Show save-resource form
+// ------------------------------
+//
 document.getElementById("saveNewResource").addEventListener("click", () => {
     const first = newResFirst.value.trim();
     const last  = newResLast.value.trim();
@@ -238,13 +265,18 @@ document.getElementById("saveNewResource").addEventListener("click", () => {
 
 });
 
-
-// Show add-task-tag form
+// ------------------------------
+// IN CALENDAR MODAL Show add-tasktag form
+// ------------------------------
+//
 document.getElementById("addTaskTagBtn").addEventListener("click", () => {
     document.getElementById("addTaskTagForm").classList.remove("d-none");
 });
 
-// Save new tag
+// ------------------------------
+// IN CALENDAR MODAL Show save-tasktag form
+// ------------------------------
+//
 document.getElementById("saveNewTag").addEventListener("click", () => {
     const code  = newTagCode.value.trim();
     const label = newTagLabel.value.trim();
@@ -275,7 +307,10 @@ console.log("🔀 task_tags on DOM relaod :", window.task_tags);
     // Call this function on startup to tell backend which election is active
 
 
-// 1. Wait for tabs
+// ------------------------------
+// IN CALENDAR MODAL Wait for the tabs to be ready
+// ------------------------------
+//
 await ensureTabsReady();
 // 2️⃣ Tell backend which election is active
 await setActiveElectionOnStartup();
@@ -292,13 +327,8 @@ console.log("📅 Calendar data loaded.");
 
 
 /* ---------------------------------------------------------
- * expose refreshTableData so iframe can call the parent
+ * Initial state — hide map + calendar, show login unless in dev
  * --------------------------------------------------------- */
-
-
-
-
-// Initial state — hide map + calendar, show login unless in dev mode
 
 if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
@@ -352,7 +382,10 @@ if (window.isDev) {
 }
 
 
-// ENTER triggers login
+/* ---------------------------------------------------------
+ * LOGIN state — show hidden map and calendar
+ * --------------------------------------------------------- */
+
 passwordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
@@ -366,164 +399,165 @@ passwordInput.addEventListener("keydown", (e) => {
    });
 
 
-    /* ---------------------------------------------------------
-     * GENERAL ELEMENTS
-     * --------------------------------------------------------- */
-    const tableSelector = document.getElementById("tableSelector");
-    const resourcesToggle = document.getElementById("resources-toggle");
-    const resourcesContainer = document.getElementById("resources-container");
+/* ---------------------------------------------------------
+ * GENERAL ELEMENTS
+ * --------------------------------------------------------- */
+const tableSelector = document.getElementById("tableSelector");
+const resourcesToggle = document.getElementById("resources-toggle");
+const resourcesContainer = document.getElementById("resources-container");
 
-    const electionTabs = document.querySelectorAll(".election-tab");
-
-
-    const changeIframe = (url) => changeIframeSrc(url);
+const electionTabs = document.querySelectorAll(".election-tab");
 
 
-
-    /* ---------------------------------------------------------
-     * TABLE SELECTOR
-     * --------------------------------------------------------- */
-    if (tableSelector) {
-        tableSelector.addEventListener("change", (e) => {
-            fetchTableData(e.target.value);
-        });
-    }
+const changeIframe = (url) => changeIframeSrc(url);
 
 
 
-    for (const [id, url] of Object.entries(iframeButtons)) {
-        const btn = document.getElementById(id);
-        if (btn) btn.addEventListener("click", () => changeIframe(url));
-    }
-
-
-    /* ---------------------------------------------------------
-     * LOGOUT
-     * --------------------------------------------------------- */
-    document.getElementById("logout-button")?.addEventListener("click", () => {
-        window.location.href = "/logout";
+/* ---------------------------------------------------------
+* TRIGGER TABLE DATA REFRESH USING TABLE SELECTOR
+* --------------------------------------------------------- */
+if (tableSelector) {
+    tableSelector.addEventListener("change", (e) => {
+        fetchTableData(e.target.value);
     });
+}
 
 
-    /* ---------------------------------------------------------
-     * RESET-ELECTION TERRITORY
-     * --------------------------------------------------------- */
 
-    document.getElementById("b0")?.addEventListener("click", () => {
-      const tab = getActiveElectionTab();
-      if (!tab) return;
+for (const [id, url] of Object.entries(iframeButtons)) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener("click", () => changeIframe(url));
+}
 
-      fetch("/update-territory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-              election: tab.dataset.election
-          })
+
+/* ---------------------------------------------------------
+* LOGOUT BUTTON
+* --------------------------------------------------------- */
+document.getElementById("logout-button")?.addEventListener("click", () => {
+    window.location.href = "/logout";
+});
+
+
+/* ---------------------------------------------------------
+* RESET-ELECTION TERRITORY BUTTON
+* --------------------------------------------------------- */
+
+document.getElementById("b0")?.addEventListener("click", () => {
+  const tab = getActiveElectionTab();
+  if (!tab) return;
+
+  fetch("/update-territory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+          election: tab.dataset.election
       })
-          .then(res => res.json())
-          .then(resp => {
-              if (resp.success) refreshConstantsUI();
-          });
+  })
+      .then(res => res.json())
+      .then(resp => {
+          if (resp.success) refreshConstantsUI();
+      });
 
-    });
-
-
-    /* ---------------------------------------------------------
-     * RESOURCES TOGGLE
-     * --------------------------------------------------------- */
-    resourcesToggle?.addEventListener("click", () => {
-        const visible = resourcesContainer.style.display === "block";
-        resourcesContainer.style.display = visible ? "none" : "block";
-        resourcesToggle.textContent = visible ? "Resources ⬇" : "Resources ⬆";
-    });
-
-    /* ---------------------------------------------------------
-     * TAB CLICK HANDLER
-     * --------------------------------------------------------- */
-     document.addEventListener("click", async (e) => {
-         if (!e.target.classList.contains("election-tab")) return;
-
-         const electionName = e.target.dataset.election;
-         console.log("📩 Switching to:", electionName);
-         await switchElection(electionName);
-
-         // Optional: keep any extra tab sync logic
-         syncStreamsSelectWithTabs();
-     });
+});
 
 
+/* ---------------------------------------------------------
+ * ELECTION RESOURCES DROPDOWN BUTTON
+ * --------------------------------------------------------- */
+resourcesToggle?.addEventListener("click", () => {
+    const visible = resourcesContainer.style.display === "block";
+    resourcesContainer.style.display = visible ? "none" : "block";
+    resourcesToggle.textContent = visible ? "Resources ⬇" : "Resources ⬆";
+});
+
+/* ---------------------------------------------------------
+ * SET ELECTION TAB CLICK HANDLER
+ * --------------------------------------------------------- */
+ document.addEventListener("click", async (e) => {
+     if (!e.target.classList.contains("election-tab")) return;
+
+     const electionName = e.target.dataset.election;
+     console.log("📩 Switching to:", electionName);
+     await switchElection(electionName);
+
+     // Optional: keep any extra tab sync logic
+     syncStreamsSelectWithTabs();
+ });
 
 
-    /* ---------------------------------------------------------
-     * RESOURCES UPDATE
-     * --------------------------------------------------------- */
-    const resourcesSelect = document.getElementById("resources");
 
-    resourcesSelect?.addEventListener("blur", () => {
-        const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
-        const tab = getActiveElectionTab();
-        if (!tab) return;
 
-        fetch("/set-constant", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({
-                election: tab.dataset.election,
-                name: "resources",
-                value: selected
-            })
+/* ---------------------------------------------------------
+ * ELECTION DATA RESOURCE SELECTION REFRESH
+ * --------------------------------------------------------- */
+const resourcesSelect = document.getElementById("resources");
+
+resourcesSelect?.addEventListener("blur", () => {
+    const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
+    const tab = getActiveElectionTab();
+    if (!tab) return;
+
+    fetch("/set-constant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+            election: tab.dataset.election,
+            name: "resources",
+            value: selected
         })
-            .then(res => res.json())
-            .then(resp => {
-                if (resp.success) refreshConstantsUI();
-            });
-    });
+    })
+        .then(res => res.json())
+        .then(resp => {
+            if (resp.success) refreshConstantsUI();
+        });
+});
 
 
-    /* ---------------------------------------------------------
-     * PARENT-DROPDOWN REASSIGNMENT
-     * --------------------------------------------------------- */
-    document.addEventListener("change", (e) => {
-        if (!e.target.classList.contains("parent-dropdown")) return;
+/* ---------------------------------------------------------
+ *  PARENT-NODE REASSIGNMENT SELECTION
+ * --------------------------------------------------------- */
+document.addEventListener("change", (e) => {
+    if (!e.target.classList.contains("parent-dropdown")) return;
 
-        const select = e.target;
-        const subject = select.dataset.subject;
+    const select = e.target;
+    const subject = select.dataset.subject;
 
-        fetch("/reassign_parent", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                subject,
-                old_parent: select.dataset.oldValue,
-                new_parent: select.value
-            })
+    fetch("/reassign_parent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            subject,
+            old_parent: select.dataset.oldValue,
+            new_parent: select.value
         })
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === "success") {
-                  select.dataset.oldValue = select.value;
-                    console.log(`${data.message}`);
-                    changeIframeSrc(`${data.mapfile}`);
-                }
-            });
-    });
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === "success") {
+              select.dataset.oldValue = select.value;
+                console.log(`${data.message}`);
+                changeIframeSrc(`${data.mapfile}`);
+            }
+        });
+});
 
-      console.log("📅 Calendar dropdowns populated…");
 
-      // Buttons (use correct IDs)
-      const switchToMapBtn = document.getElementById("switch-tomap-btn");
-      const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
-      const generateSummaryBtn = document.getElementById("generate-summary-btn");
-      const saveSlotBtn = document.getElementById("saveSlotBtn");
-      const clearSlotBtn = document.getElementById("clearSlotBtn");
+  console.log("📅 Calendar dropdowns populated…");
 
-      // Attach button event handlers
-      switchToMapBtn.addEventListener("click", window.toggleView);
-      saveCalendarBtn.addEventListener("click", saveCalendarPlan);
-      generateSummaryBtn.addEventListener("click", generateSummaryReport);
-      saveSlotBtn.addEventListener("click", handleSaveSlot);
-      clearSlotBtn.addEventListener("click", handleClearSlot);
+  // Buttons (use correct IDs)
+  const switchToMapBtn = document.getElementById("switch-tomap-btn");
+  const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
+  const generateSummaryBtn = document.getElementById("generate-summary-btn");
+  const saveSlotBtn = document.getElementById("saveSlotBtn");
+  const clearSlotBtn = document.getElementById("clearSlotBtn");
+
+  // Attach button event handlers
+  switchToMapBtn.addEventListener("click", window.toggleView);
+  saveCalendarBtn.addEventListener("click", saveCalendarPlan);
+  generateSummaryBtn.addEventListener("click", generateSummaryReport);
+  saveSlotBtn.addEventListener("click", handleSaveSlot);
+  clearSlotBtn.addEventListener("click", handleClearSlot);
 
 });

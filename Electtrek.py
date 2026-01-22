@@ -56,7 +56,7 @@ import nodes
 from nodes import allelectors, get_root,restore_from_persist, persist, gettypeoflevel,parent_level_for, get_last, save_nodes, get_counters
 from layers import Featurelayers
 import layers
-from elections import get_election_data, get_tags_json, route
+from elections import get_election_data, get_tags_json, route, save_election_data
 
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
@@ -193,23 +193,6 @@ def get_current_election(session=None, session_data=None):
 
     return current_election
 
-
-
-def save_election_data (c_election,ELECTION):
-    file_path = ELECTIONS_FILE.replace(".json",f"-{c_election}.json")
-    try:
-        if  os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            print(f"____Saving Election File under {route()} in elections: {c_election}, for: {file_path}")
-            with open(file_path, 'w') as f:
-                json.dump(ELECTION, f, indent=2)
-            print(f"✅ JSON written safely  {ELECTION}")
-        else:
-            with open(file_path, 'w') as f:
-                json.dump(ELECTION, f, indent=2)
-            print(f"✅ New Election JSON: {ELECTION}")
-    except Exception as e:
-        print(f"❌ Failed to write Election JSON: {e}")
-    return
 
 
 def importVI(electorsVI):
@@ -399,15 +382,6 @@ def getstreamrag():
         rag[election]['RAG'] = 'white'
         print("_____No Active electors file:", election, rag)
     return rag
-
-def capped_append(lst, item):
-    max_size = 7
-    if not isinstance(lst, list):
-        return
-    lst.append(item)
-    if len(lst) > max_size:
-        lst.pop(0)  # Remove oldest
-    return lst
 
 
 
@@ -2724,16 +2698,16 @@ def get_location():
                         const lat = pos.coords.latitude;
                         const lon = pos.coords.longitude;
                         // Redirect to your page, passing lat/lon
-                        window.location.href = `/firstpage?lat=${lat}&lon=${lon}`;
+                        window.location.href = `/firstpage?lat=${lat}&lon=${lon}&loadTable=nodelist_xref`;
                     },
                     function(err) {
                         alert("Location access denied. Using default map.");
-                        window.location.href = "/firstpage";
+                        window.location.href = `/firstpage?lat=${lat}&lon=${lon}&loadTable=nodelist_xref`;
                     }
                 );
             } else {
                 alert("Geolocation not supported. Using default map.");
-                window.location.href = "/firstpage";
+                window.location.href = `/firstpage?lat=${lat}&lon=${lon}&loadTable=nodelist_xref`;
             }
         </script>
     </body>

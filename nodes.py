@@ -12,7 +12,7 @@ from layers import Featurelayers
 from elections import get_election_data,get_tags_json
 from folium import Map, Element
 import folium
-from elections import route
+from elections import get_election_data, get_tags_json, route, save_election_data
 import uuid
 
 
@@ -28,6 +28,17 @@ allelectors.drop(allelectors.index, inplace=True)
 
 TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
 TREK_NODES_BY_VALUE: Dict[str, "TreeNode"] = {}
+
+def capped_append(lst, item):
+    max_size = 7
+    if not isinstance(lst, list):
+        return
+    lst.append(item)
+    if len(lst) > max_size:
+        lst.pop(0)  # Remove oldest
+    return lst
+
+
 
 def create_root_node() -> "TreeNode":
     return TreeNode(
@@ -888,7 +899,7 @@ class TreeNode:
         estyle = CurrEL['territories']
         mapfile = self.mapfile()
         atype = gettypeoflevel(estyle,mapfile, self.level+1)
-        fullpath = Path(app.config['UPLOAD_FOLDER']) / mapfile
+        fullpath = Path(workdirectories['workdir']) / mapfile
         if new:
             print("___map Typemaker:",atype, state.TypeMaker[atype] )
             return redirect(url_for(state.TypeMaker[atype],path=mapfile))
