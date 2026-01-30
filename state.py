@@ -8,7 +8,7 @@ from shapely import crosses, contains, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route
 
-from config import TABLE_FILE, RESOURCE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
+from config import TABLE_FILE, OPTIONS_FILE, RESOURCE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
 
 
 from types import MappingProxyType
@@ -38,6 +38,25 @@ _LEVEL_ZOOM_MAP = {
 
 # share task and outcome tags for each election
 
+OPTIONS = {
+    "ACC": False,
+    "DEVURLS": {},
+    "territories": {},
+    "yourparty": {},
+    "previousParty": {},
+    "resources" : {},
+    "areas" : {},
+    "candidate" : {},
+    "chair" : {},
+    "tags": {},
+    "task_tags": {},
+    "autofix" : {},
+    "VNORM" : {},
+    "VCO" : {},
+    "streams" : {},
+    "stream_table": {}
+    # Add more mappings here if needed
+}
 
 STATICSWITCH = False
 TABLE_TYPES  = {
@@ -176,133 +195,101 @@ def intersectingArea(
     parent_type,
     destination,
     *,
-    parent_geoms=None,
+    parent_row,          # full GeoSeries row
     roid=None,
     select_child_name=None,
 ):
-    """
-    Returns:
-        (
-            selected_child_name,
-            child_polygons_within_parent,
-            all_child_polygons
-        )
-    Debug version with detailed logging.
-    """
 
-    from state import Treepolys, Fullpolys
-    print(f"\n[DEBUG] intersecting Area called for source: {source}")
-    print(f"[DEBUG] parent_type: {parent_type}, roid: {roid}, select_child_name: {select_child_name}")
+    print(f"\n[DEBUG] intersectingArea | source={source}")
+    print(f"[DEBUG] parent_type={parent_type}, roid={roid}, select_child_name={select_child_name}")
 
     # ------------------------------------------------------------------
     # 1. Load child layer
     # ------------------------------------------------------------------
     gdf = gpd.read_file(source)
-    print(f"[DEBUG] Loaded child layer: {len(gdf)} features")
 
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
-        print("[DEBUG] CRS was None; set to EPSG:4326")
     elif gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs(4326)
-        print(f"[DEBUG] Reprojected child layer to EPSG:4326")
 
     gdf = gdf.rename(columns={sourcekey: "NAME"})
     if "OBJECTID" in gdf.columns:
         gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
     all_child_polygons = gdf
+    print(f"[DEBUG] Loaded {len(gdf)} child features")
 
     # ------------------------------------------------------------------
-    # 2. Resolve parent geometries
+    # 2. Validate parent row
     # ------------------------------------------------------------------
-    if parent_geoms is None:
-        parent_geoms = Treepolys.get(parent_type, [])
-        print(f"[DEBUG] parent_geoms obtained from Treepolys: {type(parent_geoms)}")
+    if parent_row is None or parent_row.geometry.is_empty:
+        raise ValueError(f"Invalid parent_row for {parent_type}")
 
-    # Handle empty or invalid parent_geoms
-    if parent_geoms is None:
-        print(f"[WARNING] parent_geoms is None for {parent_type}")
-        return None, gpd.GeoDataFrame(), all_child_polygons
+    parent_geom = parent_row.geometry
+    parent_name = normalname(parent_row["NAME"])
 
-    if isinstance(parent_geoms, gpd.GeoDataFrame):
-        if parent_geoms.empty:
-            print(f"[WARNING] parent_geoms GeoDataFrame is empty for {parent_type}")
-            return None, gpd.GeoDataFrame(), all_child_polygons
-        parent_geom_list = [row.geometry for _, row in parent_geoms.iterrows()]
-    elif isinstance(parent_geoms, list):
-        parent_geom_list = parent_geoms
-    else:
-        print(f"[ERROR] parent_geoms is not a GeoDataFrame or list: {type(parent_geoms)}")
-        return None, gpd.GeoDataFrame(), all_child_polygons
+    parent_gdf = Fullpolys[parent_type].to_crs("EPSG:4326")
+    parent_names = parent_gdf["NAME"].apply(normalname)
 
-    print(f"[DEBUG] Number of parent geometries: {len(parent_geom_list)}")
-
-    # Union parents into a single geometry
-    parent_geom = gpd.GeoSeries(parent_geom_list, crs=gdf.crs).union_all()
-    if isinstance(parent_geom, gpd.GeoSeries):
-        parent_geom = parent_geom.iloc[0]  # ensure single geometry
-    print(f"[DEBUG] Unioned parent geometry created")
+    if parent_name not in parent_names.values:
+        raise ValueError(
+            f"Parent '{parent_name}' not found in parent layer '{parent_type}'"
+        )
 
     # ------------------------------------------------------------------
-    # 3. Optional child selection by point or name
-    # ------------------------------------------------------------------
-    matched_child = gpd.GeoDataFrame()
-    if roid is not None:
-        lat, lon = roid
-        if lon is None or lat is None:
-            print("[DEBUG] intersectingArea skipped: no roid")
-        else:
-            pt = Point(lon, lat)
-            matched_child = gdf[gdf.contains(pt)]
-            print(f"[DEBUG] Point selection: {len(matched_child)} match(es) found")
-    elif select_child_name:
-        matched_child = gdf[gdf["NAME"].apply(normalname) == normalname(select_child_name)]
-        print(f"[DEBUG] Name selection: {len(matched_child)} match(es) found for '{select_child_name}'")
-
-    # ------------------------------------------------------------------
-    # 4. Intersection filtering
+    # 3. Compute intersections (projected CRS)
     # ------------------------------------------------------------------
     threshold = Overlaps.get(parent_type, 0)
-    print(f"[DEBUG] Intersection threshold for {parent_type}: {threshold}")
+    print(f"[DEBUG] Intersection threshold: {threshold}")
 
     candidates = gdf[gdf.geometry.intersects(parent_geom)]
-    print(f"[DEBUG] Candidates intersecting parent: {len(candidates)}")
+    print(f"[DEBUG] Candidates intersecting bbox: {len(candidates)}")
 
-    child_polygons_within_parent = candidates[
-        candidates.intersection(parent_geom).area > threshold
-    ]
+    if candidates.empty:
+        return None, gpd.GeoDataFrame(), all_child_polygons
+
+    proj_crs = "EPSG:3857"
+    parent_geom_proj = gpd.GeoSeries([parent_geom], crs="EPSG:4326").to_crs(proj_crs).iloc[0]
+    candidates_proj = candidates.to_crs(proj_crs)
+
+    overlaps = candidates_proj.geometry.intersection(parent_geom_proj).area
+    mask = overlaps > threshold
+
+    child_polygons_within_parent = candidates[mask].copy()
     print(f"[DEBUG] Children within parent above threshold: {len(child_polygons_within_parent)}")
 
     # ------------------------------------------------------------------
-    # 5. Choose selected child name
+    # 4. Resolve selected child (navigation only)
     # ------------------------------------------------------------------
     selected_child_name = None
-    if not matched_child.empty:
-        selected_child_name = normalname(matched_child.iloc[0]["NAME"])
-        print(f"[DEBUG] Selected child via match: {selected_child_name}")
-    elif not child_polygons_within_parent.empty:
+
+    if roid:
+        lat, lon = roid
+        pt = Point(lon, lat)
+        hit = child_polygons_within_parent[
+            child_polygons_within_parent.geometry.contains(pt)
+        ]
+        if not hit.empty:
+            selected_child_name = normalname(hit.iloc[0]["NAME"])
+
+    if not selected_child_name and select_child_name:
+        hit = child_polygons_within_parent[
+            child_polygons_within_parent["NAME"].apply(normalname)
+            == normalname(select_child_name)
+        ]
+        if not hit.empty:
+            selected_child_name = normalname(hit.iloc[0]["NAME"])
+
+    if not selected_child_name and not child_polygons_within_parent.empty:
         selected_child_name = normalname(child_polygons_within_parent.iloc[0]["NAME"])
-        print(f"[DEBUG] Selected child via intersection: {selected_child_name}")
-    elif not candidates.empty:
-        selected_child_name = normalname(candidates.iloc[0]["NAME"])
-        print(f"[DEBUG] Selected child via fallback: {selected_child_name}")
-    else:
-        print("[WARNING] No intersecting child polygons found.")
-        return None, child_polygons_within_parent, all_child_polygons
 
     # ------------------------------------------------------------------
-    # 6. Save results
+    # 5. Save
     # ------------------------------------------------------------------
     if not child_polygons_within_parent.empty:
         child_polygons_within_parent.to_file(destination)
-        print(f"[DEBUG] Saved {len(child_polygons_within_parent)} intersecting feature(s) to {destination}")
-    else:
-        print("[DEBUG] No polygons to save.")
 
-    # ------------------------------------------------------------------
-    # 7. Return
-    # ------------------------------------------------------------------
     return selected_child_name, child_polygons_within_parent, all_child_polygons
 
 def subending(filename, ending):
@@ -337,138 +324,113 @@ def stepify(path):
     print("____LEAFNODE:", path,parts)
     return parts
 
+
 def ensure_treepolys(
     *,
+    territory: str | None = None,
     sourcepath: str | None = None,
     here: tuple[float, float] | None = None,
-    estyle: str | None = None,
-    ):
-    """
-    Load and maintain Treepolys and Fullpolys.
+    resolved_levels: dict[int, str] | None = None,
+):
+    print(f"[DEBUG] ensure_treepolys | sourcepath={sourcepath} here={here} resolved_levels={resolved_levels}")
 
-    Parameters
-    ----------
-    sourcepath : hierarchical path e.g. "UNITED_KINGDOM/ENGLAND/SURREY/GUILDFORD/ONSLOW"
-    here       : (lat, lon) tuple for point-based selection
-    estyle     : election territories flag ("W", "C", "B", "P", "U")
-    """
+    if not resolved_levels:
+        raise ValueError("resolved_levels is required")
 
-    print(f"[DEBUG] ensure_treepolys | sourcepath={sourcepath} here={here} estyle={estyle}")
-
+    LAYER_BY_LEVEL_AND_KEY = {
+        (layer["level"], layer["key"]): layer
+        for layer in LAYERS
+    }
+    max_parent_level = len(stepify(territory)) -1
+    print(f"___max parent level={max_parent_level}, territory={territory}")
     steps = stepify(sourcepath) if sourcepath else []
     newpath = ""
 
-    # ------------------------------------------------------------
-    # Helper: decide whether this layer consumes a path name
-    # ------------------------------------------------------------
-    def path_name_for_layer(layer_key: str, level: int):
-        if not sourcepath or level >= len(steps):
-            return None
+    active_parents: dict[int, pd.Series] = {}
+    levels = sorted(resolved_levels)
+    i = 0
+    for level in levels:
+        if i <= len(steps):
+            key = resolved_levels[level]
+            layer = LAYER_BY_LEVEL_AND_KEY.get((level, key))
+            if not layer:
+                print(f"No layer definition for level={level}, key={key}")
+                continue
 
-        # level-4 ambiguity: ward vs division
-        if level == 4:
-            if layer_key == "ward" and estyle in ("W", "B", "P"):
-                return "/".join(steps[:5])
-            if layer_key == "division" and estyle in ("C", "U"):
-                return "/".join(steps[:5])
-            return None
+            src = f"{workdirectories['bounddir']}/{layer['src']}"
+            out = f"{workdirectories['bounddir']}/{layer['out']}"
 
-        return "/".join(steps[: level + 1])
 
-    # ------------------------------------------------------------
-    # Main loop
-    # ------------------------------------------------------------
-    for layer in LAYERS:
-        key = layer["key"]
-        level = layer["level"]
+            parent_level = max_parent_level if level  > max_parent_level else level -1
+            parent_level = parent_level if parent_level >= 0 else None
+            parent_row = active_parents.get(parent_level)
+            parent_name = parent_row["NAME"] if parent_row is not None else None
+            print(f"[DEBUG] Processing layer {key} at level {level} with parent {parent_name}")
 
-        print(f"\n[DEBUG] Processing layer: {key} (level {level})")
+            if level > 0 and parent_row is None:
+                raise ValueError(f"Missing parent level {parent_level} at level {level} for key {key} under spath {sourcepath}")
 
-        # Skip if already loaded
-        if layer_loaded(key):
-            print(f"[DEBUG] {key} already loaded")
-            pname = path_name_for_layer(key, level)
-            if pname:
-                name_part = pname.split("/")[-1]
-                newpath = f"{newpath}/{name_part}" if newpath else name_part
-            continue
+            select_name = None
+            roid = None
+            if level < len(steps):
+                select_name = steps[level]
+            elif here:
+                roid = here
 
-        src = f"{workdirectories['bounddir']}/{layer['src']}"
-        out = f"{workdirectories['bounddir']}/{layer['out']}"
+            if layer["method"] == "filter":
+                filter_kwargs = {}
+                if select_name:
+                    filter_kwargs["name"] = select_name
+                if roid:
+                    filter_kwargs["roid"] = roid
 
-        kwargs = {}
+                name, tree_gdf, full_gdf = filterArea(
+                    src, layer["field"], out, **filter_kwargs
+                )
 
-        # --- selection source ---
-        pname = path_name_for_layer(key, level)
-        if pname:
-            kwargs["name"] = pname
-        elif here:
-            kwargs["roid"] = here
-        elif sourcepath:
-            # sourcepath exists but this layer does not consume its name
-            pass
-        else:
-            Treepolys[key] = Fullpolys[key] = gpd.GeoDataFrame()
-            continue
+            else:
+                parent_key = resolved_levels[parent_level]
+                name, tree_gdf, full_gdf = intersectingArea(
+                    src,
+                    layer["field"],
+                    parent_key,
+                    out,
+                    parent_row=parent_row,
+                    roid=roid,
+                    select_child_name=select_name,
+                )
 
-        # --------------------------------------------------------
-        # FILTER layers
-        # --------------------------------------------------------
-        if layer["method"] == "filter":
-            name, new_tree, new_full = filterArea(
-                src,
-                layer["field"],
-                out,
-                **kwargs
-            )
+            Treepolys[key] = combine_geodfs(Treepolys[key], tree_gdf)
 
-            Treepolys[key] = new_tree
-            Fullpolys[key] = new_full
+            Fullpolys[key] = combine_geodfs(Fullpolys[key], full_gdf)
+
+            new_parent_row = None
+            if not tree_gdf.empty:
+                if name:
+                    matches = tree_gdf[
+                        tree_gdf["NAME"].apply(normalname) == normalname(name)
+                    ]
+                    if not matches.empty:
+                        new_parent_row = matches.iloc[0]
+
+                if new_parent_row is None and len(tree_gdf) == 1:
+                    new_parent_row = tree_gdf.iloc[0]
+
+            if new_parent_row is not None:
+                active_parents[level] = new_parent_row
+                print(f"[DEBUG] active parent for level {level} set to {new_parent_row['NAME']}")
+            else:
+                print("[DEBUG] no active parent set yet")
 
             if name:
                 newpath = f"{newpath}/{name}" if newpath else name
 
-        # --------------------------------------------------------
-        # INTERSECT layers
-        # --------------------------------------------------------
-        else:
-            parent_key = layer["parent"]
-            parent_gdf = Treepolys.get(parent_key, gpd.GeoDataFrame())
-            parent_geoms = (
-                list(parent_gdf.geometry)
-                if hasattr(parent_gdf, "geometry")
-                else []
-            )
+            print(f"[DEBUG] {key} loaded | Count {len(tree_gdf)}")
 
-            name, new_tree, new_full = intersectingArea(
-                src,
-                layer["field"],
-                parent_key,
-                out,
-                parent_geoms=parent_geoms,
-                roid=here,
-                select_child_name=steps[level]
-                if pname and level < len(steps)
-                else None,
-            )
-
-            Treepolys[key] = combine_geodfs(Treepolys.get(key), new_tree)
-            Fullpolys[key] = new_full
-
-            if pname and name:
-                newpath = f"{newpath}/{name}" if newpath else name
-
-        print(f"[DEBUG] {key} loaded | Tree size = {len(Treepolys[key])}")
-
-
-    # ------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------
-    print("\n[DEBUG] Treepolys summary:")
-    for k in ("country", "nation", "county", "constituency", "division", "ward"):
-        print(f"  {k}: {len(Treepolys.get(k, gpd.GeoDataFrame()))}")
+        i = i+1
 
     return Treepolys, Fullpolys, newpath
+
 
 
 def layer_loaded(layer_key):
@@ -481,6 +443,72 @@ def layer_loaded(layer_key):
 
 def empty_gdf():
     return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+
+
+def load_last_results():
+    global LastResults
+
+    if not os.path.exists(LAST_RESULTS_FILE) or os.path.getsize(LAST_RESULTS_FILE) == 0:
+        # --- Constituencies ---
+        Con_Results_data = pd.read_excel(
+            f"{workdirectories['resultdir']}/HoC-GE2024-results-by-constituency.xlsx"
+        )
+
+        for _, row in Con_Results_data.iterrows():
+            nodename = normalname(row["Constituency name"])
+            party = normalname(row["First party"])
+            electorate = int(row["Electorate"]) if pd.notna(row["Electorate"]) else None
+            turnout = round(float(row["Turnout"]), 6) if "Turnout" in row and pd.notna(row["Turnout"]) else None
+
+            LastResults["constituency"][nodename] = {
+                "FIRST": party,
+                "TURNOUT": turnout,
+                "ELECTORATE": electorate
+            }
+
+        # --- Wards ---
+        Ward_Results_data = pd.read_excel(
+            f"{workdirectories['resultdir']}/LEH-Candidates-2023.xlsx"
+        )
+        Ward_Results_data = Ward_Results_data.loc[Ward_Results_data["WINNER"] == 1]
+
+        for _, row in Ward_Results_data.iterrows():
+            nodename = normalname(row["NAME"])
+            party = normalname(row["PARTYNAME"])
+            electorate = int(row["ELECT"]) if pd.notna(row["ELECT"]) else None
+            turnout = round(float(row["TURNOUT"]), 6) if "TURNOUT" in row and pd.notna(row["TURNOUT"]) else None
+
+            LastResults["ward"][nodename] = {
+                "FIRST": party,
+                "TURNOUT": turnout,
+                "ELECTORATE": electorate
+            }
+
+        # --- Divisions ---
+        Level4_Results_data = pd.read_excel(
+            f"{workdirectories['resultdir']}/opencouncildata_councillors.xlsx"
+        )
+
+        for _, row in Level4_Results_data.iterrows():
+            nodename = normalname(row["Ward Name"])
+            party = normalname(row["Party Name"])
+
+            LastResults["division"][nodename] = {
+                "FIRST": party
+            }
+
+        # --- Persist ---
+        with open(LAST_RESULTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(LastResults, f, indent=2, ensure_ascii=False)
+
+    else:
+        # Load from file without overwriting keys
+        with open(LAST_RESULTS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            LastResults["ward"].update(data.get("ward", {}))
+            LastResults["division"].update(data.get("division", {}))
+            LastResults["constituency"].update(data.get("constituency", {}))
+
 
 Treepolys = {
     'country': empty_gdf(),
@@ -585,8 +613,8 @@ Overlaps = {
 "nation" : 0.1,
 "county" : 0.001,
 "constituency" : 0.00005,
-"ward" : 0.00005,
-"division" : 0.00005,
+"ward" : 0.000005,
+"division" : 0.000005,
 "walk" : 0.005,
 "polling_district" : 0.005,
 "street" : 0.005,
@@ -601,66 +629,61 @@ LastResults = {
     "constituency": {},
 }
 
-def load_last_results():
-    global LastResults
+areaoptions = ["UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/SURREY_HEATH-MAP.html"]
 
-    if not os.path.exists(LAST_RESULTS_FILE) or os.path.getsize(LAST_RESULTS_FILE) == 0:
-        # --- Constituencies ---
-        Con_Results_data = pd.read_excel(
-            f"{workdirectories['resultdir']}/HoC-GE2024-results-by-constituency.xlsx"
-        )
+# save all places, resources in a new options file
+with open(OPTIONS_FILE, 'w') as f:
+    json.dump(OPTIONS, f, indent=2)
 
-        for _, row in Con_Results_data.iterrows():
-            nodename = normalname(row["Constituency name"])
-            party = normalname(row["First party"])
-            electorate = int(row["Electorate"]) if pd.notna(row["Electorate"]) else None
-            turnout = round(float(row["Turnout"]), 6) if "Turnout" in row and pd.notna(row["Turnout"]) else None
+IGNORABLE_SEGMENTS = {"PDS", "WALKS", "DIVS", "WARDS"}
 
-            LastResults["constituency"][nodename] = {
-                "FIRST": party,
-                "TURNOUT": turnout,
-                "ELECTORATE": electorate
-            }
+FILE_SUFFIXES = [
+    "-PRINT.html", "-MAP.html","-CAL.html", "-WALKS.html",
+    "-ZONES.html", "-PDS.html", "-DIVS.html", "-WARDS.html"
+]
 
-        # --- Wards ---
-        Ward_Results_data = pd.read_excel(
-            f"{workdirectories['resultdir']}/LEH-Candidates-2023.xlsx"
-        )
-        Ward_Results_data = Ward_Results_data.loc[Ward_Results_data["WINNER"] == 1]
 
-        for _, row in Ward_Results_data.iterrows():
-            nodename = normalname(row["NAME"])
-            party = normalname(row["PARTYNAME"])
-            electorate = int(row["ELECT"]) if pd.notna(row["ELECT"]) else None
-            turnout = round(float(row["TURNOUT"]), 6) if "TURNOUT" in row and pd.notna(row["TURNOUT"]) else None
 
-            LastResults["ward"][nodename] = {
-                "FIRST": party,
-                "TURNOUT": turnout,
-                "ELECTORATE": electorate
-            }
+import logging
+logging.getLogger("pyproj").setLevel(logging.WARNING)
 
-        # --- Divisions ---
-        Level4_Results_data = pd.read_excel(
-            f"{workdirectories['resultdir']}/opencouncildata_councillors.xlsx"
-        )
+# Setup logger
+logging.basicConfig(
+    level=logging.DEBUG,  # or INFO
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-        for _, row in Level4_Results_data.iterrows():
-            nodename = normalname(row["Ward Name"])
-            party = normalname(row["Party Name"])
 
-            LastResults["division"][nodename] = {
-                "FIRST": party
-            }
 
-        # --- Persist ---
-        with open(LAST_RESULTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(LastResults, f, indent=2, ensure_ascii=False)
+#or i, (key, fg) in enumerate(Featurelayers.items(), start=1):
+#    fg.id = i
+#    fg.type = [
+#        'country','nation', 'county', 'constituency', 'ward', 'division', 'polling_district',
+#        'walk', 'walkleg', 'street', 'result', 'target', 'data', 'special'
+#    ][i - 1]
+progress = {
+    "election": "",
+    "status": "idle",       # Can be 'idle', 'running', 'complete', 'error'
+    "percent": 0,           # Integer from 0 to 100
+    "targetfile": "test.csv",
+    "message": "Waiting...", # Optional string
+    "dqstats_html": ""
+    }
 
-    else:
-        # Load from file without overwriting keys
-        with open(LAST_RESULTS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            LastResults["ward"].update(data.get("ward", {}))
-            LastResults["division"].update(data.get("division", {}))
-            LastResults["constituency"].update(data.get("constituency", {}))
+DQ_DATA = {
+"df": pd.DataFrame(),  # initially empty
+}
+
+layeritems = []
+#allelectors = pd.read_csv(config.workdirectories['workdir']+"/"+ filename, engine='python',skiprows=[1,2], encoding='utf-8',keep_default_na=False, na_values=[''])
+# need a keyed dict indicating last recorded winning first party name for a given normalised node name
+
+
+
+load_last_results()
+
+
+print("_________HoC Con Results data:", len(LastResults["constituency"]))
+print("_________HoC Ward Results data:", len(LastResults["ward"]))
+print("_________HoC Division Results data:", len(LastResults["division"]))

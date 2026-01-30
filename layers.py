@@ -6,7 +6,7 @@ from folium import GeoJson, Tooltip, Popup
 import folium
 from datetime import datetime, timedelta, date
 
-from elections import get_election_data, route
+from elections import route, CurrentElection
 import json
 import os
 import html
@@ -256,7 +256,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print("📍 Starting generate_voronoi_with_geovoronoi")
 
-        CurrentElection = get_election_data(c_election)
+        CElection = CurrentElection.load(c_election)
         print(f"🗳️ Loaded election data for: {c_election}")
 
         target_path = target_node.mapfile()
@@ -873,25 +873,25 @@ class ExtendedFeatureGroup(FeatureGroup):
         global places
         global OPTIONS
         global constants
-        CurrentElection = get_election_data(c_election)
+        CElection = CurrentElection.load(c_election)
         print(f"__Layer id:{self.name} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
         if intention_type == 'marker':
             # always regen markers if OPTIONS['accumulate'] is false
-            if not CurrentElection['accumulate']:
+            if not CElection['accumulate']:
                 self._children.clear()
             entrylen = len(self._children)
             print("Markers . . ACCUMULATING from",entrylen)
             self.id = node.nid
-            self.add_genmarkers(c_election,node,'marker',static)
+            self.add_genmarkers(CElection,node,'marker',static)
             return len(self._children) - entrylen
         entrylen = len(self._children)
         if len(node.childrenoftype(intention_type)) > 0:
     # There is one layer of each type layers are identified by the node id at which it created
             print(f"")
-            if not CurrentElection['accumulate']:
+            if not CElection['accumulate']:
                 self._children.clear()
             entrylen = len(self._children)
-            print(f"ACCUMULATING {CurrentElection['accumulate']} {not CurrentElection['accumulate']} from:",entrylen, self.id, node.nid, node.value, intention_type)
+            print(f"ACCUMULATING {CElection['accumulate']} {not CElection['accumulate']} from:",entrylen, self.id, node.nid, node.value, intention_type)
             self.id = node.nid
     # create the content for an existing layer derived from the node children and required type
             if intention_type == 'street' or intention_type == 'walkleg':
@@ -903,14 +903,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"created {len(self._children)} voronoi in {c_election} - node {node.value} type {intention_type} static:{static}")
             elif intention_type == 'marker':
                 print("Markers 2 ACCUMULATING from",entrylen)
-                self.add_genmarkers(c_election,node,'marker',static)
+                self.add_genmarkers(CElection,node,'marker',static)
             else:
                 self.add_nodemaps(c_election,node, intention_type, static)
         return len(self._children) - entrylen
 
-    def add_genmarkers(self, c_election, node, type, static):
-        eventlist = node.build_eventlist_dataframe(c_election)
-        print(f" ___GenMarkers: from {c_election} to {eventlist}")
+    def add_genmarkers(self, CE, node, type, static):
+        eventlist = node.build_eventlist_dataframe(CE)
+        print(f" ___GenMarkers: under {route()} eventlist: {eventlist}")
         for _, row in eventlist.iterrows():
 
             for place in row["places"]:
@@ -952,7 +952,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         childlist = herenode.childrenoftype(type)
         nodeshtml = build_nodemap_list_html(herenode)
-        CurrentElection = get_election_data(c_election)
+        CElection = CurrentElection.load(c_election)
         details = [c.value for c in childlist]
         self.areashtml[herenode.value] = {
                             "code": herenode.value,
@@ -974,6 +974,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
                 limbX["col"] = to_hex(c.col)
+                print(
+                    f"⚠️ Boundary rows for node {c.value} (FID={c.fid}): {len(limbX)}"
+                )
 
                 if len(limbX) > 0:
                     print("______Add_Nodes Treepolys type:",type)
@@ -1049,7 +1052,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
                     party = "("+c.party+")"
-                    if not CurrentElection['accumulate']:
+                    if not CElection['accumulate']:
                         num = str(c.tagno)
                     else:
                         num = str(c.gtagno)
@@ -1168,7 +1171,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         childlist = herenode.childrenoftype(type)
         nodeshtml = build_nodemap_list_html(herenode)
-        CurrentElection = get_election_data(c_election)
+        CElection = CurrentElection.load(c_election)
         details = [c.value for c in childlist]
         self.areashtml[herenode.value] = {
                             "code": herenode.value,

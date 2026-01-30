@@ -795,19 +795,19 @@ async function setActiveElectionOnStartup() {
       });
 
       const data = await res.json();
-      window.latestConstants = data.constants;
-      window.latestOptions = data.options;
+//      window.latestConstants = data.constants;
+//      window.latestOptions = data.options;
 
-      updateConstantsUI(data.constants, data.options);
+//      updateConstantsUI(data.constants, data.options);
 
-      console.log("📩  startup (set-election returned data for:", data.current_election);
-      console.log("🔀 startup places on DOM reload :", window.places);
-      console.log("🔀 startup resources on DOM reload :", window.resources);
-      console.log("🔀 startup areas on DOM reload :", window.areas);
-      console.log("🔀 startup task_tags on DOM reload :", window.task_tags);
-      console.log("🔀 startup outcome_tags on DOM reload :", window.outcome_tags);
-     window.plan = data.constants?.calendar_plan;
-     console.log("📩 calendar_plan::", plan);
+//      console.log("📩  startup (set-election returned data for:", data.current_election);
+//      console.log("🔀 startup places on DOM reload :", window.places);
+//      console.log("🔀 startup resources on DOM reload :", window.resources);
+//      console.log("🔀 startup areas on DOM reload :", window.areas);
+//      console.log("🔀 startup task_tags on DOM reload :", window.task_tags);
+//      console.log("🔀 startup outcome_tags on DOM reload :", window.outcome_tags);
+//     window.plan = data.constants?.calendar_plan;
+//     console.log("📩 calendar_plan::", plan);
   } catch (e) {
       console.error("Failed to set active election:", e);
   }

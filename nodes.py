@@ -1,4 +1,3 @@
-
 from config import workdirectories, ELECTOR_FILE, TREKNODE_FILE, OPTIONS_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
 import os
 import state
@@ -9,36 +8,11 @@ import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context
 from layers import Featurelayers
-from elections import get_election_data,get_tags_json
+from elections import route, CurrentElection
 from folium import Map, Element
 import folium
-from elections import get_election_data, get_tags_json, route, save_election_data
 import uuid
-
-
-levels = ['country','nation','county','constituency','ward/division','polling_district/walk','street/walkleg','elector']
-
-from typing import Dict
-
-Outcomes = pd.read_excel(GENESYS_FILE)
-Outcols = Outcomes.columns.to_list()
-allelectors = pd.DataFrame(Outcomes, columns=Outcols)
-allelectors.drop(allelectors.index, inplace=True)
-
-
-TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
-TREK_NODES_BY_VALUE: Dict[str, "TreeNode"] = {}
-
-def capped_append(lst, item):
-    max_size = 7
-    if not isinstance(lst, list):
-        return
-    lst.append(item)
-    if len(lst) > max_size:
-        lst.pop(0)  # Remove oldest
-    return lst
-
-
+from pathlib import Path
 
 def create_root_node() -> "TreeNode":
     return TreeNode(
@@ -51,18 +25,28 @@ def create_root_node() -> "TreeNode":
 
 def get_root() -> "TreeNode":
     """Always returns the single root node. Creates it if needed."""
-    global TREK_NODES_BY_ID, TREK_NODES_BY_VALUE
+    global TREK_NODES_BY_ID
 
     # If the root already exists, return it
     for node in TREK_NODES_BY_ID.values():
         if node.parent is None:
             return node
-
     # Otherwise, create the root and store it
     root = create_root_node()
     TREK_NODES_BY_ID[root.nid] = root
-    TREK_NODES_BY_VALUE[root.value] = root
+
     return root
+
+def capped_append(lst, item):
+    max_size = 7
+    if not isinstance(lst, list):
+        return
+    lst.append(item)
+    if len(lst) > max_size:
+        lst.pop(0)  # Remove oldest
+    return lst
+
+
 
 def first_node() -> "TreeNode":
     """Return the first inserted node, or the root if empty."""
@@ -90,9 +74,16 @@ def parse_slot_key(slot_key):
 def reset_nodes():
     """Clear all registered nodes (in-place)."""
     TREK_NODES_BY_ID.clear()
-    TREK_NODES_BY_VALUE.clear()
+
 
 def save_nodes(path):
+    for node in TREK_NODES_BY_ID.values():
+        if node.parent and node.parent.nid not in TREK_NODES_BY_ID:
+            raise RuntimeError(
+                f"Persist invariant violated: "
+                f"{node.value} ({node.nid}) has missing parent {node.parent.nid}"
+            )
+
     with open(path, "w") as f:
         json.dump(
             [n.to_dict() for n in TREK_NODES_BY_ID.values()],
@@ -100,7 +91,7 @@ def save_nodes(path):
         )
 
 def load_nodes(path):
-    global TREK_NODES_BY_ID, TREK_NODES_BY_VALUE
+    global TREK_NODES_BY_ID
 
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         print(f"[WARN] Node file missing or empty: {path}")
@@ -109,40 +100,43 @@ def load_nodes(path):
     reset_nodes()
 
     with open(path) as f:
-        try:
-            raw_nodes = json.load(f)
-        except json.JSONDecodeError as e:
-            print(f"[ERROR] Invalid JSON in {path}: {e}")
-            return False
+        raw_nodes = json.load(f)
 
     # PASS 1: create nodes
     for data in raw_nodes:
         node = TreeNode.from_dict(data)
+        node.parent = None
+        node.children = []
+
         TREK_NODES_BY_ID[node.nid] = node
-        TREK_NODES_BY_VALUE[node.value] = node
 
     # PASS 2: wire relationships
     for data in raw_nodes:
         node = TREK_NODES_BY_ID[data["nid"]]
 
         pid = data.get("parent")
-        if pid is not None:
+        if pid:
             parent = TREK_NODES_BY_ID.get(pid)
             if not parent:
                 raise ValueError(
-                    f"Missing parent {pid} for node {node.nid} ({node.value})"
+                    f"Missing parent {pid} for node {node.value}"
                 )
             node.parent = parent
+            if node not in parent.children:
+                parent.children.append(node)
 
         for cid in data.get("children", []):
             child = TREK_NODES_BY_ID.get(cid)
             if not child:
                 raise ValueError(
-                    f"Missing child {cid} for node {node.nid} ({node.value})"
+                    f"Missing child {cid} for node {node.value}"
                 )
-            node.children.append(child)
+            if child not in node.children:
+                node.children.append(child)
+            child.parent = node
 
     return True
+
 
 
 
@@ -151,19 +145,7 @@ def parent_level_for(child_type):
     Returns the level index of the node you must be on
     to list children of `child_type`.
     """
-    LEVEL_INDEX = {
-        'country': 0,
-        'nation': 1,
-        'county': 2,
-        'constituency': 3,
-        'ward': 4,
-        'division': 4,
-        'polling_district': 5,
-        'walk': 5,
-        'street': 6,
-        'walkleg': 6,
-        'elector': 7
-    }
+
 
     if child_type not in LEVEL_INDEX:
         raise ValueError(f"Unknown node type: {child_type}")
@@ -271,52 +253,6 @@ def get_places_json(markers):
     print(f"___on map create places_json {places_jsn}")
     return places_jsn
 
-
-def gettypeoflevel(estyle,path,level):
-# returns the correct type for nodes at a given level along a given path
-# the level will give type options , which are resolved by looking at the path content
-    global levels
-    moretype = ""
-    dest = path
-    if path.find(" ") > -1:
-        dest_path = path.split(" ")
-        moretype = dest_path.pop() # take off any trailing parameters
-        dest = dest_path[0]
-    deststeps = list(state.stepify(dest)) # lowest left - UK right
-
-    if level > 6:
-        level = 6
-    type = levels[level] # could have type options that need to be resolved
-
-    if type == 'ward/division':
-        if estyle == 'C' or estyle == 'U':
-            type = 'division'
-        else:
-            type = 'ward'
-    elif type == 'polling_district/walk':
-        if path.find("/PDS/") >= 0 or path.endswith("-PDS.html"):
-            type = 'polling_district'
-        elif path.find("/WALKS/") >= 0 or path.endswith("-WALKS.html") or path.endswith("-MAP.html"):
-            type = 'walk'
-        elif level+1 >= len(deststeps) and moretype != "":
-            print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
-            type = moretype # this is the type override syntax if level is new - ie desired level great than path level
-        else:
-            type = 'walk'
-            print('XXStrange polling_district/walk Type discoveredXX')
-    elif type == 'street/walkleg':
-        if path.find("/PDS/") >= 0:
-            type = 'street'
-        elif path.find("/WALKS/") >= 0 or path.endswith("-MAP.html"):
-            type = 'walkleg'
-        elif level+1 >= len(deststeps) and moretype != "":
-            print(f"____override! len child level {level} > {len(deststeps)}  so override with {moretype}")
-            type = moretype # this is the type override syntax if level is new - ie desired level great than path level
-        else:
-            raise Exception('XXStrange street/walkleg Type discoveredXX')
-
-
-    return type
 
 
 def is_safe_url(target):
@@ -454,7 +390,6 @@ def get_counters(session=None, session_data=None):
 
 def get_current_node(session=None, session_data=None):
 
-    MapRoot = get_root()
     try:
         if not session or 'current_node_id' not in session:
             node = None
@@ -476,11 +411,11 @@ def get_current_node(session=None, session_data=None):
         current_node_id = session_data.get('current_node_id',None)
         node = TREK_NODES_BY_ID.get(current_node_id)
     else:
-        node = get_root()
+        node = MapRoot
         print("⚠️ current_node_id not found in session or session_data:so id = ",238 )
 
     if node == None:
-        node = get_root()
+        node = MapRoot
         current_node_id = node.nid
 
         print (f" current_node_id: {current_node_id} not in TREK_NODES_BY_ID:",TREK_NODES_BY_ID)
@@ -513,8 +448,8 @@ def safe_pickle_load(path, default):
 def restore_from_persist(session=None,session_data=None):
     from state import Treepolys, Fullpolys
     global OPTIONS
-    global CurrentElection
     global allelectors
+    from elections import route, CurrentElection
 
     if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
         with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
@@ -542,7 +477,7 @@ def restore_from_persist(session=None,session_data=None):
     if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
         load_nodes(TREKNODE_FILE)
 
-    print('_______Trek Nodes: ', TREK_NODES_BY_VALUE, TREK_NODES_BY_ID)
+    print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
     return
 
 def persist(node):
@@ -639,14 +574,14 @@ def get_last(current_election, CE):
     cid = CE.get("cid")
     cidLat = CE.get("cidLat")
     cidLong = CE.get("cidLong")
+    rlevels = CE.resolved_levels
     here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
     sourcepath = CE.get("mapfiles", [None])[-1]
-    estyle = CE.get("territories")
 
     # --- 1. CID lookup ---
     if cid and cid in TREK_NODES_BY_ID:
         last_node = TREK_NODES_BY_ID[cid]
-        print("___after apply cid:", cid)
+        print(f"___under route: {route()} return to existing cid: {cid}")
         return last_node
 
     print(f"___Get last Sourcepath {sourcepath} under {route()}")
@@ -656,20 +591,13 @@ def get_last(current_election, CE):
     if response:
         return response  # IMPORTANT
 
-    # --- 3. Build tree from sourcepath / here ---
-    Treepolys, Fullpolys, basepath = ensure_treepolys(
-        sourcepath=sourcepath,
-        estyle=estyle,
-        here=here
-    )
 
-    print("___after apply basepath:", basepath)
+    print(f"___ Get Last node under {route()} for {current_election} sourcepath: {sourcepath}")
 
     # --- 4. Try to resolve node from path ---
-    MapRoot = get_root()
 
-    last_node = get_root().ping_node(
-        estyle,
+    last_node = MapRoot.ping_node(
+        CE.resolved_levels,
         current_election,
         sourcepath
     )
@@ -680,8 +608,8 @@ def get_last(current_election, CE):
         last_node = get_root()
 
     print(
-        f"___ GET LAST - ELECTION: {current_election} "
-        f"NODE {last_node.value} INVOKED AT: {here} "
+        f"___ GET LAST DESTINATION - election: {current_election} "
+        f"NODE {last_node.value} at loc: {here} "
         f"using source: {sourcepath}"
     )
 
@@ -690,7 +618,6 @@ def get_last(current_election, CE):
 
 
 def find_node_by_path(basepath: str, debug=False):
-    MapRoot = get_root()
     if debug:
         print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES_BY_ID)}")
 
@@ -888,7 +815,7 @@ class TreeNode:
         CurrEL2['cidLat'] = self.latlongroid[0]
         CurrEL2['cidLong'] = self.latlongroid[1]
         CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile())
-        save_election_data(c_elect, CurrEL2)
+        CurrEL2.save()
 
         session['current_election'] = c_elect
         session['current_node_id'] = self.nid
@@ -896,25 +823,28 @@ class TreeNode:
         print("=== VISIT NODE ===", self.mapfile())
         print("current children:",
               [c.value for c in self.children])
-        estyle = CurrEL['territories']
+
         mapfile = self.mapfile()
-        atype = gettypeoflevel(estyle,mapfile, self.level+1)
+#        atype = gettypeoflevel(estyle,mapfile, self.level+1)
+        next_level = self.level + 1
+        if next_level > max(CurrEL2.resolved_levels):
+            return None
+        atype = CurrEL2.resolved_levels[next_level]
+
+
         fullpath = Path(workdirectories['workdir']) / mapfile
-        if new:
-            print("___map Typemaker:",atype, state.TypeMaker[atype] )
-            return redirect(url_for(state.TypeMaker[atype],path=mapfile))
+
+        # Check if the file exists
+        if not fullpath.exists() or (new and CurrEL['cid'] != self.nid):
+            print(f"⚙️ [DEBUG] Map file does not exist or needs new creation: {fullpath}")
+            next_level = self.level + 1
+            atype = CurrEL.resolved_levels[next_level]
+            print("___map Typemaker:", atype, state.TypeMaker[atype])
+            return redirect(url_for(state.TypeMaker[atype], path=mapfile))
+
+        # If the file exists, send it
         print("___map Exists:", fullpath)
         return send_file(fullpath, as_attachment=False)
-
-
-
-    def layer_mapfile(self, estyle):
-        if estyle in ("C", "U"):  # divisions
-            return f"{self.dir}/DIVS/{self.value}-DIVS.html"
-        elif estyle in ("B", "P", "W"):  # wards
-            return f"{self.dir}/WARDS/{self.value}-WARDS.html"
-        else:
-            return self.mapfile()
 
 
     def set_parent(self, parent):
@@ -1005,13 +935,12 @@ class TreeNode:
 
 
 
-    def build_eventlist_dataframe(self,c_election):
+    def build_eventlist_dataframe(self,CElection):
         """
         Produce an eventlist dataframe matching the intent of the JS summary.
         """
-        CurrentElection = get_election_data(c_election)
 
-        slots = CurrentElection["calendar_plan"]["slots"]
+        slots = CElection["calendar_plan"]["slots"]
         rows = []
         print("__Building events from slots:",slots)
         for key, slot in slots.items():
@@ -1022,7 +951,7 @@ class TreeNode:
 
             resources, tasks, places, areas = self.process_lozenges(
                 slot.get("lozenges", []),
-                CurrentElection
+                CElection
             )
 
             if not places:
@@ -1081,173 +1010,152 @@ class TreeNode:
 
 
 
-    def ping_node(self, estyle, c_election, dest_path):
-        from state import Treepolys, Fullpolys,LEVEL_ZOOM_MAP
-
-        global levels
-        global allelectors
-        global areaelectors
-        global CurrentElection
-        global SERVER_PASSWORD
-        global OPTIONS
-
-
+    def ping_node(self, rlevels, c_election, dest_path):
+        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys,ensure_treepolys
+        from elections import route
 
         def strip_leaf_from_path(path):
             leaf = path.split("/")[-1]
             for suffix in [
-                "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
-                "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
+                "-PRINT.html", "-MAP.html", "-CAL.html", "-WALKS.html",
+                "-ZONES.html", "-PDS.html", "-DIVS.html",
+                "-WARDS.html", "-DEMO.html"
             ]:
                 if leaf.endswith(suffix):
                     leaf = leaf.replace(suffix, "")
-            # In case the leaf has parts like "prefix--name", we take the last part
-            leaf = leaf.split("--")[-1]
-            return leaf
+            return leaf.split("--")[-1]
 
         def split_clean_path(path):
-            # Get the leaf and remove suffixes
             leaf = strip_leaf_from_path(path)
-
-            # Get the directory part (excluding the original filename)
             dir_path = "/".join(path.strip("/").split("/")[:-1])
-
-            # Split and clean the directory path
             parts = [
-                part for part in dir_path.strip("/").split("/")
-                if part not in ["DIVS", "PDS", "WALKS", "WARDS", ""] and "@@@" not in part
+                p for p in dir_path.split("/")
+                if p and p not in ["DIVS", "PDS", "WALKS", "WARDS"] and "@@@" not in p
             ]
-
-            # Add leaf only if it's not already in parts and is valid
-            if leaf and leaf not in ["DIVS", "PDS", "WALKS", "WARDS"] and leaf not in parts:
+            if leaf and leaf not in parts:
                 parts.append(leaf)
-
             return parts
 
-
-        """
-        Find and return the node in the tree corresponding to dest_path,
-        starting from any node in the tree (self).
-
-        dest_path: string with path (and optional keyword after a space)
-        c_election: passed into branch-creation functions
-        """
-
-        # Step 0: Handle optional keyword (e.g., "ward", "division" etc.)
-        # Full destination path
+        # ──────────────────────────────
+        # Step 0: keyword handling
         full_dest_path = dest_path.strip()
+        path_only, *kw = full_dest_path.rsplit(" ", 1)
 
-        # ✅ Split out the keyword, but keep the full original for gettypeoflevel()
-        path_only, *keyword_parts = full_dest_path.rsplit(" ", 1)
-
-        # If there's a keyword, extract it and restore full_path with keyword for later
-        if keyword_parts and keyword_parts[0].lower() in LEVEL_ZOOM_MAP:
-            keyword = keyword_parts[0].lower()
-            raw_path_for_types = full_dest_path  # ✅ Keep keyword included for gettypeoflevel()
-            path_str = path_only                 # ✅ Path for traversal only (no keyword)
+        if kw and kw[0].lower() in LEVEL_ZOOM_MAP:
+            keyword = kw[0].lower()
+            path_str = path_only
         else:
             keyword = None
-            raw_path_for_types = full_dest_path  # No keyword, use entire path
             path_str = full_dest_path
 
-
-        # Clean paths
+        # ──────────────────────────────
+        # Step 1: clean paths
         self_path = split_clean_path(self.mapfile())
-        dest_path_parts = split_clean_path(path_str)
+        dest_parts = split_clean_path(path_str)
 
-        print(f"   🪜 under {route()} self_path: {self_path}")
-        print(f"   🪜 under {route()} dest_path_parts: {dest_path_parts}")
 
-        # Step 2: Find common ancestor
-        common_len = get_common_prefix_len(self_path, dest_path_parts)
-        print(f"   🔗 Common prefix length: {common_len}")
+        print(f"🪜 [DEBUG] self_path: {self_path}")
+        print(f"🪜 [DEBUG] dest_parts: {dest_parts}")
 
-        # Step 3: Move up to the common ancestor
+        # ──────────────────────────────
+        # Step 2: common ancestor
+        common_len = get_common_prefix_len(self_path, dest_parts)
+        print(f"🔗 [DEBUG] Common prefix length: {common_len}")
 
         node = self
-        print(f"   📏 self_path length: {len(self_path)}")
-        print(f"   📏 common_len: {common_len}")
-        print(f"   📏 Steps to move up: {len(self_path) - common_len}")
-        for i in range(len(self_path) - common_len):
-            if not hasattr(node, "parent") or node.parent is None:
-                print(f"   ⛔️ Reached root or missing parent at node: {node.value}")
+
+        # ──────────────────────────────
+        # Step 3: move UP
+        for _ in range(len(self_path) - common_len):
+            if not node.parent:
+                print(f"⚠️ [DEBUG] Reached root while moving up from {node.value}")
                 break
             node = node.parent
-            print(f"   🔼 Moved up to: {node.value} (level {node.level})")
+            print(f"🔼 [DEBUG] Moved up to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
-        # Step 4: Move down from common ancestor
-        down_path = dest_path_parts[common_len:]
-        print(f"   ⬇️ Moving down path: {down_path}")
+        # ──────────────────────────────
+        # Step 4: move DOWN
+        down_path = dest_parts[common_len:]
+        print(f"⬇️ [DEBUG] Moving down path: {down_path}")
+
+        moved = False
 
         for part in down_path:
             next_level = node.level + 1
-            ntype = gettypeoflevel(estyle, raw_path_for_types, next_level)
+            if next_level > max(rlevels):
+                raise Exception("Resolved level overflow")
 
-            print(f"   ➡️ under {route()} Looking for part: '{part}' at next level {next_level} (ntype={ntype})")
+            ntype = rlevels[next_level]
 
-            # Expand children dynamically
-            if next_level <= 4:
-                print(f"      🛠 create_map_branch({ntype})")
-                node.create_map_branch(estyle,c_election, ntype)
-            elif next_level <= 6:
-                print(f"      🛠 create_data_branch for election {c_election}({ntype})")
-                node.create_data_branch(estyle,c_election, ntype)
+            print(f"➡️ [DEBUG] At node: {node.value} (L{node.level}), looking for part '{part}' at level {next_level} (type={ntype})")
+            print(f"   Children before match: {[c.value for c in node.children]}")
 
-            # Try to find a matching child
-            matches = [child for child in node.children if child.value == part]
+            matches = [c for c in node.children if c.value == part]
+
             if not matches:
-                print(f"   ❌ under {route()} No match for '{part}' in node '{node.value}' children. Returning original node: {self.value}")
-                print(f"   ❌ children of self:{[x.value for x in self.children]}")
-                return self
+                print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
+                try:
+                    if next_level <= 4:
+                        node.create_map_branch(rlevels, c_election, ntype)
+                    else:
+                        node.create_data_branch(rlevels, c_election, ntype)
+                except Exception as e:
+                    print(f"   ⚠️ [DEBUG] Branch creation failed: {e}")
+
+                matches = [c for c in node.children if c.value == part]
+
+            print(f"   Children after branch creation: {[c.value for c in node.children]}")
+
+            if not matches:
+                # Instead of returning self, raise a clear error
+                raise ValueError(
+                    f"Path error: could not find or create node '{part}' under '{node.value}' "
+                    f"(level {node.level + 1})"
+                )
 
             node = matches[0]
-            print(f"   ✅ under {route()} Descended to: {node.value} (level {node.level})")
+            moved = True
+            print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
-        # Step 5: Handle optional zoom keyword
-        if keyword in LEVEL_ZOOM_MAP:
+        # ──────────────────────────────
+        # Step 5: keyword zoom
+        if keyword:
             node.zoom_level = LEVEL_ZOOM_MAP[keyword]
-            print(f"   🔍 Set zoom level to {node.zoom_level} due to keyword '{keyword}'")
+            print(f"🔍 [DEBUG] Applied keyword zoom '{keyword}' → zoom_level {node.zoom_level}")
 
-        print(f"✅ under {route()} Reached destination node: {node.value} (level {node.level})")
-        # Step 6: Populate children of destination node
-        final_level = node.level
-        final_ntype = gettypeoflevel(estyle, raw_path_for_types, final_level + 1)
+        print(f"✅ [DEBUG] Reached node: {node.value} (L{node.level}) with children: {[c.value for c in node.children]}")
 
-        print(f"   🌿 Expanding children of path {raw_path_for_types} final node '{node.value}' (level {final_level}) with type '{final_ntype}'")
-
-        try:
-            if final_level < 4:
-                node.create_map_branch(estyle,c_election, final_ntype)
-                print("   ✅ create_map_branch() called")
-            elif final_level < 6:
-                node.create_data_branch(estyle,c_election, final_ntype)
-                print(f"   ✅ create_data_branch() called for {c_election}({final_ntype})")
-            else:
-                print("   ℹ️ No further branching at this level.")
-        except Exception as e:
-            print(f"   ⚠️ Failed to create child branches: {e}")
-
-
-        print(f"   ✅ Descended to: {node.value} (level {node.level}) children: {len(node.children)}")
-        if final_ntype == 'street' or final_ntype == 'walkleg':
-            leaf = strip_leaf_from_path(raw_path_for_types)
-            leafmatches = [child for child in node.children if child.value == leaf]
-            if not leafmatches:
-                print(f"   ❌ No match for leaf '{leaf}' under node '{node.value}'. Returning original node: {node.value}")
-                return node
-            node = leafmatches[0]
+        # ──────────────────────────────
+        # Step 6: ONLY expand children if we MOVED
+        if moved:
+            next_level = node.level + 1
+            if next_level <= max(rlevels):
+                child_type = rlevels[next_level]
+                print(f"🌿 [DEBUG] Expanding children of {node.value} as {child_type}")
+                try:
+                    if node.level < 4:
+                        node.create_map_branch(rlevels, c_election, child_type)
+                    else:
+                        node.create_data_branch(rlevels, c_election, child_type)
+                except Exception as e:
+                    print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
+        else:
+            print("⏸ [DEBUG] No movement detected — skipping child expansion")
 
         return node
 
 
-    def getselectedlayers(self,estyle,this_election,path):
+    def getselectedlayers(self,rlevels,this_election,path):
         global Featurelayers
         global OPTIONS
 #add children layer(level+1), eg wards,constituencies, counties
         print(f"_____layerstest0 type:{self.value},{self.type} path: {path}")
 
         selected = []
-        childtype = gettypeoflevel(estyle,path,self.level+1)
+        next_level = self.level+1
+        if next_level > max(rlevels):
+            return None
+        childtype = rlevels[next_level]
         if childtype == 'elector':
             selected = []
         else:
@@ -1301,34 +1209,32 @@ class TreeNode:
 #        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
-    def updateTurnout(self,electionstyle):
+    def updateTurnout(self,rlevels):
         from state import LastResults
 
         sname = self.value
         casnode = self
 
         # --- Base turnout assignment ---
-        if electionstyle == "W":  # national
-            if self.level == 3:
-                entry = LastResults.get("constituency", {}).get(sname)
-                self.turnout = entry.get("TURNOUT") if entry else None
-            elif self.level > 3:
-                self.turnout = self.parent.turnout
+        if self.level == 3:
+            entry = LastResults.get("constituency", {}).get(sname)
+            self.turnout = entry.get("TURNOUT") if entry else None
+        elif self.level > 3:
+            self.turnout = self.parent.turnout
 
-        else:  # local
-            if self.level == 4:
-                entry = LastResults.get("ward", {}).get(sname)
-                self.turnout = entry.get("TURNOUT") if entry else None
-            elif self.level > 4:
-                self.turnout = self.parent.turnout
+        if self.level == 4:
+            entry = LastResults.get("ward", {}).get(sname)
+            self.turnout = entry.get("TURNOUT") if entry else None
+        elif self.level > 4:
+            self.turnout = self.parent.turnout
 
         # --- Cascade upward (compute parents from children) ---
         while casnode.parent:
             parent = casnode.parent
-            children = parent.childrenoftype(
-                gettypeoflevel(electionstyle, casnode.dir, casnode.level)
-            )
-
+#            children = parent.childrenoftype(
+#                gettypeoflevel(electionstyle, casnode.dir, casnode.level)
+#            )
+            children = parent.childrenoftype(rlevels[parent.level])
             values = [c.turnout for c in children if c.turnout is not None]
             parent.turnout = sum(values) / len(values) if values else None
 
@@ -1336,7 +1242,7 @@ class TreeNode:
 
         return
 
-    def updateGOTV(self, gotv_pct):
+    def updateGOTV(self, gotv_pct, rlevels):
         """
         Compute absolute GOTV target:
             gotv = 0.5 * votes_cast + (gotv_pct / 100)
@@ -1358,7 +1264,7 @@ class TreeNode:
         # --- Cascade upward (sum children) ---
         while casnode.parent:
             parent = casnode.parent
-            children = parent.children
+            children = parent.childrenoftype(rlevels[parent.level])
 
             values = [c.gotv for c in children if c.gotv is not None]
             parent.gotv = sum(values) if values else None
@@ -1404,7 +1310,7 @@ class TreeNode:
         return
 
 
-    def updateElectorate(self, electstyle):
+    def updateElectorate(self, rlevels):
         from state import LastResults
 
         # --- Base electorate ---
@@ -1426,13 +1332,13 @@ class TreeNode:
             if parent.level != 3:
                 parent.electorate = sum(
                     c.electorate if c.electorate is not None else 0
-                    for c in parent.children
+                    for c in parent.childrenoftype(rlevels[parent.level])
                 )
             casnode = parent
 
         return
 
-    def updateHouses(self,pop):
+    def updateHouses(self,rlevels,pop):
 
         sname = self.value
         pop = int(pop)
@@ -1445,7 +1351,7 @@ class TreeNode:
         for l in range(origin.level):
             sumnode.parent.houses = 0
             i=1
-            for x in sumnode.parent.childrenoftype(gettypeoflevel(estyle,sumnode.dir,sumnode.level)):
+            for x in sumnode.parent.childrenoftype(rlevels[sumnode.level]):
                 sumnode.parent.houses = sumnode.parent.houses + x.houses
                 print ("_____Houseslevel:",x.level,x.value,x.houses,sumnode.houses)
                 i = i+1
@@ -1461,24 +1367,23 @@ class TreeNode:
         return typechildren
 
 
-    def locfilepath(self,file_text):
-        global levelcolours
+    def locfilepath(self, file_text: str) -> str:
+        """
+        Ensure the directory for the map file exists and
+        return the full target file path.
+        """
 
-        target = workdirectories['workdir'] + self.dir + "/" + file_text
+        # Build full path
+        target = Path(workdirectories["workdir"]) / self.dir / file_text
 
-        dir = os.path.dirname(target)
-        print(f"____target director {dir} and filename:{file_text}")
-        os.chdir(workdirectories['workdir'])
-        if not os.path.exists(dir):
-          os.makedirs(dir)
-          print("_______Folder %s created!" % dir)
-          os.chdir(dir)
-        else:
-          print("________Folder %s already exists" % dir)
-          os.chdir(dir)
-        return target
+        # Ensure directory exists
+        target.parent.mkdir(parents=True, exist_ok=True)
 
-    def create_name_nodes(self,electstyle,gotv_pct,elect,nodetype,namepoints,ending):
+        print(f"____mapfile path ensured: {target.parent}")
+        return str(target)
+
+
+    def create_name_nodes(self,resolved_levels,gotv_pct,elect,nodetype,namepoints,ending):
         zonecolour = {
             "ZONE_0": "black", "ZONE_1": "red", "ZONE_2": "lime",
             "ZONE_3": "blue", "ZONE_4": "yellow", "ZONE_5": "cyan",
@@ -1503,20 +1408,21 @@ class TreeNode:
             print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
             namepoints['Zone'] = 'ZONE_0'  # or whatever default you want
 
+        newname = normalname(limb['Name'])
 
         for index, limb  in namepoints.iterrows():
 
-            if not TREK_NODES_BY_VALUE.get(limb['Name']) :
-                datafid = abs(hash(limb['Name']))
-                newnode = TreeNode(value=normalname(limb['Name']),fid=datafid, roid=(limb['Lat'],limb['Long']),origin=elect, node_type=nodetype )
+            if newname not in fam_nodes :
+                datafid = abs(hash(newname))
+                newnode = TreeNode(value=newname,fid=datafid, roid=(limb['Lat'],limb['Long']),origin=elect, node_type=nodetype )
                 egg = self.add_Tchild(child_node=newnode,etype=nodetype, elect=elect,counters=counters)
                 [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
                 egg.col = zonecolour.get(limb['Zone'],'black')
                 print(f"🎨 Assigned color '{egg.col}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
 
-                egg.updateTurnout(electstyle)
-                egg.updateElectorate(electstyle)
-                egg.updateGOTV(gotv_pct)
+                egg.updateTurnout(resolved_levels)
+                egg.updateElectorate(resolved_levels)
+                egg.updateGOTV(gotv_pct, resolved_levels)
                 print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
 
                 fam_nodes.append(egg)
@@ -1538,17 +1444,17 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self,electstyle,c_election, electtype):
+    def create_data_branch(self,resolved_levels,c_election, electtype):
         global allelectors
         global areaelectors
         global workdirectories
         from state import Treepolys, Fullpolys
-        from elections import get_election_data
 
 
 # if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
 # the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
 # if the electoral file hasn't been loaded yet then that needs to be done first.
+
 
         nodelist = []
 
@@ -1571,7 +1477,7 @@ class TreeNode:
             )
         areaelectors = allelectors[mask]
 
-        CE = get_election_data(c_election)
+        CE = CurrentElection.load(c_election)
         gotv_pct = CE['GOTV']
         if len(areaelectors) > 0:
             try:
@@ -1587,7 +1493,7 @@ class TreeNode:
         # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
                     g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone':'first'}
                     PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                    nodelist = self.create_name_nodes(electstyle,gotv_pct,c_election,'polling_district',PDPtsdf,"-PDS.html") #creating PD_nodes with mean PD pos and elector counts
+                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'polling_district',PDPtsdf,"-PDS.html") #creating PD_nodes with mean PD pos and elector counts
                 elif electtype == 'walk':
                     print("📦 Starting WALK processing")
                     walkdf0 = pd.DataFrame(areaelectors, columns=['Election', 'WalkName', 'ENOP', 'Long', 'Lat', 'Zone'])
@@ -1602,7 +1508,7 @@ class TreeNode:
                     nodeelectors = walkdf1.groupby(['Name']).agg(g).reset_index()
                     print(f"📈 Grouped nodeelectors shape: {nodeelectors.shape}")
 
-                    nodelist = self.create_name_nodes(electstyle, gotv_pct,c_election, 'walk', nodeelectors, "-WALKS.html")
+                    nodelist = self.create_name_nodes(resolved_levels, gotv_pct,c_election, 'walk', nodeelectors, "-WALKS.html")
                     print(f"🧩 Created {len(nodelist)} walk nodes")
 
     #---------------------------------------------------
@@ -1615,7 +1521,7 @@ class TreeNode:
                     g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count','Zone': 'first'}
                     streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Street df: ",streetdf)
-                    nodelist = self.create_name_nodes(electstyle,gotv_pct,c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
+                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
                 elif electtype == 'walkleg':
                     mask = areaelectors['WalkName'] == self.value
                     walkelectors = areaelectors[mask]
@@ -1626,7 +1532,7 @@ class TreeNode:
                     walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
                     print("____Walkleg df: ",walklegdf)
                     print("____Walkleg elector df: ",walklegdf1)
-                    nodelist = self.create_name_nodes(electstyle,gotv_pct,c_election,'walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
+                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
             except Exception as e:
                 print("❌ Error during data branch generation:", e)
                 return []
@@ -1639,27 +1545,20 @@ class TreeNode:
         save_nodes(TREKNODE_FILE)
         return nodelist
 
-    def create_map_branch(self,electstyle,c_election,electtype):
-        from state import Treepolys, Fullpolys, Overlaps
+    def create_map_branch(self,resolved_levels,c_election,electtype):
+        from state import Treepolys, Fullpolys, Overlaps, ensure_treepolys
         import random
-        from elections import get_election_data
 
 
-        def newFid(existing_fids):
-            """
-            Generate a new unique integer FID not in existing_fids.
-            Uses random integers in a large range.
-            """
-            existing_set = set(existing_fids)  # for fast lookup
-            while True:
-                fid = random.randint(1, 2**31 - 1)  # large positive integer
-                if fid not in existing_set:
-                    return fid
-
+        if self.type not in Treepolys:
+            raise ValueError(f"Layer '{self.type}' not found in Treepolys")
 
 # need to know the CE['territories'] value to determine division or ward
         # NOW THIS IS SAFE
         parent_poly = Treepolys[self.type]
+
+        if parent_poly is None or parent_poly.empty:
+            raise ValueError(f"No polygons loaded for layer '{self.type}'")
 
         print(
             f"🧭 create_map_branch({self.type}) polys loaded:",
@@ -1669,7 +1568,7 @@ class TreeNode:
         # existing logic continues...
 
         counters = get_counters(session)
-        CE = get_election_data(c_election)
+        CE = CurrentElection.load(c_election)
         gotv_pct = CE['GOTV']
         block = pd.DataFrame()
 
@@ -1682,21 +1581,6 @@ class TreeNode:
         if parent_geom.empty:
             print(f"Adding back in Full '{self.type}' boundaries for {self.value} FID {self.fid}")
             raise Exception ("EMPTY COUNTRY PARENT GEOMETRY")
-            restore_fullpolys(self.type)
-            parent_poly = Treepolys[self.type]
-            print(
-                f"full map branch type: {self.type} "
-                f"size {len(parent_poly)} "
-                f"parent poly cols: {list(parent_poly.columns)} "
-                f"NID {self.nid}"
-            )
-
-            parent_geom = parent_poly[parent_poly['FID'] == int(self.fid)]
-            # Ensure that parent_geom has the desired geometry after the update
-            if parent_geom.empty:
-                print(f"Still no matching geometry found after adding new polygon for FID {self.fid}")
-            else:
-                parent_geom = parent_geom.geometry.values[0]
         else:
             print(f"___create_map_branch geometry for {self.value} FID {self.fid} is ",parent_geom)
             print(
@@ -1713,49 +1597,81 @@ class TreeNode:
 
         print(f"____There are {len(ChildPolylayer)} Children candidates for {self.value} bbox:[{self.bbox}] of type {electtype}" )
         index = 0
-        i = 0
-        j = 0
         fam_nodes = self.childrenoftype(electtype)
 
-        for index,limb in ChildPolylayer.iterrows():
-            print(f"____Considering inclusion of child {limb.NAME} in Parent geometry of branch")
+        # Check if there’s anything to process
+        if ChildPolylayer.empty:
+            print(f"⚠️ No geometries found for children of type '{electtype}' under {self.value}. Skipping creation.")
+            return fam_nodes
+
+        i = 0
+        j = 0
+        k = 0
+        for index, limb in ChildPolylayer.iterrows():
+            newname = normalname(limb.NAME)
+            print(f"____Considering inclusion of child {newname} in {self.value} of branch")
             fam_values = [x.value for x in fam_nodes]
 
-            newname = normalname(limb.NAME)
+
             centroid_point = limb.geometry.centroid
             here = (centroid_point.y, centroid_point.x)
             overlaparea = parent_geom.intersection(limb.geometry).area
-            Overlaps[electtype] = round(Overlaps[electtype], 8)  # 6 decimal places
-            print (f"________trying map type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
-#            if parent_geom.intersects(limb.geometry) and parent_geom.intersection(limb.geometry).area > 0.0001:
-            if overlaparea > Overlaps[electtype] and not TREK_NODES_BY_VALUE.get(newname) :
-# if name is already in treknodes ignore
-                egg = TreeNode(value=newname, fid=limb.FID, roid=here,origin="ONS_MAPS",node_type=electtype)
-#                else:
-#                    egg = TreeNode(newname, newFid(fam_fids), here,self.level+1,c_election)
-                print (f"________found missing type {electtype} name {newname} names {fam_values} level+1 {self.level+1} area {overlaparea} margin {Overlaps[electtype]}" )
-                egg = self.add_Tchild(child_node=egg,etype=electtype, elect=c_election,counters=counters)
-                [egg.bbox, centroid] = egg.get_bounding_box(electtype,block)
-                print (f"________bbox [{egg.bbox}] - child of type:{electtype} at lev {self.level+1} of {self.value}")
-                fam_nodes.append(egg)
-                egg.updateParty() # get the last recorded election result for this node
-                egg.updateTurnout(electstyle) # get the last recorded election turnout for this node
-                egg.updateElectorate(electstyle) # get the current electorate for this node
-                egg.updateGOTV(gotv_pct)
-                print (f"______Eggname: {egg.value} type {egg.type} level {egg.level} party {egg.party} " )
-                j = j + 1
-            i = i + 1
+            overlap_margin = round(Overlaps[electtype], 8)  # 8 decimal places for safety
+            existing_node = next((x for x in fam_nodes if x.value == newname), None)
 
+            print(
+                f"________Trying map type {electtype} name {newname}, "
+                f"existing names: {fam_values}, level+1: {self.level+1}, "
+                f"area: {overlaparea}, margin: {overlap_margin}, "
+                f"test: {overlaparea > overlap_margin}"
+                f"existing: {existing_node}"
+            )
+
+            # Only create new node if doesn't already exist and passes the area overlap check
+            if not existing_node:
+                if overlaparea > overlap_margin:
+                    # new boundary inside parent
+                    egg = TreeNode(
+                        value=newname,
+                        fid=limb.FID,
+                        roid=here,
+                        origin="ONS_MAPS",
+                        node_type=electtype
+                    )
+                    print(f"________Found missing type {electtype} name {newname} at level {self.level+1}, area {overlaparea}")
+
+                    # Add as child and calculate bbox
+                    egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election, counters=counters)
+                    egg.bbox, centroid = egg.get_bounding_box(electtype, block)
+                    print(f"________bbox [{egg.bbox}] - child of type {electtype} at lev {self.level+1} of {self.value}")
+
+                    # Update the node with latest stats
+                    fam_nodes.append(egg)
+                    egg.updateParty()
+                    egg.updateTurnout(resolved_levels)
+                    egg.updateElectorate(resolved_levels)
+                    egg.updateGOTV(gotv_pct, resolved_levels)
+                    print(f"______Addedname: {egg.value}, type {egg.type}, level {egg.level}, party {egg.party}")
+                    k += 1
+                else:
+                    # boundary not inside parent ignore
+                    continue
+            else:
+                if existing_node:
+                    j += 1
+                # boundary name already a child node
+                    continue
+            i += 1
 
         if len(fam_nodes) == 0:
-            print (f"________Xno children of type:{electtype} at lev {self.level+1} for {self.value}")
+            print(f"⚠️ No children of type '{electtype}' created for {self.value} at level {self.level+1}")
 
-        print (f"___ at {self.value} lev {self.level} revised {electtype} type fam nodes:{fam_nodes}")
-
-        print ("_________fam_nodes :",j," of ", i, [x.value for x in fam_nodes] )
+        print(f"___At {self.value}, level {self.level}, revised {electtype} type fam nodes: {fam_nodes}")
+        print(f"______create_map_branch added_nodes: {k} existing {j} new of {i} total, values: {[x.value for x in fam_nodes]}")
 
         save_nodes(TREKNODE_FILE)
         return fam_nodes
+
 
 
 
@@ -2358,7 +2274,6 @@ class TreeNode:
         FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
 
         # Fit map to bounding box
-        print(f"_____before saving map file: in {route()}", self.locfilepath(self.file), len(FolMap._children), self.value, self.level)
         if self.level == 4:
             print("_____bboxcheck", self.value, self.bbox)
         if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
@@ -2386,7 +2301,7 @@ class TreeNode:
         else:
             print(f"⚠️ BBox is missing or badly formatted: {self.bbox}")
 
-        # Save to file
+        # overwrite file
         target = self.locfilepath(self.file)
         FolMap.save(target)
 
@@ -2459,25 +2374,24 @@ class TreeNode:
         return d
 
     def add_Tchild(self, child_node, etype, elect, *, counters):
-        """
-        Attach child_node to self safely and consistently.
-        """
 
         # 1. Detach from old parent
         if child_node.parent and child_node in child_node.parent.children:
             child_node.parent.children.remove(child_node)
 
-        # 2. Attach to new parent
+        # 2. Assign type FIRST
+        child_node.type = etype
+
+        # 3. Attach to new parent
         child_node.parent = self
         if child_node not in self.children:
             self.children.append(child_node)
 
-        # 3. Structural attributes
-        child_node.type = etype
-        child_node.election = elect
-
-        # 4. Stable per-parent numbering
-        same_type_siblings = [c for c in self.children if c.type == etype]
+        # 4. Per-parent numbering
+        same_type_siblings = [
+            c for c in self.children
+            if c is not child_node and c.type == etype
+        ]
         child_node.tagno = len(same_type_siblings)
 
         # 5. Global display counter
@@ -2487,18 +2401,24 @@ class TreeNode:
         counters[etype] += 1
         child_node.gtagno = counters[etype]
 
-        # 6. Global registration
-        TREK_NODES_BY_ID[child_node.nid] = child_node
-        TREK_NODES_BY_VALUE[child_node.value] = child_node
+        # 6. Register by ID only (safe)
+        # Ensure parent is registered first
+        if self.nid not in TREK_NODES_BY_ID:
+            TREK_NODES_BY_ID[self.nid] = self
 
-        print(f"REGISTERED NODE:,parent {child_node.parent.nid}-{child_node.parent.value}, child {child_node.nid}-{child_node.value}")
-        assert child_node.parent is self, "Child parent not set correctly"
-        assert child_node in self.children, "Child missing from parent children"
+        if child_node.nid not in TREK_NODES_BY_ID:
+            TREK_NODES_BY_ID[child_node.nid] = child_node
+
+        print(
+            f"REGISTERED NODE: parent {self.nid}-{self.value}, "
+            f"child {child_node.nid}-{child_node.value}"
+        )
 
         return child_node
 
 
-    def create_streetsheet(self, c_election, electorwalks):
+
+    def create_streetsheet(self, c_election, rlevels,electorwalks):
         current_election = c_election
         print(f"___streetsheet: {current_election} and street data len {len(electorwalks)}")
         Postcode = electorwalks.Postcode.values[0]
@@ -2527,7 +2447,7 @@ class TreeNode:
         y = electorwalks.StreetName
         z = electorwalks.AddressPrefix.values
         houses = len(list(set(zip(x,y,z))))
-        self.updateHouses(houses)
+        self.updateHouses(rlevels,houses)
         streets = len(electorwalks.StreetName.unique())
         areamsq = 34*21.2*20*21.2
         avstrlen = 200
@@ -2542,7 +2462,7 @@ class TreeNode:
         leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
         canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2) if streetdash else 1
         prodstats = {}
-        CurrentElection = get_election_data(current_election)
+        CElection = CurrentElection.load(current_election)
         prodstats['ward'] = self.parent.parent.value
         prodstats['polling_district'] = self.parent.value
         prodstats['groupelectors'] = groupelectors
@@ -2694,3 +2614,34 @@ class TreeNode:
           count = count+1
         print("_________leafnodes  ",count)
         return
+
+LEVEL_INDEX = {
+    'country': 0,
+    'nation': 1,
+    'county': 2,
+    'constituency': 3,
+    'ward': 4,
+    'division': 4,
+    'polling_district': 5,
+    'walk': 5,
+    'street': 6,
+    'walkleg': 6,
+    'elector': 7
+}
+
+levels = ['country','nation','county','constituency','ward/division','polling_district/walk','street/walkleg','elector']
+
+from typing import Dict
+
+Outcomes = pd.read_excel(GENESYS_FILE)
+Outcols = Outcomes.columns.to_list()
+allelectors = pd.DataFrame(Outcomes, columns=Outcols)
+allelectors.drop(allelectors.index, inplace=True)
+
+
+TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
+
+
+MapRoot = get_root()
+TREK_NODES_BY_ID[MapRoot.nid] = MapRoot
+save_nodes(TREKNODE_FILE)

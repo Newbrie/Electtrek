@@ -442,6 +442,38 @@ document.getElementById("logout-button")?.addEventListener("click", () => {
 * RESET-ELECTION TERRITORY BUTTON
 * --------------------------------------------------------- */
 
+const territorySelect = document.getElementById("territory");
+const mapIframe = document.getElementById("iframe1");
+
+territorySelect.addEventListener("change", async () => {
+    const mapfile = territorySelect.value;
+    if (!mapfile) return;
+
+    try {
+        // 1️⃣ persist selection
+        const res = await fetch("/update-territory", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ mapfile })
+        });
+
+        if (!res.ok) {
+            throw new Error("Failed to update territory");
+        }
+
+        // 2️⃣ update map iframe
+        mapIframe.src = `/thru/${encodeURIComponent(mapfile)}`;
+
+    } catch (err) {
+        console.error(err);
+        alert("Could not save territory selection");
+    }
+});
+
+
+
 document.getElementById("b0")?.addEventListener("click", () => {
   const tab = getActiveElectionTab();
   if (!tab) return;
