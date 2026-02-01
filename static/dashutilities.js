@@ -840,7 +840,7 @@ async function fetchBackendURL() {
         console.log("Backend URL:", backendUrl);
 
         // Set it globally (for example)
-        window.API = backendUrl + "api/v1/resource";  // Example: append an API endpoint
+        window.API = backendUrl ;  // Example: append an API endpoint
     } catch (error) {
         console.error("Error fetching backend URL:", error);
     }
