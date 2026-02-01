@@ -471,9 +471,6 @@
      window.outcome_tags = result.outcome_tags;
 
 
-     window.DEVURLS    = options?.DEVURLS || {};
-     window.API = isDev ? window.DEVURLS.dev : window.DEVURLS.prod;
-
 
      console.log("Global areas:", window.areas);
      console.log("Global places:", window.places);

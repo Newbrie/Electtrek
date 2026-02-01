@@ -22,6 +22,8 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   window.passwordInput = document.getElementById("password");
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
+  window.DEVURLS    = options?.DEVURLS || {};
+  window.API = isDev ? window.DEVURLS.dev : window.DEVURLS.prod;
 
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD
