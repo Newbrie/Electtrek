@@ -87,6 +87,15 @@ onoff = {"on" : 1, 'off': 0}
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
 
+API = "http://127.0.0.1:5000"  # replace with your current backend URL
+
+isDev = API == DEVURLS['dev']
+
+
+
+print(isDev)  # True if backend_url is the dev URL, False otherwise
+
+
 def clear_treepolys(from_level=None):
     from state import Treepolys, Fullpolys, LAYERS
 
@@ -313,16 +322,25 @@ def combine_geodfs(existing, new):
 
 
 def stepify(path):
-    # turn path into steps removing directories and file ending ie 'WARDS, DIVS, PDS and WALKS'
-    route = path.replace('/WALKS/','/').replace('/PDS/','/').replace('/WARDS/','/').replace('/DIVS/','/') # strip out all padding directories and file endings except -PRINT.html (leaves)
+    if not path:
+        return []
+
+    route = (
+        path.replace('/WALKS/', '/')
+            .replace('/PDS/', '/')
+            .replace('/WARDS/', '/')
+            .replace('/DIVS/', '/')
+    )
     parts = route.split("/")
-    last = parts.pop() #eg KA>SMITH_STREET or BAGSHOT-MAP
-    if last.find("-PRINT.html"):#only works for street-leaf nodes, not -WALKS etc nodes
-        leaf = subending(last,"").split("--").pop()
-        parts.append(leaf) #eg SMITH_STREET
-    parts = list(dict.fromkeys(parts))
-    print("____LEAFNODE:", path,parts)
+    last = parts.pop()
+
+    if "-PRINT.html" in last:
+        leaf = subending(last, "").split("--").pop()
+        parts.append(leaf)
+
+    print("____LEAFNODE:", path, parts)
     return parts
+
 
 
 def ensure_treepolys(
@@ -337,38 +355,45 @@ def ensure_treepolys(
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
 
-    LAYER_BY_LEVEL_AND_KEY = {
+    LAYER_BY_LEVEL_AND_LAYER_TYPE = {
         (layer["level"], layer["key"]): layer
         for layer in LAYERS
     }
-    max_parent_level = len(stepify(territory)) -1
-    print(f"___max parent level={max_parent_level}, territory={territory}")
+    territory_level = len(stepify(territory)) -1
+    print(f"___max parent level={territory_level}, territory={territory}")
     steps = stepify(sourcepath) if sourcepath else []
     newpath = ""
 
     active_parents: dict[int, pd.Series] = {}
-    levels = sorted(resolved_levels)
-    i = 0
-    for level in levels:
-        if i <= len(steps):
-            key = resolved_levels[level]
-            layer = LAYER_BY_LEVEL_AND_KEY.get((level, key))
+    for level, layer_type in resolved_levels.items():
+
+        if level < len(steps) or here:
+            # need the name to do a name match or roid to do a spatial match
+            # different name for each level of the sourcepath (if not [])
+            # if len 0 = [] - no anem so use roid
+            # if no roid or name raise error
+
+            layer = LAYER_BY_LEVEL_AND_LAYER_TYPE.get((level, layer_type))
             if not layer:
-                print(f"No layer definition for level={level}, key={key}")
+                print(f"No layer definition for level={level}, layer_type={layer_type}")
                 continue
 
             src = f"{workdirectories['bounddir']}/{layer['src']}"
             out = f"{workdirectories['bounddir']}/{layer['out']}"
 
 
-            parent_level = max_parent_level if level  > max_parent_level else level -1
-            parent_level = parent_level if parent_level >= 0 else None
-            parent_row = active_parents.get(parent_level)
-            parent_name = parent_row["NAME"] if parent_row is not None else None
-            print(f"[DEBUG] Processing layer {key} at level {level} with parent {parent_name}")
+            parent_level = level - 1
+            if parent_level < 0:
+                parent_level = None
+            if parent_level is not None and parent_level > territory_level:
+                parent_level = territory_level
 
-            if level > 0 and parent_row is None:
-                raise ValueError(f"Missing parent level {parent_level} at level {level} for key {key} under spath {sourcepath}")
+            parent_row = active_parents.get(parent_level) if parent_level is not None else None
+            parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
+            print(f"[DEBUG] Processing layer {layer_type} at level {level} with parent {parent_name}")
+
+            if level > 0 and parent_name is None:
+                raise ValueError(f"Missing parent level {parent_level} at level {level} for layer_type {layer_type} under spath {sourcepath}")
 
             select_name = None
             roid = None
@@ -389,20 +414,29 @@ def ensure_treepolys(
                 )
 
             else:
-                parent_key = resolved_levels[parent_level]
+                parent_layer_type = resolved_levels.get(parent_level)
+                if not parent_layer_type:
+                    raise ValueError(f"No resolved layer type for parent level {parent_level}")
+
                 name, tree_gdf, full_gdf = intersectingArea(
                     src,
                     layer["field"],
-                    parent_key,
+                    parent_layer_type,
                     out,
                     parent_row=parent_row,
                     roid=roid,
                     select_child_name=select_name,
                 )
 
-            Treepolys[key] = combine_geodfs(Treepolys[key], tree_gdf)
+            Treepolys[layer_type] = combine_geodfs(
+                Treepolys.get(layer_type),
+                tree_gdf
+            )
 
-            Fullpolys[key] = combine_geodfs(Fullpolys[key], full_gdf)
+            Fullpolys[layer_type] = combine_geodfs(
+                Fullpolys.get(layer_type),
+                full_gdf
+            )
 
             new_parent_row = None
             if not tree_gdf.empty:
@@ -425,9 +459,7 @@ def ensure_treepolys(
             if name:
                 newpath = f"{newpath}/{name}" if newpath else name
 
-            print(f"[DEBUG] {key} loaded | Count {len(tree_gdf)}")
-
-        i = i+1
+            print(f"[DEBUG] {layer_type} loaded | Count {len(tree_gdf)}")
 
     return Treepolys, Fullpolys, newpath
 

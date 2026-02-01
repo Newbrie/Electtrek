@@ -472,6 +472,8 @@
 
 
      window.DEVURLS    = options?.DEVURLS || {};
+     window.API = isDev ? window.DEVURLS.dev : window.DEVURLS.prod;
+
 
      console.log("Global areas:", window.areas);
      console.log("Global places:", window.places);
@@ -666,6 +668,7 @@
    });
 
    const data = await res.json();
+   console.log("set-election call outcome",data.success);
    window.latestConstants = data.constants;
    window.latestOptions = data.options;
    updateConstantsUI(data.constants, data.options);
@@ -843,7 +846,7 @@ function syncStreamsSelectWithTabs() {
          const data = await response.json();
          console.log("📦 Backend response:", data);
 
-//               window.plan = data.calendar_plan;
+               window.plan = data.calendar_plan;
 
 //             updateConstantsUI(data.constants, data.options);
          console.log("📩 update calendar_plan::", plan);

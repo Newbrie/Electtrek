@@ -51,7 +51,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 
 import state
-from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname
+from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys
 import nodes
 from nodes import allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last, save_nodes, get_counters
 from layers import Featurelayers
@@ -1970,6 +1970,14 @@ def set_election():
         if not CElection:
             return jsonify(success=False, error="Election not found"), 404
 
+
+        Treepolys, Fullpolys, basepath = ensure_treepolys(
+            territory=territory,
+            sourcepath=mapfile,
+            resolved_levels=rlevels,
+            here=here
+        )
+
         current_node = get_last(current_election,CElection)
 
         if not current_node:
@@ -1978,17 +1986,17 @@ def set_election():
 
         print(f"____Route/set-election/constantsX {current_node.value}, election: {current_election} CE data: {CElection}")
 
-        if not CElection:
-            return jsonify(success=False, error="Election not found", current_election=current_election), 404
 
         CElection['previousParty'] = current_node.party
+        current_node.endpoint_created(current_election, CElection)
+
         persist(current_node)
-        return current_node.render_face(current_election,CElection,True)
-#        return jsonify({
-#                'constants': CElection,
-#                'options': OPTIONS,
-#                'current_election': current_election
-#            })
+
+        return jsonify({'success':True,
+                'constants': CElection,
+                'options': OPTIONS,
+                'current_election': current_election
+            })
 
     except Exception as e:
         print("____Route/set-election/exception", e)
@@ -2554,30 +2562,19 @@ def downbut(path):
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
-
+    session['current_election'] = current_election
+    session['current_node_id'] = current_node.nid
     previous_node = current_node
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path)
-
     mapfile = current_node.mapfile()
-    print("____Route/downbut:",previous_node.value,current_node.value, mapfile)
-    atype = CElection.childnode_type(current_node.level)
-#    FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
-#    current_node.file = subending(current_node.file,FACEENDING[atype]) # face is driven by intention type
-    print(f" target type: {atype} current {current_node.value} type: {current_node.type} ")
-# the map under the selected node map needs to be configured
-# the selected  boundary options need to be added to the layer
+    if current_node.endpoint_created(current_election,CElection):
+        return send_file(mapfile, as_attachment=False)
+    print("____Route/downbut end:",previous_node.value,current_node.value, mapfile)
 
-    Featurelayers[atype].reset()
-    Featurelayers[atype].create_layer(current_election,current_node,atype)
-    print(f"____/DOWN OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-    selectedlayers = current_node.getselectedlayers(rlevels,current_election,mapfile)
-    current_node.create_area_map(selectedlayers,current_election,CElection)
-    print(f"_________layeritems for {current_node.value} of type {atype} are {current_node.childrenoftype(atype)} for lev {current_node.level}")
     persist(current_node)
-    return current_node.render_face(current_election,CElection,True)
-
+    return jsonify({"error": "Endpoint not created"}), 400
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
 #        selectedlayers = current_node.getselectedlayers(current_election,mapfile)

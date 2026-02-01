@@ -104,9 +104,9 @@ class CurrentElection(dict):
         Lazily compute and cache resolved LEVELS for this election instance.
         """
         if not hasattr(self, "_resolved_levels"):
-            resolved = {}
+            resolved: dict[int, str] = {}
 
-            for level, name in LEVELS.items():
+            for level, name in sorted(LEVELS.items(), key=lambda x: x[0]):
                 if name == "ward/division":
                     resolved[level] = (
                         "division" if self.territories in ("C", "U") else "ward"
@@ -125,6 +125,7 @@ class CurrentElection(dict):
             self._resolved_levels = resolved
 
         return self._resolved_levels
+
 
 
     # ---------- node typing ----------

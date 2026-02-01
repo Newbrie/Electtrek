@@ -846,6 +846,63 @@ class TreeNode:
         print("___map Exists:", fullpath)
         return send_file(fullpath, as_attachment=False)
 
+    def endpoint_created(self, c_elect,CurrEL):
+    #  create the node html (if it doesnt already exist).
+        from pathlib import Path
+        from layers import Featurelayers
+        from elections import route
+        # Access the first key from the dictionary
+        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile())
+
+        CurrEL['cid'] = self.nid
+        CurrEL['cidLat'] = self.latlongroid[0]
+        CurrEL['cidLong'] = self.latlongroid[1]
+        CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile())
+        CurrEL.save()
+
+
+        print(f"___under {c_elect} visiting from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL['mapfiles'][-1]}")
+        print("=== VISIT NODE ===", self.mapfile())
+        print("current children:",
+              [c.value for c in self.children])
+
+        mapfile = self.mapfile()
+    #        atype = gettypeoflevel(estyle,mapfile, self.level+1)
+        next_level = self.level + 1
+        if next_level > max(CurrEL.resolved_levels):
+            return False
+        atype = CurrEL.resolved_levels[next_level]
+
+
+        fullpath = Path(workdirectories['workdir']) / mapfile
+
+        # Check if the file exists
+        if not fullpath.exists() or CurrEL['cid'] != self.nid:
+            print(f"⚙️ [DEBUG] Map file does not exist or needs new creation: {fullpath}")
+            next_level = self.level + 1
+            atype = CurrEL.resolved_levels[next_level]
+            print("___map Typemaker:", atype, state.TypeMaker[atype])
+
+            atype = CurrEL.childnode_type(self.level)
+        #    FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
+        #    current_node.file = subending(current_node.file,FACEENDING[atype]) # face is driven by intention type
+            print(f" target type: {atype} current {self.value} type: {self.type} ")
+        # the map under the selected node map needs to be configured
+        # the selected  boundary options need to be added to the layer
+
+            Featurelayers[atype].reset()
+            Featurelayers[atype].create_layer(c_elect,self,atype)
+            print(f"____/DOWN OPTIONS areas for calendar node {self.value} are {OPTIONS['areas']} ")
+            selectedlayers = self.getselectedlayers(rlevels,c_elect,mapfile)
+            self.create_area_map(selectedlayers,c_elect,CurrEL)
+            print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for lev {self.level}")
+
+            return True
+
+        # If the file exists, send it
+        print("___map Exists:", fullpath)
+        return False
+
 
     def set_parent(self, parent):
         if self.parent is parent:
