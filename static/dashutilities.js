@@ -828,6 +828,24 @@ function syncStreamsSelectWithTabs() {
   streamsSelect.value = document.querySelector('.election-tab.active')?.dataset.election || '';
 }
 
+async function fetchBackendURL() {
+    try {
+        const response = await fetch('/get-backend-url');
+        const data = await response.json();
+
+        // Now you have the backend URL
+        const backendUrl = data.backend_url;
+
+        // Do something with the backend URL
+        console.log("Backend URL:", backendUrl);
+
+        // Set it globally (for example)
+        window.API = backendUrl + "api/v1/resource";  // Example: append an API endpoint
+    } catch (error) {
+        console.error("Error fetching backend URL:", error);
+    }
+}
+
 
  async function getCalendarUpdate(API) {
      const currentTab = getActiveElectionTab();

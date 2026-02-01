@@ -5,6 +5,10 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 
   document.addEventListener("DOMContentLoaded", async () => {
 
+    // Call the function to fetch the backend URL used as window.API
+  fetchBackendURL();
+
+
   let selectedPlaceData = null; // Store data from the map
   let preventModalClose = false;
   let addPlaceActive = false;
@@ -22,8 +26,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   window.passwordInput = document.getElementById("password");
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
-  window.DEVURLS    = window.latestOptions?.DEVURLS || {};
-  window.API = window.isDev ? window.DEVURLS.dev : window.DEVURLS.prod;
+
 
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD

@@ -865,13 +865,13 @@ class TreeNode:
         print("=== VISIT NODE ===", self.mapfile())
         print("current children:",
               [c.value for c in self.children])
-
+        rlevels = CurrEL.resolved_levels
         mapfile = self.mapfile()
     #        atype = gettypeoflevel(estyle,mapfile, self.level+1)
         next_level = self.level + 1
-        if next_level > max(CurrEL.resolved_levels):
+        if next_level > max(rlevels):
             return False
-        atype = CurrEL.resolved_levels[next_level]
+        atype = rlevels[next_level]
 
 
         fullpath = Path(workdirectories['workdir']) / mapfile
@@ -880,7 +880,6 @@ class TreeNode:
         if not fullpath.exists() or CurrEL['cid'] != self.nid:
             print(f"⚙️ [DEBUG] Map file does not exist or needs new creation: {fullpath}")
             next_level = self.level + 1
-            atype = CurrEL.resolved_levels[next_level]
             print("___map Typemaker:", atype, state.TypeMaker[atype])
 
             atype = CurrEL.childnode_type(self.level)

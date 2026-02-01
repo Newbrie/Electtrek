@@ -1687,6 +1687,9 @@ def get_tags():
 
     return jsonify(tags=tag_list)
 
+@app.route('/get-backend-url', methods=['GET'])
+def get_backend_url():
+    return jsonify({"backend_url": request.host_url})
 
 @app.route('/add_tag', methods=['POST'])
 @login_required
