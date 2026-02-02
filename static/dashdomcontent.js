@@ -598,5 +598,5 @@ document.addEventListener("change", (e) => {
   saveSlotBtn.addEventListener("click", handleSaveSlot);
   clearSlotBtn.addEventListener("click", handleClearSlot);
   // Attach listers to constants
-  attachListenersToConstantFields(constants);
+  attachListenersToConstantFields(window.latestConstants);
 });
