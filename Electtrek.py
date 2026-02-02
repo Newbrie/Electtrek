@@ -33,6 +33,8 @@ from flask import json, get_flashed_messages, make_response
 from werkzeug.exceptions import HTTPException
 from datetime import datetime, timedelta, date
 import geocoder
+from pathlib import Path
+from flask import abort, send_file
 
 from collections import defaultdict
 import requests
@@ -2012,6 +2014,7 @@ def set_election():
 @app.route('/current-election', methods=['GET'])
 @login_required
 def get_current_election_data():
+    # received a call to return election data constants and options
     global OPTIONS
 
     resources = OPTIONS['resources']
@@ -3662,21 +3665,19 @@ def calendar_partial(path):
     )
 
 
-@app.route('/thru/<path:path>', methods=['GET','POST'])
+@app.route('/thru/<path:path>')
 @login_required
 def thru(path):
-    # received a call to display an existing map file
-#    restore_from_persist(session=session)
-#    current_election = CurrentElection.get_current_election()
-#    CElection = CurrentElection.load(current_election)
-#    current_node = get_last(current_election,CElection)
-#    rlevels = CElection.resolved_levels
-#    mapfile = path
-#    flash ("_________ROUTE/thru:"+mapfile)
-#    print ("_________ROUTE/thru:",mapfile, CElection)
-#    current_node.endpoint_created(current_election, CElection)
+    base = Path(config.workdirectories['workdir'])  # or wherever files live
+    fullpath = base / path
+
+    print("_________ROUTE/thru display file:", fullpath)
+
+    if not fullpath.exists():
+        abort(404, f" Route/Thru File not found: {fullpath}")
     print ("_________ROUTE/thru display file:",path)
-    return send_file(path, as_attachment=False)
+    return send_file(fullpath, as_attachment=False)
+
 
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
