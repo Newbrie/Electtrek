@@ -26,6 +26,9 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   window.passwordInput = document.getElementById("password");
   window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
+  window.latestConstants = {{ constants }};
+  window.latestOptions = {{ options }};
+  window.current_election = {{ current_election }};
 
 
   /* ---------------------------------------------------------
@@ -596,5 +599,6 @@ document.addEventListener("change", (e) => {
   generateSummaryBtn.addEventListener("click", generateSummaryReport);
   saveSlotBtn.addEventListener("click", handleSaveSlot);
   clearSlotBtn.addEventListener("click", handleClearSlot);
-
+  // Attach listers to constants
+  attachListenersToConstantFields(constants);
 });

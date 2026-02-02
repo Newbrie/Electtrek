@@ -1973,6 +1973,7 @@ def set_election():
         if not CElection:
             return jsonify(success=False, error="Election not found"), 404
 
+        print(f"____Route/set-election- Loaded election: {current_election} CE data: {CElection}")
 
         Treepolys, Fullpolys, basepath = ensure_treepolys(
             territory=territory,
@@ -3664,15 +3665,19 @@ def calendar_partial(path):
 @app.route('/thru/<path:path>', methods=['GET','POST'])
 @login_required
 def thru(path):
-    restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last(current_election,CElection)
-    rlevels = CElection.resolved_levels
-    mapfile = path
-    flash ("_________ROUTE/thru:"+mapfile)
-    print ("_________ROUTE/thru:",mapfile, CElection)
-    return current_node.render_face(current_election,CElection,True)
+    # received a call to display an existing map file
+#    restore_from_persist(session=session)
+#    current_election = CurrentElection.get_current_election()
+#    CElection = CurrentElection.load(current_election)
+#    current_node = get_last(current_election,CElection)
+#    rlevels = CElection.resolved_levels
+#    mapfile = path
+#    flash ("_________ROUTE/thru:"+mapfile)
+#    print ("_________ROUTE/thru:",mapfile, CElection)
+#    current_node.endpoint_created(current_election, CElection)
+    print ("_________ROUTE/thru display file:",path)
+    return send_file(path, as_attachment=False)
+
 
 @app.route('/showmore/<path:path>', methods=['GET','POST'])
 @login_required

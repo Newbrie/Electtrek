@@ -863,7 +863,7 @@ async function fetchBackendURL() {
 
                window.plan = data.calendar_plan;
 
-//             updateConstantsUI(data.constants, data.options);
+             updateConstantsUI(data.constants, data.options);
          console.log("📩 update calendar_plan::", plan);
 //               console.log("🔀 update places on DOM relaod :", places);
 //               console.log("🔀 update resources on DOM relaod :", resources);
