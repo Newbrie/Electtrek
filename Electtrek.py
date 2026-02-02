@@ -1691,7 +1691,17 @@ def get_tags():
 
 @app.route('/get-backend-url', methods=['GET'])
 def get_backend_url():
-    return jsonify({"backend_url": request.host_url})
+    from elections import CurrentElection
+    from state import OPTIONS
+    current_election = CurrentElection.get_current_election()
+    CElection = CurrentElection.load(current_election)
+
+    return jsonify({
+    'backend_url': request.host_url,
+    'constants': CElection,
+    'options': OPTIONS,
+    'current_election': current_election
+    })
 
 @app.route('/add_tag', methods=['POST'])
 @login_required

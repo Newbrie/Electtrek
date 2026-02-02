@@ -836,6 +836,10 @@ async function fetchBackendURL() {
         // Now you have the backend URL
         const backendUrl = data.backend_url;
 
+        window.latestConstants = data.constants;
+        window.latestOptions = data.options;
+        window.current_election = data.current_election;
+
         // Do something with the backend URL
         console.log("Backend URL:", backendUrl);
 
