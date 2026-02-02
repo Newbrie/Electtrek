@@ -493,8 +493,9 @@ def persist(node):
     print('___persisting file ', ELECTOR_FILE, len(allelectors))
     allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
-    print('___persisting nodes ', node.value)
-
+    print('___persisting options ', node.value)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(OPTIONS_FILE, f, indent=2)
     return
 
 def restore_fullpolys(node_type):
@@ -1684,7 +1685,6 @@ class TreeNode:
             here = (centroid_point.y, centroid_point.x)
             overlaparea = parent_geom.intersection(limb.geometry).area
             overlap_margin = round(Overlaps[electtype], 8)  # 8 decimal places for safety
-            existing_node = next((x for x in fam_nodes if x.value == newname), None)
 
             print(
                 f"________Trying map type {electtype} name {newname}, "
@@ -1695,8 +1695,9 @@ class TreeNode:
             )
 
             # Only create new node if doesn't already exist and passes the area overlap check
-            if not existing_node:
-                if overlaparea > overlap_margin:
+            if overlaparea > overlap_margin:
+                existing_node = next((x for x in fam_nodes if x.value == newname), None)
+                if not existing_node:
                     # new boundary inside parent
                     egg = TreeNode(
                         value=newname,
@@ -1721,13 +1722,13 @@ class TreeNode:
                     print(f"______Addedname: {egg.value}, type {egg.type}, level {egg.level}, party {egg.party}")
                     k += 1
                 else:
-                    # boundary not inside parent ignore
+                    if existing_node:
+                        j += 1
+                    # boundary name already a child node        
                     continue
             else:
-                if existing_node:
-                    j += 1
-                # boundary name already a child node
-                    continue
+                # boundary not inside parent ignore
+                continue
             i += 1
 
         if len(fam_nodes) == 0:

@@ -248,29 +248,33 @@ class CurrentElection(dict):
     @classmethod
     def last_election(cls) -> str:
         """
-        Return the most recently accessed election.
+        Return the most recently used election.
         Fallback to 'DEMO' if none found.
         """
-        import os
+        from pathlib import Path
 
         last = "DEMO"
         elections_dir = cls.BASE_FILE.parent
 
-        election_files = cls.get_available_elections()  # returns dict of names → paths
+        election_files = cls.get_available_elections()  # dict: name → path
         print(f"____election files: {list(election_files.keys())} under route {route()}")
 
         if election_files:
-            # map names to full paths
-            paths = [Path(elections_dir) / f"elections-{name}.json" for name in election_files]
-            # filter out missing files just in case
+            paths = [
+                elections_dir / f"elections-{name}.json"
+                for name in election_files
+            ]
+
             paths = [p for p in paths if p.exists()]
+
             if paths:
-                # sort descending by last access time
-                paths.sort(key=lambda p: p.stat().st_atime, reverse=True)
+                # 🔑 Use modification time, not access time
+                paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
                 last = paths[0].stem.replace("elections-", "")
 
         print(f"____last election: {last}")
         return last
+
 
 
 
