@@ -1783,27 +1783,42 @@ class TreeNode:
 
 
     def create_area_map(self, flayers, CE, CEdata):
-        from folium import Map, TileLayer, LayerControl, LatLngPopup, Element
+        global SERVER_PASSWORD
+        global STATICSWITCH
+        global OPTIONS
+
+        from folium import IFrame
         from state import LEVEL_ZOOM_MAP
 
-        rlevels = CEdata.resolved_levels
 
-        # -----------------------------
-        # Static CSS (safe to inject)
-        # -----------------------------
-        base_css = """
-        <style>
+        import hashlib
+        import re
+        from pathlib import Path
+        rlevels = CEdata.resolved_levels
+        print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
+
+        print(f"___BEFORE map creation: in route {route()} creating file: ", self.file(rlevels))
+
+
+        # --- CSS to adjust popup styling
+        move_close_button_css = """
+            <style>
             .leaflet-popup-close-button {
                 right: auto !important;
                 left: 10px !important;
                 top: 10px !important;
                 font-size: 16px;
+                color: #444;
+                background: rgba(255, 255, 255, 0.8);
+                border-radius: 4px;
+                padding: 2px 5px;
             }
+            </style>
+            """
 
-            .leaflet-container.add-place-mode {
-                cursor: crosshair;
-            }
-
+        # --- Search bar with map detection and one single searchMap() function
+        search_bar_html = """
+            <style>
             #customSearchBox {
                 position: fixed;
                 top: 60px;
@@ -1812,92 +1827,593 @@ class TreeNode:
                 background: white;
                 padding: 5px;
                 border: 1px solid #ccc;
+                font-size: 14px;
                 display: flex;
                 gap: 8px;
+                align-items: center;
             }
-        </style>
-        """
+            #customSearchBox input {
+                padding: 4px 6px;
+                font-size: 14px;
+            }
+            #customSearchBox button {
+                padding: 4px 8px;
+                font-size: 14px;
+                cursor: pointer;
+            }
 
-        # -----------------------------
-        # Static HTML only (NO JS)
-        # -----------------------------
-        title_html = f"""
-            <h1 style="z-index:1100;color:black;position:fixed;left:100px;">
-                {self.value} MAP
-            </h1>
-        """
+            /* Change cursor to crosshair when in add-place mode */
+            .leaflet-container.add-place-mode {
+                cursor: crosshair;
+            }
 
-        search_html = """
+
+            </style>
+
+
             <div id="customSearchBox">
                 <input type="text" id="searchInput" placeholder="Search..." />
                 <button onclick="searchMap()">Search</button>
                 <button id="backToCalendarBtn">📅 Calendar</button>
             </div>
-        """
 
-        # -----------------------------
-        # Create map
-        # -----------------------------
-        FolMap = Map(
+            <script>
+
+
+            document.addEventListener("DOMContentLoaded", function () {
+
+
+                function waitForMap() {
+                    for (const key in window) {
+                        if (window.hasOwnProperty(key)) {
+                            const val = window[key];
+                            if (val && val instanceof L.Map) {
+                                window.fmap = val;  // assign fmap here
+                                return;
+                            }
+                        }
+                    }
+                    setTimeout(waitForMap, 100);
+                }
+
+                waitForMap();
+
+
+            });
+
+            document.getElementById("backToCalendarBtn").addEventListener("click", () => {
+                console.log("📤 Sending back-to-calendar message to parent");
+
+                window.parent.postMessage(
+                    { type: "toggleView" },
+                    "*"
+                );
+            });
+
+            function extractVisibleText(element) {
+                const walker = document.createTreeWalker(
+                    element,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function (node) {
+                            const parent = node.parentNode;
+                            const style = window.getComputedStyle(parent);
+                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                    }
+                );
+
+                let visibleText = '';
+                while (walker.nextNode()) {
+                    visibleText += walker.currentNode.nodeValue + ' ';
+                }
+                return visibleText.trim();
+            }
+
+            async function searchMap() {
+                const query = document.getElementById("searchInput").value.trim();
+                if (!query) return;
+
+                // --- 1️⃣ Check if query looks like a UK postcode ---
+                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+                if (postcodePattern.test(query)) {
+                    const cleanPostcode = query.replace(/\s+/g, '');
+                    const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error("Network error");
+                        const data = await res.json();
+
+                        if (data.status === "match" && data.data) {
+                            const { latitude, longitude } = data.data;
+                            fmap.setView([latitude, longitude], 17);
+
+                            L.marker([latitude, longitude])
+                                .addTo(fmap)
+                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
+                                .openPopup();
+                            return;
+                        } else {
+                            alert("Postcode not found.");
+                            return;
+                        }
+                    } catch (err) {
+                        console.error("Postcode lookup failed:", err);
+                        // Only alert if the fmap didn’t already move
+                        if (!fmap.getCenter()) alert("Error looking up postcode.");
+                        return;
+                    }
+
+                }
+
+                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
+                const normalizedQuery = query.toLowerCase();
+                let found = false;
+
+                fmap.eachLayer(function (layer) {
+                    if (found) return;
+
+                    // ✅ Search Popups with <b data-name="...">
+                    if (layer.getPopup && layer.getPopup()) {
+                        let bElements = [];
+                        const content = layer.getPopup().getContent();
+
+                        if (content instanceof HTMLElement) {
+                            bElements = content.querySelectorAll('b[data-name]');
+                        } else if (typeof content === 'string') {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(content, 'text/html');
+                            bElements = doc.querySelectorAll('b[data-name]');
+                        }
+
+                        for (let b of bElements) {
+                            const dataName = b.getAttribute('data-name');
+                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
+                            if (normalizedDataName.includes(normalizedQuery)) {
+                                let latlng = null;
+                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
+
+                                if (latlng) {
+                                    fmap.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
+                                    found = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    // ✅ Search Tooltips
+                    if (!found && layer.getTooltip && layer.getTooltip()) {
+                        const tooltipContent = layer.getTooltip().getContent();
+                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
+                            let latlng = null;
+                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
+                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
+
+                            if (latlng) {
+                                fmap.setView(latlng, 17);
+                                found = true;
+                                return;
+                            }
+                        }
+                    }
+
+                    // ✅ Search DivIcons
+                    if (!found && layer instanceof L.Marker) {
+                        if (layer.options.icon instanceof L.DivIcon) {
+                            const iconContent = layer.options.icon.options.html;
+                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
+                                const latlng = layer.getLatLng();
+                                if (latlng) {
+                                    fmap.setView(latlng, 17);
+                                    if (typeof layer.openPopup === 'function') layer.openPopup();
+                                    if (layer._icon) layer._icon.style.border = "2px solid red";
+                                    found = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                if (!found) {
+                    alert("No matching location found.");
+                }
+            }
+            </script>
+
+            """
+
+
+        # --- Title for the map
+        title = f"{self.value} MAP"
+        title_html = f'''
+            <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
+            '''
+
+        # --- Create the map
+        FolMap = folium.Map(
             location=self.latlongroid,
             zoom_start=LEVEL_ZOOM_MAP[self.type],
-            width="100%",
-            height="800px"
+            width='100%',
+            height='800px'
         )
 
-        TileLayer(
-            tiles="https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png",
-            name="OPNVKarte (Public Transport)",
-            attr="Map data © OpenStreetMap contributors",
+        # Inject custom CSS
+        css = """
+        <style>
+        .leaflet-control-layers {
+            margin-right: 300px !important; /* move left by increasing the right margin */
+            /* or use left:50px; right:auto; for absolute positioning */
+        }
+        </style>
+        """
+#        FolMap.get_root().html.add_child(Element(css))
+# no need for this if map left of nav buttons
+        folium.TileLayer(
+            tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
+            name='OPNVKarte (Public Transport)',
+            attr='Map data © OpenStreetMap contributors, OPNVKarte by memomaps.de',
             overlay=False,
             control=True
         ).add_to(FolMap)
 
-        # -----------------------------
-        # Add feature layers
-        # -----------------------------
+        # Add all layers
         for layer in flayers:
             layer.add_to(FolMap)
+            print(f"layer name: {layer.name} size:{len(layer._children)}")
+            if getattr(layer, 'areashtml', {}):
+                OPTIONS['areas'] = layer.areashtml
 
-        # -----------------------------
-        # Map plugins
-        # -----------------------------
-        FolMap.add_child(LatLngPopup())
 
-        if not any(isinstance(c, LayerControl) for c in FolMap._children.values()):
-            FolMap.add_child(LayerControl())
+        # --- Inject custom HTML and JS into map
 
-        # -----------------------------
-        # Inject HTML & CSS
-        # -----------------------------
-        root = FolMap.get_root().html
-        root.add_child(Element(base_css))
-        root.add_child(Element(title_html))
-        root.add_child(Element(search_html))
 
-        # -----------------------------
-        # Load external JS (single source of truth)
-        # -----------------------------
-        FolMap.add_js_link(
-            "electtrekmap",
-            "https://newbrie.github.io/Electtrek/static/map.js"
-        )
+        FolMap.get_root().html.add_child(folium.Element(title_html))
+        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
 
-        # -----------------------------
-        # Fit bounds (unchanged logic)
-        # -----------------------------
+        # Add the LatLngPopup plugin
+        FolMap.add_child(folium.LatLngPopup())
+
+
+        fmap_tags_js = r"""
+                <script>
+                (function() {
+
+                    console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
+
+                    window.fmap = null;
+                    window.MarkerLayer = null;
+
+                    let pollAttempts = 0;
+                    const MAX_ATTEMPTS = 100; // 10 seconds timeout
+
+                    // ---------------------------------------------------------
+                    // 1️⃣ Stage 1: Detect the Folium map object
+                    // ---------------------------------------------------------
+                    function detectFoliumMap() {
+                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                            setTimeout(detectFoliumMap, 100);
+                            return;
+                        }
+
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            if (key.startsWith("map_") && val instanceof L.Map) {
+                                window.fmap = val;
+                                startLayerPolling();
+                                return;
+                            }
+                        }
+                        setTimeout(detectFoliumMap, 100);
+                    }
+
+                    // ---------------------------------------------------------
+                    // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
+                    // ---------------------------------------------------------
+                    function findTargetLayer() {
+                        pollAttempts++;
+
+                        if (pollAttempts > MAX_ATTEMPTS) {
+                            console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                            clearInterval(poll_interval_id);
+                            return;
+                        }
+
+                        // --- Search for the Layer Control's internal dictionary ---
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
+                            if (key.startsWith("layer_control_") && val && val.overlays) {
+
+                                // Check if the target layer ("marker") is inside the overlays
+                                if (val.overlays.marker) {
+                                    window.MarkerLayer = val.overlays.marker;
+
+                                    console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
+                                    console.log(`Marker Layer stored in window.MarkerLayer.`);
+
+                                    clearInterval(poll_interval_id);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    let poll_interval_id;
+                    function startLayerPolling() {
+                        poll_interval_id = setInterval(findTargetLayer, 100);
+                    }
+
+                    document.addEventListener("DOMContentLoaded", detectFoliumMap);
+
+                })();
+                </script>
+                """
+
+        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
+
+
+        # Inject canvas icon JS
+        canvas_icon_js = """
+        <script>
+        window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
+            const size = 40;
+            const radius = 18;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d");
+
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#000";
+            ctx.stroke();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 16px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(prefix, size/2, size/2);
+
+            console.log("📍 canvas icon:");
+
+            return L.icon({
+                iconUrl: canvas.toDataURL(),
+                iconSize: [size, size],
+                iconAnchor: [size/2, size],
+                popupAnchor: [0, -size/2]
+            });
+        };
+        </script>
+        """
+        FolMap.get_root().html.add_child(Element(canvas_icon_js))
+
+
+
+        # Inject JS to replace default popup with canvas marker
+        custom_click_js = r"""
+            <script>
+            (function () {
+
+                console.log("📌 custom_click_js loaded");
+
+                // State
+                window.awaitingNewPlace = false;
+                window.pinMarker = null;
+
+                // --- The Layer Polling Mechanism (For the initial click) ---
+                // If the layer isn't found on the first click, this function will wait for it.
+                function tryAddMarkerToLayer(marker, lat, lng, prefix) {
+                    if (window.MarkerLayer) {
+                        window.MarkerLayer.addLayer(marker);
+                        console.log("📌 Marker added to FeatureGroup 'marker'");
+                        // Now safe to do the final geocoding/messaging
+
+                        // Trigger the rest of the original logic here
+                        window.reverseGeocode(lat, lng)
+                            .then(({ address, house_number, road, suburb, city, postcode }) => {
+                                console.log("Raw reverse geocode result:", house_number, road, suburb, city, postcode);
+                                window.awaitingNewPlace = false;
+
+                                window.parent.postMessage({
+                                    type: "newPlaceCreated",
+                                    prefix, lat, lng, house_number, road, suburb, city, postcode
+                                }, "*");
+
+                                marker.bindPopup(`<b>${prefix}</b><br>${address}`).openPopup();
+                                window.fmap.getContainer().classList.remove("add-place-mode");
+                                console.log("📍 newPlaceCreated message sent");
+                            })
+                            .catch(err => {
+                                console.error("Reverse geocode error:", err);
+                                // Important: If geocoding fails, you may want to remove the marker or handle the error gracefully
+                                if (window.fmap.hasLayer(marker)) window.fmap.removeLayer(marker);
+                                window.awaitingNewPlace = false;
+                                window.fmap.getContainer().classList.remove("add-place-mode");
+                            });
+
+                    } else if (window.fmap) {
+                        // Safety Fallback (Should only run if polling failed)
+                        marker.addTo(window.fmap);
+                        console.warn("📌 Marker added directly to fmap (Layer not yet found, using fallback).");
+
+                        // To prevent code duplication and complexity, if the layer is not found,
+                        // we add it to the map but skip the reverseGeocode logic here
+                        // or simplify it to prevent errors.
+
+                        // You need to decide if the rest of the logic should run without the target layer.
+                        // For now, let's keep the original logic flow focused on success.
+
+                    } else {
+                        console.error("Critical Error: Map object (fmap) is null.");
+                    }
+                }
+
+
+                // --------------------------------------------------------------------
+                // Click handler — only fires when awaitingNewPlace === true
+                // --------------------------------------------------------------------
+                function handleMapClick(e) {
+                    if (!window.awaitingNewPlace || !window.fmap) return;
+
+                    const lat = e.latlng.lat;
+                    const lng = e.latlng.lng;
+
+                    const prefix = prompt("Enter a prefix for this new place:", "");
+                    if (!prefix) return;
+
+                    // Remove previous pinMarker
+                    if (window.pinMarker) {
+                        // Check if it's on the MarkerLayer or directly on the map
+                        if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
+                            window.MarkerLayer.removeLayer(window.pinMarker);
+                        } else if (window.fmap.hasLayer(window.pinMarker)) {
+                            window.fmap.removeLayer(window.pinMarker);
+                        }
+                    }
+
+                    // Create canvas-based prefix icon (Assumes window.makePrefixMarkerIcon exists)
+                    const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
+                    window.pinMarker = L.marker([lat, lng], { icon });
+
+                    // Use the consolidated function to handle adding the marker and reverse geocoding
+                    // Note: The original geocoding/messaging logic is now moved INTO tryAddMarkerToLayer
+                    tryAddMarkerToLayer(window.pinMarker, lat, lng, prefix);
+                }
+
+                // --------------------------------------------------------------------
+                // Turn on add-place mode when parent sends enableAddPlace
+                // --------------------------------------------------------------------
+                window.addEventListener("message", (event) => {
+                    if (event.data?.type === "enableAddPlace") {
+                        console.log("🟡 enableAddPlace received");
+                        window.awaitingNewPlace = true;
+
+                        if (window.fmap) {
+                            window.fmap.getContainer().classList.add("add-place-mode");
+                        }
+
+                        alert("Click on the map to select a new place.");
+                    }
+                });
+
+                // --------------------------------------------------------------------
+                // Attach click handler when fmap is ready
+                // --------------------------------------------------------------------
+                window.addEventListener("fmap-ready", (ev) => {
+                    const fmap = ev.detail;
+                    // Double-check window.fmap is set if the event didn't set it (good practice)
+                    window.fmap = fmap;
+
+                    console.log("🎯 custom_click_js attaching click handler to fmap");
+                    fmap.on("click", handleMapClick);
+                });
+
+            })();
+            </script>
+            """
+
+        FolMap.get_root().html.add_child(Element(custom_click_js))
+
+        reverse_geocode_js = """
+        <script>
+        // Simple reverse geocoder using Nominatim
+        window.reverseGeocode = async function(lat, lng) {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+
+            const res = await fetch(url, {
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!res.ok) throw new Error("Reverse geocoding failed");
+
+            const data = await res.json();
+            console.log("📍 Reverse geocode result:", data);
+
+            return {
+                address: data.display_name || "Unknown address",
+                house_number: data.address?.house_number || "",
+                road: data.address?.road || "",
+                suburb: data.address?.suburb || "",
+                city: data.address?.city || data.address?.town || data.address?.village || "",
+                postcode: data.address?.postcode || ""
+            };
+
+        };
+        </script>
+        """
+
+        FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
+
+    #    FolMap.get_root().html.add_child(folium.Element(add_place_js))
+
+
+
+        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+
+
+
+        # Ensure there's only one LayerControl
+        if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
+            FolMap.add_child(folium.LayerControl())
+
+        # Add custom CSS/JS
+        FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
+        FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
+        FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
+
+        # Fit map to bounding box
+        if self.level == 4:
+            print("_____bboxcheck", self.value, self.bbox)
         if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
             try:
                 sw, ne = self.bbox
-                FolMap.fit_bounds([sw, ne])
-            except Exception as e:
-                print("⚠️ Invalid bbox:", e)
 
+                # Check each part is a pair
+                if not (isinstance(sw, (list, tuple)) and len(sw) == 2 and
+                        isinstance(ne, (list, tuple)) and len(ne) == 2):
+                    raise ValueError("BBox corners are not 2-element lists")
+
+                sw = [float(sw[0]), float(sw[1])]
+                ne = [float(ne[0]), float(ne[1])]
+
+                if sw == ne:
+                    print("⚠️ BBox corners are identical; using centroid instead")
+                    FolMap.location = self.latlongroid
+                    FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
+                else:
+                    print("✅ BBox is valid, applying fit_bounds")
+                    FolMap.fit_bounds([sw, ne], padding=(0, 0))
+
+            except (TypeError, ValueError) as e:
+                print(f"⚠️ Invalid bbox values: {self.bbox} | Error: {e}")
+        else:
+            print(f"⚠️ BBox is missing or badly formatted: {self.bbox}")
+
+        # overwrite file
         target = self.locfilepath(self.file(rlevels))
         FolMap.save(target)
 
-        return FolMap
+        print("Centroid raw:", self.latlongroid)
+        print(f" ✅ _____saved map file in route: {route()}", target, len(flayers), self.value, self.dir, self.file(rlevels))
 
+        return FolMap
 
 
     def set_bounding_box(self,block):
