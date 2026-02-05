@@ -831,24 +831,34 @@ function syncStreamsSelectWithTabs() {
 async function fetchBackendURL() {
     try {
         const response = await fetch('/get-backend-url');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
         const data = await response.json();
 
-        // Now you have the backend URL
         const backendUrl = data.backend_url;
 
-        window.latestConstants = data.constants;
-        window.latestOptions = data.options;
+        window.latestConstants  = data.constants;
+        window.latestOptions    = data.options;
         window.current_election = data.current_election;
 
-        // Do something with the backend URL
         console.log("Backend URL:", backendUrl);
 
-        // Set it globally (for example)
-        window.API = backendUrl ;  // Example: append an API endpoint
+        window.API = backendUrl.replace(/\/$/, "");
+
+        // Safe + correct
+        window.isDev =
+            backendUrl.includes("127.0.0.1") ||
+            backendUrl.includes("localhost");
+
+        console.log("__isDevelopment?", window.isDev);
+
     } catch (error) {
         console.error("Error fetching backend URL:", error);
     }
 }
+
 
 
  async function getCalendarUpdate(API) {

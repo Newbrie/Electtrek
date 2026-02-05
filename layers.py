@@ -248,9 +248,10 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def generate_voronoi_with_geovoronoi(self, c_election, target_node, vtype, static=False, add_to_map=True, color="#3388ff"):
+    def generate_voronoi_with_geovoronoi(self, c_election, rlevels,target_node, vtype, static=False, add_to_map=True, color="#3388ff"):
         global allelectors
         global levelcolours
+        from state import Treepolys, Fullpolys
     # generate voronoi fields within the target_node Boundary
         shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
 
@@ -259,7 +260,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         CElection = CurrentElection.load(c_election)
         print(f"🗳️ Loaded election data for: {c_election}")
 
-        target_path = target_node.mapfile()
+        target_path = target_node.mapfile(rlevels)
         print(f"📁 Target path: {target_path}")
 
         print(f"📌 Target node: {target_node.value}")
@@ -445,20 +446,20 @@ class ExtendedFeatureGroup(FeatureGroup):
                     popup_html = ""
 
                     if vtype == 'polling_district':
-                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file +" street", matched_child.value,'street')
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file, matched_child.parent.value,matched_child.parent.type)
-                    #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(target_node.dir+"/"+target_node.file, target_node.value,child_type_of('polling_district',estyle))
+                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels) +" street", matched_child.value,'street')
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
+                    #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(target_node.dir+"/"+target_node.file(rlevels), target_node.value,child_type_of('polling_district',estyle))
                         downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
                     #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
-                    #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), target_node.dir+"/"+target_node.file)
+                    #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), target_node.dir+"/"+target_node.file(rlevels))
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         limbX['UPDOWN'] = uptag1 +"<br>"+ downST
                         print("_________new PD convex hull and tagno:  ",matched_child.value, matched_child.tagno, gdf)
 
                         streetstag = ""
                     elif vtype == 'walk':
-                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file+" walkleg", matched_child.value,'walkleg')
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file, matched_child.parent.value,matched_child.parent.type)
+                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels)+" walkleg", matched_child.value,'walkleg')
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         streetstag = build_street_list_html(Streetsdf)
@@ -480,7 +481,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         popup = folium.Popup(popup_html, max_width=600)
                         #        target_node.tagno = len(self._children)+1
-                        pathref = matched_child.mapfile()
+                        pathref = matched_child.mapfile(rlevels)
                         mapfile = '/transfer/'+pathref
                         # Turn into HTML list items
 
@@ -519,7 +520,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         tag = matched_child.value
 
-                        mapfile = matched_child.mapfile()
+                        mapfile = matched_child.mapfile(rlevels)
 
                         tcol = get_text_color(to_hex(fill_color))
                         bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
@@ -635,7 +636,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_shapenodes (self,c_election,herenode,stype):
+    def add_shapenodes (self,c_election,rlevels,herenode,stype):
         global allelectors
 # add a convex hull for all zonal children nodes , using all street centroids contained in each zone
 # zonal nodes are added at same time as walk nodes, zone nodes generated from zone grouped means of electors
@@ -647,6 +648,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         mask = allelectors['Election'] == c_election
         nodeelectors = allelectors[mask]
+
 #        mask2 = areaelectors[shapecolumn[stype]] == herenode.value
 #        nodeelectors = areaelectors[mask2]
         # Step 2: Group by WalkName and compute mean lat/long (already done)
@@ -679,7 +681,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
                 Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
                 print ("______Streetsdf:",Streetsdf)
-                self.add_shapenode(shape_node, stype,Streetsdf)
+                self.add_shapenode(rlevels,shape_node, stype,Streetsdf)
                 print("_______new shape node ",shape_node.value,shape_node.col,"|")
             else:
                 flash("no data exists for this election at this location")
@@ -689,7 +691,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_shapenode (self,herenode,type,datablock):
+    def add_shapenode (self,rlevels, herenode,type,datablock):
         global levelcolours
 
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
@@ -721,18 +723,18 @@ class ExtendedFeatureGroup(FeatureGroup):
         limbX['col'] = herenode.col
 
         if type == 'polling_district':
-            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file +" street", herenode.value,'street')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
-#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,child_type_of('polling_district',estyle))
+            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels) +" street", herenode.value,'street')
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(rlevels), herenode.parent.value,herenode.parent.type)
+#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,child_type_of('polling_district',estyle))
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
 #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
-#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.dir+"/"+herenode.file)
+#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.dir+"/"+herenode.file(rlevels))
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
             limbX['UPDOWN'] = uptag1 +"<br>"+ downST
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
         elif type == 'walk':
-            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file+" walkleg", herenode.value,'walkleg')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file, herenode.parent.value,herenode.parent.type)
+            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels)+" walkleg", herenode.value,'walkleg')
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(rlevels), herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
             streetstag = build_street_list_html(datablock)
@@ -746,7 +748,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         tag = str(herenode.value)
         typetag = "streets in "+str(herenode.type)+" "+str(herenode.value)
         here = [float(f"{herenode.latlongroid[0]:.6f}"), float(f"{herenode.latlongroid[1]:.6f}")]
-        pathref = herenode.mapfile()
+        pathref = herenode.mapfile(rlevels)
         mapfile = '/transfer/'+pathref
         # Turn into HTML list items
 
@@ -869,46 +871,39 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self._children
 
     def create_layer(self, c_election, node, intention_type, static=False):
-        global allelectors
-        global places
-        global OPTIONS
-        global constants
+        """
+        Create all features for a node in a single election.
+        Layers are cleared before adding new features.
+        """
         CElection = CurrentElection.load(c_election)
-        print(f"__Layer id:{self.name} value:{node.value} type: {intention_type} layer children:{len(self._children)} node children:{len(node.children)}")
-        if intention_type == 'marker':
-            # always regen markers if OPTIONS['accumulate'] is false
-            if not CElection['accumulate']:
-                self._children.clear()
-            entrylen = len(self._children)
-            print("Markers . . ACCUMULATING from",entrylen)
-            self.id = node.nid
-            self.add_genmarkers(CElection,node,'marker',static)
-            return len(self._children) - entrylen
-        entrylen = len(self._children)
-        if len(node.childrenoftype(intention_type)) > 0:
-    # There is one layer of each type layers are identified by the node id at which it created
-            print(f"")
-            if not CElection['accumulate']:
-                self._children.clear()
-            entrylen = len(self._children)
-            print(f"ACCUMULATING {CElection['accumulate']} {not CElection['accumulate']} from:",entrylen, self.id, node.nid, node.value, intention_type)
-            self.id = node.nid
-    # create the content for an existing layer derived from the node children and required type
-            if intention_type == 'street' or intention_type == 'walkleg':
-                self.add_nodemarks(c_election,node,intention_type,static)
-            elif intention_type == 'polling_district' or intention_type == 'walk':
-                print(f"calling creation of voronoi in {c_election} - node {node.value} type {intention_type}")
-#                self.add_shapenodes(c_election,node,intention_type)
-                self.generate_voronoi_with_geovoronoi(c_election,node,intention_type, static)
-                print(f"created {len(self._children)} voronoi in {c_election} - node {node.value} type {intention_type} static:{static}")
-            elif intention_type == 'marker':
-                print("Markers 2 ACCUMULATING from",entrylen)
-                self.add_genmarkers(CElection,node,'marker',static)
-            else:
-                self.add_nodemaps(c_election,node, intention_type, static)
-        return len(self._children) - entrylen
+        rlevels = CElection.resolved_levels
 
-    def add_genmarkers(self, CE, node, type, static):
+        # Clear the layer before adding new features
+        self._children.clear()
+
+        print(f"__Layer id:{self.name} value:{node.value} type:{intention_type} layer children cleared")
+
+        # Add content depending on type
+        if intention_type == 'marker':
+            self.id = node.nid
+            self.add_genmarkers(CElection, rlevels, node, 'marker', static)
+
+        elif intention_type in ('street', 'walkleg'):
+            self.id = node.nid
+            self.add_nodemarks(c_election, rlevels, node, intention_type, static)
+
+        elif intention_type in ('polling_district', 'walk'):
+            self.id = node.nid
+            self.generate_voronoi_with_geovoronoi(c_election, rlevels, node, intention_type, static)
+
+        else:
+            self.id = node.nid
+            self.add_nodemaps(c_election, rlevels, node, intention_type, static)
+
+        return len(self._children)
+
+
+    def add_genmarkers(self, CE, rlevels, node, type, static):
         eventlist = node.build_eventlist_dataframe(CE)
         print(f" ___GenMarkers: under {route()} eventlist: {eventlist}")
         for _, row in eventlist.iterrows():
@@ -944,13 +939,14 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_nodemaps (self,c_election,herenode,type,static):
+    def add_nodemaps (self,c_election,rlevels, herenode,type,static):
         from state import Treepolys, Fullpolys
         global levelcolours
         global Con_Results_data
         global OPTIONS
 
         childlist = herenode.childrenoftype(type)
+        allchildlist = herenode.children
         nodeshtml = build_nodemap_list_html(herenode)
         CElection = CurrentElection.load(c_election)
         details = [c.value for c in childlist]
@@ -963,7 +959,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{type} they are {[x.value for x in childlist]}" )
 
         for c in childlist:
-            print("______Display children:",herenode.value, c.value,type)
+            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value,type}")
+            print(f"______All nodemaps:{len(allchildlist)} at {herenode.value}")
+
 #            layerfids = [x.fid for x in self._children if x.type == type]
 #            if c.fid not in layerfids:
             if c.level+1 <= 5:
@@ -982,61 +980,61 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print("______Add_Nodes Treepolys type:",type)
     #
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" county", c.value,type)
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,herenode.type)
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" county", c.value,type)
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,herenode.type)
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,type,12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
                         uptag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         limbX['UPDOWN'] = uptag+"<br>"+c.value+"<br>"  + downtag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
+                        mapfile = "/transfer/"+c.mapfile(rlevels)
     #                        self.children.append(c)
                     elif herenode.level == 1:
-                        wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,type)
-                        divreportmess = "moveDown(&#39;/divreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file, c.value,type)
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" constituency", c.value,type)
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+                        wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
+                        divreportmess = "moveDown(&#39;/divreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" constituency", c.value,type)
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
                         wardreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(wardreportmess,"WARD Report",12)
                         divreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(divreportmess,"DIV Report",12)
                         downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ wardreporttag + divreporttag+"<br>"+ downconstag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
+                        mapfile = "/transfer/"+c.mapfile(rlevels)
     #                        self.children.append(c)
                     elif herenode.level == 2:
-                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" ward", c.value,"ward")
-                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file+" division", c.value,"division")
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" ward", c.value,"ward")
+                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" division", c.value,"division")
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
                         downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downwardmessage,"WARDS",12)
                         downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
 
                         limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downwardstag + " " + downdivstag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
+                        mapfile = "/transfer/"+c.mapfile(rlevels)
     #                        self.children.append(c)
                     elif herenode.level == 3:
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file, herenode.value,herenode.type)
+                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
     #                upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12, session.get('importfile'))
 
                         PDbtn = """
                             <button type='button' class='guil-button' onclick='moveDown("/downPDbut/{0}", "{1}", "polling_district");' class='btn btn-norm'>
                                 PDs
                             </button>
-                        """.format(c.dir+"/"+c.file+" polling_district", c.value)
+                        """.format(c.dir+"/"+c.file(rlevels)+" polling_district", c.value)
 
                         WKbtn = """
                             <button type='button' class='guil-button' onclick='moveDown("/downWKbut/{0}", "{1}", "walk");' class='btn btn-norm'>
                                 WALKS
                             </button>
-                        """.format(c.dir+"/"+c.file+" walk", c.value)
+                        """.format(c.dir+"/"+c.file(rlevels)+" walk", c.value)
 
                         MWbtn = """
                             <button type='button' class='guil-button' onclick='moveDown("/downMWbut/{0}", "{1}", "walk");' class='btn btn-norm'>
                                 STAT
                             </button>
-                        """.format(c.dir+"/"+c.file+" walk", c.value)
+                        """.format(c.dir+"/"+c.file(rlevels)+" walk", c.value)
 
 
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
@@ -1046,7 +1044,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         else:
                             limbX['UPDOWN'] = "<br>"+c.value+"<br>"
     #                    c.tagno = len(self._children)+1
-                        pathref = c.mapfile()
+                        pathref = c.mapfile(rlevels)
                         mapfile = '/transfer/'+pathref
     #                        self.children.append(c)
 
@@ -1111,7 +1109,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-                    pathref = c.mapfile()
+                    pathref = c.mapfile(rlevels)
                     mapfile = '/transfer/'+pathref
 
 
@@ -1166,7 +1164,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return self._children
 
-    def add_nodemarks (self,c_election,herenode,type,static):
+    def add_nodemarks (self,c_election,rlevels,herenode,type,static):
         global levelcolours
 
         childlist = herenode.childrenoftype(type)
@@ -1190,7 +1188,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             tag = str(c.value)
             here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
             fill = herenode.col
-            pathref = c.mapfile()
+            pathref = c.mapfile(rlevels)
             mapfile = '/transfer/'+pathref
 
             print("______Display childrenx:",c.value, c.level,type,c.latlongroid )

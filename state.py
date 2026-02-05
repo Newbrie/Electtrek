@@ -22,82 +22,8 @@ def normalname(name):
         print("______ERROR: Can only normalise name in a string or series")
     return name
 
-# original dict
-_LEVEL_ZOOM_MAP = {
-    'country': 12,
-    'nation': 13,
-    'county': 14,
-    'constituency': 15,
-    'ward': 16,
-    'division': 16,
-    'polling_district': 17,
-    'walk': 17,
-    'walkleg': 18,
-    'street': 18
-}
-
-# share task and outcome tags for each election
-
-OPTIONS = {
-    "ACC": False,
-    "DEVURLS": {},
-    "territories": {},
-    "yourparty": {},
-    "previousParty": {},
-    "resources" : {},
-    "areas" : {},
-    "candidate" : {},
-    "chair" : {},
-    "tags": {},
-    "task_tags": {},
-    "autofix" : {},
-    "VNORM" : {},
-    "VCO" : {},
-    "streams" : {},
-    "stream_table": {}
-    # Add more mappings here if needed
-}
-
-STATICSWITCH = False
-TABLE_TYPES  = {
-    "resources": "Resources",
-    "events": "Event Markers",
-    "report_data": "Report Data",
-    "stream_table": "Import Data Streams",
-    "nodelist_xref" : "Nodelist xref",
-    "country_layer" : "Countries",
-    "nation_layer" : "Nations",
-    "county_layer" : "Counties",
-    "constituency_layer" : "Constituencies",
-    "ward_layer" : "Wards",
-    "division_layer" : "Divisions",
-    "polling_district_layer" : "Polling Districts",
-    "walk_layer" : "Walks",
-    "street_layer" : "Streets",
-    "walkleg_layer" : "Walklegs"
-}
-# make it read-only
-LEVEL_ZOOM_MAP = MappingProxyType(_LEVEL_ZOOM_MAP)
-
-ElectionTypes = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
-VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
-VNORM = {"OTHER":"O","REFORM" : "R" , "REFORM_DERBY" : "R" ,"REFORM_UK" : "R" ,"REF" : "R", "RUK" : "R","R" :"R","CONSERVATIVE_AND_UNIONIST" : "C","CONSERVATIVE" : "C", "CON" : "C", "C":"C","LABOUR_PARTY" : "S","LABOUR" : "S", "LAB" :"S", "L" : "L", "LIBERAL_DEMOCRATS" :"LD" ,"LIBDEM" :"LD" , "LIB" :"LD","LD" :"LD", "GREEN_PARTY" : "G" ,"GREEN" : "G" ,"G":"G", "INDEPENDENT" : "I", "IND" : "I" ,"I" : "I" ,"PLAID_CYMRU" : "PC" ,"PC" : "PC" ,"SNP": "SNP" ,"MAYBE" : "Z" ,"WONT_VOTE" : "W" ,"WONT_SAY" : "X" , "SDLP" : "S", "SINN_FEIN" : "SF", "SPK": "N", "TUV" : "C", "UUP" : "C", "DUP" : "C","APNI" : "N", "INET": "I", "NIP": "I","PBPA": "I","WPB": "S","OTHER" : "O"}
-VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
-onoff = {"on" : 1, 'off': 0}
-data = [0] * len(VID)
-VIC = dict(zip(VID.keys(), data))
-
-API = "http://127.0.0.1:5000"  # replace with your current backend URL
-
-isDev = API == DEVURLS['dev']
-
-
-
-print(isDev)  # True if backend_url is the dev URL, False otherwise
-
 
 def clear_treepolys(from_level=None):
-    from state import Treepolys, Fullpolys, LAYERS
 
     if from_level is None:
         for k in Treepolys:
@@ -196,18 +122,26 @@ def select_parent_geoms(*, Treepolys, parent_key, sourcepath=None, here=None):
     # 3️⃣ fallback: return all parents
     return parents
 
-
-
 def intersectingArea(
     source,
     sourcekey,
-    parent_type,
+    parent_level,
+    child_level,
+    resolved_levels,
     destination,
     *,
     parent_row,          # full GeoSeries row
     roid=None,
     select_child_name=None,
 ):
+    """
+    Compute intersection of child polygons with a parent polygon.
+    Parent type is derived from resolved_levels[parent_level].
+    """
+
+    parent_type = resolved_levels.get(parent_level)
+    if parent_type is None:
+        raise ValueError(f"No parent type found for parent_level={parent_level}")
 
     print(f"\n[DEBUG] intersectingArea | source={source}")
     print(f"[DEBUG] parent_type={parent_type}, roid={roid}, select_child_name={select_child_name}")
@@ -233,7 +167,7 @@ def intersectingArea(
     # 2. Validate parent row
     # ------------------------------------------------------------------
     if parent_row is None or parent_row.geometry.is_empty:
-        raise ValueError(f"Invalid parent_row for {parent_type}")
+        raise ValueError(f"Invalid parent_row for {parent_type} - {source} - {parent_level}")
 
     parent_geom = parent_row.geometry
     parent_name = normalname(parent_row["NAME"])
@@ -249,8 +183,10 @@ def intersectingArea(
     # ------------------------------------------------------------------
     # 3. Compute intersections (projected CRS)
     # ------------------------------------------------------------------
-    threshold = Overlaps.get(parent_type, 0)
-    print(f"[DEBUG] Intersection threshold: {threshold}")
+
+    child_type = resolved_levels[child_level]
+    threshold = Overlaps.get(child_type, 0)
+    print(f"[DEBUG] Intersection threshold ({child_type}): {threshold}")
 
     candidates = gdf[gdf.geometry.intersects(parent_geom)]
     print(f"[DEBUG] Candidates intersecting bbox: {len(candidates)}")
@@ -301,23 +237,71 @@ def intersectingArea(
 
     return selected_child_name, child_polygons_within_parent, all_child_polygons
 
+
 def subending(filename, ending):
   stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-CAL.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-ZONES.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
   print(f"____Subending test: from {filename} to {stem.replace('@@@', ending)}")
   return stem.replace("@@@", ending)
 
 
-def combine_geodfs(existing, new):
+def upsert_geodf(existing, incoming, key="FID"):
     if existing is None or existing.empty:
-        return new
-    if new is None or new.empty:
-        return existing
-    if existing.crs != new.crs:
-        new = new.to_crs(existing.crs)
+        return incoming
 
-    return gpd.GeoDataFrame(
-        pd.concat([existing, new], ignore_index=True),
-        crs=existing.crs
+    if incoming is None or incoming.empty:
+        return existing
+
+    if existing.crs != incoming.crs:
+        incoming = incoming.to_crs(existing.crs)
+
+    existing = existing.set_index(key, drop=False)
+    incoming = incoming.set_index(key, drop=False)
+
+    # overwrite or insert
+    for fid, row in incoming.iterrows():
+        existing.loc[fid] = row
+
+    return gpd.GeoDataFrame(existing.reset_index(drop=True), crs=existing.crs)
+
+
+def load_layer(
+    *,
+    layer,
+    level,
+    resolved_levels,
+    parent_level,
+    parent_row,
+    select_name=None,
+    roid=None,
+):
+    """
+    Load a layer using either filter or intersection method.
+    parent_level is used to derive parent_type from resolved_levels.
+    """
+    src = f"{workdirectories['bounddir']}/{layer['src']}"
+    out = f"{workdirectories['bounddir']}/{layer['out']}"
+
+    if layer["method"] == "filter":
+        # Filter-based selection (no parent needed)
+        return filterArea(
+            src,
+            layer["field"],
+            out,
+            name=select_name,
+            roid=roid,
+        )
+
+    # Intersection-based selection
+    return intersectingArea(
+        source=src,
+        sourcekey=layer["field"],
+        parent_level=parent_level,
+        child_level= level,
+        resolved_levels=resolved_levels,
+        destination=out,
+        parent_row=parent_row,
+        roid=roid,
+        select_child_name=select_name,
     )
 
 
@@ -343,125 +327,118 @@ def stepify(path):
 
 
 
+from collections import defaultdict
+from typing import DefaultDict
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point
+
 def ensure_treepolys(
     *,
-    territory: str | None = None,
-    sourcepath: str | None = None,
-    here: tuple[float, float] | None = None,
-    resolved_levels: dict[int, str] | None = None,
+    territory: str | None,
+    sourcepath: str | None,
+    here: tuple[float, float] | None,
+    resolved_levels: dict[int, str],
 ):
-    print(f"[DEBUG] ensure_treepolys | sourcepath={sourcepath} here={here} resolved_levels={resolved_levels}")
-
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
 
-    LAYER_BY_LEVEL_AND_LAYER_TYPE = {
-        (layer["level"], layer["key"]): layer
-        for layer in LAYERS
-    }
-    territory_level = len(stepify(territory)) -1
-    print(f"___max parent level={territory_level}, territory={territory}")
     steps = stepify(sourcepath) if sourcepath else []
+    territory_level = len(stepify(territory)) - 1 if territory else -1
+
+    layer_defs = { (l["level"], l["key"]): l for l in LAYERS }
+    active_parents: dict[int, pd.Series] = {}
     newpath = ""
 
-    active_parents: dict[int, pd.Series] = {}
+    # ✅ Track inserted FIDs to prevent duplicates
+    inserted_fids: DefaultDict[str, set] = defaultdict(set)
+
     for level, layer_type in resolved_levels.items():
+        if level >= len(steps) and not here:
+            print(f"[DEBUG] Skipping level {level} layer {layer_type} — no step and no spatial fallback")
+            continue
 
-        if level < len(steps) or here:
-            # need the name to do a name match or roid to do a spatial match
-            # different name for each level of the sourcepath (if not [])
-            # if len 0 = [] - no anem so use roid
-            # if no roid or name raise error
+        if has_treepoly(layer_type):
+            print(f"[DEBUG] Skipping level {level} layer {layer_type} — already loaded")
+            continue
 
-            layer = LAYER_BY_LEVEL_AND_LAYER_TYPE.get((level, layer_type))
-            if not layer:
-                print(f"No layer definition for level={level}, layer_type={layer_type}")
-                continue
+        layer = layer_defs.get((level, layer_type))
+        if not layer:
+            print(f"[WARN] No layer definition for level {level} layer {layer_type}")
+            continue
 
-            src = f"{workdirectories['bounddir']}/{layer['src']}"
-            out = f"{workdirectories['bounddir']}/{layer['out']}"
+        # Parent row logic
+        parent_level = max(0, min(level - 1, territory_level))
+        parent_layer_type = resolved_levels.get(parent_level)
+        parent_row = active_parents.get(parent_level)
+
+        # fallback: if no active parent yet, try spatial or whole layer
+        if parent_row is None and parent_layer_type:
+            parent_gdf = get_treepoly(parent_layer_type)
+            if isinstance(parent_gdf, gpd.GeoDataFrame) and len(parent_gdf) == 1:
+                parent_row = parent_gdf.iloc[0]
+
+        # Determine selection or spatial fallback
+        select_name = steps[level] if level < len(steps) else None
+        roid = here if level >= len(steps) else None
+
+        # Load layer with updated signature
+        name, tree_gdf, full_gdf = load_layer(
+            layer=layer,
+            level=level,
+            resolved_levels=resolved_levels,
+            parent_level=parent_level,
+            parent_row=parent_row,
+            select_name=select_name,
+            roid=roid,
+        )
 
 
-            parent_level = level - 1
-            if parent_level < 0:
-                parent_level = None
-            if parent_level is not None and parent_level > territory_level:
-                parent_level = territory_level
+        # 🔐 Update Treepolys and Fullpolys
+        existing = get_treepoly(layer_type)
 
-            parent_row = active_parents.get(parent_level) if parent_level is not None else None
-            parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
-            print(f"[DEBUG] Processing layer {layer_type} at level {level} with parent {parent_name}")
+        if existing is None or existing.empty:
+            print(f"[DEBUG] Before upsert {layer_type}: 0 rows (initial or reset)")
+            new_tree_gdf = tree_gdf
+        else:
+            print(f"[DEBUG] Before upsert {layer_type}: {len(existing)} rows")
+            new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
 
-            if level > 0 and parent_name is None:
-                raise ValueError(f"Missing parent level {parent_level} at level {level} for layer_type {layer_type} under spath {sourcepath}")
+        set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
 
-            select_name = None
-            roid = None
-            if level < len(steps):
-                select_name = steps[level]
-            elif here:
-                roid = here
+        updated = get_treepoly(layer_type)
+        print(f"[DEBUG] After upsert {layer_type}: {len(updated) if updated is not None else 0} rows")
 
-            if layer["method"] == "filter":
-                filter_kwargs = {}
-                if select_name:
-                    filter_kwargs["name"] = select_name
-                if roid:
-                    filter_kwargs["roid"] = roid
+        Fullpolys[layer_type] = upsert_geodf(Fullpolys.get(layer_type), full_gdf)
 
-                name, tree_gdf, full_gdf = filterArea(
-                    src, layer["field"], out, **filter_kwargs
-                )
+        for idx, row in tree_gdf.iterrows():
+            print(f"___POLYCHECK: {layer_type.capitalize()} level {level}: {row['NAME']}, Parent: {parent_row['NAME'] if parent_row is not None else 'None'}")
 
-            else:
-                parent_layer_type = resolved_levels.get(parent_level)
-                if not parent_layer_type:
-                    raise ValueError(f"No resolved layer type for parent level {parent_level}")
-
-                name, tree_gdf, full_gdf = intersectingArea(
-                    src,
-                    layer["field"],
-                    parent_layer_type,
-                    out,
-                    parent_row=parent_row,
-                    roid=roid,
-                    select_child_name=select_name,
-                )
-
-            Treepolys[layer_type] = combine_geodfs(
-                Treepolys.get(layer_type),
-                tree_gdf
-            )
-
-            Fullpolys[layer_type] = combine_geodfs(
-                Fullpolys.get(layer_type),
-                full_gdf
-            )
-
-            new_parent_row = None
-            if not tree_gdf.empty:
-                if name:
-                    matches = tree_gdf[
-                        tree_gdf["NAME"].apply(normalname) == normalname(name)
-                    ]
-                    if not matches.empty:
-                        new_parent_row = matches.iloc[0]
-
-                if new_parent_row is None and len(tree_gdf) == 1:
-                    new_parent_row = tree_gdf.iloc[0]
-
-            if new_parent_row is not None:
-                active_parents[level] = new_parent_row
-                print(f"[DEBUG] active parent for level {level} set to {new_parent_row['NAME']}")
-            else:
-                print("[DEBUG] no active parent set yet")
-
+        # Determine active parent row safely
+        new_parent_row = None
+        if not tree_gdf.empty:
             if name:
-                newpath = f"{newpath}/{name}" if newpath else name
+                matches = tree_gdf[tree_gdf["NAME"].apply(normalname) == normalname(name)]
+                if not matches.empty:
+                    new_parent_row = matches.iloc[0]
+            if new_parent_row is None and len(tree_gdf) == 1:
+                new_parent_row = tree_gdf.iloc[0]
+            if new_parent_row is None and roid is not None:
+                distances = tree_gdf.geometry.apply(lambda g: g.distance(Point(roid[::-1])))
+                new_parent_row = tree_gdf.iloc[distances.idxmin()]
 
-            print(f"[DEBUG] {layer_type} loaded | Count {len(tree_gdf)}")
+        if new_parent_row is not None:
+            active_parents[level] = new_parent_row
+            print(f"[DEBUG] Active parent for level {level} set to {new_parent_row['NAME']}")
+        else:
+            print(f"[DEBUG] No active parent could be set at level {level}")
 
-    return Treepolys, Fullpolys, newpath
+        if name:
+            newpath = f"{newpath}/{name}" if newpath else name
+            print(f"[DEBUG] Layer {layer_type} loaded, newpath={newpath}, features={len(tree_gdf)}")
+
+    return newpath
+
 
 
 
@@ -542,19 +519,97 @@ def load_last_results():
             LastResults["constituency"].update(data.get("constituency", {}))
 
 
-Treepolys = {
-    'country': empty_gdf(),
-    'nation': empty_gdf(),
-    'county': empty_gdf(),
-    'constituency': empty_gdf(),
-    'ward': empty_gdf(),
-    'division': empty_gdf()
+#Treepolys = {
+#    'country': empty_gdf(),
+#    'nation': empty_gdf(),
+#    'county': empty_gdf(),
+#    'constituency': empty_gdf(),
+#    'ward': empty_gdf(),
+#    'division': empty_gdf()
+#}
+
+#Fullpolys = {
+#    k: empty_gdf() for k in Treepolys
+#}
+
+
+def get_treepoly(layer_type: str):
+    return Treepolys.get(layer_type)
+
+def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
+    Treepolys[layer_type] = gdf
+
+def has_treepoly(layer_type: str) -> bool:
+    return layer_type in Treepolys and not Treepolys[layer_type].empty
+
+# original dict
+_LEVEL_ZOOM_MAP = {
+    'country': 12,
+    'nation': 13,
+    'county': 14,
+    'constituency': 15,
+    'ward': 16,
+    'division': 16,
+    'polling_district': 17,
+    'walk': 17,
+    'walkleg': 18,
+    'street': 18
 }
 
-Fullpolys = {
-    k: empty_gdf() for k in Treepolys
+# share task and outcome tags for each election
+
+OPTIONS = {
+    "ACC": False,
+    "DEVURLS": {},
+    "territories": {},
+    "yourparty": {},
+    "previousParty": {},
+    "resources" : {},
+    "areas" : {},
+    "candidate" : {},
+    "chair" : {},
+    "tags": {},
+    "task_tags": {},
+    "autofix" : {},
+    "VNORM" : {},
+    "VCO" : {},
+    "streams" : {},
+    "stream_table": {}
+    # Add more mappings here if needed
 }
 
+STATICSWITCH = False
+TABLE_TYPES  = {
+    "resources": "Resources",
+    "events": "Event Markers",
+    "report_data": "Report Data",
+    "stream_table": "Import Data Streams",
+    "nodelist_xref" : "Nodelist xref",
+    "country_layer" : "Countries",
+    "nation_layer" : "Nations",
+    "county_layer" : "Counties",
+    "constituency_layer" : "Constituencies",
+    "ward_layer" : "Wards",
+    "division_layer" : "Divisions",
+    "polling_district_layer" : "Polling Districts",
+    "walk_layer" : "Walks",
+    "street_layer" : "Streets",
+    "walkleg_layer" : "Walklegs"
+}
+# make it read-only
+LEVEL_ZOOM_MAP = MappingProxyType(_LEVEL_ZOOM_MAP)
+
+ElectionTypes = {"W":"Westminster","C":"County","B":"Borough","P":"Parish","U":"Unitary"}
+VID = {"R" : "Reform","C" : "Conservative","S" : "Labour","LD" :"LibDem","G" :"Green","I" :"Independent","PC" : "Plaid Cymru","SD" : "SDP","Z" : "Maybe","W" :  "Wont Vote", "X" :  "Won't Say"}
+VNORM = {"OTHER":"O","REFORM" : "R" , "REFORM_DERBY" : "R" ,"REFORM_UK" : "R" ,"REF" : "R", "RUK" : "R","R" :"R","CONSERVATIVE_AND_UNIONIST" : "C","CONSERVATIVE" : "C", "CON" : "C", "C":"C","LABOUR_PARTY" : "S","LABOUR" : "S", "LAB" :"S", "L" : "L", "LIBERAL_DEMOCRATS" :"LD" ,"LIBDEM" :"LD" , "LIB" :"LD","LD" :"LD", "GREEN_PARTY" : "G" ,"GREEN" : "G" ,"G":"G", "INDEPENDENT" : "I", "IND" : "I" ,"I" : "I" ,"PLAID_CYMRU" : "PC" ,"PC" : "PC" ,"SNP": "SNP" ,"MAYBE" : "Z" ,"WONT_VOTE" : "W" ,"WONT_SAY" : "X" , "SDLP" : "S", "SINN_FEIN" : "SF", "SPK": "N", "TUV" : "C", "UUP" : "C", "DUP" : "C","APNI" : "N", "INET": "I", "NIP": "I","PBPA": "I","WPB": "S","OTHER" : "O"}
+VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"limegreen","I" :"indigo","PC" : "darkred","SD" : "orange","Z" : "lightgray","W" :  "white", "X" :  "darkgray"}
+onoff = {"on" : 1, 'off': 0}
+data = [0] * len(VID)
+VIC = dict(zip(VID.keys(), data))
+
+# state.py
+Treepolys: dict[str, gpd.GeoDataFrame] = {}
+Fullpolys: dict[str, gpd.GeoDataFrame] = {}
 
 LAYERS = [
     {
@@ -571,8 +626,7 @@ LAYERS = [
         "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
         "field": "CTRY21NM",
         "out": "Nation_Boundaries.geojson",
-        "method": "filter",
-        "parent": "country"
+        "method": "filter"
     },
     {
         "key": "county",
@@ -580,8 +634,7 @@ LAYERS = [
         "src": "Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
         "field": "CTYUA23NM",
         "out": "County_Boundaries.geojson",
-        "method": "filter",
-        "parent": "nation"
+        "method": "filter"
     },
     {
         "key": "constituency",
@@ -589,8 +642,7 @@ LAYERS = [
         "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
         "field": "PCON24NM",
         "out": "Constituency_Boundaries.geojson",
-        "method": "intersect",
-        "parent": "county"
+        "method": "intersect"
     },
     {
         "key": "ward",
@@ -598,8 +650,7 @@ LAYERS = [
         "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
         "field": "WD24NM",
         "out": "Ward_Boundaries.geojson",
-        "method": "intersect",
-        "parent": "constituency"
+        "method": "intersect"
     },
     {
         "key": "division",
@@ -607,8 +658,7 @@ LAYERS = [
         "src": "Surrey_Proposed_Divisions.geojson",
         "field": "Division_n",
         "out": "Division_Boundaries.geojson",
-        "method": "intersect",
-        "parent": "constituency"
+        "method": "intersect"
     }
 
 ]
@@ -641,17 +691,18 @@ ROOT_LEVEL = {
 
 
 Overlaps = {
-"country" : 1,
-"nation" : 0.1,
-"county" : 0.001,
-"constituency" : 0.00005,
-"ward" : 0.000005,
-"division" : 0.000005,
-"walk" : 0.005,
-"polling_district" : 0.005,
-"street" : 0.005,
-"walkleg" : 0.005
+    "country": 0.9,            # almost complete overlap; usually one polygon
+    "nation": 0.5,             # moderate, allows small overseas regions
+    "county": 0.1,           # counties are large; even tiny overlap is ok
+    "constituency": 0.001,   # very small fraction of parent polygon
+    "ward": 0.0001,          # tiny polygons; keep threshold tiny
+    "division": 0.0001,      # similar to wards
+    "walk": 0.005,             # walking routes
+    "polling_district": 0.005, # small but meaningful overlap
+    "street": 0.005,           # street polygons
+    "walkleg": 0.005           # same as walk
 }
+
 
 
 
@@ -714,8 +765,3 @@ layeritems = []
 
 
 load_last_results()
-
-
-print("_________HoC Con Results data:", len(LastResults["constituency"]))
-print("_________HoC Ward Results data:", len(LastResults["ward"]))
-print("_________HoC Division Results data:", len(LastResults["division"]))

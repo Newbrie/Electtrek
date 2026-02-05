@@ -1087,7 +1087,7 @@ def reassign_parent():
         allelectors.loc[mask_subject, 'WalkName'] = new_parent_name
         print(f"✔ Updated allelectors: '{subject_name}' now under '{new_parent_name}'")
     else:
-        mapfile = old_parent_node.mapfile()
+        mapfile = old_parent_node.mapfile(rlevels)
         Featurelayers[etype].reset()
         Featurelayers[etype].create_layer(current_election, old_parent_node, etype)
         old_parent_node.create_area_map(old_parent_node.getselectedlayers(rlevels, current_election, mapfile),
@@ -1100,7 +1100,7 @@ def reassign_parent():
     # 6. Save changes
     # --------------------------
 
-    mapfile = old_parent_node.mapfile()
+    mapfile = old_parent_node.mapfile(rlevels)
     print("✅ Reassignment complete")
     return jsonify({
         "status": "success",
@@ -1215,7 +1215,7 @@ def kanban():
     grouped['VI_ToGet_Pos'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(lower=0)
     grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
     print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg','VI_L1Done','VI_Canvassed' ]].head());
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     title = current_node.value+" details"
     items = current_node.childrenoftype('walk')
     layeritems = get_layer_table(items,title )
@@ -1960,7 +1960,7 @@ def election_report():
 def set_election():
     global constants, constants, Featurelayers
     import json
-    from state import OPTIONS
+    from state import OPTIONS, Treepolys, Fullpolys
     from elections import CurrentElection
 
     try:
@@ -1985,16 +1985,42 @@ def set_election():
         if not CElection:
             return jsonify(success=False, error="Election not found"), 404
 
+        # At the start of a fresh election:
+
+        for layer in Featurelayers.values():
+            layer._children.clear()
+
         print(f"____Route/set-election- Loaded election: {current_election} CE data: {CElection}")
 
-        Treepolys, Fullpolys, basepath = ensure_treepolys(
+        basepath = ensure_treepolys(
             territory=territory,
             sourcepath=mapfile,
             resolved_levels=rlevels,
             here=here
         )
+        for lev, ltype in rlevels.items():
+            gdf = Treepolys.get(ltype)
+            if gdf is None or gdf.empty:
+                print(f"____Treepolys {ltype} - EMPTY")
+                continue
+
+                # Same for Fullpolys
+            full_gdf = Fullpolys.get(ltype)
+            if full_gdf is None or full_gdf.empty:
+                print(f"____Fullpolys {ltype} - EMPTY")
+                continue
+
+            tot_full = len(full_gdf)
+            unique_name_full = full_gdf['NAME'].nunique()
+            unique_fid_full = full_gdf['FID'].nunique()
+            print(f"____Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
+
+
+
+
 
         current_node = get_last(current_election,CElection)
+        mapfile = current_node.mapfile(rlevels)
 
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
@@ -2004,7 +2030,8 @@ def set_election():
 
 
         CElection['previousParty'] = current_node.party
-        current_node.endpoint_created(current_election, CElection)
+        current_node.endpoint_created(current_election, CElection, mapfile)
+
 
         persist(current_node)
 
@@ -2294,7 +2321,7 @@ def update_territory():
 
     CElection['territory'] = mapfile
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
 
     CElection.save()
     print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {new_path}")
@@ -2359,7 +2386,7 @@ def index():
         CElection = CurrentElection.load(current_election)
         current_node = get_last(current_election,CElection)
 
-        mapfile = current_node.mapfile()
+        mapfile = current_node.mapfile(rlevels)
 
 
     #       Track used IDs across both existing and new entries
@@ -2539,7 +2566,7 @@ def dashboard():
         print ("____Dashboard CElection: ",path, previous_node.value)
         # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
-        mapfile = current_node.mapfile()
+        mapfile = current_node.mapfile(rlevels)
         print ("___Dashboard persisted filename: ",mapfile)
         persist(current_node)
         if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
@@ -2585,8 +2612,8 @@ def downbut(path):
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path)
-    mapfile = current_node.mapfile()
-    if current_node.endpoint_created(current_election,CElection):
+    mapfile = current_node.mapfile(rlevels)
+    if current_node.endpoint_created(current_election,CElection,mapfile):
         return send_file(mapfile, as_attachment=False)
     print("____Route/downbut end:",previous_node.value,current_node.value, mapfile)
 
@@ -2659,7 +2686,7 @@ def downPDbut(path):
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     print(f"__downPD- {mapfile}-l4area {current_node.value}, lenAll {len(allelectors)}, len area {len(areaelectors)}")
     PDpathfile = os.path.join(config.workdirectories['workdir'],mapfile)
 
@@ -2675,7 +2702,7 @@ def downPDbut(path):
         else:
             print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
             Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
-            mapfile = current_node.mapfile()
+            mapfile = current_node.mapfile(rlevels)
             print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
             current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,mapfile),current_election,CElection)
             flash("________PDs added:  "+str(len(Featurelayers['polling_district']._children)))
@@ -2726,7 +2753,7 @@ def downWKbut(path):
 #    current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     print (f"_________ROUTE/downWKbut2 CE {current_election}",previous_node.value, current_node.value, path)
     flash ("_________ROUTE/downWKbut ")
     mask = allelectors['Election'] == current_election
@@ -2807,7 +2834,7 @@ def downMWbut(path):
 #    current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     print (f"_________ROUTE/downMWbut2 CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {mapfile}")
     flash ("_________ROUTE/downMWbut ")
     mask = allelectors['Election'] == current_election
@@ -2892,7 +2919,7 @@ def STupdate(path):
     )
     streetelectors = allelectors[mask]
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
 
     if request.method == 'POST':
     # Get JSON data from request
@@ -2936,7 +2963,7 @@ def STupdate(path):
                     # Find the row where ENO matches electID
                     allelectors["ENOP"] = allelectors["ENOP"].astype(str)
                     mask = allelectors["ENOP"] == electID
-                    changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file
+                    changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file(rlevels)
                     changefields.loc[i,'Lat'] = street_node.latlongroid[0]
                     changefields.loc[i,'Long'] = street_node.latlongroid[1]
                     changefields.loc[i,'ENOP'] = electID
@@ -2970,7 +2997,7 @@ def STupdate(path):
                     i = i+1
 
                 base_path = path2+"/INDATA"
-                base_name = current_node.file.replace("-PRINT.html",fileending.replace(".html",""))
+                base_name = current_node.file(rlevels).replace("-PRINT.html",fileending.replace(".html",""))
                 changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName'])
 
                 versioned_filename = get_versioned_filename(base_path, base_name, ".csv")
@@ -3035,7 +3062,7 @@ def PDdownST(path):
 # now pointing at the STREETS.html node containing a map of street markers
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
-    mapfile = PD_node.mapfile()
+    mapfile = PD_node.mapfile(rlevels)
     mask2 = areaelectors['PD'] == PD_node.value
     PDelectors = areaelectors[mask2]
     print(f"__PDdownST- lenAll {len(allelectors)}, len area {len(areaelectors)} lenPD {len(PDelectors)}")
@@ -3064,9 +3091,9 @@ def PDdownST(path):
 #           only create a map if the branch does not already exist
 
         PD_node.create_area_map(PD_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
-    mapfile = PD_node.mapfile()
+    mapfile = PD_node.mapfile(rlevels)
 
-    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
+    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
     if len(Featurelayers['street']._children) == 0:
         flash("Can't find any Streets for this PD.")
     else:
@@ -3131,9 +3158,9 @@ def LGdownST(path):
             street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
         PD_node.create_area_map(PD_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
-    mapfile = PD_node.mapfile()
+    mapfile = PD_node.mapfile(rlevels)
 
-    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file)
+    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
     if len(Featurelayers['street']._children) == 0:
         flash("Can't find any Streets for this PD.")
     else:
@@ -3185,7 +3212,7 @@ def WKdownST(path):
     walks = areaelectors.WalkName.unique()
     if request.method == 'GET':
 # if there is a selected file , then areaelectors will be full of records
-        print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file)
+        print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
 
         Featurelayers['walkleg'].create_layer(current_election,walk_node,'walkleg')
 
@@ -3200,7 +3227,7 @@ def WKdownST(path):
 
             walk_node.create_area_map(walk_node.getselectedlayers(rlevels,current_election,path), current_election,CElection)
 
-    mapfile = walk_node.mapfile()
+    mapfile = walk_node.mapfile(rlevels)
 
 
     if len(areaelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
@@ -3235,16 +3262,16 @@ def wardreport(path):
 
     flash('_______ROUTE/wardreport')
     print('_______ROUTE/wardreport')
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     print("________layeritems  :  ", layeritems)
 
     i = 0
     alreadylisted = []
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+CElection.childnode_type(current_node.level)+" details"
-    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
+    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
     for group_node in current_node.childrenoftype('constituency'):
 
-        layeritems = get_layer_table(group_node.create_map_branch(session,'ward'))
+        layeritems = get_layer_table(group_node.create_map_branch(session,'ward'),rlevels)
 
         for temp in group_node.childrenoftype('ward'):
             if temp.value not in alreadylisted:
@@ -3272,7 +3299,6 @@ def get_table(table_name):
     global layertable
     from state import VNORM
     from nodes import TREK_NODES_BY_ID, get_layer_table
-
 
     def get_resources_table():
         return pd.DataFrame(resources)
@@ -3317,7 +3343,7 @@ def get_table(table_name):
     current_node = get_last(current_election,CElection)
     rlevels = CElection.resolved_levels
 
-    print(f"____Get Table1 {table_name}")
+    print(f"____Get Table1 {table_name} for election {current_election}")
 
     # Table mapping
     table_map = {
@@ -3340,15 +3366,15 @@ def get_table(table_name):
             print(f"____TABNODE: {tabnode.nid} - {tabnode.findnodeat_Level(lev).value} tabtype {tabtype} listNUM {len(tabnode.childrenoftype(tabtype))} - {len(tabnode.children)} ")
             print(f"____TREK_NODES_BY_ID: {TREK_NODES_BY_ID} ")
 
-            [column_headers,rows, title] = get_layer_table(tabnode.childrenoftype(tabtype), str(tabtype)+"s")
+            [column_headers,rows, title] = get_layer_table(tabnode.childrenoftype(tabtype), str(tabtype)+"s",rlevels)
             print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
         elif table_name.endswith("_xref"):
             lev = current_node.level+1
-            path = current_node.dir+"/"+current_node.file
+            path = current_node.dir+"/"+current_node.file(rlevels)
             tabtype = rlevels[lev]
             print(f"____NODEXREF type {tabtype} level {lev} ")
-            [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s")
+            [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s",rlevels)
             print(f"____NODEXREF -COLS {column_headers} ROWS {rows} TITLE {title}")
             return jsonify([column_headers, rows.to_dict(orient="records"), title])
         elif table_name is None or table_name not in table_map:
@@ -3394,13 +3420,13 @@ def displayareas():
     if current_election == "DEMO":
         if len(places) > 0:
             formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
-            layeritems = get_layer_table(pd.DataFrame(places) ,formdata['tabledetails'])
+            layeritems = get_layer_table(pd.DataFrame(places) ,formdata['tabledetails'],rlevels)
             print(f" Number of displayed markframe items - {len(places)} ")
         else:
             formdata['tabledetails'] = "No data to display - please upload"
-            layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'])
+            layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'],rlevels)
     else:
-        path = current_node.dir+"/"+current_node.file
+        path = current_node.dir+"/"+current_node.file(rlevels)
         ctype = CElection.childnode_type
 
         formdata = current_node.value +CElection.childnode_type(current_node.level)+"s"
@@ -3411,7 +3437,7 @@ def displayareas():
                 tablenodes = current_node.parent.childrenoftype(ctype)
             else:
                 return jsonify([[], [], "No data"])
-        layeritems = get_layer_table(tablenodes ,formdata)
+        layeritems = get_layer_table(tablenodes ,formdata,rlevels)
         print(f"Display layeritems area {current_node.value} - {ctype} - {len(tablenodes)}")
 
     if not layeritems or len(layeritems) < 3:
@@ -3492,7 +3518,7 @@ def divreport(path):
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
 
     session['current_node_id'] = current_node.nid
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
 
     flash('_______ROUTE/divreport')
     print('_______ROUTE/divreport')
@@ -3501,11 +3527,11 @@ def divreport(path):
     layeritems = pd.DataFrame()
     alreadylisted = []
     formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+CElection.childnode_type(current_node.level)+" details"
-    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'])
+    layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
 
     for group_node in current_node.childrenoftype('division'):
 
-        layeritems = get_layer_table(group_node.create_map_branch(session,'division'),formdata['tabledetails'])
+        layeritems = get_layer_table(group_node.create_map_branch(session,'division'),formdata['tabledetails'],rlevels)
 
         for item in Featurelayers['division']._children:
             if item.value not in alreadylisted:
@@ -3573,7 +3599,7 @@ def upbut(path):
 #    face_file = subending(trimmed_path,FACEENDING[previous_node.type])
 #    print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
-    mapfile = current_node.mapfile()
+    mapfile = current_node.mapfile(rlevels)
     if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
         Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
 
@@ -3862,7 +3888,7 @@ def postcode():
 
     flash('__ROUTE/Findpostcode')
 
-    pthref = current_node.dir+"/"+current_node.file
+    pthref = current_node.dir+"/"+current_node.file(rlevels)
     mapfile = url_for(downtoType[current_node.type],path=pathref)
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
@@ -3913,7 +3939,7 @@ def firstpage():
         return jsonify(success=False, error="Election not found"), 404
 
     # --- 3. Build tree from sourcepath / here ---
-    Treepolys, Fullpolys, basepath = ensure_treepolys(
+    basepath = ensure_treepolys(
         territory=territory,
         sourcepath=mapfile,
         resolved_levels=rlevels,
@@ -4000,7 +4026,7 @@ def firstpage():
     print('_______ROUTE/firstpage at :',current_node.value )
 
 
-    mapfile = CElection['mapfiles'][-1]
+    mapfile = current_node.mapfile(rlevels)
 
     print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
     print("____Firstpage Mapfile",mapfile, current_node.value)
@@ -4017,7 +4043,7 @@ def firstpage():
     print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[CElection.childnode_type(current_node.level)].name} ")
     flayers = current_node.getselectedlayers(rlevels,current_election,mapfile)
     current_node.create_area_map(flayers, current_election,CElection)
-    print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file)
+    print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
 
 #        CElection['mapfiles'][-1] = mapfile
 

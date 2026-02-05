@@ -160,11 +160,16 @@ class CurrentElection(dict):
         Return the election_id of the most recently modified election file.
         """
         elections_dir = cls.BASE_FILE.parent
-        election_files = list(elections_dir.glob("elections-*.json"))
+
+        election_files = list(elections_dir.glob("Elections-*.json"))
+
+
         if not election_files:
+            print(f"-------election directory:{elections_dir} - is empty")
             return "DEMO"
         latest_file = max(election_files, key=lambda p: p.stat().st_mtime)
-        return latest_file.stem.replace("elections-", "")
+        print(f"-------election directory:{elections_dir} - {latest_file}")
+        return latest_file.stem.replace("Elections-", "")
 
     @classmethod
     def load(cls, election_id: str) -> "CurrentElection":

@@ -140,17 +140,17 @@ def load_nodes(path):
 
 
 
-def parent_level_for(child_type):
+def parent_level_for(node_type):
     """
     Returns the level index of the node you must be on
-    to list children of `child_type`.
+    to list children of `node_type`.
     """
 
 
-    if child_type not in LEVEL_INDEX:
-        raise ValueError(f"Unknown node type: {child_type}")
+    if node_type not in LEVEL_INDEX:
+        raise ValueError(f"Unknown node type: {node_type}")
 
-    child_level = LEVEL_INDEX[child_type]
+    child_level = LEVEL_INDEX[node_type]
 
     if child_level == 0:
         return None
@@ -261,7 +261,7 @@ def is_safe_url(target):
     return test_url.scheme in ('http', 'https') and \
             ref_url.netloc == test_url.netloc
 
-def get_layer_table(nodelist,title):
+def get_layer_table(nodelist,title,rlevels):
     from state import VNORM
     def safe_float(val, default=0.0):
         try:
@@ -285,11 +285,11 @@ def get_layer_table(nodelist,title):
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
             elif x.type == 'walk':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
             else:
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
             # 1. Identify grandparent
             grandparent = x.parent.parent if x.parent else None
 
@@ -482,7 +482,7 @@ def restore_from_persist(session=None,session_data=None):
 
 def persist(node):
     global allelectors
-    from state import Treepolys, Fullpolys
+    from state import Treepolys, Fullpolys, OPTIONS
 
 
     print('___persisting file ', TREEPOLY_FILE)
@@ -494,8 +494,8 @@ def persist(node):
     allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
     print('___persisting options ', node.value)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(OPTIONS_FILE, f, indent=2)
+    with open(OPTIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(OPTIONS, f, indent=2)
     return
 
 def restore_fullpolys(node_type):
@@ -569,7 +569,6 @@ def resolve_here_or_redirect(sourcepath, here):
 
 
 def get_last(current_election, CE):
-    from state import Treepolys, Fullpolys, ensure_treepolys
     from flask import redirect
 
     cid = CE.get("cid")
@@ -603,8 +602,6 @@ def get_last(current_election, CE):
         sourcepath
     )
 
-    CE['mapfiles'] = capped_append(CE['mapfiles'], sourcepath)
-    CE.save()
     # --- 5. Final fallback to root ---
     if not last_node:
         print("⚠️ Falling back to root node")
@@ -688,6 +685,7 @@ class TreeNode:
         self.value = normalname(str(value))
         self.fid = fid
         self.latlongroid = roid
+        self._child_index = {}
 
         self.origin = origin
         self.election = origin
@@ -801,33 +799,66 @@ class TreeNode:
         else:
             return f"{self.parent.dir}/{self.value}"
 
-    @property
-    def file(self):
+
+    def child_type(self, rlevels: dict[int, str]) -> str | None:
+        """
+        Return the child node type for this node.
+        Safely returns None if this is a leaf node.
+        """
+        if not rlevels:
+            return None
+
+        next_level = self.level + 1
+
+        # If the next level does not exist in rlevels, this is a leaf
+        if next_level not in rlevels:
+            return None
+
+        return rlevels[next_level]
+
+
+    def file(self, rlevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
-        FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
-        return f"{self.value}{FACEENDING[self.type]}"
+        FACEENDING = {
+            'street': "-PRINT.html",
+            'walkleg': "-PRINT.html",
+            'polling_district': "-PDS.html",
+            'walk': "-WALKS.html",
+            'ward': "-WARDS.html",
+            'division': "-DIVS.html",
+            'constituency': "-MAP.html",
+            'county': "-MAP.html",
+            'nation': "-MAP.html",
+            'country': "-MAP.html",
+        }
+
+        child = self.child_type(rlevels)
+        suffix = FACEENDING.get(child, "")
+
+        return f"{self.value}{suffix}"
+
 
     def render_face(self, c_elect,CurrEL, new):
     #  create the node html (if it doesnt already exist) and render it.
         from flask import send_file, abort
         from pathlib import Path
         # Access the first key from the dictionary
-        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile())
+        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile(rlevels))
         CurrEL2 = CurrEL
         CurrEL2['cid'] = self.nid
         CurrEL2['cidLat'] = self.latlongroid[0]
         CurrEL2['cidLong'] = self.latlongroid[1]
-        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile())
+        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile(rlevels))
         CurrEL2.save()
 
         session['current_election'] = c_elect
         session['current_node_id'] = self.nid
         print(f"___under {c_elect} visiting from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
-        print("=== VISIT NODE ===", self.mapfile())
+        print("=== VISIT NODE ===", self.mapfile(rlevels))
         print("current children:",
               [c.value for c in self.children])
 
-        mapfile = self.mapfile()
+        mapfile = self.mapfile(rlevels)
 #        atype = gettypeoflevel(estyle,mapfile, self.level+1)
         next_level = self.level + 1
         if next_level > max(CurrEL2.resolved_levels):
@@ -849,7 +880,7 @@ class TreeNode:
         print("___map Exists:", fullpath)
         return send_file(fullpath, as_attachment=False)
 
-    def endpoint_created(self, c_elect, CurrEL):
+    def endpoint_created(self, c_elect, CurrEL, newpath):
         """
         Creates a map node (HTML) if it doesn't already exist and processes layers for election data.
         """
@@ -858,14 +889,14 @@ class TreeNode:
         from layers import Featurelayers
         from elections import route
 
-        # Access the first key from the dictionary (logging route for debugging)
-        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile())
-        print("current children:", [c.value for c in self.children])
-
         # Get mapfile and determine the next level
-        mapfile = self.mapfile()
-        next_level = self.level + 1
         rlevels = CurrEL.resolved_levels
+
+
+        next_level = self.level + 1
+        # Access the first key from the dictionary (logging route for debugging)
+        print(f"___under {route()} for {c_elect} visiting newpath:", self.mapfile(rlevels))
+        print("current children:", [c.value for c in self.children])
 
         # Ensure that next_level does not exceed available levels
         if next_level > max(rlevels, default=0):
@@ -880,7 +911,7 @@ class TreeNode:
             return False
 
         # Build the full path to the map file
-        fullpath = Path(workdir) / mapfile
+        fullpath = Path(workdir) / newpath
 
         # Check if the map file exists
         if not fullpath.exists():
@@ -901,16 +932,20 @@ class TreeNode:
             Featurelayers[atype].create_layer(c_elect, self, atype)
 
             # Get selected layers and create the map
-            selectedlayers = self.getselectedlayers(rlevels, c_elect, mapfile)
+            selectedlayers = self.getselectedlayers(rlevels, c_elect, newpath)
             self.create_area_map(selectedlayers, c_elect, CurrEL)
 
             # Debug information about the layers
             print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
-
+            CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], newpath)
+            CurrEL.save()
+            print("Endpoint Created:", CurrEL['mapfiles'][-1])
             return True  # New map file created
 
         # If the file exists, send it (no need to recreate it)
-        print("___map Exists:", fullpath)
+        CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], newpath)
+        CurrEL.save()
+        print("___Endpoint Already Exists:", CurrEL['mapfiles'][-1])
         return False  # File exists, no action needed
 
 
@@ -1073,13 +1108,13 @@ class TreeNode:
                 node = node.parent
         return node
 
-    def mapfile(self):
-        return self.dir+"/"+self.file
+    def mapfile(self,rlevels):
+        return self.dir+"/"+self.file(rlevels)
 
 
 
     def ping_node(self, rlevels, c_election, dest_path):
-        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys,ensure_treepolys
+        from state import LEVEL_ZOOM_MAP
         from elections import route
 
         def strip_leaf_from_path(path):
@@ -1118,7 +1153,7 @@ class TreeNode:
 
         # ──────────────────────────────
         # Step 1: clean paths
-        self_path = split_clean_path(self.mapfile())
+        self_path = split_clean_path(self.mapfile(rlevels))
         dest_parts = split_clean_path(path_str)
 
 
@@ -1198,13 +1233,13 @@ class TreeNode:
         if moved:
             next_level = node.level + 1
             if next_level <= max(rlevels):
-                child_type = rlevels[next_level]
-                print(f"🌿 [DEBUG] Expanding children of {node.value} as {child_type}")
+                children_type = rlevels[next_level]
+                print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
                 try:
                     if node.level < 4:
-                        node.create_map_branch(rlevels, c_election, child_type)
+                        node.create_map_branch(rlevels, c_election, children_type)
                     else:
-                        node.create_data_branch(rlevels, c_election, child_type)
+                        node.create_data_branch(rlevels, c_election, children_type)
                 except Exception as e:
                     print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
         else:
@@ -1614,7 +1649,7 @@ class TreeNode:
         return nodelist
 
     def create_map_branch(self,resolved_levels,c_election,electtype):
-        from state import Treepolys, Fullpolys, Overlaps, ensure_treepolys
+        from state import Treepolys, Fullpolys, Overlaps
         import random
 
 
@@ -1650,7 +1685,7 @@ class TreeNode:
             print(f"Adding back in Full '{self.type}' boundaries for {self.value} FID {self.fid}")
             raise Exception ("EMPTY COUNTRY PARENT GEOMETRY")
         else:
-            print(f"___create_map_branch geometry for {self.value} FID {self.fid} is ",parent_geom)
+            print(f"___create_map_branch geometry for {self.value} FID {self.fid} is: ")
             print(
                 f"map branch type: {self.type} "
                 f"size {len(parent_poly)} "
@@ -1691,12 +1726,12 @@ class TreeNode:
                 f"existing names: {fam_values}, level+1: {self.level+1}, "
                 f"area: {overlaparea}, margin: {overlap_margin}, "
                 f"test: {overlaparea > overlap_margin}"
-                f"existing: {existing_node}"
             )
 
             # Only create new node if doesn't already exist and passes the area overlap check
             if overlaparea > overlap_margin:
                 existing_node = next((x for x in fam_nodes if x.value == newname), None)
+                print(f"existing: {existing_node}")
                 if not existing_node:
                     # new boundary inside parent
                     egg = TreeNode(
@@ -1715,16 +1750,19 @@ class TreeNode:
 
                     # Update the node with latest stats
                     fam_nodes.append(egg)
-                    egg.updateParty()
-                    egg.updateTurnout(resolved_levels)
-                    egg.updateElectorate(resolved_levels)
-                    egg.updateGOTV(gotv_pct, resolved_levels)
-                    print(f"______Addedname: {egg.value}, type {egg.type}, level {egg.level}, party {egg.party}")
+                    try:
+                        egg.updateParty()
+                        egg.updateTurnout(resolved_levels)
+                        egg.updateElectorate(resolved_levels)
+                        egg.updateGOTV(gotv_pct, resolved_levels)
+                        print(f"______Addedname: {egg.value}, type {egg.type}, level {egg.level}, party {egg.party}")
+                    except Exception:
+                        self.remove_child(egg)
+                        raise Exception ("Tree branching error")
                     k += 1
                 else:
-                    if existing_node:
-                        j += 1
-                    # boundary name already a child node        
+                    j += 1
+                    # boundary name already a child node
                     continue
             else:
                 # boundary not inside parent ignore
@@ -1745,41 +1783,27 @@ class TreeNode:
 
 
     def create_area_map(self, flayers, CE, CEdata):
-        global SERVER_PASSWORD
-        global STATICSWITCH
-        global OPTIONS
-
-        from folium import IFrame
+        from folium import Map, TileLayer, LayerControl, LatLngPopup, Element
         from state import LEVEL_ZOOM_MAP
 
+        rlevels = CEdata.resolved_levels
 
-        print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
-
-        print(f"___BEFORE map creation: in route {route()} creating file: ", self.file)
-
-        import hashlib
-        import re
-        from pathlib import Path
-
-        # --- CSS to adjust popup styling
-        move_close_button_css = """
-            <style>
+        # -----------------------------
+        # Static CSS (safe to inject)
+        # -----------------------------
+        base_css = """
+        <style>
             .leaflet-popup-close-button {
                 right: auto !important;
                 left: 10px !important;
                 top: 10px !important;
                 font-size: 16px;
-                color: #444;
-                background: rgba(255, 255, 255, 0.8);
-                border-radius: 4px;
-                padding: 2px 5px;
             }
-            </style>
-            """
 
-        # --- Search bar with map detection and one single searchMap() function
-        search_bar_html = """
-            <style>
+            .leaflet-container.add-place-mode {
+                cursor: crosshair;
+            }
+
             #customSearchBox {
                 position: fixed;
                 top: 60px;
@@ -1788,595 +1812,92 @@ class TreeNode:
                 background: white;
                 padding: 5px;
                 border: 1px solid #ccc;
-                font-size: 14px;
                 display: flex;
                 gap: 8px;
-                align-items: center;
             }
-            #customSearchBox input {
-                padding: 4px 6px;
-                font-size: 14px;
-            }
-            #customSearchBox button {
-                padding: 4px 8px;
-                font-size: 14px;
-                cursor: pointer;
-            }
+        </style>
+        """
 
-            /* Change cursor to crosshair when in add-place mode */
-            .leaflet-container.add-place-mode {
-                cursor: crosshair;
-            }
+        # -----------------------------
+        # Static HTML only (NO JS)
+        # -----------------------------
+        title_html = f"""
+            <h1 style="z-index:1100;color:black;position:fixed;left:100px;">
+                {self.value} MAP
+            </h1>
+        """
 
-
-            </style>
-
-
+        search_html = """
             <div id="customSearchBox">
                 <input type="text" id="searchInput" placeholder="Search..." />
                 <button onclick="searchMap()">Search</button>
                 <button id="backToCalendarBtn">📅 Calendar</button>
             </div>
+        """
 
-            <script>
-
-
-            document.addEventListener("DOMContentLoaded", function () {
-
-
-                function waitForMap() {
-                    for (const key in window) {
-                        if (window.hasOwnProperty(key)) {
-                            const val = window[key];
-                            if (val && val instanceof L.Map) {
-                                window.fmap = val;  // assign fmap here
-                                return;
-                            }
-                        }
-                    }
-                    setTimeout(waitForMap, 100);
-                }
-
-                waitForMap();
-
-
-            });
-
-            document.getElementById("backToCalendarBtn").addEventListener("click", () => {
-                console.log("📤 Sending back-to-calendar message to parent");
-
-                window.parent.postMessage(
-                    { type: "toggleView" },
-                    "*"
-                );
-            });
-
-            function extractVisibleText(element) {
-                const walker = document.createTreeWalker(
-                    element,
-                    NodeFilter.SHOW_TEXT,
-                    {
-                        acceptNode: function (node) {
-                            const parent = node.parentNode;
-                            const style = window.getComputedStyle(parent);
-                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
-                                return NodeFilter.FILTER_ACCEPT;
-                            }
-                            return NodeFilter.FILTER_REJECT;
-                        }
-                    }
-                );
-
-                let visibleText = '';
-                while (walker.nextNode()) {
-                    visibleText += walker.currentNode.nodeValue + ' ';
-                }
-                return visibleText.trim();
-            }
-
-            async function searchMap() {
-                const query = document.getElementById("searchInput").value.trim();
-                if (!query) return;
-
-                // --- 1️⃣ Check if query looks like a UK postcode ---
-                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
-                if (postcodePattern.test(query)) {
-                    const cleanPostcode = query.replace(/\s+/g, '');
-                    const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
-                    try {
-                        const res = await fetch(url);
-                        if (!res.ok) throw new Error("Network error");
-                        const data = await res.json();
-
-                        if (data.status === "match" && data.data) {
-                            const { latitude, longitude } = data.data;
-                            fmap.setView([latitude, longitude], 17);
-
-                            L.marker([latitude, longitude])
-                                .addTo(fmap)
-                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
-                                .openPopup();
-                            return;
-                        } else {
-                            alert("Postcode not found.");
-                            return;
-                        }
-                    } catch (err) {
-                        console.error("Postcode lookup failed:", err);
-                        // Only alert if the fmap didn’t already move
-                        if (!fmap.getCenter()) alert("Error looking up postcode.");
-                        return;
-                    }
-
-                }
-
-                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
-                const normalizedQuery = query.toLowerCase();
-                let found = false;
-
-                fmap.eachLayer(function (layer) {
-                    if (found) return;
-
-                    // ✅ Search Popups with <b data-name="...">
-                    if (layer.getPopup && layer.getPopup()) {
-                        let bElements = [];
-                        const content = layer.getPopup().getContent();
-
-                        if (content instanceof HTMLElement) {
-                            bElements = content.querySelectorAll('b[data-name]');
-                        } else if (typeof content === 'string') {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(content, 'text/html');
-                            bElements = doc.querySelectorAll('b[data-name]');
-                        }
-
-                        for (let b of bElements) {
-                            const dataName = b.getAttribute('data-name');
-                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
-                            if (normalizedDataName.includes(normalizedQuery)) {
-                                let latlng = null;
-                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
-
-                                if (latlng) {
-                                    fmap.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
-                                    found = true;
-                                    return;
-                                }
-                            }
-                        }
-                    }
-
-                    // ✅ Search Tooltips
-                    if (!found && layer.getTooltip && layer.getTooltip()) {
-                        const tooltipContent = layer.getTooltip().getContent();
-                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                            let latlng = null;
-                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
-
-                            if (latlng) {
-                                fmap.setView(latlng, 17);
-                                found = true;
-                                return;
-                            }
-                        }
-                    }
-
-                    // ✅ Search DivIcons
-                    if (!found && layer instanceof L.Marker) {
-                        if (layer.options.icon instanceof L.DivIcon) {
-                            const iconContent = layer.options.icon.options.html;
-                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
-                                const latlng = layer.getLatLng();
-                                if (latlng) {
-                                    fmap.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
-                                    if (layer._icon) layer._icon.style.border = "2px solid red";
-                                    found = true;
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                });
-
-                if (!found) {
-                    alert("No matching location found.");
-                }
-            }
-            </script>
-
-            """
-
-
-        # --- Title for the map
-        title = f"{self.value} MAP"
-        title_html = f'''
-            <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
-            '''
-
-        # --- Create the map
-        FolMap = folium.Map(
+        # -----------------------------
+        # Create map
+        # -----------------------------
+        FolMap = Map(
             location=self.latlongroid,
             zoom_start=LEVEL_ZOOM_MAP[self.type],
-            width='100%',
-            height='800px'
+            width="100%",
+            height="800px"
         )
 
-        # Inject custom CSS
-        css = """
-        <style>
-        .leaflet-control-layers {
-            margin-right: 300px !important; /* move left by increasing the right margin */
-            /* or use left:50px; right:auto; for absolute positioning */
-        }
-        </style>
-        """
-#        FolMap.get_root().html.add_child(Element(css))
-# no need for this if map left of nav buttons
-        folium.TileLayer(
-            tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
-            name='OPNVKarte (Public Transport)',
-            attr='Map data © OpenStreetMap contributors, OPNVKarte by memomaps.de',
+        TileLayer(
+            tiles="https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png",
+            name="OPNVKarte (Public Transport)",
+            attr="Map data © OpenStreetMap contributors",
             overlay=False,
             control=True
         ).add_to(FolMap)
 
-        # Add all layers
+        # -----------------------------
+        # Add feature layers
+        # -----------------------------
         for layer in flayers:
             layer.add_to(FolMap)
-            print(f"layer name: {layer.name} size:{len(layer._children)}")
-            if layer.areashtml != {}:
-                OPTIONS['areas'] = layer.areashtml
 
-        # --- Inject custom HTML and JS into map
-
-#        FolMap.add_child(folium.LatLngPopup())
-
-
-        FolMap.get_root().html.add_child(folium.Element(title_html))
-        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
-
-        # Add the LatLngPopup plugin
-        FolMap.add_child(folium.LatLngPopup())
-
-
-        fmap_tags_js = r"""
-                <script>
-                (function() {
-
-                    console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
-
-                    window.fmap = null;
-                    window.MarkerLayer = null;
-
-                    let pollAttempts = 0;
-                    const MAX_ATTEMPTS = 100; // 10 seconds timeout
-
-                    // ---------------------------------------------------------
-                    // 1️⃣ Stage 1: Detect the Folium map object
-                    // ---------------------------------------------------------
-                    function detectFoliumMap() {
-                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
-                            setTimeout(detectFoliumMap, 100);
-                            return;
-                        }
-
-                        for (const key in window) {
-                            if (!window.hasOwnProperty(key)) continue;
-                            const val = window[key];
-
-                            if (key.startsWith("map_") && val instanceof L.Map) {
-                                window.fmap = val;
-                                startLayerPolling();
-                                return;
-                            }
-                        }
-                        setTimeout(detectFoliumMap, 100);
-                    }
-
-                    // ---------------------------------------------------------
-                    // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
-                    // ---------------------------------------------------------
-                    function findTargetLayer() {
-                        pollAttempts++;
-
-                        if (pollAttempts > MAX_ATTEMPTS) {
-                            console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
-                            clearInterval(poll_interval_id);
-                            return;
-                        }
-
-                        // --- Search for the Layer Control's internal dictionary ---
-                        for (const key in window) {
-                            if (!window.hasOwnProperty(key)) continue;
-                            const val = window[key];
-
-                            // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
-                            if (key.startsWith("layer_control_") && val && val.overlays) {
-
-                                // Check if the target layer ("marker") is inside the overlays
-                                if (val.overlays.marker) {
-                                    window.MarkerLayer = val.overlays.marker;
-
-                                    console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
-                                    console.log(`Marker Layer stored in window.MarkerLayer.`);
-
-                                    clearInterval(poll_interval_id);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-
-                    let poll_interval_id;
-                    function startLayerPolling() {
-                        poll_interval_id = setInterval(findTargetLayer, 100);
-                    }
-
-                    document.addEventListener("DOMContentLoaded", detectFoliumMap);
-
-                })();
-                </script>
-                """
-
-        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
-
-
-        # Inject canvas icon JS
-        canvas_icon_js = """
-        <script>
-        window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
-            const size = 40;
-            const radius = 18;
-
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d");
-
-            ctx.beginPath();
-            ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "#000";
-            ctx.stroke();
-
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 16px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(prefix, size/2, size/2);
-
-            console.log("📍 canvas icon:");
-
-            return L.icon({
-                iconUrl: canvas.toDataURL(),
-                iconSize: [size, size],
-                iconAnchor: [size/2, size],
-                popupAnchor: [0, -size/2]
-            });
-        };
-        </script>
-        """
-        FolMap.get_root().html.add_child(Element(canvas_icon_js))
-
-        # Add LatLngPopup
-        FolMap.add_child(folium.LatLngPopup())
-
-        # Inject JS to replace default popup with canvas marker
-        custom_click_js = r"""
-            <script>
-            (function () {
-
-                console.log("📌 custom_click_js loaded");
-
-                // State
-                window.awaitingNewPlace = false;
-                window.pinMarker = null;
-
-                // --- The Layer Polling Mechanism (For the initial click) ---
-                // If the layer isn't found on the first click, this function will wait for it.
-                function tryAddMarkerToLayer(marker, lat, lng, prefix) {
-                    if (window.MarkerLayer) {
-                        window.MarkerLayer.addLayer(marker);
-                        console.log("📌 Marker added to FeatureGroup 'marker'");
-                        // Now safe to do the final geocoding/messaging
-
-                        // Trigger the rest of the original logic here
-                        window.reverseGeocode(lat, lng)
-                            .then(({ address, house_number, road, suburb, city, postcode }) => {
-                                console.log("Raw reverse geocode result:", house_number, road, suburb, city, postcode);
-                                window.awaitingNewPlace = false;
-
-                                window.parent.postMessage({
-                                    type: "newPlaceCreated",
-                                    prefix, lat, lng, house_number, road, suburb, city, postcode
-                                }, "*");
-
-                                marker.bindPopup(`<b>${prefix}</b><br>${address}`).openPopup();
-                                window.fmap.getContainer().classList.remove("add-place-mode");
-                                console.log("📍 newPlaceCreated message sent");
-                            })
-                            .catch(err => {
-                                console.error("Reverse geocode error:", err);
-                                // Important: If geocoding fails, you may want to remove the marker or handle the error gracefully
-                                if (window.fmap.hasLayer(marker)) window.fmap.removeLayer(marker);
-                                window.awaitingNewPlace = false;
-                                window.fmap.getContainer().classList.remove("add-place-mode");
-                            });
-
-                    } else if (window.fmap) {
-                        // Safety Fallback (Should only run if polling failed)
-                        marker.addTo(window.fmap);
-                        console.warn("📌 Marker added directly to fmap (Layer not yet found, using fallback).");
-
-                        // To prevent code duplication and complexity, if the layer is not found,
-                        // we add it to the map but skip the reverseGeocode logic here
-                        // or simplify it to prevent errors.
-
-                        // You need to decide if the rest of the logic should run without the target layer.
-                        // For now, let's keep the original logic flow focused on success.
-
-                    } else {
-                        console.error("Critical Error: Map object (fmap) is null.");
-                    }
-                }
-
-
-                // --------------------------------------------------------------------
-                // Click handler — only fires when awaitingNewPlace === true
-                // --------------------------------------------------------------------
-                function handleMapClick(e) {
-                    if (!window.awaitingNewPlace || !window.fmap) return;
-
-                    const lat = e.latlng.lat;
-                    const lng = e.latlng.lng;
-
-                    const prefix = prompt("Enter a prefix for this new place:", "");
-                    if (!prefix) return;
-
-                    // Remove previous pinMarker
-                    if (window.pinMarker) {
-                        // Check if it's on the MarkerLayer or directly on the map
-                        if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
-                            window.MarkerLayer.removeLayer(window.pinMarker);
-                        } else if (window.fmap.hasLayer(window.pinMarker)) {
-                            window.fmap.removeLayer(window.pinMarker);
-                        }
-                    }
-
-                    // Create canvas-based prefix icon (Assumes window.makePrefixMarkerIcon exists)
-                    const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
-                    window.pinMarker = L.marker([lat, lng], { icon });
-
-                    // Use the consolidated function to handle adding the marker and reverse geocoding
-                    // Note: The original geocoding/messaging logic is now moved INTO tryAddMarkerToLayer
-                    tryAddMarkerToLayer(window.pinMarker, lat, lng, prefix);
-                }
-
-                // --------------------------------------------------------------------
-                // Turn on add-place mode when parent sends enableAddPlace
-                // --------------------------------------------------------------------
-                window.addEventListener("message", (event) => {
-                    if (event.data?.type === "enableAddPlace") {
-                        console.log("🟡 enableAddPlace received");
-                        window.awaitingNewPlace = true;
-
-                        if (window.fmap) {
-                            window.fmap.getContainer().classList.add("add-place-mode");
-                        }
-
-                        alert("Click on the map to select a new place.");
-                    }
-                });
-
-                // --------------------------------------------------------------------
-                // Attach click handler when fmap is ready
-                // --------------------------------------------------------------------
-                window.addEventListener("fmap-ready", (ev) => {
-                    const fmap = ev.detail;
-                    // Double-check window.fmap is set if the event didn't set it (good practice)
-                    window.fmap = fmap;
-
-                    console.log("🎯 custom_click_js attaching click handler to fmap");
-                    fmap.on("click", handleMapClick);
-                });
-
-            })();
-            </script>
-            """
-
-        FolMap.get_root().html.add_child(Element(custom_click_js))
-
-        reverse_geocode_js = """
-        <script>
-        // Simple reverse geocoder using Nominatim
-        window.reverseGeocode = async function(lat, lng) {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
-
-            const res = await fetch(url, {
-                headers: {
-                    "Accept": "application/json"
-                }
-            });
-
-            if (!res.ok) throw new Error("Reverse geocoding failed");
-
-            const data = await res.json();
-            console.log("📍 Reverse geocode result:", data);
-
-            return {
-                address: data.display_name || "Unknown address",
-                house_number: data.address?.house_number || "",
-                road: data.address?.road || "",
-                suburb: data.address?.suburb || "",
-                city: data.address?.city || data.address?.town || data.address?.village || "",
-                postcode: data.address?.postcode || ""
-            };
-
-        };
-        </script>
-        """
-
-        FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
-
-    #    FolMap.get_root().html.add_child(folium.Element(add_place_js))
-
-
-
-        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
-
-
-
-        # Ensure there's only one LayerControl
-        if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
-            FolMap.add_child(folium.LayerControl())
-
-        # Add custom CSS/JS
-        FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
-        FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
-        FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
-
-        # Fit map to bounding box
-        if self.level == 4:
-            print("_____bboxcheck", self.value, self.bbox)
+        # -----------------------------
+        # Map plugins
+        # -----------------------------
+        FolMap.add_child(LatLngPopup())
+
+        if not any(isinstance(c, LayerControl) for c in FolMap._children.values()):
+            FolMap.add_child(LayerControl())
+
+        # -----------------------------
+        # Inject HTML & CSS
+        # -----------------------------
+        root = FolMap.get_root().html
+        root.add_child(Element(base_css))
+        root.add_child(Element(title_html))
+        root.add_child(Element(search_html))
+
+        # -----------------------------
+        # Load external JS (single source of truth)
+        # -----------------------------
+        FolMap.add_js_link(
+            "electtrekmap",
+            "https://newbrie.github.io/Electtrek/static/map.js"
+        )
+
+        # -----------------------------
+        # Fit bounds (unchanged logic)
+        # -----------------------------
         if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
             try:
                 sw, ne = self.bbox
+                FolMap.fit_bounds([sw, ne])
+            except Exception as e:
+                print("⚠️ Invalid bbox:", e)
 
-                # Check each part is a pair
-                if not (isinstance(sw, (list, tuple)) and len(sw) == 2 and
-                        isinstance(ne, (list, tuple)) and len(ne) == 2):
-                    raise ValueError("BBox corners are not 2-element lists")
-
-                sw = [float(sw[0]), float(sw[1])]
-                ne = [float(ne[0]), float(ne[1])]
-
-                if sw == ne:
-                    print("⚠️ BBox corners are identical; using centroid instead")
-                    FolMap.location = self.latlongroid
-                    FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
-                else:
-                    print("✅ BBox is valid, applying fit_bounds")
-                    FolMap.fit_bounds([sw, ne], padding=(0, 0))
-
-            except (TypeError, ValueError) as e:
-                print(f"⚠️ Invalid bbox values: {self.bbox} | Error: {e}")
-        else:
-            print(f"⚠️ BBox is missing or badly formatted: {self.bbox}")
-
-        # overwrite file
-        target = self.locfilepath(self.file)
+        target = self.locfilepath(self.file(rlevels))
         FolMap.save(target)
 
-        print("Centroid raw:", self.latlongroid)
-        print(f" ✅ _____saved map file in route: {route()}", target, len(flayers), self.value, self.dir, self.file)
-
         return FolMap
+
 
 
     def set_bounding_box(self,block):
@@ -2441,14 +1962,46 @@ class TreeNode:
         d = ''.join(d.insert(0,url_for('thru',path="UNITED_KINGDOM")))
         return d
 
+    def remove_child(self, child):
+        """
+        Remove a child node from this node safely.
+        """
+        if not child:
+            return False
+
+        try:
+            if child in self.children:
+                self.children.remove(child)
+
+            # break back-reference if it exists
+            if hasattr(child, "parent") and child.parent is self:
+                child.parent = None
+
+            return True
+
+        except ValueError:
+            return False
+
+
     def add_Tchild(self, child_node, etype, elect, *, counters):
 
-        # 1. Detach from old parent
+        # 1. Assign type FIRST
+        child_node.type = etype
+
+        # 1.1 🔒 DUPLICATE GUARD: same parent, same type, same fid
+        for existing in self.children:
+            if existing.type == etype and existing.fid == child_node.fid:
+                print(
+                    f"[DEBUG] Reusing existing child "
+                    f"{existing.value} (fid={existing.fid}) "
+                    f"under parent {self.value}"
+                )
+                return existing
+
+        # 2. Detach from old parent
         if child_node.parent and child_node in child_node.parent.children:
             child_node.parent.children.remove(child_node)
 
-        # 2. Assign type FIRST
-        child_node.type = etype
 
         # 3. Attach to new parent
         child_node.parent = self
@@ -2463,11 +2016,14 @@ class TreeNode:
         child_node.tagno = len(same_type_siblings)
 
         # 5. Global display counter
+        # 5️⃣ Global display counter (fixed)
         if etype not in counters:
-            raise KeyError(f"layerCounter type '{etype}' does not exist!")
+            counters[etype] = 0  # initialize first occurrence
 
         counters[etype] += 1
         child_node.gtagno = counters[etype]
+
+
 
         # 6. Register by ID only (safe)
         # Ensure parent is registered first
@@ -2543,11 +2099,11 @@ class TreeNode:
         prodstats['canvasshrs'] = round(canvasshrs,2)
 
         #                  electorwalks['ENOP'] =  electorwalks['PD']+"-"+electorwalks['ENO']+ electorwalks['Suffix']*0.1
-        target = self.locfilepath(self.file)
+        target = self.locfilepath(self.file(rlevels))
         results_filename = streetfile_name+"-PRINT.html"
         datafile = "/STupdate/" + self.dir+"/"+streetfile_name+"-SDATA.csv"
         # mapfile is used for the up link to the PD streets list
-        mapfile = "/upbut/" + self.parent.mapfile()
+        mapfile = "/upbut/" + self.parent.mapfile(rlevels)
         electorwalks = electorwalks.fillna("")
 
         #              These are the street nodes which are the street data collection pages
@@ -2576,26 +2132,17 @@ class TreeNode:
         parent_node.children.append(self)
         print("Children",parent_node.children)
 
-    def path_intersect(self, path):
+    def path_intersect(self, path, rlevels):
         # start at the leaf of path 1 and test membership of path 2
-        first = state.stepify(self.dir+"/"+self.file)
+        first = state.stepify(self.dir+"/"+self.file(rlevels))
         second = state.stepify(path)
-        print("intersecting paths ",self.dir+"/"+self.file, path)
+        print("intersecting paths ",self.dir+"/"+self.file(rlevels), path)
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}
         d3 = {k: d1[k] for k in d1 if k in d2}
         d = dict(sorted(d3.items(), key=lambda item: item[1]))
         print("___sorted intersection:",list(d.keys()))
         return list(d.keys())
-
-    def remove_child(self, child_node):
-        # removes parent-child relationship
-        print("Removing " + child_node.value + " from " + self.value)
-        self.children = [child for child in self.children
-                         if child is not child_node]
-
-
-    # Run path directed establishment of node 'A'
 
 
     def create_enclosing_gdf(self, gdf, buffer_size=20):
