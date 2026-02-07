@@ -233,12 +233,54 @@ def build_nodemap_list_html(herenode):
 
 
 class ExtendedFeatureGroup(FeatureGroup):
-    def __init__(self, name=None, overlay=True, control=True, show=True, type=None, id=None, **kwargs):
-        # Pass standard arguments to the base class
-        super().__init__(name=name, overlay=overlay, control=control, show=show, **kwargs)
-        self.name = name
-        self.id = id
+    def __init__(self, name=None, overlay=True, control=True, show=True):
+        super().__init__(
+            name=name,
+            overlay=overlay,
+            control=control,
+            show=show
+        )
+        self.name = name         # <--- explicitly store it
+        self.key = None
+        self.mytag = None
+        self.id = None
         self.areashtml = {}
+
+
+    def create_layer(self, c_election, node, intention_type, static=False):
+        """
+        Create all features for a node in a single election.
+        This layer instance MUST be map-local.
+        """
+
+        CElection = CurrentElection.load(c_election)
+        rlevels = CElection.resolved_levels
+
+        # 🔒 Safety: ensure this is a fresh, map-local layer
+        self._children = {}
+
+        self.id = node.nid
+
+        print(
+            f"__Layer build: name={self.name} "
+            f"value={node.value} type={intention_type}"
+        )
+
+        if intention_type == "marker":
+            self.add_genmarkers(CElection, rlevels, node, "marker", static)
+
+        elif intention_type in ("street", "walkleg"):
+            self.add_nodemarks(c_election, rlevels, node, intention_type, static)
+
+        elif intention_type in ("polling_district", "walk"):
+            self.generate_voronoi_with_geovoronoi(
+                c_election, rlevels, node, intention_type, static
+            )
+
+        else:
+            self.add_nodemaps(c_election, rlevels, node, intention_type, static)
+
+        return len(self._children)
 
     def reset(self):
         # This clears internal children before rendering
@@ -870,39 +912,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def create_layer(self, c_election, node, intention_type, static=False):
-        """
-        Create all features for a node in a single election.
-        Layers are cleared before adding new features.
-        """
-        CElection = CurrentElection.load(c_election)
-        rlevels = CElection.resolved_levels
-
-        # Clear the layer before adding new features
-        self._children.clear()
-
-        print(f"__Layer id:{self.name} value:{node.value} type:{intention_type} layer children cleared")
-
-        # Add content depending on type
-        if intention_type == 'marker':
-            self.id = node.nid
-            self.add_genmarkers(CElection, rlevels, node, 'marker', static)
-
-        elif intention_type in ('street', 'walkleg'):
-            self.id = node.nid
-            self.add_nodemarks(c_election, rlevels, node, intention_type, static)
-
-        elif intention_type in ('polling_district', 'walk'):
-            self.id = node.nid
-            self.generate_voronoi_with_geovoronoi(c_election, rlevels, node, intention_type, static)
-
-        else:
-            self.id = node.nid
-            self.add_nodemaps(c_election, rlevels, node, intention_type, static)
-
-        return len(self._children)
-
-
     def add_genmarkers(self, CE, rlevels, node, type, static):
         eventlist = node.build_eventlist_dataframe(CE)
         print(f" ___GenMarkers: under {route()} eventlist: {eventlist}")
@@ -936,8 +945,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                 ))
 
         return eventlist
-
-
 
     def add_nodemaps (self,c_election,rlevels, herenode,type,static):
         from state import Treepolys, Fullpolys
@@ -1246,25 +1253,55 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-Featurelayers = {
-"marker": ExtendedFeatureGroup(name='marker', options={'mytag': 'marker'},overlay=True, control=True, show=False),
-"country": ExtendedFeatureGroup(name='country', options={'mytag': 'country'},overlay=True, control=True, show=False),
-"nation": ExtendedFeatureGroup(name='nation', options={'mytag': 'nation'},overlay=True, control=True, show=False),
-"county": ExtendedFeatureGroup(name='county', options={'mytag': 'county'},overlay=True, control=True, show=False),
-"constituency": ExtendedFeatureGroup(name='constituency', options={'mytag': 'consituency'},overlay=True, control=True, show=False),
-"ward": ExtendedFeatureGroup(name='ward', overlay=True, options={'mytag': 'ward'},control=True, show=False),
-"division": ExtendedFeatureGroup(name='division', options={'mytag': 'division'},overlay=True, control=True, show=False),
-"polling_district": ExtendedFeatureGroup(name='polling_district', options={'mytag': 'polling_district'},overlay=True, control=True, show=False),
-"walk": ExtendedFeatureGroup(name='walk', options={'mytag': 'walk'},overlay=True, control=True, show=False),
-"walkleg": ExtendedFeatureGroup(name='walkleg', options={'mytag': 'walkleg'},overlay=True, control=True, show=False),
-"street": ExtendedFeatureGroup(name='street', options={'mytag': 'street'},overlay=True, control=True, show=False),
-"result": ExtendedFeatureGroup(name='result', options={'mytag': 'result'},overlay=True, control=True, show=False),
-"target": ExtendedFeatureGroup(name='target', options={'mytag': 'target'},overlay=True, control=True, show=False),
-"data": ExtendedFeatureGroup(name='data', options={'mytag': 'data'},overlay=True, control=True, show=False)
+# -----------------------------
+# Layer specs (cleaned up)
+# -----------------------------
+FEATURE_LAYER_SPECS = {
+    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False),
+    "country": dict(name="country", mytag="country", overlay=True, control=True, show=False),
+    "nation": dict(name="nation", mytag="nation", overlay=True, control=True, show=False),
+    "county": dict(name="county", mytag="county", overlay=True, control=True, show=False),
+    "constituency": dict(name="constituency", mytag="constituency", overlay=True, control=True, show=False),
+    "ward": dict(name="ward", mytag="ward", overlay=True, control=True, show=False),
+    "division": dict(name="division", mytag="division", overlay=True, control=True, show=False),
+    "polling_district": dict(name="polling_district", mytag="polling_district", overlay=True, control=True, show=False),
+    "walk": dict(name="walk", mytag="walk", overlay=True, control=True, show=False),
+    "walkleg": dict(name="walkleg", mytag="walkleg", overlay=True, control=True, show=False),
+    "street": dict(name="street", mytag="street", overlay=True, control=True, show=False),
+    "result": dict(name="result", mytag="result", overlay=True, control=True, show=False),
+    "target": dict(name="target", mytag="target", overlay=True, control=True, show=False),
+    "data": dict(name="data", mytag="data", overlay=True, control=True, show=False),
 }
-counters = {}
-for etype in Featurelayers.keys():
-    counters[etype] = 0
 
-for key, layer in Featurelayers.items():
-    layer.key = key
+
+# -----------------------------
+# Factory: make fresh layers per map
+# -----------------------------
+def make_feature_layers():
+    """
+    Returns a fresh dict of ExtendedFeatureGroup instances for a single map.
+    Each layer has Python-only metadata: .key and .mytag.
+    """
+    layers = {}
+
+    for key, spec in FEATURE_LAYER_SPECS.items():
+        layer = ExtendedFeatureGroup(
+            name=spec["name"],
+            overlay=spec["overlay"],
+            control=spec["control"],
+            show=spec["show"],
+        )
+
+        # Python-side metadata only, safe to reuse in counters, logging, etc.
+        layer.key = key
+        layer.mytag = spec["mytag"]
+
+        layers[key] = layer
+
+    return layers
+
+
+
+
+def make_counters():
+    return {key: 0 for key in FEATURE_LAYER_SPECS}

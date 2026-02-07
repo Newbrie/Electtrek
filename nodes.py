@@ -1,13 +1,14 @@
 from config import workdirectories, ELECTOR_FILE, TREKNODE_FILE, OPTIONS_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
 import os
 import state
+import layers
 import json
 import pandas as pd
 import geopandas as gpd
 import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context
-from layers import Featurelayers
+from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 from elections import route, CurrentElection
 from folium import Map, Element
 import folium
@@ -886,7 +887,7 @@ class TreeNode:
         """
 
         from pathlib import Path
-        from layers import Featurelayers
+        from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
         from elections import route
 
         # Get mapfile and determine the next level
@@ -927,13 +928,8 @@ class TreeNode:
             # Log type and node info
             print(f" target type: {atype} current {self.value} type: {self.type}")
 
-            # Reset and create the map layer
-            Featurelayers[atype].reset()
-            Featurelayers[atype].create_layer(c_elect, self, atype)
-
             # Get selected layers and create the map
-            selectedlayers = self.getselectedlayers(rlevels, c_elect, newpath)
-            self.create_area_map(selectedlayers, c_elect, CurrEL)
+            self.create_area_map(c_elect, CurrEL)
 
             # Debug information about the layers
             print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
@@ -1248,46 +1244,37 @@ class TreeNode:
         return node
 
 
-    def getselectedlayers(self,rlevels,this_election,path):
-        global Featurelayers
-        global OPTIONS
-#add children layer(level+1), eg wards,constituencies, counties
-        print(f"_____layerstest0 type:{self.value},{self.type} path: {path}")
-
+    def getselectedlayers(self, rlevels, this_election, path):
+        from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
+        # rlevels[self.level-1] = child type
+        # rlevels[self.level] = sibling type
+        # rlevels[self.parent.level] = parent type
         selected = []
-        next_level = self.level+1
-        if next_level > max(rlevels):
-            return None
-        childtype = rlevels[next_level]
-        if childtype == 'elector':
-            selected = []
-        else:
-            selectc = Featurelayers[childtype]
-            selectc.show = True
-            selected = [selectc]
-            print(f"_____layerstest1 {self.value} layertype: {childtype} size: {len(selectc._children)} areas html:{OPTIONS['areas']}")
-        if self.level > 0 :
-#add siblings layer = self.level eg constituencies
-    #        if len(selects._children) == 0:
-            # parent children = siblings, eg constituencies, counties, nations
-            print(f"_____layerstest20 {self.parent.value} lev:{self.level} type:{self.type} layers: {list(reversed(selected))}")
-            Featurelayers[self.type].create_layer(this_election,self.parent,self.type)
-            selected.append(Featurelayers[self.type])
-            print(f"_____layerstest2 {self.parent.value} layertype: {self.type} areashtml2:{OPTIONS['areas']}")
-        if self.level > 1:
-#add parents layer, eg counties, nations, country
-#            if len(selectp._children) == 0:
-            print(f"_____layerstest30 {self.parent.parent.value} type:{self.parent.type} layers: {list(reversed(selected))}")
-            Featurelayers[self.parent.type].create_layer(this_election,self.parent.parent,self.parent.type)
-            selected.append(Featurelayers[self.parent.type])
-            print(f"_____layerstest3 {self.parent.parent.value} layertype: {self.parent.type} areashtml3:{OPTIONS['areas']}")
+        layers = make_feature_layers()
 
-        print(f"_____layerstest40 {self.findnodeat_Level(2).value} markers layers: {list(reversed(selected))}")
-        markerlayer = Featurelayers['marker']
-        print(f"_____layerstest401 {markerlayer} markers layers: {list(reversed(selected))}")
-        selected.append(markerlayer)
-        print(f"_____layerstest4 {self.findnodeat_Level(2).value} - len {len(markerlayer._children)} markers layers: {list(reversed(selected))}")
+        childtype = self.child_type(rlevels)
+
+        if self.level < 7:
+            child_layer = layers[childtype]
+            child_layer.create_layer(this_election, self, childtype)
+            child_layer.show = True
+            selected.append(child_layer)
+
+        if self.level > 0:
+            sibling_layer = layers[self.type]
+            sibling_layer.create_layer(this_election, self.parent, self.type)
+            selected.append(sibling_layer)
+
+        if self.level > 1:
+            parent_layer = layers[self.parent.type]
+            parent_layer.create_layer(this_election, self.parent.parent, self.parent.type)
+            selected.append(parent_layer)
+
+        marker_layer = layers["marker"]
+        selected.append(marker_layer)
+
         return list(reversed(selected))
+
 
 
     def updateVI(self,viValue):
@@ -1782,14 +1769,14 @@ class TreeNode:
 
 
 
-    def create_area_map(self, flayers, CE, CEdata):
+    def create_area_map(self, CE, CEdata):
         global SERVER_PASSWORD
         global STATICSWITCH
         global OPTIONS
 
         from folium import IFrame
         from state import LEVEL_ZOOM_MAP
-
+        from layers import make_counters,FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
         import hashlib
         import re
@@ -1798,6 +1785,18 @@ class TreeNode:
         print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
 
         print(f"___BEFORE map creation: in route {route()} creating file: ", self.file(rlevels))
+
+        mapfile = self.mapfile(rlevels)
+        counters = make_counters()
+
+            # 2️⃣ Create fresh FeatureGroups for THIS map
+
+        # 3️⃣ Select which layers to render for this map
+        flayers = self.getselectedlayers(
+            rlevels=CEdata.resolved_levels,
+            this_election=CE,
+            path=mapfile
+        )
 
 
         # --- CSS to adjust popup styling
@@ -1881,14 +1880,15 @@ class TreeNode:
 
             });
 
+            let toggleSent = false;
             document.getElementById("backToCalendarBtn").addEventListener("click", () => {
-                console.log("📤 Sending back-to-calendar message to parent");
-
-                window.parent.postMessage(
-                    { type: "toggleView" },
-                    "*"
-                );
+                if (!toggleSent) {
+                    window.parent.postMessage({ type: "toggleView" }, "*");
+                    toggleSent = true;
+                    setTimeout(() => { toggleSent = false }, 500); // reset after half a second
+                }
             });
+
 
             function extractVisibleText(element) {
                 const walker = document.createTreeWalker(
@@ -2004,21 +2004,26 @@ class TreeNode:
                     }
 
                     // ✅ Search DivIcons
-                    if (!found && layer instanceof L.Marker) {
+                    // ✅ Search only markers inside the marker FeatureGroup
+                    if (
+                        !found &&
+                        window.MarkerLayer &&
+                        layer instanceof L.Marker &&
+                        window.MarkerLayer.hasLayer(layer)
+                    ) {
                         if (layer.options.icon instanceof L.DivIcon) {
-                            const iconContent = layer.options.icon.options.html;
-                            if (iconContent.toLowerCase().includes(normalizedQuery)) {
+                            const html = layer.options.icon.options.html || "";
+                            if (html.toLowerCase().includes(normalizedQuery)) {
                                 const latlng = layer.getLatLng();
-                                if (latlng) {
-                                    fmap.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
-                                    if (layer._icon) layer._icon.style.border = "2px solid red";
-                                    found = true;
-                                    return;
-                                }
+                                fmap.setView(latlng, 17);
+                                layer.openPopup?.();
+                                layer._icon?.style && (layer._icon.style.border = "2px solid red");
+                                found = true;
+                                return;
                             }
                         }
                     }
+
                 });
 
                 if (!found) {
@@ -2074,11 +2079,6 @@ class TreeNode:
         # --- Inject custom HTML and JS into map
 
 
-        FolMap.get_root().html.add_child(folium.Element(title_html))
-        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
-
-        # Add the LatLngPopup plugin
-        FolMap.add_child(folium.LatLngPopup())
 
 
         fmap_tags_js = r"""
@@ -2160,7 +2160,6 @@ class TreeNode:
                 </script>
                 """
 
-        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
 
 
         # Inject canvas icon JS
@@ -2200,7 +2199,6 @@ class TreeNode:
         };
         </script>
         """
-        FolMap.get_root().html.add_child(Element(canvas_icon_js))
 
 
 
@@ -2327,7 +2325,6 @@ class TreeNode:
             </script>
             """
 
-        FolMap.get_root().html.add_child(Element(custom_click_js))
 
         reverse_geocode_js = """
         <script>
@@ -2359,24 +2356,31 @@ class TreeNode:
         </script>
         """
 
-        FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
-
-    #    FolMap.get_root().html.add_child(folium.Element(add_place_js))
 
 
 
-        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
-
-
+        for k, v in FolMap._children.items():
+            print(type(v), getattr(v, "name", None))
 
         # Ensure there's only one LayerControl
         if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
             FolMap.add_child(folium.LayerControl())
+        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
+        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+        FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
+        FolMap.get_root().html.add_child(Element(custom_click_js))
+        FolMap.get_root().html.add_child(Element(canvas_icon_js))
+        FolMap.get_root().html.add_child(folium.Element(title_html))
+        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
+
+        # Add the LatLngPopup plugin
+        FolMap.add_child(folium.LatLngPopup())
 
         # Add custom CSS/JS
         FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
         FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
         FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
+
 
         # Fit map to bounding box
         if self.level == 4:
@@ -2500,7 +2504,6 @@ class TreeNode:
 
 
     def add_Tchild(self, child_node, etype, elect, *, counters):
-
         # 1. Assign type FIRST
         child_node.type = etype
 
@@ -2514,35 +2517,30 @@ class TreeNode:
                 )
                 return existing
 
-        # 2. Detach from old parent
+        # 2. Detach from old parent if needed (ensure child isn't already attached somewhere else)
         if child_node.parent and child_node in child_node.parent.children:
+            print(f"[DEBUG] Detaching child {child_node.value} from its previous parent.")
             child_node.parent.children.remove(child_node)
-
 
         # 3. Attach to new parent
         child_node.parent = self
         if child_node not in self.children:
             self.children.append(child_node)
 
-        # 4. Per-parent numbering
+        # 4. Per-parent numbering (keeping siblings ordered)
         same_type_siblings = [
-            c for c in self.children
-            if c is not child_node and c.type == etype
+            c for c in self.children if c is not child_node and c.type == etype
         ]
         child_node.tagno = len(same_type_siblings)
 
         # 5. Global display counter
-        # 5️⃣ Global display counter (fixed)
         if etype not in counters:
             counters[etype] = 0  # initialize first occurrence
 
         counters[etype] += 1
         child_node.gtagno = counters[etype]
 
-
-
         # 6. Register by ID only (safe)
-        # Ensure parent is registered first
         if self.nid not in TREK_NODES_BY_ID:
             TREK_NODES_BY_ID[self.nid] = self
 
@@ -2555,6 +2553,7 @@ class TreeNode:
         )
 
         return child_node
+
 
 
 

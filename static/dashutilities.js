@@ -450,35 +450,36 @@
 
 
    window.updateConstantsUI = function (constants, options) {
-     if (!constants) return;
+       if (!constants || !options) {
+           console.warn("updateConstantsUI called without constants or options", { constants, options });
+           return;
+       }
 
-     // =====================================================
-     // ⭐ Make global objects
-     // =====================================================
+       console.log("Updating constants UI with constants and options:", { constants, options });
 
-     Object.entries(options).forEach(([key, value]) => {
-          window[key] = value;       // global variable for options
-      });
+       // =====================================================
+       // ⭐ Make global objects
+       // =====================================================
+       Object.entries(options).forEach(([key, value]) => {
+           window[key] = value; // global variable for options
+       });
 
+       window.areas      = options?.areas      || {};
+       window.places     = constants?.places   || {};
+       window.resources  = options?.resources || {};
+       window.tags       = constants?.tags     || {};
+       const result      = getTagsJson(window.tags);
+       window.task_tags     = result.task_tags;
+       window.outcome_tags  = result.outcome_tags;
 
+       console.log("Global areas:", window.areas);
+       console.log("Global places:", window.places);
+       console.log("Global resources:", window.resources);
+       console.log("Global tags:", window.tags);
+       console.log("Global task_tags:", window.task_tags);
+       console.log("Global outcome_tags:", window.outcome_tags);
 
-     window.areas      = options?.areas      || {};
-     window.places     = constants?.places     || {};
-     window.resources  = options?.resources  || {};
-     window.tags  = constants?.tags  || {};
-     const result = getTagsJson(window.tags);
-     window.task_tags = result.task_tags;
-     window.outcome_tags = result.outcome_tags;
-
-
-
-     console.log("Global areas:", window.areas);
-     console.log("Global places:", window.places);
-     console.log("Global resources:", window.resources);
-     console.log("Global tags:", window.tags);
-     console.log("Global task_tags:", window.task_tags);
-     console.log("Global outcome_tags:", window.outcome_tags);
-
+  
      // =====================================================
      // ⭐ Iterate through all constants and populate UI
      // =====================================================
@@ -875,10 +876,10 @@ async function fetchBackendURL() {
          const data = await response.json();
          console.log("📦 Backend response:", data);
 
-               window.plan = data.calendar_plan;
+          window.plan = data.calendar_plan;
 
-             updateConstantsUI(data.constants, data.options);
-         console.log("📩 update calendar_plan::", plan);
+          updateConstantsUI(data.constants, data.options);
+          console.log("📩 update calendar_plan::", plan);
 //               console.log("🔀 update places on DOM relaod :", places);
 //               console.log("🔀 update resources on DOM relaod :", resources);
 //               console.log("🔀 update areas on DOM relaod :", areas);

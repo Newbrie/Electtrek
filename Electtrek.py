@@ -56,7 +56,6 @@ import state
 from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys
 import nodes
 from nodes import allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last, save_nodes, get_counters
-from layers import Featurelayers
 import layers
 from elections import route, CurrentElection
 
@@ -983,7 +982,7 @@ def add_marker():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
-    from layers import Featurelayers
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     """
     Reassigns a node from one parent to another in the tree.
     Updates TREK_NODES_BY_ID, allelectors, and regenerates relevant maps.
@@ -1088,12 +1087,9 @@ def reassign_parent():
         print(f"✔ Updated allelectors: '{subject_name}' now under '{new_parent_name}'")
     else:
         mapfile = old_parent_node.mapfile(rlevels)
-        Featurelayers[etype].reset()
-        Featurelayers[etype].create_layer(current_election, old_parent_node, etype)
-        old_parent_node.create_area_map(old_parent_node.getselectedlayers(rlevels, current_election, mapfile),
-                             current_election, CElection)
+        old_parent_node.create_area_map(current_election, CElection)
         print(f"🔁 Regenerated {etype} layer map {mapfile} for node '{old_parent_node.value}'")
-
+# NEED TO REFACTOR ALL CALLS TO CREATE MAP
     # Regenerate old parent layer if exists - deleted not required
 
     # --------------------------
@@ -1757,6 +1753,8 @@ def streamrag_api():
 @app.route('/deactivate_stream', methods=['POST'])
 @login_required
 def deactivate_stream():
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+
     # Example: Remove all electors for the given election
     from nodes import allelectors
     election = request.json.get('election')
@@ -1790,7 +1788,7 @@ def deactivate_stream():
 
     # remove the  child data nodes under the delete nodes
     ttype = Election.childnode_type(delete_node.level)
-    Featurelayers[ttype].reset()
+
     for datanode in delete_node.children:
         delete_node.children.remove(datanode)
 
@@ -1946,10 +1944,7 @@ def election_report():
 
 
     print(f"XXXXMarkers at election {current_election} at node {current_node.value}")
-    Featurelayers['marker'].create_layer(current_election,current_node,'marker')
-#    flash("No marker data for the selected election available!")
-    selectedlayers = current_node.getselectedlayers(rlevels,current_election,reportfile)
-    current_node.create_area_map(selectedlayers, current_election, CElection)
+    current_node.create_area_map(current_election, CElection)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
 
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
@@ -1958,7 +1953,8 @@ def election_report():
 @app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
-    global constants, constants, Featurelayers
+    global constants, constants
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     import json
     from state import OPTIONS, Treepolys, Fullpolys
     from elections import CurrentElection
@@ -1987,36 +1983,8 @@ def set_election():
 
         # At the start of a fresh election:
 
-        for layer in Featurelayers.values():
-            layer._children.clear()
 
         print(f"____Route/set-election- Loaded election: {current_election} CE data: {CElection}")
-
-        basepath = ensure_treepolys(
-            territory=territory,
-            sourcepath=mapfile,
-            resolved_levels=rlevels,
-            here=here
-        )
-        for lev, ltype in rlevels.items():
-            gdf = Treepolys.get(ltype)
-            if gdf is None or gdf.empty:
-                print(f"____Treepolys {ltype} - EMPTY")
-                continue
-
-                # Same for Fullpolys
-            full_gdf = Fullpolys.get(ltype)
-            if full_gdf is None or full_gdf.empty:
-                print(f"____Fullpolys {ltype} - EMPTY")
-                continue
-
-            tot_full = len(full_gdf)
-            unique_name_full = full_gdf['NAME'].nunique()
-            unique_fid_full = full_gdf['FID'].nunique()
-            print(f"____Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
-
-
-
 
 
         current_node = get_last(current_election,CElection)
@@ -2144,7 +2112,8 @@ def set_constant():
 
     global OPTIONS
 
-    global Featurelayers
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
@@ -2163,8 +2132,7 @@ def set_constant():
         if name == "ACC":
             OPTIONS['ACC'] = value
             # Assuming you want to reset to 0 for the 1-based indexing logic (0 -> 1)
-            for layer_instance in Featurelayers.values():
-                layer_instance.reset()
+
             counters = get_counters(session)
 
 
@@ -2570,8 +2538,7 @@ def dashboard():
         print ("___Dashboard persisted filename: ",mapfile)
         persist(current_node)
         if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-            selectedlayers = current_node.getselectedlayers(rlevels,current_election,mapfile)
-            current_node.create_area_map(selectedlayers,current_election,CElection)
+            current_node.create_area_map(current_election, CElection)
 
 #        redirect(url_for('captains'))
     return   send_from_directory(app.config['UPLOAD_FOLDER'],mapfile, as_attachment=False)
@@ -2587,8 +2554,8 @@ def downbut(path):
     global formdata
     from state import Treepolys, Fullpolys
     from nodes import allelectors
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
-    global Featurelayers
     global layeritems
     global constants
     global OPTIONS
@@ -2621,8 +2588,7 @@ def downbut(path):
     return jsonify({"error": "Endpoint not created"}), 400
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-#        selectedlayers = current_node.getselectedlayers(current_election,mapfile)
-#        current_node.create_area_map(selectedlayers,current_election,CElection)
+#        current_node.create_area_map(CElection)
 
 #    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
 #    print(f"_____creating mapfile for {atype} map file path :{mapfile} for path:{path}" )
@@ -2633,7 +2599,6 @@ def transfer(path):
 
     from state import Treepolys, Fullpolys
     from nodes import allelectors
-    global Featurelayers
     global environment
     global levels
     global layeritems
@@ -2663,7 +2628,6 @@ def transfer(path):
 def downPDbut(path):
     from state import Treepolys, Fullpolys
 
-    global Featurelayers
     from nodes import allelectors
     global areaelectors
     global filename
@@ -2700,13 +2664,12 @@ def downPDbut(path):
             if os.path.exists(mapfile):
                 os.remove(mapfile)
         else:
-            print("_____ Before creation - PD display markers ", current_node.level, len(Featurelayers['polling_district']._children))
-            Featurelayers['polling_district'].create_layer(current_election,current_node, 'polling_district')
+            print("_____ Before creation - PD display markers ", current_node.level)
             mapfile = current_node.mapfile(rlevels)
-            print("_______just before create_area_map call:",current_node.level, len(Featurelayers['polling_district']._children), mapfile)
-            current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,mapfile),current_election,CElection)
-            flash("________PDs added:  "+str(len(Featurelayers['polling_district']._children)))
-            print("________After map created PDs added  :  ",current_node.level, len(Featurelayers['polling_district']._children))
+            print("_______just before create_area_map call:",current_node.level, mapfile)
+            current_node.create_area_map(current_election, CElection)
+            flash("________PDs added:  ")
+            print("________After map created PDs added  :  ",current_node.level)
 
 #    face_file = subending(current_node.file,"-MAP.html")
 #    mapfile = current_node.dir+"/"+face_file
@@ -2714,8 +2677,7 @@ def downPDbut(path):
 
 
     print ("_________New PD mapfile/",current_node.value, mapfile)
-    Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
-    current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,mapfile),current_election,CElection)
+    current_node.create_area_map(current_election, CElection)
 
     persist(current_node)
 
@@ -2728,8 +2690,6 @@ def downPDbut(path):
 @login_required
 def downWKbut(path):
     from state import Treepolys, Fullpolys
-
-    global Featurelayers
     from nodes import allelectors
     global areaelectors
     global filename
@@ -2767,36 +2727,23 @@ def downWKbut(path):
             if os.path.exists(mapfile):
                 os.remove(mapfile)
         else:
-            print(f"_____ Before creation - Walk display markers at CE {current_election} ",current_node.level, len(Featurelayers['walk']._children))
-            Featurelayers['walk'].reset()
-            Featurelayers['walk'].create_layer(current_election,current_node, 'walk')
-            print(f"____/DOWN OPTIONS1 areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-            print(f"____/DOWN OPTIONS2 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
-            print(f"____/DOWN OPTIONS3 areas for calendar node {current_node.value} are {Featurelayers['constituency'].areashtml} ")
-
-            print("_______just before Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
-            current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
-            flash("________Walks added:  "+str(len(Featurelayers['walk']._children)))
-            print("________After map created Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
+            print(f"_____ Before creation - Walk display markers at CE {current_election} ",current_node.level)
+            current_node.create_area_map(current_election, CElection)
+            print("________After map created Walks added  :  ",current_node.level)
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
 
 
 #        simple transfer from another node -
     print ("_________New WK mapfile/",current_node.value, mapfile)
-    Featurelayers[previous_node.type].create_layer(current_election,current_node,'walk') #from upnode children type of prev node
-    print(f"____/DOWN OPTIONS21 areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-    print(f"____/DOWN OPTIONS22 areas for calendar node {current_node.value} are {Featurelayers['ward'].areashtml} ")
-    print(f"____/DOWN OPTIONS23 areas for calendar node {current_node.value} are {Featurelayers['constituency'].areashtml} ")
-
 #        current_node.file = face_file
-    current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,mapfile),current_election,CElection)
+    current_node.create_area_map(current_election, CElection)
 
 #    moredata = importVI(allelectors.copy())
 #    if len(moredata) > 0:
 #        allelectors = moredata
 
-    print("________ Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
+    print("________ Walk markers After importVI  :  ")
     print("_______writing to file:", mapfile)
 
     persist(current_node)
@@ -2808,8 +2755,6 @@ def downWKbut(path):
 @login_required
 def downMWbut(path):
     from state import Treepolys, Fullpolys
-
-    global Featurelayers
 
     global areaelectors
     global filename
@@ -2848,30 +2793,25 @@ def downMWbut(path):
             if os.path.exists(walkpathfile):
                 os.remove(walkpathfile)
         else:
-            print(f"_____ Before creation - Static Walk display markers at CE {current_election} ",current_node.level, len(Featurelayers['walk']._children))
-            Featurelayers['walk'].create_layer(current_election,current_node, 'walk',static=True)
-
-            print("_______just before Static Walk create_area_map call:",current_node.level, len(Featurelayers['walk']._children))
+            print(f"_____ Before creation - Static Walk display markers at CE {current_election} ",current_node.level)
             STATICSWITCH = True
-            current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
+            current_node.create_area_map(current_election, CElection)
             STATICSWITCH = False
-            flash("________Static Walks added:  "+str(len(Featurelayers['walk']._children)))
-            print("________After map created Static Walks added  :  ",current_node.level, len(Featurelayers['walk']._children))
+            flash("________Static Walks added:  ")
+            print("________After map created Static Walks added  :  ",current_node.level)
 
     #            allelectors = getblock(allelectors,'Area',current_node.value)
 
 
 #        simple transfer from another node -
     print ("_________New MW mapfile/",current_node.value, walkpathfile)
-    Featurelayers['walk'].create_layer(current_election,current_node,'walk', static=True) #from upnode children type of prev node
-
     STATICSWITCH = True
-    current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
+    current_node.create_area_map(current_election, CElection)
     STATICSWITCH = False
 #    moredata = importVI(allelectors.copy())
 #    if len(moredata) > 0:
 #        allelectors = moredata
-    print("________ Static Walk markers After importVI  :  "+str(len(Featurelayers['walk']._children)))
+    print("________ Static Walk markers After importVI  :  ")
 
     persist(current_node)
     return current_node.render_face(current_election,CElection,True)
@@ -3038,7 +2978,6 @@ def STupdate(path):
 def PDdownST(path):
     from state import Treepolys, Fullpolys
 
-    global Featurelayers
 
     global areaelectors
     global environment
@@ -3068,18 +3007,17 @@ def PDdownST(path):
     print(f"__PDdownST- lenAll {len(allelectors)}, len area {len(areaelectors)} lenPD {len(PDelectors)}")
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
-        Featurelayers['street'].create_layer(current_election,PD_node,'street')
 
         streetnodelist = PD_node.childrenoftype('street')
 
-        if len(PDelectors) == 0 or len(Featurelayers['street']._children) == 0:
+        if len(PDelectors) == 0 :
             flash("Can't find any elector data for this Polling District.")
             print("Can't find any elector data for this Polling District.",len(streetnodelist))
             if os.path.exists(mapfile):
                 os.remove(mapfile)
         else:
-            flash(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added = {len(Featurelayers['street']._children)}")
-            print(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added = {len(Featurelayers['street']._children)}")
+            flash(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added")
+            print(f"________in {PD_node.value} there {len(streetnodelist)} streetnode and markers added")
 
         for street_node in streetnodelist:
             mask3 = PDelectors['StreetName'] == street_node.value
@@ -3090,14 +3028,10 @@ def PDdownST(path):
 
 #           only create a map if the branch does not already exist
 
-        PD_node.create_area_map(PD_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
+        PD_node.create_area_map(current_election, CElection)
     mapfile = PD_node.mapfile(rlevels)
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
-    if len(Featurelayers['street']._children) == 0:
-        flash("Can't find any Streets for this PD.")
-    else:
-        flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
     persist(current_node)
 
     return current_node.render_face(current_election,CElection,True)
@@ -3109,8 +3043,6 @@ def PDdownST(path):
 @login_required
 def LGdownST(path):
     from state import Treepolys, Fullpolys
-
-    global Featurelayers
 
     global areaelectors
     global environment
@@ -3141,15 +3073,12 @@ def LGdownST(path):
     if request.method == 'GET':
     # we only want to plot with single streets , so we need to establish one street record with pt data to plot
         atype = Election.node_type(current_node.level)
-        Featurelayers['street'].create_layer(current_election,PD_node,'street')
 
         flash("No data for the selected election available!")
         flash("Can't find any elector data for this Polling District.")
         print("Can't find any elector data for this Polling District.")
         if os.path.exists(mapfile):
             os.remove(mapfile)
-        flash("________streets added  :  "+str(Featurelayers['street']._children))
-        print("________streets added  :  "+str(len(Featurelayers['street']._children)))
 
         streetnodelist = PD_node.childrenoftype('street')
         for street_node in streetnodelist:
@@ -3157,14 +3086,10 @@ def LGdownST(path):
             streetelectors = PDelectors[mask]
             street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-        PD_node.create_area_map(PD_node.getselectedlayers(rlevels,current_election,path),current_election,CElection)
+        PD_node.create_area_map(current_election, CElection)
     mapfile = PD_node.mapfile(rlevels)
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
-    if len(Featurelayers['street']._children) == 0:
-        flash("Can't find any Streets for this PD.")
-    else:
-        flash("________Streets added  :  "+str(len(Featurelayers['street']._children)))
 
 
     persist(current_node)
@@ -3177,8 +3102,6 @@ def LGdownST(path):
 @login_required
 def WKdownST(path):
     from state import Treepolys, Fullpolys
-
-    global Featurelayers
 
     global areaelectors
     global environment
@@ -3214,8 +3137,6 @@ def WKdownST(path):
 # if there is a selected file , then areaelectors will be full of records
         print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
 
-        Featurelayers['walkleg'].create_layer(current_election,walk_node,'walkleg')
-
         flash("No data for the selected election available!")
         walklegnodelist = walk_node.childrenoftype('walkleg')
         print ("________Walklegs",walk_node.value,len(walklegnodelist))
@@ -3225,19 +3146,16 @@ def WKdownST(path):
             streetelectors = walkelectors[mask]
             walkleg_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-            walk_node.create_area_map(walk_node.getselectedlayers(rlevels,current_election,path), current_election,CElection)
+            walk_node.create_area_map(current_election, CElection)
 
     mapfile = walk_node.mapfile(rlevels)
 
 
-    if len(areaelectors) == 0 or len(Featurelayers['walkleg']._children) == 0:
+    if len(areaelectors) == 0 :
         flash("Can't find any elector data for this ward.")
         print("Can't find any elector data for this ward.")
         if os.path.exists(mapfile):
             os.remove(mapfile)
-    else:
-        flash("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
-        print("________walks added  :  "+str(len(Featurelayers['walkleg']._children)))
 
 
     persist(current_node)
@@ -3506,7 +3424,6 @@ def divreport(path):
 
     global layeritems
     global formdata
-    global Featurelayers
     global CElection
 
     restore_from_persist(session=session)
@@ -3533,18 +3450,18 @@ def divreport(path):
 
         layeritems = get_layer_table(group_node.create_map_branch(session,'division'),formdata['tabledetails'],rlevels)
 
-        for item in Featurelayers['division']._children:
-            if item.value not in alreadylisted:
-                alreadylisted.append(item.value)
-                temp.loc[i,'No']= i
-                temp.loc[i,'Area']=  item.value
-                temp.loc[i,'Constituency']=  group_node.value
-                temp.loc[i,'Candidate']=  "Joe Bloggs"
-                temp.loc[i,'Email']=  "xxx@reforumuk.com"
-                temp.loc[i,'Mobile']=  "07789 342456"
-                i = i + 1
-        formdata['tabledetails'] = "Other Division Details"
-        layeritems = [list(temp.columns.values), temp, formdata['tabledetails']]
+#        for item in Featurelayers['division']._children:
+#            if item.value not in alreadylisted:
+#                alreadylisted.append(item.value)
+#                temp.loc[i,'No']= i
+#                temp.loc[i,'Area']=  item.value
+#                temp.loc[i,'Constituency']=  group_node.value
+#                temp.loc[i,'Candidate']=  "Joe Bloggs"
+#                temp.loc[i,'Email']=  "xxx@reforumuk.com"
+#                temp.loc[i,'Mobile']=  "07789 342456"
+#                i = i + 1
+#        formdata['tabledetails'] = "Other Division Details"
+#        layeritems = [list(temp.columns.values), temp, formdata['tabledetails']]
 
 
     persist(current_node)
@@ -3557,7 +3474,6 @@ def upbut(path):
     from nodes import allelectors
     from state import Treepolys, Fullpolys
 
-    global Featurelayers
     global environment
     global layeritems
     global constants
@@ -3601,11 +3517,10 @@ def upbut(path):
 
     mapfile = current_node.mapfile(rlevels)
     if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-        Featurelayers[previous_node.type].create_layer(current_election,current_node,previous_node.type) #from upnode children type of prev node
 
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
-        current_node.create_area_map(current_node.getselectedlayers(rlevels,current_election,mapfile), current_election,CElection)
+        current_node.create_area_map(current_election, CElection)
 
     print("________chosen node url",mapfile)
     persist(current_node)
@@ -3860,7 +3775,7 @@ def walks():
         formdata = {}
         formdata['importfile'] = request.files['importfile']
         formdata['electiondate'] = request.form["electiondate"]
-        electwalks = prodwalks(current_node,formdata['importfile'], formdata,Treepolys, environment, Featurelayers)
+        electwalks = prodwalks(current_node,formdata['importfile'], formdata,Treepolys, environment)
         formdata = electwalks[1]
         print("_________Mapfile",electwalks[2])
         mapfile = electwalks[2]
@@ -3879,7 +3794,6 @@ def postcode():
 # first get lat long, then search through constit boundaries and pull up the NAME of the one that its IN
 
     from state import Treepolys, Fullpolys
-    global Featurelayers
     global CElection
     restore_from_persist(session=session)
     current_election = CurrentElection.get_current_election()
@@ -3915,7 +3829,6 @@ def firstpage():
     from state import Treepolys, Fullpolys, ensure_treepolys
 
     global workdirectories
-    global Featurelayers
     global environment
     global layeritems
     global streamrag
@@ -3945,6 +3858,30 @@ def firstpage():
         resolved_levels=rlevels,
         here=here
     )
+
+    for lev, ltype in rlevels.items():
+        tree_gdf = Treepolys.get(ltype)
+        if tree_gdf is None or tree_gdf.empty:
+            print(f"____F/Treepolys {ltype} - EMPTY")
+            continue
+        tot_tree = len(tree_gdf)
+        unique_name_tree = tree_gdf['NAME'].nunique()
+        unique_fid_tree = tree_gdf['FID'].nunique()
+        print(f"____F/Treepolys {ltype} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
+
+            # Same for Fullpolys
+        full_gdf = Fullpolys.get(ltype)
+        if full_gdf is None or full_gdf.empty:
+            print(f"____F/Fullpolys {ltype} - EMPTY")
+            continue
+
+        tot_full = len(full_gdf)
+        unique_name_full = full_gdf['NAME'].nunique()
+        unique_fid_full = full_gdf['FID'].nunique()
+        print(f"____F/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
+
+
+
     # add the root nodes.TreeNode to the node tree
     nodes.reset_nodes()
 
@@ -4033,16 +3970,10 @@ def firstpage():
     atype = CElection.childnode_type(current_node.level)
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
-
-    Featurelayers['marker'].create_layer(current_election,current_node,'marker')
-    print(f"XXXXMarkers {len(Featurelayers['marker']._children)} at election {current_election} at node {current_node.value}")
-
-    Featurelayers[atype].create_layer(current_election,current_node,atype)
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
     streamrag = getstreamrag()
-    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} - name {Featurelayers[CElection.childnode_type(current_node.level)].name} ")
-    flayers = current_node.getselectedlayers(rlevels,current_election,mapfile)
-    current_node.create_area_map(flayers, current_election,CElection)
+    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} ")
+    current_node.create_area_map(current_election, CElection)
     print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
 
 #        CElection['mapfiles'][-1] = mapfile
@@ -4092,7 +4023,7 @@ def cards():
             formdata['nation'] = current_node.parent.parent.value
             formdata['country'] = current_node.parent.parent.parent.value
 
-            prodcards = canvasscards.prodcards(current_node,formdata['importfile'], formdata, Treepolys, environment, Featurelayers)
+            prodcards = canvasscards.prodcards(current_node,formdata['importfile'], formdata, Treepolys, environment)
             formdata = prodcards[1]
             print('_______Formdata:',formdata)
 
