@@ -2,7 +2,10 @@ import os
 import json
 from flask import has_request_context, request
 from pathlib import Path
-from config import ELECTIONS_FILE
+from config import ELECTIONS_FILE, BASE_FILE, TABLE_FILE
+import config
+import state
+import re
 
 
 def route():
@@ -38,7 +41,73 @@ LEVELS = {
     7: "elector",
 }
 
+class ProgramContext:
+    def get_options(self):
+        stream_table = {}
+        if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
+            with open(TABLE_FILE, "r") as f:
+                stream_table = json.load(f)
+        return {
+            "DEVURLS": config.DEVURLS,
+            "VNORM": state.VNORM,
+            "VCO": state.VCO,
+            "streams": get_available_elections(),
+            "territories": state.ElectionTypes,
+            "stream_table": stream_table
+        }
 
+class ElectionContext:
+    def __init__(self, celection):
+        self.ce = celection
+
+    def get_options(self):
+        task_tags, outcome_tags, all_tags = self.ce.get_tags()
+
+        return {
+            "tags": all_tags,
+            "task_tags": task_tags,
+            "autofix": self.ce.autofix,
+            "yourparty": self.ce.yourparty,
+            "previousParty": self.ce.previousParty,
+            "places": self.ce.places,
+            "resources": self.ce.resources,
+            "candidate": self.ce.resources,
+            "chair": self.ce.resources,
+            "campaignMgr": self.ce.resources,
+            "mapfiles": self.ce.mapfiles
+        }
+
+    def get_constants(self):
+        return {
+            "GOTV": self.ce.GOTV,
+            "accumulate": self.ce.accumulate,
+            "adminmode": self.ce.adminmode,
+              "walksize": 350,
+              "teamsize": 8
+        }
+
+def resolve_options(program, election, node):
+    options = {}
+    options.update(program.get_options())
+    options.update(election.get_options())
+    options.update(node.get_options(program=program, election=election))
+    return options
+
+
+def get_available_elections():
+    """
+    Return a dict of all elections found in the elections directory
+    """
+    election_files = {}
+    pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
+
+    # Use BASE_FILE.parent because we want the directory containing the JSONs
+    for file in BASE_FILE.parent.iterdir():
+        match = pattern.match(file.name)
+        if match:
+            name = match.group(1)
+            election_files[name] = str(file)
+    return election_files
 
 class CurrentElection(dict):
     """
@@ -174,7 +243,7 @@ class CurrentElection(dict):
     @classmethod
     def load(cls, election_id: str) -> "CurrentElection":
         """
-        Load election JSON from disk.
+        Load  election JSON .
         Falls back to DEMO election if missing.
         """
         print(f"____Get election: {election_id}")
@@ -216,38 +285,25 @@ class CurrentElection(dict):
 
     # ---------- tag helpers ----------
 
+
     def get_tags(self):
         """
         Split tags into task_tags and outcome_tags
         """
         task_tags = {}
         outcome_tags = {}
+        all_tags = {}
 
         for tag, description in self.get("tags", {}).items():
             if tag.startswith("L"):
                 task_tags[tag] = description
             elif tag.startswith("M"):
                 outcome_tags[tag] = description
+            all_tags[tag] = description
 
         print(f"___Under route {route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
-        return task_tags, outcome_tags
+        return task_tags, outcome_tags, all_tags
 
-    @classmethod
-    def get_available_elections(cls):
-        """
-        Return a dict of all elections found in the elections directory
-        """
-        import re
-
-        election_files = {}
-        pattern = re.compile(r'^elections-(.+)\.json$', re.IGNORECASE)
-
-        for file in cls.BASE_FILE.parent.iterdir():  # directory where election JSONs are
-            match = pattern.match(file.name)
-            if match:
-                name = match.group(1)
-                election_files[name] = str(file)
-        return election_files
 
 
     @classmethod
@@ -261,7 +317,7 @@ class CurrentElection(dict):
         last = "DEMO"
         elections_dir = cls.BASE_FILE.parent
 
-        election_files = cls.get_available_elections()  # dict: name → path
+        election_files = get_available_elections()  # dict: name → path
         print(f"____election files: {list(election_files.keys())} under route {route()}")
 
         if election_files:

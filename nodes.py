@@ -1,4 +1,4 @@
-from config import workdirectories, ELECTOR_FILE, TREKNODE_FILE, OPTIONS_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
+from config import workdirectories, ELECTOR_FILE, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
 import os
 import state
 import layers
@@ -14,6 +14,8 @@ from folium import Map, Element
 import folium
 import uuid
 from pathlib import Path
+from datetime import datetime
+
 
 def create_root_node() -> "TreeNode":
     return TreeNode(
@@ -448,13 +450,9 @@ def safe_pickle_load(path, default):
 
 def restore_from_persist(session=None,session_data=None):
     from state import Treepolys, Fullpolys
-    global OPTIONS
+
     global allelectors
     from elections import route, CurrentElection
-
-    if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
-        with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
-            OPTIONS = json.load(f)
 
 
     if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
@@ -471,9 +469,7 @@ def restore_from_persist(session=None,session_data=None):
             na_values=['']
         )
 
-    resources = OPTIONS['resources']
-    print('_______allelectors size: ', len(allelectors))
-    print('_______resources: ', resources)
+
 
     if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
         load_nodes(TREKNODE_FILE)
@@ -483,7 +479,7 @@ def restore_from_persist(session=None,session_data=None):
 
 def persist(node):
     global allelectors
-    from state import Treepolys, Fullpolys, OPTIONS
+    from state import Treepolys, Fullpolys
 
 
     print('___persisting file ', TREEPOLY_FILE)
@@ -495,8 +491,6 @@ def persist(node):
     allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
     print('___persisting options ', node.value)
-    with open(OPTIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(OPTIONS, f, indent=2)
     return
 
 def restore_fullpolys(node_type):
@@ -569,13 +563,17 @@ def resolve_here_or_redirect(sourcepath, here):
     return here, None
 
 
-def get_last(current_election, CE):
+def get_last(current_election, CE, *, create=True):
+    """
+    Returns the last node for the current election.
+    If `create=False`, do not call ping_node and return root if CID node is unavailable.
+    """
+
     from flask import redirect
 
     cid = CE.get("cid")
     cidLat = CE.get("cidLat")
     cidLong = CE.get("cidLong")
-    rlevels = CE.resolved_levels
     here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
     sourcepath = CE.get("mapfiles", [None])[-1]
 
@@ -590,20 +588,26 @@ def get_last(current_election, CE):
     # --- 2. Resolve location or redirect ---
     here, response = resolve_here_or_redirect(sourcepath, here)
     if response:
-        return response  # IMPORTANT
-
+        return response  # redirect response
 
     print(f"___ Get Last node under {route()} for {current_election} sourcepath: {sourcepath}")
 
-    # --- 4. Try to resolve node from path ---
+    # --- 3. Resolve node from path ---
+    if create and sourcepath:
+        try:
+            last_node = MapRoot.ping_node(
+                CE.resolved_levels,
+                current_election,
+                sourcepath
+            )
+        except Exception as e:
+            print(f"⚠️ ping_node failed: {e}")
+            last_node = None
+    else:
+        # If create is False, skip ping_node entirely
+        last_node = None
 
-    last_node = MapRoot.ping_node(
-        CE.resolved_levels,
-        current_election,
-        sourcepath
-    )
-
-    # --- 5. Final fallback to root ---
+    # --- 4. Fallback to root ---
     if not last_node:
         print("⚠️ Falling back to root node")
         last_node = get_root()
@@ -615,6 +619,7 @@ def get_last(current_election, CE):
     )
 
     return last_node
+
 
 
 
@@ -687,6 +692,7 @@ class TreeNode:
         self.fid = fid
         self.latlongroid = roid
         self._child_index = {}
+        self.last_modified = None  # <-- add this
 
         self.origin = origin
         self.election = origin
@@ -712,6 +718,12 @@ class TreeNode:
         self.bbox = []
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
+
+
+    def get_options(self, *, program, election):
+        return {
+            "areas": self.get_areas()
+        }
 
     def to_dict(self):
         return {
@@ -844,12 +856,12 @@ class TreeNode:
         from flask import send_file, abort
         from pathlib import Path
         # Access the first key from the dictionary
-        print(f"___under {route()} for {c_elect} visiting mapfile:", self.mapfile(rlevels))
+        print(f"___under {route()} for {c_elect} visiting mapfile:")
         CurrEL2 = CurrEL
         CurrEL2['cid'] = self.nid
         CurrEL2['cidLat'] = self.latlongroid[0]
         CurrEL2['cidLong'] = self.latlongroid[1]
-        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'], self.mapfile(rlevels))
+        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'])
         CurrEL2.save()
 
         session['current_election'] = c_elect
@@ -883,80 +895,71 @@ class TreeNode:
 
     def endpoint_created(self, c_elect, CurrEL, newpath):
         """
-        Creates a map node (HTML) if it doesn't already exist and processes layers for election data.
+        Creates a map node (HTML) if it doesn't already exist or
+        the one that does exist is older than the node's last modification.
         """
 
         from pathlib import Path
         from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
         from elections import route
+        import os
+        from datetime import datetime
 
-        # Get mapfile and determine the next level
         rlevels = CurrEL.resolved_levels
-
-
         next_level = self.level + 1
-        # Access the first key from the dictionary (logging route for debugging)
+
         print(f"___under {route()} for {c_elect} visiting newpath:", self.mapfile(rlevels))
         print("current children:", [c.value for c in self.children])
 
-        # Ensure that next_level does not exceed available levels
         if next_level > max(rlevels, default=0):
             return False  # No further levels to process
 
         atype = rlevels[next_level]
 
-        # Ensure workdirectories and 'workdir' key exist
         workdir = workdirectories.get('workdir')
         if not workdir:
             print("⚠️ [ERROR] 'workdir' not found in workdirectories!")
             return False
 
-        # Build the full path to the map file
         fullpath = Path(workdir) / newpath
 
-        # Check if the map file exists
-        if not fullpath.exists():
-            print(f"⚙️ [DEBUG] Map file does not exist or needs new creation: {fullpath}")
-            print("___map Typemaker:", atype, state.TypeMaker.get(atype, "Unknown"))
+        # Determine if the map is stale
+        map_stale = True
+        if fullpath.exists() and hasattr(self, 'last_modified') and self.last_modified:
+            # Compare file modification time with node last_modified time
+            file_mtime = datetime.utcfromtimestamp(fullpath.stat().st_mtime)
+            map_stale = self.last_modified > file_mtime
+            if not map_stale:
+                print(f"⚙️ Map file {fullpath} is up-to-date (last_modified {self.last_modified})")
 
-            # Ensure childnode_type method exists before calling
+        # Create map if it doesn't exist or is stale
+        if map_stale:
+            print(f"⚙️ Creating/updating map file: {fullpath}")
             if hasattr(CurrEL, 'childnode_type'):
                 atype = CurrEL.childnode_type(self.level)
-            else:
-                print(f"⚠️ [ERROR] 'CurrEL' does not have method 'childnode_type'. Using default type.")
-
-            # Log type and node info
             print(f" target type: {atype} current {self.value} type: {self.type}")
-
-            # Get selected layers and create the map
             self.create_area_map(c_elect, CurrEL)
-
-            # Debug information about the layers
             print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
-            CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], newpath)
-            CurrEL.save()
-            print("Endpoint Created:", CurrEL['mapfiles'][-1])
-            return True  # New map file created
 
-        # If the file exists, send it (no need to recreate it)
+        # Record map in CurrEL mapfiles
         CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], newpath)
         CurrEL.save()
-        print("___Endpoint Already Exists:", CurrEL['mapfiles'][-1])
-        return False  # File exists, no action needed
+        print("Endpoint Created/Updated:", CurrEL['mapfiles'][-1])
+
+        return map_stale  # True if a new map was created or updated
 
 
 
-    def set_parent(self, parent):
-        if self.parent is parent:
-            return
-
+    def set_parent(self, new_parent):
         # Remove from old parent
         if self.parent:
             self.parent.children.remove(self)
+            self.parent.last_modified = datetime.utcnow()  # update old parent
 
-        self.parent = parent
-        parent.children.append(self)
-        save_nodes(TREKNODE_FILE)  # persists TREK_NODES_BY_ID and relationships
+        # Add to new parent
+        new_parent.children.append(self)
+        self.parent = new_parent
+        new_parent.last_modified = datetime.utcnow()  # update new parent
 
 
 
@@ -989,7 +992,7 @@ class TreeNode:
 
     def process_lozenges(self,lozenges, CE):
         """
-        Convert lozenges from calendar slots into readable forms.
+        Convert lozenges(a code , type & description) found in calendar slots into detailed lists of resources, areas, tags and places.
         """
 
         resources = []
@@ -998,8 +1001,8 @@ class TreeNode:
         areas = []
 
 
-        CE_resources = OPTIONS['resources']
-        CE_task_tags, CE_outcome_tags = get_tags_json(CE['tags'])
+        CE_resources = CE.get('resources',{})
+        CE_task_tags, CE_outcome_tags, CE_all_tags = get_tags_json(CE['tags'])
         CE_areas = self.get_areas()
         CE_places = CE.get("places", {})
         print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
@@ -1225,21 +1228,20 @@ class TreeNode:
         print(f"✅ [DEBUG] Reached node: {node.value} (L{node.level}) with children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 6: ONLY expand children if we MOVED
-        if moved:
-            next_level = node.level + 1
-            if next_level <= max(rlevels):
-                children_type = rlevels[next_level]
-                print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
-                try:
-                    if node.level < 4:
-                        node.create_map_branch(rlevels, c_election, children_type)
-                    else:
-                        node.create_data_branch(rlevels, c_election, children_type)
-                except Exception as e:
-                    print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
-        else:
-            print("⏸ [DEBUG] No movement detected — skipping child expansion")
+
+        # ──────────────────────────────
+        # Step 6: always expand children at final node
+        next_level = node.level + 1
+        if next_level <= max(rlevels):
+            children_type = rlevels[next_level]
+            print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
+            try:
+                if node.level < 4:
+                    node.create_map_branch(rlevels, c_election, children_type)
+                else:
+                    node.create_data_branch(rlevels, c_election, children_type)
+            except Exception as e:
+                print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
 
         return node
 
@@ -1772,7 +1774,6 @@ class TreeNode:
     def create_area_map(self, CE, CEdata):
         global SERVER_PASSWORD
         global STATICSWITCH
-        global OPTIONS
 
         from folium import IFrame
         from state import LEVEL_ZOOM_MAP
@@ -2072,8 +2073,7 @@ class TreeNode:
         for layer in flayers:
             layer.add_to(FolMap)
             print(f"layer name: {layer.name} size:{len(layer._children)}")
-            if getattr(layer, 'areashtml', {}):
-                OPTIONS['areas'] = layer.areashtml
+
 
 
         # --- Inject custom HTML and JS into map
@@ -2517,33 +2517,35 @@ class TreeNode:
                 )
                 return existing
 
-        # 2. Detach from old parent if needed (ensure child isn't already attached somewhere else)
+        # 2. Detach from old parent if needed
         if child_node.parent and child_node in child_node.parent.children:
             print(f"[DEBUG] Detaching child {child_node.value} from its previous parent.")
             child_node.parent.children.remove(child_node)
+            # Update old parent's last_modified
+            from datetime import datetime
+            child_node.parent.last_modified = datetime.utcnow()
 
         # 3. Attach to new parent
         child_node.parent = self
         if child_node not in self.children:
             self.children.append(child_node)
+            # Update new parent's last_modified
+            from datetime import datetime
+            self.last_modified = datetime.utcnow()
 
         # 4. Per-parent numbering (keeping siblings ordered)
-        same_type_siblings = [
-            c for c in self.children if c is not child_node and c.type == etype
-        ]
+        same_type_siblings = [c for c in self.children if c is not child_node and c.type == etype]
         child_node.tagno = len(same_type_siblings)
 
         # 5. Global display counter
         if etype not in counters:
             counters[etype] = 0  # initialize first occurrence
-
         counters[etype] += 1
         child_node.gtagno = counters[etype]
 
         # 6. Register by ID only (safe)
         if self.nid not in TREK_NODES_BY_ID:
             TREK_NODES_BY_ID[self.nid] = self
-
         if child_node.nid not in TREK_NODES_BY_ID:
             TREK_NODES_BY_ID[child_node.nid] = child_node
 

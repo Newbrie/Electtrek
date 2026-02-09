@@ -2,7 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import TABLE_FILE,LAST_RESULTS_FILE,OPTIONS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
+from config import TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
 from normalised import normz
 #import normz
 
@@ -53,11 +53,13 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 
 import state
-from state import STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys
+from state import VNORM,STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys
 import nodes
-from nodes import allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last, save_nodes, get_counters
+from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last, save_nodes, get_counters
 import layers
-from elections import route, CurrentElection
+from elections import CurrentElection, get_available_elections, resolve_options,route, CurrentElection, ProgramContext, ElectionContext
+
+
 
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
@@ -441,7 +443,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             print(f"\nRow index {index} data {data}")
 
             stream = str(data.get('election', '')).upper()
-            ELECTIONS = CurrentElection.get_available_elections()
+            ELECTIONS = get_available_elections()
             if stream not in ELECTIONS:
                 progress["percent"] = 100
                 progress["status"] = "error"
@@ -862,6 +864,91 @@ def get_latlong(postcode, lat, lon):
 def generate_place_code(prefix):
     return ''.join(re.findall(r'\b\w', prefix)).upper()
 
+# tables.py
+
+def fetch_table(table_name, current_election=None, create_node=False):
+    """
+    Returns a tuple (column_headers, rows_dict, title) for the requested table.
+    `create_node` determines whether to recreate path nodes if last node not found.
+    """
+
+    # Load current election if not provided
+    if current_election is None:
+        current_election = CurrentElection.get_current_election()
+    CElection = CurrentElection.load(current_election)
+    rlevels = CElection.resolved_levels
+
+    # Determine current node
+    current_node = get_last(current_election, CElection, create=create_node)
+
+    # Local helpers for standard tables
+    global report_data, resources, places, stream_table  # these may live in global state
+
+    def get_resources_table():
+        return pd.DataFrame(resources)
+
+    def get_report_table():
+        try:
+            if report_data:
+                return pd.DataFrame(report_data)
+        except:
+            pass
+        return pd.DataFrame(report_data or [])
+
+    def get_places_table():
+        if not places:
+            return pd.DataFrame()
+        if isinstance(places, dict):
+            return pd.DataFrame.from_dict(places, orient='index')
+        elif isinstance(places, list):
+            return pd.DataFrame(places)
+        else:
+            raise TypeError("places must be a dict or list")
+
+    def get_stream_table():
+        if isinstance(stream_table, dict):
+            return pd.DataFrame.from_dict(stream_table, orient='index')
+        return pd.DataFrame(stream_table)
+
+    # Mapping table names to functions
+    table_map = {
+        "report_data": get_report_table,
+        "resources": get_resources_table,
+        "places": get_places_table,
+        "stream_table": get_stream_table
+    }
+
+    # Handle dynamic tables like _layer or _xref
+    if table_name.endswith("_layer"):
+        tabtype = table_name.removesuffix("_layer")
+        lev = parent_level_for(tabtype)
+        tabnode = current_node.findnodeat_Level(lev)
+        column_headers, rows, title = get_layer_table(
+            tabnode.childrenoftype(tabtype),
+            str(tabtype) + "s",
+            rlevels
+        )
+        return column_headers, rows.to_dict(orient="records"), title
+
+    elif table_name.endswith("_xref"):
+        lev = current_node.level + 1
+        tabtype = rlevels[lev]
+        column_headers, rows, title = get_layer_table(
+            current_node.childrenoftype(tabtype),
+            str(tabtype) + "s",
+            rlevels
+        )
+        return column_headers, rows.to_dict(orient="records"), title
+
+    elif table_name in table_map:
+        df = table_map[table_name]()
+        column_headers = list(df.columns)
+        rows = df.to_dict(orient="records")
+        title = table_name.replace("_", " ").title()
+        return column_headers, rows, title
+
+    else:
+        raise ValueError(f"Table '{table_name}' not found")
 
 
 from flask_cors import CORS
@@ -982,12 +1069,13 @@ def add_marker():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     """
     Reassigns a node from one parent to another in the tree.
     Updates TREK_NODES_BY_ID, allelectors, and regenerates relevant maps.
     """
-    global OPTIONS, constants
+
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from enum import Enum
 
     print(">>> /reassign_parent called")
 
@@ -999,49 +1087,94 @@ def reassign_parent():
     current_election = CurrentElection.get_current_election()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
-    current_node = get_last(current_election, CElection)
-    print(f"✔ Current node: {current_node.value if current_node else 'None'}")
+    print(f"✔ Current election: {current_election}")
 
-
-    print(f"✔ Current election: {current_election} ")
-
-    # Get request data
-    data = request.get_json()
+    # Request payload
+    data = request.get_json(force=True)
     old_parent_name = data['old_parent']
     new_parent_name = data['new_parent']
     subject_name = data['subject']
-    print(f"📥 Request to move node '{subject_name}' from '{old_parent_name}' to '{new_parent_name}'")
+
+    print(
+        f"📥 Request to move node '{subject_name}' "
+        f"from '{old_parent_name}' to '{new_parent_name}'"
+    )
 
     # --------------------------
-    # 1. Find nodes in tree
+    # Error states
+    # --------------------------
+    class MoveNodeError(Enum):
+        SUBJECT_NOT_FOUND = "subject_not_found"
+        WRONG_OLD_PARENT = "wrong_old_parent"
+        NO_GRANDPARENT = "no_grandparent"
+        NEW_PARENT_NOT_FOUND = "new_parent_not_found"
+
+    # --------------------------
+    # Find nodes in tree
     # --------------------------
     def find_nodes(node):
         if node.value == subject_name:
-            # Check parent matches old_parent_name
-            if node.parent and node.parent.value == old_parent_name:
-                parent = node.parent
-                grandparent = parent.parent
-                if grandparent:
-                    new_parent = next((n for n in grandparent.children if n.value == new_parent_name), None)
-                    if new_parent:
-                        return node, parent, new_parent
-            return None
-        # Recurse through children
+            if not node.parent:
+                return ("error", MoveNodeError.NO_GRANDPARENT)
+
+            if node.parent.value != old_parent_name:
+                return ("error", MoveNodeError.WRONG_OLD_PARENT)
+
+            parent = node.parent
+            grandparent = parent.parent
+            if not grandparent:
+                return ("error", MoveNodeError.NO_GRANDPARENT)
+
+            new_parent = next(
+                (n for n in grandparent.children if n.value == new_parent_name),
+                None
+            )
+            if not new_parent:
+                return ("error", MoveNodeError.NEW_PARENT_NOT_FOUND)
+
+            return ("ok", node, parent, new_parent)
+
         for child in node.children:
             result = find_nodes(child)
             if result:
                 return result
+
         return None
 
+    # --------------------------
+    # Execute search
+    # --------------------------
     rootx = get_root()
-    nodes = find_nodes(rootx)
+    result = find_nodes(rootx)
 
-    if not nodes:
-        print(f"❌ Node '{subject_name}' not found or parents mismatch")
-        return jsonify({'status': 'error', 'message': f"Node '{subject_name}' not found"}), 404
+    if result is None:
+        return jsonify({
+            "status": "error",
+            "error": MoveNodeError.SUBJECT_NOT_FOUND.value,
+            "message": f"Node '{subject_name}' not found"
+        })
 
-    subject_node, old_parent_node, new_parent_node = nodes
-    print(f"✔ Found subject node: {subject_node.value}, old parent: {old_parent_node.value}, new parent: {new_parent_node.value}")
+    status, *payload = result
+
+    if status == "error":
+        error = payload[0]
+        return jsonify({
+            "status": "error",
+            "error": error.value,
+            "message": error.value.replace("_", " ").capitalize()
+        })
+
+
+    # ✅ Correct unpacking
+    subject_node, old_parent_node, new_parent_node = payload
+
+    print(
+        f"✔ Found subject node: {subject_node.value}, "
+        f"old parent: {old_parent_node.value}, "
+        f"new parent: {new_parent_node.value}"
+    )
+
+    # (actual move logic comes next)
 
     # --------------------------
     # 2. Remove from old parent
@@ -1081,19 +1214,32 @@ def reassign_parent():
         (allelectors['WalkName'] == old_parent_name) &
         (allelectors['StreetName'] == subject_name)
     )
-
     if mask_subject.any():
         allelectors.loc[mask_subject, 'WalkName'] = new_parent_name
         print(f"✔ Updated allelectors: '{subject_name}' now under '{new_parent_name}'")
     else:
-        mapfile = old_parent_node.mapfile(rlevels)
-        old_parent_node.create_area_map(current_election, CElection)
-        print(f"🔁 Regenerated {etype} layer map {mapfile} for node '{old_parent_node.value}'")
+        print(f"⚠ No allelectors rows matched for '{subject_name}'")
+
 # NEED TO REFACTOR ALL CALLS TO CREATE MAP
     # Regenerate old parent layer if exists - deleted not required
+    print("🔁 Regenerating affected maps...")
+
+    old_parent_node.create_area_map(current_election, CElection)
+    new_parent_node.create_area_map(current_election, CElection)
+
+    print(
+        f"🔁 Regenerated maps for "
+        f"'{old_parent_node.value}' and '{new_parent_node.value}'"
+    )
 
     # --------------------------
     # 6. Save changes
+    # --------------------------
+
+    columns, rows, title = fetch_table("resources", create_node=False)
+
+    # --------------------------
+    # 7. Save changes
     # --------------------------
 
     mapfile = old_parent_node.mapfile(rlevels)
@@ -1148,8 +1294,6 @@ def update_walk():
     global layeritems
 
 
-    global OPTIONS
-
     restore_from_persist(session=session)
 
     current_election = CurrentElection.get_current_election()
@@ -1175,7 +1319,7 @@ def kanban():
 
 
     global areaelectors
-    global OPTIONS
+
 
 # campaign plan is only available to westminster elections at level 3 and others at level 4.
 # every election should acquire an election node(ping to its mapfile) to which this route should take you
@@ -1670,32 +1814,27 @@ def handle_exception(e):
     }
     return jsonify(response), e.code
 
-@app.route('/get_tags')
-@login_required
-def get_tags():
-    global CElection
-    restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
-    CElection = CurrentElection.load(current_election)
-    tags = CElection['tags']
-    task_tags, outcome_tags =  CElection.get_tags()
-
-    # tags is assumed to be a dict: { "leafletting1": "FirstLeaflet", ... }
-    tag_list = [{"code": code, "label": label} for code, label in tags.items()]
-
-    return jsonify(tags=tag_list)
 
 @app.route('/get-backend-url', methods=['GET'])
 def get_backend_url():
     from elections import CurrentElection
-    from state import OPTIONS
+
+
     current_election = CurrentElection.get_current_election()
+
     CElection = CurrentElection.load(current_election)
+
+    current_node = get_last(current_election,CElection)
+
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    options = resolve_options(program, election, current_node)
+    constants = CElection
 
     return jsonify({
     'backend_url': request.host_url,
-    'constants': CElection,
-    'options': OPTIONS,
+    'constants': constants,
+    'options': options,
     'current_election': current_election
     })
 
@@ -1758,7 +1897,7 @@ def deactivate_stream():
     # Example: Remove all electors for the given election
     from nodes import allelectors
     election = request.json.get('election')
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
 
     if os.path.exists(TABLE_FILE):
         try:
@@ -1852,8 +1991,12 @@ def reset_Elections():
 @app.route("/election-report")
 @login_required
 def election_report():
-    global OPTIONS
+
     global report_data
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
+
     resources = OPTIONS['resources']
     # Define the absolute path to the 'static/data' directory
     elections_dir = os.path.join(config.workdirectories['workdir'], 'static', 'data')
@@ -1956,7 +2099,7 @@ def set_election():
     global constants, constants
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     import json
-    from state import OPTIONS, Treepolys, Fullpolys
+    from state import Treepolys, Fullpolys
     from elections import CurrentElection
 
     try:
@@ -1986,7 +2129,6 @@ def set_election():
 
         print(f"____Route/set-election- Loaded election: {current_election} CE data: {CElection}")
 
-
         current_node = get_last(current_election,CElection)
         mapfile = current_node.mapfile(rlevels)
 
@@ -1995,6 +2137,10 @@ def set_election():
 
 
         print(f"____Route/set-election/constantsX {current_node.value}, election: {current_election} CE data: {CElection}")
+        program = ProgramContext()
+        election = ElectionContext(CElection)
+        options = resolve_options(program, election, current_node)
+        constants = CElection
 
 
         CElection['previousParty'] = current_node.party
@@ -2004,8 +2150,8 @@ def set_election():
         persist(current_node)
 
         return jsonify({'success':True,
-                'constants': CElection,
-                'options': OPTIONS,
+                'constants': constants,
+                'options': options,
                 'current_election': current_election
             })
 
@@ -2020,16 +2166,18 @@ def set_election():
 @login_required
 def get_current_election_data():
     # received a call to return election data constants and options
-    global OPTIONS
-
-    resources = OPTIONS['resources']
 
     restore_from_persist(session)
     current_election = request.args.get("election")
 
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
 
+
+    resources = OPTIONS['resources']
     rlevels = CElection.resolved_levels
 
     plan = CElection.get("calendar_plan", {})
@@ -2084,24 +2232,26 @@ def update_current_election():
 @app.route('/get-constants', methods=["GET"])
 @login_required
 def get_constants():
-    global OPTIONS
     global CElection
     print("____Route/get_constants" )
     current_election = CurrentElection.get_current_election()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
-    if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
-        with open(OPTIONS_FILE, 'r',encoding="utf-8") as f:
-            OPTIONS = json.load(f)
-
     print(f"__get constants for election: {current_election}")
     if not current_election:
         return jsonify({'error': 'Invalid election'}), 400
     print('__constants:', CElection )
+
+    program = ProgramContext()
+    current_election = ElectionContext(CElection)
+
+    options = resolve_options(program, current_election, current_node)
+    constants = election.get_constants()
+
     return jsonify({
-        'constants': CElection,
-        'options': OPTIONS,
+        'constants': constants,
+        'options': options,
         'current_election': current_election
     })
 
@@ -2109,8 +2259,6 @@ def get_constants():
 @app.route("/set-constant", methods=["POST"])
 @login_required
 def set_constant():
-
-    global OPTIONS
 
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
@@ -2124,6 +2272,12 @@ def set_constant():
 
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
+
+
+    resources = OPTIONS['resources']
 
 
     counters = get_counters(session)
@@ -2157,7 +2311,7 @@ def delete_election():
     global formdata
 
     restore_from_persist(session)
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
     data = request.get_json()
     election_to_delete = data.get("election")
 
@@ -2195,8 +2349,6 @@ def delete_election():
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
-    with open(OPTIONS_FILE, 'w') as f:
-        json.dump(OPTIONS, f, indent=2)
 
     return jsonify(success=True, electiontabs_html=electiontabs_html)
 
@@ -2204,14 +2356,14 @@ def delete_election():
 @app.route("/add-election", methods=["POST"])
 @login_required
 def add_election():
-    global OPTIONS
+
     global CElection
     restore_from_persist(session)
 
     # no have Current Election data loaded
     # Load existing elections
 
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
 
     # Get name for new election
     data = request.get_json()
@@ -2238,16 +2390,20 @@ def add_election():
     # Write updated elections back
     CElection.save()
 
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
     print("____ELECTIONS:", ELECTIONS)
     formdata = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
+
+
+    resources = OPTIONS['resources']
+
 
     OPTIONS['streams'] = ELECTIONS
 
-    # Optional: set session to the new election
-    with open(OPTIONS_FILE, 'w') as f:
-        json.dump(OPTIONS, f, indent=2)
-
+    constants = current_election.get_constants()
 
     print("election-tabs:",formdata)
 
@@ -2273,7 +2429,6 @@ def update_territory():
     from nodes import allelectors
     global CElection
     global constants
-    global OPTIONS
 
     data = request.get_json()
     mapfile = data.get("mapfile")
@@ -2339,11 +2494,11 @@ def index():
 
     global streamrag
     global TABLE_TYPES
-    global OPTIONS
+
     global constants
 
 
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
     if 'username' in session:
         flash("__________Session Alive:"+ session['username'])
         print("__________Session Alive:"+ session['username'])
@@ -2355,6 +2510,9 @@ def index():
         current_node = get_last(current_election,CElection)
 
         mapfile = current_node.mapfile(rlevels)
+        program = ProgramContext()
+        election = ElectionContext(CElection)
+        OPTIONS = resolve_options(program, election, current_node)
 
 
     #       Track used IDs across both existing and new entries
@@ -2558,7 +2716,7 @@ def downbut(path):
 
     global layeritems
     global constants
-    global OPTIONS
+
 
     print("____Route/downbut:", path)
 
@@ -2580,12 +2738,17 @@ def downbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path)
     mapfile = current_node.mapfile(rlevels)
+    base = Path(config.workdirectories['workdir'])  # or wherever files live
+    fullpath = base / mapfile
+
     if current_node.endpoint_created(current_election,CElection,mapfile):
-        return send_file(mapfile, as_attachment=False)
-    print("____Route/downbut end:",previous_node.value,current_node.value, mapfile)
+        if not fullpath.exists():
+            abort(404, f" Route/downbut File not found: {fullpath}")
+        print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
 
     persist(current_node)
-    return jsonify({"error": "Endpoint not created"}), 400
+    print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
+    return send_file(fullpath, as_attachment=False)
 
 #    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
 #        current_node.create_area_map(CElection)
@@ -2633,7 +2796,7 @@ def downPDbut(path):
     global filename
     global layeritems
     global constants
-    global OPTIONS
+
 
     restore_from_persist(session=session)
 
@@ -2695,7 +2858,7 @@ def downWKbut(path):
     global filename
     global layeritems
     global constants
-    global OPTIONS
+
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
     restore_from_persist(session=session)
@@ -2761,7 +2924,7 @@ def downMWbut(path):
     global layeritems
     global constants
     global STATICSWITCH
-    global OPTIONS
+
 # so this is the button which creates the nodes and map of equal sized walks for the troops
 
     restore_from_persist(session=session)
@@ -2984,7 +3147,7 @@ def PDdownST(path):
     global filename
     global layeritems
     global constants
-    global OPTIONS
+
 
     restore_from_persist(session=session)
     current_election = CurrentElection.get_current_election()
@@ -3108,7 +3271,7 @@ def WKdownST(path):
     global filename
     global layeritems
     global constants
-    global OPTIONS
+
     restore_from_persist(session=session)
     current_election = CurrentElection.get_current_election()
     CElection = CurrentElection.load(current_election)
@@ -3208,105 +3371,19 @@ def wardreport(path):
 
 
 
+# Electtrek.py or routes.py
+from flask import jsonify
+from tables import fetch_table
+
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
-    global OPTIONS
-    global report_data
-    global stream_table
-    global layertable
-    from state import VNORM
-    from nodes import TREK_NODES_BY_ID, get_layer_table
-
-    def get_resources_table():
-        return pd.DataFrame(resources)
-
-    def get_report_table():
-        try:
-            if report_data:
-                return pd.DataFrame(report_data)
-        except:
-            report_data = pd.DataFrame()
-        return pd.DataFrame(report_data)
-
-    def get_places_table():
-        print(f"Places content: {places}")
-        print(f"pd.DataFrame: {pd.DataFrame}, type: {type(pd.DataFrame)}")
-        if places is None or not places:
-            raise ValueError("places is not defined")
-
-        # Check if places is a dictionary or a list
-        if isinstance(places, dict):
-            return pd.DataFrame.from_dict(places, orient='index')
-
-        elif isinstance(places, list):
-            # Ensure each item in the list is a dictionary (if it's a list of dicts)
-            if all(isinstance(item, dict) for item in places):
-                return pd.DataFrame(places)
-            else:
-                raise ValueError("Each item in places list must be a dictionary.")
-
-        else:
-            raise TypeError("places must be either a dictionary or a list.")
-
-    def get_stream_table():
-        print(f"Stream_table content: {stream_table}")
-        if isinstance(stream_table, dict):
-            return pd.DataFrame.from_dict(stream_table, orient='index')
-        else:
-            return pd.DataFrame(stream_table)
-
-    current_election = CurrentElection.get_current_election()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last(current_election,CElection)
-    rlevels = CElection.resolved_levels
-
-    print(f"____Get Table1 {table_name} for election {current_election}")
-
-    # Table mapping
-    table_map = {
-        "report_data" : get_report_table,
-        "resources" : get_resources_table,
-        "places" : get_places_table,
-        "stream_table" : get_stream_table
-    }
-
-
     try:
-        print(f"____GET TABLE  start: {current_node.value} table: {table_name} ")
-
-        if table_name.endswith("_layer"):
-            # eg for constituency_layer - look up children of county surrey
-            tabtype = table_name.removesuffix("_layer")
-            lev = parent_level_for(tabtype) # eg Surrey
-            print(f"____NODELOOKUP  start: {current_node.value} table: {table_name} type {tabtype} level {lev} ")
-            tabnode =current_node.findnodeat_Level(lev)
-            print(f"____TABNODE: {tabnode.nid} - {tabnode.findnodeat_Level(lev).value} tabtype {tabtype} listNUM {len(tabnode.childrenoftype(tabtype))} - {len(tabnode.children)} ")
-            print(f"____TREK_NODES_BY_ID: {TREK_NODES_BY_ID} ")
-
-            [column_headers,rows, title] = get_layer_table(tabnode.childrenoftype(tabtype), str(tabtype)+"s",rlevels)
-            print(f"____NODELOOKUP {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
-            return jsonify([column_headers, rows.to_dict(orient="records"), title])
-        elif table_name.endswith("_xref"):
-            lev = current_node.level+1
-            path = current_node.dir+"/"+current_node.file(rlevels)
-            tabtype = rlevels[lev]
-            print(f"____NODEXREF type {tabtype} level {lev} ")
-            [column_headers,rows, title] = get_layer_table(current_node.childrenoftype(tabtype), str(tabtype)+"s",rlevels)
-            print(f"____NODEXREF -COLS {column_headers} ROWS {rows} TITLE {title}")
-            return jsonify([column_headers, rows.to_dict(orient="records"), title])
-        elif table_name is None or table_name not in table_map:
-            print(f"____BAD TABLE {table_name} None or not in list ")
-            return jsonify(["", "", f"Table '{table_name}' not found"]), 404
-        df = table_map[table_name]()
-        column_headers = list(df.columns)
-        rows = df.to_dict(orient="records")
-        title = table_name.replace("_", " ").title()
-        print(f"____TABLENAME {table_name} -COLS {column_headers} ROWS {rows} TITLE {title}")
-        return jsonify([column_headers, rows, title])
+        columns, rows, title = fetch_table(table_name, create_node=False)
+        return jsonify([columns, rows, title])
     except Exception as e:
-        print(f"[ERROR] Failed to generate table '{table_name}': {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/fetch_areas', methods=['POST', 'GET'])
 @login_required
@@ -3477,7 +3554,7 @@ def upbut(path):
     global environment
     global layeritems
     global constants
-    global OPTIONS
+
 
     restore_from_persist(session=session)
     current_election = CurrentElection.get_current_election()
@@ -3563,7 +3640,7 @@ def register():
 @app.route("/calendar_partial/<path:path>")
 @login_required
 def calendar_partial(path):
-    global places, resources, constants, OPTIONS
+    global places, resources, constants
 
     restore_from_persist(session=session)
     current_election = CurrentElection.get_current_election()
@@ -3573,16 +3650,16 @@ def calendar_partial(path):
     ctype = CElection.node_type(current_node.level)
 
 
-    with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
-        OPTIONS = json.load(f)
-
-
     # Track used IDs across both existing and new entries
 #        places = build_place_lozenges(markerframe)
 
 #        restore_from_persist(session=session)
 #        current_node = get_current_node(session)
 #        CE = CurrentElection.get_current_election()
+
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
 
     selectedResources = {
             k: v for k, v in OPTIONS['resources'].items()
@@ -3599,7 +3676,7 @@ def calendar_partial(path):
 
     # share input and outcome tags
     valid_tags = CElection['tags']
-    task_tags, outcome_tags = CElection.get_tags()
+    task_tags, outcome_tags, all_tags = CElection.get_tags()
 
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
     print(f"🧪 calendar partial level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
@@ -3834,7 +3911,7 @@ def firstpage():
     global streamrag
     global CElection
     global TABLE_TYPES
-    global OPTIONS
+
     global constants
 
 
@@ -3886,7 +3963,7 @@ def firstpage():
     nodes.reset_nodes()
 
     # Get al the Elections Names
-    ELECTIONS = CElection.get_available_elections()
+    ELECTIONS = get_available_elections()
 
     #election constants , nodes, event values are now loaded up
     constants = CElection
@@ -3900,7 +3977,7 @@ def firstpage():
             stream_table = json.load(f)
 
     resources = {}
-    task_tags, outcome_tags = CElection.get_tags()
+    task_tags, outcome_tags, all_tags = CElection.get_tags()
 
     current_node = get_last(current_election,CElection) # go to the first node
 
@@ -3919,33 +3996,15 @@ def firstpage():
 
     selectedResources = resources
 
-    OPTIONS = {
-        "ACC": False,
-        "DEVURLS": config.DEVURLS,
-        "territories": state.ElectionTypes,
-        "yourparty": state.VID,
-        "previousParty": state.VID,
-        "resources" : resources,
-        "areas" : areas,
-        "candidate" : selectedResources,
-        "chair" : selectedResources,
-        "tags": CurrentElection['tags'],
-        "task_tags": task_tags,
-        "autofix" : state.onoff,
-        "VNORM" : state.VNORM,
-        "VCO" : state.VCO,
-        "streams" : ELECTIONS,
-        "stream_table": stream_table
-        # Add more mappings here if needed
-    }
-    # override if OPTIONS(.json) exists because it contains memorised option for areas, resources and tags data
-    if  os.path.exists(OPTIONS_FILE) and os.path.getsize(OPTIONS_FILE) > 0:
-        with open(OPTIONS_FILE, 'r', encoding="utf-8") as f:
-            OPTIONS = json.load(f)
-        areas =  current_node.get_areas()
-        task_tags, outcome_tags =  CElection.get_tags()
-        resources = OPTIONS['resources']
+    areas =  current_node.get_areas()
+    task_tags, outcome_tags,all_tags =  CElection.get_tags()
+    program = ProgramContext()
+    election = ElectionContext(CElection)
+    OPTIONS = resolve_options(program, election, current_node)
 
+    resources = OPTIONS['resources']
+    print('_______allelectors size: ', len(allelectors))
+    print('_______resources: ', resources)
     current_node = get_last(current_election,CElection)
 
 
@@ -3978,7 +4037,7 @@ def firstpage():
 
 #        CElection['mapfiles'][-1] = mapfile
 
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
 
 #    render the entire application frame in Dash0 - passing all required data and ensuring mapfile set to last visited place
 
@@ -4032,7 +4091,7 @@ def cards():
                 flash ( "Electoral data for" + formdata['constituency'] + " can now be explored.")
                 mapfile =  prodcards[2]
                 group = prodcards[0]
-                ELECTIONS = CurrentElection.get_available_elections()
+                ELECTIONS = get_available_elections()
                 return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=mapfile)
             else:
                 flash ( "Data file does not match selected constituency!")
@@ -4248,7 +4307,7 @@ def stream_input():
             row["stream_path"] = ""
 
     streamrag = getstreamrag()
-    ELECTIONS = CurrentElection.get_available_elections()
+    ELECTIONS = get_available_elections()
     streams = list(ELECTIONS)
 
     return render_template(

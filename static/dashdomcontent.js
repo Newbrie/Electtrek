@@ -556,30 +556,40 @@ resourcesSelect?.addEventListener("blur", () => {
 /* ---------------------------------------------------------
  *  PARENT-NODE REASSIGNMENT SELECTION
  * --------------------------------------------------------- */
-document.addEventListener("change", (e) => {
-    if (!e.target.classList.contains("parent-dropdown")) return;
+ document.addEventListener("change", (e) => {
+     if (!e.target.classList.contains("parent-dropdown")) return;
 
-    const select = e.target;
-    const subject = select.dataset.subject;
+     const select = e.target;
+     const subject = select.dataset.subject;
 
-    fetch("/reassign_parent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            subject,
-            old_parent: select.dataset.oldValue,
-            new_parent: select.value
-        })
-    })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === "success") {
-              select.dataset.oldValue = select.value;
-                console.log(`${data.message}`);
-                changeIframeSrc(`${data.mapfile}`);
-            }
-        });
-});
+     fetch("/reassign_parent", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+             subject,
+             old_parent: select.dataset.oldValue,
+             new_parent: select.value
+         })
+     })
+         .then(r => r.json())
+         .then(data => {
+             if (data.status === "success") {
+                 // Update dropdown old value
+                 select.dataset.oldValue = select.value;
+
+                 // Update map iframe
+                 changeIframeSrc(`${data.mapfile}`);
+                 console.log(`${data.message}`);
+
+                 // --- Refresh table ---
+                 fetchTableData("nodelist_xref");  // <-- call your existing function
+             } else {
+                 console.error(`Reassign failed: ${data.message}`);
+             }
+         })
+         .catch(err => console.error("Error calling /reassign_parent:", err));
+ });
+
 
 
   console.log("📅 Calendar dropdowns populated…");

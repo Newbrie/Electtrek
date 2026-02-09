@@ -8,7 +8,7 @@ from shapely import crosses, contains, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route
 
-from config import TABLE_FILE, OPTIONS_FILE, RESOURCE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
+from config import TABLE_FILE, RESOURCE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
 
 
 from types import MappingProxyType
@@ -713,10 +713,6 @@ LastResults = {
 }
 
 areaoptions = ["UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/SURREY_HEATH-MAP.html"]
-
-# save all places, resources in a new options file
-with open(OPTIONS_FILE, 'w') as f:
-    json.dump(OPTIONS, f, indent=2)
 
 IGNORABLE_SEGMENTS = {"PDS", "WALKS", "DIVS", "WARDS"}
 

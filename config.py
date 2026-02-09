@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 workdirectories = {}
 workdirectories['testdir'] = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
 workdirectories['staticdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek"
@@ -17,5 +18,6 @@ ELECTOR_FILE = os.path.join(workdirectories['workdir'],'static','data','allelect
 TREKNODE_FILE = os.path.join(workdirectories['workdir'],'static','data','Treknodes.json')
 FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','data','Fullpolys.pkl')
 RESOURCE_FILE = os.path.join(workdirectories['workdir'],'Resources.json')
+BASE_FILE = Path(workdirectories['workdir']) / 'static' / 'data' / 'Elections-DEMO.json'
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }
