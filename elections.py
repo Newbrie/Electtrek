@@ -43,55 +43,56 @@ LEVELS = {
 
 class ProgramContext:
     def get_options(self):
-        stream_table = {}
-        if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
-            with open(TABLE_FILE, "r") as f:
-                stream_table = json.load(f)
+        # on startup its possible to define a range of global options
+
         return {
-            "DEVURLS": config.DEVURLS,
-            "VNORM": state.VNORM,
-            "VCO": state.VCO,
-            "streams": get_available_elections(),
-            "territories": state.ElectionTypes,
-            "stream_table": stream_table
+            "LEVELS": LEVELS,
+            "LEVEL_INDEX": LEVEL_INDEX,
+            "LAYERS": state.LAYERS,
+            "TABLE_TYPES": state.TABLE_TYPES,
+            "DEVURLS": config.DEVURLS, #backend urls used on start up
+            "VNORM": state.VNORM, #normalised party used everywhere
+            "VCO": state.VCO, # party colours used everywhere
+            "streams": get_available_elections(), # currently running elections
+            "stream_table": get_stream_table() # all currently running data pipelines
         }
 
 class ElectionContext:
+    # when an election is chosen, a number of options exist for given selections
     def __init__(self, celection):
-        self.ce = celection
+        self.ce = celection # all election option selections
 
     def get_options(self):
         task_tags, outcome_tags, all_tags = self.ce.get_tags()
 
         return {
-            "tags": all_tags,
-            "task_tags": task_tags,
-            "autofix": self.ce.autofix,
-            "yourparty": self.ce.yourparty,
-            "previousParty": self.ce.previousParty,
-            "places": self.ce.places,
-            "resources": self.ce.resources,
-            "candidate": self.ce.resources,
-            "chair": self.ce.resources,
-            "campaignMgr": self.ce.resources,
-            "mapfiles": self.ce.mapfiles
+            "territories": state.ElectionTypes, # all possible types of election used in elections
+            "tags": all_tags, # all poss election tasks and outcomes
+            "task_tags": task_tags, # all poss tasks
+            "autofix": list(state.autofix), # stages of data quality cleaning
+            "yourparty": state.VID, # party of interest
+            "previousParty": state.VID, # incumbent party
+            "places": self.ce.places, # the places used by the campaign team
+            "resources": self.ce.resources, # the resources in the campaign team
+            "selectResources": self.ce.resources, # the selected resources
+            "calendar_plan": self.ce.calendar_plan, # the cal plan slots
+            "candidate": self.ce.resources, # the selected candidate resources
+            "chair": self.ce.resources, # the designated chair resource
+            "campaignMgr": self.ce.resources, # the designated campaign manager
+            "mapfiles": self.ce.mapfiles, #a recent history of nodes navigated
+            "territory": self.ce.mapfiles  # the selected electorate node for this election
         }
 
-    def get_constants(self):
-        return {
-            "GOTV": self.ce.GOTV,
-            "accumulate": self.ce.accumulate,
-            "adminmode": self.ce.adminmode,
-              "walksize": 350,
-              "teamsize": 8
-        }
 
-def resolve_options(program, election, node):
-    options = {}
-    options.update(program.get_options())
-    options.update(election.get_options())
-    options.update(node.get_options(program=program, election=election))
-    return options
+
+def capped_append(lst, item):
+    max_size = 7
+    if not isinstance(lst, list):
+        return
+    lst.append(item)
+    if len(lst) > max_size:
+        lst.pop(0)  # Remove oldest
+    return lst
 
 
 def get_available_elections():
@@ -109,30 +110,69 @@ def get_available_elections():
             election_files[name] = str(file)
     return election_files
 
-class CurrentElection(dict):
-    """
-    Dict-backed election object with helpers
-    """
-    BASE_FILE = Path(ELECTIONS_FILE)
+def get_stream_table():
+    stream_table = {}
+    if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
+        with open(TABLE_FILE, "r") as f:
+            stream_table = json.load(f)
+    return stream_table
 
-    DEFAULTS = {
-        "adminview": False,
-        "territories": "W",
-        "walksize": 300,
-        "teamsize": 6,
-        "resources": [],
-        "places": {},
-        "tags": {},
-        "calendar_plan": {"slots": {}},
+def resolve_ui_context(program, election, node):
+    """
+    Merge program, election, and node options into a single dict,
+    converting any sets to lists so the result is JSON-serializable.
+    """
+    def make_json_serializable(obj):
+        if isinstance(obj, dict):
+            return {k: make_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [make_json_serializable(v) for v in obj]
+        elif isinstance(obj, set):
+            return [make_json_serializable(v) for v in obj]
+        else:
+            return obj
+
+    merged = {
+        **program.get_options(),
+        **election.get_options(),
+        **node.get_options(program=program, electionctx=election),
     }
 
-    # ---------- construction ----------
+    return make_json_serializable(merged)
 
-    def __init__(self, data: dict, election_id: str | None = None):
-        merged = {**self.DEFAULTS, **data}
-        super().__init__(merged)
+
+
+class CurrentElection(dict):
+    BASE_FILE = Path(ELECTIONS_FILE)
+
+    def __init__(self, data: dict, election_id: str):
+        super().__init__(data)
         self.election_id = election_id
-        self.name = election_id
+        self.name = election_id  # stable election identity
+
+    def visit_node(self, node):
+        rlevels = self.resolved_levels
+        self['cid'] = node.nid
+        self['cidLat'] = node.latlongroid[0]
+        self['cidLong'] = node.latlongroid[1]
+        self['mapfiles'] = capped_append(self['mapfiles'], node.mapfile(rlevels))
+        self.save()
+
+        print(
+            f"___under {self.name} visited mapfile: "
+            f"{self['mapfiles'][-1]}"
+        )
+
+        print("=== VISIT NODE ===", node.mapfile(rlevels))
+        print("visited node children:", [c.value for c in node.children])
+
+
+    def resolve_ui_options(program, election_ctx, node):
+        options = {}
+        options.update(program.get_options())        # app-level options
+        options.update(election_ctx.get_options())   # election-level options
+        options.update(node.get_options())            # node-level options
+        return options
 
 
 
@@ -199,17 +239,6 @@ class CurrentElection(dict):
 
     # ---------- node typing ----------
 
-    def childnode_type(self, level: int) -> str | None:
-        """
-        Return the child node type for a given parent level,
-        using this election's resolved levels.
-        """
-        next_level = level + 1
-        if next_level > max(self.resolved_levels):
-            return None
-        return self.resolved_levels.get(next_level)
-
-        return self.resolved_levels.get(next_level)
 
     def node_type(self, level: int) -> str | None:
         return self.resolved_levels.get(level)
@@ -224,7 +253,7 @@ class CurrentElection(dict):
         )
 
     @classmethod
-    def get_current_election(cls) -> str:
+    def get_lastused(cls) -> str:
         """
         Return the election_id of the most recently modified election file.
         """
@@ -268,10 +297,10 @@ class CurrentElection(dict):
         """
         Persist election JSON to disk
         """
-        if not self.election_id:
+        if not self.name:
             raise ValueError("Cannot save election without election_id")
 
-        path = self._file_for(self.election_id)
+        path = self._file_for(self.name)
 
         try:
             print(f"____Under route {route()} Saving Election File: {self.election_id} → {path}")
@@ -303,38 +332,6 @@ class CurrentElection(dict):
 
         print(f"___Under route {route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
         return task_tags, outcome_tags, all_tags
-
-
-
-    @classmethod
-    def last_election(cls) -> str:
-        """
-        Return the most recently used election.
-        Fallback to 'DEMO' if none found.
-        """
-        from pathlib import Path
-
-        last = "DEMO"
-        elections_dir = cls.BASE_FILE.parent
-
-        election_files = get_available_elections()  # dict: name → path
-        print(f"____election files: {list(election_files.keys())} under route {route()}")
-
-        if election_files:
-            paths = [
-                elections_dir / f"elections-{name}.json"
-                for name in election_files
-            ]
-
-            paths = [p for p in paths if p.exists()]
-
-            if paths:
-                # 🔑 Use modification time, not access time
-                paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                last = paths[0].stem.replace("elections-", "")
-
-        print(f"____last election: {last}")
-        return last
 
 
 

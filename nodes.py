@@ -9,12 +9,13 @@ import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context
 from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-from elections import route, CurrentElection
+from elections import route, CurrentElection, capped_append
 from folium import Map, Element
 import folium
 import uuid
 from pathlib import Path
 from datetime import datetime
+
 
 
 def create_root_node() -> "TreeNode":
@@ -40,14 +41,6 @@ def get_root() -> "TreeNode":
 
     return root
 
-def capped_append(lst, item):
-    max_size = 7
-    if not isinstance(lst, list):
-        return
-    lst.append(item)
-    if len(lst) > max_size:
-        lst.pop(0)  # Remove oldest
-    return lst
 
 
 
@@ -590,7 +583,7 @@ def get_last(current_election, CE, *, create=True):
     if response:
         return response  # redirect response
 
-    print(f"___ Get Last node under {route()} for {current_election} sourcepath: {sourcepath}")
+    print(f"___ Get Last node under {route()} for {current_election} sourcepath: {sourcepath} create:{create}")
 
     # --- 3. Resolve node from path ---
     if create and sourcepath:
@@ -610,7 +603,7 @@ def get_last(current_election, CE, *, create=True):
     # --- 4. Fallback to root ---
     if not last_node:
         print("⚠️ Falling back to root node")
-        last_node = get_root()
+        last_node = MapRoot
 
     print(
         f"___ GET LAST DESTINATION - election: {current_election} "
@@ -719,11 +712,42 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
-
-    def get_options(self, *, program, election):
+    def available_tables(self,rlevels):
         return {
-            "areas": self.get_areas()
+        "TABLE_TYPES": state.TABLE_TYPES
         }
+
+    def available_layers(self,rlevels):
+        return {
+        "LAYERS": state.LAYERS
+        }
+
+    def get_options(self, *, program=None, electionctx=None):
+            rlevels = electionctx.ce.resolved_levels
+            next_level = self.level + 1
+
+            return {
+                # identity
+                "node_id": self.nid,
+                "node_name": self.value,
+                "level": self.level,
+                "ACC": {True,False}, # accumulate boundaries during navigation
+
+                # navigation capabilities
+                "has_parent": self.parent is not None,
+                "child_types": (
+                    [rlevels[next_level]] if next_level in rlevels else []
+                ),
+
+                # available UI elements
+                "tables_available": self.available_tables(rlevels),
+                "layers_available": self.available_layers(rlevels),
+                "areas": self.get_areas(),
+
+                # relationships
+                "children": [c.value for c in self.children],
+            }
+
 
     def to_dict(self):
         return {
@@ -935,15 +959,12 @@ class TreeNode:
         # Create map if it doesn't exist or is stale
         if map_stale:
             print(f"⚙️ Creating/updating map file: {fullpath}")
-            if hasattr(CurrEL, 'childnode_type'):
-                atype = CurrEL.childnode_type(self.level)
+            atype = self.child_type(rlevels)
             print(f" target type: {atype} current {self.value} type: {self.type}")
             self.create_area_map(c_elect, CurrEL)
             print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
 
         # Record map in CurrEL mapfiles
-        CurrEL['mapfiles'] = capped_append(CurrEL['mapfiles'], newpath)
-        CurrEL.save()
         print("Endpoint Created/Updated:", CurrEL['mapfiles'][-1])
 
         return map_stale  # True if a new map was created or updated
@@ -951,15 +972,25 @@ class TreeNode:
 
 
     def set_parent(self, new_parent):
+        # Ensure new parent is in the global index
+        if new_parent.nid not in TREK_NODES_BY_ID:
+            TREK_NODES_BY_ID[new_parent.nid] = new_parent
+
+        # Ensure self is in the global index
+        if self.nid not in TREK_NODES_BY_ID:
+            TREK_NODES_BY_ID[self.nid] = self
+
         # Remove from old parent
         if self.parent:
-            self.parent.children.remove(self)
-            self.parent.last_modified = datetime.utcnow()  # update old parent
+            if self in self.parent.children:
+                self.parent.children.remove(self)
+            self.parent.last_modified = datetime.utcnow()
 
         # Add to new parent
-        new_parent.children.append(self)
+        if self not in new_parent.children:
+            new_parent.children.append(self)
         self.parent = new_parent
-        new_parent.last_modified = datetime.utcnow()  # update new parent
+        new_parent.last_modified = datetime.utcnow()
 
 
 

@@ -165,7 +165,7 @@
         tabBody.appendChild(row);
       });
 
-      console.log(`✅ Table "${tableName}" populated with ${rows.length} rows.`);
+      console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
     } catch (err) {
       console.error("❌ Error fetching table data:", err);
     }
@@ -479,7 +479,7 @@
        console.log("Global task_tags:", window.task_tags);
        console.log("Global outcome_tags:", window.outcome_tags);
 
-  
+
      // =====================================================
      // ⭐ Iterate through all constants and populate UI
      // =====================================================

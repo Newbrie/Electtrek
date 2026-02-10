@@ -57,7 +57,7 @@ from state import VNORM,STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, le
 import nodes
 from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last, save_nodes, get_counters
 import layers
-from elections import CurrentElection, get_available_elections, resolve_options,route, CurrentElection, ProgramContext, ElectionContext
+from elections import CurrentElection, get_available_elections, route, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 
 
 
@@ -663,7 +663,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
             territory_path = CElection['mapfiles'][-1] # this is the node at which the imported data is to be filtered through
             Territory_node = current_node.ping_node(rlevels,current_election,territory_path)
-            ttype = CElection.childnode_type(Territory_node.level)
+            ttype = Territory_node.child_type(rlevels)
             #        Territory_node = self
             #        ttype = electtype
             pfile = Treepolys[ttype]
@@ -866,7 +866,7 @@ def generate_place_code(prefix):
 
 # tables.py
 
-def fetch_table(table_name, current_election=None, create_node=False):
+def fetch_table(table_name, current_election=None):
     """
     Returns a tuple (column_headers, rows_dict, title) for the requested table.
     `create_node` determines whether to recreate path nodes if last node not found.
@@ -874,12 +874,12 @@ def fetch_table(table_name, current_election=None, create_node=False):
 
     # Load current election if not provided
     if current_election is None:
-        current_election = CurrentElection.get_current_election()
+        current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
 
     # Determine current node
-    current_node = get_last(current_election, CElection, create=create_node)
+    current_node = get_last(current_election, CElection, create=False)
 
     # Local helpers for standard tables
     global report_data, resources, places, stream_table  # these may live in global state
@@ -1084,7 +1084,7 @@ def reassign_parent():
     print("✔ Restored from persist")
 
     # Get current election and settings
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
     print(f"✔ Current election: {current_election}")
@@ -1180,7 +1180,7 @@ def reassign_parent():
     # 2. Remove from old parent
     # --------------------------
     # Determine election type for child
-    etype = CElection.childnode_type(old_parent_node.level)
+    etype = old_parent_node.child_type(rlevels)
 
     print("=== BEFORE MOVE ===")
     print("Old parent children:",
@@ -1236,7 +1236,7 @@ def reassign_parent():
     # 6. Save changes
     # --------------------------
 
-    columns, rows, title = fetch_table("resources", create_node=False)
+#    columns, rows, title = fetch_table("nodelist_xref", create_node=False)
 
     # --------------------------
     # 7. Save changes
@@ -1296,7 +1296,7 @@ def update_walk():
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     data = request.json
@@ -1325,7 +1325,7 @@ def kanban():
 # every election should acquire an election node(ping to its mapfile) to which this route should take you
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     rlevels = CElection.resolved_levels
@@ -1455,7 +1455,7 @@ def update_walk_kanban():
     # Restore context
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -1484,7 +1484,7 @@ def update_walk_kanban():
 @login_required
 def telling():
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -1539,7 +1539,7 @@ def check_enop(enop):
     global CElection
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     # Check if ENOP exists in the DataFrame
@@ -1602,7 +1602,7 @@ def update_location_tags():
     global areaelectors
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -1660,7 +1660,7 @@ def location_search():
     from nodes import allelectors
     global areaelectors
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     mask = (allelectors['Election'] == current_election)
@@ -1704,7 +1704,7 @@ def search_electors(df, query):
 def search_api():
     from nodes import allelectors
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     if len(allelectors) != 0:
@@ -1790,7 +1790,7 @@ def search():
 @login_required
 def location():
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     lat = request.args.get("lat")
@@ -1819,17 +1819,19 @@ def handle_exception(e):
 def get_backend_url():
     from elections import CurrentElection
 
-
-    current_election = CurrentElection.get_current_election()
-
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-
     current_node = get_last(current_election,CElection)
 
     program = ProgramContext()
     election = ElectionContext(CElection)
-    options = resolve_options(program, election, current_node)
+    options = resolve_ui_context(program, election, current_node)
     constants = CElection
+
+    print(f"__election: {current_election} __current_node: {current_node.value}")
+    print(f"__program opts: {program}")
+    print(f"__election opts: {election}")
+    print(f"full opts: {options}")
 
     return jsonify({
     'backend_url': request.host_url,
@@ -1843,7 +1845,7 @@ def get_backend_url():
 def add_tag():
     global CElection
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     try:
@@ -1926,7 +1928,7 @@ def deactivate_stream():
     print(f"Deactivated election {election}. Removed {before_count - after_count} electors.")
 
     # remove the  child data nodes under the delete nodes
-    ttype = Election.childnode_type(delete_node.level)
+    ttype = delete_node.child_type(rlevels)
 
     for datanode in delete_node.children:
         delete_node.children.remove(datanode)
@@ -1959,7 +1961,7 @@ def reset_Elections():
     if not fixed_path or not os.path.exists(fixed_path):
         return jsonify({'message': 'Elections reset unnessary - no election data '}), 404
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -1995,14 +1997,14 @@ def election_report():
     global report_data
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
+    OPTIONS = resolve_ui_context(program,election, current_node)
 
     resources = OPTIONS['resources']
     # Define the absolute path to the 'static/data' directory
     elections_dir = os.path.join(config.workdirectories['workdir'], 'static', 'data')
     report_data = []
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -2139,7 +2141,7 @@ def set_election():
         print(f"____Route/set-election/constantsX {current_node.value}, election: {current_election} CE data: {CElection}")
         program = ProgramContext()
         election = ElectionContext(CElection)
-        options = resolve_options(program, election, current_node)
+        options = resolve_ui_context(program,election, current_node)
         constants = CElection
 
 
@@ -2174,8 +2176,7 @@ def get_current_election_data():
     current_node = get_last(current_election,CElection)
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
-
+    OPTIONS = resolve_ui_context(program,election, current_node)
 
     resources = OPTIONS['resources']
     rlevels = CElection.resolved_levels
@@ -2234,7 +2235,7 @@ def update_current_election():
 def get_constants():
     global CElection
     print("____Route/get_constants" )
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -2244,9 +2245,9 @@ def get_constants():
     print('__constants:', CElection )
 
     program = ProgramContext()
-    current_election = ElectionContext(CElection)
+    election = ElectionContext(CElection)
 
-    options = resolve_options(program, current_election, current_node)
+    options = resolve_ui_context(program, election, current_node)
     constants = election.get_constants()
 
     return jsonify({
@@ -2274,7 +2275,7 @@ def set_constant():
     current_node = get_last(current_election,CElection)
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
+    OPTIONS = resolve_ui_context(program,election,current_node)
 
 
     resources = OPTIONS['resources']
@@ -2395,7 +2396,7 @@ def add_election():
     formdata = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
+    OPTIONS = resolve_ui_context(program,election, election,current_node)
 
 
     resources = OPTIONS['resources']
@@ -2418,7 +2419,7 @@ def add_election():
 @app.route("/last-election")
 @login_required
 def last_election():
-    result = CurrentElection.last_election()
+    result = get_current_election()
     return jsonify(result)
 
 
@@ -2436,7 +2437,7 @@ def update_territory():
     if not mapfile:
         return jsonify({"error": "No mapfile provided"}), 400
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     rlevels = CElection.resolved_levels
@@ -2459,7 +2460,7 @@ def validate_tags():
 
     global CElection
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -2505,14 +2506,14 @@ def index():
         formdata = {}
         streamrag = getstreamrag()
         restore_from_persist(session=session)
-        current_election = CurrentElection.get_current_election()
+        current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
         current_node = get_last(current_election,CElection)
 
         mapfile = current_node.mapfile(rlevels)
         program = ProgramContext()
         election = ElectionContext(CElection)
-        OPTIONS = resolve_options(program, election, current_node)
+        OPTIONS = resolve_ui_context(program,election,current_node)
 
 
     #       Track used IDs across both existing and new entries
@@ -2520,7 +2521,7 @@ def index():
 
     #        restore_from_persist(session=session)
     #        current_node = get_current_node(session)
-    #        CE = CurrentElection.get_current_election()
+    #        CE = CurrentElection.get_lastused()
 
         print(f"🧪 Index level {current_election} - current_node mapfile:{mapfile}")
 
@@ -2722,7 +2723,7 @@ def downbut(path):
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -2770,7 +2771,7 @@ def transfer(path):
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     rlevels = CElection.resolved_levels
@@ -2800,7 +2801,7 @@ def downPDbut(path):
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     previous_node = current_node
@@ -2863,7 +2864,7 @@ def downWKbut(path):
 # so this is the button which creates the nodes and map of equal sized walks for the troops
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     previous_node = current_node
@@ -2928,7 +2929,7 @@ def downMWbut(path):
 # so this is the button which creates the nodes and map of equal sized walks for the troops
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -2996,7 +2997,7 @@ def STupdate(path):
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3150,7 +3151,7 @@ def PDdownST(path):
 
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     rlevels = CElection.resolved_levels
@@ -3215,7 +3216,7 @@ def LGdownST(path):
 
     restore_from_persist(session=session)
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3273,7 +3274,7 @@ def WKdownST(path):
     global constants
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3334,7 +3335,7 @@ def wardreport(path):
     global CElection
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3348,7 +3349,7 @@ def wardreport(path):
 
     i = 0
     alreadylisted = []
-    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+CElection.childnode_type(current_node.level)+" details"
+    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+current_node.child_type(rlevels)+" details"
     layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
     for group_node in current_node.childrenoftype('constituency'):
 
@@ -3372,14 +3373,14 @@ def wardreport(path):
 
 
 # Electtrek.py or routes.py
-from flask import jsonify
-from tables import fetch_table
 
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
     try:
-        columns, rows, title = fetch_table(table_name, create_node=False)
+        print(f"_______ get table {table_name}")
+        columns, rows, title = fetch_table(table_name)
+        print(f"_______ get table result {columns}* {rows}* {title}")
         return jsonify([columns, rows, title])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3389,9 +3390,9 @@ def get_table(table_name):
 @login_required
 def fetch_areas():
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = get_last(current_election,CElection)
+    current_node = get_last(current_election,CElection, create=False)
     accordian = current_node.get_areas()
     print(f"_______ Fetch under {current_election} for {current_node.value} Areas {accordian}")
 
@@ -3407,9 +3408,10 @@ def displayareas():
     global layeritems
     global formdata
 
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
+    rlevels = CElection.resolved_levels
     places = CElection['places']
     print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
@@ -3422,9 +3424,9 @@ def displayareas():
             layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'],rlevels)
     else:
         path = current_node.dir+"/"+current_node.file(rlevels)
-        ctype = CElection.childnode_type
+        ctype = current_node.child_type(rlevels)
 
-        formdata = current_node.value +CElection.childnode_type(current_node.level)+"s"
+        formdata = current_node.value +current_node.child_type(rlevels)+"s"
         tablenodes = current_node.childrenoftype(ctype)
         if len(tablenodes) == 0:
             if current_node.level > 0:
@@ -3504,7 +3506,7 @@ def divreport(path):
     global CElection
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3520,7 +3522,7 @@ def divreport(path):
     i = 0
     layeritems = pd.DataFrame()
     alreadylisted = []
-    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+CElection.childnode_type(current_node.level)+" details"
+    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+current_node.child_type(rlevels)+" details"
     layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
 
     for group_node in current_node.childrenoftype('division'):
@@ -3557,7 +3559,7 @@ def upbut(path):
 
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3613,7 +3615,7 @@ def register():
     password = request.form['password']
     print("Register", username)
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3643,7 +3645,7 @@ def calendar_partial(path):
     global places, resources, constants
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 
@@ -3655,11 +3657,11 @@ def calendar_partial(path):
 
 #        restore_from_persist(session=session)
 #        current_node = get_current_node(session)
-#        CE = CurrentElection.get_current_election()
+#        CE = CurrentElection.get_lastused()
 
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
+    OPTIONS = resolve_ui_context(program,election,current_node)
 
     selectedResources = {
             k: v for k, v in OPTIONS['resources'].items()
@@ -3713,7 +3715,7 @@ def thru(path):
 def showmore(path):
 # is not moving nodes but just changing from wards to div or walks to PD render
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     steps = path.split("/")
@@ -3730,7 +3732,7 @@ def showmore(path):
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     file = request.files.get('file')
@@ -3762,7 +3764,7 @@ def filelist():
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     if filetype == "maps":
@@ -3841,7 +3843,7 @@ def walks():
 
     global environment
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
     flash('_______ROUTE/walks',session)
@@ -3873,10 +3875,10 @@ def postcode():
     from state import Treepolys, Fullpolys
     global CElection
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
-
+    rlevels = CElection.resolved_levels
     flash('__ROUTE/Findpostcode')
 
     pthref = current_node.dir+"/"+current_node.file(rlevels)
@@ -3891,7 +3893,7 @@ def postcode():
     df1['Long'] = df1['Long'].astype(float)
     lookuplatlong = df1[df1['Postcode'] == postcodeentry]
     here = [float(f"{lookuplatlong.Lat.values[0]:.6f}"), float(f"{lookuplatlong.Long.values[0]:.6f}")]
-    pfile = Treepolys[CElection.childnode_type(current_node.level)]
+    pfile = Treepolys[current_node.child_type(rlevels)]
     polylocated = find_boundary(pfile,here)
     flash(f'___The branch that contains this postcode is:{polylocated.NAME}')
 
@@ -3919,7 +3921,7 @@ def firstpage():
         return redirect(url_for('login'))
 
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
     mapfile = CElection['mapfiles'][-1]
@@ -3958,55 +3960,18 @@ def firstpage():
         print(f"____F/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
 
 
-
     # add the root nodes.TreeNode to the node tree
     nodes.reset_nodes()
 
-    # Get al the Elections Names
-    ELECTIONS = get_available_elections()
+    current_node = get_last(current_election,CElection, create=True) # go to the first node
 
-    #election constants , nodes, event values are now loaded up
-    constants = CElection
-    places =  CElection['places']
-    print("🔍 constants:", constants)
-
-    # the general list of  election data files and proessing streams
-    stream_table = {}
-    if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
-        with open(TABLE_FILE, "r") as f:
-            stream_table = json.load(f)
-
-    resources = {}
-    task_tags, outcome_tags, all_tags = CElection.get_tags()
-
-    current_node = get_last(current_election,CElection) # go to the first node
-
-    areas = current_node.get_areas()
-    # override if RESOURCES_FILE(.csv) exists because it initialises resources if options file deleted
-    resourcesdf = pd.DataFrame()
-    if  os.path.exists(RESOURCE_FILE) and os.path.getsize(RESOURCE_FILE) > 0:
-        with open(RESOURCE_FILE, 'r', encoding="utf-8") as f:
-            resources = json.load(f)
-        selectResources = resources
-        print("____Resources file read in")
-        # need to save to ELECTIONS)
-
-
-    # OPTIONS template
-
-    selectedResources = resources
-
-    areas =  current_node.get_areas()
-    task_tags, outcome_tags,all_tags =  CElection.get_tags()
-    program = ProgramContext()
-    election = ElectionContext(CElection)
-    OPTIONS = resolve_options(program, election, current_node)
+    program = ProgramContext()            # app-wide possible options
+    election_ctx = ElectionContext(CElection)  # election-scoped possible options
+    OPTIONS = resolve_ui_context(program,election_ctx,current_node)
 
     resources = OPTIONS['resources']
     print('_______allelectors size: ', len(allelectors))
     print('_______resources: ', resources)
-    current_node = get_last(current_election,CElection)
-
 
     print("🔍 Accessed /firstpage")
     print("🧪 current_user.is_authenticated:", current_user.is_authenticated)
@@ -4026,7 +3991,7 @@ def firstpage():
 
     print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
     print("____Firstpage Mapfile",mapfile, current_node.value)
-    atype = CElection.childnode_type(current_node.level)
+    atype = current_node.child_type(rlevels)
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
@@ -4139,7 +4104,7 @@ def normalise():
     request_form = request.form.to_dict(flat=True)
     request_files = request.files.to_dict(flat=False)  # Getlist-style access
     restore_from_persist(session=session)
-    current_election = CurrentElection.get_current_election()
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last(current_election,CElection)
 

@@ -606,6 +606,7 @@ VCO = {"O" : "brown","R" : "cyan","C" : "blue","S" : "red","LD" :"yellow","G" :"
 onoff = {"on" : 1, 'off': 0}
 data = [0] * len(VID)
 VIC = dict(zip(VID.keys(), data))
+autofix = {0,1,2,3,4}
 
 # state.py
 Treepolys: dict[str, gpd.GeoDataFrame] = {}
