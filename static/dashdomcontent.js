@@ -471,7 +471,7 @@ territorySelect.addEventListener("change", async () => {
         }
 
         // 2️⃣ update map iframe
-        mapIframe.src = `/thru/${encodeURIComponent(mapfile)}`;
+        mapIframe.src = `/upbut/${encodeURIComponent(mapfile)}`;
 
     } catch (err) {
         console.error(err);
