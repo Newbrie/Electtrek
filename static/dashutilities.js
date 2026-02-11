@@ -481,23 +481,6 @@
     populateAllSelects(options);
 
     // After populateAllSelects(options) is called
-    const territoryEl = document.getElementById("territory");
-    if (territoryEl && options.territory) {
-
-        // 1️⃣ Populate the dropdown first
-        territoryEl.innerHTML = ""; // clear old options
-        options.territory.forEach(optVal => {
-            const o = document.createElement("option");
-            o.value = optVal;
-            o.textContent = optVal.split("/").pop(); // or whatever display you want
-            territoryEl.appendChild(o);
-        });
-
-        // 2️⃣ Set the selected value AFTER options exist
-        if (constants.territory) {
-            territoryEl.value = constants.territory;
-        }
-    }
 
     // =====================================================
     // ⭐ SPECIAL CASES FOR SELECTS
