@@ -477,7 +477,7 @@
     window.outcome_tags = result.outcome_tags;
 
 
-    populateAllSelects();   // ✅ CALL IT HERE
+    populateAllSelects(options);   // ✅ CALL IT HERE
     // =====================================================
     // ⭐ POPULATE ALL SELECTS FROM OPTIONS
     // =====================================================
