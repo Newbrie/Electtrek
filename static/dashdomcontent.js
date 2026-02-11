@@ -607,6 +607,7 @@ resourcesSelect?.addEventListener("blur", () => {
   generateSummaryBtn.addEventListener("click", generateSummaryReport);
   saveSlotBtn.addEventListener("click", handleSaveSlot);
   clearSlotBtn.addEventListener("click", handleClearSlot);
+  updateConstantsUI(window.constants, window.options);
   // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 });
