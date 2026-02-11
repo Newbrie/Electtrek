@@ -182,15 +182,14 @@
 
 
 // Fill s
-function populateDropdowns() {
+window.function populateDropdowns() {
     fillSelect("activitySelect", window.task_tags);   // ✔ correct
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
     fillSelect("areaSelect", window.areas);
 }
 
-
-function fillSelect(selectId, items) {
+window.function fillSelect(selectId, items) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
 
