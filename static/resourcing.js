@@ -180,16 +180,22 @@
 
   }
   // resourcing.js
-  window.populateAllSelects = function(options = {}) {
+  window.populateAllSelects = function(options = {}, constants = {}) {
       document.querySelectorAll("select").forEach(el => {
           const key = el.id;
           const items = options[key];
           if (!items) return;
+
+          // skip special multi-selects
           if (el.multiple && key === "resources") return;
 
-          fillSelect(key, items);
+          // pass selected value if available
+          const selectedValue = constants[key] ?? null;
+
+          fillSelect(key, items, selectedValue);
       });
   };
+
 
 
 // Fill s
