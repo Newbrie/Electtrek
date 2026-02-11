@@ -450,151 +450,159 @@
 
 
    window.updateConstantsUI = function (constants, options) {
+
     if (!constants || !options) {
         console.warn("updateConstantsUI called without constants or options", { constants, options });
         return;
     }
 
-    console.log("Updating constants UI with constants and options:", { constants, options });
+    console.log("Updating constants UI", { constants, options });
 
     // =====================================================
-    // ⭐ Make global objects
+    // ⭐ GLOBALS
     // =====================================================
+
     Object.entries(options).forEach(([key, value]) => {
-        window[key] = value; // global variable for options
+        window[key] = value;
     });
 
-    window.areas      = options?.areas      || {};
-    window.places     = constants?.places   || {};
-    window.resources  = options?.resources || {};
-    window.tags       = constants?.tags     || {};
-    window.territory  = options?.territory  || {};
+    window.areas       = options?.areas || {};
+    window.places      = constants?.places || {};
+    window.resources   = options?.resources || {};
+    window.tags        = constants?.tags || {};
+    window.territory   = options?.territory || [];
 
     const result = getTagsJson(window.tags);
-    window.task_tags     = result.task_tags;
-    window.outcome_tags  = result.outcome_tags;
+    window.task_tags    = result.task_tags;
+    window.outcome_tags = result.outcome_tags;
 
-    console.log("Global areas:", window.areas);
-    console.log("Global places:", window.places);
-    console.log("Global resources:", window.resources);
-    console.log("Global tags:", window.tags);
-    console.log("Global task_tags:", window.task_tags);
-    console.log("Global outcome_tags:", window.outcome_tags);
-    console.log("territory:", window.territory);
 
     // =====================================================
-    // ⭐ Populate general dropdowns using existing helper
+    // ⭐ POPULATE ALL SELECTS FROM OPTIONS
     // =====================================================
-    populateDropdowns(); // task_tags, resources, areas, places
-    if (window.territory && Array.isArray(window.territory)) {
-        fillSelect("territory", window.territory); // populate territory dropdown
+
+    document.querySelectorAll("select").forEach(el => {
+
+        const key = el.id;
+        const items = options[key];
+
+        if (!items) return;
+
+        // Skip special cases handled later
+        if (["resources", "candidate", "campaignMgr", "mapfiles"].includes(key)) {
+            return;
+        }
+
+        fillSelect(el, items);
+    });
+
+    // =====================================================
+    // ⭐ SPECIAL CASES
+    // =====================================================
+
+    // 1️⃣ Resources (multi-select)
+    const resourcesEl = document.getElementById("resources");
+    if (resourcesEl && options.resources) {
+        resourcesEl.innerHTML = "";
+        Object.entries(options.resources).forEach(([code, person]) => {
+            const o = document.createElement("option");
+            o.value = code;
+            o.textContent = `${person.Firstname} ${person.Surname}`;
+            resourcesEl.appendChild(o);
+        });
+    }
+
+    // 2️⃣ candidate & campaignMgr (filtered from selected resources)
+    ["candidate", "campaignMgr"].forEach(role => {
+
+        const el = document.getElementById(role);
+        if (!el) return;
+
+        el.innerHTML = "";
+
+        const selectedResources = Array.isArray(constants.resources)
+            ? constants.resources
+            : [];
+
+        selectedResources.forEach(code => {
+            const person = options.resources?.[code];
+            if (!person) return;
+
+            const o = document.createElement("option");
+            o.value = code;
+            o.textContent = `${person.Firstname} ${person.Surname}`;
+            el.appendChild(o);
+        });
+    });
+
+    // 3️⃣ mapfiles
+    const mapfilesEl = document.getElementById("mapfiles");
+    if (mapfilesEl && Array.isArray(constants.mapfiles)) {
+
+        mapfilesEl.innerHTML = "";
+
+        constants.mapfiles.forEach((path, idx) => {
+            const o = document.createElement("option");
+            o.value = path;
+            o.textContent = path.split("/").pop();
+            if (idx === constants.mapfiles.length - 1) {
+                o.selected = true;
+            }
+            mapfilesEl.appendChild(o);
+        });
+
+        mapfilesEl.onchange = () => {
+            changeIframeSrc(`/thru/${mapfilesEl.value}`);
+        };
     }
 
     // =====================================================
-    // ⭐ Iterate through all constants and populate inputs / selects
+    // ⭐ APPLY SELECTED VALUES
     // =====================================================
+
     Object.entries(constants).forEach(([key, value]) => {
+
         const el = document.getElementById(key);
         if (!el) return;
 
-        const optsObj = options[key] || {}; // for generic select population
-        el.innerHTML = "";
-
-        // -----------------------------
-        // SELECT handling
-        // -----------------------------
         if (el.tagName === "SELECT") {
 
-            // 1️⃣ Multi-select "resources"
-            if (key === "resources") {
-                Object.entries(options.resources || {}).forEach(([code, person]) => {
-                    const o = document.createElement("option");
-                    o.value = code;
-                    o.textContent = `${person.Firstname} ${person.Surname}`;
-                    if (Array.isArray(value) && value.includes(code)) o.selected = true;
-                    el.appendChild(o);
+            if (el.multiple && Array.isArray(value)) {
+                Array.from(el.options).forEach(opt => {
+                    opt.selected = value.includes(opt.value);
                 });
+            } else if (value != null) {
+                el.value = value;
             }
-
-            // 2️⃣ Candidate / Campaign Manager selectors
-            else if (key === "candidate" || key === "campaignMgr") {
-                const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
-
-                selectedResources.forEach(code => {
-                    const person = options.resources?.[code];
-                    if (!person) return;
-
-                    const o = document.createElement("option");
-                    o.value = code;
-                    o.textContent = `${person.Firstname} ${person.Surname}`;
-
-                    if (value === code) {
-                        o.selected = true;
-
-                        if (key === "campaignMgr") {
-                            const emailField = document.getElementById("campaignMgremail");
-                            if (emailField) emailField.value = person.campaignMgremail;
-                        }
-                    }
-
-                    el.appendChild(o);
-                });
-            }
-
-            // 3️⃣ Mapfiles dropdown
-            else if (key === "mapfiles") {
-                if (Array.isArray(value)) {
-                    value.forEach((path, idx) => {
-                        const o = document.createElement("option");
-                        o.value = path;
-                        o.textContent = `Map ${idx + 1}: ${path.split("/").pop()}`;
-                        if (idx === value.length - 1) o.selected = true;
-                        el.appendChild(o);
-                    });
-                }
-
-                el.onchange = () => {
-                    changeIframeSrc(`/thru/${el.value}`);
-                };
-            }
-
-            // 4️⃣ Generic selects (skip territory)
-            else if (key !== "territory") {
-                Object.entries(optsObj).forEach(([optValue, optLabel]) => {
-                    const o = document.createElement("option");
-                    o.value = optValue;
-                    o.textContent = `${optValue}: ${optLabel}`;
-                    if (String(optValue) === String(value)) o.selected = true;
-                    el.appendChild(o);
-                });
-            }
-
         }
 
-        // -----------------------------
-        // NON-SELECT INPUTS
-        // -----------------------------
         else if (el.type === "checkbox") {
-            if (!el.matches(":focus")) {
-                el.checked = Boolean(value);
-            }
+            el.checked = Boolean(value);
         }
+
         else {
             el.value = value ?? "";
         }
 
-        // -----------------------------
-        // ⭐ Auto backend update on change
-        // -----------------------------
+        // =====================================================
+        // ⭐ AUTO BACKEND UPDATE
+        // =====================================================
+
         el.oninput = () => {
+
             let newVal;
 
-            if (el.type === "number") newVal = parseFloat(el.value);
-            else if (el.type === "checkbox") newVal = el.checked;
-            else newVal = el.value;
-
-            if (el.multiple) {
+            if (el.type === "number") {
+                newVal = parseFloat(el.value);
+            }
+            else if (el.type === "checkbox") {
+                newVal = el.checked;
+            }
+            else if (el.multiple) {
                 newVal = Array.from(el.selectedOptions).map(o => o.value);
+            }
+            else {
+                newVal = el.value;
             }
 
             fetch("/set-constant", {
@@ -608,14 +616,15 @@
                     value: newVal
                 })
             })
-                .then(res => res.json())
-                .then(resp => {
-                    if (!resp.success) alert("Failed to update: " + resp.error);
-                });
+            .then(res => res.json())
+            .then(resp => {
+                if (!resp.success) {
+                    alert("Failed to update: " + resp.error);
+                }
+            });
         };
     });
 
-    // Keep the old behavior
     if (typeof attachListenersToConstantFields === "function") {
         attachListenersToConstantFields(constants);
     }
