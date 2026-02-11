@@ -481,10 +481,21 @@
     populateAllSelects(options);
 
     // After populateAllSelects(options) is called
+    // 1️⃣ Populate options
     const territoryEl = document.getElementById("territory");
-    if (territoryEl && constants.territory != null) {
+    territoryEl.innerHTML = "";
+    Object.entries(options.territories).forEach(([key, path]) => {
+        const o = document.createElement("option");
+        o.value = path; // full path
+        o.textContent = key; // display name
+        territoryEl.appendChild(o);
+    });
+
+    // 2️⃣ Set selected value
+    if (constants.territory) {
         territoryEl.value = constants.territory;
     }
+
 
     // =====================================================
     // ⭐ SPECIAL CASES FOR SELECTS
