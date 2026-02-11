@@ -477,6 +477,7 @@
     window.outcome_tags = result.outcome_tags;
 
 
+    populateAllSelects();   // ✅ CALL IT HERE
     // =====================================================
     // ⭐ POPULATE ALL SELECTS FROM OPTIONS
     // =====================================================
@@ -628,6 +629,8 @@
     if (typeof attachListenersToConstantFields === "function") {
         attachListenersToConstantFields(constants);
     }
+
+    populateDropdowns();   // ✅ add this here
 };
 
 

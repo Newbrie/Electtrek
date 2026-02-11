@@ -320,6 +320,7 @@ console.log("🔀 task_tags on DOM relaod :", window.task_tags);
 await ensureTabsReady();
 // 2️⃣ Tell backend which election is active
 await setActiveElectionOnStartup();
+await refreshConstantsUI();
 
 // 4. Build calendar UI BEFORE loading calendar data
 console.log("📅 Building calendar UI…");
@@ -607,7 +608,6 @@ resourcesSelect?.addEventListener("blur", () => {
   generateSummaryBtn.addEventListener("click", generateSummaryReport);
   saveSlotBtn.addEventListener("click", handleSaveSlot);
   clearSlotBtn.addEventListener("click", handleClearSlot);
-  updateConstantsUI(window.constants, window.options);
   // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 });
