@@ -450,180 +450,177 @@
 
 
    window.updateConstantsUI = function (constants, options) {
-       if (!constants || !options) {
-           console.warn("updateConstantsUI called without constants or options", { constants, options });
-           return;
-       }
+    if (!constants || !options) {
+        console.warn("updateConstantsUI called without constants or options", { constants, options });
+        return;
+    }
 
-       console.log("Updating constants UI with constants and options:", { constants, options });
+    console.log("Updating constants UI with constants and options:", { constants, options });
 
-       // =====================================================
-       // ⭐ Make global objects
-       // =====================================================
-       Object.entries(options).forEach(([key, value]) => {
-           window[key] = value; // global variable for options
-       });
+    // =====================================================
+    // ⭐ Make global objects
+    // =====================================================
+    Object.entries(options).forEach(([key, value]) => {
+        window[key] = value; // global variable for options
+    });
 
-       window.areas      = options?.areas      || {};
-       window.places     = constants?.places   || {};
-       window.resources  = options?.resources || {};
-       window.tags       = constants?.tags     || {};
-       window.territory = options?.territory || {};
-       const result      = getTagsJson(window.tags);
-       window.task_tags     = result.task_tags;
-       window.outcome_tags  = result.outcome_tags;
+    window.areas      = options?.areas      || {};
+    window.places     = constants?.places   || {};
+    window.resources  = options?.resources || {};
+    window.tags       = constants?.tags     || {};
+    window.territory  = options?.territory  || {};
 
-       console.log("Global areas:", window.areas);
-       console.log("Global places:", window.places);
-       console.log("Global resources:", window.resources);
-       console.log("Global tags:", window.tags);
-       console.log("Global task_tags:", window.task_tags);
-       console.log("Global outcome_tags:", window.outcome_tags);
-       console.log("territory:", window.territory);
+    const result = getTagsJson(window.tags);
+    window.task_tags     = result.task_tags;
+    window.outcome_tags  = result.outcome_tags;
 
+    console.log("Global areas:", window.areas);
+    console.log("Global places:", window.places);
+    console.log("Global resources:", window.resources);
+    console.log("Global tags:", window.tags);
+    console.log("Global task_tags:", window.task_tags);
+    console.log("Global outcome_tags:", window.outcome_tags);
+    console.log("territory:", window.territory);
 
-     // =====================================================
-     // ⭐ Iterate through all constants and populate UI
-     // =====================================================
-     Object.entries(constants).forEach(([key, value]) => {
-         const el = document.getElementById(key);
-         if (!el) return;
+    // =====================================================
+    // ⭐ Populate general dropdowns using existing helper
+    // =====================================================
+    populateDropdowns(); // task_tags, resources, areas, places
+    if (window.territory && Array.isArray(window.territory)) {
+        fillSelect("territory", window.territory); // populate territory dropdown
+    }
 
-         const optsObj = options[key] || {}; // used for dynamic select building
-         el.innerHTML = "";
+    // =====================================================
+    // ⭐ Iterate through all constants and populate inputs / selects
+    // =====================================================
+    Object.entries(constants).forEach(([key, value]) => {
+        const el = document.getElementById(key);
+        if (!el) return;
 
-         // ------------------------------------------
-         // SELECT HANDLING
-         // ------------------------------------------
-         if (el.tagName === "SELECT") {
+        const optsObj = options[key] || {}; // for generic select population
+        el.innerHTML = "";
 
-             //
-             // 1️⃣ MULTI-SELECT "resources"
-             //
-             if (key === "resources") {
-                 Object.entries(options.resources || {}).forEach(([code, person]) => {
-                     const o = document.createElement("option");
-                     o.value = code;
-                     o.textContent = `${person.Firstname} ${person.Surname}`;
-                     if (Array.isArray(value) && value.includes(code)) o.selected = true;
-                     el.appendChild(o);
-                 });
-             }
+        // -----------------------------
+        // SELECT handling
+        // -----------------------------
+        if (el.tagName === "SELECT") {
 
-             //
-             // 2️⃣ candidate / campaignMgr selectors
-             //
-             else if (key === "candidate" || key === "campaignMgr") {
-                 const selectedResources = Array.isArray(constants.resources)
-                     ? constants.resources
-                     : [];
-
-                 selectedResources.forEach(code => {
-                     const person = options.resources?.[code];
-                     if (!person) return;
-
-                     const o = document.createElement("option");
-                     o.value = code;
-                     o.textContent = `${person.Firstname} ${person.Surname}`;
-
-                     if (value === code) {
-                         o.selected = true;
-
-                         // support the old behaviour where campaignMgr updates email field
-                         if (key === "campaignMgr") {
-                             const emailField = document.getElementById("campaignMgremail");
-                             if (emailField) emailField.value = person.campaignMgremail;
-                         }
-                     }
-
-                     el.appendChild(o);
-                 });
-             }
-
-             //
-             // 3️⃣ mapfiles logic (loads into iframe)
-             //
-             else if (key === "mapfiles") {
-                 if (Array.isArray(value)) {
-                     value.forEach((path, idx) => {
-                         const o = document.createElement("option");
-                         o.value = path;
-                         o.textContent = `Map ${idx + 1}: ${path.split("/").pop()}`;
-                         if (idx === value.length - 1) o.selected = true;
-                         el.appendChild(o);
-                     });
-                 }
-
-                 el.onchange = () => {
-                     changeIframeSrc(`/thru/${el.value}`);
-                 };
-             }
-
-             //
-             // 4️⃣ Generic SELECT population
-             //
-             else {
-                 Object.entries(optsObj).forEach(([optValue, optLabel]) => {
-                     const o = document.createElement("option");
-                     o.value = optValue;
-                     o.textContent = `${optValue}: ${optLabel}`;
-                     if (String(optValue) === String(value)) o.selected = true;
-                     el.appendChild(o);
-                 });
-             }
-
-         }
-         // ------------------------------------------
-         // NON-SELECT INPUTS
-         // ------------------------------------------
-
-         else if (el.type === "checkbox") {
-             if (!el.matches(":focus")) {
-                 el.checked = Boolean(value);
-             }
-         }
-         else {
-                el.value = value ?? "";
+            // 1️⃣ Multi-select "resources"
+            if (key === "resources") {
+                Object.entries(options.resources || {}).forEach(([code, person]) => {
+                    const o = document.createElement("option");
+                    o.value = code;
+                    o.textContent = `${person.Firstname} ${person.Surname}`;
+                    if (Array.isArray(value) && value.includes(code)) o.selected = true;
+                    el.appendChild(o);
+                });
             }
 
-         // =====================================================
-         // ⭐ Auto backend update on change (old behaviour kept)
-         // =====================================================
-         el.oninput = () => {
-             let newVal;
+            // 2️⃣ Candidate / Campaign Manager selectors
+            else if (key === "candidate" || key === "campaignMgr") {
+                const selectedResources = Array.isArray(constants.resources) ? constants.resources : [];
 
-             if (el.type === "number") newVal = parseFloat(el.value);
-             else if (el.type === "checkbox") newVal = el.checked;
-             else newVal = el.value;
+                selectedResources.forEach(code => {
+                    const person = options.resources?.[code];
+                    if (!person) return;
 
-             if (el.multiple) {
-                 newVal = Array.from(el.selectedOptions).map(o => o.value);
-             }
+                    const o = document.createElement("option");
+                    o.value = code;
+                    o.textContent = `${person.Firstname} ${person.Surname}`;
 
-             fetch("/set-constant", {
-                 method: "POST",
-                 credentials: "same-origin",
-                 headers: { "Content-Type": "application/json" },
-                 body: JSON.stringify({
-                     election:
-                         document.querySelector(".election-tab.active")?.dataset.election ||
-                         "",
-                     name: key,
-                     value: newVal
-                 })
-             })
-                 .then(res => res.json())
-                 .then(resp => {
-                     if (!resp.success) alert("Failed to update: " + resp.error);
-                 });
-         };
-     });
+                    if (value === code) {
+                        o.selected = true;
 
-     // Keep the old behaviour
-     if (typeof attachListenersToConstantFields === "function") {
-         attachListenersToConstantFields(constants);
-     }
- };
+                        if (key === "campaignMgr") {
+                            const emailField = document.getElementById("campaignMgremail");
+                            if (emailField) emailField.value = person.campaignMgremail;
+                        }
+                    }
+
+                    el.appendChild(o);
+                });
+            }
+
+            // 3️⃣ Mapfiles dropdown
+            else if (key === "mapfiles") {
+                if (Array.isArray(value)) {
+                    value.forEach((path, idx) => {
+                        const o = document.createElement("option");
+                        o.value = path;
+                        o.textContent = `Map ${idx + 1}: ${path.split("/").pop()}`;
+                        if (idx === value.length - 1) o.selected = true;
+                        el.appendChild(o);
+                    });
+                }
+
+                el.onchange = () => {
+                    changeIframeSrc(`/thru/${el.value}`);
+                };
+            }
+
+            // 4️⃣ Generic selects (skip territory)
+            else if (key !== "territory") {
+                Object.entries(optsObj).forEach(([optValue, optLabel]) => {
+                    const o = document.createElement("option");
+                    o.value = optValue;
+                    o.textContent = `${optValue}: ${optLabel}`;
+                    if (String(optValue) === String(value)) o.selected = true;
+                    el.appendChild(o);
+                });
+            }
+
+        }
+
+        // -----------------------------
+        // NON-SELECT INPUTS
+        // -----------------------------
+        else if (el.type === "checkbox") {
+            if (!el.matches(":focus")) {
+                el.checked = Boolean(value);
+            }
+        }
+        else {
+            el.value = value ?? "";
+        }
+
+        // -----------------------------
+        // ⭐ Auto backend update on change
+        // -----------------------------
+        el.oninput = () => {
+            let newVal;
+
+            if (el.type === "number") newVal = parseFloat(el.value);
+            else if (el.type === "checkbox") newVal = el.checked;
+            else newVal = el.value;
+
+            if (el.multiple) {
+                newVal = Array.from(el.selectedOptions).map(o => o.value);
+            }
+
+            fetch("/set-constant", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    election:
+                        document.querySelector(".election-tab.active")?.dataset.election || "",
+                    name: key,
+                    value: newVal
+                })
+            })
+                .then(res => res.json())
+                .then(resp => {
+                    if (!resp.success) alert("Failed to update: " + resp.error);
+                });
+        };
+    });
+
+    // Keep the old behavior
+    if (typeof attachListenersToConstantFields === "function") {
+        attachListenersToConstantFields(constants);
+    }
+};
+
 
  const getActiveElectionTab = () =>
      document.querySelector("button.election-tab.active");
