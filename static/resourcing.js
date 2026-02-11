@@ -200,38 +200,45 @@ window.populateDropdowns = function(options = {}) {
     fillSelect("areaSelect", window.areas);
 }
 
-window.fillSelect = function (selectId, items) {
-    const sel = document.getElementById(selectId);
-    if (!sel) return;
+window.fillSelect = function (selectId, items,selectedValue = null) {
+      const sel = document.getElementById(selectId);
+      if (!sel) return;
 
-    sel.innerHTML = '<option value="">-- Select --</option>';
+      sel.innerHTML = ""; // clear
 
-    let arr = [];
+      let arr = [];
 
-    if (Array.isArray(items)) {
-        arr = items.map(it => ({
-            key: it.key ?? "",
-            value: it.value?.Firstname
-                    ? `${it.value.Firstname} ${it.value.Surname}`
-                    : it.value?.name ?? it.key
-        }));
-    }
-    else if (typeof items === "object" && items !== null) {
-        arr = Object.entries(items).map(([k, v]) => ({
-            key: k,
-            value: typeof v === "string"
-                ? v                     // task_tags style (TAG1: "Leafleting")
-                : v.name ?? v.code ?? k // areas, places
-        }));
-    }
+      if (Array.isArray(items)) {
+          arr = items.map(it => ({
+              key: it.key ?? it,
+              value: it.value ?? it
+          }));
+      } else if (typeof items === "object" && items !== null) {
+          arr = Object.entries(items).map(([k, v]) => ({
+              key: k,
+              value: typeof v === "string" ? v : v?.name ?? v?.code ?? k
+          }));
+      }
 
-    arr.forEach(({ key, value }) => {
-        const opt = document.createElement("option");
-        opt.value = key;
-        opt.textContent = value;
-        sel.appendChild(opt);
-    });
-}
+      arr.forEach(it => {
+          const opt = document.createElement("option");
+          opt.value = it.key;
+          opt.textContent = it.value;
+          sel.appendChild(opt);
+      });
+
+      // ✅ Now safely set selected value
+      if (selectedValue !== null) {
+          sel.value = selectedValue;
+
+          // fallback if value doesn't match exactly
+          if (sel.value !== selectedValue) {
+              const fallback = Array.from(sel.options).find(o => o.textContent === selectedValue);
+              if (fallback) sel.value = fallback.value;
+          }
+      }
+  }
+
 
 
 function updateSlotAvailability(slot) {
