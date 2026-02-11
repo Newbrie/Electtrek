@@ -479,6 +479,7 @@
        console.log("Global tags:", window.tags);
        console.log("Global task_tags:", window.task_tags);
        console.log("Global outcome_tags:", window.outcome_tags);
+       console.log("territory:", window.territory);
 
 
      // =====================================================
