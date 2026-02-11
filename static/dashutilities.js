@@ -488,12 +488,25 @@
 
         options.territory.forEach(opt => {
             const o = document.createElement("option");
-            // If opt is an object with .value and .label
-            o.value = opt.value ?? opt;               // fallback if opt is string
-            o.textContent = opt.label ?? opt.split("/").pop();
+
+            // Determine if opt is an object or a string
+            let optVal, optLabel;
+            if (typeof opt === "string") {
+                optVal = opt;
+                optLabel = opt.split("/").pop();  // safe because opt is string
+            } else if (typeof opt === "object" && opt !== null) {
+                optVal = opt.value;               // path string
+                optLabel = opt.label ?? opt.value.split("/").pop();
+            } else {
+                return; // skip invalid entries
+            }
+
+            o.value = optVal;
+            o.textContent = optLabel;
             territoryEl.appendChild(o);
         });
 
+        // Apply selected value from constants
         if (constants.territory) {
             territoryEl.value = constants.territory;
         }
