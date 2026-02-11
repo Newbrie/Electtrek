@@ -480,22 +480,12 @@
     // =====================================================
     populateAllSelects(options);
 
+    // After populateAllSelects(options) is called
+    const territoryEl = document.getElementById("territory");
+    if (territoryEl && constants.territory != null) {
+        territoryEl.value = constants.territory;
+    }
 
-    // ⚡ Special case: territory select (single select)
-        const territoryEl = document.getElementById("territory");
-        if (territoryEl && Array.isArray(window.territory)) {
-            territoryEl.innerHTML = "";
-            window.territory.forEach(t => {
-                const o = document.createElement("option");
-                o.value = t;
-                o.textContent = t;
-                territoryEl.appendChild(o);
-            });
-            // Apply selected value from constants
-            if (constants.territory) {
-                territoryEl.value = constants.territory;
-            }
-        }
     // =====================================================
     // ⭐ SPECIAL CASES FOR SELECTS
     // =====================================================
