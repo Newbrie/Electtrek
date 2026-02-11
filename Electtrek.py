@@ -2131,7 +2131,7 @@ def set_election():
 
         print(f"____Route/set-election- Loaded election: {current_election} CE data: {CElection}")
 
-        current_node = get_last(current_election,CElection)
+        current_node = get_last(current_election,CElection, create=True)
         mapfile = current_node.mapfile(rlevels)
 
         if not current_node:
@@ -2439,16 +2439,17 @@ def update_territory():
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = get_last(current_election,CElection)
+    current_node = get_last(current_election,CElection, create=True)
     rlevels = CElection.resolved_levels
     # mapfiles last entry is what we need to bookmark.
 
+    mapfile = current_node.mapfile(rlevels)
     CElection['territory'] = mapfile
 
-    mapfile = current_node.mapfile(rlevels)
+    current_node.endpoint_created(current_election, CElection, mapfile)
 
     CElection.save()
-    print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {new_path}")
+    print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {mapfile}")
 
     return jsonify(success=True, constants=CElection)
 

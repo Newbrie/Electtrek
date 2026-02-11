@@ -79,9 +79,8 @@ class ElectionContext:
             "candidate": self.ce.resources, # the selected candidate resources
             "chair": self.ce.resources, # the designated chair resource
             "campaignMgr": self.ce.resources, # the designated campaign manager
-            "mapfiles": self.ce.mapfiles, #a recent history of nodes navigated
-            "territory": self.ce.mapfiles  # the selected electorate node for this election
-        }
+            "mapfiles": self.ce.mapfiles #a recent history of nodes navigated
+}
 
 
 

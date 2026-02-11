@@ -712,6 +712,41 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
+
+
+    def path_options(self, rlevels, *, include_self=True):
+        """
+        Returns a list of dropdown items where:
+        - key = full mapfile path for each step
+        - value = human-readable step
+        Example:
+        UNITED_KINGDOM/UNITED_KINGDOM-MAP.html
+        UNITED_KINGDOM/ENGLAND/ENGLAND-MAP.html
+        ...
+        """
+        options = []
+        cur = self if include_self else self.parent
+        path_parts = []
+
+        # collect all ancestors (from root → current)
+        ancestors = []
+        while cur:
+            ancestors.insert(0, cur)  # prepend to get root → current
+            cur = cur.parent
+
+        # build key for each step
+        for node in ancestors:
+            path_parts.append(node.value)  # accumulate path
+            key = "/".join(path_parts) + f"/{node.value}-MAP.html"
+            options.append({
+                "key": key,         # full mapfile path
+                "value": node.value # step name
+            })
+
+        return options
+
+
+
     def available_tables(self,rlevels):
         return {
         "TABLE_TYPES": state.TABLE_TYPES
@@ -725,6 +760,7 @@ class TreeNode:
     def get_options(self, *, program=None, electionctx=None):
             rlevels = electionctx.ce.resolved_levels
             next_level = self.level + 1
+
 
             return {
                 # identity
@@ -746,6 +782,7 @@ class TreeNode:
 
                 # relationships
                 "children": [c.value for c in self.children],
+                "territory": self.path_options(rlevels, include_self=True)
             }
 
 

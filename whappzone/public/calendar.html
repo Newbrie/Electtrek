@@ -17,15 +17,15 @@
   <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css">
 
   <!-- 🗺️ Optional map or per-page head block -->
-  
+
 
   <!-- 🎨 Page-specific inline CSS (calendar, etc.) -->
-  
+
 </head>
 
 <body>
   <!-- 🌍 Main content blocks -->
-  
+
 
 <style>
 body {
@@ -275,7 +275,7 @@ body {
   document.getElementById("view-map-btn").addEventListener("click", () => {
       window.location.href = "map.html";
   });
-  
+
   document.getElementById("export-html-btn").addEventListener("click", async () => {
     await saveCalendarPlan();
     const btn = document.getElementById("export-html-btn");
@@ -436,6 +436,7 @@ function populateDropdowns() {
   fillSelect("resourcesSelect", window.resources);
   fillSelect("placeSelect", window.places);
   fillSelect("areaSelect", window.areas);
+  fillSelect("territory", window.territory);
 }
 
 
@@ -951,9 +952,9 @@ function populateResourcesSelect(resourcesSelect, lozenges) {
 </script>
 
 
-  
-  
-  
+
+
+
 
   <!-- ⚙️ Core JavaScript libraries -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -965,6 +966,6 @@ function populateResourcesSelect(resourcesSelect, lozenges) {
   <script src="https://newbrie.github.io/Electtrek/static/map.js"></script>
 
   <!-- 🧩 Optional JS override for per-page logic -->
-  
+
 
 </body></html>
