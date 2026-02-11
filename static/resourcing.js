@@ -200,7 +200,7 @@ window.populateDropdowns = function(options = {}) {
     fillSelect("areaSelect", window.areas);
 }
 
-window.function fillSelect(selectId, items) {
+window.fillSelect = function (selectId, items) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
 
