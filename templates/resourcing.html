@@ -241,27 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 // Fill s
-function populateDropdowns() {
-  fillSelect("activitySelect", window.task_tags);
-  fillSelect("resourcesSelect", window.resources);
-  fillSelect("placeSelect", window.places);
-  fillSelect("areaSelect", window.areas);
-}
 
-function populateAllSelects(options) {
-
-    document.querySelectorAll("select").forEach(el => {
-
-        const key = el.id;
-        const items = options[key];
-
-        if (!items) return;   // no matching options
-        if (el.multiple && key === "resources") return;
-        // let special handler deal with resources
-
-        fillSelect(key, items);
-    });
-}
 
 
 function fillSelect(selectId, items) {

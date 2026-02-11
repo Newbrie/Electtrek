@@ -478,39 +478,8 @@
     // =====================================================
     // ⭐ POPULATE ALL SELECTS FIRST
     // =====================================================
-    populateAllSelects(options);
+    populateAllSelects(options, constants);
 
-    // After populateAllSelects(options) is called
-    const territoryEl = document.getElementById("territory");
-    if (territoryEl && options.territory) {
-
-        territoryEl.innerHTML = "";
-
-        options.territory.forEach(opt => {
-            const o = document.createElement("option");
-
-            // Determine if opt is an object or a string
-            let optVal, optLabel;
-            if (typeof opt === "string") {
-                optVal = opt;
-                optLabel = opt.split("/").pop();  // safe because opt is string
-            } else if (typeof opt === "object" && opt !== null) {
-                optVal = opt.value;               // path string
-                optLabel = opt.label ?? opt.value.split("/").pop();
-            } else {
-                return; // skip invalid entries
-            }
-
-            o.value = optVal;
-            o.textContent = optLabel;
-            territoryEl.appendChild(o);
-        });
-
-        // Apply selected value from constants
-        if (constants.territory) {
-            territoryEl.value = constants.territory;
-        }
-    }
 
     // =====================================================
     // ⭐ SPECIAL CASES FOR SELECTS
