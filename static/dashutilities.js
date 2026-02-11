@@ -484,16 +484,16 @@
     const territoryEl = document.getElementById("territory");
     if (territoryEl && options.territory) {
 
-        // 1️⃣ Populate the dropdown first
-        territoryEl.innerHTML = ""; // clear old options
-        options.territory.forEach(optVal => {
+        territoryEl.innerHTML = "";
+
+        options.territory.forEach(opt => {
             const o = document.createElement("option");
-            o.value = optVal;
-            o.textContent = optVal.split("/").pop(); // or whatever display you want
+            // If opt is an object with .value and .label
+            o.value = opt.value ?? opt;               // fallback if opt is string
+            o.textContent = opt.label ?? opt.split("/").pop();
             territoryEl.appendChild(o);
         });
 
-        // 2️⃣ Set the selected value AFTER options exist
         if (constants.territory) {
             territoryEl.value = constants.territory;
         }
