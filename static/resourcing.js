@@ -179,10 +179,21 @@
     console.log("📅 Calendar-Grid:", container);
 
   }
+  // resourcing.js
+  window.populateAllSelects = function(options = {}) {
+      document.querySelectorAll("select").forEach(el => {
+          const key = el.id;
+          const items = options[key];
+          if (!items) return;
+          if (el.multiple && key === "resources") return;
+
+          fillSelect(key, items);
+      });
+  };
 
 
 // Fill s
-window.function populateDropdowns() {
+window.populateDropdowns = function(options = {}) {
     fillSelect("activitySelect", window.task_tags);   // ✔ correct
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
