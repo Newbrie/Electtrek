@@ -461,7 +461,6 @@
     // =====================================================
     // ⭐ GLOBALS
     // =====================================================
-
     Object.entries(options).forEach(([key, value]) => {
         window[key] = value;
     });
@@ -476,32 +475,16 @@
     window.task_tags    = result.task_tags;
     window.outcome_tags = result.outcome_tags;
 
-
-    populateAllSelects(options);   // ✅ CALL IT HERE
     // =====================================================
-    // ⭐ POPULATE ALL SELECTS FROM OPTIONS
+    // ⭐ POPULATE ALL SELECTS FIRST
     // =====================================================
-
-    document.querySelectorAll("select").forEach(el => {
-
-        const key = el.id;
-        const items = options[key];
-
-        if (!items) return;
-
-        // Skip special cases handled later
-        if (["resources", "candidate", "campaignMgr", "mapfiles"].includes(key)) {
-            return;
-        }
-
-        fillSelect(el, items);
-    });
+    populateAllSelects(options);
 
     // =====================================================
-    // ⭐ SPECIAL CASES
+    // ⭐ SPECIAL CASES FOR SELECTS
     // =====================================================
 
-    // 1️⃣ Resources (multi-select)
+    // Resources (multi-select)
     const resourcesEl = document.getElementById("resources");
     if (resourcesEl && options.resources) {
         resourcesEl.innerHTML = "";
@@ -513,9 +496,8 @@
         });
     }
 
-    // 2️⃣ candidate & campaignMgr (filtered from selected resources)
+    // candidate & campaignMgr (filtered from selected resources)
     ["candidate", "campaignMgr"].forEach(role => {
-
         const el = document.getElementById(role);
         if (!el) return;
 
@@ -536,38 +518,30 @@
         });
     });
 
-    // 3️⃣ mapfiles
+    // mapfiles
     const mapfilesEl = document.getElementById("mapfiles");
     if (mapfilesEl && Array.isArray(constants.mapfiles)) {
-
         mapfilesEl.innerHTML = "";
-
         constants.mapfiles.forEach((path, idx) => {
             const o = document.createElement("option");
             o.value = path;
             o.textContent = path.split("/").pop();
-            if (idx === constants.mapfiles.length - 1) {
-                o.selected = true;
-            }
+            if (idx === constants.mapfiles.length - 1) o.selected = true;
             mapfilesEl.appendChild(o);
         });
-
         mapfilesEl.onchange = () => {
             changeIframeSrc(`/thru/${mapfilesEl.value}`);
         };
     }
 
     // =====================================================
-    // ⭐ APPLY SELECTED VALUES
+    // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
     // =====================================================
-
     Object.entries(constants).forEach(([key, value]) => {
-
         const el = document.getElementById(key);
         if (!el) return;
 
         if (el.tagName === "SELECT") {
-
             if (el.multiple && Array.isArray(value)) {
                 Array.from(el.options).forEach(opt => {
                     opt.selected = value.includes(opt.value);
@@ -575,44 +549,29 @@
             } else if (value != null) {
                 el.value = value;
             }
-        }
-
-        else if (el.type === "checkbox") {
+        } else if (el.type === "checkbox") {
             el.checked = Boolean(value);
-        }
-
-        else {
+        } else {
             el.value = value ?? "";
         }
 
         // =====================================================
         // ⭐ AUTO BACKEND UPDATE
         // =====================================================
-
         el.oninput = () => {
-
             let newVal;
 
-            if (el.type === "number") {
-                newVal = parseFloat(el.value);
-            }
-            else if (el.type === "checkbox") {
-                newVal = el.checked;
-            }
-            else if (el.multiple) {
-                newVal = Array.from(el.selectedOptions).map(o => o.value);
-            }
-            else {
-                newVal = el.value;
-            }
+            if (el.type === "number") newVal = parseFloat(el.value);
+            else if (el.type === "checkbox") newVal = el.checked;
+            else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
+            else newVal = el.value;
 
             fetch("/set-constant", {
                 method: "POST",
                 credentials: "same-origin",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    election:
-                        document.querySelector(".election-tab.active")?.dataset.election || "",
+                    election: document.querySelector(".election-tab.active")?.dataset.election || "",
                     name: key,
                     value: newVal
                 })
@@ -630,8 +589,12 @@
         attachListenersToConstantFields(constants);
     }
 
-    populateDropdowns();   // ✅ add this here
+    // Optional: any additional dropdown setup
+    if (typeof populateDropdowns === "function") {
+        populateDropdowns();
+    }
 };
+
 
 
  const getActiveElectionTab = () =>
