@@ -468,6 +468,7 @@
        window.places     = constants?.places   || {};
        window.resources  = options?.resources || {};
        window.tags       = constants?.tags     || {};
+       window.territory = options?.territory || {};
        const result      = getTagsJson(window.tags);
        window.task_tags     = result.task_tags;
        window.outcome_tags  = result.outcome_tags;
