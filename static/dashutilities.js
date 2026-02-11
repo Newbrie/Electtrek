@@ -481,21 +481,23 @@
     populateAllSelects(options);
 
     // After populateAllSelects(options) is called
-    // 1️⃣ Populate options
     const territoryEl = document.getElementById("territory");
-    territoryEl.innerHTML = "";
-    Object.entries(options.territories).forEach(([key, path]) => {
-        const o = document.createElement("option");
-        o.value = path; // full path
-        o.textContent = key; // display name
-        territoryEl.appendChild(o);
-    });
+    if (territoryEl && options.territory) {
 
-    // 2️⃣ Set selected value
-    if (constants.territory) {
-        territoryEl.value = constants.territory;
+        // 1️⃣ Populate the dropdown first
+        territoryEl.innerHTML = ""; // clear old options
+        options.territory.forEach(optVal => {
+            const o = document.createElement("option");
+            o.value = optVal;
+            o.textContent = optVal.split("/").pop(); // or whatever display you want
+            territoryEl.appendChild(o);
+        });
+
+        // 2️⃣ Set the selected value AFTER options exist
+        if (constants.territory) {
+            territoryEl.value = constants.territory;
+        }
     }
-
 
     // =====================================================
     // ⭐ SPECIAL CASES FOR SELECTS
