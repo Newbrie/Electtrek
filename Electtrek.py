@@ -2248,7 +2248,7 @@ def get_constants():
     election = ElectionContext(CElection)
 
     options = resolve_ui_context(program, election, current_node)
-    constants = election.get_constants()
+    constants = CElection
 
     return jsonify({
         'constants': constants,
@@ -2404,7 +2404,7 @@ def add_election():
 
     OPTIONS['streams'] = ELECTIONS
 
-    constants = current_election.get_constants()
+    constants = CElection
 
     print("election-tabs:",formdata)
 
