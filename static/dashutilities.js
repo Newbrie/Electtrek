@@ -888,7 +888,6 @@ async function fetchBackendURL() {
           .then(res => res.json())
           .then(data => {
             console.log("DATA RECEIVED:", data);
-            console.log("updateConstantsUI =", window.updateConstantsUI);
               window.latestConstants = data.constants;
               window.latestOptions = data.options;
               window.updateConstantsUI(data.constants, data.options);
