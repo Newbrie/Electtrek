@@ -441,19 +441,13 @@ def safe_pickle_load(path, default):
 
 
 
-def restore_from_persist(session=None,session_data=None):
-    from state import Treepolys, Fullpolys
-
-    global allelectors
-    from elections import route, CurrentElection
-
-
+def restore_from_persist(treepolys, fullpolys, electors):
     if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
         print('_______no elector data so creating blank', ELECTOR_FILE)
-        allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
+        electors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
     else:
         print('_______allelectors file exists so reading in ', ELECTOR_FILE)
-        allelectors = pd.read_csv(
+        electors = pd.read_csv(
             ELECTOR_FILE,
             sep='\t',                        # tab delimiter
             engine='python',                # Required for sep=None
@@ -461,8 +455,9 @@ def restore_from_persist(session=None,session_data=None):
             keep_default_na=False,
             na_values=['']
         )
+    safe_pickle_load(TREEPOLY_FILE,treepolys)
 
-
+    safe_pickle_load(FULLPOLY_FILE,fullpolys)
 
     if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
         load_nodes(TREKNODE_FILE)
@@ -470,20 +465,15 @@ def restore_from_persist(session=None,session_data=None):
     print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
     return
 
-def persist(node):
-    global allelectors
-    from state import Treepolys, Fullpolys
+def persist(treepolys, fullpolys, electors):
+    print('___persisting pickle ', TREEPOLY_FILE)
+    atomic_pickle_dump(treepolys,TREEPOLY_FILE)
+    print('___persisting pickle ', FULLPOLY_FILE)
+    atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
 
+    print('___persisting elector csv ', ELECTOR_FILE, len(allelectors))
+    electors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
-    print('___persisting file ', TREEPOLY_FILE)
-    atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
-    print('___persisting file ', FULLPOLY_FILE)
-    atomic_pickle_dump(Fullpolys,FULLPOLY_FILE)
-
-    print('___persisting file ', ELECTOR_FILE, len(allelectors))
-    allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
-
-    print('___persisting options ', node.value)
     return
 
 def restore_fullpolys(node_type):
@@ -496,7 +486,7 @@ def restore_fullpolys(node_type):
 
     Treepolys[node_type] = Fullpolys[node_type]
 
-    print('___persisting file ', TREEPOLY_FILE)
+    print('___persisting pickle ', TREEPOLY_FILE)
     atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
 
 
@@ -556,7 +546,7 @@ def resolve_here_or_redirect(sourcepath, here):
     return here, None
 
 
-def get_last(current_election, CE, *, create=True):
+def get_last_node(current_election, CE, *, create=True):
     """
     Returns the last node for the current election.
     If `create=False`, do not call ping_node and return root if CID node is unavailable.
@@ -576,14 +566,14 @@ def get_last(current_election, CE, *, create=True):
         print(f"___under route: {route()} return to existing cid: {cid}")
         return last_node
 
-    print(f"___Get last Sourcepath {sourcepath} under {route()}")
+    print(f"___No cid : {cid} Get last Sourcepath {sourcepath} under {route()}")
 
     # --- 2. Resolve location or redirect ---
     here, response = resolve_here_or_redirect(sourcepath, here)
     if response:
         return response  # redirect response
 
-    print(f"___ Get Last node under {route()} for {current_election} sourcepath: {sourcepath} create:{create}")
+    print(f"___ {create}__ Last node under {route()} for {current_election} sourcepath: {sourcepath} create:{create}")
 
     # --- 3. Resolve node from path ---
     if create and sourcepath:
@@ -602,7 +592,7 @@ def get_last(current_election, CE, *, create=True):
 
     # --- 4. Fallback to root ---
     if not last_node:
-        print("⚠️ Falling back to root node")
+        print(f"⚠️ @FALLING BACK TO ROOT NODE cid:{cid}- sp:{sourcepath}")
         last_node = MapRoot
 
     print(

@@ -2,7 +2,7 @@ import os
 import json
 from flask import has_request_context, request
 from pathlib import Path
-from config import ELECTIONS_FILE, BASE_FILE, TABLE_FILE
+from config import ELECTIONS_FILE, BASE_FILE, TABLE_FILE, RESOURCE_FILE
 import config
 import state
 import re
@@ -142,7 +142,8 @@ def resolve_ui_context(program, election, node):
 
 
 class CurrentElection(dict):
-    BASE_FILE = Path(ELECTIONS_FILE)
+    RESOURCE_FILE = RESOURCE_FILE
+    BASE_FILE = BASE_FILE
 
     def __init__(self, data: dict, election_id: str):
         super().__init__(data)
@@ -248,8 +249,20 @@ class CurrentElection(dict):
         Return the path to the election JSON file for a given election_id.
         """
         return cls.BASE_FILE.with_name(
-            cls.BASE_FILE.name.replace(".json", f"-{election_id}.json")
+            cls.BASE_FILE.name.replace("-DEMO.json", f"-{election_id}.json")
         )
+
+    @classmethod
+    def _rfile_for(cls) -> Path:
+        """
+        Return the path to the election resource JSON file corresponding
+        to the RESOURCE_FILE CSV. (Assumes same name but .json extension)
+        """
+        return cls.RESOURCE_FILE.with_name(
+            cls.RESOURCE_FILE.name.replace(".csv", ".json")
+        )
+
+
 
     @classmethod
     def get_lastused(cls) -> str:
@@ -271,13 +284,13 @@ class CurrentElection(dict):
     @classmethod
     def load(cls, election_id: str) -> "CurrentElection":
         """
-        Load  election JSON .
+        Load election JSON and merge in global resources.
         Falls back to DEMO election if missing.
         """
         print(f"____Get election: {election_id}")
 
         path = cls._file_for(election_id)
-        print(f"____Under route {route()} Reading CurrentElection from file: {path}")
+        rpath = cls._rfile_for()
 
         if not path.exists():
             print("⚠️ Election not found, loading DEMO")
@@ -286,7 +299,18 @@ class CurrentElection(dict):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            print(f"✅ Loaded election {election_id}")
+
+            # Ensure election has a resources dict
+            data.setdefault('resources', {})
+
+            # Merge global resources without overwriting local
+            if rpath.exists():
+                with open(rpath, "r", encoding="utf-8") as f:
+                    rdata = json.load(f)
+                for code, person in rdata.items():
+                    data['resources'].setdefault(code, person)
+
+            print(f"✅ Loaded election and resources for {election_id}")
             return cls(data, election_id=election_id)
 
         except Exception as e:
@@ -300,6 +324,9 @@ class CurrentElection(dict):
             raise ValueError("Cannot save election without election_id")
 
         path = self._file_for(self.name)
+
+        print("Saving resources:", self.get("resources"))
+        print("Resource count:", len(self.get("resources", {})))
 
         try:
             print(f"____Under route {route()} Saving Election File: {self.election_id} → {path}")

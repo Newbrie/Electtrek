@@ -8,7 +8,7 @@ from shapely import crosses, contains, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route
 
-from config import TABLE_FILE, RESOURCE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
+from config import TABLE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
 
 
 from types import MappingProxyType
@@ -167,7 +167,7 @@ def intersectingArea(
     # 2. Validate parent row
     # ------------------------------------------------------------------
     if parent_row is None or parent_row.geometry.is_empty:
-        raise ValueError(f"Invalid parent_row for {parent_type} - {source} - {parent_level}")
+        raise ValueError(f"Invalid parent_row {parent_row} for {parent_type} - {source} - {parent_level}")
 
     parent_geom = parent_row.geometry
     parent_name = normalname(parent_row["NAME"])
@@ -342,6 +342,28 @@ def ensure_treepolys(
 ):
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
+    from pathlib import Path
+
+    from pathlib import Path
+
+    def path_compare(A: str | Path, B: str | Path) -> str:
+        """
+        Compare two paths and return:
+          - A if B is shorter or equal in steps
+          - B if B is longer
+        Returns the result as a string.
+        """
+        A_path = Path(A)
+        B_path = Path(B)
+
+        len_A = len(A_path.parts)
+        len_B = len(B_path.parts)
+
+        return str(A_path) if len_B <= len_A else str(B_path)
+
+
+    sourcepath = path_compare(territory, sourcepath)
+    print(f"_____T:{territory} and S: {sourcepath} Path_compare:",sourcepath)  # Outputs: B because it is longer than A? Wait, let's check
 
     steps = stepify(sourcepath) if sourcepath else []
     territory_level = len(stepify(territory)) - 1 if territory else -1
@@ -541,6 +563,20 @@ def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
 
 def has_treepoly(layer_type: str) -> bool:
     return layer_type in Treepolys and not Treepolys[layer_type].empty
+
+def check_level4_gap(treepolys: dict, rlevels: list) -> bool:
+    if len(rlevels) <= 4:
+        return True
+
+    level_type = rlevels[4]
+    gdf = treepolys.get(level_type)
+
+    if gdf is None:
+        return True
+
+    return gdf.empty
+
+
 
 # original dict
 _LEVEL_ZOOM_MAP = {
