@@ -981,7 +981,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"______Add_Nodemap Treepolys type:{type} size:{len(pfile)}")
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
-                limbX["col"] = to_hex(herenode.defcol)
+
                 print(
                     f"⚠️ Boundary rows for node {c.value} (FID={c.fid}): {len(limbX)}"
                 )
@@ -1088,38 +1088,39 @@ class ExtendedFeatureGroup(FeatureGroup):
                         # Always return a DARK tone for consistency
                         return "#111111" if luminance > threshold else "#000000"
 
-                    tcol = readable_text_color(to_hex(herenode.defcol))
-                    fcol = tcol   # unified foreground
-                    bcol = adjust_boundary_color(to_hex(herenode.defcol), 0.7)
-                    print("_____ColourY", limbX['col'])
-                    poly_col = to_hex(herenode.defcol)
 
+
+
+                    # Add a property for the color to the GeoJSON
+
+                    node_color = to_hex(herenode.defcol)  # herknode = current parent for this child
+                    limbX["fillColor"] = node_color  # per-node property
+
+                    node_col = to_hex(limbX['fillColor'].values[0])
+                    tcol_node = readable_text_color(node_col)
+                    print(f"_____Colour from {herenode.value} col:{herenode.defcol} and limbX {limbX['fillColor'].values[0]}")
+                    fcol_node = tcol_node
+                    poly_col_node = node_col
 
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
-                            "fillColor": poly_col,
-                            "color": adjust_boundary_color(tcol, 0.7),
+                            "fillColor": feature["properties"]["fillColor"],
+                            "color": adjust_boundary_color(feature["properties"]["fillColor"], 0.7),
                             "weight": 3,
-                            "opacity": 1.0,      # 🔑 stroke opacity
-                            "fillOpacity": 0.2,
-                            "stroke": True,      # 🔑 REQUIRED
+                            "opacity": 1.0,
+                            "fillOpacity": 0.4,
+                            "stroke": True,
                             "dashArray": "5,5",
                         },
-                        highlight_function=lambda _: {
-                            "fillColor": "lightgray",
-                            "fillOpacity": 0.4,
-                        },
+                        highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
                         popup=folium.GeoJsonPopup(
                             fields=["UPDOWN"],
                             aliases=["Move:"],
                             labels=False,
                             localize=False,
                         ),
-                        popup_keep_highlighted=False,
                     ).add_to(self)
-
-
 
                     pathref = c.mapfile(rlevels)
                     mapfile = '/transfer/'+pathref
@@ -1128,7 +1129,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     htmlhalo =f'''
                     <a href="{mapfile}" data-name="{tag}">
                       <div style="
-                        color: {tcol};
+                        color: {tcol_node};
                         font-size: 10pt;
                         font-weight: bold;
                         text-align: center;
@@ -1144,7 +1145,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                            0px  0px 3px #fff;
                       ">
                         <span style="
-                          background: {fcol};
+                          background: {fcol_node};
                           padding: 1px 2px;
                           border-radius: 5px;
                           border: 2px solid black;

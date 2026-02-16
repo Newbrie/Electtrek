@@ -3810,6 +3810,9 @@ def set_accumulate():
     data = request.get_json()
     session["accumulate"] = bool(data.get("accumulate", False))
     session.modified = True  # ensure session is saved
+    print("Incoming JSON:", data)
+    print("Session accumulate now:", session.get("accumulate"))
+
     return jsonify(success=True, accumulate=session["accumulate"])
 
 
