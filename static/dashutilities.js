@@ -450,6 +450,7 @@
 
 
    window.updateConstantsUI = function (constants, options) {
+     window.isUpdatingConstants = true;
 
     if (!constants || !options) {
         console.warn("updateConstantsUI called without constants or options", { constants, options });
@@ -560,6 +561,9 @@
         // ⭐ AUTO BACKEND UPDATE
         // =====================================================
         el.oninput = () => {
+
+            if (window.isUpdatingConstants) return;   // 🔥 prevents loop
+
             let newVal;
 
             if (el.type === "number") newVal = parseFloat(el.value);
@@ -584,6 +588,7 @@
                 }
             });
         };
+
     });
 
     if (typeof attachListenersToConstantFields === "function") {
@@ -594,6 +599,8 @@
     if (typeof populateDropdowns === "function") {
         populateDropdowns();
     }
+    window.isUpdatingConstants = false;
+
 };
 
 

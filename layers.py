@@ -954,6 +954,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         global OPTIONS
 
         counters = get_counters(session=session)
+        print("NODE:", herenode.value, "DEF COL:", herenode.defcol)
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
