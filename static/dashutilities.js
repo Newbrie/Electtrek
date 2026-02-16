@@ -753,25 +753,17 @@ async function ensureOneTabActive() {
   return active;
 }
 
-function accumulateToggle(element) {
+function handleToggle(el) {
     fetch("/set_accumulate", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ value: element.checked })
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log("Accumulate set to:", data.accumulate);
-
-        // If your map rebuilds via page reload:
-        location.reload();
-
-        // If your map updates via AJAX,
-        // call your map refresh function instead.
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({accumulate: el.checked})
+    }).then(response => {
+        console.log("Accumulate updated:", el.checked);
+        // optionally update map layers via JS without reloading
     });
 }
+
 
 
 

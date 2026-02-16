@@ -266,10 +266,13 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
     def create_layer(self, c_election, nodelist, intention_type, static=False):
+        from flask import session
 
         print("Layer memory id:", id(self))
+        accumulate = session.get("accumulate", False)
 
-        self._children.clear()
+        if not accumulate:
+            self._children.clear()  # Only clear if accumulate is off
 
         for n in nodelist:
             self._render_single_node(c_election, n, intention_type, static)
