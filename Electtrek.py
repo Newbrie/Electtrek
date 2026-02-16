@@ -1060,6 +1060,57 @@ def add_marker():
     return jsonify({'status': 'ok', 'id': key})
 
 
+@app.route('/delete_node', methods=['POST'])
+@login_required
+def delete_node():
+    """
+    Remove a node from its parent and update state.
+    """
+    data = request.get_json(force=True)
+    node_name = data.get("node")
+    if not node_name:
+        return jsonify(status="error", message="Node name required"), 400
+
+    root = get_root()  # your tree root
+    node_to_delete = None
+
+    # Find the node
+    def find_node(node):
+        nonlocal node_to_delete
+        if node.value == node_name:
+            node_to_delete = node
+            return True
+        for child in node.children:
+            if find_node(child):
+                return True
+        return False
+
+    if not find_node(root):
+        return jsonify(status="error", message=f"Node '{node_name}' not found"), 404
+
+    parent = node_to_delete.parent
+    if parent:
+        parent.children.remove(node_to_delete)
+        node_to_delete.parent = None
+        parent.last_modified = datetime.utcnow()
+
+    # Optionally remove from global registry
+    TREK_NODES_BY_ID.pop(node_to_delete.nid, None)
+
+    # Optionally clean allelectors rows
+    from state import allelectors
+    mask = allelectors['StreetName'] == node_name
+    if mask.any():
+        allelectors.drop(allelectors[mask].index, inplace=True)
+
+    # Optionally regenerate old parent map
+    parent.create_area_map(CurrentElection.get_lastused(), CurrentElection.load(CurrentElection.get_lastused()))
+
+    persist(Treepolys, Fullpolys, allelectors)
+
+    return jsonify(status="success", message=f"Node '{node_name}' deleted")
+
+
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():

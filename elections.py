@@ -10,6 +10,23 @@ from shapely.geometry import Point
 import logging
 
 
+branchcolours = [
+    "#e41a1c",  # 0 red
+    "#377eb8",  # 1 blue
+    "#4daf4a",  # 2 green
+    "#984ea3",  # 3 purple
+    "#ff7f00",  # 4 orange
+    "#ffff33",  # 5 yellow
+    "#a65628",  # 6 brown
+    "#f781bf",  # 7 pink
+    "#17becf",  # 8 cyan
+    "#000000",  # 9 black
+    "#66c2a5",  # 10 aqua
+    "#fc8d62",  # 11 coral
+    "#8da0cb",  # 12 lavender-blue
+]
+
+
 def stepify(path):
     if not path:
         return []

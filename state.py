@@ -6,7 +6,7 @@ from shapely.geometry import Point
 from shapely.geometry import Point, Polygon, MultiPoint
 from shapely import crosses, contains, union, envelope, intersection
 from shapely.ops import nearest_points
-from elections import route
+from elections import route, branchcolours
 
 from collections import defaultdict
 from typing import DefaultDict
@@ -720,21 +720,6 @@ LAYERS = [
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
-branchcolours = [
-    "#e41a1c",  # 0 red
-    "#377eb8",  # 1 blue
-    "#4daf4a",  # 2 green
-    "#984ea3",  # 3 purple
-    "#ff7f00",  # 4 orange
-    "#ffff33",  # 5 yellow
-    "#a65628",  # 6 brown
-    "#f781bf",  # 7 pink
-    "#17becf",  # 8 cyan
-    "#000000",  # 9 black
-    "#66c2a5",  # 10 aqua
-    "#fc8d62",  # 11 coral
-    "#8da0cb",  # 12 lavender-blue
-]
 
 
 

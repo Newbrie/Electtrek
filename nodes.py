@@ -298,9 +298,15 @@ def get_layer_table(nodelist,title,rlevels):
 
             # Generate dropdown HTML
             dropdown_html = f'<select class="parent-dropdown" data-old-value="{x.parent.value}" data-subject="{x.value}">'
+
+            # Add sibling parent options
             for option in sibling_parents:
                 selected = 'selected' if option.value == x.parent.value else ''
                 dropdown_html += f'<option value="{option.value}" {selected}>{option.value}</option>'
+
+            # ✅ Add DELETE option at the end
+            dropdown_html += f'<option value="__DELETE__">Delete</option>'
+
             dropdown_html += '</select>'
 
             dfy.loc[i, x.parent.type] = dropdown_html
@@ -1783,7 +1789,7 @@ class TreeNode:
                     egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election, counters=counters)
                     egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
                     print(f"________bbox [{egg.bbox}] - child of type {electtype} at lev {self.level+1} of {self.value}")
-                    egg.defcol = branchcolours.get(str(i))
+                    egg.defcol = branchcolours[k]
                     # Update the node with latest stats
                     fam_nodes.append(egg)
                     try:
