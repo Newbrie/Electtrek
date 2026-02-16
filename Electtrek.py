@@ -1063,9 +1063,12 @@ def add_marker():
 @app.route('/delete_node', methods=['POST'])
 @login_required
 def delete_node():
+    from state import Treepolys, Fullpolys
 
     if not request.is_json:
         return jsonify(status="error", message="JSON required"), 415
+
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     data = request.get_json()
     nid = (data.get("nid") or "").strip()
@@ -1104,9 +1107,7 @@ def delete_node():
         parent.create_area_map(current_election, CElection)
         mapfile = parent.mapfile(rlevels)
 
-        # Persist AFTER successful mutation
-        from state import Treepolys, Fullpolys
-        allelectors = restore_from_persist(Treepolys, Fullpolys)
+        CElection.visit_node(parent)
 
         save_nodes(TREKNODE_FILE)
         persist(Treepolys, Fullpolys, allelectors)
@@ -1126,188 +1127,90 @@ def delete_node():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
-    """
-    Reassigns a node from one parent to another in the tree.
-    Updates TREK_NODES_BY_ID, allelectors, and regenerates relevant maps.
-    """
 
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-    from enum import Enum
+    if not request.is_json:
+        return jsonify(status="error", message="JSON required"), 415
+
+    data = request.get_json()
+    nid = (data.get("nid") or "").strip()
+    new_parent_nid = (data.get("new_parent_nid") or "").strip()
+
+    if not nid or not new_parent_nid:
+        return jsonify(status="error",
+                       message="Node ids required"), 400
+
+    # ---- Restore state FIRST ----
     from state import Treepolys, Fullpolys
-
-    print(">>> /reassign_parent called")
-
-    # Restore persisted state
     allelectors = restore_from_persist(Treepolys, Fullpolys)
-    print("✔ Restored from persist")
 
-    # Get current election and settings
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
-    print(f"✔ Current election: {current_election}")
 
-    # Request payload
-    data = request.get_json(force=True)
-    old_parent_name = data['old_parent']
-    new_parent_name = data['new_parent']
-    subject_name = data['subject']
+    # ---- Lookup nodes ----
+    subject_node = TREK_NODES_BY_ID.get(nid)
+    new_parent_node = TREK_NODES_BY_ID.get(new_parent_nid)
 
-    print(
-        f"📥 Request to move node '{subject_name}' "
-        f"from '{old_parent_name}' to '{new_parent_name}'"
-    )
+    if not subject_node:
+        return jsonify(status="error",
+                       message="Subject node not found"), 404
 
-    # --------------------------
-    # Error states
-    # --------------------------
-    class MoveNodeError(Enum):
-        SUBJECT_NOT_FOUND = "subject_not_found"
-        WRONG_OLD_PARENT = "wrong_old_parent"
-        NO_GRANDPARENT = "no_grandparent"
-        NEW_PARENT_NOT_FOUND = "new_parent_not_found"
+    if not new_parent_node:
+        return jsonify(status="error",
+                       message="New parent not found"), 404
 
-    # --------------------------
-    # Find nodes in tree
-    # --------------------------
-    def find_nodes(node):
-        if node.value == subject_name:
-            if not node.parent:
-                return ("error", MoveNodeError.NO_GRANDPARENT)
+    old_parent_node = subject_node.parent
 
-            if node.parent.value != old_parent_name:
-                return ("error", MoveNodeError.WRONG_OLD_PARENT)
+    if not old_parent_node:
+        return jsonify(status="error",
+                       message="Cannot reassign root"), 400
 
-            parent = node.parent
-            grandparent = parent.parent
-            if not grandparent:
-                return ("error", MoveNodeError.NO_GRANDPARENT)
+    if old_parent_node.nid == new_parent_node.nid:
+        return jsonify(status="error",
+                       message="Already assigned to that parent"), 400
 
-            new_parent = next(
-                (n for n in grandparent.children if n.value == new_parent_name),
-                None
-            )
-            if not new_parent:
-                return ("error", MoveNodeError.NEW_PARENT_NOT_FOUND)
+    # ---- Optional structural validation ----
+    if new_parent_node.parent != old_parent_node.parent:
+        return jsonify(status="error",
+                       message="Invalid reassignment level"), 400
 
-            return ("ok", node, parent, new_parent)
+    try:
+        # Perform reassignment
+        subject_node.set_parent(new_parent_node)
 
-        for child in node.children:
-            result = find_nodes(child)
-            if result:
-                return result
+        # Maintain correct type
+        etype = old_parent_node.child_type(rlevels)
+        subject_node.type = etype
 
-        return None
+        # Update allelectors
+        mask = (
+            (allelectors['Election'] == current_election) &
+            (allelectors['StreetName'] == subject_node.value)
+        )
+        if mask.any():
+            allelectors.loc[mask, 'WalkName'] = new_parent_node.value
 
-    # --------------------------
-    # Execute search
-    # --------------------------
-    rootx = get_root()
-    result = find_nodes(rootx)
+        # Regenerate affected maps
+        old_parent_node.create_area_map(current_election, CElection)
+        new_parent_node.create_area_map(current_election, CElection)
 
-    if result is None:
-        return jsonify({
-            "status": "error",
-            "error": MoveNodeError.SUBJECT_NOT_FOUND.value,
-            "message": f"Node '{subject_name}' not found"
-        })
+        mapfile = old_parent_node.mapfile(rlevels)
 
-    status, *payload = result
+        # Persist AFTER successful mutation
+        save_nodes(TREKNODE_FILE)
+        persist(Treepolys, Fullpolys, allelectors)
 
-    if status == "error":
-        error = payload[0]
-        return jsonify({
-            "status": "error",
-            "error": error.value,
-            "message": error.value.replace("_", " ").capitalize()
-        })
+    except Exception:
+        current_app.logger.exception("Reassignment failed")
+        return jsonify(status="error",
+                       message="Reassignment failed"), 500
 
-
-    # ✅ Correct unpacking
-    subject_node, old_parent_node, new_parent_node = payload
-
-    print(
-        f"✔ Found subject node: {subject_node.value}, "
-        f"old parent: {old_parent_node.value}, "
-        f"new parent: {new_parent_node.value}"
-    )
-
-    # (actual move logic comes next)
-
-    # --------------------------
-    # 2. Remove from old parent
-    # --------------------------
-    # Determine election type for child
-    etype = old_parent_node.child_type(rlevels)
-
-    print("=== BEFORE MOVE ===")
-    print("Old parent children:",
-          [c.value for c in old_parent_node.children])
-    print("New parent children:",
-          [c.value for c in new_parent_node.children])
-    print("Subject parent:",
-          subject_node.parent.value if subject_node.parent else None)
-
-    # Reassign parent using set_parent (handles removal, addition, and recompute)
-    subject_node.set_parent(new_parent_node)
-
-    print("=== AFTER MOVE ===")
-    print("Old parent children:",
-          [c.value for c in old_parent_node.children])
-    print("New parent children:",
-          [c.value for c in new_parent_node.children])
-    print("Subject parent:",
-          subject_node.parent.value if subject_node.parent else None)
-
-    # Update type if needed
-    subject_node.type = etype
-
-    print(f"✔ Reassigned node '{subject_node.value}' to new parent '{new_parent_node.value}' with etype '{etype}'")
-
-    # --------------------------
-    # 4. Update allelectors table
-    # --------------------------
-    mask_subject = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['WalkName'] == old_parent_name) &
-        (allelectors['StreetName'] == subject_name)
-    )
-    if mask_subject.any():
-        allelectors.loc[mask_subject, 'WalkName'] = new_parent_name
-        print(f"✔ Updated allelectors: '{subject_name}' now under '{new_parent_name}'")
-    else:
-        print(f"⚠ No allelectors rows matched for '{subject_name}'")
-
-# NEED TO REFACTOR ALL CALLS TO CREATE MAP
-    # Regenerate old parent layer if exists - deleted not required
-    print("🔁 Regenerating affected maps...")
-
-    old_parent_node.create_area_map(current_election, CElection)
-    new_parent_node.create_area_map(current_election, CElection)
-
-    print(
-        f"🔁 Regenerated maps for "
-        f"'{old_parent_node.value}' and '{new_parent_node.value}'"
-    )
-
-    # --------------------------
-    # 6. Save changes
-    # --------------------------
-
-#    columns, rows, title = fetch_table("nodelist_xref", create_node=False)
-
-    # --------------------------
-    # 7. Save changes
-    # --------------------------
-
-    mapfile = old_parent_node.mapfile(rlevels)
-    print("✅ Reassignment complete")
-    persist(Treepolys, Fullpolys, allelectors)
     return jsonify({
         "status": "success",
-        "message": f"Node '{subject_node.value}' reassigned",
+        "message": "Node reassigned",
         "mapfile": url_for("thru", path=mapfile)
     })
+
 
 
 
@@ -2840,25 +2743,24 @@ def transfer(path):
     global environment
     global levels
     global layeritems
-    global formdata
     global CElection
 
     allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(current_election,CElection)
     rlevels = CElection.resolved_levels
-    formdata = {}
+    prev = TREK_NODES_BY_ID.get(CElection['cid'])
+
 # transfering to another any other node with siblings listed below
-    previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
-    CElection = CurrentElection.load(current_election)
+    current_node = get_root().ping_node(rlevels,current_election,path, create=False)
+
     current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels))
 
     CElection.visit_node(current_node)
-    fullpath = Path(current_node.mapfile(rlevels))
+    base = Path(config.workdirectories['workdir'])  # or wherever files live
+    fullpath = base / current_node.mapfile(rlevels)
     persist(Treepolys, Fullpolys, allelectors)
     print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
     return send_file(fullpath, as_attachment=False)

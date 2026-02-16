@@ -300,16 +300,18 @@ def get_layer_table(nodelist,title,rlevels):
             dropdown_html = (
                 f'<select class="parent-dropdown" '
                 f'data-nid="{x.nid}" '
-                f'data-old-value="{x.parent.value}">'
+                f'data-old-parent-nid="{x.parent.nid}">'
             )
 
-            # Add sibling parent options
-            for option in sibling_parents:
-                selected = 'selected' if option.value == x.parent.value else ''
-                dropdown_html += f'<option value="{option.value}" {selected}>{option.value}</option>'
+            # Add DELETE option
+            dropdown_html += '<option value="__DELETE__">Delete</option>'
 
-            # ✅ Add DELETE option at the end
-            dropdown_html += f'<option value="__DELETE__">Delete</option>'
+            for option in sibling_parents:
+                selected = 'selected' if option.nid == x.parent.nid else ''
+                dropdown_html += (
+                    f'<option value="{option.nid}" {selected}>'
+                    f'{option.value}</option>'
+                )
 
             dropdown_html += '</select>'
 
@@ -1256,7 +1258,7 @@ class TreeNode:
         # ──────────────────────────────
         # Step 6: always expand children at final node
         next_level = node.level + 1
-        if next_level <= max(rlevels):
+        if next_level <= max(rlevels) and create:
             children_type = rlevels[next_level]
             print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
             try:
