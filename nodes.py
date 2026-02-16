@@ -1298,7 +1298,7 @@ class TreeNode:
 
             # Get the child layer
             child_layer = layers[childtype]
-
+            print(f"__LAYER NODE LIST: {[n.nid for n in nodelist]}")
             # Pass the list of nodes to create_layer
             child_layer.create_layer(this_election, nodelist, childtype)
 

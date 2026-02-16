@@ -753,7 +753,7 @@ async function ensureOneTabActive() {
   return active;
 }
 
-function handleToggle(el) {
+function accumulateToggle(el) {
     fetch("/set_accumulate", {
         method: "POST",
         headers: {"Content-Type": "application/json"},

@@ -3802,11 +3802,15 @@ def filelist():
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
+from flask import Flask, request, session, jsonify
+
 @app.route("/set_accumulate", methods=["POST"])
+@login_required
 def set_accumulate():
     data = request.get_json()
-    session["accumulate"] = bool(data.get("value", False))
-    return {"status": "ok", "accumulate": session["accumulate"]}
+    session["accumulate"] = bool(data.get("accumulate", False))
+    session.modified = True  # ensure session is saved
+    return jsonify(success=True, accumulate=session["accumulate"])
 
 
 from flask import jsonify, render_template
