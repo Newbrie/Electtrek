@@ -272,6 +272,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         accumulate = session.get("accumulate", False)
 
         if not accumulate:
+            print(f"CLEARING THE LAYER: {accumulate}", id(self))
             self._children.clear()  # Only clear if accumulate is off
 
         for n in nodelist:
@@ -946,7 +947,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return eventlist
 
     def add_nodemaps (self,c_election,rlevels, herenode,type,static):
-        from state import Treepolys, Fullpolys
+        from state import Treepolys, Fullpolys, branchcolours
         from nodes import get_counters
         from flask import session
         global levelcolours
@@ -954,7 +955,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         global OPTIONS
 
         counters = get_counters(session=session)
-        print("NODE:", herenode.value, "DEF COL:", herenode.defcol)
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
@@ -1094,8 +1094,10 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     # Add a property for the color to the GeoJSON
 
-                    node_color = to_hex(herenode.defcol)  # herknode = current parent for this child
+    
+                    node_color = branchcolours[herenode.tagno % len(branchcolours)]
                     limbX["fillColor"] = node_color  # per-node property
+
 
                     node_col = to_hex(limbX['fillColor'].values[0])
                     tcol_node = readable_text_color(node_col)

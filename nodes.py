@@ -1292,13 +1292,17 @@ class TreeNode:
             # Determine nodes to render
             if accumulate:
                 node_ids = session.get("accumulated_nodes", [])
+                print(f" Accumulated session stored ids{node_ids}")
                 nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
+                for n in nodelist:
+                    print("ACC NODE:", n.value, "DEF:", n.defcol, "ID:", id(n))
+
             else:
                 nodelist = [self]  # single node
 
             # Get the child layer
             child_layer = layers[childtype]
-            print(f"__LAYER NODE LIST: {[n.nid for n in nodelist]}")
+            print(f"__LAYER NODE LIST: {[n.nid for n in nodelist]} ")
             # Pass the list of nodes to create_layer
             child_layer.create_layer(this_election, nodelist, childtype)
 
