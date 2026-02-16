@@ -1063,52 +1063,64 @@ def add_marker():
 @app.route('/delete_node', methods=['POST'])
 @login_required
 def delete_node():
-    """
-    Remove a node from its parent and update state.
-    """
-    data = request.get_json(force=True)
-    node_name = data.get("node")
-    if not node_name:
-        return jsonify(status="error", message="Node name required"), 400
 
-    root = get_root()  # your tree root
-    node_to_delete = None
+    if not request.is_json:
+        return jsonify(status="error", message="JSON required"), 415
 
-    # Find the node
-    def find_node(node):
-        nonlocal node_to_delete
-        if node.value == node_name:
-            node_to_delete = node
-            return True
-        for child in node.children:
-            if find_node(child):
-                return True
-        return False
+    data = request.get_json()
+    nid = (data.get("nid") or "").strip()
 
-    if not find_node(root):
-        return jsonify(status="error", message=f"Node '{node_name}' not found"), 404
+    if not nid:
+        return jsonify(status="error", message="Node id required"), 400
+
+    node_to_delete = TREK_NODES_BY_ID.get(nid)
+
+    if not node_to_delete:
+        return jsonify(status="error", message="Node not found"), 404
+
+    if not node_to_delete.parent:
+        return jsonify(status="error", message="Cannot delete root node"), 400
+
+    if node_to_delete.children:
+        return jsonify(status="error",
+                       message="Cannot delete node with children"), 400
 
     parent = node_to_delete.parent
-    if parent:
+
+    try:
+        # Remove from tree
         parent.children.remove(node_to_delete)
         node_to_delete.parent = None
         parent.last_modified = datetime.utcnow()
 
-    # Optionally remove from global registry
-    TREK_NODES_BY_ID.pop(node_to_delete.nid, None)
+        # Remove registry entry
+        TREK_NODES_BY_ID.pop(node_to_delete.nid, None)
 
-    # Optionally clean allelectors rows
-    from state import allelectors
-    mask = allelectors['StreetName'] == node_name
-    if mask.any():
-        allelectors.drop(allelectors[mask].index, inplace=True)
+        # Regenerate parent map
+        current_election = CurrentElection.get_lastused()
+        CElection = CurrentElection.load(current_election)
+        rlevels = CElection.resolved_levels
 
-    # Optionally regenerate old parent map
-    parent.create_area_map(CurrentElection.get_lastused(), CurrentElection.load(CurrentElection.get_lastused()))
+        parent.create_area_map(current_election, CElection)
+        mapfile = parent.mapfile(rlevels)
 
-    persist(Treepolys, Fullpolys, allelectors)
+        # Persist AFTER successful mutation
+        from state import Treepolys, Fullpolys
+        allelectors = restore_from_persist(Treepolys, Fullpolys)
 
-    return jsonify(status="success", message=f"Node '{node_name}' deleted")
+        save_nodes(TREKNODE_FILE)
+        persist(Treepolys, Fullpolys, allelectors)
+
+    except Exception:
+        current_app.logger.exception("Node deletion failed")
+        return jsonify(status="error", message="Deletion failed"), 500
+
+    return jsonify({
+        "status": "success",
+        "message": "Node deleted",
+        "mapfile": url_for("thru", path=mapfile)
+    })
+
 
 
 @app.route('/reassign_parent', methods=['POST'])

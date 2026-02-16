@@ -11,20 +11,21 @@ import logging
 
 
 branchcolours = [
-    "#e41a1c",  # 0 red
-    "#377eb8",  # 1 blue
-    "#4daf4a",  # 2 green
-    "#984ea3",  # 3 purple
-    "#ff7f00",  # 4 orange
-    "#ffff33",  # 5 yellow
-    "#a65628",  # 6 brown
-    "#f781bf",  # 7 pink
-    "#17becf",  # 8 cyan
+    "#D32F2F",  # 0 strong red
+    "#1976D2",  # 1 strong blue
+    "#388E3C",  # 2 strong green
+    "#7B1FA2",  # 3 deep purple
+    "#F57C00",  # 4 strong orange
+    "#C2185B",  # 5 magenta
+    "#00796B",  # 6 teal
+    "#512DA8",  # 7 indigo
+    "#455A64",  # 8 blue-grey
     "#000000",  # 9 black
-    "#66c2a5",  # 10 aqua
-    "#fc8d62",  # 11 coral
-    "#8da0cb",  # 12 lavender-blue
+    "#795548",  # 10 brown
+    "#0097A7",  # 11 cyan
+    "#AFB42B",  # 12 olive
 ]
+
 
 
 def stepify(path):

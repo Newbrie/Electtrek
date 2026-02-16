@@ -297,7 +297,11 @@ def get_layer_table(nodelist,title,rlevels):
                 sibling_parents = [x.parent]  # fallback
 
             # Generate dropdown HTML
-            dropdown_html = f'<select class="parent-dropdown" data-old-value="{x.parent.value}" data-subject="{x.value}">'
+            dropdown_html = (
+                f'<select class="parent-dropdown" '
+                f'data-nid="{x.nid}" '
+                f'data-old-value="{x.parent.value}">'
+            )
 
             # Add sibling parent options
             for option in sibling_parents:
