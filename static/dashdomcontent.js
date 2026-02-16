@@ -557,81 +557,70 @@ resourcesSelect?.addEventListener("blur", () => {
 /* ---------------------------------------------------------
  *  PARENT-NODE REASSIGNMENT / DELETE SELECTION
  * --------------------------------------------------------- */
-document.addEventListener("change", (e) => {
-    if (!e.target.classList.contains("parent-dropdown")) return;
+ document.addEventListener("change", (e) => {
+     if (!e.target.classList.contains("parent-dropdown")) return;
 
-    const select = e.target;
-    const subject = select.dataset.subject;
-    const oldParent = select.dataset.oldValue;
-    const newParent = select.value;
+     const select = e.target;
+     const subject = select.dataset.subject;
+     const oldParent = select.dataset.oldValue;
+     const newParent = select.value;
 
-    // --------------------------
-    // DELETE CASE
-    // --------------------------
-    if (newParent === "__DELETE__") {
-        if (!confirm(`Are you sure you want to delete node '${subject}'?`)) {
-            // revert to old value
-            select.value = oldParent;
-            return;
-        }
+     if (newParent === "__DELETE__") {
+         // DELETE node
+         fetch("/delete_node", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({ node: subject })
+         })
+         .then(r => r.json())
+         .then(data => {
+             if (data.status === "success") {
+                 console.log(`${data.message}`);
 
-        fetch("/delete_node", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ node: subject })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === "success") {
-                console.log(data.message);
-                // revert dropdown or disable it
-                select.value = "";
-                select.disabled = true;
+                 // Refresh table
+                 fetchTableData("nodelist_xref");
 
-                // refresh parent map
-                changeIframeSrc(data.mapfile);
+                 // Redraw old parent's map if provided
+                 if (data.mapfile) {
+                     changeIframeSrc(`${data.mapfile}`);
+                 }
+             } else {
+                 console.error(`Delete failed: ${data.message}`);
+             }
+         })
+         .catch(err => console.error("Error calling /delete_node:", err));
 
-                // refresh table
-                fetchTableData("nodelist_xref");
-            } else {
-                console.error(`Delete failed: ${data.message}`);
-                select.value = oldParent; // revert selection
-            }
-        })
-        .catch(err => {
-            console.error("Error calling /delete_node:", err);
-            select.value = oldParent; // revert selection
-        });
+     } else {
+         // REASSIGN node
+         fetch("/reassign_parent", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({
+                 subject,
+                 old_parent: oldParent,
+                 new_parent: newParent
+             })
+         })
+         .then(r => r.json())
+         .then(data => {
+             if (data.status === "success") {
+                 // Update old value
+                 select.dataset.oldValue = newParent;
 
-        return; // exit early for delete
-    }
+                 // Update map iframe
+                 changeIframeSrc(`${data.mapfile}`);
 
-    // --------------------------
-    // NORMAL REASSIGN CASE
-    // --------------------------
-    fetch("/reassign_parent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            subject,
-            old_parent: oldParent,
-            new_parent: newParent
-        })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === "success") {
-            select.dataset.oldValue = newParent;
-            changeIframeSrc(`${data.mapfile}`);
-            console.log(data.message);
-            fetchTableData("nodelist_xref");
-        } else {
-            console.error(`Reassign failed: ${data.message}`);
-            select.value = oldParent; // revert selection
-        }
-    })
-    .catch(err => console.error("Error calling /reassign_parent:", err));
-});
+                 // Refresh table
+                 fetchTableData("nodelist_xref");
+
+                 console.log(`${data.message}`);
+             } else {
+                 console.error(`Reassign failed: ${data.message}`);
+             }
+         })
+         .catch(err => console.error("Error calling /reassign_parent:", err));
+     }
+ });
 
 
 
