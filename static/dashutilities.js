@@ -753,6 +753,28 @@ async function ensureOneTabActive() {
   return active;
 }
 
+function accumulateToggle(element) {
+    fetch("/set_accumulate", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ value: element.checked })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Accumulate set to:", data.accumulate);
+
+        // If your map rebuilds via page reload:
+        location.reload();
+
+        // If your map updates via AJAX,
+        // call your map refresh function instead.
+    });
+}
+
+
+
 async function setActiveElectionOnStartup() {
   const activeTab = await ensureOneTabActive();
   const electionName = activeTab.dataset.election || activeTab.textContent.trim();

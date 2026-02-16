@@ -8,7 +8,12 @@ from shapely import crosses, contains, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route
 
+from collections import defaultdict
+from typing import DefaultDict
+from pathlib import Path
 from config import TABLE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
+
+import logging
 
 
 from types import MappingProxyType
@@ -125,7 +130,7 @@ def select_parent_geoms(*, Treepolys, parent_key, sourcepath=None, here=None):
 def intersectingArea(
     source,
     sourcekey,
-    parent_level,
+    parent_levels,
     child_level,
     resolved_levels,
     destination,
@@ -136,15 +141,16 @@ def intersectingArea(
 ):
     """
     Compute intersection of child polygons with a parent polygon.
-    Parent type is derived from resolved_levels[parent_level].
+    Parent type is derived from parent_levels[child_level].
+    If parent_row is None, include all child polygons (no filtering).
     """
-
-    parent_type = resolved_levels.get(parent_level)
+    parent_name = normalname(parent_row["NAME"]) if parent_row is not None else "None"
+    parent_type = parent_levels.get(child_level)
     if parent_type is None:
-        raise ValueError(f"No parent type found for parent_level={parent_level}")
+        raise ValueError(f"No parent type found for parent_level IN {parent_levels}")
 
     print(f"\n[DEBUG] intersectingArea | source={source}")
-    print(f"[DEBUG] parent_type={parent_type}, roid={roid}, select_child_name={select_child_name}")
+    print(f"[DEBUG] parent_name={parent_name} parent_type={parent_type}, roid={roid}, select_child_name={select_child_name}")
 
     # ------------------------------------------------------------------
     # 1. Load child layer
@@ -164,26 +170,18 @@ def intersectingArea(
     print(f"[DEBUG] Loaded {len(gdf)} child features")
 
     # ------------------------------------------------------------------
-    # 2. Validate parent row
+    # 2. Skip parent validation and intersection if parent_row is None
     # ------------------------------------------------------------------
     if parent_row is None or parent_row.geometry.is_empty:
-        raise ValueError(f"Invalid parent_row {parent_row} for {parent_type} - {source} - {parent_level}")
+        print(f"[DEBUG] parent_row is None, including all child polygons without filtering")
+        return None, all_child_polygons, all_child_polygons
+
 
     parent_geom = parent_row.geometry
-    parent_name = normalname(parent_row["NAME"])
-
-    parent_gdf = Fullpolys[parent_type].to_crs("EPSG:4326")
-    parent_names = parent_gdf["NAME"].apply(normalname)
-
-    if parent_name not in parent_names.values:
-        raise ValueError(
-            f"Parent '{parent_name}' not found in parent layer '{parent_type}'"
-        )
 
     # ------------------------------------------------------------------
-    # 3. Compute intersections (projected CRS)
+    # 4. Compute intersections (projected CRS) only if parent_row is not None
     # ------------------------------------------------------------------
-
     child_type = resolved_levels[child_level]
     threshold = Overlaps.get(child_type, 0)
     print(f"[DEBUG] Intersection threshold ({child_type}): {threshold}")
@@ -205,7 +203,7 @@ def intersectingArea(
     print(f"[DEBUG] Children within parent above threshold: {len(child_polygons_within_parent)}")
 
     # ------------------------------------------------------------------
-    # 4. Resolve selected child (navigation only)
+    # 5. Resolve selected child (navigation only)
     # ------------------------------------------------------------------
     selected_child_name = None
 
@@ -230,7 +228,7 @@ def intersectingArea(
         selected_child_name = normalname(child_polygons_within_parent.iloc[0]["NAME"])
 
     # ------------------------------------------------------------------
-    # 5. Save
+    # 6. Save
     # ------------------------------------------------------------------
     if not child_polygons_within_parent.empty:
         child_polygons_within_parent.to_file(destination)
@@ -245,6 +243,7 @@ def subending(filename, ending):
 
 
 def upsert_geodf(existing, incoming, key="FID"):
+    #insert incoming geometries into the existing layer
     if existing is None or existing.empty:
         return incoming
 
@@ -269,14 +268,14 @@ def load_layer(
     layer,
     level,
     resolved_levels,
-    parent_level,
+    parent_levels,
     parent_row,
     select_name=None,
     roid=None,
 ):
     """
     Load a layer using either filter or intersection method.
-    parent_level is used to derive parent_type from resolved_levels.
+    parent_levels is used to derive parent_type.
     """
     src = f"{workdirectories['bounddir']}/{layer['src']}"
     out = f"{workdirectories['bounddir']}/{layer['out']}"
@@ -295,7 +294,7 @@ def load_layer(
     return intersectingArea(
         source=src,
         sourcekey=layer["field"],
-        parent_level=parent_level,
+        parent_levels=parent_levels,
         child_level= level,
         resolved_levels=resolved_levels,
         destination=out,
@@ -326,12 +325,59 @@ def stepify(path):
     return parts
 
 
+import logging
 
-from collections import defaultdict
-from typing import DefaultDict
-import geopandas as gpd
-import pandas as pd
-from shapely.geometry import Point
+def get_parent_row(plevels, child_level, parent_name, roid):
+    """
+    Resolves the parent row based on the level in plevels.
+    """
+    from state import Treepolys, Fullpolys
+
+    logging.debug(f"[DEBUG] Resolving parent for child level {child_level}, parent_name={parent_name}, roid={roid}")
+
+    # Get the parent layer type based on child_level from plevels
+    parent_layer_type = plevels.get(child_level)
+    logging.debug(f"[DEBUG] Parent layer type for child level {child_level} is {parent_layer_type} in levels {plevels}")
+
+    # Get the GeoDataFrame for the parent layer from Treepolys
+    parent_tree = Treepolys.get(parent_layer_type)
+    if parent_tree is None:
+        logging.warning(f"[WARNING] No parent tree found for layer type {parent_layer_type}")
+        return None
+    logging.debug(f"[DEBUG] Parent tree for {parent_layer_type} has {len(parent_tree)} features")
+
+    parent_row = None
+
+    # If no parent_row found and there is only one row in parent_tree, use that as the parent
+    if len(parent_tree) == 1:
+        parent_row = parent_tree.iloc[0]
+        logging.debug(f"[DEBUG] Only one parent feature available, using it as the parent: {parent_row['NAME']}")
+
+    # If parent_name is provided, try to find the matching parent
+    if parent_row is None and parent_name:
+        logging.debug(f"[DEBUG] Searching for parent with name '{parent_name}'")
+        matches = parent_tree[parent_tree["NAME"].apply(normalname) == normalname(parent_name)]
+        if not matches.empty:
+            parent_row = matches.iloc[0]  # Parent exists in the layer, select the first match
+            logging.debug(f"[DEBUG] Parent found by name: {parent_row['NAME']}")
+        else:
+            logging.debug(f"[DEBUG] No match found for parent name '{parent_name}'")
+
+    # If still no parent_row and a roid (spatial point) is provided, find the closest parent by distance
+    if parent_row is None and roid is not None:
+        logging.debug(f"[DEBUG] No parent found by name or single row fallback. Using spatial search for roid={roid}")
+        distances = parent_tree.geometry.apply(lambda g: g.distance(Point(roid[::-1])))  # Calculate distance
+        min_distance_idx = distances.idxmin()
+        parent_row = parent_tree.iloc[min_distance_idx]  # Get the row with the minimum distance
+        logging.debug(f"[DEBUG] Parent found by spatial search: {parent_row['NAME']} at distance {distances[min_distance_idx]}")
+
+    if parent_row is None:
+        logging.warning(f"[WARNING] No parent row could be found for child level {child_level}. Returning None.")
+
+    return parent_row
+
+
+
 
 def ensure_treepolys(
     *,
@@ -339,20 +385,15 @@ def ensure_treepolys(
     sourcepath: str | None,
     here: tuple[float, float] | None,
     resolved_levels: dict[int, str],
+    parent_levels: dict[int, str]
 ):
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
-    from pathlib import Path
 
-    from pathlib import Path
+    logging.debug(f"Starting treepolys with territory={territory} and sourcepath={sourcepath}")
 
     def path_compare(A: str | Path, B: str | Path) -> str:
-        """
-        Compare two paths and return:
-          - A if B is shorter or equal in steps
-          - B if B is longer
-        Returns the result as a string.
-        """
+        """Compare paths and return the appropriate one."""
         A_path = Path(A)
         B_path = Path(B)
 
@@ -361,106 +402,83 @@ def ensure_treepolys(
 
         return str(A_path) if len_B <= len_A else str(B_path)
 
-
+    # Select the best source path based on length
     sourcepath = path_compare(territory, sourcepath)
-    print(f"_____T:{territory} and S: {sourcepath} Path_compare:",sourcepath)  # Outputs: B because it is longer than A? Wait, let's check
-
     steps = stepify(sourcepath) if sourcepath else []
     territory_level = len(stepify(territory)) - 1 if territory else -1
 
     layer_defs = { (l["level"], l["key"]): l for l in LAYERS }
-    active_parents: dict[int, pd.Series] = {}
+    active_parent_rows: dict[int, pd.Series] = {}
+    active_parent_rows[0] = None
     newpath = ""
 
-    # ✅ Track inserted FIDs to prevent duplicates
-    inserted_fids: DefaultDict[str, set] = defaultdict(set)
-
     for level, layer_type in resolved_levels.items():
+        # Skip if no steps and no spatial fallback available
         if level >= len(steps) and not here:
-            print(f"[DEBUG] Skipping level {level} layer {layer_type} — no step and no spatial fallback")
+            logging.debug(f"[LEVEL {level}] Skipping {layer_type} layer — no step and no spatial fallback")
             continue
 
+        # Skip if the layer has already been processed
         if has_treepoly(layer_type):
-            print(f"[DEBUG] Skipping level {level} layer {layer_type} — already loaded")
+            logging.debug(f"[LEVEL {level}] Skipping {layer_type} layer — already loaded")
             continue
 
+        # Retrieve the layer definition for the current level
         layer = layer_defs.get((level, layer_type))
         if not layer:
-            print(f"[WARN] No layer definition for level {level} layer {layer_type}")
+            logging.warning(f"[LEVEL {level}] No layer processing for level {level} type {layer_type}")
             continue
 
-        # Parent row logic
-        parent_level = max(0, min(level - 1, territory_level))
-        parent_layer_type = resolved_levels.get(parent_level)
-        parent_row = active_parents.get(parent_level)
-
-        # fallback: if no active parent yet, try spatial or whole layer
-        if parent_row is None and parent_layer_type:
-            parent_gdf = get_treepoly(parent_layer_type)
-            if isinstance(parent_gdf, gpd.GeoDataFrame) and len(parent_gdf) == 1:
-                parent_row = parent_gdf.iloc[0]
-
-        # Determine selection or spatial fallback
+        # Prepare the selection or spatial fallback criteria
         select_name = steps[level] if level < len(steps) else None
         roid = here if level >= len(steps) else None
+        logging.debug(f"[LEVEL {level}] layer_type: {layer_type}: select_name:{select_name}")
 
-        # Load layer with updated signature
+        # Parent resolution logic
+
+        parent_row = active_parent_rows.get(level,None)
+        # Check if the parent_tree GeoDataFrame is valid and contains exactly one row
+        parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
+        # Loading the layer for this level
+
+        logging.debug(f"[LEVEL {level}] Loading layer {layer_type} with parent {parent_name} of type {parent_levels[level]}")
+
         name, tree_gdf, full_gdf = load_layer(
             layer=layer,
             level=level,
             resolved_levels=resolved_levels,
-            parent_level=parent_level,
-            parent_row=parent_row,
+            parent_levels=parent_levels,
+            parent_row=parent_row, # None is allowed
             select_name=select_name,
             roid=roid,
         )
 
-
-        # 🔐 Update Treepolys and Fullpolys
+        # Upsert the tree_gdf into Treepolys [layer type] and update the dataset
         existing = get_treepoly(layer_type)
-
-        if existing is None or existing.empty:
-            print(f"[DEBUG] Before upsert {layer_type}: 0 rows (initial or reset)")
+        if existing is None:
             new_tree_gdf = tree_gdf
         else:
-            print(f"[DEBUG] Before upsert {layer_type}: {len(existing)} rows")
             new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
-
         set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
-
+        # this is where the layer boundary features are inserted
+        # Debug upsert and check the updated data
         updated = get_treepoly(layer_type)
-        print(f"[DEBUG] After upsert {layer_type}: {len(updated) if updated is not None else 0} rows")
+        logging.debug(f"[LEVEL {level}] After upsert {layer_type}: {len(updated) if updated is not None else 0} rows")
+        next_level = level + 1
+        # Determine the next level's parent filter from the current layer's data
+        active_parent_rows[next_level] = get_parent_row(parent_levels,next_level, name,roid)
+        # parent_row of parent_layer_type = parent_levels[level]
+        # so where to store it ? active_
+        logging.debug(f"[LEVEL {next_level}] Active parent set to {active_parent_rows[next_level].get('NAME', 'Unknown')}")
 
-        Fullpolys[layer_type] = upsert_geodf(Fullpolys.get(layer_type), full_gdf)
-
-        for idx, row in tree_gdf.iterrows():
-            print(f"___POLYCHECK: {layer_type.capitalize()} level {level}: {row['NAME']}, Parent: {parent_row['NAME'] if parent_row is not None else 'None'}")
-
-        # Determine active parent row safely
-        new_parent_row = None
-        if not tree_gdf.empty:
-            if name:
-                matches = tree_gdf[tree_gdf["NAME"].apply(normalname) == normalname(name)]
-                if not matches.empty:
-                    new_parent_row = matches.iloc[0]
-            if new_parent_row is None and len(tree_gdf) == 1:
-                new_parent_row = tree_gdf.iloc[0]
-            if new_parent_row is None and roid is not None:
-                distances = tree_gdf.geometry.apply(lambda g: g.distance(Point(roid[::-1])))
-                new_parent_row = tree_gdf.iloc[distances.idxmin()]
-
-        if new_parent_row is not None:
-            active_parents[level] = new_parent_row
-            print(f"[DEBUG] Active parent for level {level} set to {new_parent_row['NAME']}")
-        else:
-            print(f"[DEBUG] No active parent could be set at level {level}")
-
+        # Build the new path for the current layer
         if name:
             newpath = f"{newpath}/{name}" if newpath else name
-            print(f"[DEBUG] Layer {layer_type} loaded, newpath={newpath}, features={len(tree_gdf)}")
+            logging.debug(f"[LEVEL {level}] Layer {layer_type} loaded, newpath={newpath}")
 
+
+    logging.debug(f"Final newpath: {newpath}")
     return newpath
-
 
 
 
@@ -564,12 +582,12 @@ def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
 def has_treepoly(layer_type: str) -> bool:
     return layer_type in Treepolys and not Treepolys[layer_type].empty
 
-def check_level4_gap(treepolys: dict, rlevels: list) -> bool:
+def check_level4_gap(rlevels: list) -> bool:
     if len(rlevels) <= 4:
         return True
 
     level_type = rlevels[4]
-    gdf = treepolys.get(level_type)
+    gdf = Treepolys.get(level_type)
 
     if gdf is None:
         return True
@@ -701,6 +719,23 @@ LAYERS = [
 ]
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'gray',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
+
+branchcolours = {
+    "0":  "#e41a1c",  # red
+    "1":  "#377eb8",  # blue
+    "2":  "#4daf4a",  # green
+    "3":  "#984ea3",  # purple
+    "4":  "#ff7f00",  # orange
+    "5":  "#ffff33",  # yellow
+    "6":  "#a65628",  # brown
+    "7":  "#f781bf",  # pink
+    "8":  "#17becf",  # cyan
+    "9":  "#000000",  # black
+    "10": "#66c2a5",  # aqua
+    "11": "#fc8d62",  # coral
+    "12": "#8da0cb",  # lavender-blue
+}
+
 
 
 

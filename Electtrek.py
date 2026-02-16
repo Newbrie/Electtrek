@@ -663,7 +663,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
 
             territory_path = CElection['mapfiles'][-1] # this is the node at which the imported data is to be filtered through
-            Territory_node = current_node.ping_node(rlevels,current_election,territory_path)
+            Territory_node = current_node.ping_node(rlevels,current_election,territory_path, create=True)
             ttype = Territory_node.child_type(rlevels)
             #        Territory_node = self
             #        ttype = electtype
@@ -698,7 +698,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                             'ward'  # Default if no match found
                             )
                         tpath = territory_path +" "+ areatype
-                        Territory_node.ping_node(rlevels,current_election,tpath)
+                        Territory_node.ping_node(rlevels,current_election,tpath, create=True)
                         Area = get_L4area(Territory_node.childrenoftype(areatype),spot)
                     else:
                         Area = Territory_node.value
@@ -1070,11 +1070,12 @@ def reassign_parent():
 
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from enum import Enum
+    from state import Treepolys, Fullpolys
 
     print(">>> /reassign_parent called")
 
     # Restore persisted state
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     print("✔ Restored from persist")
 
     # Get current election and settings
@@ -1238,6 +1239,7 @@ def reassign_parent():
 
     mapfile = old_parent_node.mapfile(rlevels)
     print("✅ Reassignment complete")
+    persist(Treepolys, Fullpolys, allelectors)
     return jsonify({
         "status": "success",
         "message": f"Node '{subject_node.value}' reassigned",
@@ -1288,7 +1290,7 @@ def update_walk():
     global layeritems
 
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -1317,7 +1319,7 @@ def kanban():
 
 # campaign plan is only available to westminster elections at level 3 and others at level 4.
 # every election should acquire an election node(ping to its mapfile) to which this route should take you
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -1447,14 +1449,14 @@ def update_walk_kanban():
         return jsonify(success=False, error="Missing data"), 400
 
     # Restore context
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
 
     rlevels = CElection.resolved_levels
-    Territory_node = current_node.ping_node(rlevels,current_election,CElection['territory'])
+    Territory_node = current_node.ping_node(rlevels,current_election,CElection['territory'], create=True)
     mask = (
             (allelectors['Election'] == current_election) &
             (allelectors['WalkName'] == walk_name)
@@ -1477,7 +1479,7 @@ def update_walk_kanban():
 @app.route('/telling')
 @login_required
 def telling():
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -1531,7 +1533,7 @@ def leafletting():
 @login_required
 def check_enop(enop):
     global CElection
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -1594,7 +1596,7 @@ def search_walks(query):
 def update_location_tags():
     from nodes import allelectors
     global areaelectors
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -1653,7 +1655,7 @@ def update_location_tags():
 def location_search():
     from nodes import allelectors
     global areaelectors
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -1702,7 +1704,7 @@ def search_api():
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
     if len(allelectors) != 0:
-        restore_from_persist(Treepolys, Fullpolys, allelectors)
+        allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     query = request.args.get('q', '').strip()
     if not query:
@@ -1783,7 +1785,7 @@ def search():
 @app.route('/location')
 @login_required
 def location():
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -1838,7 +1840,7 @@ def get_backend_url():
 @login_required
 def add_tag():
     global CElection
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -2046,7 +2048,7 @@ def election_report():
                             territory_filename = territory_filename[:-len(suffix)]
 
                 # In your route handler
-                election_node = current_node.ping_node(rlevels,"DEMO",territory_path)
+                election_node = current_node.ping_node(rlevels,"DEMO",territory_path, create=True)
                 print(f"____election territory path:{territory_path} elect:{election_node.value}")
                 # Get full party name from the abbreviation
                 selected_party_key = election_node.party
@@ -2102,7 +2104,7 @@ def set_election():
         print("____Route/set-election/top ")
 
 #        clear_treepolys()  # 🔥 FULL RESET
-        restore_from_persist(Treepolys, Fullpolys, allelectors)
+        allelectors = restore_from_persist(Treepolys, Fullpolys)
         data = request.get_json(force=True)  # <-- ensure JSON parsing
         print(f"____Route/set-election/data {data} ")
 
@@ -2117,31 +2119,41 @@ def set_election():
             return jsonify(success=False, error="Election not found"), 404
 
         rlevels = CElection.resolved_levels
+        plevels = CElection.parent_levels
         territory = CElection['territory']
         here = (CElection.get('cidLong',None),CElection.get('cidLat',None))
-        current_node = get_last_node(current_election,CElection, create=True)
-        if not current_node:
-            return jsonify(success=False, error="No current node for election"), 500
-        mapfile = current_node.mapfile(rlevels)
-        CElection['previousParty'] = current_node.party
-        missing_layer = check_level4_gap(Treepolys,rlevels)
+        mapfile = CElection['mapfiles'][-1]
+
+        missing_layer = check_level4_gap(rlevels)
 
         if missing_layer:
             basepath = ensure_treepolys(
                 territory=territory,
                 sourcepath=mapfile,
                 resolved_levels=rlevels,
+                parent_levels= plevels,
                 here=here
             )
         # At the start of a fresh election:
-        print(f"____Route/set-election- Missing: {missing_layer} node: {current_node.value},Loaded election: {current_election} CE data: {CElection}")
+        print(f"____Route/set-election- Missing: {missing_layer} path: {mapfile},Loaded election: {current_election} CE data: {CElection}")
+
+
+        current_node = get_last_node(current_election,CElection, create=True)
+        print(f"____Route/set-election- last node: {current_node.value},Loaded election: {current_election}")
+        CElection['previousParty'] = current_node.party
+
+        if not current_node:
+            return jsonify(success=False, error="No current node for election"), 500
+
         current_node.endpoint_created(current_election, CElection, mapfile)
 
         options = resolve_ui_context(ProgramContext(),ElectionContext(CElection), current_node)
         constants = CElection
+        print(f"____Route/set-election- post resolve {current_node.value} Loaded election: {current_election} ")
 
-        CElection.visit_node(current_node)
-
+        if not CElection.visit_node(current_node):
+            flash("That node is outside of the election Territory")
+            print("That node is outside of the election Territory:")
         persist(Treepolys, Fullpolys, allelectors)
         print(f"____Route/set-election/results {constants}, options: {options}")
 
@@ -2164,7 +2176,7 @@ def get_current_election_data():
     from state import Treepolys, Fullpolys
     # received a call to return election data constants and options
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = request.args.get("election")
 
     CElection = CurrentElection.load(current_election)
@@ -2306,7 +2318,7 @@ def delete_election():
 # delete selected election if not DEMO, then select DEMO as next election
     global formdata
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     ELECTIONS = get_available_elections()
     data = request.get_json()
     election_to_delete = data.get("election")
@@ -2354,7 +2366,7 @@ def delete_election():
 def add_election():
 
     global CElection
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     # no have Current Election data loaded
     # Load existing elections
@@ -2455,7 +2467,7 @@ def update_territory():
 def validate_tags():
 
     global CElection
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -2501,7 +2513,7 @@ def index():
         print("__________Session Alive:"+ session['username'])
         formdata = {}
         streamrag = getstreamrag()
-        restore_from_persist(Treepolys, Fullpolys, allelectors)
+        allelectors = restore_from_persist(Treepolys, Fullpolys)
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
         current_node = get_last_node(current_election,CElection)
@@ -2515,7 +2527,7 @@ def index():
     #       Track used IDs across both existing and new entries
     #        places = build_place_lozenges(markerframe)
 
-    #        restore_from_persist(Treepolys, Fullpolys, allelectors)
+    #        allelectors = restore_from_persist(Treepolys, Fullpolys)
     #        current_node = get_current_node(session)
     #        CE = CurrentElection.get_lastused()
 
@@ -2668,7 +2680,7 @@ def dashboard():
     global formdata
     global CElection
     from nodes import TREK_NODES_BY_ID
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = "DEMO"
     CElection = CurrentElection.load(current_election)
@@ -2706,7 +2718,6 @@ def dashboard():
 @app.route('/downbut/<path:path>', methods=['GET','POST'])
 @login_required
 def downbut(path):
-    global formdata
     from state import Treepolys, Fullpolys
     from nodes import allelectors
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
@@ -2717,14 +2728,14 @@ def downbut(path):
 
     print("____Route/downbut:", path)
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(current_election,CElection)
+    current_node = get_last_node(current_election,CElection, create=True)
 
     rlevels = CElection.resolved_levels
-    formdata = {}
+
     mask = allelectors['Election'] == current_election
     areaelectors = allelectors[mask]
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
@@ -2733,7 +2744,7 @@ def downbut(path):
     previous_node = current_node
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
     mapfile = current_node.mapfile(rlevels)
     base = Path(config.workdirectories['workdir'])  # or wherever files live
     fullpath = base / mapfile
@@ -2743,7 +2754,11 @@ def downbut(path):
             abort(404, f" Route/downbut File not found: {fullpath}")
         print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
 
+    if not CElection.visit_node(current_node):
+        flash("That node is outside of the election Territory")
+        print("That node is outside of the election Territory:")
     persist(Treepolys, Fullpolys, allelectors)
+
     print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
     return send_file(fullpath, as_attachment=False)
 
@@ -2765,7 +2780,7 @@ def transfer(path):
     global formdata
     global CElection
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -2775,7 +2790,7 @@ def transfer(path):
 # transfering to another any other node with siblings listed below
     previous_node = current_node
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
     CElection = CurrentElection.load(current_election)
     current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels))
 
@@ -2798,7 +2813,7 @@ def downPDbut(path):
     global constants
 
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -2806,7 +2821,7 @@ def downPDbut(path):
     previous_node = current_node
 
     rlevels = CElection.resolved_levels
-    current_node = previous_node.ping_node(rlevels,current_election,path) #aligns with election data and takes you to the clicked node
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True) #aligns with election data and takes you to the clicked node
     session['current_node_id'] = current_node.nid
 #    current_node.file = subending(current_node.file,"-PDS.html") # forces looking for PDs file
 
@@ -2861,7 +2876,7 @@ def downWKbut(path):
 
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -2871,7 +2886,7 @@ def downWKbut(path):
 
     rlevels = CElection.resolved_levels
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
 #    current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
@@ -2927,7 +2942,7 @@ def downMWbut(path):
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -2937,7 +2952,7 @@ def downMWbut(path):
 
     previous_node = current_node
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
 #    current_node.file = subending(current_node.file,"-WALKS.html")
  # the node which binds the election data
@@ -2994,7 +3009,7 @@ def STupdate(path):
     global layeritems
     global CElection
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -3010,7 +3025,7 @@ def STupdate(path):
 
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
-    current_node = current_node.ping_node(rlevels,current_election,path)
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True)
     session['current_node_id'] = current_node.nid
     print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
@@ -3149,7 +3164,7 @@ def PDdownST(path):
     global constants
 
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3157,7 +3172,7 @@ def PDdownST(path):
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(rlevels,current_election,path)
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True)
 
     PD_node = current_node
 
@@ -3213,7 +3228,7 @@ def LGdownST(path):
     global layeritems
     global CElection
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -3225,7 +3240,7 @@ def LGdownST(path):
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(rlevels,current_election,path)
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True)
 
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
@@ -3272,7 +3287,7 @@ def WKdownST(path):
     global layeritems
     global constants
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3284,7 +3299,7 @@ def WKdownST(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(rlevels,current_election,path) # takes to the clicked node in the territory
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True) # takes to the clicked node in the territory
     session['current_node_id'] = current_node.nid
 
 
@@ -3333,7 +3348,7 @@ def wardreport(path):
     global formdata
     global CElection
 # use ping to populate the next 2 levels of nodes with which to repaint the screen with boundaries and markers
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3376,8 +3391,9 @@ def wardreport(path):
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
+    from state import Treepolys, Fullpolys
     # Load current election if not provided
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
@@ -3514,7 +3530,7 @@ def divreport(path):
     global formdata
     global CElection
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3567,7 +3583,7 @@ def upbut(path):
     global constants
 
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3587,7 +3603,7 @@ def upbut(path):
 # for PDs the up button should take you to the -PDS file, for walks the -WALKS file
 #
     previous_node = current_node
-    current_node = previous_node.parent.ping_node(rlevels,current_election,path)
+    current_node = previous_node.parent.ping_node(rlevels,current_election,path, create=True)
     mapfile = current_node.mapfile(rlevels)
     base = Path(config.workdirectories['workdir'])  # or wherever files live
     fullpath = base / mapfile
@@ -3630,7 +3646,7 @@ def register():
     username = request.form['username']
     password = request.form['password']
     print("Register", username)
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3660,7 +3676,7 @@ def register():
 def calendar_partial(path):
     global places, resources, constants
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3671,7 +3687,7 @@ def calendar_partial(path):
     # Track used IDs across both existing and new entries
 #        places = build_place_lozenges(markerframe)
 
-#        restore_from_persist(Treepolys, Fullpolys, allelectors)
+#        allelectors = restore_from_persist(Treepolys, Fullpolys)
 #        current_node = get_current_node(session)
 #        CE = CurrentElection.get_lastused()
 
@@ -3730,7 +3746,7 @@ def thru(path):
 @login_required
 def showmore(path):
 # is not moving nodes but just changing from wards to div or walks to PD render
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3779,13 +3795,18 @@ def filelist():
 
     flash('_______ROUTE/filelist',filetype)
     print('_______ROUTE/filelist',filetype)
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
     if filetype == "maps":
         return jsonify({"message": "Success", "file": url_for('thru', path=mapfile)})
 
+@app.route("/set_accumulate", methods=["POST"])
+def set_accumulate():
+    data = request.get_json()
+    session["accumulate"] = bool(data.get("value", False))
+    return {"status": "ok", "accumulate": session["accumulate"]}
 
 
 from flask import jsonify, render_template
@@ -3858,7 +3879,7 @@ def walks():
 
 
     global environment
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -3890,7 +3911,7 @@ def postcode():
 
     from state import Treepolys, Fullpolys
     global CElection
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -4033,10 +4054,11 @@ def firstpage():
     if not current_user.is_authenticated:
         return redirect(url_for('login'))
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
+    plevels = CElection.parent_levels
     mapfile = CElection['mapfiles'][-1]
     territory = CElection['territory']
     here = (CElection.get('cidLong',None),CElection.get('cidLat',None))
@@ -4048,6 +4070,7 @@ def firstpage():
         territory=territory,
         sourcepath=mapfile,
         resolved_levels=rlevels,
+        parent_levels=plevels,
         here=here
     )
 
@@ -4217,7 +4240,7 @@ def normalise():
     # Save request/form/session to avoid issues inside thread
     request_form = request.form.to_dict(flat=True)
     request_files = request.files.to_dict(flat=False)  # Getlist-style access
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
@@ -4363,7 +4386,7 @@ def stream_input():
     from nodes import allelectors
     global stream_table
 
-    restore_from_persist(Treepolys, Fullpolys, allelectors)
+    allelectors = restore_from_persist(Treepolys, Fullpolys)
 
     DQstats = pd.DataFrame()
 

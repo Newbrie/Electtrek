@@ -6,6 +6,29 @@ from config import ELECTIONS_FILE, BASE_FILE, TABLE_FILE, RESOURCE_FILE
 import config
 import state
 import re
+from shapely.geometry import Point
+import logging
+
+
+def stepify(path):
+    if not path:
+        return []
+
+    route = (
+        path.replace('/WALKS/', '/')
+            .replace('/PDS/', '/')
+            .replace('/WARDS/', '/')
+            .replace('/DIVS/', '/')
+    )
+    parts = route.split("/")
+    last = parts.pop()
+
+    if "-PRINT.html" in last:
+        leaf = subending(last, "").split("--").pop()
+        parts.append(leaf)
+
+    print("____LEAFNODE:", path, parts)
+    return parts
 
 
 def route():
@@ -151,21 +174,38 @@ class CurrentElection(dict):
         self.name = election_id  # stable election identity
 
     def visit_node(self, node):
+        from state import Treepolys, Fullpolys
         rlevels = self.resolved_levels
-        self['cid'] = node.nid
-        self['cidLat'] = node.latlongroid[0]
-        self['cidLong'] = node.latlongroid[1]
-        self['mapfiles'] = capped_append(self['mapfiles'], node.mapfile(rlevels))
-        self.save()
+        # first check that the node is within the election territory
+        territory = self.territory
+        steps = stepify(territory)
+        level = len(steps) - 1
+        parent_row = Treepolys[rlevels[level]]
 
-        print(
-            f"___under {self.name} visited mapfile: "
-            f"{self['mapfiles'][-1]}"
-        )
+        # ----- LOOKUP BY LAT/LON ---------------------------------------
+        latitude = node.latlongroid[0]
+        longitude = node.latlongroid[1]
+        point = Point(longitude, latitude)  # (lon, lat)
+        matched = parent_row[parent_row.contains(point)]
 
-        print("=== VISIT NODE ===", node.mapfile(rlevels))
-        print("visited node children:", [c.value for c in node.children])
+        # ----- SAVE IF MATCHED ---------------------------------------------
+#        if not matched.empty:
+        if True:
+            self['cid'] = node.nid
+            self['cidLat'] = node.latlongroid[0]
+            self['cidLong'] = node.latlongroid[1]
+            self['mapfiles'] = capped_append(self['mapfiles'], node.mapfile(rlevels))
+            self.save()
+            print(f"=== VISIT NODE === {node.nid}")
+            print(f"current children:{[c.value for c in node.children]}")
+            print(
+                f"___under {self.name} leaving breadcrumb: "
+                f"{self['mapfiles'][-1]}"
+            )
+        else:
+            return None
 
+        return node.children
 
     def resolve_ui_options(program, election_ctx, node):
         options = {}
@@ -234,6 +274,25 @@ class CurrentElection(dict):
             self._resolved_levels = resolved
 
         return self._resolved_levels
+
+    @property
+    def parent_levels(self) -> dict[int, str]:
+        """
+        Derive parent filtering levels from the resolved levels.
+        """
+        parent_levels: dict[int, str] = {}
+        territory_level = len(stepify(self.territory)) - 1 if self.territory else -1
+        logging.debug(f"[DEBUG] territory_level: {territory_level}")
+
+        rlevels = self._resolved_levels
+        for level, layer_type in rlevels.items():
+            parent_level = max(0, min(level - 1, territory_level)) # clamp parent level using territory level
+            parent_levels[level] = rlevels[parent_level]
+
+            logging.debug(f"[DEBUG] level: {level}, layer_type: {layer_type}, parent_level: {parent_level}, parent_layer_type: {rlevels[parent_level]}")
+
+        self._parent_levels = parent_levels
+        return self._parent_levels
 
 
 
@@ -327,7 +386,6 @@ class CurrentElection(dict):
 
         print("Saving resources:", self.get("resources"))
         print("Resource count:", len(self.get("resources", {})))
-
         try:
             print(f"____Under route {route()} Saving Election File: {self.election_id} → {path}")
             with open(path, "w", encoding="utf-8") as f:

@@ -1,4 +1,4 @@
-from config import workdirectories, ELECTOR_FILE, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
+from config import workdirectories, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
 import os
 import state
 import layers
@@ -9,12 +9,13 @@ import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context
 from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-from elections import route, CurrentElection, capped_append
+from elections import route, CurrentElection, capped_append, stepify
 from folium import Map, Element
 import folium
 import uuid
 from pathlib import Path
 from datetime import datetime
+from state import branchcolours
 
 
 
@@ -89,7 +90,7 @@ def save_nodes(path):
 def load_nodes(path):
     global TREK_NODES_BY_ID
 
-    if not os.path.exists(path) or os.path.getsize(path) == 0:
+    if not path.exists() or path.stat().st_size == 0:
         print(f"[WARN] Node file missing or empty: {path}")
         return False
 
@@ -378,9 +379,9 @@ def get_counters(session=None, session_data=None):
         node = None
         print("⚠️ gtagno_counters not found in session or session_data:so counters = ",{} )
 
-    if counters == {}:
-        for etype in Treepolys.keys():
-            counters[etype] = 0
+    if not counters:
+        counters = {etype: 0 for etype in Treepolys.keys()}
+
     return counters
 
 
@@ -441,11 +442,9 @@ def safe_pickle_load(path, default):
 
 
 
-def restore_from_persist(treepolys, fullpolys, electors):
-    if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
-        print('_______no elector data so creating blank', ELECTOR_FILE)
-        electors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
-    else:
+def restore_from_persist(treepolys, fullpolys):
+    print(f'____Restore from persist under !{route()} called to restore allelectors, nodes and polys! ')
+    if ELECTOR_FILE.exists():
         print('_______allelectors file exists so reading in ', ELECTOR_FILE)
         electors = pd.read_csv(
             ELECTOR_FILE,
@@ -459,14 +458,13 @@ def restore_from_persist(treepolys, fullpolys, electors):
 
     safe_pickle_load(FULLPOLY_FILE,fullpolys)
 
-    if  os.path.exists(TREKNODE_FILE) and os.path.getsize(TREKNODE_FILE) > 0:
-        load_nodes(TREKNODE_FILE)
+    load_nodes(TREKNODE_FILE)
 
     print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
-    return
+    return electors
 
 def persist(treepolys, fullpolys, electors):
-    print('___persisting pickle ', TREEPOLY_FILE)
+    print(f'___persisting pickle under !{route()}', TREEPOLY_FILE)
     atomic_pickle_dump(treepolys,TREEPOLY_FILE)
     print('___persisting pickle ', FULLPOLY_FILE)
     atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
@@ -576,27 +574,21 @@ def get_last_node(current_election, CE, *, create=True):
     print(f"___ {create}__ Last node under {route()} for {current_election} sourcepath: {sourcepath} create:{create}")
 
     # --- 3. Resolve node from path ---
-    if create and sourcepath:
-        try:
-            last_node = MapRoot.ping_node(
+    last_node = MapRoot.ping_node(
                 CE.resolved_levels,
                 current_election,
-                sourcepath
+                sourcepath,
+                create=create
             )
-        except Exception as e:
-            print(f"⚠️ ping_node failed: {e}")
-            last_node = None
-    else:
-        # If create is False, skip ping_node entirely
-        last_node = None
 
     # --- 4. Fallback to root ---
     if not last_node:
-        print(f"⚠️ @FALLING BACK TO ROOT NODE cid:{cid}- sp:{sourcepath}")
+        print(f"⚠️ GAP: {cid in TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
+        print(f"⚠️ @NODE INDEX DUMP:{TREK_NODES_BY_ID} ")
         last_node = MapRoot
 
     print(
-        f"___ GET LAST DESTINATION - election: {current_election} "
+        f"___ RETRIEVED LAST DESTINATION - election: {current_election} "
         f"NODE {last_node.value} at loc: {here} "
         f"using source: {sourcepath}"
     )
@@ -669,16 +661,19 @@ def find_node_by_location(here):
 
 
 class TreeNode:
+    from datetime import datetime
     def __init__(self, *, value, fid, roid, origin, node_type):
         self.nid = str(uuid.uuid1())
         self.value = normalname(str(value))
         self.fid = fid
         self.latlongroid = roid
         self._child_index = {}
-        self.last_modified = None  # <-- add this
+        self.last_modified = datetime.now()
+
 
         self.origin = origin
         self.election = origin
+
 
         self.type = node_type
 
@@ -693,6 +688,7 @@ class TreeNode:
         self.houses = 0
         self.target = 1
         self.party = "O"
+        self.defcol = "gray"
 
         # UI
         self.tagno = 1
@@ -902,47 +898,6 @@ class TreeNode:
         return f"{self.value}{suffix}"
 
 
-    def render_face(self, c_elect,CurrEL, new):
-    #  create the node html (if it doesnt already exist) and render it.
-        from flask import send_file, abort
-        from pathlib import Path
-        # Access the first key from the dictionary
-        print(f"___under {route()} for {c_elect} visiting mapfile:")
-        CurrEL2 = CurrEL
-        CurrEL2['cid'] = self.nid
-        CurrEL2['cidLat'] = self.latlongroid[0]
-        CurrEL2['cidLong'] = self.latlongroid[1]
-        CurrEL2['mapfiles'] = capped_append(CurrEL['mapfiles'])
-        CurrEL2.save()
-
-        session['current_election'] = c_elect
-        session['current_node_id'] = self.nid
-        print(f"___under {c_elect} visiting from {CurrEL['mapfiles'][-1]} to mapfile: {CurrEL2['mapfiles'][-1]}")
-        print("=== VISIT NODE ===", self.mapfile(rlevels))
-        print("current children:",
-              [c.value for c in self.children])
-
-        mapfile = self.mapfile(rlevels)
-#        atype = gettypeoflevel(estyle,mapfile, self.level+1)
-        next_level = self.level + 1
-        if next_level > max(CurrEL2.resolved_levels):
-            return None
-        atype = CurrEL2.resolved_levels[next_level]
-
-
-        fullpath = Path(workdirectories['workdir']) / mapfile
-
-        # Check if the file exists
-        if not fullpath.exists() or (new and CurrEL['cid'] != self.nid):
-            print(f"⚙️ [DEBUG] Map file does not exist or needs new creation: {fullpath}")
-            next_level = self.level + 1
-            atype = CurrEL.resolved_levels[next_level]
-            print("___map Typemaker:", atype, state.TypeMaker[atype])
-            return redirect(url_for(state.TypeMaker[atype], path=mapfile))
-
-        # If the file exists, send it
-        print("___map Exists:", fullpath)
-        return send_file(fullpath, as_attachment=False)
 
     def endpoint_created(self, c_elect, CurrEL, newpath):
         """
@@ -959,8 +914,8 @@ class TreeNode:
         rlevels = CurrEL.resolved_levels
         next_level = self.level + 1
 
-        print(f"___under {route()} for {c_elect} visiting newpath:", self.mapfile(rlevels))
-        print("current children:", [c.value for c in self.children])
+        print(f"___under {route()} for {c_elect} testing endpoint:", self.mapfile(rlevels))
+        print("endpoint children:", [c.value for c in self.children])
 
         if next_level > max(rlevels, default=0):
             return False  # No further levels to process
@@ -1018,6 +973,7 @@ class TreeNode:
             new_parent.children.append(self)
         self.parent = new_parent
         new_parent.last_modified = datetime.utcnow()
+        save_nodes(TREKNODE_FILE)
 
 
 
@@ -1170,8 +1126,9 @@ class TreeNode:
 
 
 
-    def ping_node(self, rlevels, c_election, dest_path):
+    def ping_node(self, rlevels, c_election, dest_path, create=True):
         from state import LEVEL_ZOOM_MAP
+        from flask import session
         from elections import route
 
         def strip_leaf_from_path(path):
@@ -1213,7 +1170,6 @@ class TreeNode:
         self_path = split_clean_path(self.mapfile(rlevels))
         dest_parts = split_clean_path(path_str)
 
-
         print(f"🪜 [DEBUG] self_path: {self_path}")
         print(f"🪜 [DEBUG] dest_parts: {dest_parts}")
 
@@ -1252,7 +1208,7 @@ class TreeNode:
 
             matches = [c for c in node.children if c.value == part]
 
-            if not matches:
+            if not matches and create:
                 print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
                 try:
                     if next_level <= 4:
@@ -1301,11 +1257,27 @@ class TreeNode:
             except Exception as e:
                 print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
 
+        accumulate = session.get("accumulate", False)
+
+        if accumulate:
+
+            lst = session.get("accumulated_nodes", [])
+
+            if node.nid not in lst:
+                lst.append(node.nid)
+
+            session["accumulated_nodes"] = lst
+
+        else:
+            # Idempotent mode → reset list
+            session["accumulated_nodes"] = [node.nid]
+
         return node
 
 
     def getselectedlayers(self, rlevels, this_election, path):
         from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
+        from flask import session
         # rlevels[self.level-1] = child type
         # rlevels[self.level] = sibling type
         # rlevels[self.parent.level] = parent type
@@ -1314,20 +1286,33 @@ class TreeNode:
 
         childtype = self.child_type(rlevels)
 
+        accumulate = session.get("accumulate", False)
+
         if self.level < 7:
+            # Determine nodes to render
+            if accumulate:
+                node_ids = session.get("accumulated_nodes", [])
+                nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
+            else:
+                nodelist = [self]  # single node
+
+            # Get the child layer
             child_layer = layers[childtype]
-            child_layer.create_layer(this_election, self, childtype)
+
+            # Pass the list of nodes to create_layer
+            child_layer.create_layer(this_election, nodelist, childtype)
+
             child_layer.show = True
             selected.append(child_layer)
 
         if self.level > 0:
             sibling_layer = layers[self.type]
-            sibling_layer.create_layer(this_election, self.parent, self.type)
+            sibling_layer.create_layer(this_election, [self.parent], self.type)
             selected.append(sibling_layer)
 
         if self.level > 1:
             parent_layer = layers[self.parent.type]
-            parent_layer.create_layer(this_election, self.parent.parent, self.parent.type)
+            parent_layer.create_layer(this_election, [self.parent.parent], self.parent.type)
             selected.append(parent_layer)
 
         marker_layer = layers["marker"]
@@ -1566,9 +1551,9 @@ class TreeNode:
                 datafid = abs(hash(newname))
                 newnode = TreeNode(value=newname,fid=datafid, roid=(limb['Lat'],limb['Long']),origin=elect, node_type=nodetype )
                 egg = self.add_Tchild(child_node=newnode,etype=nodetype, elect=elect,counters=counters)
-                [egg.bbox, centroid] = egg.get_bounding_box(nodetype,block)
-                egg.col = zonecolour.get(limb['Zone'],'black')
-                print(f"🎨 Assigned color '{egg.col}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
+                [egg.bbox, egg.latlongroid] = egg.get_bounding_box(nodetype,block)
+                egg.defcol = zonecolour.get(limb['Zone'],'black')
+                print(f"🎨 Assigned color '{egg.defcol}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
 
                 egg.updateTurnout(resolved_levels)
                 egg.updateElectorate(resolved_levels)
@@ -1792,9 +1777,9 @@ class TreeNode:
 
                     # Add as child and calculate bbox
                     egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election, counters=counters)
-                    egg.bbox, centroid = egg.get_bounding_box(electtype, block)
+                    egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
                     print(f"________bbox [{egg.bbox}] - child of type {electtype} at lev {self.level+1} of {self.value}")
-
+                    egg.defcol = branchcolours.get(str(i))
                     # Update the node with latest stats
                     fam_nodes.append(egg)
                     try:
@@ -2130,7 +2115,7 @@ class TreeNode:
         # Add all layers
         for layer in flayers:
             layer.add_to(FolMap)
-            print(f"layer name: {layer.name} size:{len(layer._children)}")
+            print(f"create map layer name: {layer.name} size:{len(layer._children)}")
 
 
 

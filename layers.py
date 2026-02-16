@@ -5,8 +5,7 @@ from folium.plugins import MarkerCluster
 from folium import GeoJson, Tooltip, Popup
 import folium
 from datetime import datetime, timedelta, date
-
-from elections import route, CurrentElection
+from elections import route, CurrentElection, stepify
 import json
 import os
 import html
@@ -246,25 +245,10 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.id = None
         self.areashtml = {}
 
-
-    def create_layer(self, c_election, node, intention_type, static=False):
-        """
-        Create all features for a node in a single election.
-        This layer instance MUST be map-local.
-        """
+    def _render_single_node(self, c_election, node, intention_type, static):
 
         CElection = CurrentElection.load(c_election)
         rlevels = CElection.resolved_levels
-
-        # 🔒 Safety: ensure this is a fresh, map-local layer
-        self._children = {}
-
-        self.id = node.nid
-
-        print(
-            f"__Layer build: name={self.name} "
-            f"value={node.value} type={intention_type}"
-        )
 
         if intention_type == "marker":
             self.add_genmarkers(CElection, rlevels, node, "marker", static)
@@ -280,7 +264,19 @@ class ExtendedFeatureGroup(FeatureGroup):
         else:
             self.add_nodemaps(c_election, rlevels, node, intention_type, static)
 
+
+    def create_layer(self, c_election, nodelist, intention_type, static=False):
+
+        print("Layer memory id:", id(self))
+
+        self._children.clear()
+
+        for n in nodelist:
+            self._render_single_node(c_election, n, intention_type, static)
+
         return len(self._children)
+
+
 
     def reset(self):
         # This clears internal children before rendering
@@ -948,9 +944,13 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_nodemaps (self,c_election,rlevels, herenode,type,static):
         from state import Treepolys, Fullpolys
+        from nodes import get_counters
+        from flask import session
         global levelcolours
         global Con_Results_data
         global OPTIONS
+
+        counters = get_counters(session=session)
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
@@ -978,7 +978,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"______Add_Nodemap Treepolys type:{type} size:{len(pfile)}")
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
-                limbX["col"] = to_hex(c.col)
+                limbX["col"] = to_hex(herenode.defcol)
                 print(
                     f"⚠️ Boundary rows for node {c.value} (FID={c.fid}): {len(limbX)}"
                 )
@@ -1057,9 +1057,13 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
                     party = "("+c.party+")"
-                    if not CElection['accumulate']:
+
+                    accumulate = session.get("accumulate", False)
+                    if not accumulate:
                         num = str(c.tagno)
                     else:
+                        counters[type] += 1
+                        c.gtagno = counters[type]
                         num = str(c.gtagno)
 
                     tag = str(c.value)
@@ -1081,20 +1085,18 @@ class ExtendedFeatureGroup(FeatureGroup):
                         # Always return a DARK tone for consistency
                         return "#111111" if luminance > threshold else "#000000"
 
-                    tcol = readable_text_color(to_hex(c.col))
+                    tcol = readable_text_color(to_hex(herenode.defcol))
                     fcol = tcol   # unified foreground
-                    bcol = adjust_boundary_color(to_hex(c.col), 0.7)
+                    bcol = adjust_boundary_color(to_hex(herenode.defcol), 0.7)
                     print("_____ColourY", limbX['col'])
-                    poly_col = to_hex(c.col)
+                    poly_col = to_hex(herenode.defcol)
 
 
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
-                            "fillColor": tcol,
-                            "color": adjust_boundary_color(
-                                tcol, 0.7
-                            ),
+                            "fillColor": poly_col,
+                            "color": adjust_boundary_color(tcol, 0.7),
                             "weight": 3,
                             "opacity": 1.0,      # 🔑 stroke opacity
                             "fillOpacity": 0.2,
