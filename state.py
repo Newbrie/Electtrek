@@ -638,7 +638,7 @@ STATICSWITCH = False
 TABLE_TYPES  = {
     "resources": "Resources",
     "events": "Event Markers",
-    "report_data": "Report Data",
+    "DQstats": "Import Data Quality",
     "stream_table": "Import Data Streams",
     "nodelist_xref" : "Nodelist xref",
     "country_layer" : "Countries",

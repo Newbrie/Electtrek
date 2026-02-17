@@ -873,15 +873,15 @@ def fetch_table(rlevels,table_name, current_node):
     `create_node` determines whether to recreate path nodes if last node not found.
     """
     # Local helpers for standard tables
-    global report_data, resources, places, stream_table  # these may live in global state
+    from state import DQstats
 
     def get_resources_table():
         return pd.DataFrame(resources)
 
     def get_report_table():
         try:
-            if report_data:
-                return pd.DataFrame(report_data)
+            if DQstats:
+                return pd.DataFrame(DQstats)
         except:
             pass
         return pd.DataFrame(report_data or [])
@@ -904,7 +904,7 @@ def fetch_table(rlevels,table_name, current_node):
     print(f"____retrieving table: {table_name} for node: {current_node.value}")
     # Mapping table names to functions
     table_map = {
-        "report_data": get_report_table,
+        "DQstats": get_report_table,
         "resources": get_resources_table,
         "places": get_places_table,
         "stream_table": get_stream_table
@@ -3356,7 +3356,7 @@ def wardreport(path):
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
-    from state import Treepolys, Fullpolys
+    from state import Treepolys, Fullpolys, DQstats
     # Load current election if not provided
     allelectors = restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()

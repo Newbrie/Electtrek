@@ -572,7 +572,8 @@ document.addEventListener('DOMContentLoaded', function () {
               console.log("Normalization is complete. Injecting DQstats HTML if available.");
               text.innerText = "✅ Complete";
               console.log("DQstats_html from server:", data.dqstats_html);
-              window.parent.fetchtable('DQstats');
+
+              window.parent.fetchTableData('DQstats');
 
               if (data.dqstats_html) {
                 const tbody = document.querySelector("#DQ-table tbody");
