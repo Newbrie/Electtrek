@@ -252,15 +252,29 @@
   }
 
 
-  const modal = document.getElementById("modalPopup");
-
-  // Bootstrap tries to close the modal → we intercept it
-  modal.addEventListener("hide.bs.modal", function (e) {
-      if (preventModalClose) {
-          console.warn("⛔ Prevented modal from closing — add-place mode active");
-          e.preventDefault();
+  function attachModalListener() {
+      const modal = document.getElementById("modalPopup");
+      if (!modal) {
+          // Try again in 50ms until it exists
+          setTimeout(attachModalListener, 50);
+          return;
       }
-  });
+
+      // Only attach once
+      if (!modal.dataset.listenerAttached) {
+          modal.addEventListener("hide.bs.modal", function (e) {
+              if (preventModalClose) {
+                  console.warn("⛔ Prevented modal from closing — add-place mode active");
+                  e.preventDefault();
+              }
+          });
+          modal.dataset.listenerAttached = "true";
+      }
+  }
+
+  // Call this once after map or modal generation
+  attachModalListener();
+
 
   /* ---------------------------------------------------------
    * CALENDAR <-> MAP TOGGLE
