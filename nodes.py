@@ -1280,6 +1280,7 @@ class TreeNode:
 
             session["accumulated_nodes"] = lst
 
+
         else:
             # Idempotent mode → reset list
             session["accumulated_nodes"] = [node.nid]
@@ -1299,12 +1300,14 @@ class TreeNode:
         childtype = self.child_type(rlevels)
 
         accumulate = session.get("accumulate", False)
-
+        print(f"___ACCUMULATE IN SESSION: {accumulate}")
         if self.level < 7:
             # Determine nodes to render
             if accumulate:
                 node_ids = session.get("accumulated_nodes", [])
-                print(f" Accumulated session stored ids{node_ids}")
+                print("Accumulate SESSION IDS:", node_ids)
+                print("Accumulate TREK KEYS:", list(TREK_NODES_BY_ID.keys()))
+
                 nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
                 for n in nodelist:
                     print("ACC NODE:", n.value, "DEF:", n.defcol, "ID:", id(n))
@@ -2613,6 +2616,7 @@ class TreeNode:
             f"child {child_node.nid}-{child_node.value}"
         )
 
+        save_nodes(TREKNODE_FILE)
         return child_node
 
 

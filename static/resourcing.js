@@ -24,45 +24,6 @@
   }
 
 
-  document.getElementById("export-html-btn").addEventListener("click", async () => {
-    await saveCalendarPlan();
-    const btn = document.getElementById("export-html-btn");
-    btn.disabled = true;
-    btn.textContent = "🔄 Exporting...";
-
-    try {
-      // Create a standalone HTML document
-
-      const htmlContent = createStandaloneHTML();
-
-      // Create a Blob and FormData to send as 'file'
-      const blob = new Blob([htmlContent], { type: "text/html" });
-      const formData = new FormData();
-      formData.append("file", blob, "calendar.html");
-
-      // Upload to development backend
-      const response = await fetch("/api/upload-and-protect", {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || "Upload failed");
-      }
-
-      btn.textContent = "✅ Exported & Protected";
-    } catch (err) {
-      console.error("Export failed:", err);
-      btn.textContent = "❌ Failed";
-    } finally {
-      setTimeout(() => {
-        btn.textContent = "🔐 Export Protected HTML";
-        btn.disabled = false;
-      }, 1500);
-    }
-  });
 
   // Format hours nicely
   function formatHour(hour) {
