@@ -1,154 +1,110 @@
-{% extends "base.html" %}
 {% block map %}
 
 <!-- Editable File Information Table -->
 <h4 style="text-align: center">Electoral registers, changes and postal voter files</h4>
 <h4 style="text-align: center">(Select fix level 3 to upload)</h4>
-<button id="add-row-btn">Add Row</button>
-<button id="save-btn">Save</button>
 
-<table id="stream-table" border="1">
-  <thead>
-    <tr>
-      <th>Order</th>
-      <th>Election</th>
-      <th>Territory</th>
-      <th>Filename</th>
-      <th>Type</th>
-      <th>Purpose</th>
-      <th>Fixlevel</th>
-      <th>Active</th>
-      <th>Live</th>
-      <th>Delete</th>
-    </tr>
-  </thead>
-  <tbody id="file-info-tbody">
-    {% for row in stream_table %}
-    <tr>
-      <td>
-        <input type="number" class="editable order" value="{{ row['order'] }}" style="width: 60px;">
-      </td>
-      <td>
-        <select class="editable election" data-initial="{{ row['election'] }}" data-territory="{{ row['territory'] }}"></select>
-      </td>
-      <td>
-        <input type="text" class="right-cropped territory" value="{{ row['territory'] }}" data-full-territory="{{ row['territory'] }}" readonly>
-      </td>
-      <td>
-        <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 300px;">
-        <input type="hidden" class="file-path" value="{{ row['file_path'] }}">
-        <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
-        <button type="button" class="file-btn">📂</button>
-      </td>
-      <td>
-        <select class="editable type" style="width: 60px;">
+<div style="margin-bottom: 10px;">
+  <button id="add-row-btn">Add Row</button>
+  <button id="save-btn">Save</button>
+</div>
+
+<div style="overflow-x: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 20px;">
+  <table id="stream-table" border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">
+    <thead>
+      <tr>
+        <th style="width: 50px;">Order</th>
+        <th style="width: 120px;">Election</th>
+        <th style="width: 120px;">Territory</th>
+        <th style="width: 200px;">Filename</th>
+        <th style="width: 60px;">Type</th>
+        <th style="width: 60px;">Purpose</th>
+        <th style="width: 60px;">Fixlevel</th>
+        <th style="width: 50px;">Active</th>
+        <th style="width: 50px;">Live</th>
+        <th style="width: 60px;">Delete</th>
+      </tr>
+    </thead>
+    <tbody id="file-info-tbody">
+      {% for row in stream_table %}
+      <tr>
+        <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 90%;"></td>
+        <td><select class="editable election" data-initial="{{ row['election'] }}" data-territory="{{ row['territory'] }}" style="width: 90%;"></select></td>
+        <td><input type="text" class="right-cropped territory" value="{{ row['territory'] }}" data-full-territory="{{ row['territory'] }}" readonly style="width: 90%;"></td>
+        <td>
+          <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 100%; max-width: 180px;">
+          <input type="hidden" class="file-path" value="{{ row['file_path'] }}">
+          <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
+          <button type="button" class="file-btn">📂</button>
+        </td>
+        <td><select class="editable type" style="width: 100%; max-width: 60px;">
           <option value="csv" {% if row['type'] == 'csv' %}selected{% endif %}>csv</option>
           <option value="xlsx" {% if row['type'] == 'xlsx' %}selected{% endif %}>xlsx</option>
           <option value="json" {% if row['type'] == 'json' %}selected{% endif %}>json</option>
-        </select>
-      </td>
-      <td>
-        <select class="editable purpose" style="width: 60px;">
+        </select></td>
+        <td><select class="editable purpose" style="width: 100%; max-width: 60px;">
           <option value="main" {% if row['purpose'] == 'main' %}selected{% endif %}>main</option>
           <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
           <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
           <option value="mark" {% if row['purpose'] == 'mark' %}selected{% endif %}>mark</option>
           <option value="resource" {% if row['purpose'] == 'resource' %}selected{% endif %}>resource</option>
-        </select>
-      </td>
-      <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 60px;"></td>
-      <td><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked{% endif %}></td>
-      <td><input type="checkbox" class="editable live" {% if row['live'] and row['live'].strip() != '' %}checked{% endif %}></td>
-      <td><button class="delete-btn">Delete</button></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+        </select></td>
+        <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 90%;"></td>
+        <td style="text-align:center;"><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked{% endif %}></td>
+        <td style="text-align:center;"><input type="checkbox" class="editable live" {% if row['live'] and row['live'].strip() != '' %}checked{% endif %}></td>
+        <td style="text-align:center;"><button class="delete-btn">Delete</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
 <!-- DATA QUALITY DASHBOARD -->
-<div id="streams" class="section">
+<div id="streams" class="section" style="margin-bottom: 20px;">
   <h3 class="centred">DATA QUALITY DASHBOARD</h3>
-  <table id="streamtab">
-    <thead>
-      <tr>
-        <th>Election</th>
-        <th>Alive</th>
-        <th>Files</th>
-        <th>Elect</th>
-        <th>RAG</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for key, value in streamrag.items() %}
-      <tr>
-        <td>{{ key }}</td>
-        <td>{{ value['Alive'] }}</td>
-        <td>{{ value['Files'] }}</td>
-        <td>{{ value['Elect'] }}</td>
-        <td>{{ value['RAG'] }}</td>
-        <td><button onclick="deactivateElection('{{ key }}')">Deactivate</button></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
 
-<!-- Import Table -->
-<div id="importTable" class="section">
-  <div id="DQ-controls" style="margin-bottom: 10px;">
-    <button id="process-btn">LOAD ELECTION</button>
-    <button id="reset-btn">RESET</button>
-    <div id="progress-container" style="margin-top: 20px; display: none;">
-      <label for="progress-bar">Normalization Progress:</label>
-      <progress id="progress-bar" value="0" max="100" style="width: 300px;"></progress>
-      <span id="progress-text">0%</span>
-    </div>
+  <!-- Scrollable container for table -->
+  <div style="overflow-x: auto; border: 1px solid #ccc; padding: 5px;">
+    <table id="streamtab" style="border-collapse: collapse; width: 100%; table-layout: fixed;">
+      <thead>
+        <tr>
+          <th style="width: 120px;">Election</th>
+          <th style="width: 50px;">Alive</th>
+          <th style="width: 50px;">Files</th>
+          <th style="width: 50px;">Elect</th>
+          <th style="width: 50px;">RAG</th>
+          <th style="width: 80px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, value in streamrag.items() %}
+        <tr>
+          <td>{{ key }}</td>
+          <td>{{ value['Alive'] }}</td>
+          <td>{{ value['Files'] }}</td>
+          <td>{{ value['Elect'] }}</td>
+          <td>{{ value['RAG'] }}</td>
+          <td><button onclick="deactivateElection('{{ key }}')">Deactivate</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
-  <table id="DQ-table">
-    <thead>
-      <tr>
-        <th>Election</th>
-        <th>Filename</th>
-        <th>Field</th>
-        <th>P0</th>
-        <th>P1</th>
-        <th>P2</th>
-        <th>P3</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for index, row in DQstats.iterrows() %}
-      <tr>
-        <td>{{ row['Election'] }}</td>
-        <td>{{ row['File'] }}</td>
-        <td>{{ row['Field'] }}</td>
-        <td>
-          <label class="maximpact-label">
-            <input type="checkbox" class="maximpact-checkbox"{% if row['P0'] == 1 %}checked{% endif %} disabled>
-          </label>
-        </td>
-        <td>
-          <label class="maximpact-label">
-            <input type="checkbox" class="maximpact-checkbox"{% if row['P1'] == 1 %}checked{% endif %} disabled>
-          </label>
-        </td>
-        <td>
-          <label class="maximpact-label">
-            <input type="checkbox" class="maximpact-checkbox"{% if row['P2'] == 1 %}checked{% endif %} disabled>
-          </label>
-        </td>
-        <td>
-          <label class="maximpact-label">
-            <input type="checkbox" class="maximpact-checkbox"{% if row['P3'] == 1 %}checked{% endif %} disabled>
-          </label>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <!-- Buttons below table -->
+  <div style="margin-top: 10px;">
+    <button id="process-btn">LOAD ELECTION</button>
+    <button id="reset-btn">RESET</button>
+  </div>
+  <!-- Progress bar container -->
+<div id="progress-container" style="margin-top: 20px; display: none;">
+  <label for="progress-bar">Normalization Progress:</label>
+  <progress id="progress-bar" value="0" max="100" style="width: 300px;"></progress>
+  <span id="progress-text">0%</span>
 </div>
+
+</div>
+
 
 
 <script>
@@ -489,58 +445,72 @@ document.getElementById('add-row-btn').addEventListener('click', function () {
   }
 });
 
+
 function populateElectionDropdowns() {
-const parentSelect = window.parent.document.getElementById("streams");
-const electionNames = Array.from(parentSelect.options).map(opt => opt.value);
-console.log(`__Stream_Processing elections ${electionNames} drop down from parentSelect:`,  parentSelect.options)
-// 🆕 Access the election-to-territory mapping
-const mapfilesSelect = window.parent.document.getElementById("mapfiles");
-const territoryEL =
-    mapfilesSelect?.options?.length
-        ? mapfilesSelect.options[mapfilesSelect.options.length - 1].value
-        : null;
+  const parentSelect = window.parent.document.getElementById("streams");
+  const electionNames = Array.from(parentSelect.options).map(opt => opt.value);
 
-const allElectionDropdowns = document.querySelectorAll('.editable.election');
+  // 🧠 Read the singleton territory from parent
+  const singletonTerritoryEl = window.parent.document.getElementById("territory");
+  const singletonTerritory = singletonTerritoryEl ? singletonTerritoryEl.value : '';
 
-allElectionDropdowns.forEach(select => {
-  const currentValue = select.getAttribute('data-initial');
-  const currentTerritory = select.getAttribute('data-territory');
-  const isNewRow = select.getAttribute('data-new') === 'true';
+  const allElectionDropdowns = document.querySelectorAll('.editable.election');
 
-  select.innerHTML = '';  // Clear existing options
+  allElectionDropdowns.forEach(select => {
+    const currentValue = select.getAttribute('data-initial') || '';
+    const currentTerritory = select.getAttribute('data-territory') || '';
 
-  electionNames.forEach(electionName => {
-    const option = document.createElement('option');
-    option.value = electionName;
-    option.textContent = electionName;
+    select.innerHTML = '';  // Clear existing options
 
-    // 🧠 Add data-territory to each option
+    electionNames.forEach(electionName => {
+      const option = document.createElement('option');
+      option.value = electionName;
+      option.textContent = electionName;
 
-    option.dataset.territory = territoryEL || '';
+      // Use the singleton territory for all elections
+      option.dataset.territory = singletonTerritory || '';
 
+      if (electionName === currentValue) option.selected = true;
+      select.appendChild(option);
+    });
 
-    if (electionName === currentValue) {
-      option.selected = true;
+    // If current value is missing from the list
+    if (currentValue && !electionNames.includes(currentValue)) {
+      const missingOption = document.createElement('option');
+      missingOption.value = currentValue;
+      missingOption.textContent = currentValue + " (not found)";
+      missingOption.dataset.territory = currentTerritory || '';
+      missingOption.selected = true;
+      select.appendChild(missingOption);
     }
-
-    select.appendChild(option);
   });
 
-  // If current value is missing from the list
-  if (currentValue && !electionNames.includes(currentValue)) {
-    const missingOption = document.createElement('option');
-    missingOption.value = currentValue;
-    missingOption.textContent = currentValue + " (not found)";
-    missingOption.dataset.territory = currentTerritory || '';
-    missingOption.selected = true;
-    select.appendChild(missingOption);
-  }
-});
-
-console.log("✅ Populated election dropdowns with data-territory values.");
+  console.log("✅ Populated election dropdowns with singleton territory.");
 }
 
-  document.addEventListener('DOMContentLoaded', function () {
+
+document.addEventListener('DOMContentLoaded', function () {
+
+
+
+  function attachElectionChangeListeners() {
+  document.querySelectorAll('.editable.election').forEach(select => {
+    select.addEventListener('change', function () {
+      const selectedOption = this.options[this.selectedIndex];
+      const territory = selectedOption.dataset.territory || this.dataset.territory || '';
+      this.setAttribute('data-territory', territory);
+
+      const row = this.closest('tr');
+      const territoryInput = row.querySelector('.territory');
+      if (territoryInput) {
+        const parts = territory.split('/');
+        const last = parts.pop();
+        territoryInput.value = last || '';
+        territoryInput.setAttribute('data-full-territory', territory);
+      }
+    });
+  });
+}
 
 
     populateElectionDropdowns();
@@ -573,10 +543,6 @@ console.log("✅ Populated election dropdowns with data-territory values.");
     });
   });
 
-  });
-
-
-
 
 
       document.getElementById('process-btn').addEventListener('click', function () {
@@ -601,8 +567,12 @@ console.log("✅ Populated election dropdowns with data-territory values.");
             text.innerText = (data.percent || 0) + "% — " + (data.message || "");
 
             if (data.status === "complete") {
+
+
               console.log("Normalization is complete. Injecting DQstats HTML if available.");
               text.innerText = "✅ Complete";
+              console.log("DQstats_html from server:", data.dqstats_html);
+              window.parent.fetchtable('DQstats');
 
               if (data.dqstats_html) {
                 const tbody = document.querySelector("#DQ-table tbody");
@@ -617,6 +587,7 @@ console.log("✅ Populated election dropdowns with data-territory values.");
               const html = data.html;
               const streamrag = data.streamrag;
               const streamTbody = document.querySelector('#streamtab tbody');
+              console.log("STREAM HTML:", html);
               if (streamTbody) {
                 streamTbody.innerHTML = html;
               }
@@ -766,10 +737,7 @@ console.log("✅ Populated election dropdowns with data-territory values.");
         });
     });
 
-
-
-
-
+  });
 
 
 

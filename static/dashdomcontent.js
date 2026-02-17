@@ -70,49 +70,53 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   /* ---------------------------------------------------------
    * CALENDAR LOGIN AND CALENDAR BUILD
    * --------------------------------------------------------- */
+    const exportBtn = document.getElementById("export-html-btn");
+   if (exportBtn) {
+     console.log("Initial view set: calendar visible, map hidden");
+     exportBtn.addEventListener("click", async () => {
+       await saveCalendarPlan();
+       const btn = document.getElementById("export-html-btn");
+       btn.disabled = true;
+       btn.textContent = "🔄 Exporting...";
 
-  console.log("Initial view set: calendar visible, map hidden");
+       try {
+         // Create a standalone HTML document
 
-  document.getElementById("export-html-btn").addEventListener("click", async () => {
-    await saveCalendarPlan();
-    const btn = document.getElementById("export-html-btn");
-    btn.disabled = true;
-    btn.textContent = "🔄 Exporting...";
+         const htmlContent = createStandaloneHTML();
 
-    try {
-      // Create a standalone HTML document
+         // Create a Blob and FormData to send as 'file'
+         const blob = new Blob([htmlContent], { type: "text/html" });
+         const formData = new FormData();
+         formData.append("file", blob, "calendar.html");
 
-      const htmlContent = createStandaloneHTML();
+         // Upload to development backend
+         const response = await fetch("/api/upload-and-protect", {
+           method: "POST",
+           body: formData
+         });
 
-      // Create a Blob and FormData to send as 'file'
-      const blob = new Blob([htmlContent], { type: "text/html" });
-      const formData = new FormData();
-      formData.append("file", blob, "calendar.html");
+         const result = await response.json();
 
-      // Upload to development backend
-      const response = await fetch("/api/upload-and-protect", {
-        method: "POST",
-        body: formData
-      });
+         if (!response.ok || !result.ok) {
+           throw new Error(result.error || "Upload failed");
+         }
 
-      const result = await response.json();
+         btn.textContent = "✅ Exported & Protected";
+       } catch (err) {
+         console.error("Export failed:", err);
+         btn.textContent = "❌ Failed";
+       } finally {
+         setTimeout(() => {
+           btn.textContent = "🔐 Export Protected HTML";
+           btn.disabled = false;
+         }, 1500);
+       }
+     });
+   }
 
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || "Upload failed");
-      }
 
-      btn.textContent = "✅ Exported & Protected";
-    } catch (err) {
-      console.error("Export failed:", err);
-      btn.textContent = "❌ Failed";
-    } finally {
-      setTimeout(() => {
-        btn.textContent = "🔐 Export Protected HTML";
-        btn.disabled = false;
-      }, 1500);
-    }
-  });
-  
+
+
   document.addEventListener("click", function (e) {
       const btn = e.target.closest(".area-option");
       if (!btn) return;

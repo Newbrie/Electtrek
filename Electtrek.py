@@ -347,8 +347,8 @@ def add_zone_Level4(teamsize, unzonedelectors):
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
-    from nodes import allelectors, Treepolys, Fullpolys, current_node,formdata, layeritems, progress
-
+    from nodes import allelectors
+    from state import Treepolys, Fullpolys, progress, DQstats
     from sklearn.metrics.pairwise import haversine_distances
 
 
@@ -448,7 +448,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             if stream not in ELECTIONS:
                 progress["percent"] = 100
                 progress["status"] = "error"
-                progress["message"] = f"Error: Election '{stream}' not recognized."
+                progress["message"] = f"Error: Election '{stream}' not recognized {ELECTIONS}."
                 print(progress["message"])
                 return
 
@@ -1320,7 +1320,7 @@ def kanban():
     mapfile = current_node.mapfile(rlevels)
     title = current_node.value+" details"
     items = current_node.childrenoftype('walk')
-    layeritems = get_layer_table(items,title )
+    layeritems = get_layer_table(items,title, rlevels)
     print("___Layeritems: ",[x.value for x in items] )
 
 
@@ -3788,7 +3788,7 @@ import pandas as pd
 @app.route('/progress')
 @login_required
 def get_progress():
-    global DQstats, progress
+    from state import DQstats, progress
 
     if progress['status'] != 'complete':
         for key, value in progress.items():

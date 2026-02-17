@@ -18,6 +18,8 @@ import logging
 
 from types import MappingProxyType
 
+progress = {}
+
 def normalname(name):
     if isinstance(name, str):
         name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").replace(" ","_").upper()
@@ -808,7 +810,7 @@ progress = {
     "dqstats_html": ""
     }
 
-DQ_DATA = {
+DQstats = {
 "df": pd.DataFrame(),  # initially empty
 }
 

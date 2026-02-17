@@ -146,7 +146,7 @@ def get_available_elections():
     for file in BASE_FILE.parent.iterdir():
         match = pattern.match(file.name)
         if match:
-            name = match.group(1)
+            name = match.group(1).upper()
             election_files[name] = str(file)
     return election_files
 
