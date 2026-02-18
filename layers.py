@@ -269,7 +269,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         from flask import session
         from elections import branchcolours
 
-        print("Layer memory id:", id(self))
+        print(f"Layer {intention_type} memory id:", id(self))
         accumulate = session.get("accumulate", False)
 
         if not accumulate:
@@ -950,7 +950,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return eventlist
 
     def add_nodemaps (self,c_election,rlevels, herenode,type,static):
-        from state import Treepolys, Fullpolys
+        from state import Treepolys, Fullpolys, Candidates, LastResults
         from nodes import get_counters
         from flask import session
         global levelcolours
@@ -1107,29 +1107,12 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print(f"_____Colour from {herenode.value} col:{herenode.defcol} and limbX {limbX['fillColor'].values[0]}")
                     fcol_node = tcol_node
                     poly_col_node = node_col
-
-                    folium.GeoJson(
-                        limbX,
-                        style_function=lambda feature: {
-                            "fillColor": feature["properties"]["fillColor"],
-                            "color": adjust_boundary_color(feature["properties"]["fillColor"], 0.7),
-                            "weight": 3,
-                            "opacity": 1.0,
-                            "fillOpacity": 0.4,
-                            "stroke": True,
-                            "dashArray": "5,5",
-                        },
-                        highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
-                        popup=folium.GeoJsonPopup(
-                            fields=["UPDOWN"],
-                            aliases=["Move:"],
-                            labels=False,
-                            localize=False,
-                        ),
-                    ).add_to(self)
-
-                    pathref = c.mapfile(rlevels)
-                    mapfile = '/transfer/'+pathref
+                    if c.type == 'division' and isinstance(c.candidates, dict):
+                        c1 = c.candidates.get('Candidate_1', '')
+                        c2 = c.candidates.get('Candidate_2', '')
+                        candidates = f"[{c1},{c2}]"
+                    else:
+                        candidates = ""
 
 
                     htmlhalo =f'''
@@ -1156,28 +1139,53 @@ class ExtendedFeatureGroup(FeatureGroup):
                           border-radius: 5px;
                           border: 2px solid black;
                         ">{num}</span>
-                        {numtag}
+                        {numtag}<br>{candidates}
                       </div>
                     </a>
                     '''
 
+                    folium.GeoJson(
+                        limbX,
+                        style_function=lambda feature: {
+                            "fillColor": feature["properties"]["fillColor"],
+                            "color": adjust_boundary_color(feature["properties"]["fillColor"], 0.7),
+                            "weight": 3,
+                            "opacity": 1.0,
+                            "fillOpacity": 0.4,
+                            "stroke": True,
+                            "dashArray": "5,5",
+                        },
+                        highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
+                        tooltip=folium.Tooltip(htmlhalo),
+                        popup=folium.GeoJsonPopup(
+                            fields=["UPDOWN"],
+                            aliases=["Move:"],
+                            labels=False,
+                            localize=False,
+                        ),
+                    ).add_to(self)
 
-                    if not static:
-                        self.add_child(folium.Marker(
-                             location=here,
-                             icon = folium.DivIcon(
-                                    html=htmlhalo,
-                                       )
-                                       )
-                                       )
-                    else:
-                        self.add_child(folium.Marker(
-                             location=here,
-                             icon = folium.DivIcon(
-                                    html=htmlhalo,
-                                       )
-                                       )
-                                       )
+                    pathref = c.mapfile(rlevels)
+                    mapfile = '/transfer/'+pathref
+
+
+
+#                    if not static:
+#                        self.add_child(folium.Marker(
+#                             location=here,
+#                             icon = folium.DivIcon(
+#                                    html=htmlhalo,
+#                                       )
+#                                       )
+#                                       )
+#                    else:
+#                        self.add_child(folium.Marker(
+#                             location=here,
+#                             icon = folium.DivIcon(
+#                                    html=htmlhalo,
+#                                       )
+#                                       )
+#                                       )
 
 
 

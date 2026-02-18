@@ -8,8 +8,11 @@ workdirectories['datadir'] = "/Users/newbrie/Sites/INDATA"
 workdirectories['templdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates"
 workdirectories['bounddir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/Boundaries"
 workdirectories['resultdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/AreaIndicators/"
+workdirectories['candidatedir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/Candidates/"
+
 GENESYS_FILE =  os.path.join(workdirectories['workdir'],'static','registers','RuncornRegister.xlsx')
 LAST_RESULTS_FILE = os.path.join(workdirectories['workdir'],'static','registers','LastResults.json')
+CANDIDATES_FILE = os.path.join(workdirectories['workdir'],'static','registers','Candidates.json')
 ELECTIONS_FILE = os.path.join(workdirectories['workdir'],'static','elections','Elections-DEMO.json')
 TREEPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Treepolys.pkl')
 ELECTOR_FILE = Path(workdirectories['workdir']) /'static'/ 'registers' / 'allelectors.csv'

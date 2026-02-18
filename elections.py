@@ -137,18 +137,27 @@ def capped_append(lst, item):
 
 def get_available_elections():
     """
-    Return a dict of all elections found in the elections directory
+    Return a list of election names found in the elections directory,
+    sorted by last modified time (most recent first).
     """
-    election_files = {}
+    elections_dir = BASE_FILE.parent  # directory containing JSON files
     pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
 
-    # Use BASE_FILE.parent because we want the directory containing the JSONs
-    for file in BASE_FILE.parent.iterdir():
+    elections = []
+
+    for file in elections_dir.iterdir():
         match = pattern.match(file.name)
-        if match:
+        if match and file.is_file():
             name = match.group(1).upper()
-            election_files[name] = str(file)
-    return election_files
+            mtime = file.stat().st_mtime  # last modified time
+            elections.append((name, mtime))
+
+    # Sort by modification time, descending (most recent first)
+    elections.sort(key=lambda x: x[1], reverse=True)
+
+    # Return only the names
+    return [name for name, _ in elections]
+
 
 def get_stream_table():
     stream_table = {}

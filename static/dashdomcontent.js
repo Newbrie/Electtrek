@@ -6,7 +6,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   document.addEventListener("DOMContentLoaded", async () => {
 
     // Call the function to fetch the backend URL used as window.API
-  fetchBackendURL();
+  await fetchBackendURL();
 
 
   let selectedPlaceData = null; // Store data from the map
@@ -164,6 +164,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
    // TABLE UPDATE
    // -----------------------------------------------------
    if (data?.type === "update-table" || data === "update-table") {
+     console.log("Message received to update table")
        fetchTableData(data.stable);
        return;
    }
@@ -173,7 +174,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
          deactivateMapAfterPlaceSelected();
 
          selectedPlaceData = data;
-         console.log("📦 Stored selectedPlaceData:", selectedPlaceData);
+         console.log("📦 message received to store selectedPlaceData:", selectedPlaceData);
 
          fillAddPlaceForm(selectedPlaceData); // your existing function to fill the modal
 
@@ -467,10 +468,15 @@ const changeIframe = (url) => changeIframeSrc(url);
 * TRIGGER TABLE DATA REFRESH USING TABLE SELECTOR
 * --------------------------------------------------------- */
 if (tableSelector) {
+    tableSelector.addEventListener("click", (e) => {
+        fetchTableData(e.target.value);
+    });
+
     tableSelector.addEventListener("change", (e) => {
         fetchTableData(e.target.value);
     });
 }
+
 
 
 

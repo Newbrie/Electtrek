@@ -77,15 +77,15 @@ def save_nodes(path):
     for node in TREK_NODES_BY_ID.values():
         if node.parent and node.parent.nid not in TREK_NODES_BY_ID:
             raise RuntimeError(
-                f"Persist invariant violated: "
-                f"{node.value} ({node.nid}) has missing parent {node.parent.nid}"
+                f"Persist invariant violated: {node.value} ({node.nid}) has missing parent {node.parent.nid}"
             )
 
+        # DEBUG: show candidates before saving
+        print(f"💾 [DEBUG] Saving node '{node.value}' ({node.nid}) candidates: {node.candidates}")
+
     with open(path, "w") as f:
-        json.dump(
-            [n.to_dict() for n in TREK_NODES_BY_ID.values()],
-            f
-        )
+        json.dump([n.to_dict() for n in TREK_NODES_BY_ID.values()], f, indent=2)
+        print(f"✅ [DEBUG] All nodes saved to {path}")
 
 def load_nodes(path):
     global TREK_NODES_BY_ID
@@ -104,8 +104,10 @@ def load_nodes(path):
         node = TreeNode.from_dict(data)
         node.parent = None
         node.children = []
-
         TREK_NODES_BY_ID[node.nid] = node
+
+        # DEBUG: show candidates on load
+        print(f"📥 [DEBUG] Loaded node '{node.value}' ({node.nid}) candidates: {node.candidates}")
 
     # PASS 2: wire relationships
     for data in raw_nodes:
@@ -115,9 +117,7 @@ def load_nodes(path):
         if pid:
             parent = TREK_NODES_BY_ID.get(pid)
             if not parent:
-                raise ValueError(
-                    f"Missing parent {pid} for node {node.value}"
-                )
+                raise ValueError(f"Missing parent {pid} for node {node.value}")
             node.parent = parent
             if node not in parent.children:
                 parent.children.append(node)
@@ -125,13 +125,12 @@ def load_nodes(path):
         for cid in data.get("children", []):
             child = TREK_NODES_BY_ID.get(cid)
             if not child:
-                raise ValueError(
-                    f"Missing child {cid} for node {node.value}"
-                )
+                raise ValueError(f"Missing child {cid} for node {node.value}")
             if child not in node.children:
                 node.children.append(child)
             child.parent = node
 
+    print(f"✅ [DEBUG] Finished wiring {len(TREK_NODES_BY_ID)} nodes")
     return True
 
 
@@ -471,7 +470,10 @@ def restore_from_persist(treepolys, fullpolys):
     safe_pickle_load(FULLPOLY_FILE,fullpolys)
 
     load_nodes(TREKNODE_FILE)
-
+    print("AFTER LOAD:")
+    for nid, node in TREK_NODES_BY_ID.items():
+        print(nid, node.candidates)
+        break
     print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
     return electors
 
@@ -701,6 +703,7 @@ class TreeNode:
         self.target = 1
         self.party = "O"
         self.defcol = "gray"
+        self.candidates = {}
 
         # UI
         self.tagno = 1
@@ -801,11 +804,14 @@ class TreeNode:
             "houses": self.houses,
             "target": self.target,
             "party": self.party,
+            "candidates": self.candidates,
+            "defcol": self.defcol,
 
             "tagno": self.tagno,
             "gtagno": self.gtagno,
             "bbox": self.bbox,
         }
+
     @classmethod
     def from_dict(cls, data):
         node = cls(
@@ -822,6 +828,8 @@ class TreeNode:
         node.houses = data["houses"]
         node.target = data["target"]
         node.party = data["party"]
+        node.candidates = data.get("candidates", {})
+        node.defcol = data["defcol"]
         node.tagno = data["tagno"]
         node.gtagno = data["gtagno"]
         node.bbox = data["bbox"]
@@ -1220,24 +1228,24 @@ class TreeNode:
 
             matches = [c for c in node.children if c.value == part]
 
-            if not matches and create:
+            if not matches:
                 print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
                 try:
                     if next_level <= 4:
-                        node.create_map_branch(rlevels, c_election, ntype)
+                        node.create_map_branch(rlevels, c_election)
                     else:
-                        node.create_data_branch(rlevels, c_election, ntype)
+                        node.create_data_branch(rlevels, c_election)
                 except Exception as e:
                     print(f"   ⚠️ [DEBUG] Branch creation failed: {e}")
 
                 matches = [c for c in node.children if c.value == part]
 
-            print(f"   Children after branch creation: {[c.value for c in node.children]}")
+            print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
-            if not matches:
+            if not matches and create:
                 # Instead of returning self, raise a clear error
                 raise ValueError(
-                    f"Path error: could not find or create node '{part}' under '{node.value}' "
+                    f"Path error: Mode {create} could not find or create node '{part}' under '{node.value}' "
                     f"(level {node.level + 1})"
                 )
 
@@ -1257,15 +1265,15 @@ class TreeNode:
 
         # ──────────────────────────────
         # Step 6: always expand children at final node
-        next_level = node.level + 1
+        next_level = node.level
         if next_level <= max(rlevels) and create:
             children_type = rlevels[next_level]
             print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
             try:
                 if node.level < 4:
-                    node.create_map_branch(rlevels, c_election, children_type)
+                    node.create_map_branch(rlevels, c_election)
                 else:
-                    node.create_data_branch(rlevels, c_election, children_type)
+                    node.create_data_branch(rlevels, c_election)
             except Exception as e:
                 print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
 
@@ -1464,6 +1472,17 @@ class TreeNode:
         return
 
 
+    def updateCandidates(self,rlevels):
+        """Fill self.candidates from the global Candidates dict."""
+        from state import Candidates
+
+        if self.type == "division":
+            # Safely get candidate dict or default to empty dict
+            self.candidates = Candidates.get("division", {}).get(self.value, {})
+            print(f"[DEBUG] Candidate update for {self.value}: {self.candidates}")
+        save_nodes(TREKNODE_FILE)
+
+
     def updateElectorate(self, rlevels):
         from state import LastResults
 
@@ -1598,7 +1617,7 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self,resolved_levels,c_election, electtype):
+    def create_data_branch(self,resolved_levels,c_election):
         global allelectors
         global areaelectors
         global workdirectories
@@ -1612,6 +1631,7 @@ class TreeNode:
 
         nodelist = []
 
+        electtype = resolved_levels[self.level+1]
 
         if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
             print('_______Redirect to upload_form', ELECTOR_FILE)
@@ -1699,10 +1719,11 @@ class TreeNode:
         save_nodes(TREKNODE_FILE)
         return nodelist
 
-    def create_map_branch(self,resolved_levels,c_election,electtype):
+    def create_map_branch(self,resolved_levels,c_election):
         from state import Treepolys, Fullpolys, Overlaps
         import random
 
+        electtype = resolved_levels[self.level+1]
 
         if self.type not in Treepolys:
             raise ValueError(f"Layer '{self.type}' not found in Treepolys")
@@ -1803,6 +1824,7 @@ class TreeNode:
                     fam_nodes.append(egg)
                     try:
                         egg.updateParty()
+                        egg.updateCandidates(resolved_levels)
                         egg.updateTurnout(resolved_levels)
                         egg.updateElectorate(resolved_levels)
                         egg.updateGOTV(gotv_pct, resolved_levels)

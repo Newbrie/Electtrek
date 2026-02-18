@@ -11,7 +11,7 @@ from elections import route, branchcolours
 from collections import defaultdict
 from typing import DefaultDict
 from pathlib import Path
-from config import TABLE_FILE, LAST_RESULTS_FILE, workdirectories, DEVURLS
+from config import TABLE_FILE, CANDIDATES_FILE,LAST_RESULTS_FILE, workdirectories, DEVURLS
 
 import logging
 
@@ -496,6 +496,50 @@ def empty_gdf():
     return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
 
 
+def load_candidates():
+    global Candidates
+    # --- Candidates ---
+    print(f"___Creating CANDIDATES data and file")
+    if not os.path.exists(CANDIDATES_FILE) or os.path.getsize(CANDIDATES_FILE) == 0:
+
+        Candidates_data = pd.read_excel(
+            f"{workdirectories['candidatedir']}/Candidate_Placement_for_Surrey-2.xlsx"
+        )
+
+        for _, row in Candidates_data.iterrows():
+
+            ward = row.get("Wardname")
+            c1 = row.get("Candidate 1")
+            c2 = row.get("Candidate 2")
+
+            # Skip row if ward OR either candidate is missing
+            if pd.isna(ward) or pd.isna(c1) or pd.isna(c2):
+                continue
+
+            # Now safe to normalise
+            nodename = normalname(str(ward))
+            C1 = normalname(str(c1))
+            C2 = normalname(str(c2))
+
+            Candidates["division"][nodename] = {
+                "Candidate_1": C1,
+                "Candidate_2": C2
+            }
+
+
+        with open(CANDIDATES_FILE, "w", encoding="utf-8") as f:
+            json.dump(Candidates, f, indent=2, ensure_ascii=False)
+
+
+    else:
+        # Load from file without overwriting keys
+        with open(CANDIDATES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            Candidates["ward"].update(data.get("ward", {}))
+            Candidates["division"].update(data.get("division", {}))
+            Candidates["constituency"].update(data.get("constituency", {}))
+
+
 def load_last_results():
     global LastResults
 
@@ -519,7 +563,7 @@ def load_last_results():
 
         # --- Wards ---
         Ward_Results_data = pd.read_excel(
-            f"{workdirectories['resultdir']}/LEH-Candidates-2023.xlsx"
+            f"{workdirectories['candidatedir']}/LEH-Candidates-2023.xlsx"
         )
         Ward_Results_data = Ward_Results_data.loc[Ward_Results_data["WINNER"] == 1]
 
@@ -763,7 +807,11 @@ Overlaps = {
     "walkleg": 0.005           # same as walk
 }
 
-
+Candidates = {
+    "ward": {},
+    "division": {},
+    "constituency": {},
+}
 
 
 LastResults = {
@@ -821,3 +869,4 @@ layeritems = []
 
 
 load_last_results()
+load_candidates()

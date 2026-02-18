@@ -884,7 +884,7 @@ def fetch_table(rlevels,table_name, current_node):
                 return pd.DataFrame(DQstats)
         except:
             pass
-        return pd.DataFrame(report_data or [])
+        return pd.DataFrame(DQstats or [])
 
     def get_places_table():
         if not places:
@@ -2173,7 +2173,7 @@ def get_current_election_data():
 @app.route('/current-election', methods=['POST'])
 @login_required
 def update_current_election():
-    current_election = get_current_election(session=session)
+    current_election = last_election(session=session)
     CElection = CurrentElection.load(current_election)
 
 
@@ -2392,7 +2392,7 @@ def add_election():
 @app.route("/last-election")
 @login_required
 def last_election():
-    result = get_current_election()
+    result = get_available_elections()[0]
     return jsonify(result)
 
 
