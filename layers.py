@@ -951,13 +951,16 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_nodemaps (self,c_election,rlevels, herenode,type,static):
         from state import Treepolys, Fullpolys, Candidates, LastResults
-        from nodes import get_counters
+
         from flask import session
         global levelcolours
         global Con_Results_data
         global OPTIONS
 
+        from nodes import get_counters  # wherever it lives
+
         counters = get_counters(session=session)
+
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
@@ -1066,6 +1069,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     party = "("+c.party+")"
 
                     accumulate = session.get("accumulate", False)
+                    print(f"In Add_nodemaps testing accumulate {accumulate}")
                     if not accumulate:
                         num = str(c.tagno)
                     else:
@@ -1139,7 +1143,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                           border-radius: 5px;
                           border: 2px solid black;
                         ">{num}</span>
-                        {numtag}<br>{candidates}
+                        {numtag}<br>
+                        <span style="
+                            font-size: 6pt;
+                            font-weight: normal;
+                        ">
+                            {candidates}
+                        </span>
+
                       </div>
                     </a>
                     '''
@@ -1187,7 +1198,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 #                                       )
 #                                       )
 
-
+        # AFTER traversal:
+        if session:
+            session['gtagno_counters'] = counters
+        elif session_data:
+            session_data['gtagno_counters'] = counters
 
         return self._children
 

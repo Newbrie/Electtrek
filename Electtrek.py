@@ -2254,15 +2254,7 @@ def set_constant():
     resources = OPTIONS['resources']
 
 
-    counters = get_counters(session)
-
     if name in CElection:
-        if name == "ACC":
-            OPTIONS['ACC'] = value
-            # Assuming you want to reset to 0 for the 1-based indexing logic (0 -> 1)
-
-            counters = get_counters(session)
-
 
         print("____Back End2:",name,"-",value)
         if name == 'mapfiles':
@@ -2754,7 +2746,7 @@ def transfer(path):
 
 # transfering to another any other node with siblings listed below
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = get_root().ping_node(rlevels,current_election,path, create=False)
+    current_node = get_root().ping_node(rlevels,current_election,path, create=True)
 
     current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels))
 
@@ -4116,7 +4108,7 @@ def firstpage():
 #    render the entire application frame in Dash0 - passing all required data and ensuring mapfile set to last visited place
 
     print(f"🧪 firstpage level {current_election} - current_node mapfile:{mapfile} - OPTIONS html {OPTIONS['areas']}")
-
+    persist(Treepolys,Fullpolys,allelectors)
     return render_template(
         "Dash0.html",
         table_types=TABLE_TYPES,

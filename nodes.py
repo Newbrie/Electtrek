@@ -361,37 +361,35 @@ def get_layer_table(nodelist,title,rlevels):
 
 
 
-
 def get_counters(session=None, session_data=None):
-    from state import Treepolys, Fullpolys
+    from state import Treepolys
 
-    try:
-        if not session or 'gtagno_counters' not in session:
-            counters = {}
-        elif not session_data or 'gtagno_counters' not in session_data:
-            counters = {}
-    except Exception as e:
-        counters = {}
-        print(f"___System error: No session or current_node: {e} ")
-    """
-    Returns the current node from TREK_NODES_BY_ID using either the Flask session or passed-in session_data.
-    """
+    counters = None
 
+    # ---- MAIN THREAD ----
+    if session is not None:
+        if not session.get("accumulate"):
+            session.pop('gtagno_counters', None)
+            print("🔄 Resetting gtagno_counters (accumulate=False)")
+        counters = session.get('gtagno_counters')
 
-    if session and 'gtagno_counters' in session:
-        counters = session['gtagno_counters']
-        print("[Main Thread] gtagno_counters from session:", session.get('gtagno_counters',{}))
-    elif session_data and 'gtagno_counters' in session_data and session_data.get('gtagno_counters',{}):
-        counters = session_data['gtagno_counters']
-        print("[Background Thread] gtagno_counters from session_data:", session_data.get('gtagno_counters',{}))
-        counters = session_data.get('gtagno_counters',{})
-    else:
-        counters = {}
-        node = None
-        print("⚠️ gtagno_counters not found in session or session_data:so counters = ",{} )
+        if counters:
+            print("[Main Thread] gtagno_counters from session:", counters)
 
+    # ---- BACKGROUND THREAD ----
+    elif session_data is not None:
+        if not session_data.get("accumulate"):
+            session_data.pop('gtagno_counters', None)
+            print("🔄 Resetting gtagno_counters (background accumulate=False)")
+        counters = session_data.get('gtagno_counters')
+
+        if counters:
+            print("[Background Thread] gtagno_counters from session_data:", counters)
+
+    # ---- INITIALISE IF EMPTY ----
     if not counters:
         counters = {etype: 0 for etype in Treepolys.keys()}
+        print("⚠️ Initialising new gtagno_counters:", counters)
 
     return counters
 
@@ -1228,7 +1226,7 @@ class TreeNode:
 
             matches = [c for c in node.children if c.value == part]
 
-            if not matches:
+            if create and not matches:
                 print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
                 try:
                     if next_level <= 4:
@@ -1242,7 +1240,7 @@ class TreeNode:
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
-            if not matches and create:
+            if create and not matches :
                 # Instead of returning self, raise a clear error
                 raise ValueError(
                     f"Path error: Mode {create} could not find or create node '{part}' under '{node.value}' "
@@ -1299,6 +1297,7 @@ class TreeNode:
     def getselectedlayers(self, rlevels, this_election, path):
         from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
         from flask import session
+        from nodes import get_counters
         # rlevels[self.level-1] = child type
         # rlevels[self.level] = sibling type
         # rlevels[self.parent.level] = parent type
@@ -1327,7 +1326,9 @@ class TreeNode:
             child_layer = layers[childtype]
             print(f"__LAYER NODE LIST: {[n.nid for n in nodelist]} ")
             # Pass the list of nodes to create_layer
+
             child_layer.create_layer(this_election, nodelist, childtype)
+
 
             child_layer.show = True
             selected.append(child_layer)
@@ -1564,7 +1565,6 @@ class TreeNode:
             "ZONE_9": "brown", "ZONE_10": "gray"
         }
 
-        counters = get_counters(session)
 
         fam_nodes = []
         if namepoints.empty:
@@ -1588,7 +1588,7 @@ class TreeNode:
             if newname not in fam_nodes :
                 datafid = abs(hash(newname))
                 newnode = TreeNode(value=newname,fid=datafid, roid=(limb['Lat'],limb['Long']),origin=elect, node_type=nodetype )
-                egg = self.add_Tchild(child_node=newnode,etype=nodetype, elect=elect,counters=counters)
+                egg = self.add_Tchild(child_node=newnode,etype=nodetype, elect=elect)
                 [egg.bbox, egg.latlongroid] = egg.get_bounding_box(nodetype,block)
                 egg.defcol = zonecolour.get(limb['Zone'],'black')
                 print(f"🎨 Assigned color '{egg.defcol}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
@@ -1742,7 +1742,7 @@ class TreeNode:
 
         # existing logic continues...
 
-        counters = get_counters(session)
+
         CE = CurrentElection.load(c_election)
         gotv_pct = CE['GOTV']
         block = pd.DataFrame()
@@ -1759,7 +1759,7 @@ class TreeNode:
         else:
             print(f"___create_map_branch geometry for {self.value} FID {self.fid} is: ")
             print(
-                f"map branch type: {self.type} "
+                f"parent type: {self.type} "
                 f"size {len(parent_poly)} "
                 f"parent poly cols: {list(parent_poly.columns)} "
                 f"NID {self.nid}"
@@ -1816,7 +1816,7 @@ class TreeNode:
                     print(f"________Found missing type {electtype} name {newname} at level {self.level+1}, area {overlaparea}")
 
                     # Add as child and calculate bbox
-                    egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election, counters=counters)
+                    egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
                     egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
                     print(f"________bbox [{egg.bbox}] - child of type {electtype} at lev {self.level+1} of {self.value}")
                     egg.defcol = branchcolours[k]
@@ -2587,7 +2587,7 @@ class TreeNode:
             return False
 
 
-    def add_Tchild(self, child_node, etype, elect, *, counters):
+    def add_Tchild(self, child_node, etype, elect):
         # 1. Assign type FIRST
         child_node.type = etype
 
@@ -2620,12 +2620,6 @@ class TreeNode:
         # 4. Per-parent numbering (keeping siblings ordered)
         same_type_siblings = [c for c in self.children if c is not child_node and c.type == etype]
         child_node.tagno = len(same_type_siblings)
-
-        # 5. Global display counter
-        if etype not in counters:
-            counters[etype] = 0  # initialize first occurrence
-        counters[etype] += 1
-        child_node.gtagno = counters[etype]
 
         # 6. Register by ID only (safe)
         if self.nid not in TREK_NODES_BY_ID:

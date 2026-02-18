@@ -39,7 +39,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   console.log("___ Is Function ? ", typeof fetchTableData);
   if (table && typeof fetchTableData === "function") {
       console.log("📊 Auto-loading table:", table);
-      fetchTableData(table);
+      await fetchTableData(table);
   }
   /* ---------------------------------------------------------
    * FETCH AREA ACCORDION FOR MODALS
@@ -165,7 +165,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
    // -----------------------------------------------------
    if (data?.type === "update-table" || data === "update-table") {
      console.log("Message received to update table")
-       fetchTableData(data.stable);
+       await fetchTableData(data.stable);
        return;
    }
 
@@ -469,11 +469,11 @@ const changeIframe = (url) => changeIframeSrc(url);
 * --------------------------------------------------------- */
 if (tableSelector) {
     tableSelector.addEventListener("click", (e) => {
-        fetchTableData(e.target.value);
+        await fetchTableData(e.target.value);
     });
 
     tableSelector.addEventListener("change", (e) => {
-        fetchTableData(e.target.value);
+        await fetchTableData(e.target.value);
     });
 }
 
@@ -645,7 +645,7 @@ resourcesSelect?.addEventListener("blur", () => {
             }
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            fetchTableData("nodelist_xref");
+            await fetchTableData("nodelist_xref");
         }
 
         // REASSIGN
@@ -670,7 +670,7 @@ resourcesSelect?.addEventListener("blur", () => {
             select.dataset.oldParentNid = newParentNid;
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            fetchTableData("nodelist_xref");
+            await fetchTableData("nodelist_xref");
         }
 
     } catch (err) {
