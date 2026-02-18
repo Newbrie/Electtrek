@@ -91,7 +91,64 @@
      console.groupEnd();
  }
 
+ async function fetchTableData(tableName) {
+   const table = document.getElementById("captains-table");
+   const tabTitle = document.getElementById("selectedTitle");
 
+   if (!table || !tabTitle) {
+     console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
+     return;
+   }
+
+   const tabHead = table.querySelector("thead");
+   const tabBody = table.querySelector("tbody");
+
+   if (!tabHead || !tabBody) {
+     console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+     return;
+   }
+
+   console.log(`📥 Fetching data for table: ${tableName}`);
+
+   try {
+     const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
+     if (!res.ok) throw new Error(`Server returned ${res.status}`);
+     const data = await res.json();
+
+     if (!Array.isArray(data) || data.length < 3) {
+       console.error("❌ Invalid data format received:", data);
+       return;
+     }
+
+     const [columnHeaders, rows, title] = data;
+     tabTitle.textContent = title;
+     tabHead.innerHTML = "";
+     tabBody.innerHTML = "";
+
+     // Table header
+     const headRow = document.createElement("tr");
+     headRow.innerHTML = `<th>?</th>` + columnHeaders.map(h => `<th>${h.toUpperCase()}</th>`).join('');
+     tabHead.appendChild(headRow);
+
+     const selectedParty = document.getElementById("yourparty")?.value;
+
+     // Table body
+     rows.forEach(record => {
+       const row = document.createElement("tr");
+       row.innerHTML = `<td><input type="checkbox" class="selectRow" name="selectRow[]"></td>` +
+         columnHeaders.map(h => {
+           const value = record[h] ?? "";
+           const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+           return `<td style="background-color:${color}">${value}</td>`;
+         }).join('');
+       tabBody.appendChild(row);
+     });
+
+     console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
+   } catch (err) {
+     console.error("❌ Error fetching table data:", err);
+   }
+ }
 
 
   function getTagsJson(electionTags) {
@@ -111,65 +168,6 @@
     return { task_tags, outcome_tags };
 }
 
-
-  async function fetchTableData(tableName) {
-    const table = document.getElementById("captains-table");
-    const tabTitle = document.getElementById("selectedTitle");
-
-    if (!table || !tabTitle) {
-      console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
-      return;
-    }
-
-    const tabHead = table.querySelector("thead");
-    const tabBody = table.querySelector("tbody");
-
-    if (!tabHead || !tabBody) {
-      console.error("❌ Table structure invalid: missing <thead> or <tbody>");
-      return;
-    }
-
-    console.log(`📥 Fetching data for table: ${tableName}`);
-
-    try {
-      const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-
-      if (!Array.isArray(data) || data.length < 3) {
-        console.error("❌ Invalid data format received:", data);
-        return;
-      }
-
-      const [columnHeaders, rows, title] = data;
-      tabTitle.textContent = title;
-      tabHead.innerHTML = "";
-      tabBody.innerHTML = "";
-
-      // Table header
-      const headRow = document.createElement("tr");
-      headRow.innerHTML = `<th>?</th>` + columnHeaders.map(h => `<th>${h.toUpperCase()}</th>`).join('');
-      tabHead.appendChild(headRow);
-
-      const selectedParty = document.getElementById("yourparty")?.value;
-
-      // Table body
-      rows.forEach(record => {
-        const row = document.createElement("tr");
-        row.innerHTML = `<td><input type="checkbox" class="selectRow" name="selectRow[]"></td>` +
-          columnHeaders.map(h => {
-            const value = record[h] ?? "";
-            const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
-            return `<td style="background-color:${color}">${value}</td>`;
-          }).join('');
-        tabBody.appendChild(row);
-      });
-
-      console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
-    } catch (err) {
-      console.error("❌ Error fetching table data:", err);
-    }
-  }
 
 
   function handleToggle(el) {
@@ -695,7 +693,7 @@
    }
 
 
-   fetchTableData("nodelist_xref");
+   await fetchTableData("nodelist_xref");
 
 
 
@@ -712,7 +710,7 @@ window.deleteElection = async function(electionName) {
   const resp = await res.json();
   if (resp.success && resp.electiontabs_html) {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-    fetchTableData('nodelist_xref');
+    await fetchTableData('nodelist_xref');
     syncStreamsSelectWithTabs();
   } else alert("Could not delete election: " + (resp.error || "Unknown error"));
 };
@@ -731,7 +729,7 @@ window.addElection = async function() {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
     syncStreamsSelectWithTabs();
     updateConstantsUI(resp.constants, resp.options);
-    fetchTableData('nodelist_xref');
+    await fetchTableData('nodelist_xref');
   } else alert("Error adding election: " + resp.error);
 };
 

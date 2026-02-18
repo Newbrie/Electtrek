@@ -33,6 +33,8 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
    * ENSURE TABLE REFRESH ON PAGE LOAD
    * --------------------------------------------------------- */
 
+
+
   const params = new URLSearchParams(window.location.search);
   const table = params.get("loadTable");
   console.log("___ Table being reloaded ", table);
