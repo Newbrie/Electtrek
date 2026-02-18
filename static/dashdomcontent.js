@@ -470,14 +470,15 @@ const changeIframe = (url) => changeIframeSrc(url);
 * TRIGGER TABLE DATA REFRESH USING TABLE SELECTOR
 * --------------------------------------------------------- */
 if (tableSelector) {
-    tableSelector.addEventListener("click", (e) => {
+    tableSelector.addEventListener("click", async (e) => {
         await fetchTableData(e.target.value);
     });
 
-    tableSelector.addEventListener("change", (e) => {
+    tableSelector.addEventListener("change", async (e) => {
         await fetchTableData(e.target.value);
     });
 }
+
 
 
 
