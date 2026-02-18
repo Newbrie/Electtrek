@@ -245,7 +245,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.id = None
         self.areashtml = {}
 
-    def _render_single_node(self, c_election, node, intention_type, static):
+    def _render_single_node(self, c_election, node, intention_type, static, counters):
 
         CElection = CurrentElection.load(c_election)
         rlevels = CElection.resolved_levels
@@ -262,12 +262,15 @@ class ExtendedFeatureGroup(FeatureGroup):
             )
 
         else:
-            self.add_nodemaps(c_election, rlevels, node, intention_type, static)
+            self.add_nodemaps(c_election, rlevels, node, intention_type, static, counters)
 
 
     def create_layer(self, c_election, nodelist, intention_type, static=False):
         from flask import session
         from elections import branchcolours
+
+        from collections import defaultdict
+
 
         print(f"Layer {intention_type} memory id:", id(self))
         accumulate = session.get("accumulate", False)
@@ -275,12 +278,13 @@ class ExtendedFeatureGroup(FeatureGroup):
         if not accumulate:
             print(f"CLEARING THE LAYER: {accumulate}", id(self))
             self._children.clear()  # Only clear if accumulate is off
-
+        counters = defaultdict(int)
         i = 0
         for n in nodelist:
             n.defcol = branchcolours[i]
-            self._render_single_node(c_election, n, intention_type, static)
+            self._render_single_node(c_election, n, intention_type, static, counters)
             i = i+1
+
         return len(self._children)
 
 
@@ -949,18 +953,13 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps (self,c_election,rlevels, herenode,type,static):
+    def add_nodemaps (self,c_election,rlevels, herenode,type,static, counters):
         from state import Treepolys, Fullpolys, Candidates, LastResults
 
         from flask import session
         global levelcolours
         global Con_Results_data
         global OPTIONS
-
-        from nodes import get_counters  # wherever it lives
-
-        counters = get_counters(session=session)
-
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
@@ -1069,13 +1068,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                     party = "("+c.party+")"
 
                     accumulate = session.get("accumulate", False)
-                    print(f"In Add_nodemaps testing accumulate {accumulate}")
+
                     if not accumulate:
                         num = str(c.tagno)
                     else:
-                        counters[type] += 1
-                        c.gtagno = counters[type]
+                        counters[c.type] += 1
+                        c.gtagno = counters[c.type]
                         num = str(c.gtagno)
+
 
                     tag = str(c.value)
                     numtag = str(c.value)+party
@@ -1198,11 +1198,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 #                                       )
 #                                       )
 
-        # AFTER traversal:
-        if session:
-            session['gtagno_counters'] = counters
-        elif session_data:
-            session_data['gtagno_counters'] = counters
 
         return self._children
 

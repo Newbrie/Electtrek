@@ -56,7 +56,7 @@ import state
 from state import Treepolys, Fullpolys
 from state import VNORM,STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys, check_level4_gap
 import nodes
-from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last_node, save_nodes, get_counters
+from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last_node, save_nodes
 import layers
 from elections import CurrentElection, get_available_elections, route, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 

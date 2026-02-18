@@ -361,38 +361,6 @@ def get_layer_table(nodelist,title,rlevels):
 
 
 
-def get_counters(session=None, session_data=None):
-    from state import Treepolys
-
-    counters = None
-
-    # ---- MAIN THREAD ----
-    if session is not None:
-        if not session.get("accumulate"):
-            session.pop('gtagno_counters', None)
-            print("🔄 Resetting gtagno_counters (accumulate=False)")
-        counters = session.get('gtagno_counters')
-
-        if counters:
-            print("[Main Thread] gtagno_counters from session:", counters)
-
-    # ---- BACKGROUND THREAD ----
-    elif session_data is not None:
-        if not session_data.get("accumulate"):
-            session_data.pop('gtagno_counters', None)
-            print("🔄 Resetting gtagno_counters (background accumulate=False)")
-        counters = session_data.get('gtagno_counters')
-
-        if counters:
-            print("[Background Thread] gtagno_counters from session_data:", counters)
-
-    # ---- INITIALISE IF EMPTY ----
-    if not counters:
-        counters = {etype: 0 for etype in Treepolys.keys()}
-        print("⚠️ Initialising new gtagno_counters:", counters)
-
-    return counters
-
 
 def get_current_node(session=None, session_data=None):
 
@@ -1297,7 +1265,6 @@ class TreeNode:
     def getselectedlayers(self, rlevels, this_election, path):
         from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
         from flask import session
-        from nodes import get_counters
         # rlevels[self.level-1] = child type
         # rlevels[self.level] = sibling type
         # rlevels[self.parent.level] = parent type
