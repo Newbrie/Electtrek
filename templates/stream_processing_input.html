@@ -386,7 +386,7 @@ function init() {
       let found = false;
 
       rows.forEach((row, index) => {
-        const election = qs('.election', row).value.trim().toLowerCase();
+        const election = qs('.election', row).value.trim().toUpperCase();
         if (!qs('.active', row).checked || election !== normalized) return;
 
         found = true;

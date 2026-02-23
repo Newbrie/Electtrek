@@ -305,15 +305,24 @@
     background-color: #f1f1f1;
 }
 
-
-#file-info-table .order {
-    width: 60px;  /* Ensures only 2-digit integers fit */
+#file-info-table .fixlevel {
+    width: 70px;
 }
 
-/* Optional: Adjust dropdown width for stream */
-#file-info-table .stream {
-    width: 120px;
+#file-info-table input[type="number"] {
+    box-sizing: border-box;
 }
+
+#file-info-table td {
+    vertical-align: middle;
+}
+
+#file-info-table input[type="checkbox"] {
+    width: auto;
+    margin: 0 auto;
+    display: block;
+}
+
 body
 {
 			margin: 0;
