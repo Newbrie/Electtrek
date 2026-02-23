@@ -56,7 +56,7 @@ import state
 from state import Treepolys, Fullpolys
 from state import VNORM,STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys, check_level4_gap
 import nodes
-from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last_node, save_nodes
+from nodes import TREK_NODES_BY_ID, get_layer_table, allelectors, get_root,restore_from_persist, persist,parent_level_for, get_last_node, save_nodes, move_item
 import layers
 from elections import CurrentElection, get_available_elections, route, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 
@@ -1790,6 +1790,7 @@ def get_backend_url():
     options = resolve_ui_context(program, election, current_node)
     constants = CElection
 
+    print(f"__url: {request.host_url}")
     print(f"__election: {current_election} __current_node: {current_node.value}")
     print(f"__program opts: {program}")
     print(f"__election opts: {election}")
@@ -2087,23 +2088,24 @@ def set_election():
         rlevels = CElection.resolved_levels
         plevels = CElection.parent_levels
         territory = CElection['territory']
-        here = (CElection.get('cidLong',None),CElection.get('cidLat',None))
         mapfile = CElection['mapfiles'][-1]
+        here = (CElection.get('cidLat',None),CElection.get('cidLong',None))
 
         missing_layer = check_level4_gap(rlevels)
 
         if missing_layer:
-            basepath = ensure_treepolys(
+            mapfile = ensure_treepolys(
                 territory=territory,
                 sourcepath=mapfile,
                 resolved_levels=rlevels,
                 parent_levels= plevels,
                 here=here
             )
+
         # At the start of a fresh election:
         print(f"____Route/set-election- Missing: {missing_layer} path: {mapfile},Loaded election: {current_election} CE data: {CElection}")
 
-
+        newlist = CElection.add_newarea(mapfile)
         current_node = get_last_node(current_election,CElection, create=True)
         print(f"____Route/set-election- last node: {current_node.value},Loaded election: {current_election}")
         CElection['previousParty'] = current_node.party
@@ -2345,31 +2347,23 @@ def add_election():
     CElection = CurrentElection.load(current_election)
     current_node = get_last_node(current_election,CElection)
 
-
-
     mapfile = CElection['mapfiles'][-1]
 
     CElection['previousParty'] = current_node.party
 
     print(f"___new_election + CElection: {new_election} + {CElection}")
 
-    # Write updated elections back
-    CElection.save()
+    # Create a new election file with new_election name
+    CElection.save(new_election)
 
     ELECTIONS = get_available_elections()
     print("____ELECTIONS:", ELECTIONS)
     formdata = render_template('partials/electiontabs.html', ELECTIONS=ELECTIONS, current_election=current_election)
     program = ProgramContext()
     election = ElectionContext(CElection)
-    OPTIONS = resolve_ui_context(program,election, election,current_node)
-
+    OPTIONS = resolve_ui_context(program,election, current_node)
 
     resources = OPTIONS['resources']
-
-
-    OPTIONS['streams'] = ELECTIONS
-
-    constants = CElection
 
     print("election-tabs:",formdata)
 
@@ -2506,10 +2500,6 @@ def index():
 @app.route('/login', methods=['POST', 'GET'])
 def login():
 
-
-    if 'gtagno_counters' not in session:
-        session['gtagno_counters'] = {}
-        # Example: {'marker': 0, 'country': 0, ...}
 
     if session.get('username'):
         msg = f"User already logged in: {session['username']} at {current_node.value}"
@@ -4025,12 +4015,12 @@ def firstpage():
     plevels = CElection.parent_levels
     mapfile = CElection['mapfiles'][-1]
     territory = CElection['territory']
-    here = (CElection.get('cidLong',None),CElection.get('cidLat',None))
+    here = (CElection.get('cidLat',None),CElection.get('cidLong',None))
     if not CElection:
         return jsonify(success=False, error="Election not found"), 404
 
     # --- 3. Build tree from sourcepath / here ---
-    basepath = ensure_treepolys(
+    mapfile = ensure_treepolys(
         territory=territory,
         sourcepath=mapfile,
         resolved_levels=rlevels,
@@ -4060,8 +4050,10 @@ def firstpage():
         print(f"____F/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
 
 
-    # add the root nodes.TreeNode to the node tree
+    # add the root nodes.TreeNode to the node tree, and start at the lat long of stored cid node.
     nodes.reset_nodes()
+
+    newlist = CElection.add_newarea(mapfile)
 
     current_node = get_last_node(current_election,CElection, create=True) # go to the first node
 

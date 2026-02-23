@@ -4,7 +4,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.geometry import Point, Polygon, MultiPoint
-from shapely import crosses, contains, union, envelope, intersection
+from shapely import crosses, contains,covers, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route, branchcolours
 
@@ -29,6 +29,32 @@ def normalname(name):
         print("______ERROR: Can only normalise name in a string or series")
     return name
 
+def ensure_4326(gdf):
+    """
+    Ensure the GeoDataFrame has CRS EPSG:4326 for Folium.
+    Returns a GeoDataFrame in 4326.
+    """
+    # 1️⃣ Check if CRS exists
+    if gdf.crs is None:
+        print("[CRS] Missing — assuming EPSG:4326 (lon/lat)")
+        gdf = gdf.set_crs(epsg=4326)
+    else:
+        print(f"[CRS] Detected: {gdf.crs}")
+
+    # 2️⃣ Convert to 4326 if needed
+    if gdf.crs.to_epsg() != 4326:
+        print(f"[CRS] Reprojecting from {gdf.crs} to EPSG:4326 for Folium")
+        gdf = gdf.to_crs(epsg=4326)
+    else:
+        print("[CRS] Already EPSG:4326 — no conversion needed")
+
+    # 3️⃣ Optional: inspect bounds
+    print("[CRS] GeoDataFrame bounds:", gdf.total_bounds)
+
+    return gdf
+
+
+
 
 def clear_treepolys(from_level=None):
 
@@ -46,18 +72,19 @@ def filterArea(source, sourcekey, destination,roid=None,name=None):
     If name is provided → lookup by polygon NAME.
     Otherwise → lookup by lat/lon from roid.
     """
+    print(f"[filterArea] destination :{destination} roid {roid} step:{name}")
 
     nodestep = None
 
     # Load source GeoJSON
-    gdf = gpd.read_file(source)
+    gdf_RAW = gpd.read_file(source)
+    # ----- CRS FIX ------------------------------------------------------
+
+    # -------------------------------
+
+    gdf = ensure_4326(gdf_RAW)
     matched = gdf.head(0)
 
-    # ----- CRS FIX ------------------------------------------------------
-    if gdf.crs is None:
-        gdf.set_crs("EPSG:4326", inplace=True)
-    elif gdf.crs.to_epsg() != 4326:
-        gdf = gdf.to_crs(epsg=4326)
 
     # Standardize field names
     gdf = gdf.rename(columns={sourcekey: 'NAME'})
@@ -65,7 +92,7 @@ def filterArea(source, sourcekey, destination,roid=None,name=None):
         gdf = gdf.rename(columns={'OBJECTID': 'FID'})
 
 
-    # ----- LOOKUP BY NAME ----------------------------------------------
+    # ----- LOOKUP BY NAME IF PRESENT ----------------------------------------------
     if name is not None:
         target = normalname(name.split("/")[-1])
         matched = gdf[
@@ -75,24 +102,46 @@ def filterArea(source, sourcekey, destination,roid=None,name=None):
             == target
         ]
 
-    elif roid is not None:
-        # ----- LOOKUP BY LAT/LON ---------------------------------------
-        latitude = roid[0]
-        longitude = roid[1]
-        if longitude is None or latitude is None:
-            print(f"[filterArea] No coordinates — skipping spatial filter")
-        else:
-            point = Point(longitude, latitude)  # (lon, lat)
-            matched = gdf[gdf.contains(point)]
-
     # ----- SAVE IF MATCHED ---------------------------------------------
     if not matched.empty:
         nodestep = normalname(matched['NAME'].values[0])
         output_path = destination
 
         matched.to_file(output_path, driver="GeoJSON")
-        print(f"Found {len(matched)} matching feature(s). Saved to {output_path}")
-    else:
+        print(f"[filterArea] Found {nodestep}{len(matched)} matching feature(s). Saved to {output_path}")
+    elif roid is not None:
+        print("[filterArea] Coords — do spatial filter")
+
+        # ----- LOOKUP BY LAT/LON ---------------------------------------
+        latitude = roid[0]
+        longitude = roid[1]
+
+        if longitude is None or latitude is None:
+            print("[filterArea] No coordinates — skipping spatial filter")
+            matched = gdf.iloc[0:0]   # empty result
+        else:
+            # 1️⃣ Ensure GDF has a CRS
+            if gdf.crs is None:
+                raise ValueError("GeoDataFrame has no CRS set")
+
+            # 2️⃣ Create point in WGS84 (lat/lon)
+
+            point_gs = gpd.GeoSeries(
+                [Point(longitude, latitude)],  # (lon, lat)
+                crs="EPSG:4326"
+            )
+
+            point = point_gs.iloc[0]
+
+            # 4️⃣ Now CRS definitely matches
+            matched = gdf[gdf.covers(point)]
+            nodestep = normalname(matched['NAME'].iloc[0])
+
+
+        print(f"[filterArea] Coords — point {point} match ({name}) with {len(matched)} rows")
+
+
+    if matched is None or matched.empty:
         if name:
             print(f'No match found for name "{name}".')
         else:
@@ -157,12 +206,12 @@ def intersectingArea(
     # ------------------------------------------------------------------
     # 1. Load child layer
     # ------------------------------------------------------------------
-    gdf = gpd.read_file(source)
+    gdf_RAW = gpd.read_file(source)
+    # ----- CRS FIX ------------------------------------------------------
 
-    if gdf.crs is None:
-        gdf.set_crs("EPSG:4326", inplace=True)
-    elif gdf.crs.to_epsg() != 4326:
-        gdf = gdf.to_crs(4326)
+    # -------------------------------
+
+    gdf = ensure_4326(gdf_RAW)
 
     gdf = gdf.rename(columns={sourcekey: "NAME"})
     if "OBJECTID" in gdf.columns:
@@ -354,23 +403,38 @@ def get_parent_row(plevels, child_level, parent_name, roid):
     if len(parent_tree) == 1:
         parent_row = parent_tree.iloc[0]
         logging.debug(f"[DEBUG] Only one parent feature available, using it as the parent: {parent_row['NAME']}")
-
-    # If parent_name is provided, try to find the matching parent
-    if parent_row is None and parent_name:
-        logging.debug(f"[DEBUG] Searching for parent with name '{parent_name}'")
-        matches = parent_tree[parent_tree["NAME"].apply(normalname) == normalname(parent_name)]
-        if not matches.empty:
-            parent_row = matches.iloc[0]  # Parent exists in the layer, select the first match
-            logging.debug(f"[DEBUG] Parent found by name: {parent_row['NAME']}")
-        else:
-            logging.debug(f"[DEBUG] No match found for parent name '{parent_name}'")
-
+        return parent_row
     # If still no parent_row and a roid (spatial point) is provided, find the closest parent by distance
     if parent_row is None and roid is not None:
         logging.debug(f"[DEBUG] No parent found by name or single row fallback. Using spatial search for roid={roid}")
-        distances = parent_tree.geometry.apply(lambda g: g.distance(Point(roid[::-1])))  # Calculate distance
-        min_distance_idx = distances.idxmin()
-        parent_row = parent_tree.iloc[min_distance_idx]  # Get the row with the minimum distance
+
+        # Calculate distances from the point to each geometry in the GeoDataFrame
+        distances = parent_tree.geometry.apply(lambda g: g.distance(Point(roid[::-1])))
+
+        # Check if distances is empty or contains NaNs
+        if distances.empty:
+            logging.error(f"[ERROR] Distances Series is empty. No geometries to calculate distances.")
+            parent_row = None  # Handle empty case as needed
+        elif distances.isna().all():
+            logging.error(f"[ERROR] All distances are NaN. This could be due to invalid geometries.")
+            parent_row = None  # Handle NaN case as needed
+        else:
+            # Check if there are any valid distances and ensure we have a valid index
+            valid_distances = distances.dropna()  # Remove NaNs from distances
+
+            if valid_distances.empty:
+                logging.error(f"[ERROR] No valid distances after dropping NaNs.")
+                parent_row = None  # Handle the case where no valid distances are left
+            else:
+                # Get the index of the minimum distance (the closest geometry)
+                min_distance_idx = valid_distances.idxmin()
+
+                # Ensure that the index is valid and within bounds
+                if min_distance_idx in parent_tree.index:
+                    parent_row = parent_tree.loc[min_distance_idx]  # Use .loc for better error handling
+                else:
+                    logging.error(f"[ERROR] The index {min_distance_idx} is out of bounds or invalid.")
+                    parent_row = None  # Handle as needed (e.g., default or fallback logic)
         logging.debug(f"[DEBUG] Parent found by spatial search: {parent_row['NAME']} at distance {distances[min_distance_idx]}")
 
     if parent_row is None:
@@ -433,17 +497,20 @@ def ensure_treepolys(
 
         # Prepare the selection or spatial fallback criteria
         select_name = steps[level] if level < len(steps) else None
-        roid = here if level >= len(steps) else None
+        roid = here
         logging.debug(f"[LEVEL {level}] layer_type: {layer_type}: select_name:{select_name}")
 
         # Parent resolution logic
 
         parent_row = active_parent_rows.get(level,None)
+
         # Check if the parent_tree GeoDataFrame is valid and contains exactly one row
         parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
         # Loading the layer for this level
 
-        logging.debug(f"[LEVEL {level}] Loading layer {layer_type} with parent {parent_name} of type {parent_levels[level]}")
+        num_parent_rows = parent_row.shape[0] if parent_row is not None else 0
+
+        logging.debug(f"[LEVEL {level}] Loading layer {layer_type} parent rows {num_parent_rows} in {parent_name} of type {parent_levels[level]}")
 
         name, tree_gdf, full_gdf = load_layer(
             layer=layer,
@@ -458,6 +525,7 @@ def ensure_treepolys(
         # Upsert the tree_gdf into Treepolys [layer type] and update the dataset
         existing = get_treepoly(layer_type)
         if existing is None:
+            # layer search for name or lat long is empty so return all filter or intersecting candidates
             new_tree_gdf = tree_gdf
         else:
             new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
@@ -468,10 +536,10 @@ def ensure_treepolys(
         logging.debug(f"[LEVEL {level}] After upsert {layer_type}: {len(updated) if updated is not None else 0} rows")
         next_level = level + 1
         # Determine the next level's parent filter from the current layer's data
-        active_parent_rows[next_level] = get_parent_row(parent_levels,next_level, name,roid)
+        active_parent_rows[next_level] = get_parent_row(parent_levels,next_level, parent_name,roid)
         # parent_row of parent_layer_type = parent_levels[level]
         # so where to store it ? active_
-        logging.debug(f"[LEVEL {next_level}] Active parent set to {active_parent_rows[next_level].get('NAME', 'Unknown')}")
+        logging.debug(f"[LEVEL {next_level}] Active parent set to {parent_name}=={active_parent_rows[next_level].get('NAME', 'Unknown')}")
 
         # Build the new path for the current layer
         if name:
@@ -732,8 +800,8 @@ LAYERS = [
     {
         "key": "county",
         "level": 2,
-        "src": "Counties_and_Unitary_Authorities_May_2023_UK_BGC_-1930082272963792289.geojson",
-        "field": "CTYUA23NM",
+        "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
+        "field": "CTYUA24NM",
         "out": "County_Boundaries.geojson",
         "method": "filter"
     },

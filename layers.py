@@ -23,6 +23,9 @@ def Hconcat(house_list):
         raise
 
 
+import geopandas as gpd
+
+
 def get_text_color(fill_hex):
     # Convert hex to RGB
     fill_hex = fill_hex.lstrip('#')
@@ -268,6 +271,7 @@ class ExtendedFeatureGroup(FeatureGroup):
     def create_layer(self, c_election, nodelist, intention_type, static=False):
         from flask import session
         from elections import branchcolours
+        from state import Treepolys, Fullpolys
 
         from collections import defaultdict
 
@@ -490,7 +494,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                     num = str(matched_child.tagno)
                     tag = str(matched_child.value)
                     typetag = "streets in "+str(matched_child.type)+" "+str(matched_child.value)
-            #        here = [float(f"{target_node.latlongroid[0]:.6f}"), float(f"{target_node.latlongroid[1]:.6f}")]
 
                     popup_html = ""
 
@@ -974,6 +977,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{type} they are {[x.value for x in childlist]}" )
 
+# reset counters of child type to so that child tag = this node's childno
+        accumulate = session.get("accumulate", False)
+        if not accumulate:
+            counters[rlevels[herenode.level+1]] = 0
+
         for c in childlist:
             print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value,type}")
             print(f"______All nodemaps:{len(allchildlist)} at {herenode.value}")
@@ -1067,14 +1075,8 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     party = "("+c.party+")"
 
-                    accumulate = session.get("accumulate", False)
-
-                    if not accumulate:
-                        num = str(c.tagno)
-                    else:
-                        counters[c.type] += 1
-                        c.gtagno = counters[c.type]
-                        num = str(c.gtagno)
+                    counters[c.type] += 1
+                    num = str(counters[c.type])
 
 
                     tag = str(c.value)

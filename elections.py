@@ -125,15 +125,6 @@ class ElectionContext:
 
 
 
-def capped_append(lst, item):
-    max_size = 7
-    if not isinstance(lst, list):
-        return
-    lst.append(item)
-    if len(lst) > max_size:
-        lst.pop(0)  # Remove oldest
-    return lst
-
 
 def get_available_elections():
     """
@@ -200,6 +191,16 @@ class CurrentElection(dict):
         self.election_id = election_id
         self.name = election_id  # stable election identity
 
+
+    def add_newarea(self, item):
+        max_size = 7
+        if not isinstance(self['mapfiles'], list):
+            return
+        self['mapfiles'].append(item)
+        if len(self['mapfiles']) > max_size:
+            self['mapfiles'].pop(0)  # Remove oldest
+        return self['mapfiles']
+
     def visit_node(self, node):
         from state import Treepolys, Fullpolys
         rlevels = self.resolved_levels
@@ -221,7 +222,7 @@ class CurrentElection(dict):
             self['cid'] = node.nid
             self['cidLat'] = node.latlongroid[0]
             self['cidLong'] = node.latlongroid[1]
-            self['mapfiles'] = capped_append(self['mapfiles'], node.mapfile(rlevels))
+            newlist = self.add_newarea(node.mapfile(rlevels))
             self.save()
             print(f"=== VISIT NODE === {node.nid}")
             print(f"current children:{[c.value for c in node.children]}")
@@ -402,19 +403,16 @@ class CurrentElection(dict):
         except Exception as e:
             raise RuntimeError(f"❌ Failed to load election file {path}: {e}")
 
-    def save(self):
+    def save(self,new_name=None):
         """
         Persist election JSON to disk
         """
-        if not self.name:
-            raise ValueError("Cannot save election without election_id")
+        if new_name is not None:
+            self.name = new_name
 
         path = self._file_for(self.name)
-
-        print("Saving resources:", self.get("resources"))
-        print("Resource count:", len(self.get("resources", {})))
         try:
-            print(f"____Under route {route()} Saving Election File: {self.election_id} → {path}")
+            print(f"____Under route {route()} Saving New Election File: {self.election_id} → {path}")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self, f, indent=2)
             print("✅ Election JSON written safely")

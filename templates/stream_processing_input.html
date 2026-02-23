@@ -544,90 +544,14 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
 
-
-      document.getElementById('process-btn').addEventListener('click', function () {
-
-        // Show progress bar
+  document.getElementById('process-btn').addEventListener('click', async () => {
+      // Show progress bar
       document.getElementById("progress-container").style.display = "block";
       document.getElementById("progress-bar").value = 0;
       document.getElementById("progress-text").innerText = "0%";
       let progressTimeoutId = null;
 
-      // Start polling progress
-      function pollProgress() {
-        fetch("/progress")
-          .then(res => {
-              return res.json();
-          })
-          .then(data => {
-
-            const bar = document.getElementById("progress-bar");
-            const text = document.getElementById("progress-text");
-            bar.value = data.percent || 0;
-            text.innerText = (data.percent || 0) + "% — " + (data.message || "");
-
-            if (data.status === "complete") {
-
-
-              console.log("Normalization is complete. Injecting DQstats HTML if available.");
-              text.innerText = "✅ Complete";
-              console.log("DQstats_html from server:", data.dqstats_html);
-
-              window.parent.fetchTableData('DQstats');
-
-              if (data.dqstats_html) {
-                const tbody = document.querySelector("#DQ-table tbody");
-                if (tbody) {
-                  tbody.innerHTML = data.dqstats_html;
-                  console.log("DQstats updated successfully.");
-                } else {
-                  console.warn("DQ-table tbody not found in DOM.");
-                }
-              }
-
-              const html = data.html;
-              const streamrag = data.streamrag;
-              const streamTbody = document.querySelector('#streamtab tbody');
-              console.log("STREAM HTML:", html);
-              if (streamTbody) {
-                streamTbody.innerHTML = html;
-              }
-              // Now handle the 'streamrag' data (which is likely an object)
-              const labels = Object.keys(streamrag);
-              const dataPoints = labels.map(label => streamrag[label].Elect);
-              const rags = labels.map(label => streamrag[label].RAG);
-
-              console.log("streamtablabels:", labels);
-              console.log("streamtabdata:", dataPoints);
-              console.log("streamtabrags:", rags);
-
-              // Update the chart
-              window.parent.createOrUpdateChart(labels, dataPoints, rags);
-
-
-              // Stop here; ❌ no further polling
-            } else if (data.status === "error") {
-              console.error("Error in normalization:", data.message);
-              text.innerText = "⚠️ " + (data.message || "Error");
-            } else if (data.status === "error") {
-              console.error("Error in normalization:", data.message);
-              text.innerText = "⚠️ " + (data.message || "Error");
-
-              // Stop polling
-              if (progressTimeoutId) {
-                  clearTimeout(progressTimeoutId);
-              }
-
-            } else {
-              // Continue polling after 500ms
-              progressTimeoutId = setTimeout(pollProgress, 500);
-            }
-          })
-          .catch(err => {
-            console.error("Polling error:", err);
-          });
-      }
-
+      // Prompt user for election name
       const streamToProcess = prompt("Enter the election name for which you want to import data:");
       if (!streamToProcess) return;
 
@@ -635,109 +559,141 @@ document.addEventListener('DOMContentLoaded', function () {
       const rows = document.querySelectorAll('#file-info-tbody tr');
       const formData = new FormData();
       let found = false;
-      console.log(`streamtoProcess ${rows}`);
 
       rows.forEach((row, index) => {
-        const election = row.querySelector('.election').value.trim().toLowerCase();
-        const territory = row.querySelector('.territory').value;
-        const active = row.querySelector('.active').checked;
-        const order = row.querySelector('.order').value;
-        const ftype = row.querySelector('.type').value;
-        const purpose = row.querySelector('.purpose').value;
-        const fixlevel = row.querySelector('.fixlevel').value;
-        const fileInput = row.querySelector('.file-picker');
-        const filepathEl = row.querySelector('.file-path');
-        const filepath = filepathEl ? filepathEl.value : '';
+          const election = row.querySelector('.election').value.trim().toLowerCase();
+          const active = row.querySelector('.active').checked;
+          const order = row.querySelector('.order').value;
+          const ftype = row.querySelector('.type').value;
+          const purpose = row.querySelector('.purpose').value;
+          const fixlevel = row.querySelector('.fixlevel').value;
+          const fileInput = row.querySelector('.file-picker');
+          const filepathEl = row.querySelector('.file-path');
+          const filepath = filepathEl ? filepathEl.value : '';
 
-    //      alert('inside active and stream: '+ stream+active );
-        console.log(`Row ${index} filepath: "${filepath} filepathEl: "${filepathEl}"` ); // Add this
-        if (active && election === normalizedInput) {
-          formData.append('election', normalizedInput);
+          if (active && election === normalizedInput) {
+              formData.append('election', normalizedInput);
 
-          if (fileInput.files.length > 0) {
-            const file = fileInput.files[0];
-            formData.append(`files_${index}`, file);  // upload if picked this session
-          } else if (filepath) {
-            formData.append(`stored_path_${index}`, filepath);  // use stored safe path
-    //          alert('Filepath found: '+`stored_path_${index}` + filepath);
-          } else {
-            console.warn(`No file selected or stored path for election '${election}'`);
-            return; // skip this row
+              if (fileInput.files.length > 0) {
+                  formData.append(`files_${index}`, fileInput.files[0]);
+              } else if (filepath) {
+                  formData.append(`stored_path_${index}`, filepath);
+              } else {
+                  console.warn(`No file selected or stored path for election '${election}'`);
+                  return;
+              }
+
+              // Append metadata
+              formData.append(`meta_${index}_order`, order);
+              formData.append(`meta_${index}_type`, ftype);
+              formData.append(`meta_${index}_purpose`, purpose);
+              formData.append(`meta_${index}_fixlevel`, fixlevel);
+              formData.append(`meta_${index}_election`, election);
+
+              found = true;
           }
-          console.log(`Row ${index} fileInput.files.length: ${fileInput.files.length}`);
-          console.log(`Row ${index} filepath: "${filepath}"`);
-          // Append other metadata
-          formData.append(`meta_${index}_order`, order);
-          formData.append(`meta_${index}_type`, ftype);
-          formData.append(`meta_${index}_purpose`, purpose);
-          formData.append(`meta_${index}_fixlevel`, fixlevel);
-          formData.append(`meta_${index}_election`, election);
-          // After metadata is appended
-
-
-          found = true;
-        };
-        console.log(`Row election: '${election}', user input: '${normalizedInput}', active: ${active}`);
-
       });
 
       if (!found) {
-        alert("No matching files found for election: " + streamToProcess);
-        return;
+          alert("No matching files found for election: " + streamToProcess);
+          return;
       }
 
-      pollProgress();
+      // -------------------
+      // Progress Polling
+      // -------------------
+      async function pollProgress() {
+          try {
+              const res = await fetch("/progress");
+              const data = await res.json();
 
-      fetch('/normalise', {
-        method: 'POST',
-        body: formData
-      })
-        .then(response => response.text())
-        .then(html => {
-          const dqTableBody = document.querySelector('#DQ-table tbody');
-          if (dqTableBody) {
-            dqTableBody.innerHTML = html;
-          }
+              const bar = document.getElementById("progress-bar");
+              const text = document.getElementById("progress-text");
+              bar.value = data.percent || 0;
+              text.innerText = (data.percent || 0) + "% — " + (data.message || "");
 
-          // Optionally reload streamtab again after update
-          fetch('/streamrag_api')
-            .then(res => res.json())  // Parse the JSON response
-            .then(data => {
-              // Extract the 'html' and 'streamrag' from the response
+              if (data.status === "complete") {
+                  text.innerText = "✅ Complete";
+                  console.log("Normalization complete.", data);
 
-              const html = data.html;
-              const streamrag = data.streamrag;
+                  if (window.parent?.fetchTableData) {
+                      await window.parent.fetchTableData('DQstats');
+                  }
 
-              // Insert the HTML into the table
-              const streamTbody = document.querySelector('#streamtab tbody');
-              if (streamTbody) {
-                streamTbody.innerHTML = html;
+                  if (data.dqstats_html) {
+                      const tbody = document.querySelector("#DQ-table tbody");
+                      if (tbody) tbody.innerHTML = data.dqstats_html;
+                  }
+
+                  if (data.html && data.streamrag) {
+                      const streamTbody = document.querySelector("#streamtab tbody");
+                      if (streamTbody) streamTbody.innerHTML = data.html;
+
+                      const labels = Object.keys(data.streamrag);
+                      const dataPoints = labels.map(l => data.streamrag[l].Elect);
+                      const rags = labels.map(l => data.streamrag[l].RAG);
+
+                      if (window.parent?.createOrUpdateChart) {
+                          window.parent.createOrUpdateChart(labels, dataPoints, rags);
+                      }
+                  }
+
+              } else if (data.status === "error") {
+                  console.error("Error in normalization:", data.message);
+                  text.innerText = "⚠️ " + (data.message || "Error");
+
+              } else {
+                  // Continue polling
+                  progressTimeoutId = setTimeout(pollProgress, 500);
               }
 
-              // Now handle the 'streamrag' data (which is likely an object)
-              const labels = Object.keys(streamrag);
-              const dataPoints = labels.map(label => streamrag[label].Elect);
-              const rags = labels.map(label => streamrag[label].RAG);
+          } catch (err) {
+              console.error("Polling error:", err);
+              progressTimeoutId = setTimeout(pollProgress, 1000);
+          }
+      }
 
-              console.log("streamtablabels:", labels);
-              console.log("streamtabdata:", dataPoints);
-              console.log("streamtabrags:", rags);
+      // Start polling
+      pollProgress();
 
-              // Update the chart
-              window.parent.createOrUpdateChart(labels, dataPoints, rags);
-            })
-            .catch(error => {
-              console.error('Error:', error);
-            });
-          })
-        .catch(error => {
+      // -------------------
+      // Upload files / start normalization
+      // -------------------
+      try {
+          const response = await fetch('/normalise', {
+              method: 'POST',
+              body: formData
+          });
+
+          const html = await response.text();
+          const dqTableBody = document.querySelector('#DQ-table tbody');
+          if (dqTableBody) dqTableBody.innerHTML = html;
+
+          // Optionally refresh streamtab
+          try {
+              const res = await fetch('/streamrag_api');
+              const data = await res.json();
+
+              const streamTbody = document.querySelector('#streamtab tbody');
+              if (streamTbody) streamTbody.innerHTML = data.html;
+
+              const labels = Object.keys(data.streamrag);
+              const dataPoints = labels.map(l => data.streamrag[l].Elect);
+              const rags = labels.map(l => data.streamrag[l].RAG);
+
+              if (window.parent?.createOrUpdateChart) {
+                  window.parent.createOrUpdateChart(labels, dataPoints, rags);
+              }
+
+          } catch (err) {
+              console.error("Streamrag fetch error:", err);
+          }
+
+      } catch (err) {
           clearTimeout(progressTimeoutId);
-          progressTimeoutId = null;
-          console.error('Error:', error);
-          alert("Processing error: " + error);
-        });
-    });
-
+          console.error("Normalization upload error:", err);
+          alert("Processing error: " + err);
+      }
   });
 
 

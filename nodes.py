@@ -9,7 +9,7 @@ import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context
 from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-from elections import route, CurrentElection, capped_append, stepify
+from elections import route, CurrentElection, stepify
 from folium import Map, Element
 import folium
 import uuid
@@ -108,6 +108,9 @@ def load_nodes(path):
 
         # DEBUG: show candidates on load
         print(f"📥 [DEBUG] Loaded node '{node.value}' ({node.nid}) candidates: {node.candidates}")
+
+    print("JSON count:", len(raw_nodes))
+    print("Dict count:", len(TREK_NODES_BY_ID))
 
     # PASS 2: wire relationships
     for data in raw_nodes:
@@ -439,7 +442,6 @@ def restore_from_persist(treepolys, fullpolys):
     print("AFTER LOAD:")
     for nid, node in TREK_NODES_BY_ID.items():
         print(nid, node.candidates)
-        break
     print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
     return electors
 
@@ -531,6 +533,8 @@ def get_last_node(current_election, CE, *, create=True):
     """
 
     from flask import redirect
+    from nodes import TREK_NODES_BY_ID
+    from state import Treepolys, Fullpolys
 
     cid = CE.get("cid")
     cidLat = CE.get("cidLat")
@@ -639,22 +643,21 @@ def find_node_by_location(here):
 
 
 
-
 class TreeNode:
-    from datetime import datetime
-    def __init__(self, *, value, fid, roid, origin, node_type):
-        self.nid = str(uuid.uuid1())
+
+    def __init__(self, *, value, fid, roid, origin, node_type, nid=None):
+        # If nid provided (loading from JSON) → use it
+        # If not (new node) → generate one
+        self.nid = nid if nid is not None else str(uuid.uuid4())
+
         self.value = normalname(str(value))
         self.fid = fid
         self.latlongroid = roid
         self._child_index = {}
         self.last_modified = datetime.now()
 
-
         self.origin = origin
         self.election = origin
-
-
         self.type = node_type
 
         # Tree relations
@@ -673,12 +676,32 @@ class TreeNode:
 
         # UI
         self.tagno = 1
-        self.gtagno = 1
-
         self.bbox = []
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
+    @classmethod
+    def from_dict(cls, data):
+        node = cls(
+            value=data["value"],
+            fid=data["fid"],
+            roid=data["latlongroid"],
+            origin=data["origin"],
+            node_type=data["node_type"],
+            nid=data["nid"],   # 🔥 THIS is the important change
+        )
+
+        node.electorate = data["electorate"]
+        node.turnout = data["turnout"]
+        node.houses = data["houses"]
+        node.target = data["target"]
+        node.party = data["party"]
+        node.candidates = data.get("candidates", {})
+        node.defcol = data["defcol"]
+        node.tagno = data["tagno"]
+        node.bbox = data["bbox"]
+
+        return node
 
 
     def path_options(self, rlevels, *, include_self=True):
@@ -774,33 +797,9 @@ class TreeNode:
             "defcol": self.defcol,
 
             "tagno": self.tagno,
-            "gtagno": self.gtagno,
             "bbox": self.bbox,
         }
 
-    @classmethod
-    def from_dict(cls, data):
-        node = cls(
-            value=data["value"],
-            fid=data['fid'],
-            roid=data["latlongroid"],
-            origin=data["origin"],
-            node_type=data["node_type"],
-        )
-        node.nid = data["nid"]  # IMPORTANT: preserve ID
-
-        node.electorate = data["electorate"]
-        node.turnout = data["turnout"]
-        node.houses = data["houses"]
-        node.target = data["target"]
-        node.party = data["party"]
-        node.candidates = data.get("candidates", {})
-        node.defcol = data["defcol"]
-        node.tagno = data["tagno"]
-        node.gtagno = data["gtagno"]
-        node.bbox = data["bbox"]
-
-        return node
 
     # ------------------------------
     # Computed properties
@@ -1113,7 +1112,8 @@ class TreeNode:
 
 
     def ping_node(self, rlevels, c_election, dest_path, create=True):
-        from state import LEVEL_ZOOM_MAP
+        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
+        from nodes import TREK_NODES_BY_ID
         from flask import session
         from elections import route
 
@@ -1265,6 +1265,7 @@ class TreeNode:
     def getselectedlayers(self, rlevels, this_election, path):
         from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
         from flask import session
+        from state import Treepolys, Fullpolys
         # rlevels[self.level-1] = child type
         # rlevels[self.level] = sibling type
         # rlevels[self.parent.level] = parent type
@@ -1448,7 +1449,7 @@ class TreeNode:
             # Safely get candidate dict or default to empty dict
             self.candidates = Candidates.get("division", {}).get(self.value, {})
             print(f"[DEBUG] Candidate update for {self.value}: {self.candidates}")
-        save_nodes(TREKNODE_FILE)
+
 
 
     def updateElectorate(self, rlevels):
@@ -1691,19 +1692,24 @@ class TreeNode:
         import random
 
         electtype = resolved_levels[self.level+1]
-
-        if self.type not in Treepolys:
-            raise ValueError(f"Layer '{self.type}' not found in Treepolys")
+        parenttype = resolved_levels[self.level]
+        print(f"🧭 create_map_branch 1Y {electtype} filteredby ({parenttype}) : {Treepolys[parenttype]}:")
+        if Treepolys.get(parenttype, []).empty:
+            raise ValueError(f"Parent Layer '{self.type}' not found in Treepolys")
 
 # need to know the CE['territories'] value to determine division or ward
         # NOW THIS IS SAFE
-        parent_poly = Treepolys[self.type]
+
+
+        parent_poly = Treepolys[parenttype]
+
+        print(f"🧭 create_map_branch 2Y {electtype} filteredby ({parenttype}) :")
 
         if parent_poly is None or parent_poly.empty:
             raise ValueError(f"No polygons loaded for layer '{self.type}'")
 
         print(
-            f"🧭 create_map_branch({self.type}) polys loaded:",
+            f"🧭 create_map_branch({parenttype}) polys loaded:",
             parent_poly is not None and not parent_poly.empty
         )
 
@@ -1718,31 +1724,34 @@ class TreeNode:
         # Filter the parent geometry based on the FID
         parent_geom = parent_poly[parent_poly['FID'] == int(self.fid)]
 
+        print(f"🧭 create_map_branch 3Y parent_geom ({parent_geom}) :")
 
         # If no matching geometry is found, handle the case where parent_geom is empty
         if parent_geom.empty:
-            print(f"Adding back in Full '{self.type}' boundaries for {self.value} FID {self.fid}")
+            print(f"Adding back in Full '{parenttype}' boundaries for {self.value} FID {self.fid}")
             raise Exception ("EMPTY COUNTRY PARENT GEOMETRY")
         else:
             print(f"___create_map_branch geometry for {self.value} FID {self.fid} is: ")
             print(
-                f"parent type: {self.type} "
+                f"parent type: {parenttype} "
                 f"size {len(parent_poly)} "
                 f"parent poly cols: {list(parent_poly.columns)} "
                 f"NID {self.nid}"
             )
             # If geometry was found, proceed with the matching geometry
             parent_geom = parent_geom.geometry.values[0]
-        [self.bbox, self.latlongroid] = self.get_bounding_box(self.type,block)
+        [self.bbox, self.latlongroid] = self.get_bounding_box(parenttype,block)
 
         ChildPolylayer = Treepolys[electtype]
 
         print(f"____There are {len(ChildPolylayer)} Children candidates for {self.value} bbox:[{self.bbox}] of type {electtype}" )
+
         index = 0
         fam_nodes = self.childrenoftype(electtype)
 
         # Check if there’s anything to process
         if ChildPolylayer.empty:
+            raise Exception ("No geometries found!")
             print(f"⚠️ No geometries found for children of type '{electtype}' under {self.value}. Skipping creation.")
             return fam_nodes
 
@@ -1756,7 +1765,7 @@ class TreeNode:
 
 
             centroid_point = limb.geometry.centroid
-            here = (centroid_point.y, centroid_point.x)
+            here = (centroid_point.y, centroid_point.x) # (lat , Long)
             overlaparea = parent_geom.intersection(limb.geometry).area
             overlap_margin = round(Overlaps[electtype], 8)  # 8 decimal places for safety
 
@@ -1827,7 +1836,7 @@ class TreeNode:
         global STATICSWITCH
 
         from folium import IFrame
-        from state import LEVEL_ZOOM_MAP
+        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
         from layers import make_counters,FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
         import hashlib
@@ -2492,19 +2501,34 @@ class TreeNode:
                 (miny + pad_lat, minx + pad_lon),  # SW (lat, lon)
                 (maxy - pad_lat, maxx - pad_lon)   # NE (lat, lon)
             ]
-            roid = pb.dissolve().centroid.iloc[0]
+            # If currently in EPSG:4326 (WGS84)
+            pb_proj = pb.to_crs(epsg=3857)   # Web Mercator (meters)
 
+            roid = pb_proj.dissolve().centroid.iloc[0]
+
+            # Optional: convert centroid back to lat/lon
+            roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
         elif self.level < 5:
             pfile = Treepolys[ntype]
             pb = pfile[pfile['FID'] == int(self.fid)]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
             swne = [(miny, minx), (maxy, maxx)]
-            roid = pb.dissolve().centroid.iloc[0]
+            # If currently in EPSG:4326 (WGS84)
+            pb_proj = pb.to_crs(epsg=3857)   # Web Mercator (meters)
 
+            roid = pb_proj.dissolve().centroid.iloc[0]
+
+            # Optional: convert centroid back to lat/lon
+            roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
         else:
             minx, miny, maxx, maxy = block.geometry.total_bounds
             swne = [(miny, minx), (maxy, maxx)]
-            roid = block.dissolve().centroid.iloc[0]
+            pb_proj = block.to_crs(epsg=3857)   # Web Mercator (meters)
+
+            roid = pb_proj.dissolve().centroid.iloc[0]
+
+            # Optional: convert centroid back to lat/lon
+            roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
 
         # Always return lat/lon tuple for centroid
         centroid = (roid.y, roid.x)
