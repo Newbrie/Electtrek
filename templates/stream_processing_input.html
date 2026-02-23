@@ -108,349 +108,359 @@
 
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
 
-  /* =====================================================
-     Utility helpers
-  ===================================================== */
+function init() {
+  document.addEventListener('DOMContentLoaded', () => {
 
-  const qs  = (sel, ctx=document) => ctx.querySelector(sel);
-  const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+    /* =====================================================
+       Utility helpers
+    ===================================================== */
 
-  async function fetchJSON(url, options={}) {
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`${url} failed`);
-    return res.json();
-  }
+    const qs  = (sel, ctx=document) => ctx.querySelector(sel);
+    const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
 
-  async function uploadFile(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const res = await fetch('/upload_file', {
-      method: 'POST',
-      body: formData
-    });
-
-    const result = await res.json();
-    if (result.error) throw new Error(result.error);
-    return result.path;
-  }
-
-  function updateStreamTable(html, streamrag) {
-    const tbody = qs('#streamtab tbody');
-    if (tbody) tbody.innerHTML = html;
-
-    if (streamrag && window.parent?.createOrUpdateChart) {
-      const labels = Object.keys(streamrag);
-      const dataPoints = labels.map(l => streamrag[l].Elect);
-      const rags = labels.map(l => streamrag[l].RAG);
-      window.parent.createOrUpdateChart(labels, dataPoints, rags);
-    }
-  }
-
-  /* =====================================================
-     Election dropdown logic
-  ===================================================== */
-
-  function populateElectionDropdowns() {
-    const parentSelect = window.parent.document.getElementById("streams");
-    if (!parentSelect) return;
-
-    const electionNames = [...parentSelect.options].map(opt => opt.value);
-    const singletonTerritoryEl = window.parent.document.getElementById("territory");
-    const singletonTerritory = singletonTerritoryEl?.value || '';
-
-    qsa('.editable.election').forEach(select => {
-      const currentValue = select.dataset.initial || '';
-      const currentTerritory = select.dataset.territory || '';
-
-      select.innerHTML = '';
-
-      electionNames.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        option.dataset.territory = singletonTerritory;
-        if (name === currentValue) option.selected = true;
-        select.appendChild(option);
-      });
-
-      if (currentValue && !electionNames.includes(currentValue)) {
-        const opt = document.createElement('option');
-        opt.value = currentValue;
-        opt.textContent = currentValue + " (not found)";
-        opt.dataset.territory = currentTerritory;
-        opt.selected = true;
-        select.appendChild(opt);
-      }
-    });
-  }
-
-  function handleElectionChange(select) {
-    const selected = select.options[select.selectedIndex];
-    const territory = selected?.dataset.territory || '';
-    select.dataset.territory = territory;
-
-    const row = select.closest('tr');
-    const territoryInput = qs('.territory', row);
-
-    if (territoryInput) {
-      const last = territory.split('/').pop();
-      territoryInput.value = last || '';
-      territoryInput.dataset.fullTerritory = territory;
-    }
-  }
-
-  /* =====================================================
-     File table logic
-  ===================================================== */
-
-  function collectTableData() {
-    return qsa('#file-info-tbody tr').map(row => ({
-      order: parseInt(qs('.order', row)?.value || 0),
-      election: qs('.election', row)?.value || "",
-      territory: qs('.territory', row)?.value || "",
-      filename: qs('.filename', row)?.value || "",
-      type: qs('.type', row)?.value || "",
-      purpose: qs('.purpose', row)?.value || "",
-      fixlevel: parseInt(qs('.fixlevel', row)?.value || 0),
-      active: qs('.active', row)?.checked || false,
-      file_path: qs('.file-path', row)?.value || ""
-    }));
-  }
-
-  async function handleFileSelection(row, fileInput) {
-    if (!fileInput.files.length) return;
-
-    try {
-      const path = await uploadFile(fileInput.files[0]);
-      qs('.filename', row).value = fileInput.files[0].name;
-      qs('.file-path', row).value = path;
-      qs('.active', row).checked = true;
-    } catch (err) {
-      alert("Upload error: " + err.message);
-    }
-  }
-
-  /* =====================================================
-     Event delegation for table
-  ===================================================== */
-
-  qs('#file-info-tbody').addEventListener('click', async (e) => {
-    const row = e.target.closest('tr');
-    if (!row) return;
-
-    // File button
-    if (e.target.classList.contains('file-btn')) {
-      const fileInput = qs('.file-picker', row);
-      fileInput.click();
-      fileInput.onchange = () => handleFileSelection(row, fileInput);
+    async function fetchJSON(url, options={}) {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(`${url} failed`);
+      return res.json();
     }
 
-    // Delete row
-    if (e.target.classList.contains('delete-btn')) {
-      row.remove();
-    }
-  });
+    async function uploadFile(file) {
+      const formData = new FormData();
+      formData.append('file', file);
 
-  qs('#file-info-tbody').addEventListener('change', (e) => {
-    if (e.target.classList.contains('editable') &&
-        e.target.classList.contains('election')) {
-      handleElectionChange(e.target);
-    }
-  });
-
-  /* =====================================================
-     Add row
-  ===================================================== */
-
-  qs('#add-row-btn').addEventListener('click', () => {
-    const tbody = qs('#file-info-tbody');
-    const newRow = document.createElement('tr');
-
-    newRow.innerHTML = `
-      <td><input type="number" class="editable order" value="1"></td>
-      <td><select class="editable election" data-initial="" data-territory=""></select></td>
-      <td><input type="text" class="territory" readonly></td>
-      <td>
-        <input type="text" class="filename" readonly>
-        <input type="hidden" class="file-path">
-        <input type="file" class="file-picker" style="display:none">
-        <button type="button" class="file-btn">📂</button>
-      </td>
-      <td>
-        <select class="editable type">
-          <option value="csv">csv</option>
-          <option value="xlsx">xlsx</option>
-          <option value="json">json</option>
-        </select>
-      </td>
-      <td>
-        <select class="editable purpose">
-          <option value="main">main</option>
-          <option value="delta">delta</option>
-          <option value="avi">avi</option>
-          <option value="mark">mark</option>
-          <option value="resource">resource</option>
-        </select>
-      </td>
-      <td><input type="number" class="editable fixlevel" value="0"></td>
-      <td><input type="checkbox" class="editable active"></td>
-      <td><input type="checkbox" class="editable live"></td>
-      <td><button class="delete-btn">Delete</button></td>
-    `;
-
-    tbody.appendChild(newRow);
-    populateElectionDropdowns();
-  });
-
-  /* =====================================================
-     Save
-  ===================================================== */
-
-  qs('#save-btn').addEventListener('click', async () => {
-    try {
-      const data = collectTableData();
-      const res = await fetchJSON('/save_stream_table', {
+      const res = await fetch('/upload_file', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ data })
-      });
-      alert("Saved: " + res.message);
-    } catch (err) {
-      alert("Save error: " + err.message);
-    }
-  });
-
-  /* =====================================================
-     Reset
-  ===================================================== */
-
-  qs('#reset-btn').addEventListener('click', async () => {
-    if (!confirm("Reset Elections?")) return;
-
-    try {
-      const res = await fetchJSON('/reset_Elections', { method: 'POST' });
-      alert(res.message);
-
-      const data = await fetchJSON('/streamrag_api');
-      updateStreamTable(data.html, data.streamrag);
-
-    } catch (err) {
-      alert("Reset error: " + err.message);
-    }
-  });
-
-  /* =====================================================
-     Deactivate election
-  ===================================================== */
-
-  window.deactivateElection = async (election) => {
-    if (!confirm(`Deactivate ${election}?`)) return;
-
-    try {
-      const res = await fetchJSON('/deactivate_stream', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ election })
+        body: formData
       });
 
-      if (res.status !== 'success') {
-        alert(res.message);
-        return;
-      }
-
-      updateStreamTable(res.html, res.streamrag);
-      window.parent?.updateMessages?.();
-
-    } catch (err) {
-      alert("Deactivation error: " + err.message);
-    }
-  };
-
-  /* =====================================================
-     Process election (normalized + polling)
-  ===================================================== */
-
-  qs('#process-btn').addEventListener('click', async () => {
-
-    const electionName = prompt("Enter election name:");
-    if (!electionName) return;
-
-    const normalized = electionName.trim().toLowerCase();
-    const rows = qsa('#file-info-tbody tr');
-
-    const formData = new FormData();
-    let found = false;
-
-    rows.forEach((row, index) => {
-      const election = qs('.election', row).value.trim().toLowerCase();
-      if (!qs('.active', row).checked || election !== normalized) return;
-
-      found = true;
-      formData.append('election', normalized);
-
-      const fileInput = qs('.file-picker', row);
-      const storedPath = qs('.file-path', row).value;
-
-      if (fileInput.files.length) {
-        formData.append(`files_${index}`, fileInput.files[0]);
-      } else if (storedPath) {
-        formData.append(`stored_path_${index}`, storedPath);
-      }
-
-      formData.append(`meta_${index}_order`, qs('.order', row).value);
-      formData.append(`meta_${index}_type`, qs('.type', row).value);
-      formData.append(`meta_${index}_purpose`, qs('.purpose', row).value);
-      formData.append(`meta_${index}_fixlevel`, qs('.fixlevel', row).value);
-    });
-
-    if (!found) {
-      alert("No matching active files.");
-      return;
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+      return result.path;
     }
 
-    qs("#progress-container").style.display = "block";
+    function updateStreamTable(html, streamrag) {
+      const tbody = qs('#streamtab tbody');
+      if (tbody) tbody.innerHTML = html;
 
-    async function poll() {
+      if (streamrag && window.parent?.createOrUpdateChart) {
+        const labels = Object.keys(streamrag);
+        const dataPoints = labels.map(l => streamrag[l].Elect);
+        const rags = labels.map(l => streamrag[l].RAG);
+        window.parent.createOrUpdateChart(labels, dataPoints, rags);
+      }
+    }
+
+    /* =====================================================
+       Election dropdown logic
+    ===================================================== */
+
+    function populateElectionDropdowns() {
+      const parentSelect = window.parent.document.getElementById("streams");
+      if (!parentSelect) return;
+
+      const electionNames = [...parentSelect.options].map(opt => opt.value);
+      const singletonTerritoryEl = window.parent.document.getElementById("territory");
+      const singletonTerritory = singletonTerritoryEl?.value || '';
+
+      qsa('.editable.election').forEach(select => {
+        const currentValue = select.dataset.initial || '';
+        const currentTerritory = select.dataset.territory || '';
+
+        select.innerHTML = '';
+
+        electionNames.forEach(name => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          option.dataset.territory = singletonTerritory;
+          if (name === currentValue) option.selected = true;
+          select.appendChild(option);
+        });
+
+        if (currentValue && !electionNames.includes(currentValue)) {
+          const opt = document.createElement('option');
+          opt.value = currentValue;
+          opt.textContent = currentValue + " (not found)";
+          opt.dataset.territory = currentTerritory;
+          opt.selected = true;
+          select.appendChild(opt);
+        }
+      });
+    }
+
+    function handleElectionChange(select) {
+      const selected = select.options[select.selectedIndex];
+      const territory = selected?.dataset.territory || '';
+      select.dataset.territory = territory;
+
+      const row = select.closest('tr');
+      const territoryInput = qs('.territory', row);
+
+      if (territoryInput) {
+        const last = territory.split('/').pop();
+        territoryInput.value = last || '';
+        territoryInput.dataset.fullTerritory = territory;
+      }
+    }
+
+    /* =====================================================
+       File table logic
+    ===================================================== */
+
+    function collectTableData() {
+      return qsa('#file-info-tbody tr').map(row => ({
+        order: parseInt(qs('.order', row)?.value || 0),
+        election: qs('.election', row)?.value || "",
+        territory: qs('.territory', row)?.value || "",
+        filename: qs('.filename', row)?.value || "",
+        type: qs('.type', row)?.value || "",
+        purpose: qs('.purpose', row)?.value || "",
+        fixlevel: parseInt(qs('.fixlevel', row)?.value || 0),
+        active: qs('.active', row)?.checked || false,
+        file_path: qs('.file-path', row)?.value || ""
+      }));
+    }
+
+    async function handleFileSelection(row, fileInput) {
+      if (!fileInput.files.length) return;
+
       try {
-        const data = await fetchJSON('/progress');
+        const path = await uploadFile(fileInput.files[0]);
+        qs('.filename', row).value = fileInput.files[0].name;
+        qs('.file-path', row).value = path;
+        qs('.active', row).checked = true;
+      } catch (err) {
+        alert("Upload error: " + err.message);
+      }
+    }
 
-        qs('#progress-bar').value = data.percent || 0;
-        qs('#progress-text').innerText =
-          (data.percent || 0) + "% — " + (data.message || "");
+    /* =====================================================
+       Event delegation for table
+    ===================================================== */
 
-        if (data.status === "complete") {
-          qs('#progress-text').innerText = "✅ Complete";
-          if (data.html && data.streamrag)
-            updateStreamTable(data.html, data.streamrag);
+    qs('#file-info-tbody').addEventListener('click', async (e) => {
+      const row = e.target.closest('tr');
+      if (!row) return;
+
+      // File button
+      if (e.target.classList.contains('file-btn')) {
+        const fileInput = qs('.file-picker', row);
+        fileInput.click();
+        fileInput.onchange = () => handleFileSelection(row, fileInput);
+      }
+
+      // Delete row
+      if (e.target.classList.contains('delete-btn')) {
+        row.remove();
+      }
+    });
+
+    qs('#file-info-tbody').addEventListener('change', (e) => {
+      if (e.target.classList.contains('editable') &&
+          e.target.classList.contains('election')) {
+        handleElectionChange(e.target);
+      }
+    });
+
+    /* =====================================================
+       Add row
+    ===================================================== */
+
+    qs('#add-row-btn').addEventListener('click', () => {
+      const tbody = qs('#file-info-tbody');
+      const newRow = document.createElement('tr');
+
+      newRow.innerHTML = `
+        <td><input type="number" class="editable order" value="1"></td>
+        <td><select class="editable election" data-initial="" data-territory=""></select></td>
+        <td><input type="text" class="territory" readonly></td>
+        <td>
+          <input type="text" class="filename" readonly>
+          <input type="hidden" class="file-path">
+          <input type="file" class="file-picker" style="display:none">
+          <button type="button" class="file-btn">📂</button>
+        </td>
+        <td>
+          <select class="editable type">
+            <option value="csv">csv</option>
+            <option value="xlsx">xlsx</option>
+            <option value="json">json</option>
+          </select>
+        </td>
+        <td>
+          <select class="editable purpose">
+            <option value="main">main</option>
+            <option value="delta">delta</option>
+            <option value="avi">avi</option>
+            <option value="mark">mark</option>
+            <option value="resource">resource</option>
+          </select>
+        </td>
+        <td><input type="number" class="editable fixlevel" value="0"></td>
+        <td><input type="checkbox" class="editable active"></td>
+        <td><input type="checkbox" class="editable live"></td>
+        <td><button class="delete-btn">Delete</button></td>
+      `;
+
+      tbody.appendChild(newRow);
+      populateElectionDropdowns();
+    });
+
+    /* =====================================================
+       Save
+    ===================================================== */
+
+    qs('#save-btn').addEventListener('click', async () => {
+      try {
+        const data = collectTableData();
+        const res = await fetchJSON('/save_stream_table', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ data })
+        });
+        alert("Saved: " + res.message);
+      } catch (err) {
+        alert("Save error: " + err.message);
+      }
+    });
+
+    /* =====================================================
+       Reset
+    ===================================================== */
+
+    qs('#reset-btn').addEventListener('click', async () => {
+      if (!confirm("Reset Elections?")) return;
+
+      try {
+        const res = await fetchJSON('/reset_Elections', { method: 'POST' });
+        alert(res.message);
+
+        const data = await fetchJSON('/streamrag_api');
+        updateStreamTable(data.html, data.streamrag);
+
+      } catch (err) {
+        alert("Reset error: " + err.message);
+      }
+    });
+
+    /* =====================================================
+       Deactivate election
+    ===================================================== */
+
+    window.deactivateElection = async (election) => {
+      if (!confirm(`Deactivate ${election}?`)) return;
+
+      try {
+        const res = await fetchJSON('/deactivate_stream', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ election })
+        });
+
+        if (res.status !== 'success') {
+          alert(res.message);
           return;
         }
 
-        if (data.status !== "error")
-          setTimeout(poll, 500);
+        updateStreamTable(res.html, res.streamrag);
+        window.parent?.updateMessages?.();
 
-      } catch {
-        setTimeout(poll, 1000);
+      } catch (err) {
+        alert("Deactivation error: " + err.message);
       }
-    }
+    };
 
-    poll();
+    /* =====================================================
+       Process election (normalized + polling)
+    ===================================================== */
 
-    try {
-      await fetch('/normalise', { method: 'POST', body: formData });
-    } catch (err) {
-      alert("Processing error: " + err.message);
-    }
+    qs('#process-btn').addEventListener('click', async () => {
+
+      const electionName = prompt("Enter election name:");
+      if (!electionName) return;
+
+      const normalized = electionName.trim().toLowerCase();
+      const rows = qsa('#file-info-tbody tr');
+
+      const formData = new FormData();
+      let found = false;
+
+      rows.forEach((row, index) => {
+        const election = qs('.election', row).value.trim().toLowerCase();
+        if (!qs('.active', row).checked || election !== normalized) return;
+
+        found = true;
+        formData.append('election', normalized);
+
+        const fileInput = qs('.file-picker', row);
+        const storedPath = qs('.file-path', row).value;
+
+        if (fileInput.files.length) {
+          formData.append(`files_${index}`, fileInput.files[0]);
+        } else if (storedPath) {
+          formData.append(`stored_path_${index}`, storedPath);
+        }
+
+        formData.append(`meta_${index}_order`, qs('.order', row).value);
+        formData.append(`meta_${index}_type`, qs('.type', row).value);
+        formData.append(`meta_${index}_purpose`, qs('.purpose', row).value);
+        formData.append(`meta_${index}_fixlevel`, qs('.fixlevel', row).value);
+      });
+
+      if (!found) {
+        alert("No matching active files.");
+        return;
+      }
+
+      qs("#progress-container").style.display = "block";
+
+      async function poll() {
+        try {
+          const data = await fetchJSON('/progress');
+
+          qs('#progress-bar').value = data.percent || 0;
+          qs('#progress-text').innerText =
+            (data.percent || 0) + "% — " + (data.message || "");
+
+          if (data.status === "complete") {
+            qs('#progress-text').innerText = "✅ Complete";
+            if (data.html && data.streamrag)
+              updateStreamTable(data.html, data.streamrag);
+            return;
+          }
+
+          if (data.status !== "error")
+            setTimeout(poll, 500);
+
+        } catch {
+          setTimeout(poll, 1000);
+        }
+      }
+
+      poll();
+
+      try {
+        await fetch('/normalise', { method: 'POST', body: formData });
+      } catch (err) {
+        alert("Processing error: " + err.message);
+      }
+
+    });
+
+    /* ===================================================== */
+
+    populateElectionDropdowns();
 
   });
+}
 
-  /* ===================================================== */
+if (document.readyState === "loading") {
+   document.addEventListener("DOMContentLoaded", init);
+} else {
+   init();
+}
 
-  populateElectionDropdowns();
-
-});
 </script>
 
 {% endblock map %}
