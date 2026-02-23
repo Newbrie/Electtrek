@@ -1,464 +1,231 @@
 {% block map %}
 
-<!-- Editable File Information Table -->
-<h4 style="text-align: center">Electoral registers, changes and postal voter files</h4>
-<h4 style="text-align: center">(Select fix level 3 to upload)</h4>
+<h3 style="text-align:center;">Electoral Roll Stream Processing</h3>
+<h4 style="text-align:center;">Upload files for a single election and process</h4>
 
+<!-- Election selection -->
 <div style="margin-bottom: 10px;">
-  <button id="add-row-btn">Add Row</button>
-  <button id="save-btn">Save</button>
+  <label for="election-select">Select Election:</label>
+  <select id="election-select"></select>
+  <button id="load-election-btn">Load Election</button>
 </div>
 
-<div style="overflow-x: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 20px;">
-  <table id="stream-table" border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">
+<!-- File table -->
+<div style="overflow-x:auto; border:1px solid #ccc; padding:5px; margin-bottom:20px;">
+  <table id="file-table" border="1" style="border-collapse: collapse; width:100%;">
     <thead>
       <tr>
-        <th style="width: 50px;">Order</th>
-        <th style="width: 120px;">Election</th>
-        <th style="width: 120px;">Territory</th>
-        <th style="width: 200px;">Filename</th>
-        <th style="width: 60px;">Type</th>
-        <th style="width: 60px;">Purpose</th>
-        <th style="width: 60px;">Fixlevel</th>
-        <th style="width: 50px;">Active</th>
-        <th style="width: 50px;">Live</th>
-        <th style="width: 60px;">Delete</th>
+        <th>Order</th>
+        <th>Filename</th>
+        <th>File Type</th>
+        <th>Purpose</th>
+        <th>Fix Level</th>
+        <th>Upload</th>
+        <th>Remove</th>
       </tr>
     </thead>
-    <tbody id="file-info-tbody">
-      {% for row in stream_table %}
-      <tr>
-        <td><input type="number" class="editable order" value="{{ row['order'] }}" style="width: 90%;"></td>
-        <td><select class="editable election" data-initial="{{ row['election'] }}" data-territory="{{ row['territory'] }}" style="width: 90%;"></select></td>
-        <td><input type="text" class="right-cropped territory" value="{{ row['territory'] }}" data-full-territory="{{ row['territory'] }}" readonly style="width: 90%;"></td>
-        <td>
-          <input type="text" class="editable filename" value="{{ row['filename'] }}" readonly style="width: 100%; max-width: 180px;">
-          <input type="hidden" class="file-path" value="{{ row['file_path'] }}">
-          <input type="file" class="file-picker" style="display: none;" accept=".csv,.xlsx">
-          <button type="button" class="file-btn">📂</button>
-        </td>
-        <td><select class="editable type" style="width: 100%; max-width: 60px;">
-          <option value="csv" {% if row['type'] == 'csv' %}selected{% endif %}>csv</option>
-          <option value="xlsx" {% if row['type'] == 'xlsx' %}selected{% endif %}>xlsx</option>
-          <option value="json" {% if row['type'] == 'json' %}selected{% endif %}>json</option>
-        </select></td>
-        <td><select class="editable purpose" style="width: 100%; max-width: 60px;">
-          <option value="main" {% if row['purpose'] == 'main' %}selected{% endif %}>main</option>
-          <option value="delta" {% if row['purpose'] == 'delta' %}selected{% endif %}>delta</option>
-          <option value="avi" {% if row['purpose'] == 'avi' %}selected{% endif %}>avi</option>
-          <option value="mark" {% if row['purpose'] == 'mark' %}selected{% endif %}>mark</option>
-          <option value="resource" {% if row['purpose'] == 'resource' %}selected{% endif %}>resource</option>
-        </select></td>
-        <td><input type="number" class="editable fixlevel" value="{{ row['fixlevel'] or 0 }}" style="width: 90%;"></td>
-        <td style="text-align:center;"><input type="checkbox" class="editable active" {% if row['active'] and row['filename'].strip() != '' %}checked{% endif %}></td>
-        <td style="text-align:center;"><input type="checkbox" class="editable live" {% if row['live'] and row['live'].strip() != '' %}checked{% endif %}></td>
-        <td style="text-align:center;"><button class="delete-btn">Delete</button></td>
-      </tr>
-      {% endfor %}
+    <tbody id="file-table-body">
+      <!-- Populated dynamically -->
     </tbody>
   </table>
 </div>
 
-<!-- DATA QUALITY DASHBOARD -->
-<div id="streams" class="section" style="margin-bottom: 20px;">
-  <h3 class="centred">DATA QUALITY DASHBOARD</h3>
+<div style="margin-bottom: 10px;">
+  <button id="add-file-btn">Add File</button>
+</div>
 
-  <!-- Scrollable container for table -->
-  <div style="overflow-x: auto; border: 1px solid #ccc; padding: 5px;">
-    <table id="streamtab" style="border-collapse: collapse; width: 100%; table-layout: fixed;">
-      <thead>
-        <tr>
-          <th style="width: 120px;">Election</th>
-          <th style="width: 50px;">Alive</th>
-          <th style="width: 50px;">Files</th>
-          <th style="width: 50px;">Elect</th>
-          <th style="width: 50px;">RAG</th>
-          <th style="width: 80px;">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for key, value in streamrag.items() %}
-        <tr>
-          <td>{{ key }}</td>
-          <td>{{ value['Alive'] }}</td>
-          <td>{{ value['Files'] }}</td>
-          <td>{{ value['Elect'] }}</td>
-          <td>{{ value['RAG'] }}</td>
-          <td><button onclick="deactivateElection('{{ key }}')">Deactivate</button></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<!-- Process & Progress -->
+<div>
+  <button id="process-election-btn">Process Election</button>
+</div>
 
-  <!-- Buttons below table -->
-  <div style="margin-top: 10px;">
-    <button id="process-btn">LOAD ELECTION</button>
-    <button id="reset-btn">RESET</button>
-  </div>
-  <!-- Progress bar container -->
-<div id="progress-container" style="margin-top: 20px; display: none;">
+<div id="progress-container" style="margin-top: 20px; display:none;">
   <label for="progress-bar">Normalization Progress:</label>
-  <progress id="progress-bar" value="0" max="100" style="width: 300px;"></progress>
+  <progress id="progress-bar" value="0" max="100" style="width:300px;"></progress>
   <span id="progress-text">0%</span>
 </div>
 
-</div>
-
-
-
 <script>
+document.addEventListener("DOMContentLoaded", () => {
 
-function init() {
+  const qs = (sel, ctx=document) => ctx.querySelector(sel);
+  const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
 
-    /* =====================================================
-       Utility helpers
-    ===================================================== */
+  let stream_processing = {
+    files: [],
+    last_run: null,
+    status: "idle"
+  };
+  let selectedElection = "";
 
-    const qs  = (sel, ctx=document) => ctx.querySelector(sel);
-    const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
-
-    async function fetchJSON(url, options={}) {
-      const res = await fetch(url, options);
-      if (!res.ok) throw new Error(`${url} failed`);
-      return res.json();
-    }
-
-    async function uploadFile(file) {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/upload_file', {
-        method: 'POST',
-        body: formData
+  /* =====================================================
+     Fetch available elections
+  ===================================================== */
+  async function loadElectionOptions() {
+    try {
+      const elections = await fetch('/get_elections').then(res => res.json());
+      const select = qs('#election-select');
+      select.innerHTML = '';
+      elections.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.cid;
+        opt.textContent = e.name;
+        select.appendChild(opt);
       });
-
-      const result = await res.json();
-      if (result.error) throw new Error(result.error);
-      return result.path;
+    } catch (err) {
+      alert("Error loading elections: " + err.message);
     }
+  }
 
-    function updateStreamTable(html, streamrag) {
-      const tbody = qs('#streamtab tbody');
-      if (tbody) tbody.innerHTML = html;
+  /* =====================================================
+     Load selected election's stream_processing
+  ===================================================== */
+  async function loadElection() {
+    selectedElection = qs('#election-select').value;
+    if (!selectedElection) return;
 
-      if (streamrag && window.parent?.createOrUpdateChart) {
-        const labels = Object.keys(streamrag);
-        const dataPoints = labels.map(l => streamrag[l].Elect);
-        const rags = labels.map(l => streamrag[l].RAG);
-        window.parent.createOrUpdateChart(labels, dataPoints, rags);
-      }
+    try {
+      stream_processing = await fetch(`/get_stream_processing/${selectedElection}`)
+                                  .then(res => res.json());
+
+      renderFileTable();
+    } catch (err) {
+      alert("Error loading election: " + err.message);
     }
+  }
 
-    /* =====================================================
-       Election dropdown logic
-    ===================================================== */
+  /* =====================================================
+     Render file table
+  ===================================================== */
+  function renderFileTable() {
+    const tbody = qs('#file-table-body');
+    tbody.innerHTML = '';
 
-    function populateElectionDropdowns() {
-      const parentSelect = window.parent.document.getElementById("streams");
-      if (!parentSelect) return;
-
-      const electionNames = [...parentSelect.options].map(opt => opt.value);
-      const singletonTerritoryEl = window.parent.document.getElementById("territory");
-      const singletonTerritory = singletonTerritoryEl?.value || '';
-
-      qsa('.editable.election').forEach(select => {
-        const currentValue = select.dataset.initial || '';
-        const currentTerritory = select.dataset.territory || '';
-
-        select.innerHTML = '';
-
-        electionNames.forEach(name => {
-          const option = document.createElement('option');
-          option.value = name;
-          option.textContent = name;
-          option.dataset.territory = singletonTerritory;
-          if (name === currentValue) option.selected = true;
-          select.appendChild(option);
-        });
-
-        if (currentValue && !electionNames.includes(currentValue)) {
-          const opt = document.createElement('option');
-          opt.value = currentValue;
-          opt.textContent = currentValue + " (not found)";
-          opt.dataset.territory = currentTerritory;
-          opt.selected = true;
-          select.appendChild(opt);
-        }
-      });
-    }
-
-    function handleElectionChange(select) {
-      const selected = select.options[select.selectedIndex];
-      const territory = selected?.dataset.territory || '';
-      select.dataset.territory = territory;
-
-      const row = select.closest('tr');
-      const territoryInput = qs('.territory', row);
-
-      if (territoryInput) {
-        const last = territory.split('/').pop();
-        territoryInput.value = last || '';
-        territoryInput.dataset.fullTerritory = territory;
-      }
-    }
-
-    /* =====================================================
-       File table logic
-    ===================================================== */
-
-    function collectTableData() {
-      return qsa('#file-info-tbody tr').map(row => ({
-        order: parseInt(qs('.order', row)?.value || 0),
-        election: qs('.election', row)?.value || "",
-        territory: qs('.territory', row)?.value || "",
-        filename: qs('.filename', row)?.value || "",
-        type: qs('.type', row)?.value || "",
-        purpose: qs('.purpose', row)?.value || "",
-        fixlevel: parseInt(qs('.fixlevel', row)?.value || 0),
-        active: qs('.active', row)?.checked || false,
-        file_path: qs('.file-path', row)?.value || ""
-      }));
-    }
-
-    async function handleFileSelection(row, fileInput) {
-      if (!fileInput.files.length) return;
-
-      try {
-        const path = await uploadFile(fileInput.files[0]);
-        qs('.filename', row).value = fileInput.files[0].name;
-        qs('.file-path', row).value = path;
-        qs('.active', row).checked = true;
-      } catch (err) {
-        alert("Upload error: " + err.message);
-      }
-    }
-
-    /* =====================================================
-       Event delegation for table
-    ===================================================== */
-
-    qs('#file-info-tbody').addEventListener('click', async (e) => {
-      const row = e.target.closest('tr');
-      if (!row) return;
-
-      // File button
-      if (e.target.classList.contains('file-btn')) {
-        const fileInput = qs('.file-picker', row);
-        fileInput.click();
-        fileInput.onchange = () => handleFileSelection(row, fileInput);
-      }
-
-      // Delete row
-      if (e.target.classList.contains('delete-btn')) {
-        row.remove();
-      }
-    });
-
-    qs('#file-info-tbody').addEventListener('change', (e) => {
-      if (e.target.classList.contains('editable') &&
-          e.target.classList.contains('election')) {
-        handleElectionChange(e.target);
-      }
-    });
-
-    /* =====================================================
-       Add row
-    ===================================================== */
-
-    qs('#add-row-btn').addEventListener('click', () => {
-      const tbody = qs('#file-info-tbody');
-      const newRow = document.createElement('tr');
-
-      newRow.innerHTML = `
-        <td><input type="number" class="editable order" value="1"></td>
-        <td><select class="editable election" data-initial="" data-territory=""></select></td>
-        <td><input type="text" class="territory" readonly></td>
+    stream_processing.files.forEach((file, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="number" class="order" value="${file.order}" style="width:50px;"></td>
         <td>
-          <input type="text" class="filename" readonly>
-          <input type="hidden" class="file-path">
-          <input type="file" class="file-picker" style="display:none">
-          <button type="button" class="file-btn">📂</button>
+          <input type="text" class="filename" value="${file.file_path?.split('/').pop() || ''}" readonly style="width:150px;">
+          <input type="file" class="file-picker" style="display:none;">
         </td>
         <td>
-          <select class="editable type">
-            <option value="csv">csv</option>
-            <option value="xlsx">xlsx</option>
-            <option value="json">json</option>
+          <select class="type">
+            <option value="csv" ${file.type==='csv'?'selected':''}>csv</option>
+            <option value="xlsx" ${file.type==='xlsx'?'selected':''}>xlsx</option>
+            <option value="json" ${file.type==='json'?'selected':''}>json</option>
           </select>
         </td>
         <td>
-          <select class="editable purpose">
-            <option value="main">main</option>
-            <option value="delta">delta</option>
-            <option value="avi">avi</option>
-            <option value="mark">mark</option>
-            <option value="resource">resource</option>
+          <select class="purpose">
+            <option value="main" ${file.purpose==='main'?'selected':''}>main</option>
+            <option value="delta" ${file.purpose==='delta'?'selected':''}>delta</option>
+            <option value="avi" ${file.purpose==='avi'?'selected':''}>avi</option>
+            <option value="mark" ${file.purpose==='mark'?'selected':''}>mark</option>
+            <option value="resource" ${file.purpose==='resource'?'selected':''}>resource</option>
           </select>
         </td>
-        <td><input type="number" class="editable fixlevel" value="0"></td>
-        <td><input type="checkbox" class="editable active"></td>
-        <td><input type="checkbox" class="editable live"></td>
-        <td><button class="delete-btn">Delete</button></td>
+        <td><input type="number" class="fixlevel" value="${file.fixlevel || 0}" style="width:50px;"></td>
+        <td><button class="upload-btn">📂</button></td>
+        <td><button class="remove-btn">❌</button></td>
       `;
+      tbody.appendChild(tr);
 
-      tbody.appendChild(newRow);
-      populateElectionDropdowns();
-    });
+      const filePicker = tr.querySelector('.file-picker');
+      tr.querySelector('.upload-btn').addEventListener('click', () => filePicker.click());
+      filePicker.addEventListener('change', async (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        try {
+          const formData = new FormData();
+          formData.append('file', f);
+          formData.append('election', selectedElection);
+          formData.append('index', idx);
 
-    /* =====================================================
-       Save
-    ===================================================== */
+          const result = await fetch('/upload_file', {method:'POST', body: formData}).then(r=>r.json());
+          if (result.error) throw new Error(result.error);
 
-    qs('#save-btn').addEventListener('click', async () => {
-      try {
-        const data = collectTableData();
-        const res = await fetchJSON('/save_stream_table', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ data })
-        });
-        alert("Saved: " + res.message);
-      } catch (err) {
-        alert("Save error: " + err.message);
-      }
-    });
+          tr.querySelector('.filename').value = f.name;
+          stream_processing.files[idx].file_path = result.path;
 
-    /* =====================================================
-       Reset
-    ===================================================== */
-
-    qs('#reset-btn').addEventListener('click', async () => {
-      if (!confirm("Reset Elections?")) return;
-
-      try {
-        const res = await fetchJSON('/reset_Elections', { method: 'POST' });
-        alert(res.message);
-
-        const data = await fetchJSON('/streamrag_api');
-        updateStreamTable(data.html, data.streamrag);
-
-      } catch (err) {
-        alert("Reset error: " + err.message);
-      }
-    });
-
-    /* =====================================================
-       Deactivate election
-    ===================================================== */
-
-    window.deactivateElection = async (election) => {
-      if (!confirm(`Deactivate ${election}?`)) return;
-
-      try {
-        const res = await fetchJSON('/deactivate_stream', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ election })
-        });
-
-        if (res.status !== 'success') {
-          alert(res.message);
-          return;
+        } catch(err) {
+          alert("Upload failed: " + err.message);
         }
-
-        updateStreamTable(res.html, res.streamrag);
-        window.parent?.updateMessages?.();
-
-      } catch (err) {
-        alert("Deactivation error: " + err.message);
-      }
-    };
-
-    /* =====================================================
-       Process election (normalized + polling)
-    ===================================================== */
-
-    qs('#process-btn').addEventListener('click', async () => {
-
-      const electionName = prompt("Enter election name:");
-      if (!electionName) return;
-
-      const normalized = electionName.trim().toLowerCase();
-      const rows = qsa('#file-info-tbody tr');
-
-      const formData = new FormData();
-      let found = false;
-
-      rows.forEach((row, index) => {
-        const election = qs('.election', row).value.trim().toUpperCase();
-        if (!qs('.active', row).checked || election !== normalized) return;
-
-        found = true;
-        formData.append('election', normalized);
-
-        const fileInput = qs('.file-picker', row);
-        const storedPath = qs('.file-path', row).value;
-
-        if (fileInput.files.length) {
-          formData.append(`files_${index}`, fileInput.files[0]);
-        } else if (storedPath) {
-          formData.append(`stored_path_${index}`, storedPath);
-        }
-
-        formData.append(`meta_${index}_order`, qs('.order', row).value);
-        formData.append(`meta_${index}_type`, qs('.type', row).value);
-        formData.append(`meta_${index}_purpose`, qs('.purpose', row).value);
-        formData.append(`meta_${index}_fixlevel`, qs('.fixlevel', row).value);
       });
 
-      if (!found) {
-        alert("No matching active files.");
-        return;
-      }
+      tr.querySelector('.remove-btn').addEventListener('click', () => {
+        stream_processing.files.splice(idx, 1);
+        renderFileTable();
+      });
+    });
+  }
 
-      qs("#progress-container").style.display = "block";
+  /* =====================================================
+     Add file
+  ===================================================== */
+  qs('#add-file-btn').addEventListener('click', () => {
+    stream_processing.files.push({
+      order: stream_processing.files.length + 1,
+      file_path: '',
+      type: 'csv',
+      purpose: 'main',
+      fixlevel: 3
+    });
+    renderFileTable();
+  });
 
-      async function poll() {
-        try {
-          const data = await fetchJSON('/progress');
+  /* =====================================================
+     Process election
+  ===================================================== */
+  qs('#process-election-btn').addEventListener('click', async () => {
+    if (!selectedElection || !stream_processing.files.length) {
+      alert("Select an election and add files first.");
+      return;
+    }
 
-          qs('#progress-bar').value = data.percent || 0;
-          qs('#progress-text').innerText =
-            (data.percent || 0) + "% — " + (data.message || "");
+    qs('#progress-container').style.display = "block";
+    qs('#progress-bar').value = 0;
+    qs('#progress-text').innerText = "0%";
 
-          if (data.status === "complete") {
-            qs('#progress-text').innerText = "✅ Complete";
-            if (data.html && data.streamrag)
-              updateStreamTable(data.html, data.streamrag);
-            return;
-          }
-
-          if (data.status !== "error")
-            setTimeout(poll, 500);
-
-        } catch {
-          setTimeout(poll, 1000);
-        }
-      }
-
-      poll();
-
-      try {
-        await fetch('/normalise', { method: 'POST', body: formData });
-      } catch (err) {
-        alert("Processing error: " + err.message);
-      }
-
+    const formData = new FormData();
+    formData.append('election', selectedElection);
+    stream_processing.files.forEach((file, idx) => {
+      if (file.file_path) formData.append(`stored_path_${idx}`, file.file_path);
+      formData.append(`meta_${idx}_order`, file.order);
+      formData.append(`meta_${idx}_type`, file.type);
+      formData.append(`meta_${idx}_purpose`, file.purpose);
+      formData.append(`meta_${idx}_fixlevel`, file.fixlevel);
     });
 
-    /* ===================================================== */
+    // Start polling
+    async function pollProgress() {
+      try {
+        const data = await fetch('/progress').then(r=>r.json());
+        qs('#progress-bar').value = data.percent || 0;
+        qs('#progress-text').innerText = (data.percent || 0) + "% — " + (data.message || "");
 
-    populateElectionDropdowns();
+        if (data.status !== "complete") setTimeout(pollProgress, 500);
+        else qs('#progress-text').innerText = "✅ Complete";
 
-}
+      } catch {
+        setTimeout(pollProgress, 1000);
+      }
+    }
+    pollProgress();
 
-if (document.readyState === "loading") {
-   document.addEventListener("DOMContentLoaded", init);
-} else {
-   init();
-}
+    try {
+      await fetch('/normalise', {method:'POST', body:formData});
+    } catch(err) {
+      alert("Processing failed: " + err.message);
+    }
 
+  });
+
+  qs('#load-election-btn').addEventListener('click', loadElection);
+
+  loadElectionOptions();
+
+});
 </script>
 
 {% endblock map %}

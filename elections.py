@@ -149,6 +149,29 @@ def get_available_elections():
     # Return only the names
     return [name for name, _ in elections]
 
+def get_elections():
+    """
+    Return a list of elections as objects with cid and name,
+    sorted by last modified time (most recent first).
+    """
+    elections_dir = BASE_FILE.parent  # directory containing JSON files
+    pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
+
+    elections = []
+
+    for file in elections_dir.iterdir():
+        match = pattern.match(file.name)
+        if match and file.is_file():
+            name = match.group(1).upper()
+            mtime = file.stat().st_mtime  # last modified time
+            elections.append({"cid": name, "name": name, "mtime": mtime})
+
+    # Sort by modification time, descending (most recent first)
+    elections.sort(key=lambda x: x["mtime"], reverse=True)
+
+    # Return only cid and name for front end
+    return [{"cid": e["cid"], "name": e["name"]} for e in elections]
+
 
 def get_stream_table():
     stream_table = {}
