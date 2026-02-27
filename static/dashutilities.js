@@ -602,10 +602,10 @@
                 if (!resp.success) {
                     alert("Failed to update: " + resp.error);
                 }
-            });
             .catch(err => {
                   console.error("FETCH FAILED:", err);
-              });
+            });
+
         };
 
     });

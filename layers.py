@@ -399,15 +399,74 @@ class ExtendedFeatureGroup(FeatureGroup):
             valid_children.append((child, point))
 
         # Clip Voronoi regions to area_shape
+        # ------------------------------
+        # Prepare Voronoi diagnostics
+        # ------------------------------
+
+        print("🧮 Preparing Voronoi generation")
+
+        print("---- AREA SHAPE ----")
+        print("Type:", area_shape.geom_type)
+        print("Has Z:", getattr(area_shape, "has_z", False))
+        print("Is valid:", area_shape.is_valid)
+        print("Bounds:", area_shape.bounds)
+        print("Area:", area_shape.area)
+
+        print("Children processed:", len(valid_children))
+        print("Raw coord count:", len(coords))
+
+        if len(coords) == 0:
+            print("⚠️ No coordinates collected — aborting Voronoi.")
+            return []
+
+        # Convert AFTER loop
+        coords = np.array(coords)
+
+        print("---- COORDS ----")
+        print("Shape:", coords.shape)
+
+        # Remove duplicates safely
+        unique_coords = np.unique(coords, axis=0)
+        print("Unique coord count:", len(unique_coords))
+
+        if len(unique_coords) < len(coords):
+            print("⚠️ Duplicate coordinates detected.")
+
+        coords = unique_coords
+
+        if len(coords) < 2:
+            print("⚠️ Not enough unique points for Voronoi (need ≥2).")
+            return []
+
+        # Spread diagnostics (NumPy 2 safe)
+        lon_spread = np.ptp(coords[:, 0])
+        lat_spread = np.ptp(coords[:, 1])
+
+        print("Longitude range:", coords[:,0].min(), "→", coords[:,0].max(),
+              " (spread:", lon_spread, ")")
+        print("Latitude range:", coords[:,1].min(), "→", coords[:,1].max(),
+              " (spread:", lat_spread, ")")
+
+        if lon_spread < 1e-12 or lat_spread < 1e-12:
+            print("⚠️ Points are collinear or nearly collinear.")
+
+        print("------------------------------")
+
+        # ------------------------------
+        # Run Voronoi
+        # ------------------------------
 
         print("🧮 Generating Voronoi regions using geovoronoi...")
-        # Pass coords as a list of Point objects
-        coords = np.array(coords)
-        # Ensure 2D shape
+
         if coords.shape[1] != 2:
             raise ValueError(f"Expected 2D coordinates, got shape: {coords.shape}")
+
         try:
-            region_polys, region_pts = voronoi_regions_from_coords(coords, area_shape)
+            region_polys, region_pts = voronoi_regions_from_coords(
+                coords,
+                area_shape,
+                qhull_options="Qbb Qc Qz QJ"  # Joggle for robustness
+            )
             print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
         except Exception as e:
             print("❌ Error during Voronoi generation:", e)
