@@ -149,6 +149,7 @@ def get_available_elections():
     # Return only the names
     return [name for name, _ in elections]
 
+
 def get_elections():
     """
     Return a list of elections as objects with cid and name,
@@ -159,12 +160,16 @@ def get_elections():
 
     elections = []
 
-    for file in elections_dir.iterdir():
-        match = pattern.match(file.name)
-        if match and file.is_file():
-            name = match.group(1).upper()
-            mtime = file.stat().st_mtime  # last modified time
-            elections.append({"cid": name, "name": name, "mtime": mtime})
+    try:
+        # Use glob for pattern matching (only .json files)
+        for file in elections_dir.glob('Elections-*.json'):
+            match = pattern.match(file.name)
+            if match:
+                name = match.group(1).upper()  # Extract election name
+                mtime = file.stat().st_mtime  # Get last modified time
+                elections.append({"cid": name, "name": name, "mtime": mtime})
+    except Exception as e:
+        print(f"⚠️ Error loading elections: {e}")
 
     # Sort by modification time, descending (most recent first)
     elections.sort(key=lambda x: x["mtime"], reverse=True)
@@ -203,6 +208,21 @@ def resolve_ui_context(program, election, node):
 
     return make_json_serializable(merged)
 
+# This prints a script tag you can paste into your HTML
+
+def resolve_here_or_redirect(sourcepath, here):
+    # Only read request args if a request context exists
+    if has_request_context():
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+
+        if lat is not None and lon is not None:
+            here = (lat, lon)
+
+        if sourcepath is None and here is None:
+            return None, redirect(url_for("get_location"))
+
+    return here, None
 
 
 class CurrentElection(dict):
@@ -223,6 +243,61 @@ class CurrentElection(dict):
         if len(self['mapfiles']) > max_size:
             self['mapfiles'].pop(0)  # Remove oldest
         return self['mapfiles']
+
+    def get_last_node(self, *, create=True):
+        """
+        Returns the last node for the current election.
+        If `create=False`, do not call ping_node and return root if CID node is unavailable.
+        """
+
+        from flask import redirect
+        from nodes import TREK_NODES_BY_ID, MapRoot
+        from state import Treepolys, Fullpolys
+
+        cid = self.get("cid")
+        cidLat = self.get("cidLat")
+        cidLong = self.get("cidLong")
+        here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
+        sourcepath = self.get("mapfiles", [None])[-1]
+
+        # --- 1. CID lookup ---
+        if cid and cid in TREK_NODES_BY_ID:
+            last_node = TREK_NODES_BY_ID[cid]
+            print(f"___under route: {route()} return to existing cid: {cid}")
+            return last_node
+
+        print(f"___No cid : {cid} Get last Sourcepath {sourcepath} under {route()}")
+
+        # --- 2. Resolve location or redirect ---
+        here, response = resolve_here_or_redirect(sourcepath, here)
+        if response:
+            return response  # redirect response
+
+        print(f"___ {create}__ Last node under {route()} for {self.name} sourcepath: {sourcepath} create:{create}")
+
+        # --- 3. Resolve node from path ---
+        last_node = MapRoot.ping_node(
+                    self.resolved_levels,
+                    self.name,
+                    sourcepath,
+                    create=create
+                )
+
+        # --- 4. Fallback to root ---
+        if not last_node:
+            print(f"⚠️ GAP: {cid in TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
+            print(f"⚠️ @NODE INDEX DUMP:{TREK_NODES_BY_ID} ")
+            last_node = MapRoot
+
+        print(
+            f"___ RETRIEVED LAST DESTINATION - election: {self.name} "
+            f"NODE {last_node.value} at loc: {here} "
+            f"using source: {sourcepath}"
+        )
+
+        return last_node
+
+
 
     def visit_node(self, node):
         from state import Treepolys, Fullpolys
@@ -389,7 +464,7 @@ class CurrentElection(dict):
             return "DEMO"
         latest_file = max(election_files, key=lambda p: p.stat().st_mtime)
         print(f"-------election directory:{elections_dir} - {latest_file}")
-        return latest_file.stem.replace("Elections-", "")
+        return latest_file.stem.replace("Elections-", "").upper()
 
     @classmethod
     def load(cls, election_id: str) -> "CurrentElection":

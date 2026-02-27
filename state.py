@@ -917,7 +917,19 @@ logger = logging.getLogger(__name__)
 #        'country','nation', 'county', 'constituency', 'ward', 'division', 'polling_district',
 #        'walk', 'walkleg', 'street', 'result', 'target', 'data', 'special'
 #    ][i - 1]
+
+# Overall progress fractions for each stage
+STAGE_FRACTIONS = {
+    "sourcing": 0.1,        # 0% → 10%
+    "normz": 0.1,           # 10% → 20%
+    "address_norm": 0.4,    # 20% → 60%
+    "assign_areas": 0.25,   # 60% → 85%
+    "assign_walks": 0.15    # 85% → 100%
+}
+
+
 progress = {
+    "stages": STAGE_FRACTIONS,
     "election": "",
     "status": "idle",       # Can be 'idle', 'running', 'complete', 'error'
     "percent": 0,           # Integer from 0 to 100
@@ -925,6 +937,28 @@ progress = {
     "message": "Waiting...", # Optional string
     "dqstats_html": ""
     }
+
+def update_progress(progress, stage_name, stage_local_fraction, message=""):
+    stages = progress["stages"]
+
+    accumulated = 0
+    for name, fraction in stages.items():
+        if name == stage_name:
+            break
+        accumulated += fraction
+
+    stage_fraction = stages.get(stage_name, 0)
+
+    progress["current_stage"] = stage_name
+    progress["stage_progress"] = round(stage_local_fraction * 100, 2)
+    progress["percent"] = round(
+        100 * (accumulated + stage_local_fraction * stage_fraction),
+        2
+    )
+    progress["status"] = "running"
+    progress["message"] = message
+
+
 
 DQstats = {
 "df": pd.DataFrame(),  # initially empty

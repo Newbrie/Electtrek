@@ -423,17 +423,8 @@ def safe_pickle_load(path, default):
 
 
 def restore_from_persist(treepolys, fullpolys):
-    print(f'____Restore from persist under !{route()} called to restore allelectors, nodes and polys! ')
-    if ELECTOR_FILE.exists():
-        print('_______allelectors file exists so reading in ', ELECTOR_FILE)
-        electors = pd.read_csv(
-            ELECTOR_FILE,
-            sep='\t',                        # tab delimiter
-            engine='python',                # Required for sep=None
-            encoding='utf-8',
-            keep_default_na=False,
-            na_values=['']
-        )
+    print(f'____Restore from persist under !{route()} called to restore nodes and polys! ')
+
     safe_pickle_load(TREEPOLY_FILE,treepolys)
 
     safe_pickle_load(FULLPOLY_FILE,fullpolys)
@@ -443,17 +434,13 @@ def restore_from_persist(treepolys, fullpolys):
     for nid, node in TREK_NODES_BY_ID.items():
         print(nid, node.candidates)
     print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
-    return electors
+    return
 
-def persist(treepolys, fullpolys, electors):
+def persist(treepolys, fullpolys):
     print(f'___persisting pickle under !{route()}', TREEPOLY_FILE)
     atomic_pickle_dump(treepolys,TREEPOLY_FILE)
     print('___persisting pickle ', FULLPOLY_FILE)
     atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
-
-    print('___persisting elector csv ', ELECTOR_FILE, len(allelectors))
-    electors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
-
     return
 
 def restore_fullpolys(node_type):
@@ -507,78 +494,6 @@ def strip_filename_from_path(path):
     ]:
         path = path.replace(suffix, "@@@")
     return path
-
-
-# This prints a script tag you can paste into your HTML
-
-def resolve_here_or_redirect(sourcepath, here):
-    # Only read request args if a request context exists
-    if has_request_context():
-        lat = request.args.get("lat", type=float)
-        lon = request.args.get("lon", type=float)
-
-        if lat is not None and lon is not None:
-            here = (lat, lon)
-
-        if sourcepath is None and here is None:
-            return None, redirect(url_for("get_location"))
-
-    return here, None
-
-
-def get_last_node(current_election, CE, *, create=True):
-    """
-    Returns the last node for the current election.
-    If `create=False`, do not call ping_node and return root if CID node is unavailable.
-    """
-
-    from flask import redirect
-    from nodes import TREK_NODES_BY_ID
-    from state import Treepolys, Fullpolys
-
-    cid = CE.get("cid")
-    cidLat = CE.get("cidLat")
-    cidLong = CE.get("cidLong")
-    here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
-    sourcepath = CE.get("mapfiles", [None])[-1]
-
-    # --- 1. CID lookup ---
-    if cid and cid in TREK_NODES_BY_ID:
-        last_node = TREK_NODES_BY_ID[cid]
-        print(f"___under route: {route()} return to existing cid: {cid}")
-        return last_node
-
-    print(f"___No cid : {cid} Get last Sourcepath {sourcepath} under {route()}")
-
-    # --- 2. Resolve location or redirect ---
-    here, response = resolve_here_or_redirect(sourcepath, here)
-    if response:
-        return response  # redirect response
-
-    print(f"___ {create}__ Last node under {route()} for {current_election} sourcepath: {sourcepath} create:{create}")
-
-    # --- 3. Resolve node from path ---
-    last_node = MapRoot.ping_node(
-                CE.resolved_levels,
-                current_election,
-                sourcepath,
-                create=create
-            )
-
-    # --- 4. Fallback to root ---
-    if not last_node:
-        print(f"⚠️ GAP: {cid in TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
-        print(f"⚠️ @NODE INDEX DUMP:{TREK_NODES_BY_ID} ")
-        last_node = MapRoot
-
-    print(
-        f"___ RETRIEVED LAST DESTINATION - election: {current_election} "
-        f"NODE {last_node.value} at loc: {here} "
-        f"using source: {sourcepath}"
-    )
-
-    return last_node
-
 
 
 
@@ -1116,6 +1031,29 @@ class TreeNode:
         from nodes import TREK_NODES_BY_ID
         from flask import session
         from elections import route
+        from elector import electors
+
+        for lev, ltype in rlevels.items():
+            tree_gdf = Treepolys.get(ltype)
+            if tree_gdf is None or tree_gdf.empty:
+                print(f"____Ping/Treepolys {ltype} - EMPTY")
+                continue
+            tot_tree = len(tree_gdf)
+            unique_name_tree = tree_gdf['NAME'].nunique()
+            unique_fid_tree = tree_gdf['FID'].nunique()
+            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
+
+                # Same for Fullpolys
+            full_gdf = Fullpolys.get(ltype)
+            if full_gdf is None or full_gdf.empty:
+                print(f"____Ping/Fullpolys {ltype} - EMPTY")
+                continue
+
+            tot_full = len(full_gdf)
+            unique_name_full = full_gdf['NAME'].nunique()
+            unique_fid_full = full_gdf['FID'].nunique()
+            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
+
 
         def strip_leaf_from_path(path):
             leaf = path.split("/")[-1]
@@ -1549,9 +1487,10 @@ class TreeNode:
             print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
             namepoints['Zone'] = 'ZONE_0'  # or whatever default you want
 
-        newname = normalname(limb['Name'])
 
         for index, limb  in namepoints.iterrows():
+
+            newname = normalname(limb['Name'])
 
             if newname not in fam_nodes :
                 datafid = abs(hash(newname))
@@ -1585,107 +1524,125 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self,resolved_levels,c_election):
-        global allelectors
-        global areaelectors
-        global workdirectories
+    def create_data_branch(self, resolved_levels, c_election):
+        from elector import electors
         from state import Treepolys, Fullpolys
 
-
-# if called from within ping, then this module should aim to return the next level of nodes of selected type underneath self.
-# the new data namepoints must be derived from the electoral file - name is stored in session['importfile']
-# if the electoral file hasn't been loaded yet then that needs to be done first.
-
-
         nodelist = []
+        electtype = resolved_levels[self.level + 1]
 
-        electtype = resolved_levels[self.level+1]
+        # ----------------------------------------
+        # Load electors from ElectorManager
+        # ----------------------------------------
+        allelectors = electors.get(c_election)
 
-        if not ELECTOR_FILE or not os.path.exists(ELECTOR_FILE):
-            print('_______Redirect to upload_form', ELECTOR_FILE)
-            flash("Please upload a file or provide the name of the electoral roll file.", "error")
-            return nodelist
+        if allelectors.empty:
+            print(f"❌ No electors loaded for election {c_election}")
+            return []
 
-        Outcomes = pd.read_excel(GENESYS_FILE)
-        Outcols = Outcomes.columns.to_list()
+        if 'Area' not in allelectors.columns:
+            print(f"❌ 'Area' column missing in elector data {allelectors['Area']}")
+            return []
 
-        allelectors = pd.DataFrame(allelectors, columns=Outcols)
+        areaelectors = allelectors[allelectors['Area'] == self.value]
 
-# this section is common after data has been loaded: get filter area from node, PDs from data and the test if in area
-
-        mask = (
-            (allelectors['Election'] == c_election) &
-            (allelectors['Area'] == self.value)
-            )
-        areaelectors = allelectors[mask]
+        if areaelectors.empty:
+            print(f"⚠️ No data for election {c_election} in area {self.value}")
+            return []
 
         CE = CurrentElection.load(c_election)
         gotv_pct = CE['GOTV']
-        if len(areaelectors) > 0:
-            try:
-    #            allelectors.loc[areaelectors.index, "Area"] = areaelectors["Area"]
-                allelectors.to_csv(ELECTOR_FILE,sep='\t', encoding='utf-8', index=False)
 
-        # so all data is now loaded and we are able to filter by PDs(L5) , walks(L5), streets(L6), walklegs(L6)
+        try:
 
-        # already have data so node is ward/division level children should be PDs or Walks
-                if electtype == 'polling_district':
-                    PDPtsdf0 = pd.DataFrame(areaelectors, columns=['Election','PD', 'ENOP','Long', 'Lat', 'Zone'])
-                    PDPtsdf1 = PDPtsdf0.rename(columns= {'PD': 'Name'})
-        # we group electors by each polling_district, calculating mean lat , long for PD centroids and population of each PD for self.electorate
-                    g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone':'first'}
-                    PDPtsdf = PDPtsdf1.groupby(['Name']).agg(g).reset_index()
-                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'polling_district',PDPtsdf,"-PDS.html") #creating PD_nodes with mean PD pos and elector counts
-                elif electtype == 'walk':
-                    print("📦 Starting WALK processing")
-                    walkdf0 = pd.DataFrame(areaelectors, columns=['Election', 'WalkName', 'ENOP', 'Long', 'Lat', 'Zone'])
-                    print(f"📊 walkdf0 created with {len(walkdf0)} rows")
-                    unique_walks = areaelectors['WalkName'].unique()
-                    print(f"Unique walk names ({len(unique_walks)}): {unique_walks}")
+            # ----------------------------------------
+            # POLLING DISTRICT
+            # ----------------------------------------
+            if electtype == 'polling_district':
+                df = areaelectors[['PD', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
+                df = df.rename(columns={'PD': 'Name'})
+                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
 
-                    walkdf1 = walkdf0.rename(columns={'WalkName': 'Name'})
-                    print("📛 Renamed 'WalkName' to 'Name' in walkdf1")
+                nodelist = self.create_name_nodes(
+                    resolved_levels,
+                    gotv_pct,
+                    c_election,
+                    'polling_district',
+                    nodeelectors,
+                    "-PDS.html"
+                )
 
-                    g = {'Election': 'first', 'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
-                    nodeelectors = walkdf1.groupby(['Name']).agg(g).reset_index()
-                    print(f"📈 Grouped nodeelectors shape: {nodeelectors.shape}")
+            # ----------------------------------------
+            # WALK
+            # ----------------------------------------
+            elif electtype == 'walk':
+                df = areaelectors[['WalkName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
+                df = df.rename(columns={'WalkName': 'Name'})
+                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
 
-                    nodelist = self.create_name_nodes(resolved_levels, gotv_pct,c_election, 'walk', nodeelectors, "-WALKS.html")
-                    print(f"🧩 Created {len(nodelist)} walk nodes")
+                nodelist = self.create_name_nodes(
+                    resolved_levels,
+                    gotv_pct,
+                    c_election,
+                    'walk',
+                    nodeelectors,
+                    "-WALKS.html"
+                )
 
-    #---------------------------------------------------
-                elif electtype == 'street':
-                    mask = areaelectors['PD'] == self.value
-                    PDelectors = areaelectors[mask]
-        #            StreetPts = [(x[0],x[1],x[2],x[3]) for x in PDelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-                    streetdf0 = pd.DataFrame(PDelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat', 'Zone'])
-                    streetdf1 = streetdf0.rename(columns= {'StreetName': 'Name'})
-                    g = {'Election':'first','Lat':'mean','Long':'mean', 'ENOP':'count','Zone': 'first'}
-                    streetdf = streetdf1.groupby(['Name']).agg(g).reset_index()
-                    print("____Street df: ",streetdf)
-                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'street',streetdf,"-PRINT.html") #creating street_nodes with mean street pos and elector counts
-                elif electtype == 'walkleg':
-                    mask = areaelectors['WalkName'] == self.value
-                    walkelectors = areaelectors[mask]
-    #                WalklegPts = [(x[0],x[1],x[2],x[3]) for x in walkelectors[['StreetName','Long','Lat','ENOP']].drop_duplicates().values]
-                    walklegdf0 = pd.DataFrame(walkelectors, columns=['Election','StreetName','ENOP', 'Long', 'Lat', 'Zone'])
-                    walklegdf1 = walklegdf0.rename(columns= {'StreetName': 'Name'})
-                    g = {'Election':'first','Lat':'mean','Long':'mean','ENOP':'count','Zone': 'first'}
-                    walklegdf = walklegdf1.groupby(['Name']).agg(g).reset_index()
-                    print("____Walkleg df: ",walklegdf)
-                    print("____Walkleg elector df: ",walklegdf1)
-                    nodelist = self.create_name_nodes(resolved_levels,gotv_pct,c_election,'walkleg',walklegdf,"-PRINT.html") #creating walkleg_nodes with mean street pos and elector counts
-            except Exception as e:
-                print("❌ Error during data branch generation:", e)
-                return []
-        else:
-            print(f"_____ Electoral file contains no  data for election {c_election} and {self.value} for {electtype} types - Please load correct file",len(allelectors), len(areaelectors))
+            # ----------------------------------------
+            # STREET
+            # ----------------------------------------
+            elif electtype == 'street':
+                PDelectors = areaelectors[areaelectors['PD'] == self.value]
+                df = PDelectors[['StreetName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
+                df = df.rename(columns={'StreetName': 'Name'})
+                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
 
-            nodelist = []
-        print(f"____Created Data Branch for Election: {c_election} in area: {self.value} creating: {len(nodelist)} of child type {electtype} from: {len(allelectors)} - {len(areaelectors)} electors")
+                nodelist = self.create_name_nodes(
+                    resolved_levels,
+                    gotv_pct,
+                    c_election,
+                    'street',
+                    nodeelectors,
+                    "-PRINT.html"
+                )
+
+            # ----------------------------------------
+            # WALKLEG
+            # ----------------------------------------
+            elif electtype == 'walkleg':
+                walkelectors = areaelectors[areaelectors['WalkName'] == self.value]
+                df = walkelectors[['StreetName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
+                df = df.rename(columns={'StreetName': 'Name'})
+                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
+
+                nodelist = self.create_name_nodes(
+                    resolved_levels,
+                    gotv_pct,
+                    c_election,
+                    'walkleg',
+                    nodeelectors,
+                    "-PRINT.html"
+                )
+
+        except Exception as e:
+            print("❌ Error during data branch generation:", e)
+            return []
+
+        print(
+            f"✅ Created Data Branch for Election: {c_election} "
+            f"in area: {self.value} "
+            f"creating: {len(nodelist)} of type {electtype} "
+            f"from {len(areaelectors)} electors"
+        )
 
         save_nodes(TREKNODE_FILE)
         return nodelist
+
 
     def create_map_branch(self,resolved_levels,c_election):
         from state import Treepolys, Fullpolys, Overlaps

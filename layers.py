@@ -3,6 +3,9 @@ from folium.features import DivIcon
 from folium.utilities import JsCode
 from folium.plugins import MarkerCluster
 from folium import GeoJson, Tooltip, Popup
+from shapely.geometry import Point, Polygon
+from geovoronoi import voronoi_regions_from_coords
+import numpy as np
 import folium
 from datetime import datetime, timedelta, date
 from elections import route, CurrentElection, stepify
@@ -305,6 +308,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         global allelectors
         global levelcolours
         from state import Treepolys, Fullpolys
+        from elector import electors
+
+        allelectors = electors.get(c_election)
     # generate voronoi fields within the target_node Boundary
         shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
 
