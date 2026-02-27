@@ -574,41 +574,47 @@
         // =====================================================
         el.oninput = () => {
 
-            if (window.isUpdatingConstants) return;   // 🔥 prevents loop
+        if (window.isUpdatingConstants) return;   // 🔥 prevents loop
 
-            let newVal;
+        let newVal;
 
-            if (el.type === "number") newVal = parseFloat(el.value);
-            else if (el.type === "checkbox") newVal = el.checked;
-            else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
-            else newVal = el.value;
+        if (el.type === "number") newVal = parseFloat(el.value);
+        else if (el.type === "checkbox") newVal = el.checked;
+        else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
+        else newVal = el.value;
 
-            fetch("/set-constant", {
-                method: "POST",
-                credentials: "same-origin",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    election: document.querySelector(".election-tab.active")?.dataset.election || "",
-                    name: key,
-                    value: newVal
-                })
+        fetch("/set-constant", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                election: document.querySelector(".election-tab.active")?.dataset.election || "",
+                name: key,
+                value: newVal
             })
-            .then(res => res.text())
-            .then(text => {
-                console.log("RAW RESPONSE:", text);
-                return JSON.parse(text);
-            })
-            .then(resp => {
-                if (!resp.success) {
-                    alert("Failed to update: " + resp.error);
-                }
-            });
-            .catch(err => {
-                  console.error("FETCH FAILED:", err);
-            });
-        };
+        })
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP error ${res.status}`);
+            }
+            return res.text();
+        })
+        .then(text => {
+            console.log("RAW RESPONSE:", text);
+            return JSON.parse(text);
+        })
+        .then(resp => {
+            if (!resp.success) {
+                alert("Failed to update: " + resp.error);
+            }
+        })
+        .catch(err => {
+            console.error("❌ Fetch error:", err);
+            alert("Server error while updating constant. Check console.");
+        });
 
-    });
+    };
+
 
     if (typeof attachListenersToConstantFields === "function") {
         attachListenersToConstantFields(constants);
