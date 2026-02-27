@@ -498,7 +498,7 @@ document.getElementById("logout-button")?.addEventListener("click", () => {
 
 
 /* ---------------------------------------------------------
-* RESET-ELECTION TERRITORY BUTTON
+* RESET-ELECTION TERRITORY ON CHANGE TRIGGER
 * --------------------------------------------------------- */
 
 const territorySelect = document.getElementById("territory");
@@ -515,7 +515,7 @@ territorySelect.addEventListener("change", async () => {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ mapfile })
+            body: JSON.stringify({ mapfile: mapfile })
         });
 
         if (!res.ok) {
@@ -531,26 +531,6 @@ territorySelect.addEventListener("change", async () => {
     }
 });
 
-
-
-document.getElementById("b0")?.addEventListener("click", () => {
-  const tab = getActiveElectionTab();
-  if (!tab) return;
-
-  fetch("/update-territory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({
-          election: tab.dataset.election
-      })
-  })
-      .then(res => res.json())
-      .then(resp => {
-          if (resp.success) refreshConstantsUI();
-      });
-
-});
 
 
 /* ---------------------------------------------------------

@@ -32,77 +32,61 @@
 
 <div style="margin-bottom: 10px;">
   <button id="add-file-btn">Add File</button>
+  <button id="save-stream-btn">Save Changes</button> <!-- Add this -->
 </div>
+
 
 <!-- Process & Progress -->
 <div>
   <button id="process-election-btn">Process Election</button>
 </div>
 
-<div id="progress-container" style="margin-top: 20px; display:none;">
-  <label for="progress-bar">Normalization Progress:</label>
-  <progress id="progress-bar" value="0" max="100" style="width:300px;"></progress>
-  <span id="progress-text">0%</span>
+<div id="progress-container" style="margin-top:20px; display:none; width:400px;">
+
+  <div style="margin-bottom:6px;">
+    <strong id="stage-name">Preparing...</strong>
+  </div>
+
+  <!-- Overall Progress -->
+  <progress id="progress-bar" value="0" max="100" style="width:100%;"></progress>
+  <div style="text-align:right;">
+    <span id="progress-text">0%</span>
+  </div>
+
+  <!-- Stage Progress -->
+  <div style="margin-top:8px;">
+    <small>Stage Progress</small>
+    <progress id="stage-bar" value="0" max="100" style="width:100%; height:8px;"></progress>
+  </div>
+
 </div>
+
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
+  // ------------------------
+  // DOM helpers
+  // ------------------------
   const qs = (sel, ctx=document) => ctx.querySelector(sel);
   const qsa = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
 
-  let stream_processing = {
-    files: [],
-    last_run: null,
-    status: "idle"
-  };
+  // ------------------------
+  // Single source of truth
+  // ------------------------
+  let stream_processing = { files: [], last_run: null, status: "idle" };
   let selectedElection = "";
 
-  /* =====================================================
-     Fetch available elections
-  ===================================================== */
-  async function loadElectionOptions() {
-    try {
-      const elections = await fetch('/get_elections').then(res => res.json());
-      const select = qs('#election-select');
-      select.innerHTML = '';
-      elections.forEach(e => {
-        const opt = document.createElement('option');
-        opt.value = e.cid;
-        opt.textContent = e.name;
-        select.appendChild(opt);
-      });
-    } catch (err) {
-      alert("Error loading elections: " + err.message);
-    }
-  }
-
-  /* =====================================================
-     Load selected election's stream_processing
-  ===================================================== */
-  async function loadElection() {
-    selectedElection = qs('#election-select').value;
-    if (!selectedElection) return;
-
-    try {
-      stream_processing = await fetch(`/get_stream_processing/${selectedElection}`)
-                                  .then(res => res.json());
-
-      renderFileTable();
-    } catch (err) {
-      alert("Error loading election: " + err.message);
-    }
-  }
-
-  /* =====================================================
-     Render file table
-  ===================================================== */
+  // ------------------------
+  // Render the file table
+  // ------------------------
   function renderFileTable() {
     const tbody = qs('#file-table-body');
     tbody.innerHTML = '';
 
     stream_processing.files.forEach((file, idx) => {
       const tr = document.createElement('tr');
+      tr.dataset.index = idx;
       tr.innerHTML = `
         <td><input type="number" class="order" value="${file.order}" style="width:50px;"></td>
         <td>
@@ -131,6 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
       tbody.appendChild(tr);
 
+      // File upload
       const filePicker = tr.querySelector('.file-picker');
       tr.querySelector('.upload-btn').addEventListener('click', () => filePicker.click());
       filePicker.addEventListener('change', async (e) => {
@@ -142,17 +127,17 @@ document.addEventListener("DOMContentLoaded", () => {
           formData.append('election', selectedElection);
           formData.append('index', idx);
 
-          const result = await fetch('/upload_file', {method:'POST', body: formData}).then(r=>r.json());
+          const result = await fetch('/upload_file', {method:'POST', body:formData}).then(r=>r.json());
           if (result.error) throw new Error(result.error);
 
           tr.querySelector('.filename').value = f.name;
           stream_processing.files[idx].file_path = result.path;
-
         } catch(err) {
           alert("Upload failed: " + err.message);
         }
       });
 
+      // Remove file
       tr.querySelector('.remove-btn').addEventListener('click', () => {
         stream_processing.files.splice(idx, 1);
         renderFileTable();
@@ -160,72 +145,224 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  /* =====================================================
-     Add file
-  ===================================================== */
-  qs('#add-file-btn').addEventListener('click', () => {
-    stream_processing.files.push({
-      order: stream_processing.files.length + 1,
-      file_path: '',
-      type: 'csv',
-      purpose: 'main',
-      fixlevel: 3
+  // ------------------------
+  // Add a new file row
+  // ------------------------
+  const addBtn = qs('#add-file-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      stream_processing.files.push({
+        order: stream_processing.files.length + 1,
+        file_path: "",
+        type: "csv",
+        purpose: "main",
+        fixlevel: 0
+      });
+      renderFileTable();
     });
-    renderFileTable();
-  });
+  }
 
-  /* =====================================================
-     Process election
-  ===================================================== */
-  qs('#process-election-btn').addEventListener('click', async () => {
+
+
+  // ------------------------
+  // Load election list
+  // ------------------------
+  async function loadElectionOptions() {
+    try {
+      const elections = await fetch('/get_elections').then(r => r.json());
+      const select = qs('#election-select');
+      select.innerHTML = '';
+
+      if (!elections.length) {
+        const opt = document.createElement('option');
+        opt.value = "";
+        opt.textContent = "No elections found";
+        select.appendChild(opt);
+        return;
+      }
+
+      elections.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.cid;
+        opt.textContent = e.name;
+        select.appendChild(opt);
+      });
+    } catch(err) {
+      alert("Error loading elections: " + err.message);
+    }
+  }
+
+  // ------------------------
+  // Load a specific election's stream_processing
+  // ------------------------
+  async function loadElection() {
+    selectedElection = qs('#election-select').value;
+    if (!selectedElection) return;
+
+    try {
+      const data = await fetch(`/get_stream_processing/${selectedElection}`).then(r => r.json());
+
+      if (!data.files) data.files = [];
+
+      // Keep any new local rows (added but not uploaded yet)
+      const localNewFiles = stream_processing.files.filter(f => !f.file_path);
+      stream_processing = { ...data, files: [...data.files, ...localNewFiles] };
+
+      renderFileTable();
+    } catch(err) {
+      alert("Error loading election: " + err.message);
+    }
+  }
+
+  // ------------------------
+  // Save stream_processing
+  // ------------------------
+  const saveBtn = qs('#save-stream-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      // Update from table first
+      const tbody = qs('#file-table-body');
+      stream_processing.files = qsa('tr', tbody).map(tr => ({
+        order: Number(tr.querySelector('.order').value),
+        file_path: tr.querySelector('.filename').value,
+        type: tr.querySelector('.type').value,
+        purpose: tr.querySelector('.purpose').value,
+        fixlevel: Number(tr.querySelector('.fixlevel').value)
+      }));
+
+      try {
+        const res = await fetch(`/save_stream_processing/${selectedElection}`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(stream_processing)
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        alert("Changes saved successfully!");
+      } catch(err) {
+        alert("Save failed: " + err.message);
+      }
+    });
+  }
+
+
+
+  // ------------------------
+// Process Election button
+// ------------------------
+const processBtn = qs('#process-election-btn');
+if (processBtn) {
+  processBtn.addEventListener('click', async () => {
     if (!selectedElection || !stream_processing.files.length) {
       alert("Select an election and add files first.");
       return;
     }
 
+    // Show progress UI
     qs('#progress-container').style.display = "block";
     qs('#progress-bar').value = 0;
     qs('#progress-text').innerText = "0%";
 
-    const formData = new FormData();
-    formData.append('election', selectedElection);
-    stream_processing.files.forEach((file, idx) => {
-      if (file.file_path) formData.append(`stored_path_${idx}`, file.file_path);
-      formData.append(`meta_${idx}_order`, file.order);
-      formData.append(`meta_${idx}_type`, file.type);
-      formData.append(`meta_${idx}_purpose`, file.purpose);
-      formData.append(`meta_${idx}_fixlevel`, file.fixlevel);
-    });
+    // Prepare payload
+    const filesWithPaths = stream_processing.files.filter(f => f.file_path);
+    if (!filesWithPaths.length) {
+      alert("You must upload at least one file before processing.");
+      return;
+    }
 
-    // Start polling
+    const payload = {
+      ename: selectedElection,
+      files: filesWithPaths.map(f => ({
+        stored_path: f.file_path,
+        order: f.order,
+        type: f.type,
+        purpose: f.purpose,
+        fixlevel: f.fixlevel
+      }))
+    };
+
+    // Function to poll progress
     async function pollProgress() {
       try {
-        const data = await fetch('/progress').then(r=>r.json());
-        qs('#progress-bar').value = data.percent || 0;
-        qs('#progress-text').innerText = (data.percent || 0) + "% — " + (data.message || "");
+        const data = await fetch('/progress').then(r => r.json());
 
-        if (data.status !== "complete") setTimeout(pollProgress, 500);
-        else qs('#progress-text').innerText = "✅ Complete";
+        const overallPercent = data.percent || 0;
+        const stagePercent = data.stage_progress || 0;
+        const stageName = data.current_stage || data.status || "";
+        const message = data.message || "";
 
-      } catch {
+        // Show container if hidden
+        qs('#progress-container').style.display = "block";
+
+        // ---------------------------
+        // Overall progress bar
+        qs('#progress-bar').value = overallPercent;
+        qs('#progress-text').innerText =
+          overallPercent + "% — " + stageName + " — " + message;
+
+        // ---------------------------
+        // Stage progress bar (if exists)
+        const stageBar = qs('#stage-bar');
+        if (stageBar) {
+          stageBar.value = stagePercent;
+        }
+
+        // ---------------------------
+        // Continue polling if running
+        if (data.status !== "complete" && data.status !== "error") {
+          setTimeout(pollProgress, 500);
+        } else if (data.status === "complete") {
+          qs('#progress-text').innerText = "✅ Complete";
+          if (stageBar) stageBar.value = 100;
+          qs('#progress-bar').value = 100;
+        } else if (data.status === "error") {
+          qs('#progress-text').innerText = "❌ Error — " + message;
+        }
+
+      } catch (err) {
+        // Retry on failure
         setTimeout(pollProgress, 1000);
       }
     }
-    pollProgress();
 
+
+    // Start normalization
     try {
-      await fetch('/normalise', {method:'POST', body:formData});
+      const res = await fetch('/normalise', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
+      // Only start polling after successful POST
+      pollProgress();
+
     } catch(err) {
       alert("Processing failed: " + err.message);
+      qs('#progress-container').style.display = "none";
     }
-
   });
+}
 
-  qs('#load-election-btn').addEventListener('click', loadElection);
 
+  // ------------------------
+  // Wire load button
+  // ------------------------
+  const loadBtn = qs('#load-election-btn');
+  if (loadBtn) loadBtn.addEventListener('click', loadElection);
+
+  // ------------------------
+  // Initialize dropdown on page load
+  // ------------------------
   loadElectionOptions();
 
 });
 </script>
+
 
 {% endblock map %}
