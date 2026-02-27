@@ -593,12 +593,19 @@
                     value: newVal
                 })
             })
-            .then(res => res.json())
+            .then(res => res.text())
+            .then(text => {
+                console.log("RAW RESPONSE:", text);
+                return JSON.parse(text);
+            })
             .then(resp => {
                 if (!resp.success) {
                     alert("Failed to update: " + resp.error);
                 }
             });
+            .catch(err => {
+                  console.error("FETCH FAILED:", err);
+              });
         };
 
     });
