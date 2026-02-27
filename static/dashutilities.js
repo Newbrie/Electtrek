@@ -462,171 +462,164 @@
 
 
    window.updateConstantsUI = function (constants, options) {
-     window.isUpdatingConstants = true;
+       window.isUpdatingConstants = true;
 
-    if (!constants || !options) {
-        console.warn("updateConstantsUI called without constants or options", { constants, options });
-        return;
-    }
+       if (!constants || !options) {
+           console.warn("updateConstantsUI called without constants or options", { constants, options });
+           window.isUpdatingConstants = false;
+           return;
+       }
 
-    console.log("Updating constants UI", { constants, options });
+       console.log("Updating constants UI", { constants, options });
 
-    // =====================================================
-    // ⭐ GLOBALS
-    // =====================================================
-    Object.entries(options).forEach(([key, value]) => {
-        window[key] = value;
-    });
+       // =====================================================
+       // ⭐ GLOBALS
+       // =====================================================
+       Object.entries(options).forEach(([key, value]) => {
+           window[key] = value;
+       });
 
-    window.areas       = options?.areas || {};
-    window.places      = constants?.places || {};
-    window.resources   = options?.resources || {};
-    window.tags        = constants?.tags || {};
-    window.territory   = options?.territory || [];
+       window.areas       = options?.areas || {};
+       window.places      = constants?.places || {};
+       window.resources   = options?.resources || {};
+       window.tags        = constants?.tags || {};
+       window.territory   = options?.territory || [];
 
-    const result = getTagsJson(window.tags);
-    window.task_tags    = result.task_tags;
-    window.outcome_tags = result.outcome_tags;
+       const result = getTagsJson(window.tags);
+       window.task_tags    = result.task_tags;
+       window.outcome_tags = result.outcome_tags;
 
-    // =====================================================
-    // ⭐ POPULATE ALL SELECTS FIRST
-    // =====================================================
-    populateAllSelects(options, constants);
+       // =====================================================
+       // ⭐ POPULATE ALL SELECTS FIRST
+       // =====================================================
+       populateAllSelects(options, constants);
 
+       // =====================================================
+       // ⭐ SPECIAL CASES FOR SELECTS
+       // =====================================================
+       // Resources (multi-select)
+       const resourcesEl = document.getElementById("resources");
+       if (resourcesEl && options.resources) {
+           resourcesEl.innerHTML = "";
+           Object.entries(options.resources).forEach(([code, person]) => {
+               const o = document.createElement("option");
+               o.value = code;
+               o.textContent = `${person.Firstname} ${person.Surname}`;
+               resourcesEl.appendChild(o);
+           });
+       }
 
-    // =====================================================
-    // ⭐ SPECIAL CASES FOR SELECTS
-    // =====================================================
+       // candidate & campaignMgr (filtered from selected resources)
+       ["candidate", "campaignMgr"].forEach(role => {
+           const el = document.getElementById(role);
+           if (!el) return;
 
-    // Resources (multi-select)
-    const resourcesEl = document.getElementById("resources");
-    if (resourcesEl && options.resources) {
-        resourcesEl.innerHTML = "";
-        Object.entries(options.resources).forEach(([code, person]) => {
-            const o = document.createElement("option");
-            o.value = code;
-            o.textContent = `${person.Firstname} ${person.Surname}`;
-            resourcesEl.appendChild(o);
-        });
-    }
+           el.innerHTML = "";
 
-    // candidate & campaignMgr (filtered from selected resources)
-    ["candidate", "campaignMgr"].forEach(role => {
-        const el = document.getElementById(role);
-        if (!el) return;
+           const selectedResources = Array.isArray(constants.resources)
+               ? constants.resources
+               : [];
 
-        el.innerHTML = "";
+           selectedResources.forEach(code => {
+               const person = options.resources?.[code];
+               if (!person) return;
 
-        const selectedResources = Array.isArray(constants.resources)
-            ? constants.resources
-            : [];
+               const o = document.createElement("option");
+               o.value = code;
+               o.textContent = `${person.Firstname} ${person.Surname}`;
+               el.appendChild(o);
+           });
+       });
 
-        selectedResources.forEach(code => {
-            const person = options.resources?.[code];
-            if (!person) return;
+       // mapfiles
+       const mapfilesEl = document.getElementById("mapfiles");
+       if (mapfilesEl && Array.isArray(constants.mapfiles)) {
+           mapfilesEl.innerHTML = "";
+           constants.mapfiles.forEach((path, idx) => {
+               const o = document.createElement("option");
+               o.value = path;
+               o.textContent = path.split("/").pop();
+               if (idx === constants.mapfiles.length - 1) o.selected = true;
+               mapfilesEl.appendChild(o);
+           });
+           mapfilesEl.onchange = () => {
+               changeIframeSrc(`/thru/${mapfilesEl.value}`);
+           };
+       }
 
-            const o = document.createElement("option");
-            o.value = code;
-            o.textContent = `${person.Firstname} ${person.Surname}`;
-            el.appendChild(o);
-        });
-    });
+       // =====================================================
+       // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
+       // =====================================================
+       Object.entries(constants).forEach(([key, value]) => {
+           const el = document.getElementById(key);
+           if (!el) return;
 
-    // mapfiles
-    const mapfilesEl = document.getElementById("mapfiles");
-    if (mapfilesEl && Array.isArray(constants.mapfiles)) {
-        mapfilesEl.innerHTML = "";
-        constants.mapfiles.forEach((path, idx) => {
-            const o = document.createElement("option");
-            o.value = path;
-            o.textContent = path.split("/").pop();
-            if (idx === constants.mapfiles.length - 1) o.selected = true;
-            mapfilesEl.appendChild(o);
-        });
-        mapfilesEl.onchange = () => {
-            changeIframeSrc(`/thru/${mapfilesEl.value}`);
-        };
-    }
+           if (el.tagName === "SELECT") {
+               if (el.multiple && Array.isArray(value)) {
+                   Array.from(el.options).forEach(opt => {
+                       opt.selected = value.includes(opt.value);
+                   });
+               } else if (value != null) {
+                   el.value = value;
+               }
+           } else if (el.type === "checkbox") {
+               el.checked = Boolean(value);
+           } else {
+               el.value = value ?? "";
+           }
 
-    // =====================================================
-    // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
-    // =====================================================
-    Object.entries(constants).forEach(([key, value]) => {
-        const el = document.getElementById(key);
-        if (!el) return;
+           // =====================================================
+           // ⭐ AUTO BACKEND UPDATE
+           // =====================================================
+           el.oninput = () => {
+               if (window.isUpdatingConstants) return;   // 🔥 prevents loop
 
-        if (el.tagName === "SELECT") {
-            if (el.multiple && Array.isArray(value)) {
-                Array.from(el.options).forEach(opt => {
-                    opt.selected = value.includes(opt.value);
-                });
-            } else if (value != null) {
-                el.value = value;
-            }
-        } else if (el.type === "checkbox") {
-            el.checked = Boolean(value);
-        } else {
-            el.value = value ?? "";
-        }
+               let newVal;
+               if (el.type === "number") newVal = parseFloat(el.value);
+               else if (el.type === "checkbox") newVal = el.checked;
+               else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
+               else newVal = el.value;
 
-        // =====================================================
-        // ⭐ AUTO BACKEND UPDATE
-        // =====================================================
-        el.oninput = () => {
+               fetch("/set-constant", {
+                   method: "POST",
+                   credentials: "same-origin",
+                   headers: { "Content-Type": "application/json" },
+                   body: JSON.stringify({
+                       election: document.querySelector(".election-tab.active")?.dataset.election || "",
+                       name: key,
+                       value: newVal
+                   })
+               })
+               .then(res => {
+                   if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+                   return res.text();
+               })
+               .then(text => {
+                   console.log("RAW RESPONSE:", text);
+                   return JSON.parse(text);
+               })
+               .then(resp => {
+                   if (!resp.success) {
+                       alert("Failed to update: " + resp.error);
+                   }
+               })
+               .catch(err => {
+                   console.error("❌ Fetch error:", err);
+                   alert("Server error while updating constant. Check console.");
+               });
+           };
+       });
 
-        if (window.isUpdatingConstants) return;   // 🔥 prevents loop
+       if (typeof attachListenersToConstantFields === "function") {
+           attachListenersToConstantFields(constants);
+       }
 
-        let newVal;
+       if (typeof populateDropdowns === "function") {
+           populateDropdowns();
+       }
 
-        if (el.type === "number") newVal = parseFloat(el.value);
-        else if (el.type === "checkbox") newVal = el.checked;
-        else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
-        else newVal = el.value;
-
-        fetch("/set-constant", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                election: document.querySelector(".election-tab.active")?.dataset.election || "",
-                name: key,
-                value: newVal
-            })
-        })
-        .then(res => {
-            if (!res.ok) {
-                throw new Error(`HTTP error ${res.status}`);
-            }
-            return res.text();
-        })
-        .then(text => {
-            console.log("RAW RESPONSE:", text);
-            return JSON.parse(text);
-        })
-        .then(resp => {
-            if (!resp.success) {
-                alert("Failed to update: " + resp.error);
-            }
-        })
-        .catch(err => {
-            console.error("❌ Fetch error:", err);
-            alert("Server error while updating constant. Check console.");
-        });
-
-    };
-
-
-    if (typeof attachListenersToConstantFields === "function") {
-        attachListenersToConstantFields(constants);
-    }
-
-    // Optional: any additional dropdown setup
-    if (typeof populateDropdowns === "function") {
-        populateDropdowns();
-    }
-    window.isUpdatingConstants = false;
-
-};
+       window.isUpdatingConstants = false;
+   };
 
 
 
