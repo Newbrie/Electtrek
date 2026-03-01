@@ -94,7 +94,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
 
 #    here = Point(Decimal(Con_Long),Decimal(Con_Lat))
     pfile = TreeBounds[gapnode.parent.level]
-    downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.dir+"/"+gapnode.file,"DOWN",18)
+    downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.dir+"/"+gapnode.file(rlevels),"DOWN",18)
     uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.parent.dir+"/"+gapnode.parent.file,"UP",18)
 
     Countyboundary = pfile[pfile['FID']==gapnode.parent.fid]
@@ -341,7 +341,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
     print ("____________flayer objects:",len(flayers[gapnode.level+1].children))
 
 #    uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.parent.dir+"/"+gapnode.parent.file,"UP",15)
-#    downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.dir+"/"+gapnode.file,"DOWN",15)
+#    downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(gapnode.dir+"/"+gapnode.file(rlevels),"DOWN",15)
 
 #    Conboundary["UP"] = "<br>"+constituency+"</br>" + uptag
 #    add_to_con_layer(flayers[3].children, Conboundary,"UP",flayers[3].fg)
@@ -388,7 +388,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
       type_colour = allowed["C0"]
 
       # in the Constituency map add the ward marker to the map with a ward title
-      downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file,"DOWN",15)
+      downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file(rlevels),"DOWN",15)
 
       flayers[4].fg.add_child(
         folium.Marker(
@@ -425,8 +425,8 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
           print("Cant find Wardboundary - Lat Long:",maplaty,maplongx)
         else:
           uppdtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.parent.dir+"/"+ward_node.parent.file,"UP",10)
-          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file,"UP",10)
-          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file,"DOWN",10)
+          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file(rlevels),"UP",10)
+          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.dir+"/"+ward_node.file(rlevels),"DOWN",10)
           Wardboundary["Downcon"] =  "<br>"+Ward+"</br>"+ downtag
           Wardboundary["UP"] =  "<br>"+Ward+"</br>"+uptag
           Wardboundary["UPpd"] =  "<br>"+Ward+"</br>"+uppdtag
@@ -681,7 +681,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
         PD_node.map.save(PD_node.file)
         p = p + 1
       os.chdir(ward_node.dir)
-      ward_node.map.save(ward_node.file)
+      ward_node.map.save(ward_node.file(rlevels))
       w = w + 1
 
 #    for fid,fmap,fdir,fpath in DivMapfilelist:
@@ -695,7 +695,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
     target = gapnode.locmappath("")
     gapnode.map.save(target)
     prodstats['status'] = "Walk generation complete"
-    return [allelectors, prodstats, gapnode.dir+"/"+gapnode.file]
+    return [allelectors, prodstats, gapnode.dir+"/"+gapnode.file(rlevels)]
 
 if __name__ == "__main__":
     # this won't be run when imported

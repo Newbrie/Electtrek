@@ -3,7 +3,9 @@ from folium.features import DivIcon
 from folium.utilities import JsCode
 from folium.plugins import MarkerCluster
 from folium import GeoJson, Tooltip, Popup
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, MultiPoint
+from shapely import crosses, contains,covers, union, envelope, intersection
+from shapely.ops import nearest_points
 from geovoronoi import voronoi_regions_from_coords
 import numpy as np
 import folium
@@ -12,6 +14,9 @@ from elections import route, CurrentElection, stepify
 import json
 import os
 import html
+import pandas as pd
+import re
+
 
 import colorsys
 from matplotlib.colors import to_hex, to_rgb
@@ -67,7 +72,74 @@ def adjust_boundary_color(fill_hex, factor=0.7):
     # Back to hex
     return '#{:02x}{:02x}{:02x}'.format(int(new_r*255), int(new_g*255), int(new_b*255))
 
+def create_enclosing_gdf(gdf, buffer_size=20):
+    """
+    Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
 
+    Parameters:
+        gdf (GeoDataFrame): A GeoDataFrame with Point geometries (assumed to be EPSG:4326).
+        buffer_size (float, optional): Buffer size in meters for single-point cases (default: 20m).
+
+    Returns:
+        GeoDataFrame: A GeoDataFrame with one row containing the enclosing shape in EPSG:3857.
+    """
+    if gdf.empty:
+        return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
+
+    # Ensure CRS is set
+    if gdf.crs is None:
+        gdf.set_crs("EPSG:4326", inplace=True)
+
+    # Convert to metric CRS for accurate geometry ops
+    gdf_3857 = gdf.to_crs("EPSG:3857")
+
+    multi_point = gdf_3857.iloc[0].geometry
+
+    if multi_point.is_empty:
+        return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
+
+    points = list(multi_point.geoms)
+
+    if len(points) == 1:
+        enclosed_shape = points[0]
+
+    elif len(points) == 2:
+        p1, p2 = points
+
+        mid_x = (p1.x + p2.x) / 2
+        mid_y = (p1.y + p2.y) / 2
+
+        d = np.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+
+        if d == 0:
+            enclosed_shape = p1
+        else:
+            h = d / np.sqrt(3)
+            dx = (p2.y - p1.y) / d
+            dy = -(p2.x - p1.x) / d
+            p3 = Point(mid_x + h * dx, mid_y + h * dy)
+            enclosed_shape = MultiPoint([p1, p2, p3]).convex_hull
+
+    else:
+        enclosed_shape = MultiPoint(points).convex_hull
+
+    # Buffer for visual padding
+    smoothing_radius = 3*buffer_size if len(points) == 1 else buffer_size * 2
+    rounded_shape = enclosed_shape.buffer(smoothing_radius)
+
+    # Build GeoDataFrame with same CRS (EPSG:3857)
+    enclosing_gdf = gpd.GeoDataFrame(
+        {
+            "NAME": gdf.NAME,
+            "FID": gdf.FID,
+            "LAT": gdf.LAT.values[0],
+            "LONG": gdf.LONG.values[0],
+            "geometry": [rounded_shape]
+        },
+        crs="EPSG:3857"
+    )
+
+    return enclosing_gdf
 
 def build_street_list_html(streets_df):
     # Voting intention map
@@ -251,10 +323,11 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.id = None
         self.areashtml = {}
 
-    def _render_single_node(self, c_election, node, intention_type, static, counters):
+    def _render_single_node(self, c_election, node, static, counters):
 
         CElection = CurrentElection.load(c_election)
         rlevels = CElection.resolved_levels
+        intention_type = rlevels[node.level+1]
 
         if intention_type == "marker":
             self.add_genmarkers(CElection, rlevels, node, "marker", static)
@@ -264,14 +337,14 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         elif intention_type in ("polling_district", "walk"):
             self.generate_voronoi_with_geovoronoi(
-                c_election, rlevels, node, intention_type, static
+                c_election, rlevels, node, static
             )
 
         else:
-            self.add_nodemaps(c_election, rlevels, node, intention_type, static, counters)
+            self.add_nodemaps(c_election, rlevels, node, static, counters)
 
 
-    def create_layer(self, c_election, nodelist, intention_type, static=False):
+    def create_layer(self, c_election, nodelist, static=False):
         from flask import session
         from elections import branchcolours
         from state import Treepolys, Fullpolys
@@ -279,7 +352,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         from collections import defaultdict
 
 
-        print(f"Layer {intention_type} memory id:", id(self))
+        print(f"Layer {self.name} memory id:", id(self))
         accumulate = session.get("accumulate", False)
 
         if not accumulate:
@@ -289,7 +362,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         i = 0
         for n in nodelist:
             n.defcol = branchcolours[i]
-            self._render_single_node(c_election, n, intention_type, static, counters)
+            self._render_single_node(c_election, n, static, counters)
             i = i+1
 
         return len(self._children)
@@ -304,11 +377,12 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def generate_voronoi_with_geovoronoi(self, c_election, rlevels,target_node, vtype, static=False, add_to_map=True, color="#3388ff"):
+    def generate_voronoi_with_geovoronoi(self, c_election, rlevels,target_node, static=False, add_to_map=True, color="#3388ff"):
         global allelectors
         global levelcolours
         from state import Treepolys, Fullpolys
         from elector import electors
+        from flask import session, flash
 
         allelectors = electors.get(c_election)
     # generate voronoi fields within the target_node Boundary
@@ -342,6 +416,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             area_shape = Territory_boundary
             print("⚠️ Warning: Territory_boundary has no .geometry — using raw")
 
+        vtype = rlevels[target_node.level+1]
         children = target_node.childrenoftype(vtype)
         print(f"👶 Found {len(children)} children of type '{vtype}'")
     # children nodes are the target child Walks/PDs polygons which should fit into area_shape
@@ -356,10 +431,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         mask = (
                 (allelectors['Election'] == c_election) &
-                (allelectors['Area'] == target_node.value)
+                (allelectors['Area'] == target_node.value) # ward or division name
             )
         nodeelectors = allelectors[mask]
 # these are the electors within the area - the area being the Level 4 area(div/ward)
+        print(f"✅  Election {c_election} at node {target_node.value} has {len(nodeelectors)} of rows in nodeelectors")
 
         coords = []
         valid_children = []
@@ -367,6 +443,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         for child in children:
 # these are the centroids that will form the centre of each voronoi field
             cent = child.latlongroid
+            print(f"✅  nodelatlog {cent}")
+
             if isinstance(cent, (tuple, list)) and len(cent) == 2:
                 lon, lat = cent[1], cent[0]  # Note: [lon, lat] = [x, y]
             elif hasattr(cent, 'x') and hasattr(cent, 'y'):
@@ -464,9 +542,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         try:
             region_polys, region_pts = voronoi_regions_from_coords(
                 coords,
-                area_shape,
-                qhull_options="Qbb Qc Qz QJ"  # Joggle for robustness
-            )
+                area_shape            )
             print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
         except Exception as e:
             print("❌ Error during Voronoi generation:", e)
@@ -553,7 +629,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     #            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
                     #        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
                     # Generate enclosing shape
-                    limbX = matched_child.create_enclosing_gdf(gdf)
+                    limbX = create_enclosing_gdf(gdf)
                     limbX['col'] = matched_child.col
                     numtag = str(matched_child.tagno)+" "+str(matched_child.value)
                     num = str(matched_child.tagno)
@@ -744,9 +820,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                     'child': matched_child,
                     'region': region_polygon
                 })
+
             else:
                 flash("no data exists for this election at this location")
-                print (f" no walks exist for this region {region_polygon} under this {c_election} election ")
+                print (f" no data exists for this region {region_polygon} under this {c_election} election ")
 
         print("✅ Voronoi generation complete.")
         return voronoi_regions
@@ -836,7 +913,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 #            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
 #        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
         # Generate enclosing shape
-        limbX = herenode.create_enclosing_gdf(gdf)
+        limbX = create_enclosing_gdf(gdf)
         limbX['col'] = herenode.col
 
         if type == 'polling_district':
@@ -1021,13 +1098,14 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps (self,c_election,rlevels, herenode,type,static, counters):
+    def add_nodemaps (self,c_election,rlevels, herenode,static, counters):
         from state import Treepolys, Fullpolys, Candidates, LastResults
-
-        from flask import session
+        from flask import session, flash
         global levelcolours
         global Con_Results_data
         global OPTIONS
+
+        type = rlevels[herenode.level+1]
 
         childlist = herenode.childrenoftype(type)
         allchildlist = herenode.children
@@ -1268,8 +1346,10 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return self._children
 
-    def add_nodemarks (self,c_election,rlevels,herenode,type,static):
+    def add_nodemarks (self,c_election,rlevels,herenode,static):
         global levelcolours
+
+        type = rlevels[herenode.level + 1]
 
         childlist = herenode.childrenoftype(type)
         nodeshtml = build_nodemap_list_html(herenode)

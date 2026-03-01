@@ -928,18 +928,32 @@ async function fetchBackendURL() {
   * FETCH CONSTANTS + UPDATE UI
   * --------------------------------------------------------- */
   function refreshConstantsUI(callback) {
-     console.log("📩 refreshing constants");
+      console.log("📩 refreshing constants");
+
       return fetch("/get-constants", { credentials: "same-origin" })
-          .then(res => res.json())
+          .then(res => {
+              if (!res.ok) {
+                  throw new Error(`Server error: ${res.status}`);
+              }
+              return res.json();
+          })
           .then(data => {
-            console.log("DATA RECEIVED:", data);
+              console.log("DATA RECEIVED:", data);
+
               window.latestConstants = data.constants;
               window.latestOptions = data.options;
+
               window.updateConstantsUI(data.constants, data.options);
+
               if (callback) callback(data);
               return data.constants;
+          })
+          .catch(err => {
+              console.error("Failed to refresh constants:", err);
+              alert("Failed to load constants. Check server logs.");
           });
   }
+
 
   // ----------------------------
   // Iframe & Toggle

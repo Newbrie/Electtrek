@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
-from shapely.geometry import Point, Polygon, MultiPoint
+from shapely.geometry import Point, Polygon
 from shapely import crosses, contains,covers, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route, branchcolours

@@ -7,7 +7,7 @@ import pandas as pd
 import geopandas as gpd
 import pickle
 from flask import session
-from flask import request, redirect, url_for, has_request_context
+from flask import request, redirect, url_for, has_request_context, render_template, current_app
 from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 from elections import route, CurrentElection, stepify
 from folium import Map, Element
@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 from state import branchcolours
+import sys, math, stat, json
 
 
 
@@ -595,6 +596,26 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
+    def file(self, rlevels: dict[int, str]) -> str:
+        """Compute map filename dynamically."""
+        FACEENDING = {
+            'street': "-PRINT.html",
+            'walkleg': "-PRINT.html",
+            'polling_district': "-PDS.html",
+            'walk': "-WALKS.html",
+            'ward': "-WARDS.html",
+            'division': "-DIVS.html",
+            'constituency': "-MAP.html",
+            'county': "-MAP.html",
+            'nation': "-MAP.html",
+            'country': "-MAP.html",
+        }
+
+        child = self.child_type(rlevels)
+        suffix = FACEENDING.get(child, "")
+
+        return f"{self.value}{suffix}"
+
     @classmethod
     def from_dict(cls, data):
         node = cls(
@@ -617,6 +638,30 @@ class TreeNode:
         node.bbox = data["bbox"]
 
         return node
+
+    def to_dict(self):
+        return {
+            "nid": self.nid,
+            "value": self.value,
+            "fid": self.fid,
+            "latlongroid": self.latlongroid,
+            "origin": self.origin,
+            "node_type": self.type,
+
+            "parent": self.parent.nid if self.parent else None,
+            "children": [c.nid for c in self.children],
+
+            "electorate": self.electorate,
+            "turnout": self.turnout,
+            "houses": self.houses,
+            "target": self.target,
+            "party": self.party,
+            "candidates": self.candidates,
+            "defcol": self.defcol,
+
+            "tagno": self.tagno,
+            "bbox": self.bbox,
+        }
 
 
     def path_options(self, rlevels, *, include_self=True):
@@ -691,29 +736,6 @@ class TreeNode:
             }
 
 
-    def to_dict(self):
-        return {
-            "nid": self.nid,
-            "value": self.value,
-            "fid": self.fid,
-            "latlongroid": self.latlongroid,
-            "origin": self.origin,
-            "node_type": self.type,
-
-            "parent": self.parent.nid if self.parent else None,
-            "children": [c.nid for c in self.children],
-
-            "electorate": self.electorate,
-            "turnout": self.turnout,
-            "houses": self.houses,
-            "target": self.target,
-            "party": self.party,
-            "candidates": self.candidates,
-            "defcol": self.defcol,
-
-            "tagno": self.tagno,
-            "bbox": self.bbox,
-        }
 
 
     # ------------------------------
@@ -777,29 +799,8 @@ class TreeNode:
         return rlevels[next_level]
 
 
-    def file(self, rlevels: dict[int, str]) -> str:
-        """Compute map filename dynamically."""
-        FACEENDING = {
-            'street': "-PRINT.html",
-            'walkleg': "-PRINT.html",
-            'polling_district': "-PDS.html",
-            'walk': "-WALKS.html",
-            'ward': "-WARDS.html",
-            'division': "-DIVS.html",
-            'constituency': "-MAP.html",
-            'county': "-MAP.html",
-            'nation': "-MAP.html",
-            'country': "-MAP.html",
-        }
 
-        child = self.child_type(rlevels)
-        suffix = FACEENDING.get(child, "")
-
-        return f"{self.value}{suffix}"
-
-
-
-    def endpoint_created(self, c_elect, CurrEL, newpath):
+    def endpoint_created(self, c_elect, CurrEL, newpath, static=False):
         """
         Creates a map node (HTML) if it doesn't already exist or
         the one that does exist is older than the node's last modification.
@@ -814,7 +815,7 @@ class TreeNode:
         rlevels = CurrEL.resolved_levels
         next_level = self.level + 1
 
-        print(f"___under {route()} for {c_elect} testing endpoint:", self.mapfile(rlevels))
+        print(f"___under {route()} for {c_elect} testing endpoint:", newpath)
         print("endpoint children:", [c.value for c in self.children])
 
         if next_level > max(rlevels, default=0):
@@ -843,7 +844,7 @@ class TreeNode:
             print(f"⚙️ Creating/updating map file: {fullpath}")
             atype = self.child_type(rlevels)
             print(f" target type: {atype} current {self.value} type: {self.type}")
-            self.create_area_map(c_elect, CurrEL)
+            self.create_area_map(c_elect, CurrEL, static=static)
             print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
 
         # Record map in CurrEL mapfiles
@@ -1146,14 +1147,14 @@ class TreeNode:
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
-            if create and not matches :
-                # Instead of returning self, raise a clear error
-                raise ValueError(
-                    f"Path error: Mode {create} could not find or create node '{part}' under '{node.value}' "
-                    f"(level {node.level + 1})"
-                )
+            if not matches:
+                # no mstch found so best to return current node
+                print(f"✅ [DEBUG] Ascended to: {node.parent.value} (L{node.parent.level}), children: {[c.value for c in node.parent.children]}")
+
+                return node.parent  # or raise a controlled exception
 
             node = matches[0]
+
             moved = True
             print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
@@ -1170,6 +1171,8 @@ class TreeNode:
         # ──────────────────────────────
         # Step 6: always expand children at final node
         next_level = node.level
+        print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max(rlevels)} createmode :{create} rlevels: {rlevels}")
+
         if next_level <= max(rlevels) and create:
             children_type = rlevels[next_level]
             print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
@@ -1184,71 +1187,82 @@ class TreeNode:
         accumulate = session.get("accumulate", False)
 
         if accumulate:
-
+            # Get the list of accumulated nodes from the session, or initialize it as an empty list if not available
             lst = session.get("accumulated_nodes", [])
 
+            # Only add the node to the list if it's not already there
             if node.nid not in lst:
                 lst.append(node.nid)
 
+            # Update the session with the new list of accumulated nodes
             session["accumulated_nodes"] = lst
 
-
         else:
-            # Idempotent mode → reset list
+            # Reset the list of accumulated nodes to only include the current node
             session["accumulated_nodes"] = [node.nid]
 
         return node
 
 
-    def getselectedlayers(self, rlevels, this_election, path):
-        from layers import make_feature_layers, FEATURE_LAYER_SPECS, ExtendedFeatureGroup        # need to create child, sibling and parent layers for given self.level
+
+    def getselectedlayers(self, rlevels, this_election, path, static=False):
+        from layers import make_feature_layers
         from flask import session
         from state import Treepolys, Fullpolys
-        # rlevels[self.level-1] = child type
-        # rlevels[self.level] = sibling type
-        # rlevels[self.parent.level] = parent type
+
         selected = []
         layers = make_feature_layers()
 
-        childtype = self.child_type(rlevels)
-
+        # Get the accumulate flag from the session
         accumulate = session.get("accumulate", False)
         print(f"___ACCUMULATE IN SESSION: {accumulate}")
+
+        # -------------------------------------------------
+        # Handle the Child Layer (Level + 1)
+        # -------------------------------------------------
         if self.level < 7:
-            # Determine nodes to render
             if accumulate:
+                # Get accumulated node IDs from the session
                 node_ids = session.get("accumulated_nodes", [])
                 print("Accumulate SESSION IDS:", node_ids)
-                print("Accumulate TREK KEYS:", list(TREK_NODES_BY_ID.keys()))
 
+                # Fetch nodes from TREK_NODES_BY_ID based on node_ids
                 nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
-                for n in nodelist:
-                    print("ACC NODE:", n.value, "DEF:", n.defcol, "ID:", id(n))
+                if not nodelist:
+                    print(f"Warning: No nodes found in TREK_NODES_BY_ID for IDs {node_ids}")
+                else:
+                    print("Accumulated Nodes:", [n.value for n in nodelist])
 
             else:
-                nodelist = [self]  # single node
+                # If accumulation is off, render only the current node
+                nodelist = [self]
 
-            # Get the child layer
-            child_layer = layers[childtype]
-            print(f"__LAYER NODE LIST: {[n.nid for n in nodelist]} ")
-            # Pass the list of nodes to create_layer
-
-            child_layer.create_layer(this_election, nodelist, childtype)
-
-
+            # Render the child layer
+            child_layer = layers[rlevels[self.level + 1]]
+            print(f"__LAYER NODE LIST (Child Layer): {[n.value for n in nodelist]} ")
+            child_layer.create_layer(this_election, nodelist, static=False)
             child_layer.show = True
             selected.append(child_layer)
 
+        # -------------------------------------------------
+        # Handle the Sibling Layer (Current Level)
+        # -------------------------------------------------
         if self.level > 0:
-            sibling_layer = layers[self.type]
-            sibling_layer.create_layer(this_election, [self.parent], self.type)
+            sibling_layer = layers[rlevels[self.level]]
+            sibling_layer.create_layer(this_election, [self.parent], static=False)
             selected.append(sibling_layer)
 
+        # -------------------------------------------------
+        # Handle the Parent Layer (Level - 1)
+        # -------------------------------------------------
         if self.level > 1:
-            parent_layer = layers[self.parent.type]
-            parent_layer.create_layer(this_election, [self.parent.parent], self.parent.type)
+            parent_layer = layers[rlevels[self.level - 1]]
+            parent_layer.create_layer(this_election, [self.parent.parent], static=False)
             selected.append(parent_layer)
 
+        # -------------------------------------------------
+        # Always Add Marker Layer
+        # -------------------------------------------------
         marker_layer = layers["marker"]
         selected.append(marker_layer)
 
@@ -1488,24 +1502,54 @@ class TreeNode:
             namepoints['Zone'] = 'ZONE_0'  # or whatever default you want
 
 
-        for index, limb  in namepoints.iterrows():
+        for index, limb in namepoints.iterrows():
 
             newname = normalname(limb['Name'])
 
-            if newname not in fam_nodes :
-                datafid = abs(hash(newname))
-                newnode = TreeNode(value=newname,fid=datafid, roid=(limb['Lat'],limb['Long']),origin=elect, node_type=nodetype )
-                egg = self.add_Tchild(child_node=newnode,etype=nodetype, elect=elect)
-                [egg.bbox, egg.latlongroid] = egg.get_bounding_box(nodetype,block)
-                egg.defcol = zonecolour.get(limb['Zone'],'black')
-                print(f"🎨 Assigned color '{egg.defcol}' to walk_node '{egg.value}' for zone '{limb['Zone']}'")
+            existing = next(
+                (c for c in self.children
+                 if c.type == nodetype and c.value == newname),
+                None
+            )
 
-                egg.updateTurnout(resolved_levels)
-                egg.updateElectorate(resolved_levels)
-                egg.updateGOTV(gotv_pct, resolved_levels)
-                print('______Data nodes',egg.value,egg.fid, egg.electorate,egg.houses,egg.target,egg.bbox)
+            if existing:
+                egg = existing
+            else:
+                datafid = index
+                newnode = TreeNode(
+                    value=newname,
+                    fid=datafid,
+                    roid=(limb['Lat'], limb['Long']),
+                    origin=elect,
+                    node_type=nodetype
+                )
+                egg = self.add_Tchild(child_node=newnode, etype=nodetype, elect=elect)
 
-                fam_nodes.append(egg)
+            # 🔥 Always update geometry
+            lon = limb['Long']
+            lat = limb['Lat']
+            delta = 0.0001
+
+            egg.latlongroid = (lat, lon)
+            egg.bbox = [
+                lon - delta,
+                lat - delta,
+                lon + delta,
+                lat + delta
+            ]
+
+            egg.defcol = zonecolour.get(limb['Zone'], 'black')
+
+            egg.updateTurnout(resolved_levels)
+            egg.updateElectorate(resolved_levels)
+            egg.updateGOTV(gotv_pct, resolved_levels)
+
+            print('______Data nodes', egg.value, egg.fid,
+                  egg.electorate, egg.houses, egg.target, egg.bbox)
+
+        # After loop
+        fam_nodes = self.childrenoftype(nodetype)
+
 
     #    self.aggTarget()
         print('______Create Namepoints :',nodetype,namepoints)
@@ -1528,8 +1572,10 @@ class TreeNode:
         from elector import electors
         from state import Treepolys, Fullpolys
 
+
         nodelist = []
         electtype = resolved_levels[self.level + 1]
+        print(f"✅ Creating {electtype} Data branch for election {c_election}")
 
         # ----------------------------------------
         # Load electors from ElectorManager
@@ -1544,7 +1590,8 @@ class TreeNode:
             print(f"❌ 'Area' column missing in elector data {allelectors['Area']}")
             return []
 
-        areaelectors = allelectors[allelectors['Area'] == self.value]
+        areaelectors = allelectors[allelectors['Area'] == self.findnodeat_Level(4).value]
+        # filter by the name of the relevant level 4 node
 
         if areaelectors.empty:
             print(f"⚠️ No data for election {c_election} in area {self.value}")
@@ -1788,9 +1835,8 @@ class TreeNode:
 
 
 
-    def create_area_map(self, CE, CEdata):
+    def create_area_map(self, CE, CEdata, static=False):
         global SERVER_PASSWORD
-        global STATICSWITCH
 
         from folium import IFrame
         from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
@@ -1813,7 +1859,8 @@ class TreeNode:
         flayers = self.getselectedlayers(
             rlevels=CEdata.resolved_levels,
             this_election=CE,
-            path=mapfile
+            path=mapfile,
+            static=static
         )
 
 
@@ -2541,13 +2588,18 @@ class TreeNode:
 
         # 1.1 🔒 DUPLICATE GUARD: same parent, same type, same fid
         for existing in self.children:
-            if existing.type == etype and existing.fid == child_node.fid:
-                print(
-                    f"[DEBUG] Reusing existing child "
-                    f"{existing.value} (fid={existing.fid}) "
-                    f"under parent {self.value}"
-                )
-                return existing
+            if existing.type == etype:
+
+                # Polygon nodes: use fid
+                if hasattr(child_node, "origin") and child_node.origin == "ONS_MAPS":
+                    if existing.fid == child_node.fid:
+                        return existing
+
+                # Data nodes: use name
+                else:
+                    if existing.value == child_node.value:
+                        return existing
+
 
         # 2. Detach from old parent if needed
         if child_node.parent and child_node in child_node.parent.children:
@@ -2585,88 +2637,86 @@ class TreeNode:
 
 
 
+    def create_streetsheet(self, c_election, rlevels, electorwalks):
+        """
+        Generates an HTML streetsheet for a given walk/polling district.
+        Uses Flask's render_template safely inside an app context.
+        """
 
-    def create_streetsheet(self, c_election, rlevels,electorwalks):
         current_election = c_election
         print(f"___streetsheet: {current_election} and street data len {len(electorwalks)}")
-        Postcode = electorwalks.Postcode.values[0]
-        streetfile_name = self.parent.value+"--"+self.value
-        type_colour = "indigo"
-        #      BMapImg = walk_name+"-MAP.png"
 
-        # create point geometries from the Lat Long values of for all electors with different locations in each group(walk/cluster)
-        geometry = gpd.points_from_xy(electorwalks.Long.values,electorwalks.Lat.values, crs="EPSG:4326")
-        # create a geo dataframe for the Walk Map
-        geo_df1 = gpd.GeoDataFrame(
-        electorwalks, geometry=geometry
-        )
+        # Basic file naming
+        streetfile_name = f"{self.parent.value}--{self.value}"
+        results_filename = f"{streetfile_name}-PRINT.html"
 
-        # Create a geometry list from the GeoDataFrame
-        geo_df1_list = [[point.xy[1][0], point.xy[0][0]] for point in geo_df1.geometry]
-        CL_unique_list = pd.Series(geo_df1_list).drop_duplicates().tolist()
+        # Create GeoDataFrame for map points
+        geometry = gpd.points_from_xy(electorwalks.Long.values, electorwalks.Lat.values, crs="EPSG:4326")
+        geo_df = gpd.GeoDataFrame(electorwalks, geometry=geometry)
+        geo_df_list = [[pt.xy[1][0], pt.xy[0][0]] for pt in geo_df.geometry]
+        unique_coords = pd.Series(geo_df_list).drop_duplicates().tolist()
 
+        # Compute street/housing stats
         groupelectors = electorwalks.shape[0]
-        if math.isnan(float('%.6f'%(electorwalks.Elevation.max()))):
-          climb = 0
-        else:
-          climb = int(float('%.6f'%(electorwalks.Elevation.max())) - float('%.6f'%(electorwalks.Elevation.min())))
-
-        x = electorwalks.AddressNumber.values
-        y = electorwalks.StreetName
-        z = electorwalks.AddressPrefix.values
-        houses = len(list(set(zip(x,y,z))))
-        self.updateHouses(rlevels,houses)
+        climb = int(float(electorwalks.Elevation.max() or 0) - float(electorwalks.Elevation.min() or 0))
+        houses = len(set(zip(electorwalks.AddressNumber, electorwalks.StreetName, electorwalks.AddressPrefix)))
         streets = len(electorwalks.StreetName.unique())
-        areamsq = 34*21.2*20*21.2
-        avstrlen = 200
+        areamsq = 34 * 21.2 * 20 * 21.2
         housedensity = round(houses / (areamsq / 10000), 3) if areamsq else 1
-        avhousem = 100*round(math.sqrt(1/housedensity),2) if housedensity else 1
-        streetdash = avstrlen*streets/houses if houses else 100
-        speed = 5*1000
-        climbspeed = 5*1000 - climb*50/7
+        avhousem = 100 * round(math.sqrt(1 / housedensity), 2) if housedensity else 1
+        streetdash = 200 * streets / houses if houses else 100
         leafmins = 0.5
         canvassmins = 5
-        canvasssample = .5
-        leafhrs = round(houses*(leafmins+60*streetdash/climbspeed)/60,2)
-        canvasshrs = round(houses*(canvasssample*canvassmins+60*streetdash/climbspeed)/60,2) if streetdash else 1
-        prodstats = {}
-        CElection = CurrentElection.load(current_election)
-        prodstats['ward'] = self.parent.parent.value
-        prodstats['polling_district'] = self.parent.value
-        prodstats['groupelectors'] = groupelectors
-        prodstats['climb'] = climb
-        prodstats['walk'] = ""
-        prodstats['houses'] = houses
-        prodstats['streets'] = streets
-        prodstats['housedensity'] = housedensity
-        prodstats['leafhrs'] = round(leafhrs,2)
-        prodstats['canvasshrs'] = round(canvasshrs,2)
+        canvasssample = 0.5
+        speed = 5000
+        climbspeed = speed - climb * 50 / 7
+        leafhrs = round(houses * (leafmins + 60 * streetdash / climbspeed) / 60, 2)
+        canvasshrs = round(houses * (canvasssample * canvassmins + 60 * streetdash / climbspeed) / 60, 2) if streetdash else 1
 
-        #                  electorwalks['ENOP'] =  electorwalks['PD']+"-"+electorwalks['ENO']+ electorwalks['Suffix']*0.1
-        target = self.locfilepath(self.file(rlevels))
-        results_filename = streetfile_name+"-PRINT.html"
-        datafile = "/STupdate/" + self.dir+"/"+streetfile_name+"-SDATA.csv"
-        # mapfile is used for the up link to the PD streets list
-        mapfile = "/upbut/" + self.parent.mapfile(rlevels)
+        # Production stats dictionary
+        prodstats = {
+            "ward": self.parent.parent.value,
+            "polling_district": self.parent.value,
+            "groupelectors": groupelectors,
+            "climb": climb,
+            "walk": "",
+            "houses": houses,
+            "streets": streets,
+            "housedensity": housedensity,
+            "leafhrs": leafhrs,
+            "canvasshrs": canvasshrs,
+        }
+
+        # File paths
+        target_folder = self.locfilepath(self.file(rlevels))
+        os.makedirs(target_folder, exist_ok=True)
+        results_path = os.path.join(target_folder, results_filename)
+        datafile = f"/STupdate/{self.dir}/{streetfile_name}-SDATA.csv"
+        mapfile = f"/upbut/{self.parent.mapfile(rlevels)}"
+
+        # Fill missing data to prevent template errors
         electorwalks = electorwalks.fillna("")
 
-        #              These are the street nodes which are the street data collection pages
-
-
+        # Template context
         context = {
-        "group": electorwalks,
-        "prodstats": prodstats,
-        "mapfile": mapfile,
-        "datafile": datafile,
-        "walkname": streetfile_name,
+            "group": electorwalks,
+            "prodstats": prodstats,
+            "mapfile": mapfile,
+            "datafile": datafile,
+            "walkname": streetfile_name,
         }
-        results_template = environment.get_template('canvasscard1.html')
 
-        with open(results_filename, mode="w", encoding="utf-8") as results:
-            results.write(results_template.render(context, url_for=url_for))
+        # Render street capture template safely inside Flask app context
+        with current_app.app_context():
+            html_output = render_template("canvasscard1.html", **context)
 
-        print(f"Created streetsheet called {results_filename}")
-        return results_filename
+        # Write HTML to the file to be used as canvasssheet
+        with open(results_path, "w", encoding="utf-8") as f:
+            f.write(html_output)
+
+        print(f"✅ Created streetsheet called {results_path}")
+        return results_path
+
 
     def add_parent(self, parent_node):
         # creates parent-child relationship
@@ -2688,75 +2738,6 @@ class TreeNode:
         print("___sorted intersection:",list(d.keys()))
         return list(d.keys())
 
-
-    def create_enclosing_gdf(self, gdf, buffer_size=20):
-        """
-        Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
-
-        Parameters:
-            gdf (GeoDataFrame): A GeoDataFrame with Point geometries (assumed to be EPSG:4326).
-            buffer_size (float, optional): Buffer size in meters for single-point cases (default: 20m).
-
-        Returns:
-            GeoDataFrame: A GeoDataFrame with one row containing the enclosing shape in EPSG:3857.
-        """
-        if gdf.empty:
-            return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
-
-        # Ensure CRS is set
-        if gdf.crs is None:
-            gdf.set_crs("EPSG:4326", inplace=True)
-
-        # Convert to metric CRS for accurate geometry ops
-        gdf_3857 = gdf.to_crs("EPSG:3857")
-
-        multi_point = gdf_3857.iloc[0].geometry
-
-        if multi_point.is_empty:
-            return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
-
-        points = list(multi_point.geoms)
-
-        if len(points) == 1:
-            enclosed_shape = points[0]
-
-        elif len(points) == 2:
-            p1, p2 = points
-
-            mid_x = (p1.x + p2.x) / 2
-            mid_y = (p1.y + p2.y) / 2
-
-            d = np.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-
-            if d == 0:
-                enclosed_shape = p1
-            else:
-                h = d / np.sqrt(3)
-                dx = (p2.y - p1.y) / d
-                dy = -(p2.x - p1.x) / d
-                p3 = Point(mid_x + h * dx, mid_y + h * dy)
-                enclosed_shape = MultiPoint([p1, p2, p3]).convex_hull
-
-        else:
-            enclosed_shape = MultiPoint(points).convex_hull
-
-        # Buffer for visual padding
-        smoothing_radius = 3*buffer_size if len(points) == 1 else buffer_size * 2
-        rounded_shape = enclosed_shape.buffer(smoothing_radius)
-
-        # Build GeoDataFrame with same CRS (EPSG:3857)
-        enclosing_gdf = gpd.GeoDataFrame(
-            {
-                "NAME": gdf.NAME,
-                "FID": gdf.FID,
-                "LAT": gdf.LAT.values[0],
-                "LONG": gdf.LONG.values[0],
-                "geometry": [rounded_shape]
-            },
-            crs="EPSG:3857"
-        )
-
-        return enclosing_gdf
 
 
 
