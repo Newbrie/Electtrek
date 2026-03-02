@@ -746,7 +746,7 @@ OPTIONS = {
     # Add more mappings here if needed
 }
 
-STATICSWITCH = False
+
 TABLE_TYPES  = {
     "resources": "Resources",
     "events": "Event Markers",
@@ -850,7 +850,7 @@ kanban_options = [
 
 
 # this is for creating a new mapfile when one does not exist.
-TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downPDbut', 'walk' : 'downWKbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
+TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downbut', 'walk' : 'downbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
 
 
 ROOT_LEVEL = {

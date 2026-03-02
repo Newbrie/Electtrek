@@ -16,7 +16,7 @@ import os
 import html
 import pandas as pd
 import re
-
+import math
 
 import colorsys
 from matplotlib.colors import to_hex, to_rgb
@@ -29,6 +29,43 @@ def Hconcat(house_list):
         print("❌ Error in Hconcat:", e)
         print("Type of house_list:", type(house_list))
         raise
+
+
+def spread_coordinates_vertical(base_lat, base_lon, index, total, spread_lat=0.00005, spread_lon=0.00001):
+    """
+    Returns slightly offset coordinates to prevent marker overlap.
+    Vertical-biased: spreads more in latitude than longitude.
+
+    base_lat, base_lon : original coordinates
+    index              : index of this marker in the group (0-based)
+    total              : total markers sharing this area
+    spread_lat         : max offset in latitude (vertical)
+    spread_lon         : max offset in longitude (horizontal)
+
+    Returns: (lat, lon)
+    """
+
+    # No need to offset if only one marker
+    if total <= 1:
+        return base_lat, base_lon
+
+    # Evenly distribute along vertical "arc"
+    angle = (math.pi / total) * index  # semi-circle vertically
+
+    offset_lat = base_lat + spread_lat * math.cos(angle)
+    offset_lon = base_lon + spread_lon * math.sin(angle)
+
+    return offset_lat, offset_lon
+
+def readable_text_color(hex_color, threshold=0.55):
+    """Return a dark readable colour that contrasts with hex_color"""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = [int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4)]
+    luminance = 0.2126*r + 0.7152*g + 0.0722*b
+
+    # Always return a DARK tone for consistency
+    return "#111111" if luminance > threshold else "#000000"
+
 
 
 import geopandas as gpd
@@ -333,13 +370,12 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_genmarkers(CElection, rlevels, node, "marker", static)
 
         elif intention_type in ("street", "walkleg"):
-            self.add_nodemarks(c_election, rlevels, node, intention_type, static)
+            self.add_nodemarks(c_election, rlevels, node, static)
 
         elif intention_type in ("polling_district", "walk"):
             self.generate_voronoi_with_geovoronoi(
                 c_election, rlevels, node, static
             )
-
         else:
             self.add_nodemaps(c_election, rlevels, node, static, counters)
 
@@ -353,11 +389,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
         print(f"Layer {self.name} memory id:", id(self))
-        accumulate = session.get("accumulate", False)
-
-        if not accumulate:
-            print(f"CLEARING THE LAYER: {accumulate}", id(self))
-            self._children.clear()  # Only clear if accumulate is off
         counters = defaultdict(int)
         i = 0
         for n in nodelist:
@@ -715,6 +746,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         mapfile = matched_child.mapfile(rlevels)
 
+
                         tcol = get_text_color(to_hex(fill_color))
                         bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
                         fcol = invert_black_white(tcol)
@@ -726,7 +758,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                                         <div style="
                                             color: {tcol};
                                             font-size: 10pt;
-                                            font-weight: bold;
+                                            font-weight: 200;
+                                            -webkit-text-stroke: 1px {tcol};
                                             text-align: center;
                                             padding: 2px;
                                             white-space: nowrap;">
@@ -771,7 +804,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                             data=json.loads(json.dumps(geojson_feature)),
                             style_function=lambda feature: {
                                 'fillColor': feature["properties"]["col"],
-                                'color': '#FFFFFF',     # white border
+                                'color': '#FFFF00',     # yellow border
                                 'weight': 4,            # thinner, adjustable
                                 'fillOpacity': 0.4,
                                 'opacity': 1.0,         # ensure stroke visible
@@ -801,8 +834,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                                         <div style="
                                             color: {tcol};
                                             font-size: 10pt;
-                                            font-weight: bold;
+                                            font-weight: 200;
                                             text-align: center;
+                                            -webkit-text-stroke: 1px {tcol};
                                             padding: 2px;
                                             white-space: nowrap;">
                                             <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
@@ -1001,8 +1035,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                         <a href='{mapfile}' data-name='{tag}'><div style="
                             color: {tcol};
                             font-size: 10pt;
-                            font-weight: bold;
+                            font-weight: 200;
                             text-align: center;
+                            -webkit-text-stroke: 1px white;
                             padding: 2px;
                             white-space: nowrap;">
                             <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
@@ -1050,8 +1085,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                         <a href='{mapfile}' data-name='{tag}'><div style="
                             color: {tcol};
                             font-size: 10pt;
-                            font-weight: bold;
+                            font-weight: 200;
                             text-align: center;
+                            -webkit-text-stroke: 1px white;
                             padding: 2px;
                             white-space: nowrap;">
                             <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
@@ -1185,21 +1221,16 @@ class ExtendedFeatureGroup(FeatureGroup):
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
     #                upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12, session.get('importfile'))
 
-                        PDbtn = """
-                            <button type='button' class='guil-button' onclick='moveDown("/downPDbut/{0}", "{1}", "polling_district");' class='btn btn-norm'>
-                                PDs
+                        Sheetbtn = """
+                            <button type='button' class='guil-button' onclick='moveDown("/downbut/{0}", "{1}", "NOTUSED");' class='btn btn-norm'>
+                                Sheets
                             </button>
                         """.format(c.dir+"/"+c.file(rlevels)+" polling_district", c.value)
 
-                        WKbtn = """
-                            <button type='button' class='guil-button' onclick='moveDown("/downWKbut/{0}", "{1}", "walk");' class='btn btn-norm'>
-                                WALKS
-                            </button>
-                        """.format(c.dir+"/"+c.file(rlevels)+" walk", c.value)
 
-                        MWbtn = """
+                        Appbtn = """
                             <button type='button' class='guil-button' onclick='moveDown("/downMWbut/{0}", "{1}", "walk");' class='btn btn-norm'>
-                                STAT
+                                App
                             </button>
                         """.format(c.dir+"/"+c.file(rlevels)+" walk", c.value)
 
@@ -1207,7 +1238,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
 
                         if not static:
-                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+PDbtn+" "+WKbtn+" "+MWbtn
+                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+Sheetbtn+" "+Appbtn
                         else:
                             limbX['UPDOWN'] = "<br>"+c.value+"<br>"
     #                    c.tagno = len(self._children)+1
@@ -1231,17 +1262,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     # Now you can use limb_geojson as a valid GeoJSON feature
     #                print("GeoJSON Feature:", limb)
-
-                    def readable_text_color(hex_color, threshold=0.55):
-                        """Return a dark readable colour that contrasts with hex_color"""
-                        hex_color = hex_color.lstrip("#")
-                        r, g, b = [int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4)]
-                        luminance = 0.2126*r + 0.7152*g + 0.0722*b
-
-                        # Always return a DARK tone for consistency
-                        return "#111111" if luminance > threshold else "#000000"
-
-
 
 
                     # Add a property for the color to the GeoJSON
@@ -1300,6 +1320,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                     </a>
                     '''
 
+
+
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
@@ -1326,22 +1348,22 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-#                    if not static:
-#                        self.add_child(folium.Marker(
-#                             location=here,
-#                             icon = folium.DivIcon(
-#                                    html=htmlhalo,
-#                                       )
-#                                       )
-#                                       )
-#                    else:
-#                        self.add_child(folium.Marker(
-#                             location=here,
-#                             icon = folium.DivIcon(
-#                                    html=htmlhalo,
-#                                       )
-#                                       )
-#                                       )
+                    if not static:
+                        self.add_child(folium.Marker(
+                             location=here,
+                             icon = folium.DivIcon(
+                                    html=htmlhalo,
+                                       )
+                                       )
+                                       )
+                    else:
+                        self.add_child(folium.Marker(
+                             location=here,
+                             icon = folium.DivIcon(
+                                    html=htmlhalo,
+                                       )
+                                       )
+                                       )
 
 
         return self._children
@@ -1363,14 +1385,29 @@ class ExtendedFeatureGroup(FeatureGroup):
         num = len(herenode.childrenoftype(type))
         print(f"___creating {num} add_nodemarks of type {type} for {herenode.value} at level {herenode.level}")
 
-        for c in [x for x in herenode.childrenoftype(type)]:
+
+        children = herenode.childrenoftype(type)
+
+        for i, c in enumerate(children):
+
+            base_lat = float(f"{c.latlongroid[0]:.6f}")
+            base_lon = float(f"{c.latlongroid[1]:.6f}")
+
+            lat, lon = spread_coordinates_vertical(
+                base_lat,
+                base_lon,
+                i,
+                len(children),
+                spread_lat=0.0006,   # more vertical spacing
+                spread_lon=0.00001    # minimal horizontal spacing
+            )
+            here = [lat, lon]
+
             print('_______MAP Markers')
-#            layerfids = [x.fid for x in self.children if x.type == type]
-#            if c.fid not in layerfids:
+
             numtag = str(c.tagno)+" "+str(c.value)
             num = str(c.tagno)
             tag = str(c.value)
-            here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
             fill = herenode.col
             pathref = c.mapfile(rlevels)
             mapfile = '/transfer/'+pathref
@@ -1381,22 +1418,53 @@ class ExtendedFeatureGroup(FeatureGroup):
             bcol = adjust_boundary_color(to_hex(c.col),0.7)
             fcol = invert_black_white(tcol)
 
+            node_col = to_hex(herenode.defcol)
+            tcol_node = readable_text_color(node_col)
+            print(f"_____Colour from {herenode.value} col:{herenode.defcol}")
+            fcol_node = tcol_node
+            poly_col_node = node_col
+
+
+            htmlhalo =f'''
+            <a href="{mapfile}" data-name="{tag}">
+              <div style="
+                color: {tcol_node};
+                font-size: 10pt;
+                font-weight: bold;
+                text-align: center;
+                padding: 2px;
+                white-space: nowrap;
+
+                /* 🗺️ Cartographic halo */
+                text-shadow:
+                  -1px -1px 0 #fff,
+                   1px -1px 0 #fff,
+                  -1px  1px 0 #fff,
+                   1px  1px 0 #fff,
+                   0px  0px 3px #fff;
+              ">
+                <span style="
+                  background: {fcol_node};
+                  padding: 1px 2px;
+                  border-radius: 5px;
+                  border: 2px solid black;
+                ">{num}</span>
+                {numtag}<br>
+                <span style="
+                    font-size: 6pt;
+                    font-weight: normal;
+                ">
+
+                </span>
+
+              </div>
+            </a>
+            '''
             if not static:
                 self.add_child(folium.Marker(
                      location=here,
                      icon = folium.DivIcon(
-                            html=f'''
-                            <a href="{mapfile}" data-name="{tag}"><div style="
-                                color: {tcol};
-                                font-size: 10pt;
-                                font-weight: bold;
-                                text-align: center;
-                                padding: 2px;
-                                white-space: nowrap;">
-                                <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                border: 2px solid black;">{num}</span>
-                                {tag}</div></a>
-                                ''',
+                            html=htmlhalo,
                            )
                            )
                            )
@@ -1404,19 +1472,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 self.add_child(folium.Marker(
                      location=here,
                      icon = folium.DivIcon(
-                            html=f'''
-                            <a data-name="{tag}">
-                            <div style="
-                                color: {tcol};
-                                font-size: 10pt;
-                                font-weight: bold;
-                                text-align: center;
-                                padding: 2px;
-                                white-space: nowrap;">
-                                <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                border: 2px solid black;">{num}</span>
-                                {tag}</div></a>
-                                ''',
+                            html=htmlhalo,
                            )
                            )
                            )

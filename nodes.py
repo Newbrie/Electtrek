@@ -89,6 +89,10 @@ def save_nodes(path):
         print(f"✅ [DEBUG] All nodes saved to {path}")
 
 def load_nodes(path):
+    """
+    Load tree nodes from JSON file at `path`, wiring parents/children.
+    Resilient: missing parents or children are logged but skipped.
+    """
     global TREK_NODES_BY_ID
 
     if not path.exists() or path.stat().st_size == 0:
@@ -98,38 +102,52 @@ def load_nodes(path):
     reset_nodes()
 
     with open(path) as f:
-        raw_nodes = json.load(f)
+        try:
+            raw_nodes = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"[ERROR] Failed to parse JSON: {e}")
+            return False
 
-    # PASS 1: create nodes
+    # PASS 1: create node objects
     for data in raw_nodes:
-        node = TreeNode.from_dict(data)
+        try:
+            node = TreeNode.from_dict(data)
+        except Exception as e:
+            print(f"[WARN] Skipping node due to error: {data}. Error: {e}")
+            continue
+
         node.parent = None
         node.children = []
         TREK_NODES_BY_ID[node.nid] = node
 
-        # DEBUG: show candidates on load
         print(f"📥 [DEBUG] Loaded node '{node.value}' ({node.nid}) candidates: {node.candidates}")
 
-    print("JSON count:", len(raw_nodes))
-    print("Dict count:", len(TREK_NODES_BY_ID))
+    print(f"JSON count: {len(raw_nodes)}")
+    print(f"Dict count: {len(TREK_NODES_BY_ID)}")
 
     # PASS 2: wire relationships
     for data in raw_nodes:
-        node = TREK_NODES_BY_ID[data["nid"]]
+        node = TREK_NODES_BY_ID.get(data["nid"])
+        if not node:
+            continue  # skipped in pass 1
 
+        # Wire parent safely
         pid = data.get("parent")
         if pid:
             parent = TREK_NODES_BY_ID.get(pid)
-            if not parent:
-                raise ValueError(f"Missing parent {pid} for node {node.value}")
-            node.parent = parent
-            if node not in parent.children:
-                parent.children.append(node)
+            if parent:
+                node.parent = parent
+                if node not in parent.children:
+                    parent.children.append(node)
+            else:
+                print(f"[WARN] Missing parent {pid} for node '{node.value}'. Node treated as root.")
 
+        # Wire children safely
         for cid in data.get("children", []):
             child = TREK_NODES_BY_ID.get(cid)
             if not child:
-                raise ValueError(f"Missing child {cid} for node {node.value}")
+                print(f"[WARN] Missing child {cid} for node '{node.value}'. Skipping.")
+                continue
             if child not in node.children:
                 node.children.append(child)
             child.parent = node
@@ -432,9 +450,6 @@ def restore_from_persist(treepolys, fullpolys):
 
     load_nodes(TREKNODE_FILE)
     print("AFTER LOAD:")
-    for nid, node in TREK_NODES_BY_ID.items():
-        print(nid, node.candidates)
-    print('_______Trek Nodes: ',  TREK_NODES_BY_ID)
     return
 
 def persist(treepolys, fullpolys):
@@ -599,8 +614,9 @@ class TreeNode:
     def file(self, rlevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
         FACEENDING = {
-            'street': "-PRINT.html",
-            'walkleg': "-PRINT.html",
+            'elector': "-PRINT.html",
+            'street': "-MAP.html",
+            'walkleg': "-MAP.html",
             'polling_district': "-PDS.html",
             'walk': "-WALKS.html",
             'ward': "-WARDS.html",
@@ -613,8 +629,12 @@ class TreeNode:
 
         child = self.child_type(rlevels)
         suffix = FACEENDING.get(child, "")
+        if self.type == "street":
+            filename = f"{self.parent.name}--{self.value}{suffix}"
+        else:
+            filename = f"{self.value}{suffix}"
 
-        return f"{self.value}{suffix}"
+        return filename
 
     @classmethod
     def from_dict(cls, data):
@@ -831,26 +851,20 @@ class TreeNode:
         fullpath = Path(workdir) / newpath
 
         # Determine if the map is stale
-        map_stale = True
-        if fullpath.exists() and hasattr(self, 'last_modified') and self.last_modified:
-            # Compare file modification time with node last_modified time
+        endpoint_created = False
+
+        if not fullpath.exists():
+            endpoint_created = True
+
+        elif hasattr(self, 'last_modified') and self.last_modified:
             file_mtime = datetime.utcfromtimestamp(fullpath.stat().st_mtime)
-            map_stale = self.last_modified > file_mtime
-            if not map_stale:
-                print(f"⚙️ Map file {fullpath} is up-to-date (last_modified {self.last_modified})")
+            if self.last_modified > file_mtime:
+                endpoint_created = True
 
-        # Create map if it doesn't exist or is stale
-        if map_stale:
-            print(f"⚙️ Creating/updating map file: {fullpath}")
-            atype = self.child_type(rlevels)
-            print(f" target type: {atype} current {self.value} type: {self.type}")
+        if self.level < 5 and endpoint_created:
             self.create_area_map(c_elect, CurrEL, static=static)
-            print(f"_________layeritems for {self.value} of type {atype} are {self.childrenoftype(atype)} for level {self.level}")
 
-        # Record map in CurrEL mapfiles
-        print("Endpoint Created/Updated:", CurrEL['mapfiles'][-1])
-
-        return map_stale  # True if a new map was created or updated
+        return endpoint_created
 
 
 
@@ -1149,7 +1163,12 @@ class TreeNode:
 
             if not matches:
                 # no mstch found so best to return current node
-                print(f"✅ [DEBUG] Ascended to: {node.parent.value} (L{node.parent.level}), children: {[c.value for c in node.parent.children]}")
+                if node.parent:
+                    print(f"[DEBUG] Ascended to: {node.parent.value} "
+                          f"(L{node.parent.level}), "
+                          f"children: {[c.value for c in node.parent.children]}")
+                else:
+                    print("[DEBUG] Node has no parent (root node)")
 
                 return node.parent  # or raise a controlled exception
 
@@ -1238,8 +1257,9 @@ class TreeNode:
                 nodelist = [self]
 
             # Render the child layer
-            child_layer = layers[rlevels[self.level + 1]]
             print(f"__LAYER NODE LIST (Child Layer): {[n.value for n in nodelist]} ")
+
+            child_layer = layers[rlevels[self.level + 1]]
             child_layer.create_layer(this_election, nodelist, static=False)
             child_layer.show = True
             selected.append(child_layer)
@@ -1314,9 +1334,7 @@ class TreeNode:
         # --- Cascade upward (compute parents from children) ---
         while casnode.parent:
             parent = casnode.parent
-#            children = parent.childrenoftype(
-#                gettypeoflevel(electionstyle, casnode.dir, casnode.level)
-#            )
+
             children = parent.childrenoftype(rlevels[parent.level])
             values = [c.turnout for c in children if c.turnout is not None]
             parent.turnout = sum(values) / len(values) if values else None
@@ -2688,15 +2706,14 @@ class TreeNode:
         }
 
         # File paths
-        target_folder = self.locfilepath(self.file(rlevels))
-        os.makedirs(target_folder, exist_ok=True)
-        results_path = os.path.join(target_folder, results_filename)
+        results_path = self.locfilepath(results_filename)
         datafile = f"/STupdate/{self.dir}/{streetfile_name}-SDATA.csv"
         mapfile = f"/upbut/{self.parent.mapfile(rlevels)}"
 
         # Fill missing data to prevent template errors
         electorwalks = electorwalks.fillna("")
 
+        from Electtrek import app
         # Template context
         context = {
             "group": electorwalks,
@@ -2707,8 +2724,10 @@ class TreeNode:
         }
 
         # Render street capture template safely inside Flask app context
-        with current_app.app_context():
+        with app.app_context():
             html_output = render_template("canvasscard1.html", **context)
+        print("HTML LENGTH:", len(html_output))
+        print("HTML START:", repr(html_output[:200]))
 
         # Write HTML to the file to be used as canvasssheet
         with open(results_path, "w", encoding="utf-8") as f:

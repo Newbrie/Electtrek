@@ -56,7 +56,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 import state
 from state import Treepolys, Fullpolys, update_progress
-from state import VNORM,STATICSWITCH,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys, check_level4_gap
+from state import VNORM,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys, check_level4_gap
 import nodes
 from nodes import TREK_NODES_BY_ID, get_layer_table, get_root,restore_from_persist, persist,parent_level_for, save_nodes, move_item, MapRoot
 import layers
@@ -2085,10 +2085,7 @@ def get_constants():
         return jsonify({'error': 'Invalid election'}), 400
     print('__constants:', CElection )
 
-    program = ProgramContext()
-    election = ElectionContext(CElection)
-
-    options = resolve_ui_context(program, election, current_node)
+    options = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
     constants = CElection
 
     return jsonify({
@@ -2106,29 +2103,37 @@ def set_constant():
     from elections import CurrentElection
 
     restore_from_persist(Treepolys, Fullpolys)
+
     data = request.get_json()
     name = data.get("name")
     value = data.get("value")
     current_election = data.get("election")
 
-    print("____Back End election constants update:", current_election, ":", name, "-", value)
+    print("____Back End election constants update:",
+          current_election, ":", name, "-", value)
 
     CElection = CurrentElection.load(current_election)
 
-    # Only update if the constant exists
-    if hasattr(CElection, name):
-        # Special handling for multi-selects
-        if name == "resources":
-            if not isinstance(value, list):
-                # Ensure it's always a list
-                value = [value] if value else []
-        setattr(CElection, name, value)
-        CElection.save()
-        print(f"____Current Election choices saved: {current_election} - {name} = {value}")
-        return jsonify(success=True)
+    if not CElection:
+        return jsonify(success=False, error="Election not found"), 400
 
-    print(f"⚠️ Attempted to update invalid constant: {name}")
-    return jsonify(success=False, error="Invalid constant name"), 400
+    # Special handling
+    if name == "resources":
+        if not isinstance(value, list):
+            value = [value] if value else []
+
+    if name == "adminmode":
+        value = bool(value)
+
+    # Store in backing dict only
+    CElection[name] = value
+
+    CElection.save()
+
+    print(f"____Current Election choices saved: "
+          f"{current_election} - {name} = {value}")
+
+    return jsonify(success=True)
 
 
 @app.route("/delete-election", methods=["POST"])
@@ -2601,7 +2606,7 @@ def downbut(path):
     from state import Treepolys, Fullpolys
     from elector import electors
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-
+    from elections import CurrentElection
     global layeritems
     global constants
 
@@ -2616,8 +2621,6 @@ def downbut(path):
 
     rlevels = CElection.resolved_levels
 
-
-    areaelectors = electors.get(current_election)
 # a down button on a node has been selected on the map, so the new map must be displayed with new down options
     session['current_election'] = current_election
     session['current_node_id'] = current_node.nid
@@ -2626,27 +2629,30 @@ def downbut(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
-    base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile(rlevels)
+    areaelectors = electors.get(current_election)
 
-    if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
-        if not fullpath.exists():
-            abort(404, f" Route/downbut File not found: {fullpath}")
-        print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
+    if current_node.level > 4 and len(areaelectors)  == 0:
+        flash("Can't find any elector data for this Area.")
+        print(f"Can't find elector data at {current_node.value} for election {current_election}" )
+        raise Exception ("Can't find any elector data for this Area.")
+    else:
+        base = Path(config.workdirectories['workdir'])  # or wherever files live
+        fullpath = base / current_node.mapfile(rlevels)
 
-    if not CElection.visit_node(current_node):
-        flash("That node is outside of the election Territory")
-        print("That node is outside of the election Territory:")
-    persist(Treepolys, Fullpolys)
+        if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
+            if not fullpath.exists():
+                abort(404, f" Route/downPD File not found: {fullpath}")
+            print (f"_________ROUTE/downPD at {current_node.value} display file created:{fullpath}")
 
-    print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
-    return send_file(fullpath, as_attachment=False)
+        if not CElection.visit_node(current_node):
+            flash("That PD node is outside of the election Territory")
+            print("That PD node is outside of the election Territory:")
+        persist(Treepolys, Fullpolys)
 
-#    if not os.path.exists(os.path.join(config.workdirectories['workdir'],mapfile)):
-#        current_node.create_area_map(CElection)
+        print (f"_________ROUTE/downPD at sendinf file:{fullpath}")
+        return send_file(fullpath, as_attachment=False)
 
-#    if not os.path.exists(config.workdirectories['workdir']+"/"+mapfile):
-#    print(f"_____creating mapfile for {atype} map file path :{mapfile} for path:{path}" )
+
 
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
@@ -2680,124 +2686,6 @@ def transfer(path):
     return send_file(fullpath, as_attachment=False)
 
 
-@app.route('/downPDbut/<path:path>', methods=['GET','POST'])
-@login_required
-def downPDbut(path):
-    from state import Treepolys, Fullpolys
-    from nodes import MapRoot
-    from elector import electors
-    global filename
-    global layeritems
-    global constants
-
-    print("____Route/downPD: rlevls[level] = polling_districct says that nodes are grouped by PD column name", path)
-
-    restore_from_persist(Treepolys, Fullpolys)
-
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = CElection.get_last_node(create=False)
-    previous_node = current_node
-
-    areaelectors = electors.get(current_election)
-
-    rlevels = CElection.resolved_levels
-    current_node = previous_node.ping_node(rlevels,current_election,path, create=True) #aligns with election data and takes you to the clicked node
-    session['current_node_id'] = current_node.nid
-#    current_node.file = subending(current_node.file,"-PDS.html") # forces looking for PDs file
-
-
-
-    print(f"__downPD- {current_node.mapfile(rlevels)}-l4area {current_node.value}, len area {len(areaelectors)}")
-    PDpathfile = os.path.join(config.workdirectories['workdir'],current_node.mapfile(rlevels))
-
-    print ("_________ROUTE/downPDbut/",path, request.method)
-
-# use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    if len(areaelectors)  == 0:
-        flash("Can't find any elector data for this Area.")
-        print(f"Can't find elector data at {current_node.value} for election {current_election}" )
-        raise Exception ("Can't find any elector data for this Area.")
-    else:
-        base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
-
-        if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
-            if not fullpath.exists():
-                abort(404, f" Route/downPD File not found: {fullpath}")
-            print (f"_________ROUTE/downPD at {current_node.value} display file created:{fullpath}")
-
-        if not CElection.visit_node(current_node):
-            flash("That PD node is outside of the election Territory")
-            print("That PD node is outside of the election Territory:")
-        persist(Treepolys, Fullpolys)
-
-        print (f"_________ROUTE/downPD at sendinf file:{fullpath}")
-        return send_file(fullpath, as_attachment=False)
-
-
-
-
-@app.route('/downWKbut/<path:path>', methods=['GET','POST'])
-@login_required
-def downWKbut(path):
-    from state import Treepolys, Fullpolys
-    from nodes import MapRoot
-
-    from elector import electors
-    global filename
-    global layeritems
-    global constants
-
-
-# so this is the button which creates the nodes and map of equal sized walks for the troops
-
-    # Get the dataframe for the current election
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    rlevels = CElection.resolved_levels
-    # electors for this election only
-
-    # Fetch electors for DORK1 and compute Area automatically
-    current_node = CElection.get_last_node(create=True)
-    print (f"_________ROUTE/downWKbut Start: {current_node.value}")
-    areaelectors = electors.get(current_election)
-    print(areaelectors[['Lat','Long','Area']].head())
-    print (f"_________ROUTE/downWKbut0 Areapop: {len(areaelectors)}")
-
-    current_node = MapRoot.ping_node(rlevels,current_election,path,create=True)
-
-    print (f"_________ROUTE/downWKbut1 CE {current_election}", current_node.value, path)
-    print (f"_________ROUTE/downWKbut2 -post ping subnodes:  {len(current_node.children)}")
-#    current_node.file = subending(current_node.file,"-WALKS.html")
- # the node which binds the election data
-
-
-    print (f"_________ROUTE/downWKbut2 CE {current_election}", current_node.value, path)
-    flash ("_________ROUTE/downWKbut ")
-    walkpathfile = os.path.join(config.workdirectories['workdir'],current_node.mapfile(rlevels))
-
-    if areaelectors is None or len(areaelectors) == 0:
-        flash("Can't find any elector data for this Area.")
-        print(f"Can't find elector data at {current_node.value} for election {current_election}" )
-        raise Exception ("Can't find any elector data for this Area.")
-    else:
-        current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels),static=False)
-
-        options = resolve_ui_context(ProgramContext(),ElectionContext(CElection), current_node)
-        constants = CElection
-        print(f"____Route/downWK at {current_node.value} Loaded election: {current_election} with (len(electors)) electors ")
-
-        if not CElection.visit_node(current_node):
-            flash("That node is outside of the election Territory")
-            print("That node is outside of the election Territory:")
-    base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile(rlevels)
-    persist(Treepolys, Fullpolys)
-    print(f"____End Route {route()} ")
-
-    return send_file(fullpath, as_attachment=False)
-
 
 
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
@@ -2809,7 +2697,7 @@ def downMWbut(path):
     global filename
     global layeritems
     global constants
-    global STATICSWITCH
+
 
 # so this is the button which creates the nodes and map of equal sized walks for the troops
 
@@ -2824,34 +2712,32 @@ def downMWbut(path):
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
-#    current_node.file = subending(current_node.file,"-WALKS.html")
- # the node which binds the election data
 
 
-    print (f"_________ROUTE/downMWbut2 CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile(rlevels)}")
+    print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile(rlevels)}")
     flash ("_________ROUTE/downMWbut ")
 
     areaelectors = electors.get(current_election)
 
-    if len(areaelectors)  == 0:
+    if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
         print(f"Can't find elector data at {current_node.value} for election {current_election}" )
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile(rlevels)
-        STATICSWITCH = True
-        if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels), static=STATICSWITCH):
+
+        if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels), static=True):
             if not fullpath.exists():
-                abort(404, f" Route/downPD File not found: {fullpath}")
-            print (f"_________ROUTE/downPD at {current_node.value} display file created:{fullpath}")
-        STATICSWITCH = False
+                abort(404, f" Route/downMW File not found: {fullpath}")
+            print (f"_________ROUTE/downMW at {current_node.value} display file created:{fullpath}")
+
         if not CElection.visit_node(current_node):
-            flash("That PD node is outside of the election Territory")
-            print("That PD node is outside of the election Territory:")
+            flash("That MW node is outside of the election Territory")
+            print("That MW node is outside of the election Territory:")
         persist(Treepolys, Fullpolys)
 
-        print (f"_________ROUTE/downPD at sendinf file:{fullpath}")
+        print (f"_________ROUTE/downMW at sendinf file:{fullpath}")
         return send_file(fullpath, as_attachment=False)
 
 
@@ -3067,7 +2953,7 @@ def PDdownST(path):
     print ("_________ROUTE/PDdownST/",path, request.method)
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    if len(areaelectors)  == 0:
+    if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
         print(f"Can't find elector data at {current_node.value} for election {current_election}" )
         raise Exception ("Can't find any elector data for this Area.")
@@ -3197,19 +3083,26 @@ def WKdownST(path):
 
             walk_node.create_area_map(current_election, CElection)
 
+    if current_node.level > 4 and len(areaelectors)  == 0:
+        flash("Can't find any elector data for this Area.")
+        print(f"Can't find elector data at {current_node.value} for election {current_election}" )
+        raise Exception ("Can't find any elector data for this Area.")
+    else:
+        base = Path(config.workdirectories['workdir'])  # or wherever files live
+        fullpath = base / current_node.mapfile(rlevels)
 
+        if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
+            if not fullpath.exists():
+                abort(404, f" _________ROUTE/WKdownST File not found: {fullpath}")
+            print (f"_________ROUTE/WKdownST at {current_node.value} display file created:{fullpath}")
 
+        if not CElection.visit_node(current_node):
+            flash("That street is outside of the election Territory")
+            print("That street node is outside of the election Territory:")
+        persist(Treepolys, Fullpolys)
 
-    if len(areaelectors) == 0 :
-        flash("Can't find any elector data for this ward.")
-        print("Can't find any elector data for this ward.")
-        if os.path.exists(current_node.mapfile(rlevels)):
-            os.remove(current_node.mapfile(rlevels))
-
-
-    persist(Treepolys, Fullpolys)
-    return current_node.render_face(current_election,CElection,True)
-
+        print (f"_________ROUTE/WKdownST at sendinf file:{fullpath}")
+        return send_file(fullpath, as_attachment=False)
 
 @app.route('/wardreport/<path:path>',methods=['GET','POST'])
 @login_required
@@ -4060,7 +3953,6 @@ def firstpage():
     current_node.create_area_map(current_election, CElection)
     print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
 
-#        CElection['mapfiles'][-1] = mapfile
 
     ELECTIONS = get_available_elections()
 
