@@ -179,12 +179,12 @@ def create_enclosing_gdf(gdf, buffer_size=20):
     return enclosing_gdf
 
 def build_street_list_html(streets_df):
-    # Voting intention map
     from state import VID
     from collections import Counter
+    import pandas as pd
+    import json, re
 
     def count_units_from_column(df, column):
-        # count of all unique house numbers or names in the column across all electors
         all_units = (
             unit.strip()
             for row in df[column].dropna()
@@ -193,73 +193,82 @@ def build_street_list_html(streets_df):
         )
         return Counter(all_units)
 
-
     def extract_unit(row):
-        # building a new unit column value by combining the contents of AddressNumber and AddressPrefix
         prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
         number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
 
-        # Return the first valid field (not empty, not "nan")
         if prefix and prefix.lower() != 'nan':
             return prefix
         if number and number.lower() != 'nan':
             return number
         return None
 
-
     streets_df['unit'] = streets_df.apply(extract_unit, axis=1)
-    print(f"____Street_df:{streets_df['unit']} ")
 
     html = '''
+    <style>
+    .street-row-odd {
+        border-bottom: 1px solid #00509e;
+        background-color: #d3d3d3;  /* light gray for odd rows */
+        color: #003366;
+        transition: background 0.3s, color 0.3s;
+    }
+
+    .street-row-even {
+        border-bottom: 1px solid #00509e;
+        background-color: #e6f2ff;  /* light blue for even rows */
+        color: #003366;
+        transition: background 0.3s, color 0.3s;
+    }
+
+    .street-row-odd:hover,
+    .street-row-even:hover {
+        background-color: #004080;  /* dark blue on hover */
+        color: #ffffff;             /* white text on hover */
+    }
+    </style>
+
     <div style="
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 10px;
-        background-color: black; !important;
-        color: white; !important;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-        max-width: 600px;
+        border: 2px solid #002b5c;
+        border-radius: 8px;
+        padding: 14px;
+        background-color: #003366;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        max-width: 720px;
         overflow-x: auto;
-        font-family: sans-serif;
-        font-size: 8pt;
+        font-family: Arial, Helvetica, sans-serif;
+        font-weight: 600;
+        font-size: 8 pt;
         white-space: nowrap;
     ">
         <table style="border-collapse: collapse; width: 100%;">
             <thead>
-                <tr>
-                    <th style="text-align:left; padding: 4px;">Street Name</th>
-                    <th style="text-align:left; padding: 4px;">Total</th>
-                    <th style="text-align:left; padding: 4px;">Range</th>
-                    <th style="text-align:left; padding: 4px;">Unit</th>
-                    <th style="text-align:left; padding: 4px;">VI</th>
-                    <th style="text-align:left; padding: 4px;">Votes</th>
-                </tr>
+            <tr style="background-color:#001f3f;">
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Street Name</th>
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Total</th>
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Range</th>
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Unit</th>
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">VI</th>
+                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Votes</th>
+            </tr>
+
             </thead>
             <tbody>
     '''
-    unit_set = set()
-    num_values = set()
 
-    # Now group by street name and extract per-unit counts
-    for street_name, street_group in streets_df.groupby("StreetName"):
-        # Inside your loop for street_name, street_group in streets_df.groupby("Name"):
+    # Loop over streets with an index for alternating row classes
+    for i, (street_name, street_group) in enumerate(streets_df.groupby("StreetName")):
         unit_counts = count_units_from_column(street_group, 'unit')
-
-        # JSON version for embedding in HTML
         unit_counts_json = json.dumps(unit_counts)
-
-        print(f"Street: {street_name}")
-        print(f"Unit Counts: {unit_counts}")
-        print(f"JSON: {unit_counts_json}")
 
         unit_set = set()
         num_values = []
 
-        for _, row in street_group.iterrows():  # ✅ only iterate this street's rows
+        for _, row in street_group.iterrows():
             if pd.notna(row['unit']):
-                parts = str(row['unit']).split(',')
-                for part in parts:
-                    val = part.strip()
+                for val in str(row['unit']).split(','):
+                    val = val.strip()
                     if val and val.lower() != 'nan':
                         unit_set.add(val)
                         match = re.search(r'\d+', val)
@@ -269,46 +278,53 @@ def build_street_list_html(streets_df):
         unit_list = sorted(unit_set)
         total_units = len(unit_list) or 1
         hos = total_units
-
-        # Address range display
         num_values = sorted(num_values)
         num_display = f"({min(num_values)} - {max(num_values)})" if num_values else "( - )"
 
-        # Unit dropdown
         unit_dropdown = f'''
-        <select onchange="updateMaxVote(this)" style='width: 100%; font-size: 8pt;'>
+        <select onchange="updateMaxVote(this)"
+                style="width:100%; font-size:9pt; padding:3px;
+                       background:#e6f2ff; color:#001f3f;
+                       border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
         '''
 
-        # VI select
-        vi_select = '<select style="font-size:8pt;">' + ''.join(
-            f'<option value="{key}">{value}</option>' for key, value in VID.items()
-            ) + '</select>'
-
-
+        vi_select = '<select style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">' + \
+                    ''.join(f'<option value="{key}">{value}</option>' for key, value in VID.items()) + '</select>'
 
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
 
-
-
         vote_button = f'''
-            <button onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}" style="font-size: 8pt;">0/{max_votes}</button>
+        <button onclick="incrementVoteCount(this)"
+                data-count="0"
+                data-max="{max_votes}"
+                style="
+                    font-size:9pt;
+                    padding:4px 8px;
+                    background:#00aaff;
+                    color:#ffffff;
+                    border:none;
+                    border-radius:4px;
+                    font-weight:bold;
+                    cursor:pointer;
+                ">
+            0/{max_votes}
+        </button>
         '''
-        print(f"unit_dropdown: {unit_dropdown}")
-        print(f"vi_select: {vi_select}")
-        print(f"vote_button: {vote_button}")
 
-        # Add row
+        # Assign alternating row class
+        row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
+
         html += f'''
-        <tr>
-            <td style="padding: 4px; font-size: 8pt;"><b data-name="{street_name}" data-unit-counts='{unit_counts_json}'>{street_name} </b></td>
-            <td style="padding: 4px; font-size: 8pt;"><i>{hos}</i></td>
-            <td style="padding: 4px; font-size: 8pt;">{num_display}</td>
-            <td style="padding: 4px;">{unit_dropdown}</td>
-            <td style="padding: 4px;">{vi_select}</td>
-            <td style="padding: 4px;">{vote_button}</td>
+        <tr class="{row_class}">
+            <td style="padding:8px;"><b style="color:#00ccff;" data-name="{street_name}" data-unit-counts='{unit_counts_json}'>{street_name}</b></td>
+            <td style="padding:8px;"><i>{hos}</i></td>
+            <td style="padding:8px;">{num_display}</td>
+            <td style="padding:8px;">{unit_dropdown}</td>
+            <td style="padding:8px;">{vi_select}</td>
+            <td style="padding:8px;">{vote_button}</td>
         </tr>
         '''
 
@@ -319,7 +335,6 @@ def build_street_list_html(streets_df):
     '''
 
     return html
-
 
 
 def build_nodemap_list_html(herenode):
@@ -670,7 +685,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     popup_html = ""
 
                     if vtype == 'polling_district':
-                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels) +" street", matched_child.value,'street')
+                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels), matched_child.value,'street')
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
                     #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(target_node.dir+"/"+target_node.file(rlevels), target_node.value,child_type_of('polling_district',estyle))
                         downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
@@ -682,7 +697,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         streetstag = ""
                     elif vtype == 'walk':
-                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels)+" walkleg", matched_child.value,'walkleg')
+                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels), matched_child.value,'walkleg')
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)

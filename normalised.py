@@ -480,7 +480,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
     )
 
     for row_idx, (index, elector) in enumerate(electors2.iterrows()):
-    
+
         street = None
         prefix = ""
         Addno = ""
@@ -787,7 +787,8 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
         "FULLNAME":"ElectorName",
         "ELECTORNAME":"ElectorName",
         "NAME":"ElectorName",
-        "STREETNAME":"StreetName"
+        "STREETNAME":"StreetName",
+        "AREA":"Area"
     }
 
     Incolstuple = [
@@ -838,7 +839,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
     elif purpose == 'avi':
         electors2 = pd.DataFrame(electors100, columns=[
             'Election','Purpose','RNO','Tags','PD','Firstname',
-            'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV'
+            'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV','Area'
         ])
 
     update_progress(progress, "address_norm", 1.0, "Address normalisation complete")

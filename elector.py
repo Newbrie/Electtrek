@@ -19,7 +19,7 @@ _lock = threading.RLock()
 
 class ElectorManager:
     def __init__(self):
-        self._elections = {}  # now part of the instance
+        self._elections = {}  # Elections will be part of the instance
         logger.debug("Initializing ElectorManager")
         logger.debug(f"ELECTOR_FILE path: {os.path.abspath(ELECTOR_FILE)}")
 
@@ -44,70 +44,122 @@ class ElectorManager:
             except Exception as e:
                 logger.exception(f"Could not load {ELECTOR_FILE}: {e}")
 
+    def getstreamrag(self):
+        """
+        Get the stream processing status of elections using data from ElectorManager.
+        """
+        print("____getstreamrag entered")
+
+        rag = {}
+
+        # Fetch all current election instances from the ElectorManager class (self._elections)
+        for election_name, electors_data in self._elections.items():
+            print(f"Processing election: {election_name}")
+
+            # Get stream processing data for the election from current election instance
+            stream_processing = electors_data.get("stream_processing", {})
+            files = stream_processing.get('files', [])
+
+            # Initialize lists for active, deprecated, and deactivated streams
+            active_streams = []
+            deprecated_streams = []
+            deactivated_streams = []
+
+            if files:
+                livestreamlabels = electors_data['Election'].unique()  # Elections that are live
+
+                # Check for active, deprecated, and deactivated streams
+                for file in files:
+                    filename = file.get('file_path')
+                    if filename in livestreamlabels:
+                        active_streams.append(filename)
+                    else:
+                        deprecated_streams.append(filename)
+
+                # Assign RAG status based on streams
+                for election_name in active_streams:
+                    rag[election_name] = {
+                        'Alive': True,
+                        'Elect': len(livestreamlabels),  # Or compute based on election data
+                        'Files': ', '.join([file['file_path'] for file in files]),
+                        'RAG': 'limegreen'
+                    }
+                for election_name in deprecated_streams:
+                    rag[election_name] = {
+                        'Alive': False,
+                        'Elect': 0,
+                        'Files': ', '.join([file['file_path'] for file in files]),
+                        'RAG': 'red'
+                    }
+                for election_name in deactivated_streams:
+                    rag[election_name] = {
+                        'Alive': False,
+                        'Elect': 0,
+                        'Files': ', '.join([file['file_path'] for file in files]),
+                        'RAG': 'amber'
+                    }
+            else:
+                # Handle cases with no stream processing files
+                rag[election_name] = {
+                    'Alive': False,
+                    'Elect': 0,
+                    'Files': 0,
+                    'RAG': 'white'
+                }
+
+        if not rag:
+            rag['No Elections'] = {
+                'Alive': False,
+                'Elect': 0,
+                'Files': 0,
+                'RAG': 'white'
+            }
+
+        print("Final stream RAG status:", rag)
+        return rag
+
     def get(self, election):
-        logger.debug(f"GET called for election '{election}'")
+        # Your existing get method for accessing election data
         with _lock:
-            logger.debug(f"Available elections: {list(self._elections.keys())}")
             result = self._elections.get(election)
-
             if result is None:
-                logger.debug(f"No data found for '{election}'. Returning empty DataFrame.")
-                return pd.DataFrame()
-
-            logger.debug(f"Returning {len(result)} rows for '{election}'")
+                return pd.DataFrame()  # Return empty DataFrame if election is not found
             return result.copy()
 
     def add_or_update(self, election, df: pd.DataFrame):
-        logger.debug(f"ADD_OR_UPDATE called for election '{election}'")
-        logger.debug(f"Incoming DataFrame rows: {len(df)}")
-
+        # Your existing method for adding or updating election data
         with _lock:
-            if 'Election' in df.columns:
-                df['Election'] = df['Election'].astype(str)
-
             if election in self._elections:
-                logger.debug(f"Election '{election}' exists. Appending data.")
-                self._elections[election] = pd.concat(
-                    [self._elections[election], df],
-                    ignore_index=True
-                )
+                self._elections[election] = pd.concat([self._elections[election], df], ignore_index=True)
             else:
-                logger.debug(f"Election '{election}' does not exist. Creating new entry.")
                 self._elections[election] = df.copy()
-
-            self._elections[election]['Election'] = election
-
-            logger.debug(f"Election '{election}' now has {len(self._elections[election])} rows")
-            logger.debug(f"Current elections in memory: {list(self._elections.keys())}")
-
             self.save()
 
-    def save(self):
-        logger.debug("SAVE called")
 
+    def deactivate_election(self, election_name):
+        """
+        Deactivates (deletes) all rows associated with the given election.
+        """
+        with _lock:
+            # Check if the election exists
+            if election_name in self._elections:
+                del self._elections[election_name]  # Remove the election from memory
+                logger.debug(f"Election '{election_name}' has been deactivated and removed.")
+                self.save()  # Save the changes (i.e., update the file)
+            else:
+                logger.warning(f"Attempted to deactivate non-existent election '{election_name}'.")
+
+    def save(self):
+        # Existing save method to write data to file
         with _lock:
             all_df = []
-
             for ename, df in self._elections.items():
-                logger.debug(f"Preparing '{ename}' with {len(df)} rows for save")
                 df_copy = df.copy()
                 df_copy['Election'] = ename
                 all_df.append(df_copy)
-
             if all_df:
                 combined = pd.concat(all_df, ignore_index=True)
-                logger.debug(f"Writing {len(combined)} total rows to disk")
-
-                combined.to_csv(
-                    ELECTOR_FILE,
-                    sep='\t',
-                    encoding='utf-8',
-                    index=False
-                )
-
-                logger.debug("Save completed successfully")
-            else:
-                logger.debug("No data to save (store is empty)")
+                combined.to_csv(ELECTOR_FILE, sep='\t', encoding='utf-8', index=False)
 
 
 

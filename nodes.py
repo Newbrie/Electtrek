@@ -630,7 +630,7 @@ class TreeNode:
         child = self.child_type(rlevels)
         suffix = FACEENDING.get(child, "")
         if self.type == "street":
-            filename = f"{self.parent.name}--{self.value}{suffix}"
+            filename = f"{self.parent.value}--{self.value}{suffix}"
         else:
             filename = f"{self.value}{suffix}"
 
@@ -861,7 +861,7 @@ class TreeNode:
             if self.last_modified > file_mtime:
                 endpoint_created = True
 
-        if self.level < 5 and endpoint_created:
+        if self.level < 6 and endpoint_created:
             self.create_area_map(c_elect, CurrEL, static=static)
 
         return endpoint_created

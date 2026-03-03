@@ -179,101 +179,6 @@ def get_versioned_filename(base_path, base_name, extension):
     return new_filepath
 
 
-def getstreamrag():
-# if allstreams.csv exists then we have a RAG dataframe, otherwise black - empty
-    file_path = ELECTOR_FILE
-    print("____getstreamrag entered", file_path)
-    rag = {}
-    if file_path and os.path.exists(file_path):
-        # we have an active pre-loaded set electors, created by one or more streams
-        ef = pd.read_csv(file_path,sep='\t', engine='python',encoding='utf-8')
-        stream_table = []
-        livestreamdash = pd.DataFrame()
-        activestreams = []
-    # a empty or missing allelectors.csv is a farm waiting to be harvested WHITE circle
-    # a empty or missing STREAMS TABLE is a dessert indicated by a BLACK circle
-    # deactivated streams are potential streams found in table but not in allelectors are AMBER
-    # active streams are streams found in both table AND allelectors indicated by LIMEGREEN
-    # deprecated streams are streams with no definition - RED
-    # a stream can be deactivated by marking a file and as inactive the set up page.
-
-        ef = pd.DataFrame(ef,columns=['Election', 'ENOP'])
-        # we group electors by Election, calculating totals in each election list
-        g = {'ENOP':'count' }
-        livestreamdash = ef.groupby(['Election']).agg(g)
-        livestreamlabels = list(set(ef['Election'].values))
-        print("__LIVESTREAMLABELS: ", livestreamlabels)
-        rag = {}
-        if len(livestreamdash) > 0 and len(livestreamlabels) > 0:
-            print("🔍 type of json1:", type(json))
-            print(json)
-            if os.path.exists(TABLE_FILE):
-                with open(TABLE_FILE) as f:
-                    stream_table = json.load(f)
-    # so we are in business with stream labels - if they are defined as streams in the table and used in elector file
-                g = {'filename' : 'count', 'loaded' : 'count'}
-                table_df = pd.DataFrame(stream_table)
-                print("____we have allelectors and streamtable file :")
-                defined_streamlabels = table_df['election'].to_list() #elections are defined
-                active_streams = list({x for x in defined_streamlabels if x in livestreamlabels }) # elections are defined and live
-                depreciated_streams = [x for x in livestreamlabels if x not in defined_streamlabels] # elections are live but not defined
-                deactivated_streams = list({x for x in defined_streamlabels if x not in livestreamlabels}) #elections are defined but not live
-                print(f"____actives:{active_streams}, deprec:{depreciated_streams}, deactiv: {deactivated_streams}")
-
-                for election in active_streams:
-                    election = str(election).upper()
-                    mask = table_df['election'] == election
-                    rag[election] = {}
-                    rag[election]['Alive'] = True
-                    rag[election]['Elect'] = int(livestreamdash.loc[election,'ENOP']) # can do because its been groupby'ed
-                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[election]['RAG'] = 'limegreen'
-                    print("_____Active Streams:",election, active_streams, rag)
-                for election in depreciated_streams:
-                    election = str(election).upper()
-                    mask = table_df['election'] == election
-                    rag[election] = {}
-                    rag[election]['Alive'] = False
-                    rag[election]['Elect'] = 0
-                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[election]['RAG'] = 'red'
-                    print("_____Depreciated Streams:",election, depreciated_streams,rag)
-                for election in deactivated_streams:
-                    election = str(election).upper()
-                    mask = table_df['election'] == election
-                    rag[election] = {}
-                    rag[election]['Alive'] = False
-                    rag[election]['Elect'] = 0
-                    rag[election]['Files'] = rag[election]['Files'] = ', '.join(str(x) for x in table_df.loc[mask, 'order'].dropna().unique())
-                    rag[election]['RAG'] = 'amber'
-                    print("_____Deactivated Streams:",election, deactivated_streams,rag )
-            else:
-                election = 'NO DATA STREAMS'
-                rag[election] = {}
-                rag[election]['Alive'] = False
-                rag[election]['Elect'] = 0
-                rag[election]['Files'] = 0
-                rag[election]['RAG'] = 'gray'
-                print("_____No Streams defined yet!:",election, rag)
-        else:
-            election = 'NO LIVE DATA'
-            rag[election] = {}
-            rag[election]['Alive'] = False
-            rag[election]['Elect'] = 0
-            rag[election]['Files'] = 0
-            rag[election]['RAG'] = 'white'
-            print("_____No Active electors file:", election, rag)
-    else:
-        election = 'NO LIVE DATA'
-        rag[election] = {}
-        rag[election]['Alive'] = False
-        rag[election]['Elect'] = 0
-        rag[election]['Files'] = 0
-        rag[election]['RAG'] = 'white'
-        print("_____No Active electors file:", election, rag)
-    return rag
-
-
 
 def get_L4area(nodelist, here):
     from state import Treepolys, Fullpolys
@@ -567,6 +472,43 @@ def assign_walks_and_zones(
 
     return electors_df
 
+def check_columns_consistency(mainframe, *frames):
+    """
+    Check if all frames have the same columns as mainframe.
+    Adds missing columns with None (or another default value) before checking.
+    If any columns are missing, recheck the frames after adding them.
+    """
+    mainframe_columns = set(mainframe.columns)
+
+    # Define the missing columns explicitly
+    expected_missing_columns = {'WalkName_hier', 'Area', 'Zone', 'WalkName'}
+
+    for i, frame in enumerate(frames):
+        # Add the missing columns with None (or any other placeholder) if they don't exist in the current frame
+        missing_cols = expected_missing_columns - set(frame.columns)
+
+        # Add missing columns if any
+        for col in missing_cols:
+            frame[col] = None  # Set to None, you can replace this with any default value if required
+
+        # Print missing columns for debugging
+        if missing_cols:
+            print(f"Frame {i+1}: Missing columns added: {missing_cols}")
+
+        # Now that missing columns are added, perform the consistency check
+        if set(frame.columns) != mainframe_columns:
+            raise ValueError(f"Column mismatch in frame {i + 1}. Expected columns: {mainframe_columns}, Found columns: {set(frame.columns)}")
+
+        # Recheck after adding columns
+        recheck_missing_cols = expected_missing_columns - set(frame.columns)
+        if recheck_missing_cols:
+            print(f"Recheck (Frame {i+1}) - Missing columns still present: {recheck_missing_cols}")
+            # You can add another raise here or take any action if the columns are still missing.
+            raise ValueError(f"Recheck failed for frame {i + 1}. Missing columns after addition: {recheck_missing_cols}")
+
+        print(f"Frame {i+1} passed consistency check after adding missing columns.")
+
+
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
@@ -588,8 +530,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     logger = logging.getLogger(__name__)
 
     try:
+        Outcols = pd.read_excel(GENESYS_FILE).columns
         mainframes, deltaframes, aviframes, DQstatslist = [], [], [], []
-        mainframe = pd.DataFrame()
+        # Initialize mainframe with the same columns as electors
+        mainframe = pd.DataFrame(columns=Outcols)
+        dfx = pd.DataFrame(columns=Outcols)
+
         DQstats = pd.DataFrame()
 
         # --- Stage 1: Sourcing ---
@@ -638,6 +584,10 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         # --- Combine frames ---
         all_frames = mainframes + deltaframes
+
+        # Check all frames may different column sets
+        check_columns_consistency(mainframe, *mainframes, *deltaframes, *aviframes)
+
         if not all_frames:
             progress.update({"percent": 100, "status": "error", "message": "No valid files to process"})
             return
@@ -658,6 +608,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress=progress)
 
         # --- Save electors ---
+        print(f"___MF COL CHECKPRIOR TO SAVE: {mainframe.columns}")
         electors.add_or_update(session_data.get('current_election', 'UNKNOWN'), mainframe)
         electors.save()
         mainframe.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
@@ -1703,73 +1654,6 @@ def add_tag():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/streamrag_api')
-@login_required
-def streamrag_api():
-    global streamrag
-    from elector import electors
-    streamrag = getstreamrag()
-    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
-    print("___JSONIFYED streamrag:",streamrag)
-    return jsonify({'streamrag':streamrag,'html':html})
-
-
-#@app.route('/get_streamtab')
-#@login_required
-#def get_streamtab():
-# this refreshes the table in stream_processing html
-#    streamrag = getstreamrag()
-#    return render_template('partials/streamtab_rows.html', streamrag=streamrag)
-
-@app.route('/deactivate_stream', methods=['POST'])
-@login_required
-def deactivate_stream():
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-
-    # Example: Remove all electors for the given election
-    from elector import electors
-    election = request.json.get('election')
-    ELECTIONS = get_available_elections()
-
-    if os.path.exists(TABLE_FILE):
-        try:
-            with open(TABLE_FILE) as f:
-                stream_table = json.load(f)
-                stream_table2 = [row for row in stream_table if row.get('stream') != election]
-                if len(stream_table) < len(stream_table2):
-                    # Save to JSON file
-                    with open(TABLE_FILE, 'w') as f:
-                        json.dump(stream_table2, f, indent=2)
-
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-
-
-    if election not in ELECTIONS.keys():
-        return jsonify({'status': 'error', 'message': 'Election does not exist','html':html}), 400
-    current_election = election
-    CElection = CurrentElection.load(current_election)
-    delete_node = CElection.get_last_node(create=False)
-    rlevels = CElection.resolved_levels
-
-    before_count = len(allelectors)
-    allelectors = allelectors[allelectors['Election'] != election]
-    after_count = len(allelectors)
-    print(f"Deactivated election {election}. Removed {before_count - after_count} electors.")
-
-    # remove the  child data nodes under the delete nodes
-    ttype = delete_node.child_type(rlevels)
-
-    for datanode in delete_node.children:
-        delete_node.children.remove(datanode)
-
-    # Optionally persist this change
-    allelectors.to_csv(ELECTOR_FILE, sep='\t', index=False, encoding='utf-8')
-    streamrag = getstreamrag()
-    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
-    print(f"____Deactivate table :{streamrag} in html {html} ")
-    return jsonify({'status': 'success', 'election': election,'streamrag':streamrag,'html':html }), 200
-
 
 @app.route('/reset_Elections', methods=['POST'])
 @login_required
@@ -2299,32 +2183,14 @@ def update_territory():
 
     return jsonify(success=True, constants=CElection)
 
-@app.route("/get_stream_processing/<ename>")
-@login_required
-def get_stream_processing(ename):
+@app.route("/get_streamrag")
+def get_streamrag():
     """
-    Load the stream_processing structure for a given election name.
-    If none exists, return a default structure.
+    Endpoint to return the current stream processing RAG data.
     """
-    from elections import CurrentElection  # adjust import as needed
-
-    CElection = CurrentElection.load(ename)  # loads the election dict
-
-    if CElection and "stream_processing" in CElection:
-        stream_processing = CElection["stream_processing"]
-    else:
-        # Default structure if nothing exists yet
-        stream_processing = {
-            "files": [],
-            "last_run": None,
-            "status": "idle"
-        }
-
-    # Ensure files is always a list (prevents frontend errors)
-    if "files" not in stream_processing or not isinstance(stream_processing["files"], list):
-        stream_processing["files"] = []
-
-    return jsonify(stream_processing)
+    # Assuming you have a method in ElectorManager or elsewhere to get the RAG data.
+    rag_data = electors.getstreamrag()  # Use the refactored method here
+    return jsonify(rag_data)
 
 
 @app.route("/save_stream_processing/<ename>", methods=["POST"])
@@ -2387,39 +2253,52 @@ def validate_tags():
         return jsonify(valid=True)
 
 
+from flask import render_template, flash, session
+from elector import ElectorManager
+from elections import CurrentElection
+
 @app.route("/", methods=['POST', 'GET'])
 def index():
-
     global streamrag
     global TABLE_TYPES
-
     global constants
 
+    ELECTIONS = get_available_elections()  # This seems to be a function fetching available elections
 
-    ELECTIONS = get_available_elections()
     if 'username' in session:
-        flash("__________Session Alive:"+ session['username'])
-        print("__________Session Alive:"+ session['username'])
+        flash("__________Session Alive:" + session['username'])
+        print("__________Session Alive:" + session['username'])
         formdata = {}
-        streamrag = getstreamrag()
+
+        # Fetch the stream processing status using the new method
+        electors = ElectorManager()  # Make sure the ElectorManager instance is initialized
+        streamrag = electors.getstreamrag()  # This is your new way of getting stream processing data
+
+        # You may have to handle cases where streamrag is empty or has no valid data
+        if not streamrag:
+            streamrag = {
+                'No Elections': {
+                    'Alive': False,
+                    'Elect': 0,
+                    'Files': 0,
+                    'RAG': 'white'
+                }
+            }
+
+        # Restore the persisted state (treepolys, fullpolys)
         restore_from_persist(Treepolys, Fullpolys)
+
+        # Load the current election context
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
         current_node = CElection.get_last_node(create=False)
 
-
+        # Set up the program and election context
         program = ProgramContext()
         election = ElectionContext(CElection)
-        OPTIONS = resolve_ui_context(program,election,current_node)
+        OPTIONS = resolve_ui_context(program, election, current_node)
 
-
-    #       Track used IDs across both existing and new entries
-    #        places = build_place_lozenges(markerframe)
-
-    #        restore_from_persist(Treepolys, Fullpolys)
-    #        current_node = get_current_node(session)
-    #        CE = CurrentElection.get_lastused()
-
+        # Log the current state for debugging
         print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile(rlevels)}")
 
         return render_template(
@@ -2429,8 +2308,11 @@ def index():
             current_election=current_election,
             options=OPTIONS,
             constants=CElection,
-            mapfile=current_node.mapfile(rlevels)
+            mapfile=current_node.mapfile(rlevels),
+            streamrag=streamrag  # Pass streamrag to the template for rendering
         )
+
+    # If no session or no username, render the default index page
     return render_template("index.html")
 
 #login
@@ -2579,8 +2461,7 @@ def dashboard():
         current_node = TREK_NODES_BY_ID.get(CElection['cid'])
         if not current_node:
             raise Exception ("Current Election node does not exist")
-        streamrag = getstreamrag()
-        print ("allelectors len after streamrag: ",len(allelectors))
+
         path = CElection['mapfiles'][-1]
         previous_node = current_node
         print ("____Dashboard CElection: ",path, previous_node.value)
@@ -2625,11 +2506,11 @@ def downbut(path):
     session['current_election'] = current_election
     session['current_node_id'] = current_node.nid
     previous_node = current_node
+    areaelectors = electors.get(current_election)
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
-    areaelectors = electors.get(current_election)
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
@@ -2641,15 +2522,15 @@ def downbut(path):
 
         if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
             if not fullpath.exists():
-                abort(404, f" Route/downPD File not found: {fullpath}")
-            print (f"_________ROUTE/downPD at {current_node.value} display file created:{fullpath}")
+                abort(404, f" Route/downbut File not found: {fullpath}")
+            print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
 
         if not CElection.visit_node(current_node):
-            flash("That PD node is outside of the election Territory")
-            print("That PD node is outside of the election Territory:")
+            flash("That node is outside of the election Territory")
+            print("That node is outside of the election Territory:")
         persist(Treepolys, Fullpolys)
 
-        print (f"_________ROUTE/downPD at sendinf file:{fullpath}")
+        print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
         return send_file(fullpath, as_attachment=False)
 
 
@@ -2657,13 +2538,12 @@ def downbut(path):
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
 def transfer(path):
-
     from state import Treepolys, Fullpolys
     from elector import electors
-    global environment
-    global levels
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from elections import CurrentElection
     global layeritems
-    global CElection
+    global constants
 
     restore_from_persist(Treepolys, Fullpolys)
 
@@ -2692,9 +2572,9 @@ def transfer(path):
 @login_required
 def downMWbut(path):
     from state import Treepolys, Fullpolys
-    from nodes import MapRoot
     from elector import electors
-    global filename
+    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from elections import CurrentElection
     global layeritems
     global constants
 
@@ -2709,6 +2589,8 @@ def downMWbut(path):
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
+    areaelectors = electors.get(current_election)
+
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
 
@@ -2717,7 +2599,7 @@ def downMWbut(path):
     print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile(rlevels)}")
     flash ("_________ROUTE/downMWbut ")
 
-    areaelectors = electors.get(current_election)
+
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
@@ -2963,7 +2845,7 @@ def PDdownST(path):
 
         if current_node.endpoint_created(current_election,CElection,current_node.mapfile(rlevels),static=False):
             if not fullpath.exists():
-                abort(404, f" Route/PDdownST File not found: {fullpath}")
+                abort(404, f" Route/PDdownST at level {current_node.level} File not found: {fullpath}")
             print (f"_________ROUTE/PDdownST at {current_node.value} display file created:{fullpath}")
 
         if not CElection.visit_node(current_node):
@@ -3661,8 +3543,6 @@ def get_progress():
     progress['status'] = 'complete'
     progress['message'] = 'Normalization Complete'
 
-    streamrag = getstreamrag()
-    html = render_template('partials/streamtab_rows.html', streamrag=streamrag)
 
     # Update response after completion
     response.update({
@@ -3672,14 +3552,24 @@ def get_progress():
         'status': 'complete',
         'message': 'Normalization Complete',
         'dqstats_html': progress['dqstats_html'],
-        'html': html,
-        'streamrag': streamrag
+        'html': html
     })
 
     for key, value in response.items():
         print(f"Progress2-{key} => {value}")
 
     return jsonify(response)
+
+
+@app.route('/deactivate_election/<election_name>', methods=['POST'])
+@login_required
+def deactivate_election(election_name):
+    try:
+        electors.deactivate_election(election_name)  # Call the method to deactivate the election
+        return jsonify({"success": True, "message": f"Election {election_name} deactivated successfully."})
+    except Exception as e:
+        logger.error(f"Error deactivating election {election_name}: {str(e)}")
+        return jsonify({"success": False, "message": f"Error deactivating election {election_name}: {str(e)}"}), 500
 
 
 
@@ -3701,7 +3591,6 @@ def walks():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
     flash('_______ROUTE/walks',session)
-    streamrag = getstreamrag()
 
 
     if len(request.form) > 0:
@@ -3948,7 +3837,7 @@ def firstpage():
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
-    streamrag = getstreamrag()
+
     print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} ")
     current_node.create_area_map(current_election, CElection)
     print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
@@ -3985,7 +3874,6 @@ def cards():
 
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
-    streamrag = getstreamrag()
 
 
     if len(request.form) > 0:
@@ -4125,6 +4013,32 @@ def normalise():
     return jsonify({"message": "Normalization started"})
 
 
+@app.route("/get_stream_processing/<ename>")
+@login_required
+def get_stream_processing(ename):
+    """
+    Load the stream_processing structure for a given election name.
+    If none exists, return a default structure.
+    """
+    from elections import CurrentElection  # adjust import as needed
+
+    CElection = CurrentElection.load(ename)  # loads the election dict
+
+    if CElection and "stream_processing" in CElection:
+        stream_processing = CElection["stream_processing"]
+    else:
+        # Default structure if nothing exists yet
+        stream_processing = {
+            "files": [],
+            "last_run": None,
+            "status": "idle"
+        }
+
+    # Ensure files is always a list (prevents frontend errors)
+    if "files" not in stream_processing or not isinstance(stream_processing["files"], list):
+        stream_processing["files"] = []
+
+    return jsonify(stream_processing)
 
 @app.route('/stream_input')
 @login_required
@@ -4146,7 +4060,6 @@ def stream_input():
         else:
             row["stream_path"] = ""
 
-    streamrag = getstreamrag()  # Assuming this function fetches some stream-related data
     ELECTIONS = get_available_elections()  # Assuming this fetches available elections for front end
     streams = list(ELECTIONS)
 
@@ -4154,8 +4067,7 @@ def stream_input():
         'stream_processing_input.html',
         ELECTIONS=ELECTIONS,   # Pass elections list to the template
         stream_table=elections,  # You can pass this as stream_table, since it's now the same data
-        streamrag=streamrag,
-        DQstats=DQstats,
+        DQstats=DQstats
     )
 
 

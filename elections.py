@@ -237,12 +237,29 @@ class CurrentElection(dict):
 
     def add_newarea(self, item):
         max_size = 7
-        if not isinstance(self['mapfiles'], list):
-            return
+
+        if not isinstance(self.get('mapfiles'), list):
+            self['mapfiles'] = []
+
         self['mapfiles'].append(item)
+
         if len(self['mapfiles']) > max_size:
-            self['mapfiles'].pop(0)  # Remove oldest
+            self['mapfiles'].pop(0)
+
         return self['mapfiles']
+
+    @classmethod
+    def get_all(cls):
+        # Return a list of all current elections, for example, loaded from a directory or database
+        elections_dir = cls.BASE_FILE.parent
+        election_files = list(elections_dir.glob("Elections-*.json"))
+        elections = []
+        for file in election_files:
+            election = cls.load(file.stem.replace("Elections-", "").upper())  # assuming the filename contains election IDs
+            elections.append(election)
+        return elections
+
+
 
     def get_last_node(self, *, create=True):
         """

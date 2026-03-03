@@ -35,7 +35,6 @@
   <button id="save-stream-btn">Save Changes</button> <!-- Add this -->
 </div>
 
-
 <!-- Process & Progress -->
 <div>
   <button id="process-election-btn">Process Election</button>
@@ -61,9 +60,62 @@
 
 </div>
 
+<!-- Stream RAG Status Table -->
+<h3 style="text-align:center;">Stream Processing Status</h3>
+<div style="overflow-x:auto; border:1px solid #ccc; padding:5px;">
+  <table id="stream-table" border="1" style="border-collapse: collapse; width:100%;">
+    <thead>
+      <tr>
+        <th>Stream</th>
+        <th>Alive</th>
+        <th>Loaded</th>
+        <th>Elect</th>
+        <th>RAG</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="stream-table-body">
+      <!-- Dynamic content will be inserted here -->
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+  function updateStreamStatus() {
+      fetch('/get_streamrag')  // Adjust the endpoint if needed
+          .then(response => response.json())
+          .then(data => {
+              const tableBody = document.querySelector('#stream-table-body');  // Get table body for insertion
+              tableBody.innerHTML = '';  // Clear the existing table rows
+
+              // Loop through the stream data and create table rows dynamically
+              for (const [key, value] of Object.entries(data)) {
+                  const row = document.createElement('tr');  // Create a new row
+
+                  // Set row color based on the RAG status
+                  row.style.backgroundColor = value['RAG'];
+
+                  // Add table cells to the row
+                  row.innerHTML = `
+                      <td>${key}</td>
+                      <td>${value['Alive']}</td>
+                      <td>${value['Files']}</td>
+                      <td>${value['Elect']}</td>
+                      <td>${value['RAG']}</td>
+                      <td>
+                          <button class="deactivate-btn" data-stream-key="${key}">Deactivate</button>
+                      </td>
+                  `;
+
+                  tableBody.appendChild(row);  // Append row to the table body
+              }
+          })
+          .catch(error => console.error('Error fetching stream data:', error));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
 
   // ------------------------
   // DOM helpers
@@ -76,6 +128,62 @@ document.addEventListener("DOMContentLoaded", () => {
   // ------------------------
   let stream_processing = { files: [], last_run: null, status: "idle" };
   let selectedElection = "";
+
+  // ------------------------
+  // Load election list
+  // ------------------------
+  async function loadElectionOptions() {
+    try {
+      const elections = await fetch('/get_elections').then(r => r.json());
+      const select = qs('#election-select');
+      select.innerHTML = '';
+
+      if (!elections.length) {
+        const opt = document.createElement('option');
+        opt.value = "";
+        opt.textContent = "No elections found";
+        select.appendChild(opt);
+        return;
+      }
+
+      elections.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.cid;
+        opt.textContent = e.name;
+        select.appendChild(opt);
+      });
+    } catch(err) {
+      alert("Error loading elections: " + err.message);
+    }
+  }
+
+  // ------------------------
+  // Load a specific election's stream_processing
+  // ------------------------
+  async function loadElection() {
+      selectedElection = qs('#election-select').value;
+      if (!selectedElection) {
+          alert('Please select an election.');
+          return;
+      }
+
+      try {
+          const data = await fetch(`/get_stream_processing/${selectedElection}`).then(r => r.json());
+
+          if (!data.files) data.files = [];
+
+          // Keep any new local rows (added but not uploaded yet)
+          const localNewFiles = stream_processing.files.filter(f => !f.file_path);
+          stream_processing = { ...data, files: [...data.files, ...localNewFiles] };
+
+          renderFileTable();  // Re-render file table
+          updateStreamStatus();  // Refresh the RAG table after loading election data
+      } catch(err) {
+          alert("Error loading election: " + err.message);
+      }
+  }
+
+
 
   // ------------------------
   // Render the file table
@@ -162,58 +270,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-
-
-  // ------------------------
-  // Load election list
-  // ------------------------
-  async function loadElectionOptions() {
-    try {
-      const elections = await fetch('/get_elections').then(r => r.json());
-      const select = qs('#election-select');
-      select.innerHTML = '';
-
-      if (!elections.length) {
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.textContent = "No elections found";
-        select.appendChild(opt);
-        return;
-      }
-
-      elections.forEach(e => {
-        const opt = document.createElement('option');
-        opt.value = e.cid;
-        opt.textContent = e.name;
-        select.appendChild(opt);
-      });
-    } catch(err) {
-      alert("Error loading elections: " + err.message);
-    }
-  }
-
-  // ------------------------
-  // Load a specific election's stream_processing
-  // ------------------------
-  async function loadElection() {
-    selectedElection = qs('#election-select').value;
-    if (!selectedElection) return;
-
-    try {
-      const data = await fetch(`/get_stream_processing/${selectedElection}`).then(r => r.json());
-
-      if (!data.files) data.files = [];
-
-      // Keep any new local rows (added but not uploaded yet)
-      const localNewFiles = stream_processing.files.filter(f => !f.file_path);
-      stream_processing = { ...data, files: [...data.files, ...localNewFiles] };
-
-      renderFileTable();
-    } catch(err) {
-      alert("Error loading election: " + err.message);
-    }
-  }
-
   // ------------------------
   // Save stream_processing
   // ------------------------
@@ -246,123 +302,172 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 
-
+    // ------------------------
+  // Process Election button
   // ------------------------
-// Process Election button
-// ------------------------
-const processBtn = qs('#process-election-btn');
-if (processBtn) {
-  processBtn.addEventListener('click', async () => {
-    if (!selectedElection || !stream_processing.files.length) {
-      alert("Select an election and add files first.");
-      return;
-    }
+  const processBtn = qs('#process-election-btn');
+  if (processBtn) {
+    processBtn.addEventListener('click', async () => {
+      if (!selectedElection || !stream_processing.files.length) {
+        alert("Select an election and add files first.");
+        return;
+      }
 
-    // Show progress UI
-    qs('#progress-container').style.display = "block";
-    qs('#progress-bar').value = 0;
-    qs('#progress-text').innerText = "0%";
+      // Show progress UI
+      qs('#progress-container').style.display = "block";
+      qs('#progress-bar').value = 0;
+      qs('#progress-text').innerText = "0%";
 
-    // Prepare payload
-    const filesWithPaths = stream_processing.files.filter(f => f.file_path);
-    if (!filesWithPaths.length) {
-      alert("You must upload at least one file before processing.");
-      return;
-    }
+      // Prepare payload
+      const filesWithPaths = stream_processing.files.filter(f => f.file_path);
+      if (!filesWithPaths.length) {
+        alert("You must upload at least one file before processing.");
+        return;
+      }
 
-    const payload = {
-      ename: selectedElection,
-      files: filesWithPaths.map(f => ({
-        stored_path: f.file_path,
-        order: f.order,
-        type: f.type,
-        purpose: f.purpose,
-        fixlevel: f.fixlevel
-      }))
-    };
+      const payload = {
+        ename: selectedElection,
+        files: filesWithPaths.map(f => ({
+          stored_path: f.file_path,
+          order: f.order,
+          type: f.type,
+          purpose: f.purpose,
+          fixlevel: f.fixlevel
+        }))
+      };
 
-    // Function to poll progress
-    async function pollProgress() {
+      // Function to poll progress
+      async function pollProgress() {
+        try {
+          const data = await fetch('/progress').then(r => r.json());
+
+          const overallPercent = data.percent || 0;
+          const stagePercent = data.stage_progress || 0;
+          const stageName = data.current_stage || data.status || "";
+          const message = data.message || "";
+
+          // Show container if hidden
+          qs('#progress-container').style.display = "block";
+
+          // ---------------------------
+          // Overall progress bar
+          qs('#progress-bar').value = overallPercent;
+          qs('#progress-text').innerText =
+            overallPercent + "% — " + stageName + " — " + message;
+
+          // ---------------------------
+          // Stage progress bar (if exists)
+          const stageBar = qs('#stage-bar');
+          if (stageBar) {
+            stageBar.value = stagePercent;
+          }
+
+          // ---------------------------
+          // Continue polling if running
+          if (data.status !== "complete" && data.status !== "error") {
+            setTimeout(pollProgress, 500);
+          } else if (data.status === "complete") {
+            qs('#progress-text').innerText = "✅ Complete";
+            if (stageBar) stageBar.value = 100;
+            qs('#progress-bar').value = 100;
+          } else if (data.status === "error") {
+            qs('#progress-text').innerText = "❌ Error — " + message;
+          }
+
+        } catch (err) {
+          // Retry on failure
+          setTimeout(pollProgress, 1000);
+        }
+      }
+
+
+      // Start normalization
       try {
-        const data = await fetch('/progress').then(r => r.json());
+        const res = await fetch('/normalise', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
 
-        const overallPercent = data.percent || 0;
-        const stagePercent = data.stage_progress || 0;
-        const stageName = data.current_stage || data.status || "";
-        const message = data.message || "";
-
-        // Show container if hidden
-        qs('#progress-container').style.display = "block";
-
-        // ---------------------------
-        // Overall progress bar
-        qs('#progress-bar').value = overallPercent;
-        qs('#progress-text').innerText =
-          overallPercent + "% — " + stageName + " — " + message;
-
-        // ---------------------------
-        // Stage progress bar (if exists)
-        const stageBar = qs('#stage-bar');
-        if (stageBar) {
-          stageBar.value = stagePercent;
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}`);
         }
 
-        // ---------------------------
-        // Continue polling if running
-        if (data.status !== "complete" && data.status !== "error") {
-          setTimeout(pollProgress, 500);
-        } else if (data.status === "complete") {
-          qs('#progress-text').innerText = "✅ Complete";
-          if (stageBar) stageBar.value = 100;
-          qs('#progress-bar').value = 100;
-        } else if (data.status === "error") {
-          qs('#progress-text').innerText = "❌ Error — " + message;
-        }
+        // Only start polling after successful POST
+        pollProgress();
 
-      } catch (err) {
-        // Retry on failure
-        setTimeout(pollProgress, 1000);
+      } catch(err) {
+        alert("Processing failed: " + err.message);
+        qs('#progress-container').style.display = "none";
       }
-    }
+    });
+  }
 
 
-    // Start normalization
-    try {
-      const res = await fetch('/normalise', {
+
+  function deactivateElection(streamKey) {
+    fetch(`/deactivate_election/${streamKey}`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Election ${streamKey} deactivated successfully.`);
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
-      }
+            // Optionally remove the row from the table
+            const rowToRemove = document.querySelector(`[data-stream-key="${streamKey}"]`);
+            if (rowToRemove) {
+                rowToRemove.remove();  // Remove the row from the table
+            }
 
-      // Only start polling after successful POST
-      pollProgress();
-
-    } catch(err) {
-      alert("Processing failed: " + err.message);
-      qs('#progress-container').style.display = "none";
-    }
-  });
+            // Refresh the stream status table
+            updateStreamStatus();  // This will fetch the new data and update the table
+        } else {
+            alert(`Failed to deactivate election ${streamKey}.`);
+        }
+    })
+    .catch(error => {
+        console.error('Error deactivating election:', error);
+        alert('Error deactivating election.');
+    });
 }
 
 
-  // ------------------------
-  // Wire load button
-  // ------------------------
-  const loadBtn = qs('#load-election-btn');
-  if (loadBtn) loadBtn.addEventListener('click', loadElection);
+  function deactivateElection(streamKey) {
+    fetch(`/deactivate_election/${streamKey}`, {
+        method: 'POST',
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Election ${streamKey} deactivated successfully.`);
+            // Optionally update the UI (remove the row, refresh data, etc.)
+            updateStreamStatus();  // Refresh the status table after deactivating
+        } else {
+            alert(`Failed to deactivate election ${streamKey}.`);
+        }
+    })
+    .catch(error => {
+        console.error('Error deactivating election:', error);
+        alert('Error deactivating election.');
+    });
+  }
+
+
 
   // ------------------------
-  // Initialize dropdown on page load
+  // Add event listener to Load Election button
   // ------------------------
+  const loadElectionBtn = qs('#load-election-btn');
+  if (loadElectionBtn) {
+    loadElectionBtn.addEventListener('click', loadElection);
+  }
+
+
+  // Initialize dropdown on page load
   loadElectionOptions();
 
 });
+
 </script>
-
-
-{% endblock map %}
