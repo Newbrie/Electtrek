@@ -121,6 +121,7 @@ class ElectionContext:
             "chair": self.ce.resources, # the designated chair resource
             "campaignMgr": self.ce.resources, # the designated campaign manager
             "mapfiles": self.ce.mapfiles #a recent history of nodes navigated
+
 }
 
 
@@ -233,6 +234,53 @@ class CurrentElection(dict):
         super().__init__(data)
         self.election_id = election_id
         self.name = election_id  # stable election identity
+
+
+    @classmethod
+    def getstreamrag(cls, elections_dict, election_manager):
+        """
+        Build RAG status for all elections.
+
+        Args:
+            elections_dict: dict of {election_name: CurrentElection_instance}
+            election_manager: instance of ElectionManager, to get loaded elector data
+
+        Returns:
+            dict: { election_name: {Alive, Loaded, Elect, RAG} }
+        """
+
+        rag = {}
+
+        for name, election in elections_dict.items():
+
+            # Alive: stream_processing exists and has files
+            alive = bool(
+                election.stream_processing
+                and election.stream_processing.get("files")
+            )
+
+            # Loaded: check ElectionManager
+            data = election_manager.get(name)
+            loaded = not data.empty
+            elect_count = len(data) if loaded else 0
+
+            # Determine RAG color
+            if alive and loaded:
+                colour = "limegreen"
+            elif alive and not loaded:
+                colour = "amber"
+            else:  # not alive
+                colour = "red"
+
+            rag[name] = {
+                "Alive": alive,
+                "Loaded": loaded,
+                "Elect": elect_count,
+                "RAG": colour
+            }
+
+        return rag
+
 
 
     def add_newarea(self, item):
@@ -463,8 +511,6 @@ class CurrentElection(dict):
         return cls.RESOURCE_FILE.with_name(
             cls.RESOURCE_FILE.name.replace(".csv", ".json")
         )
-
-
 
     @classmethod
     def get_lastused(cls) -> str:

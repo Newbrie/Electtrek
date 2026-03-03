@@ -472,42 +472,48 @@ def assign_walks_and_zones(
 
     return electors_df
 
-def check_columns_consistency(mainframe, *frames):
-    """
-    Check if all frames have the same columns as mainframe.
-    Adds missing columns with None (or another default value) before checking.
-    If any columns are missing, recheck the frames after adding them.
-    """
-    mainframe_columns = set(mainframe.columns)
 
-    # Define the missing columns explicitly
-    expected_missing_columns = {'WalkName_hier', 'Area', 'Zone', 'WalkName'}
+def check_columns_consistency(mainframe, *frames, verbose=True):
+    """
+    Ensure all frames have the same columns as mainframe.
+
+    - Adds missing columns (set to None)
+    - Reports missing and extra columns
+    - Returns True if schemas match after alignment
+    - Returns False if mismatch remains
+    """
+
+    main_cols = set(mainframe.columns)
+    all_passed = True
 
     for i, frame in enumerate(frames):
-        # Add the missing columns with None (or any other placeholder) if they don't exist in the current frame
-        missing_cols = expected_missing_columns - set(frame.columns)
+        frame_cols = set(frame.columns)
 
-        # Add missing columns if any
-        for col in missing_cols:
-            frame[col] = None  # Set to None, you can replace this with any default value if required
+        missing = main_cols - frame_cols
+        extra = frame_cols - main_cols
 
-        # Print missing columns for debugging
-        if missing_cols:
-            print(f"Frame {i+1}: Missing columns added: {missing_cols}")
+        # Add missing columns
+        for col in missing:
+            frame[col] = None
 
-        # Now that missing columns are added, perform the consistency check
-        if set(frame.columns) != mainframe_columns:
-            raise ValueError(f"Column mismatch in frame {i + 1}. Expected columns: {mainframe_columns}, Found columns: {set(frame.columns)}")
+        if verbose:
+            if missing:
+                print(f"Frame {i+1}: Added missing columns -> {missing}")
+            if extra:
+                print(f"Frame {i+1}: Extra columns present -> {extra}")
 
-        # Recheck after adding columns
-        recheck_missing_cols = expected_missing_columns - set(frame.columns)
-        if recheck_missing_cols:
-            print(f"Recheck (Frame {i+1}) - Missing columns still present: {recheck_missing_cols}")
-            # You can add another raise here or take any action if the columns are still missing.
-            raise ValueError(f"Recheck failed for frame {i + 1}. Missing columns after addition: {recheck_missing_cols}")
+        # Recalculate after alignment
+        final_cols = set(frame.columns)
 
-        print(f"Frame {i+1} passed consistency check after adding missing columns.")
+        if final_cols != main_cols:
+            if verbose:
+                print(f"Frame {i+1}: ❌ Column mismatch remains after alignment.")
+            all_passed = False
+        else:
+            if verbose:
+                print(f"Frame {i+1}: ✅ Column check passed.")
 
+    return all_passed
 
 
 
@@ -2184,12 +2190,17 @@ def update_territory():
     return jsonify(success=True, constants=CElection)
 
 @app.route("/get_streamrag")
+@login_required
 def get_streamrag():
     """
     Endpoint to return the current stream processing RAG data.
     """
-    # Assuming you have a method in ElectorManager or elsewhere to get the RAG data.
-    rag_data = electors.getstreamrag()  # Use the refactored method here
+    # elections_dict should map election name -> CurrentElection instance
+    elections_dict = {name: e for name, e in CurrentElection._loaded_elections.items()}  # adjust to your storage
+
+    # Call the class method, passing the elections dictionary and the ElectorManager instance
+    rag_data = CurrentElection.getstreamrag(elections_dict, electors)
+
     return jsonify(rag_data)
 
 
