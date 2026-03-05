@@ -209,17 +209,14 @@ def get_L4area(nodelist, here):
     print("____No Level 4 boundary matched for this point")
     return None
 
-def assign_areas(electors_df, territory_path, rlevels, progress=None):
+def assign_areas(electors_df, rlevels, progress=None):
     """
-    Assigns Area to each elector using spatial joins with GeoPandas.
-    Logs internal state at multiple stages.
+    Assigns Area (Division/Ward) to each elector using spatial join with GeoPandas.
     """
     import geopandas as gpd
-    from shapely.geometry import Point, Polygon
+    from shapely.geometry import Point, Polygon, MultiPolygon
     from state import Treepolys, update_progress
-    from elections import stepify
-
-    print("🔍 Running assign_areas with GeoPandas spatial join...")
+    from elections import normalname
 
     if 'Area' not in electors_df.columns:
         electors_df['Area'] = None
@@ -228,25 +225,20 @@ def assign_areas(electors_df, territory_path, rlevels, progress=None):
         update_progress(progress, "assign_areas", 0.0, "Preparing area assignment...")
 
     # -------------------------------
-    # Prepare polygons
-    territory_steps = stepify(territory_path)
-    territory_node_level = len(territory_steps) - 1
-    child_level = territory_node_level + 2
-    parent_level = child_level - 1
-
-    child_type = rlevels.get(child_level)
-    parent_type = rlevels.get(parent_level)
-
-    pfile = Treepolys.get(child_type)
-    parent_pfile = Treepolys.get(parent_type)
-
-    if pfile is None or len(pfile) == 0:
-        print(f"❌ No child polygons for type {child_type}")
+    # Get child polygons (Divisions/Wards)
+    child_type = rlevels[4]  # or the numeric level corresponding to division
+    child_polys = Treepolys.get(child_type)
+    if child_polys is None or len(child_polys) == 0:
+        print(f"❌ No child polygons found for type {child_type}")
         return electors_df
 
-    if parent_pfile is None or len(parent_pfile) == 0:
-        print(f"❌ No parent polygons for type {parent_type}")
-        return electors_df
+    # Normalize child names
+    child_polys = child_polys.copy()
+    child_polys['NAME'] = child_polys['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
+
+    # Convert to GeoDataFrame
+    gdf_polys = gpd.GeoDataFrame(child_polys, geometry='geometry')
+    gdf_polys.set_crs(child_polys.crs, inplace=True)
 
     # -------------------------------
     # Convert electors to GeoDataFrame
@@ -255,116 +247,25 @@ def assign_areas(electors_df, territory_path, rlevels, progress=None):
         geometry=gpd.points_from_xy(electors_df['Long'], electors_df['Lat']),
         crs="EPSG:4326"
     )
-    print(f"ℹ️ Electors converted to GeoDataFrame: {len(gdf_electors)} rows, CRS={gdf_electors.crs}")
+
+    # Reproject to match polygon CRS if needed
+    if gdf_electors.crs != gdf_polys.crs:
+        gdf_electors = gdf_electors.to_crs(gdf_polys.crs)
 
     # -------------------------------
-    # Determine dominant parent polygon
-    territory_name = normalname(territory_steps[-1])
-
-    territory_poly = parent_pfile[
-        parent_pfile["NAME"].apply(lambda x: normalname(x)) == territory_name
-    ]
-
-    if territory_poly.empty:
-        print(f"❌ Territory polygon not found: {territory_name}")
-        return electors_df
-
-    territory_geom = territory_poly.iloc[0]["geometry"]
-
-    from shapely.geometry import Polygon, MultiPolygon
-
-    intersecting_parents = parent_pfile[
-        parent_pfile["geometry"].apply(
-            lambda g: isinstance(g, (Polygon, MultiPolygon)) and g.intersects(territory_geom)
-        )
-    ]
-
-    print("Parent polygons intersecting territory:", len(intersecting_parents))
-
-    parent_names = intersecting_parents["NAME"].tolist()
-
-    reduced_pfile = pfile[pfile["PARENT_NAME"].isin(parent_names)]
-
-
-    print(f"ℹ️ Reduced child polygons: {len(reduced_pfile)} polygons intersect dominant parent, CRS={reduced_pfile.crs}")
-    if len(reduced_pfile) == 0:
-        print("❌ No intersecting child polygons found.")
-        return electors_df
-
-    # -------------------------------
-    # Convert child polygons to GeoDataFrame
-    gdf_polygons = gpd.GeoDataFrame(reduced_pfile.copy(), geometry='geometry')
-    gdf_polygons.set_crs(reduced_pfile.crs, inplace=True)
-    gdf_polygons['NAME'] = gdf_polygons['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
-    print(f"ℹ️ Polygons ready: {len(gdf_polygons)} with CRS={gdf_polygons.crs}")
-    print("All polygons:\n", gdf_polygons[['FID', 'NAME']])
-
-
-    gdf_polygons = gpd.GeoDataFrame(reduced_pfile.copy(), geometry='geometry')
-    gdf_polygons.set_crs(reduced_pfile.crs, inplace=True)
-
-    # Compute mean centre per PD
-    # ----------------------------------
-    # Compute mean centre per polling district using Lat/Long directly
-    from shapely.geometry import Point
-
-    # Compute mean centres using Lat/Long
-    district_centroids = (
-        electors_df.groupby('PD', as_index=False)
-        .agg(
-            mean_long=('Long', 'mean'),
-            mean_lat=('Lat', 'mean')
-        )
-    )
-    district_centroids['geometry'] = district_centroids.apply(
-        lambda row: Point(row['mean_long'], row['mean_lat']), axis=1
-    )
-
-    # Create GeoDataFrame in EPSG:4326
-
-    gdf_districts = gpd.GeoDataFrame(
-        district_centroids[['PD', 'geometry']],  # only keep PD + geometry
-        geometry='geometry',
-        crs="EPSG:4326"
-    )
-
-    # Reproject to match polygon CRS
-    gdf_districts = gdf_districts.to_crs(gdf_polygons.crs)
-
-    print(f"ℹ️ District centroids computed: {len(gdf_districts)} districts, CRS={gdf_districts.crs}")
-    print("All centroids:\n", gdf_districts)
-
-    if progress:
-        update_progress(progress, "assign_areas", 0.6, "Computed district mean centres...")
-
-    # -------------------------------
-    # Spatial join
-    gdf_districts_joined = gpd.sjoin(
-        gdf_districts,
-        gdf_polygons[['NAME', 'geometry']],
+    # Spatial join: points -> polygons
+    gdf_joined = gpd.sjoin(
+        gdf_electors,
+        gdf_polys[['NAME', 'geometry']],
         how='left',
-        predicate='intersects'
-
+        predicate='within'  # each elector point within a Division polygon
     )
-    print(f"ℹ️ Spatial join done: matched {gdf_districts_joined['NAME'].notna().sum()} / {len(gdf_districts)} districts")
-    print("Sample join results:\n", gdf_districts_joined.head())
-
-    if progress:
-        update_progress(progress, "assign_areas", 0.9, "Assigned districts to areas...")
 
     # -------------------------------
-    # Build mapping: PD → Area
-    district_area_map = (
-        gdf_districts_joined.drop_duplicates(subset='PD')
-        .set_index('PD')['NAME']
-        .fillna('OUTSIDE')
-        .to_dict()
-    )
-    print(f"ℹ️ Built district → Area mapping for {len(district_area_map)} PDs.")
+    # Assign Area column
+    gdf_joined['Area'] = gdf_joined['NAME'].fillna('OUTSIDE')
+    electors_df['Area'] = gdf_joined['Area'].values
 
-    # -------------------------------
-    # Assign back to electors
-    electors_df['Area'] = electors_df['PD'].map(district_area_map).fillna('OUTSIDE')
     outside_count = (electors_df['Area'] == 'OUTSIDE').sum()
     print(f"🔍 Area assignment complete. {outside_count} electors outside all areas.")
 

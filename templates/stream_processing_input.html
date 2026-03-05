@@ -377,62 +377,59 @@ document.addEventListener('click', function (e) {
 
       // Function to poll progress
       async function pollProgress() {
-        try {
-          const data = await fetch('/progress').then(r => r.json());
+      try {
+        const data = await fetch('/progress').then(r => r.json());
 
-          const overallPercent = data.percent || 0;
-          const stagePercent = data.stage_progress || 0;
-          const stageName = data.current_stage || data.status || "";
-          const message = data.message || "";
+        const overallPercent = data.percent || 0;
+        const stagePercent = data.stage_progress || 0;
+        const stageName = data.current_stage || data.status || "";
+        const message = data.message || "";
 
-          // Show container if hidden
-          qs('#progress-container').style.display = "block";
+        // Show container if hidden
+        qs('#progress-container').style.display = "block";
+
+        // ---------------------------
+        // Overall progress bar
+        qs('#progress-bar').value = overallPercent;
+        qs('#progress-text').innerText = `${overallPercent}% — ${stageName} — ${message}`;
+
+        // ---------------------------
+        // Stage progress bar (if exists)
+        const stageBar = qs('#stage-bar');
+        if (stageBar) {
+          stageBar.value = stagePercent;
+        }
+
+        // ---------------------------
+        // Continue polling if running
+        if (data.status !== "complete" && data.status !== "error") {
+          setTimeout(pollProgress, 500);
+        } else if (data.status === "complete") {
+          qs('#progress-text').innerText = "✅ Complete";
+          if (stageBar) stageBar.value = 100;
+          qs('#progress-bar').value = 100;
 
           // ---------------------------
-          // Overall progress bar
-          qs('#progress-bar').value = overallPercent;
-          qs('#progress-text').innerText =
-            overallPercent + "% — " + stageName + " — " + message;
-
-          // ---------------------------
-          // Stage progress bar (if exists)
-          const stageBar = qs('#stage-bar');
-          if (stageBar) {
-            stageBar.value = stagePercent;
+          // Fetch the updated RAG stream after completion
+          try {
+            const ragRes = await fetch('/get_streamrag');
+            const ragData = await ragRes.json();
+            updateRagUI(ragData);  // <-- your function to update the RAG UI
+          } catch (err) {
+            console.error("Failed to fetch RAG data:", err);
           }
 
-          // ---------------------------
-          // Continue polling if running
-          if (data.status !== "complete" && data.status !== "error") {
-            setTimeout(pollProgress, 500);
-          } else if (data.status === "complete") {
-            qs('#progress-text').innerText = "✅ Complete";
-            if (stageBar) stageBar.value = 100;
-            qs('#progress-bar').value = 100;
-            else if (data.status === "complete") {
-              qs('#progress-text').innerText = "✅ Complete";
-              if (stageBar) stageBar.value = 100;
-              qs('#progress-bar').value = 100;
-
-              // ---------------------------
-              // Fetch the updated RAG stream
-              try {
-                const ragRes = await fetch('/get_streamrag');
-                const ragData = await ragRes.json();
-                updateRagUI(ragData);  // <-- your function to update the RAG UI
-              } catch (err) {
-                console.error("Failed to fetch RAG data:", err);
-              }
-
-            } else if (data.status === "error") {
-              qs('#progress-text').innerText = "❌ Error — " + message;
-            }
-
-        } catch (err) {
-          // Retry on failure
-          setTimeout(pollProgress, 1000);
+        } else if (data.status === "error") {
+          qs('#progress-text').innerText = "❌ Error — " + message;
         }
+
+      } catch (err) {
+        console.error("Error polling progress:", err);
+        // Retry on failure
+        setTimeout(pollProgress, 1000);
       }
+    }
+
 
 
       // Start normalization
