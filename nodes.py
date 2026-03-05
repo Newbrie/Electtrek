@@ -896,9 +896,11 @@ class TreeNode:
         return f"<TNode {self.value} L{self.level} {self.origin}>"
 
 
-    def get_areas(self):
+    def get_areas(self, nodelist=None):
         """
         Returns a nested dictionary of areas grouped by their immediate children (regions).
+
+        If nodelist is provided, it merges areas from all nodes in the list.
 
         Example output:
         {
@@ -908,15 +910,27 @@ class TreeNode:
         """
         area_groups = {}
 
-        if not self.children:
-            return {}
+        # Determine which nodes to process
+        if nodelist is None:
+            nodes_to_process = [self]
+        else:
+            nodes_to_process = nodelist
 
-        for child in self.children:  # top-level regions
-            # Map grandchildren (areas) as fid -> name
-            areas = {grand.nid: grand.value for grand in child.children} if child.children else {}
-            area_groups[child.value] = areas
+        for node in nodes_to_process:
+            if not node.children:
+                continue
+
+            for child in node.children:  # top-level regions
+                areas = {grand.nid: grand.value for grand in child.children} if child.children else {}
+
+                if child.value in area_groups:
+                    # Merge areas if the region already exists (accumulated nodes)
+                    area_groups[child.value].update(areas)
+                else:
+                    area_groups[child.value] = areas
 
         return area_groups
+
 
 
     def process_lozenges(self,lozenges, CE):
@@ -1243,10 +1257,27 @@ class TreeNode:
             if accumulate:
                 # Get accumulated node IDs from the session
                 node_ids = session.get("accumulated_nodes", [])
+                valid_nodes = []
+                stale_ids = []
+
+                for nid in node_ids:
+                    node = TREK_NODES_BY_ID.get(nid)
+                    if node and node.parent:   # ensure parent exists
+                        valid_nodes.append(node)
+                    else:
+                        stale_ids.append(nid)
+
+                if stale_ids:
+                    print("⚠️ Removing stale node IDs from session:", stale_ids)
+                    session["accumulated_nodes"] = [
+                        nid for nid in node_ids if nid not in stale_ids
+                    ]
+
+                nodelist = valid_nodes
+
                 print("Accumulate SESSION IDS:", node_ids)
 
-                # Fetch nodes from TREK_NODES_BY_ID based on node_ids
-                nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
+                # Fetch nodes from TREK_NODES_BY_ID based on node_ids                nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
                 if not nodelist:
                     print(f"Warning: No nodes found in TREK_NODES_BY_ID for IDs {node_ids}")
                 else:
@@ -2445,8 +2476,8 @@ class TreeNode:
             print(type(v), getattr(v, "name", None))
 
         # Ensure there's only one LayerControl
-        if not any(isinstance(child, folium.map.LayerControl) for child in FolMap._children.values()):
-            FolMap.add_child(folium.LayerControl())
+        FolMap.add_child(folium.LayerControl(collapsed=False))
+
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))

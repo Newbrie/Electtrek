@@ -268,7 +268,7 @@ class CurrentElection(dict):
             if alive and loaded:
                 colour = "limegreen"
             elif alive and not loaded:
-                colour = "amber"
+                colour = "yellow"
             else:  # not alive
                 colour = "red"
 
@@ -284,16 +284,28 @@ class CurrentElection(dict):
 
 
     def add_newarea(self, item):
+        def is_valid_mapfile_path(path):
+            if not isinstance(path, str):
+                return False
+            if len(path) < 10:  # too short to be real
+                return False
+            if "/" not in path:
+                return False
+            if not path.endswith(".html"):
+                return False
+            return True
+
         max_size = 7
 
         if not isinstance(self.get('mapfiles'), list):
             self['mapfiles'] = []
 
-        self['mapfiles'].append(item)
-
-        if len(self['mapfiles']) > max_size:
-            self['mapfiles'].pop(0)
-
+        if is_valid_mapfile_path(item):
+            self['mapfiles'].append(item)
+            if len(self['mapfiles']) > max_size:
+                self['mapfiles'].pop(0)
+        else:
+            raise Exception (f"in {self.name} Trying to post Invalid Path : {item}" )
         return self['mapfiles']
 
     @classmethod
@@ -367,36 +379,38 @@ class CurrentElection(dict):
     def visit_node(self, node):
         from state import Treepolys, Fullpolys
         rlevels = self.resolved_levels
+
         # first check that the node is within the election territory
-        territory = self.territory
-        steps = stepify(territory)
-        level = len(steps) - 1
-        parent_row = Treepolys[rlevels[level]]
+        try:
+            territory = self.territory
+            steps = stepify(territory)
+            level = len(steps) - 1
+            parent_row = Treepolys[rlevels[level]]
 
-        # ----- LOOKUP BY LAT/LON ---------------------------------------
-        latitude = node.latlongroid[0]
-        longitude = node.latlongroid[1]
-        point = Point(longitude, latitude)  # (lon, lat)
-        matched = parent_row[parent_row.contains(point)]
-
-        # ----- SAVE IF MATCHED ---------------------------------------------
-#        if not matched.empty:
-        if True:
-            self['cid'] = node.nid
-            self['cidLat'] = node.latlongroid[0]
-            self['cidLong'] = node.latlongroid[1]
-            newlist = self.add_newarea(node.mapfile(rlevels))
-            self.save()
-            print(f"=== VISIT NODE === {node.nid}")
-            print(f"current children:{[c.value for c in node.children]}")
+            # ----- LOOKUP BY LAT/LON ---------------------------------------
+            latitude = node.latlongroid[0]
+            longitude = node.latlongroid[1]
+            point = Point(longitude, latitude)  # (lon, lat)
+            matched = parent_row[parent_row.contains(point)]
+        except:
             print(
-                f"___under {self.name} leaving breadcrumb: "
+                f"___under {self.name} territory check exception: "
                 f"{self['mapfiles'][-1]}"
             )
-        else:
-            return None
 
-        return node.children
+        self['cid'] = node.nid
+        self['cidLat'] = node.latlongroid[0]
+        self['cidLong'] = node.latlongroid[1]
+        newlist = self.add_newarea(node.mapfile(rlevels))
+        self.save()
+        print(f"=== VISIT NODE === {node.nid}")
+        print(f"current children:{[c.value for c in node.children]}")
+        print(
+            f"___under {self.name} leaving breadcrumb: "
+            f"{self['mapfiles'][-1]}"
+        )
+
+        return True
 
     def resolve_ui_options(program, election_ctx, node):
         options = {}
@@ -418,6 +432,10 @@ class CurrentElection(dict):
     @property
     def adminmode(self) -> bool:
         return bool(self.get("adminmode", False))
+
+    @property
+    def stream_processing(self):
+        return self.get("stream_processing", {})
 
     @property
     def pd_or_walk(self) -> str:

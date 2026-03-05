@@ -209,12 +209,10 @@ def get_L4area(nodelist, here):
     print("____No Level 4 boundary matched for this point")
     return None
 
-
-
 def assign_areas(electors_df, territory_path, rlevels, progress=None):
     """
     Assigns Area to each elector using spatial joins with GeoPandas.
-    Much faster than row-wise intersection checks.
+    Logs internal state at multiple stages.
     """
     import geopandas as gpd
     from shapely.geometry import Point, Polygon
@@ -257,85 +255,121 @@ def assign_areas(electors_df, territory_path, rlevels, progress=None):
         geometry=gpd.points_from_xy(electors_df['Long'], electors_df['Lat']),
         crs="EPSG:4326"
     )
+    print(f"ℹ️ Electors converted to GeoDataFrame: {len(gdf_electors)} rows, CRS={gdf_electors.crs}")
 
     # -------------------------------
-    # Determine dominant parent polygon (same logic as before)
-    parent_elector_counts = {}
-    for _, parent_row in parent_pfile.iterrows():
-        parent_boundary = parent_row['geometry']
-        if isinstance(parent_boundary, Polygon):
-            mask = gdf_electors.geometry.within(parent_boundary)
-            parent_elector_counts[parent_row['NAME']] = {
-                "count": mask.sum(),
-                "geometry": parent_boundary
-            }
+    # Determine dominant parent polygon
+    territory_name = normalname(territory_steps[-1])
 
-    if not parent_elector_counts:
-        print("❌ No parent polygons processed.")
+    territory_poly = parent_pfile[
+        parent_pfile["NAME"].apply(lambda x: normalname(x)) == territory_name
+    ]
+
+    if territory_poly.empty:
+        print(f"❌ Territory polygon not found: {territory_name}")
         return electors_df
 
-    max_parent = max(parent_elector_counts.values(), key=lambda x: x["count"])
-    parent_polygon = max_parent["geometry"]
+    territory_geom = territory_poly.iloc[0]["geometry"]
 
-    # -------------------------------
-    # Reduce child polygons to those intersecting dominant parent
-    reduced_pfile = pfile[
-        pfile['geometry'].apply(lambda poly: isinstance(poly, Polygon) and parent_polygon.intersects(poly))
+    from shapely.geometry import Polygon, MultiPolygon
+
+    intersecting_parents = parent_pfile[
+        parent_pfile["geometry"].apply(
+            lambda g: isinstance(g, (Polygon, MultiPolygon)) and g.intersects(territory_geom)
+        )
     ]
-    print("XXXXXXXXCRS of reduced_pfile:", reduced_pfile.crs)
 
-    total_polygons = len(reduced_pfile)
-    if total_polygons == 0:
+    print("Parent polygons intersecting territory:", len(intersecting_parents))
+
+    parent_names = intersecting_parents["NAME"].tolist()
+
+    reduced_pfile = pfile[pfile["PARENT_NAME"].isin(parent_names)]
+
+
+    print(f"ℹ️ Reduced child polygons: {len(reduced_pfile)} polygons intersect dominant parent, CRS={reduced_pfile.crs}")
+    if len(reduced_pfile) == 0:
         print("❌ No intersecting child polygons found.")
         return electors_df
 
     # -------------------------------
     # Convert child polygons to GeoDataFrame
-    gdf_polygons = gpd.GeoDataFrame(
-        reduced_pfile.copy(),
+    gdf_polygons = gpd.GeoDataFrame(reduced_pfile.copy(), geometry='geometry')
+    gdf_polygons.set_crs(reduced_pfile.crs, inplace=True)
+    gdf_polygons['NAME'] = gdf_polygons['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
+    print(f"ℹ️ Polygons ready: {len(gdf_polygons)} with CRS={gdf_polygons.crs}")
+    print("All polygons:\n", gdf_polygons[['FID', 'NAME']])
+
+
+    gdf_polygons = gpd.GeoDataFrame(reduced_pfile.copy(), geometry='geometry')
+    gdf_polygons.set_crs(reduced_pfile.crs, inplace=True)
+
+    # Compute mean centre per PD
+    # ----------------------------------
+    # Compute mean centre per polling district using Lat/Long directly
+    from shapely.geometry import Point
+
+    # Compute mean centres using Lat/Long
+    district_centroids = (
+        electors_df.groupby('PD', as_index=False)
+        .agg(
+            mean_long=('Long', 'mean'),
+            mean_lat=('Lat', 'mean')
+        )
+    )
+    district_centroids['geometry'] = district_centroids.apply(
+        lambda row: Point(row['mean_long'], row['mean_lat']), axis=1
+    )
+
+    # Create GeoDataFrame in EPSG:4326
+
+    gdf_districts = gpd.GeoDataFrame(
+        district_centroids[['PD', 'geometry']],  # only keep PD + geometry
         geometry='geometry',
         crs="EPSG:4326"
     )
 
-    # Print NAME and FID for all polygons
-    print("BEFORE GDF POLYGONS",gdf_polygons[['FID', 'NAME']])
+    # Reproject to match polygon CRS
+    gdf_districts = gdf_districts.to_crs(gdf_polygons.crs)
 
-    gdf_polygons['NAME'] = gdf_polygons['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
+    print(f"ℹ️ District centroids computed: {len(gdf_districts)} districts, CRS={gdf_districts.crs}")
+    print("All centroids:\n", gdf_districts)
 
-    print("AFTER GDF POLYGONS",gdf_polygons[['FID', 'NAME']])
+    if progress:
+        update_progress(progress, "assign_areas", 0.6, "Computed district mean centres...")
 
     # -------------------------------
-    # Spatial join: assign Area
-    gdf_joined = gpd.sjoin(
-        gdf_electors,
+    # Spatial join
+    gdf_districts_joined = gpd.sjoin(
+        gdf_districts,
         gdf_polygons[['NAME', 'geometry']],
         how='left',
         predicate='intersects'
+
     )
+    print(f"ℹ️ Spatial join done: matched {gdf_districts_joined['NAME'].notna().sum()} / {len(gdf_districts)} districts")
+    print("Sample join results:\n", gdf_districts_joined.head())
 
+    if progress:
+        update_progress(progress, "assign_areas", 0.9, "Assigned districts to areas...")
 
-    # Ensure joined frame preserves original elector index
-    gdf_joined = gdf_joined.sort_index()
-
-    # Build a clean Series aligned to electors_df index
-    area_series = (
-        gdf_joined['NAME']
+    # -------------------------------
+    # Build mapping: PD → Area
+    district_area_map = (
+        gdf_districts_joined.drop_duplicates(subset='PD')
+        .set_index('PD')['NAME']
         .fillna('OUTSIDE')
-        .astype(str)
+        .to_dict()
     )
+    print(f"ℹ️ Built district → Area mapping for {len(district_area_map)} PDs.")
 
-    # Explicit reindex to guarantee alignment
-    area_series = area_series.reindex(electors_df.index)
-
-    # Assign in one operation
-    electors_df['Area'] = area_series
-
+    # -------------------------------
+    # Assign back to electors
+    electors_df['Area'] = electors_df['PD'].map(district_area_map).fillna('OUTSIDE')
+    outside_count = (electors_df['Area'] == 'OUTSIDE').sum()
+    print(f"🔍 Area assignment complete. {outside_count} electors outside all areas.")
 
     if progress:
         update_progress(progress, "assign_areas", 1.0, "Area assignment complete.")
-
-    outside_count = (electors_df['Area'] == 'OUTSIDE').sum()
-    print(f"🔍 Area assignment complete. {outside_count} electors outside all areas.")
 
     return electors_df
 
@@ -478,34 +512,41 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
     Ensure all frames have the same columns as mainframe.
 
     - Adds missing columns (set to None)
-    - Reports missing and extra columns
+    - Removes extra columns
+    - Reorders columns to match mainframe
     - Returns True if schemas match after alignment
-    - Returns False if mismatch remains
     """
 
-    main_cols = set(mainframe.columns)
+    main_cols = list(mainframe.columns)
+    main_cols_set = set(main_cols)
+
     all_passed = True
 
     for i, frame in enumerate(frames):
-        frame_cols = set(frame.columns)
+        frame_cols_set = set(frame.columns)
 
-        missing = main_cols - frame_cols
-        extra = frame_cols - main_cols
+        missing = main_cols_set - frame_cols_set
+        extra = frame_cols_set - main_cols_set
 
         # Add missing columns
         for col in missing:
             frame[col] = None
 
+        # Remove extra columns
+        if extra:
+            frame.drop(columns=list(extra), inplace=True)
+
+        # Reorder columns to match mainframe
+        frame = frame.reindex(columns=main_cols)
+
         if verbose:
             if missing:
                 print(f"Frame {i+1}: Added missing columns -> {missing}")
             if extra:
-                print(f"Frame {i+1}: Extra columns present -> {extra}")
+                print(f"Frame {i+1}: Removed extra columns -> {extra}")
 
-        # Recalculate after alignment
-        final_cols = set(frame.columns)
-
-        if final_cols != main_cols:
+        # Final verification
+        if list(frame.columns) != main_cols:
             if verbose:
                 print(f"Frame {i+1}: ❌ Column mismatch remains after alignment.")
             all_passed = False
@@ -517,6 +558,7 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 
 
 
+
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
     Full background normalisation routine with staged progress reporting.
@@ -524,7 +566,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     import logging, os, traceback, pandas as pd
     from shapely.geometry import Point, Polygon
     from elector import electors
-    from state import Treepolys, Fullpolys, progress, DQstats, update_progress
+    from state import Treepolys, Fullpolys, progress, DQstats, update_progress, check_level4_gap
     from elections import CurrentElection, stepify
     from nodes import MapRoot
 
@@ -549,7 +591,21 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         CElection = CurrentElection.load(session_data.get('current_election', 'UNKNOWN'))
         resolved_levels = CElection.resolved_levels
+        parent_levels = CElection.parent_levels
         Territory_path = CElection['territory']
+        lastfilepath = CElection['mapfiles'][-1]
+        here = (CElection.get('cidLat',None),CElection.get('cidLong',None))
+
+        missing_layer = check_level4_gap(resolved_levels)
+
+        if missing_layer:
+            lastfilepath = ensure_treepolys(
+                territory=Territory_path,
+                sourcepath=lastfilepath,
+                resolved_levels=resolved_levels,
+                parent_levels= parent_levels,
+                here=here
+            )
 
         # Sort metadata items by order
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
@@ -593,6 +649,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         # Check all frames may different column sets
         check_columns_consistency(mainframe, *mainframes, *deltaframes, *aviframes)
+
 
         if not all_frames:
             progress.update({"percent": 100, "status": "error", "message": "No valid files to process"})
@@ -1824,6 +1881,9 @@ def set_election():
 
     try:
         print("____Route/set-election/top ")
+        session.pop("accumulated_nodes", None)
+        session["accumulate"] = False
+
 
 #        clear_treepolys()  # 🔥 FULL RESET
         restore_from_persist(Treepolys, Fullpolys)
@@ -1860,8 +1920,10 @@ def set_election():
         # At the start of a fresh election:
         print(f"____Route/set-election- Missing: {missing_layer} path: {lastfilepath},Loaded election: {current_election} CE data: {CElection}")
 
-        newlist = CElection.add_newarea(lastfilepath)
-        current_node = CElection.get_last_node( create=True)
+        current_node = MapRoot.ping_node(rlevels,current_election,lastfilepath, create=True) # go to the first node
+
+        newlist = CElection.add_newarea(current_node.mapfile(rlevels))
+
         print(f"____Route/set-election- last node: {current_node.value},Loaded election: {current_election}")
         CElection['previousParty'] = current_node.party
 
@@ -2195,13 +2257,17 @@ def get_streamrag():
     """
     Endpoint to return the current stream processing RAG data.
     """
-    # elections_dict should map election name -> CurrentElection instance
-    elections_dict = {name: e for name, e in CurrentElection._loaded_elections.items()}  # adjust to your storage
+    # Get all current election instances
+    elections_list = CurrentElection.get_all()  # returns a list of CurrentElection instances
+
+    # Build a dict of {election_name: CurrentElection_instance} for getstreamrag
+    elections_dict = {e.name: e for e in elections_list}
 
     # Call the class method, passing the elections dictionary and the ElectorManager instance
     rag_data = CurrentElection.getstreamrag(elections_dict, electors)
 
     return jsonify(rag_data)
+
 
 
 @app.route("/save_stream_processing/<ename>", methods=["POST"])
@@ -3074,8 +3140,35 @@ def fetch_areas():
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = CElection.get_last_node( create=False)
-    accordian = current_node.get_areas()
+
+    if accumulate:
+        node_ids = session.get("accumulated_nodes", [])
+        valid_nodes = []
+        stale_ids = []
+
+        for nid in node_ids:
+            node = TREK_NODES_BY_ID.get(nid)
+            if node and node.parent:   # ensure parent exists
+                valid_nodes.append(node)
+            else:
+                stale_ids.append(nid)
+
+        if stale_ids:
+            print("⚠️ Removing stale node IDs from session:", stale_ids)
+            session["accumulated_nodes"] = [
+                nid for nid in node_ids if nid not in stale_ids
+            ]
+
+        nodelist = valid_nodes
+
+    else:
+        current_node = CElection.get_last_node(create=False)
+        # Move up to constituency level
+        current_node = current_node.findnodeat_Level(3)
+        nodelist = [current_node]
+
+    accordian = current_node.get_areas(nodelist=nodelist)
+
     print(f"_______ Fetch under {current_election} for {current_node.value} Areas {accordian}")
 
     return jsonify({ "areas": accordian })
@@ -3562,9 +3655,9 @@ def get_progress():
         'current_stage': 'complete',
         'status': 'complete',
         'message': 'Normalization Complete',
-        'dqstats_html': progress['dqstats_html'],
-        'html': html
+        'dqstats_html': progress['dqstats_html']
     })
+
 
     for key, value in response.items():
         print(f"Progress2-{key} => {value}")
@@ -3658,6 +3751,7 @@ def firstpage():
 
     from elector import electors
     from state import Treepolys, Fullpolys, ensure_treepolys
+    from nodes import MapRoot
 
     global workdirectories
     global environment
@@ -3813,9 +3907,9 @@ def firstpage():
     # add the root nodes.TreeNode to the node tree, and start at the lat long of stored cid node.
     nodes.reset_nodes()
 
-    newlist = CElection.add_newarea(filepath)
+    current_node = MapRoot.ping_node(rlevels,current_election,filepath, create=True) # go to the first node
 
-    current_node = CElection.get_last_node( create=True) # go to the first node
+    newlist = CElection.add_newarea(current_node.mapfile(rlevels))
 
     program = ProgramContext()            # app-wide possible options
     election_ctx = ElectionContext(CElection)  # election-scoped possible options

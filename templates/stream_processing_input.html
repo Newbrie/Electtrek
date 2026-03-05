@@ -409,9 +409,24 @@ document.addEventListener('click', function (e) {
             qs('#progress-text').innerText = "✅ Complete";
             if (stageBar) stageBar.value = 100;
             qs('#progress-bar').value = 100;
-          } else if (data.status === "error") {
-            qs('#progress-text').innerText = "❌ Error — " + message;
-          }
+            else if (data.status === "complete") {
+              qs('#progress-text').innerText = "✅ Complete";
+              if (stageBar) stageBar.value = 100;
+              qs('#progress-bar').value = 100;
+
+              // ---------------------------
+              // Fetch the updated RAG stream
+              try {
+                const ragRes = await fetch('/get_streamrag');
+                const ragData = await ragRes.json();
+                updateRagUI(ragData);  // <-- your function to update the RAG UI
+              } catch (err) {
+                console.error("Failed to fetch RAG data:", err);
+              }
+
+            } else if (data.status === "error") {
+              qs('#progress-text').innerText = "❌ Error — " + message;
+            }
 
         } catch (err) {
           // Retry on failure
