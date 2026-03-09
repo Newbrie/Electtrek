@@ -30,7 +30,7 @@ class ElectorManager:
                 logger.debug(f"Loaded file with {len(df)} rows and columns {list(df.columns)}")
 
                 if 'Election' in df.columns:
-                    df['Election'] = df['Election'].astype(str).str.strip()  # strip whitespace
+                    df['Election'] = df['Election'].astype(str).str.strip()
                 else:
                     logger.warning("'Election' column not found in file!")
 
@@ -51,6 +51,47 @@ class ElectorManager:
             if result is None:
                 return pd.DataFrame()  # Return empty DataFrame if election is not found
             return result.copy()
+
+    @property
+    def elections(self):
+        """Read-only property for combined elections dictionary."""
+        return self._elections
+
+    # -------------------------------
+    # Updated method ignoring election
+    # -------------------------------
+    def electors_for_node(self, node):
+        """
+        Return electors for a given node, ignoring election.
+        Combines all loaded elections and filters by node type/value.
+        """
+        shapecolumn = {
+            "polling_district": "PD",
+            "walk": "WalkName",
+            "ward": "Area",
+            "division": "Area",
+            "constituency": "Area"
+        }
+
+        if node.type not in shapecolumn:
+            print(f"⚠️ Unknown node type: {node.type}")
+            return pd.DataFrame()  # empty
+
+        col = shapecolumn[node.type]
+
+        # Combine all elections into one DataFrame
+        if not self._elections:
+            print("⚠️ No elections loaded")
+            return pd.DataFrame()
+
+        combined = pd.concat(self._elections.values(), ignore_index=True)
+        node_df = combined[combined[col] == node.value]
+
+        if node_df.empty:
+            print(f"⚠️ No electors found for node {node.value} across all elections")
+
+        return node_df
+
 
     def add_or_update(self, election, df: pd.DataFrame):
         # Your existing method for adding or updating election data

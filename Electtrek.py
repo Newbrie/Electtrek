@@ -215,8 +215,7 @@ def assign_areas(electors_df, rlevels, progress=None):
     """
     import geopandas as gpd
     from shapely.geometry import Point, Polygon, MultiPolygon
-    from state import Treepolys, update_progress
-    from elections import normalname
+    from state import Treepolys, update_progress, normalname
 
     if 'Area' not in electors_df.columns:
         electors_df['Area'] = None
@@ -562,7 +561,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 mainframe = mainframe.merge(af, on='ENOP', how='left', indicator=True)
 
         # --- Stage 3: Assign Areas ---
-        mainframe = assign_areas(mainframe, Territory_path, resolved_levels, progress=progress)
+        mainframe = assign_areas(mainframe, resolved_levels, progress=progress)
 
         # --- Stage 4: Assign Walks & Zones ---
         teamsize = int(CElection.get('teamsize', 5)) if CElection else 5
@@ -1076,9 +1075,8 @@ def kanban():
     current_node = CElection.get_last_node(create=False)
     rlevels = CElection.resolved_levels
     session['current_node_id'] = current_node.nid
-    mask = (allelectors['Election'] == current_election)
 
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
     print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, allelectors.shape, areaelectors.shape, CElection['mapfiles'][-1] )
     print("Sample of areaelectors:", areaelectors.head())
     print("Sample raw Tags values:")
@@ -1206,12 +1204,9 @@ def update_walk_kanban():
     current_node = CElection.get_last_node(create=False)
 
     rlevels = CElection.resolved_levels
-    Territory_node = current_node.ping_node(rlevels,current_election,CElection['territory'], create=True)
-    mask = (
-            (allelectors['Election'] == current_election) &
-            (allelectors['WalkName'] == walk_name)
-        )
-    areaelectors = electors.get(current_election)
+    Territory_node = current_node.ping_node(rlevels,current_election,CElection['territory'], create=True, accumulate=False)
+
+    areaelectors = electors.electors_for_node(Territory_node)
 
 
     if not mask.any():
@@ -1234,8 +1229,7 @@ def telling():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
-    mask = (allelectors['Election'] == current_election)
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
     valid_tags = CElection['tags']
     leaflet_tags = {}
     marked_tags = {}
@@ -1258,8 +1252,12 @@ def telling():
 @app.route('/leafletting')
 @login_required
 def leafletting():
-    mask = (allelectors['Election'] == current_election)
-    areaelectors = electors.get(current_election)
+    restore_from_persist(Treepolys, Fullpolys)
+    current_election = CurrentElection.get_lastused()
+    CElection = CurrentElection.load(current_election)
+    current_node = CElection.get_last_node(create=False)
+
+    areaelectors = electors.electors_for_node(current_node)
     valid_tags = CElection['tags']
     leaflet_tags = {}
     marked_tags = {}
@@ -1351,8 +1349,7 @@ def update_location_tags():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
-    mask = (allelectors['Election'] == current_election)
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
 
     data = request.get_json()
 
@@ -1407,8 +1404,8 @@ def location_search():
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
-    mask = (allelectors['Election'] == current_election)
-    areaelectors = electors.get(current_election)
+
+    areaelectors = electors.electors_for_node(current_node)
     query = request.args.get("query", "").strip()
     search_type = request.args.get("type", "street")
 
@@ -1671,7 +1668,7 @@ def reset_Elections():
 @app.route("/election-report")
 @login_required
 def election_report():
-
+    from flask import session
     global report_data
     program = ProgramContext()
     election = ElectionContext(CElection)
@@ -1729,8 +1726,9 @@ def election_report():
                         if territory_filename.endswith(suffix):
                             territory_filename = territory_filename[:-len(suffix)]
 
+
                 # In your route handler
-                election_node = current_node.ping_node(rlevels,"DEMO",territory_path, create=True)
+                election_node = current_node.ping_node(rlevels,"DEMO",territory_path, create=True,accumulate=session.get("accumulate", False))
                 print(f"____election territory path:{territory_path} elect:{election_node.value}")
                 # Get full party name from the abbreviation
                 selected_party_key = election_node.party
@@ -1779,6 +1777,7 @@ def set_election():
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from state import Treepolys, Fullpolys
     from elections import CurrentElection
+    from flask import session
 
     try:
         print("____Route/set-election/top ")
@@ -1821,7 +1820,7 @@ def set_election():
         # At the start of a fresh election:
         print(f"____Route/set-election- Missing: {missing_layer} path: {lastfilepath},Loaded election: {current_election} CE data: {CElection}")
 
-        current_node = MapRoot.ping_node(rlevels,current_election,lastfilepath, create=True) # go to the first node
+        current_node = MapRoot.ping_node(rlevels,current_election,lastfilepath, create=True, accumulate=session.get("accumulate", False)) # go to the first node
 
         newlist = CElection.add_newarea(current_node.mapfile(rlevels))
 
@@ -1893,9 +1892,8 @@ def get_current_election_data():
 @app.route('/current-election', methods=['POST'])
 @login_required
 def update_current_election():
-    current_election = last_election(session=session)
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-
 
     try:
         data = request.get_json()
@@ -1974,13 +1972,14 @@ def set_constant():
     if name == "resources":
         if not isinstance(value, list):
             value = [value] if value else []
-
-    if name == "adminmode":
+    elif name == "mapfiles":
+        CElection.add_newarea(value)
+    elif name == "adminmode":
         value = bool(value)
-
-    # Store in backing dict only
-    CElection[name] = value
-
+        CElection[name] = value
+    else:
+        # Store in backing dict only
+        CElection[name] = value
     CElection.save()
 
     print(f"____Current Election choices saved: "
@@ -2463,6 +2462,7 @@ def dashboard():
 @login_required
 def downbut(path):
     from state import Treepolys, Fullpolys
+    from flask import session
     from elector import electors
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from elections import CurrentElection
@@ -2484,10 +2484,10 @@ def downbut(path):
     session['current_election'] = current_election
     session['current_node_id'] = current_node.nid
     previous_node = current_node
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
 
     if current_node.level > 4 and len(areaelectors)  == 0:
@@ -2517,6 +2517,7 @@ def downbut(path):
 @login_required
 def transfer(path):
     from state import Treepolys, Fullpolys
+    from flask import session
     from elector import electors
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from elections import CurrentElection
@@ -2532,7 +2533,7 @@ def transfer(path):
 
 # transfering to another any other node with siblings listed below
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = get_root().ping_node(rlevels,current_election,path, create=True)
+    current_node = get_root().ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
     current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels),static=False)
 
@@ -2550,6 +2551,7 @@ def transfer(path):
 @login_required
 def downMWbut(path):
     from state import Treepolys, Fullpolys
+    from flask import session
     from elector import electors
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from elections import CurrentElection
@@ -2567,10 +2569,10 @@ def downMWbut(path):
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
 
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,current_election,path, create=True)
+    current_node = previous_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
 
 
@@ -2607,6 +2609,7 @@ def downMWbut(path):
 @login_required
 def STupdate(path):
     from state import Treepolys, Fullpolys
+    from flask import session
     from elector import electors
     global environment
     global filename
@@ -2629,7 +2632,7 @@ def STupdate(path):
 
     session['next'] = 'STupdate/'+path
 # use ping to precisely locate the node for which data is to be collected on screen
-    current_node = current_node.ping_node(rlevels,current_election,path, create=True)
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
     session['current_node_id'] = current_node.nid
     print(f"____Route/STUpdate - passed target path to: {path}")
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
@@ -2759,6 +2762,7 @@ def STupdate(path):
 @login_required
 def PDdownST(path):
     from state import Treepolys, Fullpolys
+    from flask import session
     from elector import electors
     from nodes import MapRoot
     global environment
@@ -2774,19 +2778,18 @@ def PDdownST(path):
     rlevels = CElection.resolved_levels
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-    areaelectors = electors.get(current_election)
-    current_node = MapRoot.ping_node(rlevels,current_election,path, create=True)
+    areaelectors = electors.electors_for_node(current_node)
+    current_node = MapRoot.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
     PD_node = current_node
 
 # now pointing at the STREETS.html node containing a map of street markers
 
-    mask2 = areaelectors['PD'] == PD_node.value
-    PDelectors = areaelectors[mask2]
-    print(f"__PDdownST- len area {len(areaelectors)} lenPD {len(PDelectors)}")
+    areaelectors = electors.electors_for_node(current_node)
+    print(f"__PDdownST- lenPD {len(areaelectors)}")
     streetnodelist = PD_node.childrenoftype('street')
 
-    if len(PDelectors) == 0 :
+    if len(areaelectors) == 0 :
         flash("Can't find any elector data for this Polling District.")
         print("Can't find any elector data for this Polling District.",len(streetnodelist))
         if os.path.exists(current_node.mapfile(rlevels)):
@@ -2796,17 +2799,16 @@ def PDdownST(path):
         print(f"________in {PD_node.value} there are {len(streetnodelist)} streetnode and markers added")
 
     for street_node in streetnodelist:
-        mask3 = PDelectors['StreetName'] == street_node.value
-        streetelectors = PDelectors[mask3]
+        mask3 = areaelectors['StreetName'] == street_node.value
+        streetelectors = areaelectors[mask3]
         print("____Street node value",street_node.value)
-        print(f"Streetelectors PDelectors {len(PDelectors)} streetnodes{len(streetnodelist)} and data {len(streetelectors)} ")
+        print(f"Streetelectors PDelectors {len(areaelectors)} streetnodes{len(streetnodelist)} and data {len(streetelectors)} ")
         street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
 #           only create a map if the branch does not already exist
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
 
-    areaelectors = electors.get(current_election)
 
     print(f"__PDdownST- {current_node.mapfile(rlevels)}-l4area {current_node.value}, len area {len(areaelectors)}")
 
@@ -2838,7 +2840,7 @@ def PDdownST(path):
 @login_required
 def LGdownST(path):
     from state import Treepolys, Fullpolys
-
+    from flask import session
     from elector import electors
     global environment
     global filename
@@ -2857,12 +2859,12 @@ def LGdownST(path):
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(rlevels,current_election,path, create=True)
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
 
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
     mask2 = areaelectors['PD'] == PD_node.value
     PDelectors = areaelectors[mask2]
     if request.method == 'GET':
@@ -2897,7 +2899,7 @@ def LGdownST(path):
 @login_required
 def WKdownST(path):
     from state import Treepolys, Fullpolys
-
+    from flask import session
     from elector import electors
     global environment
     global filename
@@ -2916,32 +2918,29 @@ def WKdownST(path):
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
 
-    current_node = current_node.ping_node(rlevels,current_election,path, create=True) # takes to the clicked node in the territory
+    current_node = current_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False)) # takes to the clicked node in the territory
     session['current_node_id'] = current_node.nid
 
 
     walk_node = current_node
 
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
 
-    mask2 = areaelectors['WalkName'] == walk_node.value
-    walkelectors = areaelectors[mask2]
+    walkelectors = areaelectors
 
-    walks = areaelectors.WalkName.unique()
-    if request.method == 'GET':
 # if there is a selected file , then areaelectors will be full of records
-        print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
+    print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
 
-        flash("No data for the selected election available!")
-        walklegnodelist = walk_node.childrenoftype('walkleg')
-        print ("________Walklegs",walk_node.value,len(walklegnodelist))
+    flash("No data for the selected election available!")
+    walklegnodelist = walk_node.childrenoftype('walkleg')
+    print ("________Walklegs",walk_node.value,len(walklegnodelist))
 # for each walkleg node(partial street), add a walkleg node marker to the walk_node parent layer (ie PD_node.level+1)
-        for walkleg_node in walklegnodelist:
-            mask = walkelectors['StreetName'] == walkleg_node.value
-            streetelectors = walkelectors[mask]
-            walkleg_node.create_streetsheet(current_election,rlevels,streetelectors)
+    for walkleg_node in walklegnodelist:
+        mask = walkelectors['StreetName'] == walkleg_node.value
+        streetelectors = walkelectors[mask]
+        walkleg_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-            walk_node.create_area_map(current_election, CElection)
+        walk_node.create_area_map(current_election, CElection)
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
@@ -3015,6 +3014,7 @@ def wardreport(path):
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
+    from elections import CurrentElection
     from state import Treepolys, Fullpolys, DQstats
     # Load current election if not provided
     restore_from_persist(Treepolys, Fullpolys)
@@ -3038,9 +3038,11 @@ def get_table(table_name):
 @app.route('/fetch_areas', methods=['POST', 'GET'])
 @login_required
 def fetch_areas():
-
+    from elections import CurrentElection
+    from flask import session
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
+    accumulate = session.get("accumulate", False)
 
     if accumulate:
         node_ids = session.get("accumulated_nodes", [])
@@ -3460,6 +3462,7 @@ from flask import Flask, request, session, jsonify
 @app.route("/set_accumulate", methods=["POST"])
 @login_required
 def set_accumulate():
+    from elections import CurrentElection
     data = request.get_json()
     new_state = bool(data.get("accumulate", False))
 
@@ -3808,7 +3811,7 @@ def firstpage():
     # add the root nodes.TreeNode to the node tree, and start at the lat long of stored cid node.
     nodes.reset_nodes()
 
-    current_node = MapRoot.ping_node(rlevels,current_election,filepath, create=True) # go to the first node
+    current_node = MapRoot.ping_node(rlevels,current_election,filepath, create=True, accumulate=False) # go to the first node
 
     newlist = CElection.add_newarea(current_node.mapfile(rlevels))
 
@@ -3818,7 +3821,7 @@ def firstpage():
 
     resources = OPTIONS['resources']
     print('_______Node: ', current_node.value)
-    areaelectors = electors.get(current_election)
+    areaelectors = electors.electors_for_node(current_node)
     print('_______areaelectors size: ', len(areaelectors))
     print('_______resources: ', resources)
 

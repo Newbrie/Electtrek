@@ -357,7 +357,8 @@ class CurrentElection(dict):
                     self.resolved_levels,
                     self.name,
                     sourcepath,
-                    create=create
+                    create=create,
+                    accumulate = False
                 )
 
         # --- 4. Fallback to root ---

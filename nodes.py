@@ -1055,7 +1055,7 @@ class TreeNode:
 
 
 
-    def ping_node(self, rlevels, c_election, dest_path, create=True):
+    def ping_node(self, rlevels, c_election, dest_path, create=True, accumulate=False):
         from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
         from nodes import TREK_NODES_BY_ID
         from flask import session
@@ -1217,8 +1217,6 @@ class TreeNode:
             except Exception as e:
                 print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
 
-        accumulate = session.get("accumulate", False)
-
         if accumulate:
             # Get the list of accumulated nodes from the session, or initialize it as an empty list if not available
             lst = session.get("accumulated_nodes", [])
@@ -1229,10 +1227,9 @@ class TreeNode:
 
             # Update the session with the new list of accumulated nodes
             session["accumulated_nodes"] = lst
+            session.modified = True
 
-        else:
-            # Reset the list of accumulated nodes to only include the current node
-            session["accumulated_nodes"] = [node.nid]
+
 
         return node
 
@@ -1274,6 +1271,7 @@ class TreeNode:
                     ]
 
                 nodelist = valid_nodes
+                session.modified = True
 
                 print("Accumulate SESSION IDS:", node_ids)
 
@@ -1623,107 +1621,73 @@ class TreeNode:
 
 
         nodelist = []
+        CE = CurrentElection.load(c_election)
         electtype = resolved_levels[self.level + 1]
         print(f"✅ Creating {electtype} Data branch for election {c_election}")
 
         # ----------------------------------------
         # Load electors from ElectorManager
         # ----------------------------------------
-        allelectors = electors.get(c_election)
+        areaelectors = electors.electors_for_node(self)
 
-        if allelectors.empty:
-            print(f"❌ No electors loaded for election {c_election}")
-            return []
-
-        if 'Area' not in allelectors.columns:
-            print(f"❌ 'Area' column missing in elector data {allelectors['Area']}")
-            return []
-
-        areaelectors = allelectors[allelectors['Area'] == self.findnodeat_Level(4).value]
-        # filter by the name of the relevant level 4 node
 
         if areaelectors.empty:
-            print(f"⚠️ No data for election {c_election} in area {self.value}")
+            print(f"⚠️ No data from election {c_election} at node {self.value}")
             return []
 
-        CE = CurrentElection.load(c_election)
+
         gotv_pct = CE['GOTV']
 
         try:
 
-            # ----------------------------------------
-            # POLLING DISTRICT
-            # ----------------------------------------
-            if electtype == 'polling_district':
-                df = areaelectors[['PD', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
-                df = df.rename(columns={'PD': 'Name'})
-                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
-                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
+                # Mapping of node type to column name in areaelectors
+            shapecolumn = {
+                "polling_district": "PD",
+                "walk": "WalkName",
+                "street": "StreetName",
+                "walkleg": "StreetName"  # same as street, but filtered by WalkName
+            }
 
+            # Optional mapping for output suffix per type
+            suffix_mapping = {
+                "polling_district": "-PDS.html",
+                "walk": "-WALKS.html",
+                "street": "-PRINT.html",
+                "walkleg": "-PRINT.html"
+            }
+
+            # -------------------------------
+            # Refactored node elector processing
+            # -------------------------------
+            if electtype in shapecolumn:
+                colname = shapecolumn[electtype]
+                df = areaelectors.copy()
+
+                # Special filtering for street and walkleg types
+                if electtype == "street":
+                    df = df[df['PD'] == self.value]
+                elif electtype == "walkleg":
+                    df = df[df['WalkName'] == self.value]
+
+                # Select relevant columns
+                select_cols = [colname, 'ENOP', 'Long', 'Lat', 'Zone']
+                df = df[select_cols].rename(columns={colname: 'Name'})
+
+                # Aggregation dictionary
+                agg_dict = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                nodeelectors = df.groupby(['Name']).agg(agg_dict).reset_index()
+
+                # Call the node creation function
                 nodelist = self.create_name_nodes(
                     resolved_levels,
                     gotv_pct,
                     c_election,
-                    'polling_district',
+                    electtype,
                     nodeelectors,
-                    "-PDS.html"
+                    suffix_mapping.get(electtype, "-PRINT.html")
                 )
-
-            # ----------------------------------------
-            # WALK
-            # ----------------------------------------
-            elif electtype == 'walk':
-                df = areaelectors[['WalkName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
-                df = df.rename(columns={'WalkName': 'Name'})
-                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
-                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
-
-                nodelist = self.create_name_nodes(
-                    resolved_levels,
-                    gotv_pct,
-                    c_election,
-                    'walk',
-                    nodeelectors,
-                    "-WALKS.html"
-                )
-
-            # ----------------------------------------
-            # STREET
-            # ----------------------------------------
-            elif electtype == 'street':
-                PDelectors = areaelectors[areaelectors['PD'] == self.value]
-                df = PDelectors[['StreetName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
-                df = df.rename(columns={'StreetName': 'Name'})
-                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
-                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
-
-                nodelist = self.create_name_nodes(
-                    resolved_levels,
-                    gotv_pct,
-                    c_election,
-                    'street',
-                    nodeelectors,
-                    "-PRINT.html"
-                )
-
-            # ----------------------------------------
-            # WALKLEG
-            # ----------------------------------------
-            elif electtype == 'walkleg':
-                walkelectors = areaelectors[areaelectors['WalkName'] == self.value]
-                df = walkelectors[['StreetName', 'ENOP', 'Long', 'Lat', 'Zone']].copy()
-                df = df.rename(columns={'StreetName': 'Name'})
-                g = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
-                nodeelectors = df.groupby(['Name']).agg(g).reset_index()
-
-                nodelist = self.create_name_nodes(
-                    resolved_levels,
-                    gotv_pct,
-                    c_election,
-                    'walkleg',
-                    nodeelectors,
-                    "-PRINT.html"
-                )
+            else:
+                print(f"⚠️ Unknown elect type: {electtype}")
 
         except Exception as e:
             print("❌ Error during data branch generation:", e)
@@ -1733,7 +1697,8 @@ class TreeNode:
             f"✅ Created Data Branch for Election: {c_election} "
             f"in area: {self.value} "
             f"creating: {len(nodelist)} of type {electtype} "
-            f"from {len(areaelectors)} electors"
+            f"from {len(areaelectors)} electors",
+            f"under resolved {resolved_levels} electors"
         )
 
         save_nodes(TREKNODE_FILE)
@@ -1913,21 +1878,55 @@ class TreeNode:
         )
 
 
-        # --- CSS to adjust popup styling
         move_close_button_css = """
             <style>
+
+            /* Make popup close button large and visible */
             .leaflet-popup-close-button {
                 right: auto !important;
-                left: 10px !important;
-                top: 10px !important;
-                font-size: 16px;
-                color: #444;
-                background: rgba(255, 255, 255, 0.8);
-                border-radius: 4px;
-                padding: 2px 5px;
+                left: 8px !important;
+                top: 8px !important;
+
+                width: 28px !important;
+                height: 28px !important;
+
+                line-height: 26px !important;
+                text-align: center;
+
+                font-size: 20px !important;
+                font-weight: bold;
+
+                color: white !important;
+                background: #d9534f !important;
+
+                border-radius: 50% !important;
+                border: 2px solid white !important;
+
+                box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+
+                cursor: pointer;
+            }
+
+            /* Hover effect */
+            .leaflet-popup-close-button:hover {
+                background: #c9302c !important;
+                transform: scale(1.1);
+            }
+
+            </style>
+            """
+
+
+        limit_popup_height_css = """
+            <style>
+            .leaflet-popup-content {
+                max-height: 300px;
+                overflow-y: auto;
             }
             </style>
             """
+
+
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
@@ -2469,14 +2468,21 @@ class TreeNode:
         </script>
         """
 
-
+        transparency = """
+        <style>
+        .leaflet-div-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+        </style>
+        """
 
 
         for k, v in FolMap._children.items():
             print(type(v), getattr(v, "name", None))
 
         # Ensure there's only one LayerControl
-        FolMap.add_child(folium.LayerControl(collapsed=False))
+        FolMap.add_child(folium.LayerControl(collapsed=True))
 
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
@@ -2485,6 +2491,8 @@ class TreeNode:
         FolMap.get_root().html.add_child(Element(canvas_icon_js))
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
+        FolMap.get_root().html.add_child(folium.Element(transparency))
+        FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
 
         # Add the LatLngPopup plugin
         FolMap.add_child(folium.LatLngPopup())

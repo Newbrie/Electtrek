@@ -336,6 +336,67 @@ def build_street_list_html(streets_df):
 
     return html
 
+# ------------------------
+# Helper for node electors
+# ------------------------
+def get_node_electors(node, election_name):
+    from elector import electors
+    """
+    Return electors for a given node using ElectorManager.
+    """
+    shapecolumn = {
+        "polling_district": "PD",
+        "walk": "WalkName",
+        "ward": "Area",
+        "division": "Area",
+        "constituency": "Area"
+    }
+
+    if node.type not in shapecolumn:
+        print(f"⚠️ Unknown node type: {node.type}")
+        return pd.DataFrame()  # empty
+
+    col = shapecolumn[node.type]
+
+    # Access electors from ElectorManager
+    allelectors = electors.get(election_name)
+
+    # Filter by node value
+    mask = allelectors[col] == node.value
+    node_df = allelectors[mask]
+
+    if node_df.empty:
+        print(f"⚠️ No electors found for node {node.value} in election {election_name}")
+
+    return node_df
+
+
+def count_houses(df):
+    import pandas as pd
+
+    def extract_unit(row):
+        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
+        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
+
+        if prefix and prefix.lower() != 'nan':
+            return prefix
+        if number and number.lower() != 'nan':
+            return number
+        return None
+
+    df = df.copy()
+    df["unit"] = df.apply(extract_unit, axis=1)
+
+    units = set()
+
+    for u in df["unit"].dropna():
+        for part in str(u).split(","):
+            part = part.strip()
+            if part:
+                units.add(part)
+
+    return len(units)
+
 
 def build_nodemap_list_html(herenode):
     """
@@ -423,459 +484,280 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def generate_voronoi_with_geovoronoi(self, c_election, rlevels,target_node, static=False, add_to_map=True, color="#3388ff"):
-        global allelectors
-        global levelcolours
+    def generate_voronoi_with_geovoronoi(self, c_election, rlevels, node, static=False):
+
+        from elections import CurrentElection
+        from flask import url_for
+        from geovoronoi import voronoi_regions_from_coords
         from state import Treepolys, Fullpolys
-        from elector import electors
-        from flask import session, flash
+        import geopandas as gpd
+        import pandas as pd
+        import folium
+        from elector import electors  # your ElectorManager instance
 
-        allelectors = electors.get(c_election)
-    # generate voronoi fields within the target_node Boundary
-        shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
-
-        print("📍 Starting generate_voronoi_with_geovoronoi")
 
         CElection = CurrentElection.load(c_election)
-        print(f"🗳️ Loaded election data for: {c_election}")
+        pfile = Treepolys[rlevels[node.level]]
+        Territory_boundary = pfile[pfile['FID'] == int(node.fid)]
+        node.geometry = Territory_boundary.union_all()
 
-        target_path = target_node.mapfile(rlevels)
-        print(f"📁 Target path: {target_path}")
-
-        print(f"📌 Target node: {target_node.value}")
-
-        ttype = target_node.type
-        print(f"📂 Territory type: {ttype}")
-
-        pfile = Treepolys[ttype]
-        print(f"🗺️ Loaded polygon file for type '{ttype}', records: {len(pfile)}")
-
-        # Select boundary by FID
-        Territory_boundary = pfile[pfile['FID'] == int(target_node.fid)]
-        print(f"🧭 Filtered territory boundary by FID = {target_node.fid}, matches: {len(Territory_boundary)}")
-
-        # Get the shapely polygon for area
-        if hasattr(Territory_boundary, 'geometry'):
-            area_shape = Territory_boundary.union_all()
-            print("✅ Retrieved union of territory boundary geometry")
-        else:
-            area_shape = Territory_boundary
-            print("⚠️ Warning: Territory_boundary has no .geometry — using raw")
-
-        vtype = rlevels[target_node.level+1]
-        children = target_node.childrenoftype(vtype)
-        print(f"👶 Found {len(children)} children of type '{vtype}'")
-    # children nodes are the target child Walks/PDs polygons which should fit into area_shape
-
+        children = node.childrenoftype(rlevels[node.level+1])
         if not children:
-            print("⚠️ No children found so no fields for the node— exiting early")
-            # no children means no fields
-            return []
+            print(f"⚠️ Node has no children of type {rlevels[node.level+1]}")
+            return
 
-        # Build coords array from centroids
-        from shapely.ops import nearest_points
+        # -------------------------------------------------
+        # Build points from children
+        # -------------------------------------------------
 
-        mask = (
-                (allelectors['Election'] == c_election) &
-                (allelectors['Area'] == target_node.value) # ward or division name
-            )
-        nodeelectors = allelectors[mask]
-# these are the electors within the area - the area being the Level 4 area(div/ward)
-        print(f"✅  Election {c_election} at node {target_node.value} has {len(nodeelectors)} of rows in nodeelectors")
-
-        coords = []
-        valid_children = []
+        points = []
+        point_to_child = {}
 
         for child in children:
-# these are the centroids that will form the centre of each voronoi field
-            cent = child.latlongroid
-            print(f"✅  nodelatlog {cent}")
-
-            if isinstance(cent, (tuple, list)) and len(cent) == 2:
-                lon, lat = cent[1], cent[0]  # Note: [lon, lat] = [x, y]
-            elif hasattr(cent, 'x') and hasattr(cent, 'y'):
-                lon, lat = cent.x, cent.y
+            if child.latlongroid and len(child.latlongroid) == 2:
+                child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
             else:
+                child.centre = None
+
+            if not child.centre:
                 continue
 
-            point = Point(lon, lat)
+            pt = (round(float(child.centre.x), 6), round(float(child.centre.y), 6))
+            point_to_child[pt] = child
+            points.append(pt)
 
-# Ensure the child centroid is within the overall boundary else centroid of first street within
-            if not area_shape.contains(point):
-#                childx = target_node.ping_node(c_election,child.dir)
-#                print(f"Point {point} is not in shape so looking at children:",[x.value for x in child.children])
+        if not points:
+            print("⚠️ No valid child centres")
+            return
+
+        coords = np.array(points)  # directly usable for geovoronoi
 
 
-                p1, _ = nearest_points(area_shape, point)
-                point = p1  # now point is on area_shape
-                print(f"Point {point} is not in shape {area_shape} so looking at nearest point")
+        # -------------------------------------------------
+        # Parent boundary
+        # -------------------------------------------------
 
-#                for grandchild in child.children:
-#                    cent = grandchild.latlongroid
-#                    point = Point(cent[1],cent[0])
-#                    if area_shape.contains(point):
-#                        print("___Selecting right child within shape as field centroid", grandchild.dir, point)
-#                       found a child inside the area
-#                        break
-    #                point, _ = nearest_points(area_shape, point)
+        parent_boundary = node.geometry
+        if parent_boundary is None:
+            print("⚠️ Parent boundary missing")
+            return
 
-            coords.append([point.x, point.y])  # Ensure only 2D coords
-            valid_children.append((child, point))
+        # -------------------------------------------------
+        # Generate Voronoi
+        # -------------------------------------------------
 
-        # Clip Voronoi regions to area_shape
-        # ------------------------------
-        # Prepare Voronoi diagnostics
-        # ------------------------------
+        region_polys, region_pts = voronoi_regions_from_coords(coords, parent_boundary)
 
-        print("🧮 Preparing Voronoi generation")
+        print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
 
-        print("---- AREA SHAPE ----")
-        print("Type:", area_shape.geom_type)
-        print("Has Z:", getattr(area_shape, "has_z", False))
-        print("Is valid:", area_shape.is_valid)
-        print("Bounds:", area_shape.bounds)
-        print("Area:", area_shape.area)
+        # -------------------------------------------------
+        # Load electors
+        # -------------------------------------------------
 
-        print("Children processed:", len(valid_children))
-        print("Raw coord count:", len(coords))
+        nodeelectors = electors.electors_for_node(node)
 
-        if len(coords) == 0:
-            print("⚠️ No coordinates collected — aborting Voronoi.")
-            return []
+        if nodeelectors is None or nodeelectors.empty:
+            print("⚠️ No electors for node")
+            return
 
-        # Convert AFTER loop
-        coords = np.array(coords)
+        # -------------------------------------------------
+        # Loop regions
+        # -------------------------------------------------
 
-        print("---- COORDS ----")
-        print("Shape:", coords.shape)
 
-        # Remove duplicates safely
-        unique_coords = np.unique(coords, axis=0)
-        print("Unique coord count:", len(unique_coords))
+        for region_id, poly in region_polys.items():
 
-        if len(unique_coords) < len(coords):
-            print("⚠️ Duplicate coordinates detected.")
+            idx = region_pts[region_id]
 
-        coords = unique_coords
+            if isinstance(idx, (list, np.ndarray)):
+                idx = idx[0]
 
-        if len(coords) < 2:
-            print("⚠️ Not enough unique points for Voronoi (need ≥2).")
-            return []
+            coord = coords[idx]
 
-        # Spread diagnostics (NumPy 2 safe)
-        lon_spread = np.ptp(coords[:, 0])
-        lat_spread = np.ptp(coords[:, 1])
+            coord_key = (round(float(coord[0]), 6), round(float(coord[1]), 6))
+            child = point_to_child.get(coord_key)
 
-        print("Longitude range:", coords[:,0].min(), "→", coords[:,0].max(),
-              " (spread:", lon_spread, ")")
-        print("Latitude range:", coords[:,1].min(), "→", coords[:,1].max(),
-              " (spread:", lat_spread, ")")
-
-        if lon_spread < 1e-12 or lat_spread < 1e-12:
-            print("⚠️ Points are collinear or nearly collinear.")
-
-        print("------------------------------")
-
-        # ------------------------------
-        # Run Voronoi
-        # ------------------------------
-
-        print("🧮 Generating Voronoi regions using geovoronoi...")
-
-        if coords.shape[1] != 2:
-            raise ValueError(f"Expected 2D coordinates, got shape: {coords.shape}")
-
-        try:
-            region_polys, region_pts = voronoi_regions_from_coords(
-                coords,
-                area_shape            )
-            print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
-        except Exception as e:
-            print("❌ Error during Voronoi generation:", e)
-            return []
-
-        matched = set()
-        voronoi_regions = []
-
-        for region_index, region_polygon in region_polys.items():
-            if region_polygon.is_empty or not region_polygon.is_valid:
+            if child is None:
+                print(f"⚠️ No child found for region coordinate {coord_key}")
                 continue
 
-            matched_child = None
-            for child, centroid in valid_children:
-                if centroid.within(region_polygon) and child not in matched:
-                    matched_child = child
-                    matched.add(child)
-                    break
-
-            if matched_child:
-            #  one walk child matched to region_polygon
-                matched_child.voronoi_region = region_polygon
-                print(f"✅ Region {region_index} assigned to child: {matched_child.value}")
-                voronoi_regions.append({'child': matched_child, 'region': region_polygon})
-            else:
-                print(f"⚠️ No matching child found for region index {region_index}")
+            child.voronoi_region = poly
 
 
-            if matched_child and add_to_map:
-                label = str(matched_child.value)
+            # -------------------------
+            # Electors
+            # -------------------------
 
-                # Here, we dynamically assign a color, either from the child or default to color
-                fill_color = getattr(child, "col", color)  # If no color assigned, default to passed color
+            region_electors = electors.electors_for_node(child)
 
-                # You can also dynamically generate colors based on the child or other parameters
-                # For example, using a hash of the child's value to generate a unique color:
-                # fill_color = '#' + hashlib.md5(str(child.value).encode()).hexdigest()[:6]
+            if region_electors.empty:
+                continue
 
-                mask1 = nodeelectors[shapecolumn[vtype]] == child.value
-                region_electors = nodeelectors[mask1]
-#________________________First get the data that the walk layer polygon fields requires
-                if not region_electors.empty and len(region_electors.dropna(how="all")) > 0:
-                    Streetsdf = pd.DataFrame(region_electors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
-#                    Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
-#                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
-#                    g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first','AddressNumber': lambda x: ','.join(x.dropna().astype(str)),
-#                        'AddressPrefix': lambda x: ','.join(x.dropna().astype(str))
-#                        }
-#                    Streetsdf = Streetsdf0.groupby(['StreetName']).agg(g).reset_index()
-#    build the area html for dropdowns and tooltips
-                    streetstag = build_street_list_html(Streetsdf)
-                    streets = Streetsdf["StreetName"].unique().tolist()
-                    self.areashtml[matched_child.value] = {
-                                        "code": matched_child.value,
-                                        "details": streets,
-                                        "tooltip_html": streetstag
-                                        }
-                    print (f"______Voronoi html at : {matched_child.value} details {streets} tooltip html:{streetstag}")
-                    print ("______Voronoi Streetsdf:",len(Streetsdf), streetstag)
-                    print (f" {len(Streetsdf)} streets exist in {target_node.value} under {c_election} election for the {shapecolumn[vtype]} column with this value {child.value}")
+            # -------------------------
+            # Navigation links
+            # -------------------------
 
-                    points = [Point(lon, lat) for lon, lat in zip(Streetsdf['Long'], Streetsdf['Lat'])]
-                    print('_______Walk Shape', matched_child.value, matched_child.level, len(Streetsdf), points)
-
-                    # Create a single MultiPoint geometry that contains all the points
-                    multi_point = MultiPoint(points)
-                    centroid = multi_point.centroid
-
-                    # Access coordinates
-                    centroid_lon = centroid.x
-                    centroid_lat = centroid.y
-    #                target_node.latlongroid = (centroid_lat,centroid_lon)
-
-                    # Create a new DataFrame for a single row GeoDataFrame
-                    gdf = gpd.GeoDataFrame({
-                        'NAME': [matched_child.value],  # You can modify this name to fit your case
-                        'FID': [matched_child.fid],  # FID can be a unique value for the row
-                        'LAT': [multi_point.centroid.y],  # You can modify this name to fit your case
-                        'LONG': [multi_point.centroid.x],  # FID can be a unique value for the row
-                        'geometry': [multi_point]  # The geometry field contains the MultiPoint geometry
-                    }, crs="EPSG:4326")
+            nav_html = ""
 
 
-                    #            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
-                    #        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
-                    # Generate enclosing shape
-                    limbX = create_enclosing_gdf(gdf)
-                    limbX['col'] = matched_child.col
-                    numtag = str(matched_child.tagno)+" "+str(matched_child.value)
-                    num = str(matched_child.tagno)
-                    tag = str(matched_child.value)
-                    typetag = "streets in "+str(matched_child.type)+" "+str(matched_child.value)
+            upmessage = (
+                "moveUp('/upbut/{0}','{1}','{2}')"
+                .format(
+                    child.parent.dir + "/" + child.parent.file(rlevels),
+                    child.parent.value,
+                    child.parent.type
+                )
+            )
 
-                    popup_html = ""
+            up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
-                    if vtype == 'polling_district':
-                        showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels), matched_child.value,'street')
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
-                    #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(target_node.dir+"/"+target_node.file(rlevels), target_node.value,child_type_of('polling_district',estyle))
-                        downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
-                    #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
-                    #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), target_node.dir+"/"+target_node.file(rlevels))
-                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                        limbX['UPDOWN'] = uptag1 +"<br>"+ downST
-                        print("_________new PD convex hull and tagno:  ",matched_child.value, matched_child.tagno, gdf)
+            if not static:
 
-                        streetstag = ""
-                    elif vtype == 'walk':
-                        showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.dir+"/"+matched_child.file(rlevels), matched_child.value,'walkleg')
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(matched_child.parent.dir+"/"+matched_child.parent.file(rlevels), matched_child.parent.value,matched_child.parent.type)
-                        downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
-                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                        streetstag = build_street_list_html(Streetsdf)
-                        limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+downtag+"</div>"
-                        print("_________new Walk convex hull and tagno:  ",matched_child.value, matched_child.tagno)
+                showmessageST = (
+                    "showMore('/PDdownST/{0}','{1}','street')"
+                    .format(child.dir + "/" + child.file(rlevels), child.value)
+                )
 
-    #________________________Now paint items onto the walk layer
-                    if not static:
-                        limbX = limbX.to_crs("EPSG:4326")
-                        limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
+                street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
 
-                        feature = limb['features'][0]
-                        props = feature['properties']
-                        popup_html = f"""
-                        <div style='white-space: normal; text-align: center' >
-                            <strong> {typetag}:<br></strong> {props.get('UPDOWN', 'N/A')}<br> {streetstag}<br>
-                        </div>
-                        """
+                nav_html = f"""
+                <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                {street_link}<br>
+                {up_link}
+                </div>
+                """
 
-                        popup = folium.Popup(popup_html, max_width=600)
-                        #        target_node.tagno = len(self._children)+1
-                        pathref = matched_child.mapfile(rlevels)
-                        mapfile = '/transfer/'+pathref
-                        # Turn into HTML list items
-
-                        # Ensure 'properties' exists in the GeoJSON and add 'col'
-                        print("GeoJSON Convex creation:", limb)
-                        if 'properties' not in limb:
-                            limb['properties'] = {}
-
-                        # Add the color to properties — this is **required**
-                        limb['properties']['col'] = to_hex(matched_child.col)
-
-                        geojson_feature = {
-                            "type": "Feature",
-                            "properties": {"col": fill_color},
-                            "geometry": region_polygon.__geo_interface__,
-                        }
-                        gj = folium.GeoJson(
-                            data=json.loads(json.dumps(geojson_feature)),
-                            style_function=lambda feature: {
-                                'fillColor': feature["properties"]["col"],
-                                'color': '#FFFFFF',     # white border
-                                'weight': 4,            # thinner, adjustable
-                                'fillOpacity': 0.4,
-                                'opacity': 1.0,         # ensure stroke visible
-                                'stroke': True,         # explicitly enable stroke
-                            },
-                            name=f"Voronoi {label}",
-                            tooltip=folium.Tooltip(label),
-                            popup=popup,
-                        )
-                        gj.add_to(self)
-                        print(f"🖼️ Added Non-static GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
-
-                        centroid = region_polygon.centroid
-                        cent = [centroid.y, centroid.x]  # folium expects (lat, lon)
-
-                        tag = matched_child.value
-
-                        mapfile = matched_child.mapfile(rlevels)
-
-
-                        tcol = get_text_color(to_hex(fill_color))
-                        bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
-                        fcol = invert_black_white(tcol)
-                        self.add_child(folium.Marker(
-                             location=[cent[0], cent[1]],
-                             icon = folium.DivIcon(
-                                    html=f'''
-                                    <a href="{mapfile}" data-name="{tag}">
-                                        <div style="
-                                            color: {tcol};
-                                            font-size: 10pt;
-                                            font-weight: 200;
-                                            -webkit-text-stroke: 1px {tcol};
-                                            text-align: center;
-                                            padding: 2px;
-                                            white-space: nowrap;">
-                                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                            border: 2px solid black;">{tag}</span>
-                                        </div>
-                                    </a>
-                                    '''
-                                    ,
-                                   )
-                                   )
-                                   )
-                    else:
-                        limbX = limbX.to_crs("EPSG:4326")
-                        limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
-
-                        feature = limb['features'][0]
-                        props = feature['properties']
-                        popup_html = f"""
-                        <div style='white-space: normal; text-align: center' >
-                            <strong> {typetag}:<br></strong> <br> {streetstag}<br>
-                        </div>
-                        """
-                        # Turn into HTML list items
-                        popup = folium.Popup(popup_html, max_width=600)
-                        #        target_node.tagno = len(self._children)+1
-                        # Turn into HTML list items
-                        # Ensure 'properties' exists in the GeoJSON and add 'col'
-                        print("GeoJSON Convex creation:", limb)
-                        if 'properties' not in limb:
-                            limb['properties'] = {}
-
-                        # Add the color to properties — this is **required**
-                        limb['properties']['col'] = to_hex(matched_child.col)
-
-                        geojson_feature = {
-                            "type": "Feature",
-                            "properties": {"col": fill_color},
-                            "geometry": region_polygon.__geo_interface__,
-                        }
-                        gj = folium.GeoJson(
-                            data=json.loads(json.dumps(geojson_feature)),
-                            style_function=lambda feature: {
-                                'fillColor': feature["properties"]["col"],
-                                'color': '#FFFF00',     # yellow border
-                                'weight': 4,            # thinner, adjustable
-                                'fillOpacity': 0.4,
-                                'opacity': 1.0,         # ensure stroke visible
-                                'stroke': True,         # explicitly enable stroke
-                            },
-                            name=f"Voronoi {label}",
-                            tooltip=folium.Tooltip(label),
-                            popup=popup,
-                        )
-                        gj.add_to(self)
-
-                        print(f"🖼️ Added Static GeoJson for child: {label} nodecol: {child.col} with color: {fill_color}")
-
-                        centroid = region_polygon.centroid
-                        cent = [centroid.y, centroid.x]  # folium expects (lat, lon)
-
-                        tag = matched_child.value
-
-                        tcol = get_text_color(to_hex(fill_color))
-                        bcol = adjust_boundary_color(to_hex(fill_color), 0.7)
-                        fcol = invert_black_white(tcol)
-                        self.add_child(folium.Marker(
-                             location=[cent[0], cent[1]],
-                             icon = folium.DivIcon(
-                                    html=f'''
-                                    <a data-name="{tag}">
-                                        <div style="
-                                            color: {tcol};
-                                            font-size: 10pt;
-                                            font-weight: 200;
-                                            text-align: center;
-                                            -webkit-text-stroke: 1px {tcol};
-                                            padding: 2px;
-                                            white-space: nowrap;">
-                                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                                            border: 2px solid black;">{tag}</span>
-                                        </div>
-                                    </a>
-                                    '''
-                                    ,
-                                   )
-                                   )
-                                   )
-                    print(f"🖼️ Added walk area marker: {tag} with color: {tcol}")
-
-                voronoi_regions.append({
-                    'child': matched_child,
-                    'region': region_polygon
-                })
 
             else:
-                flash("no data exists for this election at this location")
-                print (f" no data exists for this region {region_polygon} under this {c_election} election ")
 
-        print("✅ Voronoi generation complete.")
-        return voronoi_regions
+                nav_html = f"""
+                <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                {up_link}
+                </div>
+                """
+
+
+
+            # -------------------------
+            # Build popup HTML
+            # -------------------------
+
+            street_html = nav_html + "<hr>" + build_street_list_html(region_electors)
+
+
+            popup = folium.Popup(street_html, max_width=900)
+
+
+
+            # -------------------------
+            # Style
+            # -------------------------
+
+            style = {
+                "fillColor": getattr(child, "defcol", "#3388ff"),
+                "color": "white",
+                "weight": 3,
+                "fillOpacity": 0.5
+            }
+
+
+            # -------------------------
+            # Tooltip content
+            # -------------------------
+
+            house_count = count_houses(region_electors)
+
+            elector_density = round(len(region_electors) / house_count, 2) if house_count else 0
+
+
+
+            tooltip_html = f"""
+            <b>{child.value}</b><br>
+            Electors: {len(region_electors)}<br>
+            Houses: {house_count}<br>
+            Elector/house: {elector_density}
+            """
+
+
+
+            # -------------------------
+            # Polygon
+            # -------------------------
+
+            gj = folium.GeoJson(
+                poly.__geo_interface__,
+                style_function=lambda x, s=style: s
+            )
+
+            folium.Tooltip(tooltip_html).add_to(gj)
+
+            # ✅ THIS WAS MISSING
+            gj.add_child(popup)
+
+            gj.add_to(self)
+
+
+            # -------------------------
+            # Name marker at centroid
+            # -------------------------
+
+            centre = poly.point_on_surface()
+
+            tag = child.value
+            fcol = getattr(child, "defcol", "#cccccc")
+
+            mapfile = url_for("transfer", path=f"{child.dir}/{child.file(rlevels)}")
+
+            # -----------------------------------
+            # Conditional link wrapper
+            # -----------------------------------
+
+            if not static:
+                link_start = f"<a href='{mapfile}' data-name='{tag}'>"
+                link_end = "</a>"
+            else:
+                link_start = ""
+                link_end = ""
+
+            folium.Marker(
+                location=[centre.y, centre.x],
+                icon=folium.DivIcon(
+                    class_name="",
+                    html=f'''
+                    <div style="
+                        background: transparent;
+                        border: none;
+                        box-shadow: none;
+                        display: inline-block;
+                    ">
+                        {link_start}
+                        <div style="
+                            color: black;
+                            font-size: 10pt;
+                            font-weight: 500;
+                            text-align: center;
+                            -webkit-text-stroke: 2px white;
+                            paint-order: stroke fill;
+                            padding: 2px;
+                            white-space: nowrap;">
+                            <span style="
+                                background: {fcol};
+                                padding: 2px 4px;
+                                border-radius: 5px;
+                                border: 2px solid black;">
+                                {tag}
+                            </span>
+                        </div>
+                        {link_end}
+                    </div>
+                    '''
+                )
+            ).add_to(self)
+
+
+
+            print(f"🖼️ Added Voronoi for {child.value}")
+
 
 
 

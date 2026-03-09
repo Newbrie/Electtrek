@@ -233,6 +233,7 @@ function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
   const resourceList = [];
   const activityList = [];
   const placeList = [];
+  const areasList =[];
 
   lozenges?.forEach(loz => {
     if (!loz?.type || !loz?.code) {
@@ -248,9 +249,9 @@ function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
       case "area": {
         const areaInfo = areas[loz.code];
         if (areaInfo?.details?.length) {
-          placeList.push(`Area: ${loz.code} – ${areaInfo.details.join(", ")}`);
+          areasList.push(`Area: ${loz.code} – ${areaInfo.details.join(", ")}`);
         } else {
-          placeList.push(`Area: ${loz.code}`);
+          areasList.push(`Area: ${loz.code}`);
         }
         break;
       }
@@ -274,7 +275,7 @@ function processLozenges(lozenges, areas = {}, places = {}, tags = {}) {
     }
   });
 
-  return { resourceList, activityList, placeList };
+  return { resourceList, activityList, placeList, areasList };
 }
 
 
@@ -295,6 +296,7 @@ function buildSummaryTable(slots, areas, places, tags) {
         <th scope="col">Activities</th>
         <th scope="col">Resources</th>
         <th scope="col">Places</th>
+        <th scope="col">Areas</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -336,7 +338,7 @@ function buildSummaryTable(slots, areas, places, tags) {
       console.warn("⚠️ Invalid slot key format:", key);
     }
 
-    const { resourceList, activityList, placeList } = processLozenges(
+    const { resourceList, activityList, placeList, areasList } = processLozenges(
       slot.lozenges,
       areas,
       places,
@@ -351,6 +353,7 @@ function buildSummaryTable(slots, areas, places, tags) {
       <td class="align-top">${activityList.join("<br>")}</td>
       <td class="align-top">${resourceList.join(", ")}</td>
       <td class="align-top">${placeList.join("<br>")}</td>
+      <td class="align-top">${areasList.join("<br>")}</td>
     `;
     tbody.appendChild(row);
   });
