@@ -533,16 +533,30 @@
     });
 
     // mapfiles
+    // mapfiles
     const mapfilesEl = document.getElementById("mapfiles");
+
     if (mapfilesEl && Array.isArray(constants.mapfiles)) {
+
         mapfilesEl.innerHTML = "";
-        constants.mapfiles.forEach((path, idx) => {
+
+        constants.mapfiles.forEach(path => {
+
             const o = document.createElement("option");
             o.value = path;
             o.textContent = path.split("/").pop();
-            if (idx === constants.mapfiles.length - 1) o.selected = true;
+
             mapfilesEl.appendChild(o);
+
         });
+
+        // ⭐ set the selected value explicitly
+        if (constants.mapfile) {
+            mapfilesEl.value = constants.mapfile;
+        } else {
+            mapfilesEl.value = constants.mapfiles[constants.mapfiles.length - 1];
+        }
+
         mapfilesEl.onchange = () => {
             changeIframeSrc(`/thru/${mapfilesEl.value}`);
         };
@@ -552,6 +566,8 @@
     // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
     // =====================================================
     Object.entries(constants).forEach(([key, value]) => {
+
+        if (key === "mapfiles") return;   // handled separately
         const el = document.getElementById(key);
         if (!el) return;
 

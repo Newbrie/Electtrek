@@ -1877,6 +1877,46 @@ class TreeNode:
             static=static
         )
 
+        street_row_css = """
+            <style>
+            .street-row-odd {
+                border-bottom: 1px solid #00509e;
+                background-color: #d3d3d3;  /* light gray for odd rows */
+                color: #003366;
+                transition: background 0.3s, color 0.3s;
+            }
+
+            .street-row-even {
+                border-bottom: 1px solid #00509e;
+                background-color: #e6f2ff;  /* light blue for even rows */
+                color: #003366;
+                transition: background 0.3s, color 0.3s;
+            }
+
+            .street-row-odd:hover,
+            .street-row-even:hover {
+                background-color: #004080;  /* dark blue on hover */
+                color: #ffffff;             /* white text on hover */
+            }
+            </style>
+            """
+        voronoi_labelandtag_css = """
+            <style>
+            .voronoi-label{
+              font-size:10pt;
+              font-weight:500;
+              text-align:center;
+              -webkit-text-stroke:2px white;
+              paint-order:stroke fill;
+            }
+            .voronoi-tag{
+              padding:2px 4px;
+              border-radius:5px;
+              border:2px solid black;
+            }
+            </style>
+            """
+
 
         move_close_button_css = """
             <style>
@@ -2491,6 +2531,8 @@ class TreeNode:
         FolMap.get_root().html.add_child(Element(canvas_icon_js))
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
+        FolMap.get_root().html.add_child(folium.Element(voronoi_labelandtag_css))
+        FolMap.get_root().html.add_child(folium.Element(street_row_css))
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
 

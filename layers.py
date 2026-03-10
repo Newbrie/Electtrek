@@ -178,55 +178,14 @@ def create_enclosing_gdf(gdf, buffer_size=20):
 
     return enclosing_gdf
 
-def build_street_list_html(streets_df):
+def build_street_list_html(streets_df, street_stats):
     from state import VID
     from collections import Counter
     import pandas as pd
     import json, re
 
-    def count_units_from_column(df, column):
-        all_units = (
-            unit.strip()
-            for row in df[column].dropna()
-            for unit in str(row).split(',')
-            if unit.strip().lower() != 'nan' and unit.strip() != ''
-        )
-        return Counter(all_units)
-
-    def extract_unit(row):
-        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
-        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
-
-        if prefix and prefix.lower() != 'nan':
-            return prefix
-        if number and number.lower() != 'nan':
-            return number
-        return None
-
-    streets_df['unit'] = streets_df.apply(extract_unit, axis=1)
 
     html = '''
-    <style>
-    .street-row-odd {
-        border-bottom: 1px solid #00509e;
-        background-color: #d3d3d3;  /* light gray for odd rows */
-        color: #003366;
-        transition: background 0.3s, color 0.3s;
-    }
-
-    .street-row-even {
-        border-bottom: 1px solid #00509e;
-        background-color: #e6f2ff;  /* light blue for even rows */
-        color: #003366;
-        transition: background 0.3s, color 0.3s;
-    }
-
-    .street-row-odd:hover,
-    .street-row-even:hover {
-        background-color: #004080;  /* dark blue on hover */
-        color: #ffffff;             /* white text on hover */
-    }
-    </style>
 
     <div style="
         border: 2px solid #002b5c;
@@ -258,28 +217,16 @@ def build_street_list_html(streets_df):
     '''
 
     # Loop over streets with an index for alternating row classes
-    for i, (street_name, street_group) in enumerate(streets_df.groupby("StreetName")):
-        unit_counts = count_units_from_column(street_group, 'unit')
+    for i, (street_name, data) in enumerate(street_stats.items()):
+        unit_list = data["unit_list"]
+        unit_counts = data["unit_counts"]
+        hos = data["houses"]
         unit_counts_json = json.dumps(unit_counts)
 
-        unit_set = set()
-        num_values = []
-
-        for _, row in street_group.iterrows():
-            if pd.notna(row['unit']):
-                for val in str(row['unit']).split(','):
-                    val = val.strip()
-                    if val and val.lower() != 'nan':
-                        unit_set.add(val)
-                        match = re.search(r'\d+', val)
-                        if match:
-                            num_values.append(int(match.group()))
-
-        unit_list = sorted(unit_set)
-        total_units = len(unit_list) or 1
-        hos = total_units
-        num_values = sorted(num_values)
-        num_display = f"({min(num_values)} - {max(num_values)})" if num_values else "( - )"
+        if data["min_num"]:
+            num_display = f"({data['min_num']} - {data['max_num']})"
+        else:
+            num_display = "( - )"
 
         unit_dropdown = f'''
         <select onchange="updateMaxVote(this)"
@@ -339,63 +286,60 @@ def build_street_list_html(streets_df):
 # ------------------------
 # Helper for node electors
 # ------------------------
-def get_node_electors(node, election_name):
-    from elector import electors
-    """
-    Return electors for a given node using ElectorManager.
-    """
-    shapecolumn = {
-        "polling_district": "PD",
-        "walk": "WalkName",
-        "ward": "Area",
-        "division": "Area",
-        "constituency": "Area"
-    }
-
-    if node.type not in shapecolumn:
-        print(f"⚠️ Unknown node type: {node.type}")
-        return pd.DataFrame()  # empty
-
-    col = shapecolumn[node.type]
-
-    # Access electors from ElectorManager
-    allelectors = electors.get(election_name)
-
-    # Filter by node value
-    mask = allelectors[col] == node.value
-    node_df = allelectors[mask]
-
-    if node_df.empty:
-        print(f"⚠️ No electors found for node {node.value} in election {election_name}")
-
-    return node_df
 
 
-def count_houses(df):
+
+
+def preprocess_streets(df):
+
     import pandas as pd
-
-    def extract_unit(row):
-        prefix = str(row['AddressPrefix']).strip() if pd.notna(row['AddressPrefix']) else ''
-        number = str(row['AddressNumber']).strip() if pd.notna(row['AddressNumber']) else ''
-
-        if prefix and prefix.lower() != 'nan':
-            return prefix
-        if number and number.lower() != 'nan':
-            return number
-        return None
+    from collections import Counter
 
     df = df.copy()
-    df["unit"] = df.apply(extract_unit, axis=1)
 
-    units = set()
+    prefix = df["AddressPrefix"].astype(str).str.strip()
+    number = df["AddressNumber"].astype(str).str.strip()
 
-    for u in df["unit"].dropna():
-        for part in str(u).split(","):
-            part = part.strip()
-            if part:
-                units.add(part)
+    df["unit"] = prefix.where(
+        prefix.notna() & (prefix.str.lower() != "nan") & (prefix != ""),
+        number
+    )
 
-    return len(units)
+    df["unit"] = df["unit"].replace(["", "nan", "None"], pd.NA)
+
+    exploded = (
+        df.dropna(subset=["unit"])
+        .assign(unit=df["unit"].str.split(","))
+        .explode("unit")
+    )
+
+    exploded["unit"] = exploded["unit"].str.strip()
+
+    exploded = exploded[
+        exploded["unit"].notna() &
+        (exploded["unit"].str.lower() != "nan")
+    ]
+
+    exploded["num"] = exploded["unit"].str.extract(r'(\d+)')[0].astype(float)
+
+    street_data = {}
+
+    for street, group in exploded.groupby("StreetName"):
+
+        units = group["unit"].unique()
+        nums = group["num"].dropna()
+
+        street_data[street] = {
+            "houses": len(units),
+            "unit_list": sorted(units),
+            "unit_counts": dict(Counter(group["unit"])),
+            "min_num": int(nums.min()) if len(nums) else None,
+            "max_num": int(nums.max()) if len(nums) else None
+        }
+
+    total_houses = exploded["unit"].nunique()
+
+    return street_data, total_houses
 
 
 def build_nodemap_list_html(herenode):
@@ -522,7 +466,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             if not child.centre:
                 continue
 
-            pt = (round(float(child.centre.x), 6), round(float(child.centre.y), 6))
+            pt = (round(float(child.centre.x), 5), round(float(child.centre.y), 5))
             point_to_child[pt] = child
             points.append(pt)
 
@@ -548,7 +492,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         region_polys, region_pts = voronoi_regions_from_coords(coords, parent_boundary)
 
-        print(f"🗺️ Generated {len(region_polys)} Voronoi polygons")
+        print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons")
 
         # -------------------------------------------------
         # Load electors
@@ -557,40 +501,77 @@ class ExtendedFeatureGroup(FeatureGroup):
         nodeelectors = electors.electors_for_node(node)
 
         if nodeelectors is None or nodeelectors.empty:
-            print("⚠️ No electors for node")
+            print("DEBUG ELECTORS: ⚠️ No electors for node")
             return
+
+        print(f"DEBUG ELECTORS: Loaded {len(nodeelectors)} electors for node {node.value}")
+
+        # -------------------------------------------------
+        # Counters
+        # -------------------------------------------------
+
+        total_regions = 0
+        missing_child = 0
+        no_electors = 0
+        polygons_added = 0
 
         # -------------------------------------------------
         # Loop regions
         # -------------------------------------------------
 
-
         for region_id, poly in region_polys.items():
+
+            total_regions += 1
+            print(f"DEBUG REGION: Processing region {region_id}")
 
             idx = region_pts[region_id]
 
             if isinstance(idx, (list, np.ndarray)):
                 idx = idx[0]
 
+            print(f"DEBUG REGION: Coord index {idx}")
+
             coord = coords[idx]
 
             coord_key = (round(float(coord[0]), 6), round(float(coord[1]), 6))
+            print(f"DEBUG REGION: Rounded coord key {coord_key}")
+
             child = point_to_child.get(coord_key)
 
             if child is None:
-                print(f"⚠️ No child found for region coordinate {coord_key}")
+                print(f"DEBUG MATCH: ⚠️ No child found for coordinate {coord_key}")
+                missing_child += 1
                 continue
 
-            child.voronoi_region = poly
+            print(f"DEBUG MATCH: Matched child {child.value}")
 
+            child.voronoi_region = poly
 
             # -------------------------
             # Electors
             # -------------------------
 
-            region_electors = electors.electors_for_node(child)
+            shapecolumn = {
+                "polling_district": "PD",
+                "walk": "WalkName",
+                "ward": "Area",
+                "division": "Area",
+                "constituency": "Area"
+            }
+
+            if child.type not in shapecolumn:
+                print(f"⚠️ Unknown node type: {node.type}")
+                return pd.DataFrame()  # empty
+
+            col = shapecolumn[child.type]
+
+            region_electors = nodeelectors[nodeelectors[col] == child.value]
+
+            print(f"DEBUG ELECTORS: {child.value} has {len(region_electors)} electors")
 
             if region_electors.empty:
+                print(f"DEBUG ELECTORS: ⚠️ Skipping {child.value} (no electors)")
+                no_electors += 1
                 continue
 
             # -------------------------
@@ -598,7 +579,6 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
 
             nav_html = ""
-
 
             upmessage = (
                 "moveUp('/upbut/{0}','{1}','{2}')"
@@ -627,7 +607,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                 </div>
                 """
 
-
             else:
 
                 nav_html = f"""
@@ -636,18 +615,21 @@ class ExtendedFeatureGroup(FeatureGroup):
                 </div>
                 """
 
+            # -------------------------
+            # Preprocess street data
+            # -------------------------
 
+            street_stats, house_count = preprocess_streets(region_electors)
 
             # -------------------------
             # Build popup HTML
             # -------------------------
 
-            street_html = nav_html + "<hr>" + build_street_list_html(region_electors)
+            print(f"DEBUG POPUP: Building popup for {child.value}")
 
+            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
 
             popup = folium.Popup(street_html, max_width=900)
-
-
 
             # -------------------------
             # Style
@@ -660,16 +642,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                 "fillOpacity": 0.5
             }
 
+            print(f"DEBUG STYLE: Style for {child.value} = {style}")
 
             # -------------------------
             # Tooltip content
             # -------------------------
 
-            house_count = count_houses(region_electors)
 
             elector_density = round(len(region_electors) / house_count, 2) if house_count else 0
-
-
 
             tooltip_html = f"""
             <b>{child.value}</b><br>
@@ -678,85 +658,83 @@ class ExtendedFeatureGroup(FeatureGroup):
             Elector/house: {elector_density}
             """
 
-
+            print(f"DEBUG TOOLTIP: {child.value} houses={house_count} density={elector_density}")
 
             # -------------------------
             # Polygon
             # -------------------------
 
-            gj = folium.GeoJson(
-                poly.__geo_interface__,
-                style_function=lambda x, s=style: s
-            )
+            try:
 
-            folium.Tooltip(tooltip_html).add_to(gj)
+                print(f"DEBUG POLYGON: Adding polygon for {child.value}")
 
-            # ✅ THIS WAS MISSING
-            gj.add_child(popup)
+                gj = folium.GeoJson(
+                    poly.__geo_interface__,
+                    style_function=lambda x, s=style: s
+                )
 
-            gj.add_to(self)
+                folium.Tooltip(tooltip_html).add_to(gj)
 
+                gj.add_child(popup)
+
+                print(f"DEBUG LAYER: Children before add {len(self._children)}")
+
+                gj.add_to(self)
+
+                print(f"DEBUG LAYER: Children after add {len(self._children)}")
+
+                polygons_added += 1
+
+            except Exception as e:
+
+                print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
+                continue
 
             # -------------------------
             # Name marker at centroid
             # -------------------------
 
-            centre = poly.point_on_surface()
+            try:
 
-            tag = child.value
-            fcol = getattr(child, "defcol", "#cccccc")
+                centre = poly.point_on_surface()
 
-            mapfile = url_for("transfer", path=f"{child.dir}/{child.file(rlevels)}")
+                tag = child.value
+                fcol = getattr(child, "defcol", "#cccccc")
 
-            # -----------------------------------
-            # Conditional link wrapper
-            # -----------------------------------
+                mapfile = url_for("transfer", path=f"{child.dir}/{child.file(rlevels)}")
 
-            if not static:
-                link_start = f"<a href='{mapfile}' data-name='{tag}'>"
-                link_end = "</a>"
-            else:
-                link_start = ""
-                link_end = ""
+                print(f"DEBUG MARKER: Adding label marker for {tag}")
 
-            folium.Marker(
-                location=[centre.y, centre.x],
-                icon=folium.DivIcon(
-                    class_name="",
-                    html=f'''
-                    <div style="
-                        background: transparent;
-                        border: none;
-                        box-shadow: none;
-                        display: inline-block;
-                    ">
-                        {link_start}
-                        <div style="
-                            color: black;
-                            font-size: 10pt;
-                            font-weight: 500;
-                            text-align: center;
-                            -webkit-text-stroke: 2px white;
-                            paint-order: stroke fill;
-                            padding: 2px;
-                            white-space: nowrap;">
-                            <span style="
-                                background: {fcol};
-                                padding: 2px 4px;
-                                border-radius: 5px;
-                                border: 2px solid black;">
-                                {tag}
+                folium.Marker(
+                    location=[centre.y, centre.x],
+                    icon=folium.DivIcon(
+                        class_name="",
+                        html=f"""
+                            <div class="voronoi-label">
+                            <span class="voronoi-tag" style="background:{fcol}">
+                            {tag}
                             </span>
-                        </div>
-                        {link_end}
-                    </div>
-                    '''
-                )
-            ).add_to(self)
+                            </div>
+                            """
+                    )
+                ).add_to(self)
 
+            except Exception as e:
 
+                print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
 
-            print(f"🖼️ Added Voronoi for {child.value}")
+            print(f"DEBUG SUCCESS: Added Voronoi for {child.value}")
+
+        # -------------------------------------------------
+        # Summary
+        # -------------------------------------------------
+
+        print("DEBUG SUMMARY:")
+        print(f"Total regions processed: {total_regions}")
+        print(f"Missing child matches: {missing_child}")
+        print(f"Regions with no electors: {no_electors}")
+        print(f"Polygons added to layer: {polygons_added}")
+        print(f"Final layer child count: {len(self._children)}")
 
 
 
@@ -1080,7 +1058,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print("______Add_Nodes Treepolys type:",type)
     #
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" county", c.value,type)
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,herenode.type)
                         downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,type,12)
     #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
@@ -1092,7 +1070,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     elif herenode.level == 1:
                         wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
                         divreportmess = "moveDown(&#39;/divreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" constituency", c.value,type)
+                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,type)
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
                         wardreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(wardreportmess,"WARD Report",12)
                         divreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(divreportmess,"DIV Report",12)
@@ -1103,8 +1081,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                         mapfile = "/transfer/"+c.mapfile(rlevels)
     #                        self.children.append(c)
                     elif herenode.level == 2:
-                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" ward", c.value,"ward")
-                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels)+" division", c.value,"division")
+                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,"ward")
+                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(rlevels), c.value,"division")
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(rlevels), herenode.value,herenode.type)
                         downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downwardmessage,"WARDS",12)
                         downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
@@ -1216,7 +1194,41 @@ class ExtendedFeatureGroup(FeatureGroup):
                       </div>
                     </a>
                     '''
+                    htmlhalostatic =f'''
+                    <a href="" data-name="{tag}">
+                      <div style="
+                        color: {tcol_node};
+                        font-size: 10pt;
+                        font-weight: bold;
+                        text-align: center;
+                        padding: 2px;
+                        white-space: nowrap;
 
+                        /* 🗺️ Cartographic halo */
+                        text-shadow:
+                          -1px -1px 0 #fff,
+                           1px -1px 0 #fff,
+                          -1px  1px 0 #fff,
+                           1px  1px 0 #fff,
+                           0px  0px 3px #fff;
+                      ">
+                        <span style="
+                          background: {fcol_node};
+                          padding: 1px 2px;
+                          border-radius: 5px;
+                          border: 2px solid black;
+                        ">{num}</span>
+                        {numtag}<br>
+                        <span style="
+                            font-size: 6pt;
+                            font-weight: normal;
+                        ">
+
+                        </span>
+
+                      </div>
+                    </a>
+                    '''
 
 
                     folium.GeoJson(
@@ -1257,7 +1269,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         self.add_child(folium.Marker(
                              location=here,
                              icon = folium.DivIcon(
-                                    html=htmlhalo,
+                                    html=htmlhalostatic,
                                        )
                                        )
                                        )
@@ -1357,6 +1369,42 @@ class ExtendedFeatureGroup(FeatureGroup):
               </div>
             </a>
             '''
+            htmlhalostatic =f'''
+            <a href="" data-name="{tag}">
+              <div style="
+                color: {tcol_node};
+                font-size: 10pt;
+                font-weight: bold;
+                text-align: center;
+                padding: 2px;
+                white-space: nowrap;
+
+                /* 🗺️ Cartographic halo */
+                text-shadow:
+                  -1px -1px 0 #fff,
+                   1px -1px 0 #fff,
+                  -1px  1px 0 #fff,
+                   1px  1px 0 #fff,
+                   0px  0px 3px #fff;
+              ">
+                <span style="
+                  background: {fcol_node};
+                  padding: 1px 2px;
+                  border-radius: 5px;
+                  border: 2px solid black;
+                ">{num}</span>
+                {numtag}<br>
+                <span style="
+                    font-size: 6pt;
+                    font-weight: normal;
+                ">
+
+                </span>
+
+              </div>
+            </a>
+            '''
+
             if not static:
                 self.add_child(folium.Marker(
                      location=here,
@@ -1369,7 +1417,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 self.add_child(folium.Marker(
                      location=here,
                      icon = folium.DivIcon(
-                            html=htmlhalo,
+                            html=htmlhalostatic,
                            )
                            )
                            )

@@ -915,6 +915,7 @@ def delete_node():
 @app.route('/reassign_parent', methods=['POST'])
 @login_required
 def reassign_parent():
+    from elector import electors
 
     if not request.is_json:
         return jsonify(status="error", message="JSON required"), 415
@@ -970,14 +971,7 @@ def reassign_parent():
         etype = old_parent_node.child_type(rlevels)
         subject_node.type = etype
 
-        # Update allelectors
-        mask = (
-            (allelectors['Election'] == current_election) &
-            (allelectors['StreetName'] == subject_node.value)
-        )
-        if mask.any():
-            allelectors.loc[mask, 'WalkName'] = new_parent_node.value
-
+        allelectors = electors_for_node(old_parent_node.parent.value)
         # Regenerate affected maps
         old_parent_node.create_area_map(current_election, CElection)
         new_parent_node.create_area_map(current_election, CElection)
@@ -2574,12 +2568,8 @@ def downMWbut(path):
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,current_election,path, create=True, accumulate=session.get("accumulate", False))
 
-
-
     print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile(rlevels)}")
     flash ("_________ROUTE/downMWbut ")
-
-
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
