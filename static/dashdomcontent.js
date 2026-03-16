@@ -581,10 +581,24 @@ resourcesSelect?.addEventListener("blur", () => {
     })
         .then(res => res.json())
         .then(resp => {
+            if (resp.constants) {
+                updateConstantsUI(resp.constants, options);
+            }
             if (resp.success) refreshConstantsUI();
         });
 });
 
+.then(resp => {
+    console.log(`✅ Response for "${key}":`, resp);
+
+    if (resp.constants) {
+        updateConstantsUI(resp.constants, options);
+    }
+
+    if (!resp.success) {
+        console.warn(`⚠️ Failed to update "${key}":`, resp.error);
+    }
+})
 
 /* ---------------------------------------------------------
  *  PARENT-NODE REASSIGNMENT / DELETE SELECTION

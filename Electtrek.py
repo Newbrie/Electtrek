@@ -2,7 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS
+from config import TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS, NATIONAL_DIVISION_FILE
 from normalised import normz
 #import normz
 
@@ -502,9 +502,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             lastfilepath = ensure_treepolys(
                 territory=Territory_path,
                 sourcepath=lastfilepath,
+                here=here,
                 resolved_levels=resolved_levels,
-                parent_levels= parent_levels,
-                here=here
+                parent_levels= parent_levels
             )
 
         # Sort metadata items by order
@@ -1806,9 +1806,9 @@ def set_election():
             lastfilepath = ensure_treepolys(
                 territory=territory,
                 sourcepath=lastfilepath,
+                here=here,
                 resolved_levels=rlevels,
-                parent_levels= plevels,
-                here=here
+                parent_levels= plevels
             )
 
         # At the start of a fresh election:
@@ -1979,7 +1979,11 @@ def set_constant():
     print(f"____Current Election choices saved: "
           f"{current_election} - {name} = {value}")
 
-    return jsonify(success=True)
+    return jsonify({
+        "success": True,
+        "constants": CElection.constants
+    })
+
 
 
 @app.route("/delete-election", methods=["POST"])
@@ -3771,32 +3775,10 @@ def firstpage():
     filepath = ensure_treepolys(
         territory=CElection['territory'],
         sourcepath=CElection['mapfiles'][-1],
+        here=here,
         resolved_levels=rlevels,
-        parent_levels=plevels,
-        here=here
+        parent_levels=plevels
     )
-
-    for lev, ltype in rlevels.items():
-        tree_gdf = Treepolys.get(ltype)
-        if tree_gdf is None or tree_gdf.empty:
-            print(f"____F/Treepolys {ltype} - EMPTY")
-            continue
-        tot_tree = len(tree_gdf)
-        unique_name_tree = tree_gdf['NAME'].nunique()
-        unique_fid_tree = tree_gdf['FID'].nunique()
-        print(f"____F/Treepolys {ltype} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
-
-            # Same for Fullpolys
-        full_gdf = Fullpolys.get(ltype)
-        if full_gdf is None or full_gdf.empty:
-            print(f"____F/Fullpolys {ltype} - EMPTY")
-            continue
-
-        tot_full = len(full_gdf)
-        unique_name_full = full_gdf['NAME'].nunique()
-        unique_fid_full = full_gdf['FID'].nunique()
-        print(f"____F/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
-
 
     # add the root nodes.TreeNode to the node tree, and start at the lat long of stored cid node.
     nodes.reset_nodes()

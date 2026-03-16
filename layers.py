@@ -182,11 +182,9 @@ def build_street_list_html(streets_df, street_stats):
     from state import VID
     from collections import Counter
     import pandas as pd
-    import json, re
-
+    import json
 
     html = '''
-
     <div style="
         border: 2px solid #002b5c;
         border-radius: 8px;
@@ -198,36 +196,40 @@ def build_street_list_html(streets_df, street_stats):
         overflow-x: auto;
         font-family: Arial, Helvetica, sans-serif;
         font-weight: 600;
-        font-size: 8 pt;
+        font-size: 8pt;
         white-space: nowrap;
     ">
         <table style="border-collapse: collapse; width: 100%;">
             <thead>
-            <tr style="background-color:#001f3f;">
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Street Name</th>
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Total</th>
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Range</th>
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Unit</th>
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">VI</th>
-                <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Votes</th>
-            </tr>
-
+                <tr style="background-color:#001f3f;">
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Street Name</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Total</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Range</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Unit</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">VI</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Votes</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffcc00;">Gaps</th>
+                </tr>
             </thead>
             <tbody>
     '''
 
-    # Loop over streets with an index for alternating row classes
+    # Loop over streets
     for i, (street_name, data) in enumerate(street_stats.items()):
         unit_list = data["unit_list"]
         unit_counts = data["unit_counts"]
         hos = data["houses"]
-        unit_counts_json = json.dumps(unit_counts)
 
+        # Range display
         if data["min_num"]:
             num_display = f"({data['min_num']} - {data['max_num']})"
         else:
             num_display = "( - )"
 
+        # Count of gaps only
+        house_gaps_display = data.get("house_gaps", 0)
+
+        # Unit dropdown
         unit_dropdown = f'''
         <select onchange="updateMaxVote(this)"
                 style="width:100%; font-size:9pt; padding:3px;
@@ -237,12 +239,13 @@ def build_street_list_html(streets_df, street_stats):
         </select>
         '''
 
+        # VI select
         vi_select = '<select style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">' + \
                     ''.join(f'<option value="{key}">{value}</option>' for key, value in VID.items()) + '</select>'
 
+        # Vote button
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
-
         vote_button = f'''
         <button onclick="incrementVoteCount(this)"
                 data-count="0"
@@ -255,23 +258,23 @@ def build_street_list_html(streets_df, street_stats):
                     border:none;
                     border-radius:4px;
                     font-weight:bold;
-                    cursor:pointer;
-                ">
+                    cursor:pointer;">
             0/{max_votes}
         </button>
         '''
 
-        # Assign alternating row class
+        # Row class for alternating colors
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
         <tr class="{row_class}">
-            <td style="padding:8px;"><b style="color:#00ccff;" data-name="{street_name}" data-unit-counts='{unit_counts_json}'>{street_name}</b></td>
+            <td style="padding:8px;">{street_name}</td>
             <td style="padding:8px;"><i>{hos}</i></td>
             <td style="padding:8px;">{num_display}</td>
             <td style="padding:8px;">{unit_dropdown}</td>
             <td style="padding:8px;">{vi_select}</td>
             <td style="padding:8px;">{vote_button}</td>
+            <td style="padding:8px; color:#ffcc00;">{house_gaps_display}</td>
         </tr>
         '''
 
@@ -283,10 +286,10 @@ def build_street_list_html(streets_df, street_stats):
 
     return html
 
-# ------------------------
+
+#---------------------
 # Helper for node electors
 # ------------------------
-
 
 
 
@@ -327,19 +330,57 @@ def preprocess_streets(df):
     for street, group in exploded.groupby("StreetName"):
 
         units = group["unit"].unique()
-        nums = group["num"].dropna()
+        nums = group["num"].dropna().astype(int)
+
+        numbers = nums.unique()
+        numbers.sort()
+
+        actual_houses = len(units)
+
+        if len(numbers):
+
+            min_num = numbers.min()
+            max_num = numbers.max()
+
+            # detect odd/even numbering
+            if len(numbers) > 1 and all(n % 2 == numbers[0] % 2 for n in numbers):
+
+                estimated_houses = ((max_num - min_num) // 2) + 1
+
+                expected_numbers = set(range(min_num, max_num + 1, 2))
+
+            else:
+
+                estimated_houses = (max_num - min_num) + 1
+
+                expected_numbers = set(range(min_num, max_num + 1))
+
+            missing_numbers = sorted(expected_numbers - set(numbers))
+
+        else:
+
+            min_num = None
+            max_num = None
+            estimated_houses = actual_houses
+            missing_numbers = []
+
+        missing_properties = max(0, estimated_houses - actual_houses)
 
         street_data[street] = {
-            "houses": len(units),
+            "houses": actual_houses,
+            "estimated_houses": estimated_houses,
+            "house_gaps": missing_properties,       # renamed here
+            "missing_numbers": missing_numbers,
             "unit_list": sorted(units),
             "unit_counts": dict(Counter(group["unit"])),
-            "min_num": int(nums.min()) if len(nums) else None,
-            "max_num": int(nums.max()) if len(nums) else None
-        }
+            "min_num": min_num,
+            "max_num": max_num
+            }
 
     total_houses = exploded["unit"].nunique()
 
     return street_data, total_houses
+
 
 
 def build_nodemap_list_html(herenode):
@@ -354,16 +395,21 @@ def build_nodemap_list_html(herenode):
     items_html = []
 
     for child in herenode.children:
-        # Safely escape for HTML
+
         label = getattr(child, "name", None) or getattr(child, "value", "") or "Unnamed"
         label = html.escape(str(label))
 
+        missing = getattr(child, "house_gaps", None)
+
+        if missing and missing > 0:
+            label += f" <span style='color:#ffcc66'>(gap: {missing})</span>"
+
         items_html.append(f"<li>{label}</li>")
 
-    # Wrap in tooltip-friendly minimal markup
     tooltip_html = "<ul style='margin:0; padding-left:1em;'>" + "".join(items_html) + "</ul>"
 
     return tooltip_html
+
 
 
 class ExtendedFeatureGroup(FeatureGroup):
@@ -620,6 +666,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
 
             street_stats, house_count = preprocess_streets(region_electors)
+            missing_total = sum(d["house_gaps"] for d in street_stats.values())
+
 
             # -------------------------
             # Build popup HTML
@@ -655,8 +703,11 @@ class ExtendedFeatureGroup(FeatureGroup):
             <b>{child.value}</b><br>
             Electors: {len(region_electors)}<br>
             Houses: {house_count}<br>
-            Elector/house: {elector_density}
+            Elector/house: {elector_density}<br>
+            House gaps: {missing_total}
             """
+
+
 
             print(f"DEBUG TOOLTIP: {child.value} houses={house_count} density={elector_density}")
 

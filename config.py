@@ -11,6 +11,7 @@ workdirectories['resultdir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Referen
 workdirectories['candidatedir'] = "/Users/newbrie/Documents/ReformUK/GitHub/Reference/Candidates/"
 
 GENESYS_FILE =  os.path.join(workdirectories['workdir'],'static','registers','RuncornRegister.xlsx')
+NATIONAL_DIVISION_FILE = os.path.join(workdirectories['bounddir'],'County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson')
 LAST_RESULTS_FILE = os.path.join(workdirectories['workdir'],'static','registers','LastResults.json')
 CANDIDATES_FILE = os.path.join(workdirectories['workdir'],'static','registers','Candidates.json')
 ELECTIONS_FILE = os.path.join(workdirectories['workdir'],'static','elections','Elections-DEMO.json')

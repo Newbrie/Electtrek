@@ -1065,23 +1065,23 @@ class TreeNode:
         for lev, ltype in rlevels.items():
             tree_gdf = Treepolys.get(ltype)
             if tree_gdf is None or tree_gdf.empty:
-                print(f"____Ping/Treepolys {ltype} - EMPTY")
+                print(f"____Ping/Treepolys {ltype} ->{route()}- EMPTY")
                 continue
             tot_tree = len(tree_gdf)
             unique_name_tree = tree_gdf['NAME'].nunique()
             unique_fid_tree = tree_gdf['FID'].nunique()
-            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
+            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} ->{route()} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
 
                 # Same for Fullpolys
             full_gdf = Fullpolys.get(ltype)
             if full_gdf is None or full_gdf.empty:
-                print(f"____Ping/Fullpolys {ltype} - EMPTY")
+                print(f"____Ping/Fullpolys {ltype} - EMPTY ->{route()}")
                 continue
 
             tot_full = len(full_gdf)
             unique_name_full = full_gdf['NAME'].nunique()
             unique_fid_full = full_gdf['FID'].nunique()
-            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
+            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full} ->{route()}")
 
 
         def strip_leaf_from_path(path):
@@ -2356,125 +2356,165 @@ class TreeNode:
 
         # Inject JS to replace default popup with canvas marker
         custom_click_js = r"""
-            <script>
-            (function () {
+        <script>
+        (function() {
 
-                console.log("📌 custom_click_js loaded");
+            console.log("🗺️ Custom map injection loaded (auto-place markers with reverse geocode)");
 
-                // State
-                window.awaitingNewPlace = false;
-                window.pinMarker = null;
+            // Globals
+            window.fmap = null;
+            window.MarkerLayer = null;
+            window.pinMarker = null;
 
-                // --- The Layer Polling Mechanism (For the initial click) ---
-                // If the layer isn't found on the first click, this function will wait for it.
-                function tryAddMarkerToLayer(marker, lat, lng, prefix) {
-                    if (window.MarkerLayer) {
-                        window.MarkerLayer.addLayer(marker);
-                        console.log("📌 Marker added to FeatureGroup 'marker'");
-                        // Now safe to do the final geocoding/messaging
+            // --- Stage 1: Detect Folium map ---
+            function detectFoliumMap() {
+                if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                    setTimeout(detectFoliumMap, 100);
+                    return;
+                }
 
-                        // Trigger the rest of the original logic here
-                        window.reverseGeocode(lat, lng)
-                            .then(({ address, house_number, road, suburb, city, postcode }) => {
-                                console.log("Raw reverse geocode result:", house_number, road, suburb, city, postcode);
-                                window.awaitingNewPlace = false;
+                for (const key in window) {
+                    if (!window.hasOwnProperty(key)) continue;
+                    const val = window[key];
+                    if (key.startsWith("map_") && val instanceof L.Map) {
+                        window.fmap = val;
+                        startLayerPolling();
+                        return;
+                    }
+                }
+                setTimeout(detectFoliumMap, 100);
+            }
 
-                                window.parent.postMessage({
-                                    type: "newPlaceCreated",
-                                    prefix, lat, lng, house_number, road, suburb, city, postcode
-                                }, "*");
+            // --- Stage 2: Find marker layer ---
+            let pollAttempts = 0;
+            const MAX_ATTEMPTS = 100;
+            let poll_interval_id;
 
-                                marker.bindPopup(`<b>${prefix}</b><br>${address}`).openPopup();
-                                window.fmap.getContainer().classList.remove("add-place-mode");
-                                console.log("📍 newPlaceCreated message sent");
-                            })
-                            .catch(err => {
-                                console.error("Reverse geocode error:", err);
-                                // Important: If geocoding fails, you may want to remove the marker or handle the error gracefully
-                                if (window.fmap.hasLayer(marker)) window.fmap.removeLayer(marker);
-                                window.awaitingNewPlace = false;
-                                window.fmap.getContainer().classList.remove("add-place-mode");
-                            });
+            function findTargetLayer() {
+                pollAttempts++;
+                if (pollAttempts > MAX_ATTEMPTS) {
+                    console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                    clearInterval(poll_interval_id);
+                    return;
+                }
 
-                    } else if (window.fmap) {
-                        // Safety Fallback (Should only run if polling failed)
-                        marker.addTo(window.fmap);
-                        console.warn("📌 Marker added directly to fmap (Layer not yet found, using fallback).");
+                for (const key in window) {
+                    if (!window.hasOwnProperty(key)) continue;
+                    const val = window[key];
+                    if (key.startsWith("layer_control_") && val && val.overlays && val.overlays.marker) {
+                        window.MarkerLayer = val.overlays.marker;
+                        console.log(`🔥 'marker' Layer found: ${key}`);
+                        clearInterval(poll_interval_id);
+                        return;
+                    }
+                }
+            }
 
-                        // To prevent code duplication and complexity, if the layer is not found,
-                        // we add it to the map but skip the reverseGeocode logic here
-                        // or simplify it to prevent errors.
+            function startLayerPolling() {
+                poll_interval_id = setInterval(findTargetLayer, 100);
+            }
 
-                        // You need to decide if the rest of the logic should run without the target layer.
-                        // For now, let's keep the original logic flow focused on success.
+            document.addEventListener("DOMContentLoaded", detectFoliumMap);
 
-                    } else {
-                        console.error("Critical Error: Map object (fmap) is null.");
+            // --- Stage 3: Canvas icon generator ---
+            window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
+                const size = 40;
+                const radius = 18;
+                const canvas = document.createElement("canvas");
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext("2d");
+
+                ctx.beginPath();
+                ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "#000";
+                ctx.stroke();
+
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 16px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(prefix, size/2, size/2);
+
+                return L.icon({
+                    iconUrl: canvas.toDataURL(),
+                    iconSize: [size, size],
+                    iconAnchor: [size/2, size],
+                    popupAnchor: [0, -size/2]
+                });
+            };
+
+            // --- Stage 4: Click handler ---
+            function handleMapClick(e) {
+                if (!window.fmap) return;
+
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+
+                // Remove previous pinMarker
+                if (window.pinMarker) {
+                    if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
+                        window.MarkerLayer.removeLayer(window.pinMarker);
+                    } else if (window.fmap.hasLayer(window.pinMarker)) {
+                        window.fmap.removeLayer(window.pinMarker);
                     }
                 }
 
+                // Auto-prefix for icon
+                const prefix = "📍";
 
-                // --------------------------------------------------------------------
-                // Click handler — only fires when awaitingNewPlace === true
-                // --------------------------------------------------------------------
-                function handleMapClick(e) {
-                    if (!window.awaitingNewPlace || !window.fmap) return;
+                // Create canvas marker
+                const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
+                window.pinMarker = L.marker([lat, lng], { icon });
 
-                    const lat = e.latlng.lat;
-                    const lng = e.latlng.lng;
-
-                    const prefix = prompt("Enter a prefix for this new place:", "");
-                    if (!prefix) return;
-
-                    // Remove previous pinMarker
-                    if (window.pinMarker) {
-                        // Check if it's on the MarkerLayer or directly on the map
-                        if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
-                            window.MarkerLayer.removeLayer(window.pinMarker);
-                        } else if (window.fmap.hasLayer(window.pinMarker)) {
-                            window.fmap.removeLayer(window.pinMarker);
-                        }
-                    }
-
-                    // Create canvas-based prefix icon (Assumes window.makePrefixMarkerIcon exists)
-                    const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
-                    window.pinMarker = L.marker([lat, lng], { icon });
-
-                    // Use the consolidated function to handle adding the marker and reverse geocoding
-                    // Note: The original geocoding/messaging logic is now moved INTO tryAddMarkerToLayer
-                    tryAddMarkerToLayer(window.pinMarker, lat, lng, prefix);
+                // Add to layer or map
+                if (window.MarkerLayer) {
+                    window.MarkerLayer.addLayer(window.pinMarker);
+                } else {
+                    window.pinMarker.addTo(window.fmap);
                 }
 
-                // --------------------------------------------------------------------
-                // Turn on add-place mode when parent sends enableAddPlace
-                // --------------------------------------------------------------------
-                window.addEventListener("message", (event) => {
-                    if (event.data?.type === "enableAddPlace") {
-                        console.log("🟡 enableAddPlace received");
-                        window.awaitingNewPlace = true;
+                // Reverse geocode
+                if (window.reverseGeocode) {
+                    window.reverseGeocode(lat, lng)
+                        .then(({ house_number, road, suburb, city, postcode, address }) => {
+                            const popupText = `
+                                <b>${prefix}</b><br>
+                                ${address ? address : ""}
+                                ${house_number ? house_number + " " : ""}${road ? road : ""}<br>
+                                ${suburb ? suburb + ", " : ""}${city ? city + "<br>" : ""}${postcode ? postcode : ""}
+                            `;
+                            window.pinMarker.bindPopup(popupText).openPopup();
 
-                        if (window.fmap) {
-                            window.fmap.getContainer().classList.add("add-place-mode");
-                        }
+                            // Send data to parent
+                            window.parent.postMessage({
+                                type: "newPlaceCreated",
+                                prefix, lat, lng,
+                                house_number, road, suburb, city, postcode
+                            }, "*");
+                        })
+                        .catch(err => {
+                            console.error("Reverse geocode failed:", err);
+                            window.pinMarker.bindPopup(`<b>${prefix}</b><br>${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+                        });
+                } else {
+                    window.pinMarker.bindPopup(`<b>${prefix}</b><br>${lat.toFixed(5)}, ${lng.toFixed(5)}`).openPopup();
+                }
+            }
 
-                        alert("Click on the map to select a new place.");
-                    }
-                });
+            // Attach click handler when fmap is ready
+            window.addEventListener("fmap-ready", (ev) => {
+                const fmap = ev.detail;
+                window.fmap = fmap;
+                fmap.on("click", handleMapClick);
+                console.log("🎯 Click handler attached to fmap");
+            });
 
-                // --------------------------------------------------------------------
-                // Attach click handler when fmap is ready
-                // --------------------------------------------------------------------
-                window.addEventListener("fmap-ready", (ev) => {
-                    const fmap = ev.detail;
-                    // Double-check window.fmap is set if the event didn't set it (good practice)
-                    window.fmap = fmap;
-
-                    console.log("🎯 custom_click_js attaching click handler to fmap");
-                    fmap.on("click", handleMapClick);
-                });
-
-            })();
-            </script>
+        })();
+        </script>
             """
 
 

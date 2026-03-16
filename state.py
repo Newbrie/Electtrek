@@ -31,25 +31,18 @@ def normalname(name):
 
 def ensure_4326(gdf):
     """
-    Ensure the GeoDataFrame has CRS EPSG:4326 for Folium.
-    Returns a GeoDataFrame in 4326.
+    If data is naive, set the CRS to 4326.
+    If it is ALREADY 4326, do nothing (don't force a transformation).
     """
-    # 1️⃣ Check if CRS exists
     if gdf.crs is None:
-        print("[CRS] Missing — assuming EPSG:4326 (lon/lat)")
-        gdf = gdf.set_crs(epsg=4326)
-    else:
-        print(f"[CRS] Detected: {gdf.crs}")
+        # This is where you tell the system: "I know these are 4326"
+        logging.info("[CRS] Data is naive; setting to EPSG:4326")
+        gdf = gdf.set_crs("EPSG:4326")
 
-    # 2️⃣ Convert to 4326 if needed
-    if gdf.crs.to_epsg() != 4326:
-        print(f"[CRS] Reprojecting from {gdf.crs} to EPSG:4326 for Folium")
-        gdf = gdf.to_crs(epsg=4326)
-    else:
-        print("[CRS] Already EPSG:4326 — no conversion needed")
-
-    # 3️⃣ Optional: inspect bounds
-    print("[CRS] GeoDataFrame bounds:", gdf.total_bounds)
+    # If the CRS is already 4326, skip the math entirely to avoid the crash
+    elif not gdf.crs.equals("EPSG:4326"):
+        logging.info(f"[CRS] Data is in {gdf.crs}; transforming to 4326")
+        gdf = gdf.to_crs("EPSG:4326")
 
     return gdf
 
@@ -294,25 +287,29 @@ def subending(filename, ending):
 
 
 def upsert_geodf(existing, incoming, key="FID"):
-    #insert incoming geometries into the existing layer
+
     if existing is None or existing.empty:
         return incoming
 
     if incoming is None or incoming.empty:
         return existing
 
-    if existing.crs != incoming.crs:
+    # Ensure CRS compatibility
+    if existing.crs is None and incoming.crs is not None:
+        existing = existing.set_crs(incoming.crs)
+    elif existing.crs is not None and incoming.crs is not None and existing.crs != incoming.crs:
         incoming = incoming.to_crs(existing.crs)
 
-    existing = existing.set_index(key, drop=False)
-    incoming = incoming.set_index(key, drop=False)
+    # Combine
+    combined = pd.concat([existing, incoming], ignore_index=True)
 
-    # overwrite or insert
-    for fid, row in incoming.iterrows():
-        existing.loc[fid] = row
+    # Drop duplicates keeping newest (incoming overwrites existing)
+    combined = combined.drop_duplicates(subset=key, keep="last")
 
-    return gpd.GeoDataFrame(existing.reset_index(drop=True), crs=existing.crs)
+    # Rebuild GeoDataFrame safely
+    combined = gpd.GeoDataFrame(combined, geometry=existing.geometry.name, crs=existing.crs)
 
+    return combined
 
 def load_layer(
     *,
@@ -444,7 +441,6 @@ def get_parent_row(plevels, child_level, parent_name, roid):
 
 
 
-
 def ensure_treepolys(
     *,
     territory: str | None,
@@ -452,105 +448,180 @@ def ensure_treepolys(
     here: tuple[float, float] | None,
     resolved_levels: dict[int, str],
     parent_levels: dict[int, str]
-):
+    ):
+
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
 
     logging.debug(f"Starting treepolys with territory={territory} and sourcepath={sourcepath}")
 
     def path_compare(A: str | Path, B: str | Path) -> str:
-        """Compare paths and return the appropriate one."""
         A_path = Path(A)
         B_path = Path(B)
+        return str(A_path) if len(B_path.parts) > len(A_path.parts) else str(B_path)
 
-        len_A = len(A_path.parts)
-        len_B = len(B_path.parts)
+    # -------------------------------------------------------
+    # Prepare source path
+    # -------------------------------------------------------
 
-        return str(A_path) if len_B <= len_A else str(B_path)
-
-    # Select the best source path based on length
     sourcepath = path_compare(territory, sourcepath)
     steps = stepify(sourcepath) if sourcepath else []
-    territory_level = len(stepify(territory)) - 1 if territory else -1
 
-    layer_defs = { (l["level"], l["key"]): l for l in LAYERS }
+    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
+
     active_parent_rows: dict[int, pd.Series] = {}
     active_parent_rows[0] = None
+
     newpath = ""
 
+    # -------------------------------------------------------
+    # Walk through resolved levels
+    # -------------------------------------------------------
+
     for level, layer_type in resolved_levels.items():
-        # Skip if no steps and no spatial fallback available
+
         if level >= len(steps) and not here:
             logging.debug(f"[LEVEL {level}] Skipping {layer_type} layer — no step and no spatial fallback")
             continue
 
-        # Skip if the layer has already been processed
-        if has_treepoly(layer_type):
-            logging.debug(f"[LEVEL {level}] Skipping {layer_type} layer — already loaded")
-            continue
-
-        # Retrieve the layer definition for the current level
         layer = layer_defs.get((level, layer_type))
+
+
         if not layer:
             logging.warning(f"[LEVEL {level}] No layer processing for level {level} type {layer_type}")
             continue
 
-        # Prepare the selection or spatial fallback criteria
         select_name = steps[level] if level < len(steps) else None
         roid = here
-        logging.debug(f"[LEVEL {level}] layer_type: {layer_type}: select_name:{select_name}")
 
-        # Parent resolution logic
+        parent_row = active_parent_rows.get(level, None)
 
-        parent_row = active_parent_rows.get(level,None)
+        # Wrap parent geometry in GeoSeries to ensure CRS
+        parent_geom = (
+            gpd.GeoSeries([parent_row.geometry], crs= "EPSG:4326").iloc[0]
+            if parent_row is not None
+            else None
+            )
 
-        # Check if the parent_tree GeoDataFrame is valid and contains exactly one row
+        # Extract parent_name safely
         parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
-        # Loading the layer for this level
 
-        num_parent_rows = parent_row.shape[0] if parent_row is not None else 0
+        logging.debug(f"[LEVEL {level}] Loading {layer_type} with parent {parent_name}")
+        # -------------------------------------------------------
+        # Load layer
+        # -------------------------------------------------------
+        # so potential county variant if parent_name == 'county_variant'
+        if isinstance(layer['src'], list) and len(layer['src']) == 2:
 
-        logging.debug(f"[LEVEL {level}] Loading layer {layer_type} parent rows {num_parent_rows} in {parent_name} of type {parent_levels[level]}")
+            if parent_name and layer['src'][1].upper().find(parent_name.upper()) >= 0:
+                layer['src'] = layer['src'][1]
+                layer['field'] = layer['field'][1]
+                print(f"____Selecting secondary division source {layer['src']}")
+            else:
+                layer['src'] = layer['src'][0]
+                layer['field'][1] = layer['field'][1]
+                print(f"____Selecting primary division source {layer['src']} & {layer['field']}")
+
 
         name, tree_gdf, full_gdf = load_layer(
             layer=layer,
             level=level,
             resolved_levels=resolved_levels,
             parent_levels=parent_levels,
-            parent_row=parent_row, # None is allowed
+            parent_row=parent_row,
             select_name=select_name,
             roid=roid,
         )
+        if tree_gdf is not None and tree_gdf.crs is None:
+            tree_gdf.set_crs("EPSG:4326", inplace=True)
 
-        # Upsert the tree_gdf into Treepolys [layer type] and update the dataset
+        # -------------------------------------------------------
+        # Compute inclusion union
+        # -------------------------------------------------------
+
+        if parent_row is not None:
+            # Ensure we use the CRS of the data we are working with
+            current_crs = tree_gdf.crs if tree_gdf is not None else "EPSG:4326"
+            parent_gs = gpd.GeoSeries([parent_row.geometry], crs=current_crs)
+            parent_geom = parent_gs.iloc[0]
+        else:
+            parent_geom = None
+
+        existing_children = get_treepoly(layer_type)
+        children_union = None
+
+        if existing_children is not None and not existing_children.empty:
+            if existing_children.crs is None:
+                existing_children.set_crs("EPSG:4326", inplace=True)
+            children_union = existing_children.geometry.unary_union
+
+        if parent_geom is not None and children_union is not None:
+            inclusion_union = parent_geom.union(children_union)
+        elif parent_geom is not None:
+            inclusion_union = parent_geom
+        else:
+            inclusion_union = children_union
+
+        # -------------------------------------------------------
+        # Filter candidates by intersection
+        # -------------------------------------------------------
+        if tree_gdf is None or tree_gdf.empty:
+            continue  # skip empty layers
+        if inclusion_union is not None and tree_gdf is not None and not tree_gdf.empty:
+            tree_gdf = tree_gdf[tree_gdf.geometry.intersects(inclusion_union)]
+
+        # -------------------------------------------------------
+        # Upsert into Treepolys
+        # -------------------------------------------------------
+
         existing = get_treepoly(layer_type)
+
         if existing is None:
-            # layer search for name or lat long is empty so return all filter or intersecting candidates
             new_tree_gdf = tree_gdf
         else:
             new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
-        set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
-        # this is where the layer boundary features are inserted
-        # Debug upsert and check the updated data
-        updated = get_treepoly(layer_type)
-        logging.debug(f"[LEVEL {level}] After upsert {layer_type}: {len(updated) if updated is not None else 0} rows")
-        next_level = level + 1
-        # Determine the next level's parent filter from the current layer's data
-        active_parent_rows[next_level] = get_parent_row(parent_levels,next_level, parent_name,roid)
-        # parent_row of parent_layer_type = parent_levels[level]
-        # so where to store it ? active_
-        logging.debug(f"[LEVEL {next_level}] Active parent set to {parent_name}=={active_parent_rows[next_level].get('NAME', 'Unknown')}")
 
-        # Build the new path for the current layer
+        set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
+
+        updated = get_treepoly(layer_type)
+
+        logging.debug(
+            f"[LEVEL {level}] After upsert {layer_type}: "
+            f"{len(updated) if updated is not None else 0} rows"
+            )
+
+
+        # Prepare parent for next level
+        # -------------------------------------------------------
+
+        next_level = level + 1
+
+        active_parent_rows[next_level] = get_parent_row(
+            parent_levels,
+            next_level,
+            parent_name,
+            roid
+        )
+
+        logging.debug(
+            f"[LEVEL {next_level}] Active parent set to "
+            f"{parent_name}=={active_parent_rows[next_level].get('NAME', 'Unknown')}"
+        )
+
+        # -------------------------------------------------------
+        # Build path
+        # -------------------------------------------------------
+
         if name:
             newpath = f"{newpath}/{name}" if newpath else name
-            logging.debug(f"[LEVEL {level}] Layer {layer_type} loaded, newpath={newpath}")
 
+            logging.debug(
+                f"[LEVEL {level}] Layer {layer_type} loaded, newpath={newpath}"
+            )
 
     logging.debug(f"Final newpath: {newpath}")
+
     return newpath
-
-
 
 def layer_loaded(layer_key):
     return (
@@ -824,11 +895,11 @@ LAYERS = [
     {
         "key": "division",
         "level": 4,
-        "src": "Surrey_Proposed_Divisions.geojson",
-        "field": "Division_n",
+        "src": ["County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson","Revised_Surrey_Proposed_Divisions.geojson"],
+        "field": ["CED23NM","Division_n"],
         "out": "Division_Boundaries.geojson",
         "method": "intersect"
-    }
+    },
 
 ]
 

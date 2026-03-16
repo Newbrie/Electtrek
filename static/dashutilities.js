@@ -618,6 +618,9 @@
             })
             .then(resp => {
                 console.log(`✅ Response for "${key}":`, resp);
+                if (resp.constants) {
+                    updateConstantsUI(resp.constants, options);
+                }
                 if (!resp.success) {
                     console.warn(`⚠️ Failed to update "${key}":`, resp.error);
                     alert("Failed to update: " + resp.error);
