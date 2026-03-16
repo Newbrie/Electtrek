@@ -562,7 +562,7 @@ resourcesToggle?.addEventListener("click", () => {
 /* ---------------------------------------------------------
  * ELECTION DATA RESOURCE SELECTION REFRESH
  * --------------------------------------------------------- */
-const resourcesSelect = document.getElementById("resources");
+ const resourcesSelect = document.getElementById("resources");
 
 resourcesSelect?.addEventListener("blur", () => {
     const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
@@ -579,17 +579,21 @@ resourcesSelect?.addEventListener("blur", () => {
             value: selected
         })
     })
-        .then(res => res.json())
-        .then(resp => {
-          console.log(`✅ Response for "${key}":`, resp);
+    .then(res => res.json()) // ✅ convert response to JSON
+    .then(resp => {
+        console.log(`✅ Response for "resources":`, resp);
 
-          if (resp.constants) {
-              updateConstantsUI(resp.constants, options);
-          }
+        if (resp.constants) {
+            updateConstantsUI(resp.constants, resourcesSelect.options); // ✅ pass defined options
+        }
 
-          if (!resp.success) {
-              console.warn(`⚠️ Failed to update "${key}":`, resp.error);
-          }
+        if (!resp.success) {
+            console.warn(`⚠️ Failed to update "resources":`, resp.error); // ✅ use fixed key
+        }
+    })
+    .catch(err => {
+        console.error("Failed to update resources constant:", err);
+    });
 });
 
 
