@@ -2356,79 +2356,81 @@ class TreeNode:
 
         # Inject JS to replace default popup with canvas marker
         custom_click_js = r"""
-                async function handleMapClick(e) {
-                if (!window.fmap) return;
+        <script>
+            async function handleMapClick(e) {
+            if (!window.fmap) return;
 
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
 
-                // Prompt user for prefix
-                const prefix = prompt("Enter a prefix for this new place:", "");
-                if (!prefix) return;
+            // Prompt user for prefix
+            const prefix = prompt("Enter a prefix for this new place:", "");
+            if (!prefix) return;
 
-                // Remove previous temporary marker if exists
-                if (window.pinMarker) {
-                    if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
-                        window.MarkerLayer.removeLayer(window.pinMarker);
-                    } else if (window.fmap.hasLayer(window.pinMarker)) {
-                        window.fmap.removeLayer(window.pinMarker);
-                    }
-                }
-
-                // Create marker with canvas-based icon
-                const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
-                const marker = L.marker([lat, lng], { icon });
-                window.pinMarker = marker; // track temporary marker
-
-                try {
-                    // Reverse geocode using await
-                    const result = await window.reverseGeocode(lat, lng);
-                    console.log("📍 Reverse geocode result:", result);
-
-                    // Store in window.places
-                    const key = prefix || `place_${Date.now()}`;
-                    window.places = window.places || {};
-                    window.places[key] = {
-                        name: `${result.house_number || ""} ${result.road || ""}, ${result.suburb || ""} ${result.city || ""}`.trim(),
-                        lat,
-                        lng,
-                        postcode: result.postcode || ""
-                    };
-
-                    // Add popup showing prefix + address
-                    marker.bindPopup(`<b>${prefix}</b><br>${window.places[key].name}`).openPopup();
-
-                } catch (err) {
-                    console.error("❌ Reverse geocode failed:", err);
-
-                    // Fallback: just show lat/lng in popup
-                    marker.bindPopup(`<b>${prefix}</b><br>Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`).openPopup();
-                }
-
-                // Add marker to map or MarkerLayer
-                if (window.MarkerLayer) {
-                    window.MarkerLayer.addLayer(marker);
-                } else {
-                    marker.addTo(window.fmap);
-                    console.warn("⚠ MarkerLayer not found, marker added directly to map");
-                }
-
-                // Optional: post message to parent iframe/modal
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: "newPlaceCreated",
-                        prefix,
-                        lat,
-                        lng,
-                        house_number: window.places[prefix]?.house_number || "",
-                        road: window.places[prefix]?.road || "",
-                        suburb: window.places[prefix]?.suburb || "",
-                        city: window.places[prefix]?.city || "",
-                        postcode: window.places[prefix]?.postcode || ""
-                    }, "*");
+            // Remove previous temporary marker if exists
+            if (window.pinMarker) {
+                if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
+                    window.MarkerLayer.removeLayer(window.pinMarker);
+                } else if (window.fmap.hasLayer(window.pinMarker)) {
+                    window.fmap.removeLayer(window.pinMarker);
                 }
             }
-            """
+
+            // Create marker with canvas-based icon
+            const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
+            const marker = L.marker([lat, lng], { icon });
+            window.pinMarker = marker; // track temporary marker
+
+            try {
+                // Reverse geocode using await
+                const result = await window.reverseGeocode(lat, lng);
+                console.log("📍 Reverse geocode result:", result);
+
+                // Store in window.places
+                const key = prefix || `place_${Date.now()}`;
+                window.places = window.places || {};
+                window.places[key] = {
+                    name: `${result.house_number || ""} ${result.road || ""}, ${result.suburb || ""} ${result.city || ""}`.trim(),
+                    lat,
+                    lng,
+                    postcode: result.postcode || ""
+                };
+
+                // Add popup showing prefix + address
+                marker.bindPopup(`<b>${prefix}</b><br>${window.places[key].name}`).openPopup();
+
+            } catch (err) {
+                console.error("❌ Reverse geocode failed:", err);
+
+                // Fallback: just show lat/lng in popup
+                marker.bindPopup(`<b>${prefix}</b><br>Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`).openPopup();
+            }
+
+            // Add marker to map or MarkerLayer
+            if (window.MarkerLayer) {
+                window.MarkerLayer.addLayer(marker);
+            } else {
+                marker.addTo(window.fmap);
+                console.warn("⚠ MarkerLayer not found, marker added directly to map");
+            }
+
+            // Optional: post message to parent iframe/modal
+            if (window.parent) {
+                window.parent.postMessage({
+                    type: "newPlaceCreated",
+                    prefix,
+                    lat,
+                    lng,
+                    house_number: window.places[prefix]?.house_number || "",
+                    road: window.places[prefix]?.road || "",
+                    suburb: window.places[prefix]?.suburb || "",
+                    city: window.places[prefix]?.city || "",
+                    postcode: window.places[prefix]?.postcode || ""
+                }, "*");
+            }
+        }
+        </script>
+        """
 
 
         reverse_geocode_js = """
