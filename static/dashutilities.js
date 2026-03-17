@@ -591,37 +591,41 @@
                // =====================================================
                // AUTO BACKEND UPDATE
                // =====================================================
-               el.oninput = () => {
+               if (!el.dataset.bound) {
 
-                   if (window.isUpdatingConstants) return;
-                   if (el.dataset.updating === "true") return;
+                   el.oninput = () => {
 
-                   let newVal;
+                       if (window.isUpdatingConstants) return;
+                       if (el.dataset.updating === "true") return;
 
-                   if (el.type === "number") newVal = parseFloat(el.value);
-                   else if (el.type === "checkbox") newVal = el.checked;
-                   else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
-                   else newVal = el.value;
+                       let newVal;
 
-                   fetch("/set-constant", {
-                       method: "POST",
-                       credentials: "same-origin",
-                       headers: { "Content-Type": "application/json" },
-                       body: JSON.stringify({
-                           election: document.querySelector(".election-tab.active")?.dataset.election || "",
-                           name: key,
-                           value: newVal
+                       if (el.type === "number") newVal = parseFloat(el.value);
+                       else if (el.type === "checkbox") newVal = el.checked;
+                       else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
+                       else newVal = el.value;
+
+                       fetch("/set-constant", {
+                           method: "POST",
+                           credentials: "same-origin",
+                           headers: { "Content-Type": "application/json" },
+                           body: JSON.stringify({
+                               election: document.querySelector(".election-tab.active")?.dataset.election || "",
+                               name: key,
+                               value: newVal
+                           })
                        })
-                   })
-                   .then(res => res.json())
-                   .then(resp => {
-                       console.log(`✅ Response for "${key}":`, resp);
-                       // 🔥 intentionally NOT calling updateConstantsUI here
-                   })
-                   .catch(err => {
-                       console.error(`💥 Error updating "${key}":`, err);
-                   });
-               };
+                       .then(res => res.json())
+                       .then(resp => {
+                           console.log(`✅ Response for "${key}":`, resp);
+                       })
+                       .catch(err => {
+                           console.error(`💥 Error updating "${key}":`, err);
+                       });
+                   };
+
+                   el.dataset.bound = "true";
+               }
            });
 
            if (typeof attachListenersToConstantFields === "function") {
