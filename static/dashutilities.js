@@ -463,156 +463,179 @@
 
    window.updateConstantsUI = function (constants, options) {
 
-    if (window.isUpdatingConstants) return;   // 🛑 PREVENT RECURSION
+       if (window.isUpdatingConstants) return;
 
-    window.isUpdatingConstants = true;
+       window.isUpdatingConstants = true;
 
-    try {
+       try {
+           if (!constants || !options) {
+               console.warn("updateConstantsUI called without constants or options", { constants, options });
+               return;
+           }
 
-        if (!constants || !options) {
-            console.warn("updateConstantsUI called without constants or options", { constants, options });
-            return;
-        }
+           console.log("Updating constants UI", { constants, options });
 
-        console.log("Updating constants UI", { constants, options });
+           // =====================================================
+           // ⭐ GLOBALS
+           // =====================================================
+           Object.entries(options).forEach(([key, value]) => {
+               window[key] = value;
+           });
 
-        // =====================================================
-        // ⭐ GLOBALS
-        // =====================================================
-        Object.entries(options).forEach(([key, value]) => {
-            window[key] = value;
-        });
+           window.areas     = options?.areas || {};
+           window.places    = constants?.places || {};
+           window.resources = options?.resources || {};
+           window.tags      = constants?.tags || {};
+           window.territory = options?.territory || [];
 
-        window.areas       = options?.areas || {};
-        window.places      = constants?.places || {};
-        window.resources   = options?.resources || {};
-        window.tags        = constants?.tags || {};
-        window.territory   = options?.territory || [];
+           const result = getTagsJson(window.tags);
+           window.task_tags    = result.task_tags;
+           window.outcome_tags = result.outcome_tags;
 
-        const result = getTagsJson(window.tags);
-        window.task_tags    = result.task_tags;
-        window.outcome_tags = result.outcome_tags;
+           // =====================================================
+           populateAllSelects(options, constants);
 
-        // =====================================================
-        populateAllSelects(options, constants);
+           // =====================================================
+           // Resources
+           // =====================================================
+           const resourcesEl = document.getElementById("resources");
+           if (resourcesEl && options.resources) {
+               resourcesEl.innerHTML = "";
+               Object.entries(options.resources).forEach(([code, person]) => {
+                   const o = document.createElement("option");
+                   o.value = code;
+                   o.textContent = `${person.Firstname} ${person.Surname}`;
+                   resourcesEl.appendChild(o);
+               });
+           }
 
-        // =====================================================
-        // mapfiles
-        // =====================================================
-        const mapfilesEl = document.getElementById("mapfiles");
+           // =====================================================
+           // Candidate / Manager
+           // =====================================================
+           ["candidate", "campaignMgr"].forEach(role => {
+               const el = document.getElementById(role);
+               if (!el) return;
 
-        if (mapfilesEl && Array.isArray(constants.mapfiles)) {
+               el.innerHTML = "";
 
-            mapfilesEl.onchange = null;  // 🛑 detach handler
+               const selectedResources = Array.isArray(constants.resources)
+                   ? constants.resources
+                   : [];
 
-            mapfilesEl.innerHTML = "";
+               selectedResources.forEach(code => {
+                   const person = options.resources?.[code];
+                   if (!person) return;
 
-            constants.mapfiles.forEach(path => {
-                const o = document.createElement("option");
-                o.value = path;
-                o.textContent = path.split("/").pop();
-                mapfilesEl.appendChild(o);
-            });
+                   const o = document.createElement("option");
+                   o.value = code;
+                   o.textContent = `${person.Firstname} ${person.Surname}`;
+                   el.appendChild(o);
+               });
+           });
 
-            mapfilesEl.value =
-                constants.mapfile ||
-                constants.mapfiles[constants.mapfiles.length - 1];
+           // =====================================================
+           // Mapfiles
+           // =====================================================
+           const mapfilesEl = document.getElementById("mapfiles");
 
-            mapfilesEl.onchange = () => {
-                if (window.isUpdatingConstants) return;
-                changeIframeSrc(`/thru/${mapfilesEl.value}`);
-            };
-        }
+           if (mapfilesEl && Array.isArray(constants.mapfiles)) {
 
-    } finally {
-        window.isUpdatingConstants = false;   // ✅ ALWAYS resets
-    }
-};
-    // =====================================================
-    // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
-    // =====================================================
-    Object.entries(constants).forEach(([key, value]) => {
+               mapfilesEl.innerHTML = "";
 
-        if (key === "mapfiles") return;   // handled separately
-        const el = document.getElementById(key);
-        if (!el) return;
+               constants.mapfiles.forEach(path => {
+                   const o = document.createElement("option");
+                   o.value = path;
+                   o.textContent = path.split("/").pop();
+                   mapfilesEl.appendChild(o);
+               });
 
-        if (el.tagName === "SELECT") {
-            if (el.multiple && Array.isArray(value)) {
-                Array.from(el.options).forEach(opt => {
-                    opt.selected = value.includes(opt.value);
-                });
-            } else if (value != null) {
-                el.value = value;
-            }
-        } else if (el.type === "checkbox") {
-            el.checked = Boolean(value);
-        } else {
-            el.value = value ?? "";
-        }
+               mapfilesEl.value =
+                   constants.mapfile ||
+                   constants.mapfiles[constants.mapfiles.length - 1];
 
-        // =====================================================
-        // ⭐ AUTO BACKEND UPDATE
-        // =====================================================
-        el.oninput = () => {
+               mapfilesEl.onchange = () => {
+                   if (window.isUpdatingConstants) return;
+                   changeIframeSrc(`/thru/${mapfilesEl.value}`);
+               };
+           }
 
-            if (window.isUpdatingConstants) return;   // 🔥 prevents loop
+           // =====================================================
+           // Apply values + bind inputs
+           // =====================================================
+           Object.entries(constants).forEach(([key, value]) => {
 
-            let newVal;
+               if (key === "mapfiles") return;
 
-            if (el.type === "number") newVal = parseFloat(el.value);
-            else if (el.type === "checkbox") newVal = el.checked;
-            else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
-            else newVal = el.value;
+               const el = document.getElementById(key);
+               if (!el) return;
 
-            fetch("/set-constant", {
-                method: "POST",
-                credentials: "same-origin",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    election: document.querySelector(".election-tab.active")?.dataset.election || "",
-                    name: key,
-                    value: newVal
-                })
-            })
-            .then(res => {
-                if (!res.ok) {
-                    console.error(`❌ HTTP error ${res.status} when setting constant "${key}"`);
-                    throw new Error(`HTTP error ${res.status}`);
-                }
-                return res.json();
-            })
-            .then(resp => {
-                console.log(`✅ Response for "${key}":`, resp);
-                if (resp.constants) {
-                    updateConstantsUI(resp.constants, options);
-                }
-                if (!resp.success) {
-                    console.warn(`⚠️ Failed to update "${key}":`, resp.error);
-                    alert("Failed to update: " + resp.error);
-                }
-            })
-            .catch(err => {
-                console.error(`💥 Unhandled promise rejection for "${key}":`, err);
-                alert("Server error while updating constant. Check console for details.");
-            });
-        };
+               // 🛑 prevent triggering input while updating
+               el.dataset.updating = "true";
 
+               if (el.tagName === "SELECT") {
+                   if (el.multiple && Array.isArray(value)) {
+                       Array.from(el.options).forEach(opt => {
+                           opt.selected = value.includes(opt.value);
+                       });
+                   } else if (value != null) {
+                       el.value = value;
+                   }
+               } else if (el.type === "checkbox") {
+                   el.checked = Boolean(value);
+               } else {
+                   el.value = value ?? "";
+               }
 
-    });
+               el.dataset.updating = "false";
 
-    if (typeof attachListenersToConstantFields === "function") {
-        attachListenersToConstantFields(constants);
-    }
+               // =====================================================
+               // AUTO BACKEND UPDATE
+               // =====================================================
+               el.oninput = () => {
 
-    // Optional: any additional dropdown setup
-    if (typeof populateDropdowns === "function") {
-        populateDropdowns();
-    }
-    window.isUpdatingConstants = false;
+                   if (window.isUpdatingConstants) return;
+                   if (el.dataset.updating === "true") return;
 
-};
+                   let newVal;
 
+                   if (el.type === "number") newVal = parseFloat(el.value);
+                   else if (el.type === "checkbox") newVal = el.checked;
+                   else if (el.multiple) newVal = Array.from(el.selectedOptions).map(o => o.value);
+                   else newVal = el.value;
+
+                   fetch("/set-constant", {
+                       method: "POST",
+                       credentials: "same-origin",
+                       headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify({
+                           election: document.querySelector(".election-tab.active")?.dataset.election || "",
+                           name: key,
+                           value: newVal
+                       })
+                   })
+                   .then(res => res.json())
+                   .then(resp => {
+                       console.log(`✅ Response for "${key}":`, resp);
+                       // 🔥 intentionally NOT calling updateConstantsUI here
+                   })
+                   .catch(err => {
+                       console.error(`💥 Error updating "${key}":`, err);
+                   });
+               };
+           });
+
+           if (typeof attachListenersToConstantFields === "function") {
+               attachListenersToConstantFields(constants);
+           }
+
+           if (typeof populateDropdowns === "function") {
+               populateDropdowns();
+           }
+
+       } finally {
+           window.isUpdatingConstants = false;
+       }
+   };
 
 
  const getActiveElectionTab = () =>
