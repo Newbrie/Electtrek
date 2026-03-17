@@ -496,9 +496,9 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
             r"""
             \b
             (                                   # --- Start capturing group
-                (?:Flat|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
+                (?:Flat|Room|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
                 |
-                (?:Flat|Apartment|House)?\s*                                          # Optional prefix
+                (?:Flat|Room|Apartment|House)?\s*                                          # Optional prefix
                 \d+[A-Za-z]{0,2}                                                      # Main number (e.g. 23B, 234BC)
                 (?:\s*[-/]\s*\d+[A-Za-z]{0,2})?                                       # Optional range or slash
             )
@@ -512,9 +512,9 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
             r"""
             \b
             (                                   # --- Start capturing group
-                (?:Flat|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
+                (?:Flat|Room|Apartment|House)\s*\d+[A-Za-z]{0,2}\s*,\s*\d+[A-Za-z]{0,2}     # Matches: Flat 1, 423 or Flat 12BC, 123A
                 |
-                (?:Flat|Apartment|House)?\s*                                          # Optional prefix
+                (?:Flat|Room|Apartment|House)?\s*                                          # Optional prefix
                 \d+[A-Za-z]{0,2}                                                      # Main number (e.g. 23B, 234BC)
                 (?:\s*[-/]\s*\d+[A-Za-z]{0,2})?                                       # Optional range or slash
             )

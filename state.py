@@ -1,6 +1,7 @@
 import json
 import os
 import pandas as pd
+import re
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.geometry import Point, Polygon
@@ -19,11 +20,36 @@ from types import MappingProxyType
 
 progress = {}
 
+
+
 def normalname(name):
+    import re
     if isinstance(name, str):
-        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").replace(" ","_").upper().removesuffix("_ED")
+        # 1. Replace & with AND
+        name = name.replace(" & ", " AND ")
+        # 2. Remove unwanted punctuation (keep spaces)
+        name = re.sub(r"[^A-Za-z0-9 ]+", "", name)
+        # 3. Remove apostrophes and dots explicitly (optional, already handled by regex)
+        name = name.replace("'", "").replace(".", "")
+        # 4. Replace multiple spaces with single space
+        name = re.sub(r"\s+", " ", name)
+        # 5. Strip leading/trailing spaces
+        name = name.strip()
+        # 6. Replace spaces with underscore
+        name = name.replace(" ", "_")
+        # 7. Uppercase and remove _ED suffix if present
+        name = name.upper().removesuffix("_ED")
     elif isinstance(name, pd.Series):
-        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.replace(" ","_").str.upper().removesuffix("_ED")
+        import pandas as pd
+        name = name.str.replace(" & ", " AND ", regex=False)\
+                   .str.replace(r"[^A-Za-z0-9 ]+", "", regex=True)\
+                   .str.replace("'", "", regex=False)\
+                   .str.replace(".", "", regex=False)\
+                   .str.replace(r"\s+", " ", regex=True)\
+                   .str.strip()\
+                   .str.replace(" ", "_")\
+                   .str.upper()\
+                   .str.removesuffix("_ED")
     else:
         print("______ERROR: Can only normalise name in a string or series")
     return name
