@@ -1548,9 +1548,24 @@ abbr[title] {
     cursor:help
 }
 
+/* keep your existing rule */
 input[type=search] {
     -webkit-box-sizing: border-box;
-    box-sizing:border-box
+    box-sizing: border-box;
+}
+
+/* position the search bar inside the map */
+#mapwin input[type="search"] {
+    position: absolute;
+    top: 10px;
+    right: 80px;   /* move it left of the layer control */
+    z-index: 900;
+    width: 220px;
+}
+
+/* ensure the layer control sits above it */
+#mapwin .leaflet-control-layers {
+    z-index: 1000;
 }
 
 input[type=text] {

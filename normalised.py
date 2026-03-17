@@ -8,6 +8,7 @@ from requests.auth import HTTPDigestAuth
 import config
 from config import GENESYS_FILE
 from datetime import datetime
+from state import normalname
 
 
 
@@ -16,14 +17,7 @@ from datetime import datetime
 print("Config in Normalised loaded successfully:", config.workdirectories)
 
 
-def normalname(name):
-    if isinstance(name, str):
-        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").strip().replace(" ","_").upper()
-    elif isinstance(name, pd.Series):
-        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.strip().str.replace(" ","_").str.upper()
-    else:
-        print("______ERROR: Can only normalise name in a string or series")
-    return name
+
 def extract_initials(words):
     """Extract initials from word list and return (remaining_words, initials_string)"""
     initials = [w for w in words if re.fullmatch(r'([A-Z]\s?)+', w)]

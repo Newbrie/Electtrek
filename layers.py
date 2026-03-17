@@ -439,7 +439,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_nodemarks(c_election, rlevels, node, static)
 
         elif intention_type in ("polling_district", "walk"):
-            self.generate_voronoi_with_geovoronoi(
+            self.add_voronoi(
                 c_election, rlevels, node, static
             )
         else:
@@ -474,7 +474,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def generate_voronoi_with_geovoronoi(self, c_election, rlevels, node, static=False):
+    def add_voronoi(self, c_election, rlevels, node, static=False):
 
         from elections import CurrentElection
         from flask import url_for
@@ -677,8 +677,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
 
-            popup = folium.Popup(street_html, max_width=900)
-
+            popup = folium.Popup(street_html, max_width=900, show=False)
             # -------------------------
             # Style
             # -------------------------
@@ -724,17 +723,61 @@ class ExtendedFeatureGroup(FeatureGroup):
                     style_function=lambda x, s=style: s
                 )
 
-                folium.Tooltip(tooltip_html).add_to(gj)
+
+                folium.Tooltip(
+                    tooltip_html,
+                    sticky=True,
+                    interactive=False
+                    ).add_to(gj)
+
 
                 gj.add_child(popup)
 
                 print(f"DEBUG LAYER: Children before add {len(self._children)}")
 
                 gj.add_to(self)
+                layer_name = gj.get_name()
+
+                longpress_js = f"""
+                var layer = {layer_name};
+                var pressTimer;
+                var longPressTriggered = false;
+
+                // Remove Leaflet's automatic popup binding
+                var popup = layer.getPopup();
+                layer.unbindPopup();
+                layer.bindPopup(popup);
+
+                // CLICK → tooltip
+                layer.on('click', function(e) {{
+                    if (!longPressTriggered) {{
+                        layer.openTooltip();
+                    }}
+                }});
+
+                // LONG PRESS → popup
+                layer.on('touchstart mousedown', function(e) {{
+                    longPressTriggered = false;
+
+                    pressTimer = setTimeout(function() {{
+                        longPressTriggered = true;
+                        layer.openPopup();
+                    }}, 600);
+                }});
+
+                layer.on('touchend mouseup mouseleave touchcancel', function(e) {{
+                    clearTimeout(pressTimer);
+                }});
+                """
+
+                self.add_child(folium.Element(f"<script>{longpress_js}</script>"))
+
 
                 print(f"DEBUG LAYER: Children after add {len(self._children)}")
 
                 polygons_added += 1
+
+
 
             except Exception as e:
 

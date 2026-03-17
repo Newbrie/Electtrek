@@ -462,106 +462,72 @@
 
 
    window.updateConstantsUI = function (constants, options) {
-     window.isUpdatingConstants = true;
 
-    if (!constants || !options) {
-        console.warn("updateConstantsUI called without constants or options", { constants, options });
-        return;
-    }
+    if (window.isUpdatingConstants) return;   // 🛑 PREVENT RECURSION
 
-    console.log("Updating constants UI", { constants, options });
+    window.isUpdatingConstants = true;
 
-    // =====================================================
-    // ⭐ GLOBALS
-    // =====================================================
-    Object.entries(options).forEach(([key, value]) => {
-        window[key] = value;
-    });
+    try {
 
-    window.areas       = options?.areas || {};
-    window.places      = constants?.places || {};
-    window.resources   = options?.resources || {};
-    window.tags        = constants?.tags || {};
-    window.territory   = options?.territory || [];
-
-    const result = getTagsJson(window.tags);
-    window.task_tags    = result.task_tags;
-    window.outcome_tags = result.outcome_tags;
-
-    // =====================================================
-    // ⭐ POPULATE ALL SELECTS FIRST
-    // =====================================================
-    populateAllSelects(options, constants);
-
-
-    // =====================================================
-    // ⭐ SPECIAL CASES FOR SELECTS
-    // =====================================================
-
-    // Resources (multi-select)
-    const resourcesEl = document.getElementById("resources");
-    if (resourcesEl && options.resources) {
-        resourcesEl.innerHTML = "";
-        Object.entries(options.resources).forEach(([code, person]) => {
-            const o = document.createElement("option");
-            o.value = code;
-            o.textContent = `${person.Firstname} ${person.Surname}`;
-            resourcesEl.appendChild(o);
-        });
-    }
-
-    // candidate & campaignMgr (filtered from selected resources)
-    ["candidate", "campaignMgr"].forEach(role => {
-        const el = document.getElementById(role);
-        if (!el) return;
-
-        el.innerHTML = "";
-
-        const selectedResources = Array.isArray(constants.resources)
-            ? constants.resources
-            : [];
-
-        selectedResources.forEach(code => {
-            const person = options.resources?.[code];
-            if (!person) return;
-
-            const o = document.createElement("option");
-            o.value = code;
-            o.textContent = `${person.Firstname} ${person.Surname}`;
-            el.appendChild(o);
-        });
-    });
-
-    // mapfiles
-    // mapfiles
-    const mapfilesEl = document.getElementById("mapfiles");
-
-    if (mapfilesEl && Array.isArray(constants.mapfiles)) {
-
-        mapfilesEl.innerHTML = "";
-
-        constants.mapfiles.forEach(path => {
-
-            const o = document.createElement("option");
-            o.value = path;
-            o.textContent = path.split("/").pop();
-
-            mapfilesEl.appendChild(o);
-
-        });
-
-        // ⭐ set the selected value explicitly
-        if (constants.mapfile) {
-            mapfilesEl.value = constants.mapfile;
-        } else {
-            mapfilesEl.value = constants.mapfiles[constants.mapfiles.length - 1];
+        if (!constants || !options) {
+            console.warn("updateConstantsUI called without constants or options", { constants, options });
+            return;
         }
 
-        mapfilesEl.onchange = () => {
-            changeIframeSrc(`/thru/${mapfilesEl.value}`);
-        };
-    }
+        console.log("Updating constants UI", { constants, options });
 
+        // =====================================================
+        // ⭐ GLOBALS
+        // =====================================================
+        Object.entries(options).forEach(([key, value]) => {
+            window[key] = value;
+        });
+
+        window.areas       = options?.areas || {};
+        window.places      = constants?.places || {};
+        window.resources   = options?.resources || {};
+        window.tags        = constants?.tags || {};
+        window.territory   = options?.territory || [];
+
+        const result = getTagsJson(window.tags);
+        window.task_tags    = result.task_tags;
+        window.outcome_tags = result.outcome_tags;
+
+        // =====================================================
+        populateAllSelects(options, constants);
+
+        // =====================================================
+        // mapfiles
+        // =====================================================
+        const mapfilesEl = document.getElementById("mapfiles");
+
+        if (mapfilesEl && Array.isArray(constants.mapfiles)) {
+
+            mapfilesEl.onchange = null;  // 🛑 detach handler
+
+            mapfilesEl.innerHTML = "";
+
+            constants.mapfiles.forEach(path => {
+                const o = document.createElement("option");
+                o.value = path;
+                o.textContent = path.split("/").pop();
+                mapfilesEl.appendChild(o);
+            });
+
+            mapfilesEl.value =
+                constants.mapfile ||
+                constants.mapfiles[constants.mapfiles.length - 1];
+
+            mapfilesEl.onchange = () => {
+                if (window.isUpdatingConstants) return;
+                changeIframeSrc(`/thru/${mapfilesEl.value}`);
+            };
+        }
+
+    } finally {
+        window.isUpdatingConstants = false;   // ✅ ALWAYS resets
+    }
+};
     // =====================================================
     // ⭐ APPLY SELECTED VALUES (single + multi + checkbox)
     // =====================================================

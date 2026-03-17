@@ -15,7 +15,7 @@ import folium
 import uuid
 from pathlib import Path
 from datetime import datetime
-from state import branchcolours
+from state import branchcolours, normalname
 import sys, math, stat, json
 
 
@@ -212,14 +212,7 @@ def get_creation_date(filepath):
         print(f"Error getting creation date for {filepath}: {e}")
         return None  # Return None if the file is inaccessible
 
-def normalname(name):
-    if isinstance(name, str):
-        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").replace(" ","_").upper()
-    elif isinstance(name, pd.Series):
-        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.replace(" ","_").str.upper()
-    else:
-        print("______ERROR: Can only normalise name in a string or series")
-    return name
+
 
 
 
@@ -1861,10 +1854,15 @@ class TreeNode:
         from pathlib import Path
         rlevels = CEdata.resolved_levels
         print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
+        accumulate = session.get("accumulate", False)
 
-        print(f"___BEFORE map creation: in route {route()} creating file: ", self.file(rlevels))
+        if accumulate and self.parent is not None:
+            mapfile = self.parent.mapfile(rlevels)
+        else:
+            mapfile = self.mapfile(rlevels)
 
-        mapfile = self.mapfile(rlevels)
+        print(f"___AFTER map creation: on route {route()} acc: {accumulate} creating file: ", self.mapfile(rlevels))
+
         counters = make_counters()
 
             # 2️⃣ Create fresh FeatureGroups for THIS map
@@ -1966,28 +1964,55 @@ class TreeNode:
             </style>
             """
 
+        # --- Title for the map
 
+        if accumulate and self.parent is not None:
+            title = self.parent.value
+        else:
+            title = self.value
+
+        title_html = f'''
+        <h2 style="
+            z-index: 1100;
+            color: black;
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            font-variant: small-caps;
+            font-size: 12px;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        ">{title} MAP</h2>
+        '''
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
             <style>
             #customSearchBox {
-                position: fixed;
-                top: 60px;
-                left: 100px;
-                z-index: 1100;
+                position: absolute;
+                top: 10px;
+                left: 50px;          /* shift 40px to the right */
+                z-index: 1000;
                 background: white;
-                padding: 5px;
+                padding: 8px 10px;
                 border: 1px solid #ccc;
-                font-size: 14px;
                 display: flex;
-                gap: 8px;
-                align-items: center;
+                flex-direction: column;
+                gap: 5px;
+                font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
             }
+
+            #customSearchBox h2 {
+                margin: 0;
+                font-variant: small-caps;
+                font-size: 12px;
+                color: black;
+            }
+
             #customSearchBox input {
                 padding: 4px 6px;
                 font-size: 14px;
             }
+
             #customSearchBox button {
                 padding: 4px 8px;
                 font-size: 14px;
@@ -1998,39 +2023,32 @@ class TreeNode:
             .leaflet-container.add-place-mode {
                 cursor: crosshair;
             }
-
-
             </style>
 
-
             <div id="customSearchBox">
-                <input type="text" id="searchInput" placeholder="Search..." />
-                <button onclick="searchMap()">Search</button>
-                <button id="backToCalendarBtn">📅 Calendar</button>
+                <h2></h2>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="searchInput" placeholder="Search..." />
+                    <button onclick="searchMap()">Search</button>
+                    <button id="backToCalendarBtn">📅 Calendar</button>
+                </div>
             </div>
 
             <script>
-
-
             document.addEventListener("DOMContentLoaded", function () {
-
-
                 function waitForMap() {
                     for (const key in window) {
                         if (window.hasOwnProperty(key)) {
                             const val = window[key];
                             if (val && val instanceof L.Map) {
-                                window.fmap = val;  // assign fmap here
+                                window.fmap = val;
                                 return;
                             }
                         }
                     }
                     setTimeout(waitForMap, 100);
                 }
-
                 waitForMap();
-
-
             });
 
             let toggleSent = false;
@@ -2038,39 +2056,14 @@ class TreeNode:
                 if (!toggleSent) {
                     window.parent.postMessage({ type: "toggleView" }, "*");
                     toggleSent = true;
-                    setTimeout(() => { toggleSent = false }, 500); // reset after half a second
+                    setTimeout(() => { toggleSent = false }, 500);
                 }
             });
-
-
-            function extractVisibleText(element) {
-                const walker = document.createTreeWalker(
-                    element,
-                    NodeFilter.SHOW_TEXT,
-                    {
-                        acceptNode: function (node) {
-                            const parent = node.parentNode;
-                            const style = window.getComputedStyle(parent);
-                            if (style && style.visibility !== 'hidden' && style.display !== 'none') {
-                                return NodeFilter.FILTER_ACCEPT;
-                            }
-                            return NodeFilter.FILTER_REJECT;
-                        }
-                    }
-                );
-
-                let visibleText = '';
-                while (walker.nextNode()) {
-                    visibleText += walker.currentNode.nodeValue + ' ';
-                }
-                return visibleText.trim();
-            }
 
             async function searchMap() {
                 const query = document.getElementById("searchInput").value.trim();
                 if (!query) return;
 
-                // --- 1️⃣ Check if query looks like a UK postcode ---
                 const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
                 if (postcodePattern.test(query)) {
                     const cleanPostcode = query.replace(/\s+/g, '');
@@ -2083,7 +2076,6 @@ class TreeNode:
                         if (data.status === "match" && data.data) {
                             const { latitude, longitude } = data.data;
                             fmap.setView([latitude, longitude], 17);
-
                             L.marker([latitude, longitude])
                                 .addTo(fmap)
                                 .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
@@ -2095,21 +2087,17 @@ class TreeNode:
                         }
                     } catch (err) {
                         console.error("Postcode lookup failed:", err);
-                        // Only alert if the fmap didn’t already move
                         if (!fmap.getCenter()) alert("Error looking up postcode.");
                         return;
                     }
-
                 }
 
-                // --- 2️⃣ Otherwise, continue with your existing in-map search logic ---
                 const normalizedQuery = query.toLowerCase();
                 let found = false;
 
                 fmap.eachLayer(function (layer) {
                     if (found) return;
 
-                    // ✅ Search Popups with <b data-name="...">
                     if (layer.getPopup && layer.getPopup()) {
                         let bElements = [];
                         const content = layer.getPopup().getContent();
@@ -2140,7 +2128,6 @@ class TreeNode:
                         }
                     }
 
-                    // ✅ Search Tooltips
                     if (!found && layer.getTooltip && layer.getTooltip()) {
                         const tooltipContent = layer.getTooltip().getContent();
                         if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
@@ -2156,14 +2143,7 @@ class TreeNode:
                         }
                     }
 
-                    // ✅ Search DivIcons
-                    // ✅ Search only markers inside the marker FeatureGroup
-                    if (
-                        !found &&
-                        window.MarkerLayer &&
-                        layer instanceof L.Marker &&
-                        window.MarkerLayer.hasLayer(layer)
-                    ) {
+                    if (!found && window.MarkerLayer && layer instanceof L.Marker && window.MarkerLayer.hasLayer(layer)) {
                         if (layer.options.icon instanceof L.DivIcon) {
                             const html = layer.options.icon.options.html || "";
                             if (html.toLowerCase().includes(normalizedQuery)) {
@@ -2176,7 +2156,6 @@ class TreeNode:
                             }
                         }
                     }
-
                 });
 
                 if (!found) {
@@ -2184,15 +2163,8 @@ class TreeNode:
                 }
             }
             </script>
-
             """
 
-
-        # --- Title for the map
-        title = f"{self.value} MAP"
-        title_html = f'''
-            <h1 style="z-index:1100;color: black;position: fixed;left:100px;">{title}</h1>
-            '''
 
         # --- Create the map
         FolMap = folium.Map(
@@ -2356,112 +2328,69 @@ class TreeNode:
 
         # Inject JS to replace default popup with canvas marker
         custom_click_js = r"""
-        <script>
+            <script>
             async function handleMapClick(e) {
-            if (!window.fmap) return;
 
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
+                if (!window.fmap) return;
 
-            // Prompt user for prefix
-            const prefix = prompt("Enter a prefix for this new place:", "");
-            if (!prefix) return;
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
 
-            // Remove previous temporary marker if exists
-            if (window.pinMarker) {
-                if (window.MarkerLayer && window.MarkerLayer.hasLayer(window.pinMarker)) {
-                    window.MarkerLayer.removeLayer(window.pinMarker);
-                } else if (window.fmap.hasLayer(window.pinMarker)) {
-                    window.fmap.removeLayer(window.pinMarker);
+                console.log("📍 Map click for add-place:", lat, lng);
+
+                let result = null;
+
+                try {
+                    result = await window.reverseGeocode(lat, lng);
+                } catch (err) {
+                    console.error("Reverse geocode failed:", err);
                 }
-            }
 
-            // Create marker with canvas-based icon
-            const icon = window.makePrefixMarkerIcon(prefix, "#d9534f");
-            const marker = L.marker([lat, lng], { icon });
-            window.pinMarker = marker; // track temporary marker
-
-            try {
-                // Reverse geocode using await
-                const result = await window.reverseGeocode(lat, lng);
-                console.log("📍 Reverse geocode result:", result);
-
-                // Store in window.places
-                const key = prefix || `place_${Date.now()}`;
-                window.places = window.places || {};
-                window.places[key] = {
-                    name: `${result.house_number || ""} ${result.road || ""}, ${result.suburb || ""} ${result.city || ""}`.trim(),
-                    lat,
-                    lng,
-                    postcode: result.postcode || ""
-                };
-
-                // Add popup showing prefix + address
-                marker.bindPopup(`<b>${prefix}</b><br>${window.places[key].name}`).openPopup();
-
-            } catch (err) {
-                console.error("❌ Reverse geocode failed:", err);
-
-                // Fallback: just show lat/lng in popup
-                marker.bindPopup(`<b>${prefix}</b><br>Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`).openPopup();
-            }
-
-            // Add marker to map or MarkerLayer
-            if (window.MarkerLayer) {
-                window.MarkerLayer.addLayer(marker);
-            } else {
-                marker.addTo(window.fmap);
-                console.warn("⚠ MarkerLayer not found, marker added directly to map");
-            }
-
-            // Optional: post message to parent iframe/modal
-            if (window.parent) {
+                // 🔑 Send to your existing modal system
                 window.parent.postMessage({
-                    type: "newPlaceCreated",
-                    prefix,
+                    type: "mapLocationSelected",
                     lat,
                     lng,
-                    house_number: window.places[prefix]?.house_number || "",
-                    road: window.places[prefix]?.road || "",
-                    suburb: window.places[prefix]?.suburb || "",
-                    city: window.places[prefix]?.city || "",
-                    postcode: window.places[prefix]?.postcode || ""
+                    house_number: result?.house_number || "",
+                    road: result?.road || "",
+                    suburb: result?.suburb || "",
+                    city: result?.city || "",
+                    postcode: result?.postcode || ""
                 }, "*");
             }
-        }
-        </script>
-        """
+            </script>
+            """
 
 
         reverse_geocode_js = """
-        <script>
-        // Simple reverse geocoder using Nominatim
-        window.reverseGeocode = async function(lat, lng) {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+            <script>
+            // Simple reverse geocoder using Nominatim
+            window.reverseGeocode = async function(lat, lng) {
+                const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
 
-            const res = await fetch(url, {
-                headers: {
-                    "Accept": "application/json"
-                }
-            });
+                const res = await fetch(url, {
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                });
 
-            if (!res.ok) throw new Error("Reverse geocoding failed");
+                if (!res.ok) throw new Error("Reverse geocoding failed");
 
-            const data = await res.json();
-            console.log("📍 Reverse geocode result:", data);
+                const data = await res.json();
+                console.log("📍 Reverse geocode result:", data);
 
-            return {
-                address: data.display_name || "Unknown address",
-                house_number: data.address?.house_number || "",
-                road: data.address?.road || "",
-                suburb: data.address?.suburb || "",
-                city: data.address?.city || data.address?.town || data.address?.village || "",
-                postcode: data.address?.postcode || ""
+                return {
+                    address: data.display_name || "Unknown address",
+                    house_number: data.address?.house_number || "",
+                    road: data.address?.road || "",
+                    suburb: data.address?.suburb || "",
+                    city: data.address?.city || data.address?.town || data.address?.village || "",
+                    postcode: data.address?.postcode || ""
+                };
+
             };
-
-        };
-        </script>
-        """
+            </script>
+            """
 
         transparency = """
         <style>

@@ -7,7 +7,6 @@ from shapely.geometry import Point, Polygon
 from shapely import crosses, contains,covers, union, envelope, intersection
 from shapely.ops import nearest_points
 from elections import route, branchcolours
-
 from collections import defaultdict
 from typing import DefaultDict
 from pathlib import Path
@@ -22,9 +21,9 @@ progress = {}
 
 def normalname(name):
     if isinstance(name, str):
-        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").replace(" ","_").upper()
+        name = name.replace(" & "," AND ").replace(r'[^A-Za-z0-9 ]+', '').replace("'","").replace(".","").replace(","," ").replace("  "," ").replace(" ","_").upper().removesuffix("_ED")
     elif isinstance(name, pd.Series):
-        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.replace(" ","_").str.upper()
+        name = name.str.replace(" & "," AND ").str.replace(r'[^A-Za-z0-9 ]+', '').str.replace("'","").str.replace(".","").str.replace(","," ").str.replace("  "," ").str.replace(" ","_").str.upper().removesuffix("_ED")
     else:
         print("______ERROR: Can only normalise name in a string or series")
     return name
@@ -206,12 +205,15 @@ def intersectingArea(
 
     gdf = ensure_4326(gdf_RAW)
 
-    gdf = gdf.rename(columns={sourcekey: "NAME"})
+    if sourcekey in gdf.columns:
+        gdf = gdf.rename(columns={sourcekey: "NAME"})
+    else:
+        raise ValueError(f"No sourcekey {sourcekey} IN {gdf.columns}")
     if "OBJECTID" in gdf.columns:
         gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
     all_child_polygons = gdf
-    print(f"[DEBUG] Loaded {len(gdf)} child features")
+    print(f"[DEBUG] Loaded {len(gdf)} child features and cols: {gdf.columns}")
 
     # ------------------------------------------------------------------
     # 2. Skip parent validation and intersection if parent_row is None
@@ -519,7 +521,7 @@ def ensure_treepolys(
                 print(f"____Selecting secondary division source {layer['src']}")
             else:
                 layer['src'] = layer['src'][0]
-                layer['field'][1] = layer['field'][1]
+                layer['field'] = layer['field'][0]
                 print(f"____Selecting primary division source {layer['src']} & {layer['field']}")
 
 

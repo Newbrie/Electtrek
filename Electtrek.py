@@ -524,9 +524,19 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             fixlevel = int(data.get('fixlevel', 0)) if data.get('fixlevel') else 0
 
             if file_path.upper().endswith('.CSV'):
-                dfx = pd.read_csv(file_path, sep=',', encoding='ISO-8859-1')
+                dfx = pd.read_csv(
+                    file_path,
+                    sep=',',
+                    encoding='ISO-8859-1',
+                    keep_default_na=False
+                )
+
             elif file_path.upper().endswith('.XLSX'):
-                dfx = pd.read_excel(file_path, engine='openpyxl')
+                dfx = pd.read_excel(
+                    file_path,
+                    engine='openpyxl',
+                    keep_default_na=False
+                )
             else:
                 continue
 
@@ -1920,7 +1930,6 @@ def update_current_election():
 def get_constants():
     global CElection
     print("____Route/get_constants" )
-    restore_from_persist(Treepolys, Fullpolys)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
@@ -1969,6 +1978,9 @@ def set_constant():
     elif name == "mapfiles":
         CElection.add_newarea(value)
     elif name == "adminmode":
+        value = bool(value)
+        CElection[name] = value
+    elif name == "accumulate":
         value = bool(value)
         CElection[name] = value
     else:
