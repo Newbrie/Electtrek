@@ -501,35 +501,51 @@ document.getElementById("logout-button")?.addEventListener("click", () => {
 * RESET-ELECTION TERRITORY ON CHANGE TRIGGER
 * --------------------------------------------------------- */
 
-const territorySelect = document.getElementById("territory");
+const territoryInput = document.getElementById("territoryInput"); // visible field
+const territoryValue = document.getElementById("territoryValue"); // hidden value
+const geoPanel = document.getElementById("geoPanel");
 const mapIframe = document.getElementById("iframe1");
 
-territorySelect.addEventListener("change", async () => {
-    const mapfile = territorySelect.value;
-    if (!mapfile) return;
+async function updateTerritory(path) {
+    if (!path) return;
 
     try {
-        // 1️⃣ persist selection
         const res = await fetch("/update-territory", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ mapfile: mapfile })
+            body: JSON.stringify({ mapfile: path })
         });
 
         if (!res.ok) {
             throw new Error("Failed to update territory");
         }
 
-        // 2️⃣ update map iframe
-        mapIframe.src = `/upbut/${encodeURIComponent(mapfile)}`;
+        mapIframe.src = `/upbut/${encodeURIComponent(path)}`;
 
     } catch (err) {
         console.error(err);
         alert("Could not save territory selection");
     }
-});
+}
+
+function selectTerritory(path) {
+    currentPath = path;
+
+    // visible label
+
+    territoryInput.value = geoIndex[path].name;
+
+    // actual stored value (this replaces <select>.value)
+    territoryValue.value = path;
+
+    updateTerritory(path);
+
+    geoPanel.classList.add("hidden");
+}
+
+
 
 
 

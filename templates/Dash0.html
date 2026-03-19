@@ -223,7 +223,18 @@
         Admin Mode: <input type="checkbox" class="righted" name="adminmode" id="adminmode"><br>
       </li>
       <li class="righted">
-        Territory: <select class="righted"name="territory" id="territory"></select><br>
+        Territory:
+        <div class="geo-select righted">
+          <!-- visible field -->
+          <input type="text" id="territoryInput" readonly placeholder="Select territory" />
+
+          <!-- hidden real value (replaces <select>.value) -->
+          <input type="hidden" name="territory" id="territoryValue" />
+
+          <!-- dropdown panel -->
+          <div id="geoPanel" class="panel hidden"></div>
+        </div>
+        <br>
       </li>
       <li class="righted">
       Party selected: <select class="righted" name="yourparty" id="yourparty"></select><br>

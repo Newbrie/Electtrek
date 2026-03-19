@@ -376,65 +376,65 @@ document.addEventListener('click', function (e) {
       };
 
       function updateRagUI(ragData) {
-    if (!ragData || typeof ragData !== "object") {
-        console.error("Invalid RAG data");
-        return;
-    }
+      if (!ragData || typeof ragData !== "object") {
+          console.error("Invalid RAG data");
+          return;
+      }
 
-    // Get the table body where we'll insert rows
-    const tableBody = document.querySelector('#stream-table-body');
-    if (!tableBody) {
-        console.error("Table body #stream-table-body not found in DOM");
-        return;
-    }
+      // Get the table body where we'll insert rows
+      const tableBody = document.querySelector('#stream-table-body');
+      if (!tableBody) {
+          console.error("Table body #stream-table-body not found in DOM");
+          return;
+      }
 
-    // Clear existing table rows
-    tableBody.innerHTML = '';
+      // Clear existing table rows
+      tableBody.innerHTML = '';
 
-    // Loop through each stream entry
-    for (const [streamName, streamInfo] of Object.entries(ragData)) {
-        const row = document.createElement('tr');
+      // Loop through each stream entry
+      for (const [streamName, streamInfo] of Object.entries(ragData)) {
+          const row = document.createElement('tr');
 
-        // Determine row color based on RAG status
-        const rag = (streamInfo.RAG || "").toLowerCase();
-        switch (rag) {
-            case 'red':
-                row.style.backgroundColor = '#ff4d4d';
-                break;
-            case 'amber':
-                row.style.backgroundColor = '#ffcc00';
-                break;
-            case 'green':
-                row.style.backgroundColor = '#4caf50';
-                break;
-            default:
-                row.style.backgroundColor = '#f0f0f0';
-        }
+          // Determine row color based on RAG status
+          const rag = (streamInfo.RAG || "").toLowerCase();
+          switch (rag) {
+              case 'red':
+                  row.style.backgroundColor = '#ff4d4d';
+                  break;
+              case 'amber':
+                  row.style.backgroundColor = '#ffcc00';
+                  break;
+              case 'green':
+                  row.style.backgroundColor = '#4caf50';
+                  break;
+              default:
+                  row.style.backgroundColor = '#f0f0f0';
+          }
 
-        // Fill the row with table cells
-        row.innerHTML = `
-            <td>${streamName}</td>
-            <td>${streamInfo.Alive ?? ''}</td>
-            <td>${streamInfo.Files ?? ''}</td>
-            <td>${streamInfo.Elect ?? ''}</td>
-            <td>${streamInfo.RAG ?? ''}</td>
-            <td>
-                <button class="deactivate-btn" data-stream-key="${streamName}">Deactivate</button>
-            </td>
-        `;
+          // Fill the row with table cells
+          row.innerHTML = `
+              <td>${streamName}</td>
+              <td>${streamInfo.Alive ?? ''}</td>
+              <td>${streamInfo.Files ?? ''}</td>
+              <td>${streamInfo.Elect ?? ''}</td>
+              <td>${streamInfo.RAG ?? ''}</td>
+              <td>
+                  <button class="deactivate-btn" data-stream-key="${streamName}">Deactivate</button>
+              </td>
+          `;
 
-        tableBody.appendChild(row);
-    }
+          tableBody.appendChild(row);
+      }
 
-    // Optionally, attach event listeners for the deactivate buttons
-    tableBody.querySelectorAll('.deactivate-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const key = e.target.dataset.streamKey;
-            console.log(`Deactivate clicked for ${key}`);
-            // Add your deactivation logic here
-        });
-    });
-}
+      // Optionally, attach event listeners for the deactivate buttons
+      tableBody.querySelectorAll('.deactivate-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+              const key = e.target.dataset.streamKey;
+              console.log(`Deactivate clicked for ${key}`);
+              // Add your deactivation logic here
+          });
+      });
+  }
 
       // Function to poll progress
       async function pollProgress() {

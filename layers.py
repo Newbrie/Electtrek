@@ -21,6 +21,10 @@ import math
 import colorsys
 from matplotlib.colors import to_hex, to_rgb
 
+
+
+
+
 def Hconcat(house_list):
     # Make sure house_list is iterable and not accidentally a DataFrame or something else
     try:
@@ -109,74 +113,43 @@ def adjust_boundary_color(fill_hex, factor=0.7):
     # Back to hex
     return '#{:02x}{:02x}{:02x}'.format(int(new_r*255), int(new_g*255), int(new_b*255))
 
-def create_enclosing_gdf(gdf, buffer_size=20):
+def create_boundary_geom(elector_df, buffer_meters=50):
     """
-    Create a GeoDataFrame containing the enclosing shape around a set of geographic points.
+    Create a boundary geometry from a set of elector points.
 
     Parameters:
-        gdf (GeoDataFrame): A GeoDataFrame with Point geometries (assumed to be EPSG:4326).
-        buffer_size (float, optional): Buffer size in meters for single-point cases (default: 20m).
+        elector_df (pd.DataFrame): Must have 'Lat' and 'Long' columns.
+        buffer_meters (float): Optional buffer in meters around the convex hull.
 
     Returns:
-        GeoDataFrame: A GeoDataFrame with one row containing the enclosing shape in EPSG:3857.
+        shapely Polygon: EPSG:4326 polygon covering all points.
     """
-    if gdf.empty:
-        return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
+    if elector_df.empty:
+        return None
 
-    # Ensure CRS is set
-    if gdf.crs is None:
-        gdf.set_crs("EPSG:4326", inplace=True)
+    # Ensure Lat/Long columns exist
+    if 'Lat' not in elector_df.columns or 'Long' not in elector_df.columns:
+        raise ValueError("elector_df must have 'Lat' and 'Long' columns")
 
-    # Convert to metric CRS for accurate geometry ops
-    gdf_3857 = gdf.to_crs("EPSG:3857")
+    # Create points
+    points = [Point(lon, lat) for lon, lat in zip(elector_df['Long'], elector_df['Lat'])]
+    multipoint = MultiPoint(points)
 
-    multi_point = gdf_3857.iloc[0].geometry
+    # GeoSeries in WGS84
+    gdf = gpd.GeoSeries([multipoint], crs="EPSG:4326")
 
-    if multi_point.is_empty:
-        return gpd.GeoDataFrame(columns=['geometry'], crs="EPSG:3857")
+    # Project to metric CRS for accurate buffer
+    gdf_proj = gdf.to_crs("EPSG:3857")
 
-    points = list(multi_point.geoms)
+    # Convex hull + buffer
+    hull = gdf_proj.iloc[0].convex_hull
+    hull_buffered = hull.buffer(buffer_meters)
 
-    if len(points) == 1:
-        enclosed_shape = points[0]
+    # Convert back to WGS84
+    hull_wgs84 = gpd.GeoSeries([hull_buffered], crs="EPSG:3857").to_crs("EPSG:4326").iloc[0]
 
-    elif len(points) == 2:
-        p1, p2 = points
+    return hull_wgs84
 
-        mid_x = (p1.x + p2.x) / 2
-        mid_y = (p1.y + p2.y) / 2
-
-        d = np.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-
-        if d == 0:
-            enclosed_shape = p1
-        else:
-            h = d / np.sqrt(3)
-            dx = (p2.y - p1.y) / d
-            dy = -(p2.x - p1.x) / d
-            p3 = Point(mid_x + h * dx, mid_y + h * dy)
-            enclosed_shape = MultiPoint([p1, p2, p3]).convex_hull
-
-    else:
-        enclosed_shape = MultiPoint(points).convex_hull
-
-    # Buffer for visual padding
-    smoothing_radius = 3*buffer_size if len(points) == 1 else buffer_size * 2
-    rounded_shape = enclosed_shape.buffer(smoothing_radius)
-
-    # Build GeoDataFrame with same CRS (EPSG:3857)
-    enclosing_gdf = gpd.GeoDataFrame(
-        {
-            "NAME": gdf.NAME,
-            "FID": gdf.FID,
-            "LAT": gdf.LAT.values[0],
-            "LONG": gdf.LONG.values[0],
-            "geometry": [rounded_shape]
-        },
-        crs="EPSG:3857"
-    )
-
-    return enclosing_gdf
 
 def build_street_list_html(streets_df, street_stats):
     from state import VID
@@ -300,6 +273,9 @@ def preprocess_streets(df):
 
     df = df.copy()
 
+    print(f"📊 INPUT ROWS: {len(df)}")
+    print(f"📊 UNIQUE STREET NAMES: {df['StreetName'].nunique()}")
+
     prefix = df["AddressPrefix"].astype(str).str.strip()
     number = df["AddressNumber"].astype(str).str.strip()
 
@@ -309,6 +285,10 @@ def preprocess_streets(df):
     )
 
     df["unit"] = df["unit"].replace(["", "nan", "None"], pd.NA)
+
+
+    print(f"📊 NON-NULL units: {df['unit'].notna().sum()}")
+    print(f"📊 NULL units: {df['unit'].isna().sum()}")
 
     exploded = (
         df.dropna(subset=["unit"])
@@ -323,7 +303,12 @@ def preprocess_streets(df):
         (exploded["unit"].str.lower() != "nan")
     ]
 
+
     exploded["num"] = exploded["unit"].str.extract(r'(\d+)')[0].astype(float)
+
+
+    print(f"📊 EXPLODED ROWS: {len(exploded)}")
+    print(f"📊 UNIQUE units after explode: {exploded['unit'].nunique()}")
 
     street_data = {}
 
@@ -376,6 +361,11 @@ def preprocess_streets(df):
             "min_num": min_num,
             "max_num": max_num
             }
+# log output
+        original_count = len(df[df["StreetName"] == street])
+        exploded_count = len(group)
+
+        print(f"🏠 {street}: original={original_count}, exploded={exploded_count}")
 
     total_houses = exploded["unit"].nunique()
 
@@ -512,7 +502,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             if not child.centre:
                 continue
 
-            pt = (round(float(child.centre.x), 5), round(float(child.centre.y), 5))
+            pt = (round(float(child.centre.x), 6), round(float(child.centre.y), 6))
             point_to_child[pt] = child
             points.append(pt)
 
@@ -597,21 +587,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Electors
             # -------------------------
 
-            shapecolumn = {
-                "polling_district": "PD",
-                "walk": "WalkName",
-                "ward": "Area",
-                "division": "Area",
-                "constituency": "Area"
-            }
-
-            if child.type not in shapecolumn:
-                print(f"⚠️ Unknown node type: {node.type}")
-                return pd.DataFrame()  # empty
-
-            col = shapecolumn[child.type]
-
-            region_electors = nodeelectors[nodeelectors[col] == child.value]
+            region_electors = electors.electors_for_node(child)
 
             print(f"DEBUG ELECTORS: {child.value} has {len(region_electors)} electors")
 
@@ -664,58 +640,25 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
             # Preprocess street data
             # -------------------------
-
             street_stats, house_count = preprocess_streets(region_electors)
-            missing_total = sum(d["house_gaps"] for d in street_stats.values())
+            missing_total = sum(d['house_gaps'] for d in street_stats.values())
 
-
-            # -------------------------
-            # Build popup HTML
-            # -------------------------
-
-            print(f"DEBUG POPUP: Building popup for {child.value}")
-
-            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
-
-            popup = folium.Popup(street_html, max_width=900, show=False)
-            # -------------------------
-            # Style
-            # -------------------------
-
-            style = {
-                "fillColor": getattr(child, "defcol", "#3388ff"),
-                "color": "white",
-                "weight": 3,
-                "fillOpacity": 0.5
-            }
-
-            print(f"DEBUG STYLE: Style for {child.value} = {style}")
-
-            # -------------------------
-            # Tooltip content
-            # -------------------------
-
-
-            elector_density = round(len(region_electors) / house_count, 2) if house_count else 0
-
+            # Build tooltip
             tooltip_html = f"""
             <b>{child.value}</b><br>
             Electors: {len(region_electors)}<br>
             Houses: {house_count}<br>
-            Elector/house: {elector_density}<br>
+            Elector/house: {round(len(region_electors)/house_count,2) if house_count else 0}<br>
             House gaps: {missing_total}
             """
 
-
-
-            print(f"DEBUG TOOLTIP: {child.value} houses={house_count} density={elector_density}")
+            # Build popup
+            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
 
             # -------------------------
-            # Polygon
+            # Polygon (with tooltip only)
             # -------------------------
-
             try:
-
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
 
                 gj = folium.GeoJson(
@@ -723,75 +666,28 @@ class ExtendedFeatureGroup(FeatureGroup):
                     style_function=lambda x, s=style: s
                 )
 
-
+                # Tooltip stays on the polygon
                 folium.Tooltip(
                     tooltip_html,
                     sticky=True,
                     interactive=False
-                    ).add_to(gj)
+                ).add_to(gj)
 
-
-                gj.add_child(popup)
-
-                print(f"DEBUG LAYER: Children before add {len(self._children)}")
-
+                # Add polygon to the map (no popup)
                 gj.add_to(self)
-                layer_name = gj.get_name()
-
-                longpress_js = f"""
-                var layer = {layer_name};
-                var pressTimer;
-                var longPressTriggered = false;
-
-                // Remove Leaflet's automatic popup binding
-                var popup = layer.getPopup();
-                layer.unbindPopup();
-                layer.bindPopup(popup);
-
-                // CLICK → tooltip
-                layer.on('click', function(e) {{
-                    if (!longPressTriggered) {{
-                        layer.openTooltip();
-                    }}
-                }});
-
-                // LONG PRESS → popup
-                layer.on('touchstart mousedown', function(e) {{
-                    longPressTriggered = false;
-
-                    pressTimer = setTimeout(function() {{
-                        longPressTriggered = true;
-                        layer.openPopup();
-                    }}, 600);
-                }});
-
-                layer.on('touchend mouseup mouseleave touchcancel', function(e) {{
-                    clearTimeout(pressTimer);
-                }});
-                """
-
-                self.add_child(folium.Element(f"<script>{longpress_js}</script>"))
-
-
-                print(f"DEBUG LAYER: Children after add {len(self._children)}")
-
+                print(f"DEBUG LAYER: Children before add {len(self._children)}")
                 polygons_added += 1
-
-
+                print(f"DEBUG SUCCESS: Added polygon for {child.value} with tooltip only")
 
             except Exception as e:
-
                 print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
                 continue
 
             # -------------------------
-            # Name marker at centroid
+            # Marker (with popup only)
             # -------------------------
-
             try:
-
                 centre = poly.point_on_surface()
-
                 tag = child.value
                 fcol = getattr(child, "defcol", "#cccccc")
 
@@ -799,7 +695,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 print(f"DEBUG MARKER: Adding label marker for {tag}")
 
-                folium.Marker(
+                marker = folium.Marker(
                     location=[centre.y, centre.x],
                     icon=folium.DivIcon(
                         class_name="",
@@ -811,14 +707,17 @@ class ExtendedFeatureGroup(FeatureGroup):
                             </div>
                             """
                     )
-                ).add_to(self)
+                )
+
+                # Attach popup to marker (keeps your styled HTML)
+                popup = folium.Popup(street_html, max_width=900, show=False)
+                marker.add_child(popup)
+                marker.add_to(self)
+
+                print(f"DEBUG SUCCESS: Added marker for {tag} with popup")
 
             except Exception as e:
-
                 print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
-
-            print(f"DEBUG SUCCESS: Added Voronoi for {child.value}")
-
         # -------------------------------------------------
         # Summary
         # -------------------------------------------------
@@ -885,7 +784,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print (f"_nodes exist at {herenode.value} but not for this {c_election} election and this {shapecolumn[stype]} column with this value {shape_node.value}")
 
         return self._children
-
 
 
     def add_shapenode (self,rlevels, herenode,type,datablock):

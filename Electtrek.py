@@ -9,7 +9,6 @@ from normalised import normz
 from json import JSONEncoder, JSONDecodeError
 import pandas as pd
 import geopandas as gpd
-
 import numpy as np
 from numpy import ceil
 import statistics
@@ -36,6 +35,7 @@ from werkzeug.exceptions import HTTPException
 from datetime import datetime, timedelta, date
 import geocoder
 from pathlib import Path
+from shapely.geometry import Point, Polygon, MultiPolygon
 
 
 from collections import defaultdict
@@ -55,15 +55,14 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 
 import state
-from state import Treepolys, Fullpolys, update_progress
 from state import VNORM,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, normalname, ensure_treepolys, check_level4_gap
+from state import Treepolys, Fullpolys,update_progress, normalname
+
 import nodes
 from nodes import TREK_NODES_BY_ID, get_layer_table, get_root,restore_from_persist, persist,parent_level_for, save_nodes, move_item, MapRoot
 import layers
 from elections import CurrentElection, stepify,get_available_elections, get_elections, route, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
-
 from elector import electors
-
 
 
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
@@ -213,9 +212,6 @@ def assign_areas(electors_df, rlevels, progress=None):
     """
     Assigns Area (Division/Ward) to each elector using spatial join with GeoPandas.
     """
-    import geopandas as gpd
-    from shapely.geometry import Point, Polygon, MultiPolygon
-    from state import Treepolys, update_progress, normalname
 
     if 'Area' not in electors_df.columns:
         electors_df['Area'] = None
@@ -280,6 +276,7 @@ def assign_walks_and_zones(
     teamsize,
     Territory_path,
     rlevels,
+    aprefix,
     max_walk_size=50,
     max_depth=10,
     progress=None
@@ -333,7 +330,7 @@ def assign_walks_and_zones(
     # ---------------------------------------------------
     # Assign WalkName_hier
 
-    walk_labels = recursive_kmeans(electors_df)
+    walk_labels = recursive_kmeans(electors_df,prefix=aprefix)
 
     if walk_labels:
         # Align hierarchical labels safely
@@ -353,7 +350,7 @@ def assign_walks_and_zones(
         label_key = str(raw_label).strip()
 
         if label_key not in unique_label_map:
-            unique_label_map[label_key] = f"K{len(unique_label_map)+1:02}"
+            unique_label_map[label_key] = f"{aprefix}{len(unique_label_map)+1:02}"
 
         serial_series.loc[idx] = unique_label_map[label_key]
 
@@ -456,7 +453,21 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 
     return all_passed
 
+def selprefix(election):
+    from elections import list_elections
 
+    election = election.upper()
+    elections_list = list_elections()  # already sorted
+
+    if election not in elections_list:
+        raise ValueError(f"Election '{election}' not found")
+
+    idx = elections_list.index(election)
+
+    if idx >= 26:
+        raise ValueError("Too many elections for single-letter prefix")
+
+    return chr(65 + idx)
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
@@ -469,6 +480,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     from state import Treepolys, Fullpolys, progress, DQstats, update_progress, check_level4_gap
     from elections import CurrentElection, stepify
     from nodes import MapRoot
+    from layer import create_boundary_geom
 
     logging.basicConfig(
         filename="electtrek.log",
@@ -488,8 +500,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         # --- Stage 1: Sourcing ---
         update_progress(progress, "sourcing", 0.0, "Sourcing data...")
-
-        CElection = CurrentElection.load(session_data.get('current_election', 'UNKNOWN'))
+        current_election = session_data.get('current_election', 'UNKNOWN')
+        CElection = CurrentElection.load(current_election)
+        print(f"DEBUG ENAME DURING SESSION: '{current_election}'")
         resolved_levels = CElection.resolved_levels
         parent_levels = CElection.parent_levels
         Territory_path = CElection['territory']
@@ -565,6 +578,21 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress.update({"percent": 100, "status": "error", "message": "No valid files to process"})
             return
         mainframe = pd.concat(all_frames, ignore_index=True)
+        mainframe['Election'] = current_election
+        boundary_geom = create_boundary_geom(mainframe, buffer_meters=50)
+
+        newpath = ensure_treepolys(
+            territory=None,
+            sourcepath=None,
+            here=None,
+            boundary_geom=boundary_geom,
+            resolved_levels=resolved_levels,
+            parent_levels=parent_levels
+            )
+        persist(Treepolys, Fullpolys)
+        if Territory_path is None or Territory_path == "":
+            Territory_path = newpath
+            CElection.save()
 
         for af in aviframes:
             if 'ENOP' in af.columns and 'ENOP' in mainframe.columns:
@@ -576,6 +604,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # --- Stage 4: Assign Walks & Zones ---
         teamsize = int(CElection.get('teamsize', 5)) if CElection else 5
         mainframe = assign_walks_and_zones(mainframe, teamsize, Territory_path, resolved_levels,
+            selprefix(current_election),
             max_walk_size=300,
             max_depth=10,
             progress=progress)
@@ -585,6 +614,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         electors.add_or_update(session_data.get('current_election', 'UNKNOWN'), mainframe)
         electors.save()
         mainframe.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
+
 
         # --- Mark complete ---
         update_progress(progress, "assign_walks", 1.0, "All stages complete.")
@@ -1885,7 +1915,6 @@ def get_current_election_data():
     elif "slots" not in plan:
         plan["slots"] = {}
 
-    print("📥 Route current_election/constants:", current_election, CElection)
     return jsonify({"calendar_plan": plan,
             'constants': CElection,
             'options': OPTIONS,
@@ -1937,7 +1966,6 @@ def get_constants():
     print(f"__get constants for election: {current_election}")
     if not current_election:
         return jsonify({'error': 'Invalid election'}), 400
-    print('__constants:', CElection )
 
     options = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
     constants = CElection
@@ -2105,7 +2133,7 @@ def add_election():
 def load_election(ename):
     # fetch your single election data from disk or DB
     # for example, read a JSON file for the election
-    path = BASE_FILE.parent / f"Elections-{ename}.json"
+    path = BASEX_FILE.parent / f"Elections-{ename}.json"
     if not path.exists():
         return jsonify({"error": "Election not found"}), 404
 
@@ -2152,9 +2180,9 @@ def update_territory():
     # mapfiles last entry is what we need to bookmark.
 
 
-    CElection['territory'] = current_node.mapfile(rlevels)
+    CElection['territory'] = mapfile
 
-    current_node.endpoint_created(current_election, CElection, current_node.mapfile(rlevels),static=False)
+    current_node.endpoint_created(current_election, CElection, mapfile,static=False)
 
     CElection.save()
     print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {current_node.mapfile(rlevels)}")
@@ -3949,6 +3977,8 @@ def normalise():
 
     # --- Load election ---
     current_election = CurrentElection.load(ename)
+    print(f"DEBUG ENAME BEFORE SESSION: '{ename}'")
+
     if 'stream_processing' not in current_election:
         current_election['stream_processing'] = {"files": [], "last_run": None, "status": "idle"}
 

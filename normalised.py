@@ -836,6 +836,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
             'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV','Area'
         ])
 
+
     update_progress(progress, "address_norm", 1.0, "Address normalisation complete")
 
     # ---------------------------------------------

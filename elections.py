@@ -2,13 +2,12 @@ import os
 import json
 from flask import has_request_context, request
 from pathlib import Path
-from config import ELECTIONS_FILE, BASE_FILE, TABLE_FILE, RESOURCE_FILE
+from config import ELECTIONS_FILE, BASEX_FILE, TABLE_FILE, RESOURCE_FILE
 import config
 import state
 import re
 from shapely.geometry import Point
 import logging
-
 
 branchcolours = [
     "#D32F2F",  # 0 strong red
@@ -122,9 +121,30 @@ class ElectionContext:
             "campaignMgr": self.ce.resources, # the designated campaign manager
             "mapfiles": self.ce.mapfiles #a recent history of nodes navigated
 
-}
+            }
 
 
+
+def list_elections():
+    """
+    Return a list of election names (strings) sorted alphabetically.
+    """
+    elections_dir = BASEX_FILE.parent  # directory containing election files
+    pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
+
+    elections = []
+
+    for file in elections_dir.iterdir():
+        if file.is_file():
+            match = pattern.match(file.name)
+            if match:
+                name = match.group(1).upper()
+                elections.append(name)
+
+    # Sort alphabetically
+    elections.sort()
+
+    return elections
 
 
 def get_available_elections():
@@ -132,7 +152,7 @@ def get_available_elections():
     Return a list of election names found in the elections directory,
     sorted by last modified time (most recent first).
     """
-    elections_dir = BASE_FILE.parent  # directory containing JSON files
+    elections_dir = BASEX_FILE.parent  # directory containing JSON files
     pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
 
     elections = []
@@ -156,7 +176,7 @@ def get_elections():
     Return a list of elections as objects with cid and name,
     sorted by last modified time (most recent first).
     """
-    elections_dir = BASE_FILE.parent  # directory containing JSON files
+    elections_dir = BASEX_FILE.parent  # directory containing JSON files
     pattern = re.compile(r'^Elections-(.+)\.json$', re.IGNORECASE)
 
     elections = []
@@ -228,7 +248,7 @@ def resolve_here_or_redirect(sourcepath, here):
 
 class CurrentElection(dict):
     RESOURCE_FILE = RESOURCE_FILE
-    BASE_FILE = BASE_FILE
+    BASEX_FILE = BASEX_FILE
 
     def __init__(self, data: dict, election_id: str):
         super().__init__(data)
@@ -311,7 +331,7 @@ class CurrentElection(dict):
     @classmethod
     def get_all(cls):
         # Return a list of all current elections, for example, loaded from a directory or database
-        elections_dir = cls.BASE_FILE.parent
+        elections_dir = cls.BASEX_FILE.parent
         election_files = list(elections_dir.glob("Elections-*.json"))
         elections = []
         for file in election_files:
@@ -517,8 +537,8 @@ class CurrentElection(dict):
         """
         Return the path to the election JSON file for a given election_id.
         """
-        return cls.BASE_FILE.with_name(
-            cls.BASE_FILE.name.replace("-DEMO.json", f"-{election_id}.json")
+        return cls.BASEX_FILE.with_name(
+            cls.BASEX_FILE.name.replace("-DEMO.json", f"-{election_id}.json")
         )
 
     @classmethod
@@ -536,7 +556,7 @@ class CurrentElection(dict):
         """
         Return the election_id of the most recently modified election file.
         """
-        elections_dir = cls.BASE_FILE.parent
+        elections_dir = cls.BASEX_FILE.parent
 
         election_files = list(elections_dir.glob("Elections-*.json"))
 

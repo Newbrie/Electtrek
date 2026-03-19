@@ -24,35 +24,40 @@ progress = {}
 
 def normalname(name):
     import re
+    import pandas as pd
+
+    def clean(s):
+        if not isinstance(s, str):
+            return s
+
+        s = s.replace(" & ", " AND ")
+
+        # ✅ KEEP underscores
+        s = re.sub(r"[^A-Za-z0-9 _]+", "", s)
+
+        # normalize whitespace
+        s = re.sub(r"\s+", " ", s).strip()
+
+        # convert spaces to underscores
+        s = s.replace(" ", "_")
+
+        # remove duplicate underscores
+        s = re.sub(r"_+", "_", s)
+
+        # remove leading/trailing underscores
+        s = s.strip("_")
+
+        return s.upper().removesuffix("_ED")
+
     if isinstance(name, str):
-        # 1. Replace & with AND
-        name = name.replace(" & ", " AND ")
-        # 2. Remove unwanted punctuation (keep spaces)
-        name = re.sub(r"[^A-Za-z0-9 ]+", "", name)
-        # 3. Remove apostrophes and dots explicitly (optional, already handled by regex)
-        name = name.replace("'", "").replace(".", "")
-        # 4. Replace multiple spaces with single space
-        name = re.sub(r"\s+", " ", name)
-        # 5. Strip leading/trailing spaces
-        name = name.strip()
-        # 6. Replace spaces with underscore
-        name = name.replace(" ", "_")
-        # 7. Uppercase and remove _ED suffix if present
-        name = name.upper().removesuffix("_ED")
+        return clean(name)
+
     elif isinstance(name, pd.Series):
-        import pandas as pd
-        name = name.str.replace(" & ", " AND ", regex=False)\
-                   .str.replace(r"[^A-Za-z0-9 ]+", "", regex=True)\
-                   .str.replace("'", "", regex=False)\
-                   .str.replace(".", "", regex=False)\
-                   .str.replace(r"\s+", " ", regex=True)\
-                   .str.strip()\
-                   .str.replace(" ", "_")\
-                   .str.upper()\
-                   .str.removesuffix("_ED")
+        return name.apply(clean)
+
     else:
         print("______ERROR: Can only normalise name in a string or series")
-    return name
+        return name
 
 def ensure_4326(gdf):
     """
@@ -85,88 +90,53 @@ def clear_treepolys(from_level=None):
             Treepolys[layer["key"]] = gpd.GeoDataFrame()
             Fullpolys[layer["key"]] = gpd.GeoDataFrame()
 
-def filterArea(source, sourcekey, destination,roid=None,name=None):
+def filterArea(source, sourcekey,
+    destination,
+    roid=None,
+    name=None,
+    boundary_geom=None):
     """
-    If name is provided → lookup by polygon NAME.
-    Otherwise → lookup by lat/lon from roid.
+    Lookup polygon(s) by name, point, or boundary polygon.
+    Returns: [selected_name, matched_gdf, full_gdf]
     """
-    print(f"[filterArea] destination :{destination} roid {roid} step:{name}")
+    print(f"[filterArea] destination: {destination}, roid: {roid}, step: {name}")
 
-    nodestep = None
-
-    # Load source GeoJSON
     gdf_RAW = gpd.read_file(source)
-    # ----- CRS FIX ------------------------------------------------------
-
-    # -------------------------------
-
     gdf = ensure_4326(gdf_RAW)
-    matched = gdf.head(0)
 
-
-    # Standardize field names
     gdf = gdf.rename(columns={sourcekey: 'NAME'})
     if 'OBJECTID' in gdf.columns:
         gdf = gdf.rename(columns={'OBJECTID': 'FID'})
 
+    matched = gdf.head(0)
+    nodestep = None
+    point = None
 
-    # ----- LOOKUP BY NAME IF PRESENT ----------------------------------------------
+    # 1️⃣ Lookup by name
     if name is not None:
         target = normalname(name.split("/")[-1])
-        matched = gdf[
-            gdf["NAME"]
-            .astype(str)
-            .apply(normalname)
-            == target
-        ]
+        matched = gdf[gdf["NAME"].astype(str).apply(normalname) == target]
 
-    # ----- SAVE IF MATCHED ---------------------------------------------
-    if not matched.empty:
-        nodestep = normalname(matched['NAME'].values[0])
-        output_path = destination
-
-        matched.to_file(output_path, driver="GeoJSON")
-        print(f"[filterArea] Found {nodestep}{len(matched)} matching feature(s). Saved to {output_path}")
+    # 2️⃣ Lookup by roid
     elif roid is not None:
-        print("[filterArea] Coords — do spatial filter")
-
-        # ----- LOOKUP BY LAT/LON ---------------------------------------
-        latitude = roid[0]
-        longitude = roid[1]
-
-        if longitude is None or latitude is None:
-            print("[filterArea] No coordinates — skipping spatial filter")
-            matched = gdf.iloc[0:0]   # empty result
-        else:
-            # 1️⃣ Ensure GDF has a CRS
-            if gdf.crs is None:
-                raise ValueError("GeoDataFrame has no CRS set")
-
-            # 2️⃣ Create point in WGS84 (lat/lon)
-
-            point_gs = gpd.GeoSeries(
-                [Point(longitude, latitude)],  # (lon, lat)
-                crs="EPSG:4326"
-            )
-
-            point = point_gs.iloc[0]
-
-            # 4️⃣ Now CRS definitely matches
+        latitude, longitude = roid
+        if latitude is not None and longitude is not None:
+            point = Point(longitude, latitude)
             matched = gdf[gdf.covers(point)]
-            nodestep = normalname(matched['NAME'].iloc[0])
 
+    # 3️⃣ Lookup by boundary polygon
+    elif boundary_geom is not None:
+        matched = gdf[gdf.intersects(boundary_geom)]
 
-        print(f"[filterArea] Coords — point {point} match ({name}) with {len(matched)} rows")
-
-
-    if matched is None or matched.empty:
-        if name:
-            print(f'No match found for name "{name}".')
-        else:
-            print("No matching polygon found for that lat/lon.",roid)
+    # Determine nodestep
+    if not matched.empty:
+        nodestep = normalname(matched['NAME'].iloc[0])
+        matched.to_file(destination, driver="GeoJSON")
+        print(f"[filterArea] Found {nodestep} ({len(matched)} feature(s)), saved to {destination}")
+    else:
+        print(f"[filterArea] No matching feature found for name {name} or roid {roid}")
 
     return [nodestep, matched, gdf]
-
 
 
 
@@ -204,17 +174,15 @@ def intersectingArea(
     resolved_levels,
     destination,
     *,
-    parent_row,          # full GeoSeries row
-    roid=None,
+    parent_row,
     select_child_name=None,
+    roid=None,
+    boundary_geom=None
 ):
-    """
-    Compute intersection of child polygons with a parent polygon.
-    Parent type is derived from parent_levels[child_level].
-    If parent_row is None, include all child polygons (no filtering).
-    """
+
     parent_name = normalname(parent_row["NAME"]) if parent_row is not None else "None"
     parent_type = parent_levels.get(child_level)
+
     if parent_type is None:
         raise ValueError(f"No parent type found for parent_level IN {parent_levels}")
 
@@ -225,16 +193,13 @@ def intersectingArea(
     # 1. Load child layer
     # ------------------------------------------------------------------
     gdf_RAW = gpd.read_file(source)
-    # ----- CRS FIX ------------------------------------------------------
-
-    # -------------------------------
-
     gdf = ensure_4326(gdf_RAW)
 
     if sourcekey in gdf.columns:
         gdf = gdf.rename(columns={sourcekey: "NAME"})
     else:
         raise ValueError(f"No sourcekey {sourcekey} IN {gdf.columns}")
+
     if "OBJECTID" in gdf.columns:
         gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
@@ -242,49 +207,68 @@ def intersectingArea(
     print(f"[DEBUG] Loaded {len(gdf)} child features and cols: {gdf.columns}")
 
     # ------------------------------------------------------------------
-    # 2. Skip parent validation and intersection if parent_row is None
+    # 2. Choose geometry (FIXED LOGIC)
     # ------------------------------------------------------------------
-    if parent_row is None or parent_row.geometry.is_empty:
-        print(f"[DEBUG] parent_row is None, including all child polygons without filtering")
+    if boundary_geom is not None:
+        working_geom = boundary_geom
+        print("[DEBUG] Using boundary_geom for intersection")
+
+    elif parent_row is not None and not parent_row.geometry.is_empty:
+        working_geom = parent_row.geometry
+        print("[DEBUG] Using parent_row geometry")
+
+    else:
+        print(f"[DEBUG] under {route()} No geometry available → returning all children")
         return None, all_child_polygons, all_child_polygons
 
-
-    parent_geom = parent_row.geometry
-
     # ------------------------------------------------------------------
-    # 4. Compute intersections (projected CRS) only if parent_row is not None
+    # 3. Intersection filter
     # ------------------------------------------------------------------
     child_type = resolved_levels[child_level]
     threshold = Overlaps.get(child_type, 0)
+
     print(f"[DEBUG] Intersection threshold ({child_type}): {threshold}")
 
-    candidates = gdf[gdf.geometry.intersects(parent_geom)]
+    candidates = gdf[gdf.geometry.intersects(working_geom)]
+
     print(f"[DEBUG] Candidates intersecting bbox: {len(candidates)}")
 
     if candidates.empty:
         return None, gpd.GeoDataFrame(), all_child_polygons
 
+    # ------------------------------------------------------------------
+    # 4. Project + overlap
+    # ------------------------------------------------------------------
     proj_crs = "EPSG:3857"
-    parent_geom_proj = gpd.GeoSeries([parent_geom], crs="EPSG:4326").to_crs(proj_crs).iloc[0]
+
+    working_geom_proj = (
+        gpd.GeoSeries([working_geom], crs="EPSG:4326")
+        .to_crs(proj_crs)
+        .iloc[0]
+    )
+
     candidates_proj = candidates.to_crs(proj_crs)
 
-    overlaps = candidates_proj.geometry.intersection(parent_geom_proj).area
+    overlaps = candidates_proj.geometry.intersection(working_geom_proj).area
     mask = overlaps > threshold
 
     child_polygons_within_parent = candidates[mask].copy()
+
     print(f"[DEBUG] Children within parent above threshold: {len(child_polygons_within_parent)}")
 
     # ------------------------------------------------------------------
-    # 5. Resolve selected child (navigation only)
+    # 5. Resolve selected child
     # ------------------------------------------------------------------
     selected_child_name = None
 
     if roid:
         lat, lon = roid
         pt = Point(lon, lat)
+
         hit = child_polygons_within_parent[
             child_polygons_within_parent.geometry.contains(pt)
         ]
+
         if not hit.empty:
             selected_child_name = normalname(hit.iloc[0]["NAME"])
 
@@ -293,6 +277,7 @@ def intersectingArea(
             child_polygons_within_parent["NAME"].apply(normalname)
             == normalname(select_child_name)
         ]
+
         if not hit.empty:
             selected_child_name = normalname(hit.iloc[0]["NAME"])
 
@@ -306,7 +291,6 @@ def intersectingArea(
         child_polygons_within_parent.to_file(destination)
 
     return selected_child_name, child_polygons_within_parent, all_child_polygons
-
 
 def subending(filename, ending):
   stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-CAL.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-ZONES.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
@@ -348,6 +332,7 @@ def load_layer(
     parent_row,
     select_name=None,
     roid=None,
+    boundary_geom=None
 ):
     """
     Load a layer using either filter or intersection method.
@@ -362,8 +347,9 @@ def load_layer(
             src,
             layer["field"],
             out,
-            name=select_name,
             roid=roid,
+            name=select_name,
+            boundary_geom=boundary_geom
         )
 
     # Intersection-based selection
@@ -377,6 +363,7 @@ def load_layer(
         parent_row=parent_row,
         roid=roid,
         select_child_name=select_name,
+        boundary_geom=boundary_geom
     )
 
 
@@ -401,82 +388,154 @@ def stepify(path):
     return parts
 
 
-import logging
 
-def get_parent_row(plevels, child_level, parent_name, roid):
-    """
-    Resolves the parent row based on the level in plevels.
-    """
-    from state import Treepolys, Fullpolys
+def get_parent_rows(plevels, child_level, parent_rows, roid, boundary_geom):
+    from state import Treepolys
+    from shapely.geometry import Point
+    import logging
 
-    logging.debug(f"[DEBUG] Resolving parent for child level {child_level}, parent_name={parent_name}, roid={roid}")
-
-    # Get the parent layer type based on child_level from plevels
     parent_layer_type = plevels.get(child_level)
-    logging.debug(f"[DEBUG] Parent layer type for child level {child_level} is {parent_layer_type} in levels {plevels}")
-
-    # Get the GeoDataFrame for the parent layer from Treepolys
     parent_tree = Treepolys.get(parent_layer_type)
-    if parent_tree is None:
-        logging.warning(f"[WARNING] No parent tree found for layer type {parent_layer_type}")
-        return None
-    logging.debug(f"[DEBUG] Parent tree for {parent_layer_type} has {len(parent_tree)} features")
 
-    parent_row = None
+    if parent_tree is None or parent_tree.empty:
+        logging.warning(f"[WARNING] No parent tree for {parent_layer_type}")
+        return []
 
-    # If no parent_row found and there is only one row in parent_tree, use that as the parent
-    if len(parent_tree) == 1:
-        parent_row = parent_tree.iloc[0]
-        logging.debug(f"[DEBUG] Only one parent feature available, using it as the parent: {parent_row['NAME']}")
-        return parent_row
-    # If still no parent_row and a roid (spatial point) is provided, find the closest parent by distance
-    if parent_row is None and roid is not None:
-        logging.debug(f"[DEBUG] No parent found by name or single row fallback. Using spatial search for roid={roid}")
+    logging.debug(f"[DEBUG] Parent tree has {len(parent_tree)} features")
 
-        # Calculate distances from the point to each geometry in the GeoDataFrame
-        distances = parent_tree.geometry.apply(lambda g: g.distance(Point(roid[::-1])))
+    # --------------------------------------------------
+    # 1️⃣ POLYGON MODE (Option B primary mode)
+    # --------------------------------------------------
+    if boundary_geom is not None:
+        matches = parent_tree[parent_tree.geometry.intersects(boundary_geom)]
+        if not matches.empty:
+            logging.debug(f"[DEBUG] Polygon match → {len(matches)} parents")
+            return list(matches.itertuples(index=False))
 
-        # Check if distances is empty or contains NaNs
-        if distances.empty:
-            logging.error(f"[ERROR] Distances Series is empty. No geometries to calculate distances.")
-            parent_row = None  # Handle empty case as needed
-        elif distances.isna().all():
-            logging.error(f"[ERROR] All distances are NaN. This could be due to invalid geometries.")
-            parent_row = None  # Handle NaN case as needed
-        else:
-            # Check if there are any valid distances and ensure we have a valid index
-            valid_distances = distances.dropna()  # Remove NaNs from distances
+    # --------------------------------------------------
+    # 2️⃣ POINT MODE (multi-match first)
+    # --------------------------------------------------
+    if roid is not None:
+        pt = Point(roid[::-1])
 
-            if valid_distances.empty:
-                logging.error(f"[ERROR] No valid distances after dropping NaNs.")
-                parent_row = None  # Handle the case where no valid distances are left
+        matches = parent_tree[parent_tree.contains(pt)]
+
+        if not matches.empty:
+            logging.debug(f"[DEBUG] Point match → {len(matches)} parents")
+            return list(matches.itertuples(index=False))
+
+        # --------------------------------------------------
+        # 3️⃣ FALLBACK: closest parent (YOUR ORIGINAL LOGIC)
+        # --------------------------------------------------
+        logging.debug("[DEBUG] No containing parent, using nearest")
+
+        distances = parent_tree.geometry.distance(pt)
+        distances = distances.dropna()
+
+        if not distances.empty:
+            idx = distances.idxmin()
+            nearest = parent_tree.loc[idx]
+            logging.debug(f"[DEBUG] Closest parent: {nearest['NAME']}")
+            return [nearest]
+
+    # --------------------------------------------------
+    # 4️⃣ LAST RESORT
+    # --------------------------------------------------
+    logging.warning("[WARNING] No parent match found, returning all")
+    return list(parent_tree.itertuples(index=False))
+
+def ensure_fulltree(*, resolved_levels, parent_levels):
+    from state import Treepolys
+    import geopandas as gpd
+
+    geo_index = {}
+
+    # Root
+    ROOT = "UK"
+    geo_index[ROOT] = {
+        "level": "root",
+        "name": ROOT,
+        "parent": None,
+        "children": []
+    }
+
+    active_paths = {0: [ROOT]}
+
+    # -------------------------------------------------------
+    # Walk through levels (same pattern as ensure_treepolys)
+    # -------------------------------------------------------
+
+    for level, layer_type in resolved_levels.items():
+
+        layer_gdf = Treepolys.get(layer_type)
+        parent_layer_type = parent_levels.get(level)
+
+        if layer_gdf is None or layer_gdf.empty:
+            continue
+
+        next_paths = []
+
+        for parent_path in active_paths.get(level, [ROOT]):
+
+            parent_name = parent_path.split("/")[-1]
+            parent_geom = None
+
+            # --------------------------------------------------
+            # Get parent geometry (if exists)
+            # --------------------------------------------------
+            if parent_layer_type:
+                parent_tree = Treepolys.get(parent_layer_type)
+
+                if parent_tree is not None:
+                    match = parent_tree[
+                        parent_tree["NAME"].astype(str).str.upper()
+                        == parent_name.upper()
+                    ]
+                    if not match.empty:
+                        parent_geom = match.iloc[0].geometry
+
+            # --------------------------------------------------
+            # Find children
+            # --------------------------------------------------
+            if parent_geom is not None:
+                matches = layer_gdf[layer_gdf.geometry.intersects(parent_geom)]
             else:
-                # Get the index of the minimum distance (the closest geometry)
-                min_distance_idx = valid_distances.idxmin()
+                matches = layer_gdf
 
-                # Ensure that the index is valid and within bounds
-                if min_distance_idx in parent_tree.index:
-                    parent_row = parent_tree.loc[min_distance_idx]  # Use .loc for better error handling
-                else:
-                    logging.error(f"[ERROR] The index {min_distance_idx} is out of bounds or invalid.")
-                    parent_row = None  # Handle as needed (e.g., default or fallback logic)
-        logging.debug(f"[DEBUG] Parent found by spatial search: {parent_row['NAME']} at distance {distances[min_distance_idx]}")
+            for _, row in matches.iterrows():
+                child_name = normalname(row["NAME"])
+                child_path = f"{parent_path}/{child_name}"
 
-    if parent_row is None:
-        logging.warning(f"[WARNING] No parent row could be found for child level {child_level}. Returning None.")
+                if child_path not in geo_index:
+                    geo_index[child_path] = {
+                        "level": layer_type,
+                        "name": child_name,
+                        "parent": parent_path,
+                        "children": []
+                    }
 
-    return parent_row
+                # link parent → child
+                if child_path not in geo_index[parent_path]["children"]:
+                    geo_index[parent_path]["children"].append(child_path)
 
+                next_paths.append(child_path)
 
+        active_paths[level + 1] = next_paths
+
+    return geo_index
 
 def ensure_treepolys(
     *,
     territory: str | None,
     sourcepath: str | None,
     here: tuple[float, float] | None,
+    boundary_geom=None,   # 👈 NEW
     resolved_levels: dict[int, str],
     parent_levels: dict[int, str]
     ):
+
+    if boundary_geom is not None:
+        boundary_geom = boundary_geom.buffer(0)
 
     if not resolved_levels:
         raise ValueError("resolved_levels is required")
@@ -492,13 +551,14 @@ def ensure_treepolys(
     # Prepare source path
     # -------------------------------------------------------
 
-    sourcepath = path_compare(territory, sourcepath)
+    sourcepath = path_compare(territory, sourcepath) if (territory or sourcepath) else None
     steps = stepify(sourcepath) if sourcepath else []
 
     layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
 
-    active_parent_rows: dict[int, pd.Series] = {}
-    active_parent_rows[0] = None
+    active_parent_rows: dict[int, list] = {}
+    active_parent_rows[0] = [None]
+
 
     newpath = ""
 
@@ -508,7 +568,7 @@ def ensure_treepolys(
 
     for level, layer_type in resolved_levels.items():
 
-        if level >= len(steps) and not here:
+        if level >= len(steps) and not here and boundary_geom is None:
             logging.debug(f"[LEVEL {level}] Skipping {layer_type} layer — no step and no spatial fallback")
             continue
 
@@ -522,44 +582,59 @@ def ensure_treepolys(
         select_name = steps[level] if level < len(steps) else None
         roid = here
 
-        parent_row = active_parent_rows.get(level, None)
+        parent_rows = active_parent_rows.get(level, [None])
 
-        # Wrap parent geometry in GeoSeries to ensure CRS
-        parent_geom = (
-            gpd.GeoSeries([parent_row.geometry], crs= "EPSG:4326").iloc[0]
-            if parent_row is not None
-            else None
-            )
-
-        # Extract parent_name safely
-        parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
-
-        logging.debug(f"[LEVEL {level}] Loading {layer_type} with parent {parent_name}")
         # -------------------------------------------------------
         # Load layer
         # -------------------------------------------------------
         # so potential county variant if parent_name == 'county_variant'
-        if isinstance(layer['src'], list) and len(layer['src']) == 2:
+        all_results = []
 
-            if parent_name and layer['src'][1].upper().find(parent_name.upper()) >= 0:
-                layer['src'] = layer['src'][1]
-                layer['field'] = layer['field'][1]
-                print(f"____Selecting secondary division source {layer['src']}")
-            else:
-                layer['src'] = layer['src'][0]
-                layer['field'] = layer['field'][0]
-                print(f"____Selecting primary division source {layer['src']} & {layer['field']}")
+        for parent_row in parent_rows:
+            # Extract parent_name safely
+            parent_name = normalname(parent_row["NAME"]) if parent_row is not None else None
+
+            logging.debug(f"[LEVEL {level}] Loading {layer_type} with parent {parent_name}")
 
 
-        name, tree_gdf, full_gdf = load_layer(
-            layer=layer,
-            level=level,
-            resolved_levels=resolved_levels,
-            parent_levels=parent_levels,
-            parent_row=parent_row,
-            select_name=select_name,
-            roid=roid,
-        )
+
+            src = layer['src']
+            field = layer['field']
+
+            if isinstance(src, list) and len(src) == 2:
+
+                if parent_name and src[1].upper().find(parent_name.upper()) >= 0:
+                    src = src[1]
+                    field = field[1]
+                    print(f"____Selecting secondary division source {src}")
+                else:
+                    src = src[0]
+                    field = field[0]
+                    print(f"____Selecting primary division source {src} & {field}")
+            layer_local = dict(layer)
+            layer_local['src'] = src
+            layer_local['field'] = field
+
+            name, tree_gdf, full_gdf = load_layer(
+                layer=layer_local,
+                level=level,
+                resolved_levels=resolved_levels,
+                parent_levels=parent_levels,
+                parent_row=parent_row,
+                select_name=select_name,
+                roid=roid,
+                boundary_geom=boundary_geom
+            )
+
+            if tree_gdf is not None and not tree_gdf.empty:
+                all_results.append(tree_gdf)
+
+        if all_results:
+            tree_gdf = pd.concat(all_results, ignore_index=True)
+        else:
+            tree_gdf = gpd.GeoDataFrame()
+
+        tree_gdf = tree_gdf.drop_duplicates(subset="FID")
         if tree_gdf is not None and tree_gdf.crs is None:
             tree_gdf.set_crs("EPSG:4326", inplace=True)
 
@@ -567,13 +642,15 @@ def ensure_treepolys(
         # Compute inclusion union
         # -------------------------------------------------------
 
-        if parent_row is not None:
-            # Ensure we use the CRS of the data we are working with
-            current_crs = tree_gdf.crs if tree_gdf is not None else "EPSG:4326"
-            parent_gs = gpd.GeoSeries([parent_row.geometry], crs=current_crs)
-            parent_geom = parent_gs.iloc[0]
+        if boundary_geom is not None:
+            inclusion_union = boundary_geom
+
+        elif parent_rows:
+            parent_geoms = [p.geometry for p in parent_rows if p is not None]
+            inclusion_union = gpd.GeoSeries(parent_geoms).unary_union if parent_geoms else None
+
         else:
-            parent_geom = None
+            inclusion_union = None
 
         existing_children = get_treepoly(layer_type)
         children_union = None
@@ -583,12 +660,20 @@ def ensure_treepolys(
                 existing_children.set_crs("EPSG:4326", inplace=True)
             children_union = existing_children.geometry.unary_union
 
-        if parent_geom is not None and children_union is not None:
-            inclusion_union = parent_geom.union(children_union)
-        elif parent_geom is not None:
-            inclusion_union = parent_geom
-        else:
-            inclusion_union = children_union
+
+        if boundary_geom is None:
+            if parent_rows:
+                parent_geoms = [p.geometry for p in parent_rows if p is not None]
+                parent_union = gpd.GeoSeries(parent_geoms).unary_union if parent_geoms else None
+            else:
+                parent_union = None
+
+            if parent_union is not None and children_union is not None:
+                inclusion_union = parent_union.union(children_union)
+            elif parent_union is not None:
+                inclusion_union = parent_union
+            else:
+                inclusion_union = children_union
 
         # -------------------------------------------------------
         # Filter candidates by intersection
@@ -624,17 +709,30 @@ def ensure_treepolys(
 
         next_level = level + 1
 
-        active_parent_rows[next_level] = get_parent_row(
+        next_parents = []
+
+        next_parents = get_parent_rows(
             parent_levels,
             next_level,
-            parent_name,
-            roid
+            parent_rows,
+            roid,
+            boundary_geom
         )
 
-        logging.debug(
-            f"[LEVEL {next_level}] Active parent set to "
-            f"{parent_name}=={active_parent_rows[next_level].get('NAME', 'Unknown')}"
-        )
+        # Deduplicate by NAME or FID
+        seen = set()
+        unique_parents = []
+
+        for p in next_parents:
+            key = getattr(p, "FID", getattr(p, "NAME", None))
+            if key not in seen:
+                seen.add(key)
+                unique_parents.append(p)
+
+        names = [getattr(p, "NAME", "Unknown") for p in unique_parents]
+        # MISSING
+        active_parent_rows[next_level] = unique_parents
+        logging.debug(f"[LEVEL {next_level}] Active parents: {names}")
 
         # -------------------------------------------------------
         # Build path

@@ -21,6 +21,6 @@ TREKNODE_FILE = Path(workdirectories['workdir']) /'static'/ 'nodes' / 'Treknodes
 FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Fullpolys.pkl')
 TABLE_FILE = os.path.join(workdirectories['workdir'],'static','registers','stream_data.json')
 RESOURCE_FILE = Path(workdirectories['workdir']) /'static'/ 'resources' / 'Resources.csv'
-BASE_FILE = Path(workdirectories['workdir']) /'static'/ 'elections' / 'Elections-DEMO.json'
+BASEX_FILE = Path(workdirectories['workdir']) /'static'/ 'elections' / 'Elections-DEMO.json'
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }
