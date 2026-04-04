@@ -1076,6 +1076,9 @@ def delete_node():
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
         rlevels = CElection.resolved_levels
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
 
         parent.create_area_map(rlevels, static=False)
 
@@ -1091,7 +1094,7 @@ def delete_node():
     return jsonify({
         "status": "success",
         "message": "Node deleted",
-        "mapfile": url_for("thru", path=parent.mapfile(rlevels))
+        "mapfile": url_for("thru", path=parent.mapfile())
     })
 
 
@@ -1169,7 +1172,7 @@ def reassign_parent():
     return jsonify({
         "status": "success",
         "message": "Node reassigned",
-        "mapfile": url_for("thru", path=old_parent_node.mapfile(rlevels))
+        "mapfile": url_for("thru", path=old_parent_node.mapfile())
     })
 
 
@@ -1274,7 +1277,7 @@ def kanban():
     grouped['VI_ToGet_Pos'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(lower=0)
     grouped['VI_ToGet_Neg'] = (grouped['VI_Target'] - grouped['VI_Party'] ).clip(upper=0).abs()
     print("Grouped Walks data:", len(grouped), grouped[['WalkName','Kanban','ENOP', 'VI_Voted','VI_Pledged','VI_ToGet_Pos','VI_ToGet_Neg','VI_L1Done','VI_Canvassed' ]].head());
-    filepath = current_node.mapfile(rlevels)
+    filepath = current_node.mapfile()
     title = current_node.value+" details"
     items = current_node.childrenoftype('walk')
     layeritems = get_layer_table(items,title, rlevels)
@@ -2325,7 +2328,7 @@ def update_territory():
     current_node.endpoint_created(rlevels, mapfile,static=False)
 
     CElection.save()
-    print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {current_node.mapfile(rlevels)}")
+    print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {current_node.mapfile()}")
 
     return jsonify(success=True, constants=CElection)
 
@@ -2461,7 +2464,7 @@ def index():
         OPTIONS = resolve_ui_context(program, election, current_node)
 
         # Log the current state for debugging
-        print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile(elevels)}")
+        print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile()}")
 
         return render_template(
             "Dash0.html",
@@ -2470,7 +2473,7 @@ def index():
             current_election=current_election,
             options=OPTIONS,
             constants=CElection,
-            mapfile=current_node.mapfile(elevels),
+            mapfile=current_node.mapfile(),
             streamrag=streamrag  # Pass streamrag to the template for rendering
         )
 
@@ -2628,13 +2631,13 @@ def dashboard():
         # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
 
 
-        print ("___Dashboard persisted filename: ",current_node.mapfile(rlevels))
+        print ("___Dashboard persisted filename: ",current_node.mapfile())
         persist(Treepolys, Fullpolys, Geo_index)
-        if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile(rlevels))):
+        if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile())):
             current_node.create_area_map(rlevels, static=False)
 
 #        redirect(url_for('captains'))
-    return   send_from_directory(app.config['UPLOAD_FOLDER'],current_node.mapfile(rlevels), as_attachment=False)
+    return   send_from_directory(app.config['UPLOAD_FOLDER'],current_node.mapfile(), as_attachment=False)
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -2681,9 +2684,9 @@ def downbut(path):
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
+        fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels),static=False):
+        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
             if not fullpath.exists():
                 abort(404, f" Route/downbut File not found: {fullpath}")
             print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
@@ -2734,9 +2737,9 @@ def downbulk(path):
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
+        fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels),static=False):
+        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
             if not fullpath.exists():
                 abort(404, f" Route/downbulk File not found: {fullpath}")
             print (f"_________ROUTE/downbulk at {current_node.value} display file created:{fullpath}")
@@ -2773,11 +2776,11 @@ def transfer(path):
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = get_root().ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
-    current_node.endpoint_created(rlevels, current_node.mapfile(rlevels),static=False)
+    current_node.endpoint_created(rlevels, current_node.mapfile(),static=False)
 
     CElection.visit_node(current_node)
     base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile(rlevels)
+    fullpath = base / current_node.mapfile()
     persist(Treepolys, Fullpolys, Geo_index)
     print (f"_________ROUTE/transfer at sendinf file:{fullpath}")
     return send_file(fullpath, as_attachment=False)
@@ -2804,6 +2807,11 @@ def downMWbut(path):
     current_node = CElection.get_last_node(create=False)
 
     rlevels = CElection.resolved_levels
+    assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+    # The clean unpack you like
+    (c_election, elevels), = rlevels.items()
+
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
@@ -2812,7 +2820,7 @@ def downMWbut(path):
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
-    print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile(rlevels)}")
+    print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile()}")
     flash ("_________ROUTE/downMWbut ")
 
     if current_node.level > 4 and len(areaelectors)  == 0:
@@ -2821,9 +2829,9 @@ def downMWbut(path):
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
+        fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels), static=True):
+        if current_node.endpoint_created(rlevels,current_node.mapfile(), static=True):
             if not fullpath.exists():
                 abort(404, f" Route/downMW File not found: {fullpath}")
             print (f"_________ROUTE/downMW at {current_node.value} display file created:{fullpath}")
@@ -3025,8 +3033,8 @@ def PDdownST(path):
     if len(areaelectors) == 0 :
         flash("Can't find any elector data for this Polling District.")
         print("Can't find any elector data for this Polling District.",len(streetnodelist))
-        if os.path.exists(current_node.mapfile(rlevels)):
-            os.remove(current_node.mapfile(rlevels))
+        if os.path.exists(current_node.mapfile()):
+            os.remove(current_node.mapfile())
     else:
         flash(f"________in {PD_node.value} there are {len(streetnodelist)} streetnode and markers added")
         print(f"________in {PD_node.value} there are {len(streetnodelist)} streetnode and markers added")
@@ -3043,7 +3051,7 @@ def PDdownST(path):
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
 
 
-    print(f"__PDdownST- {current_node.mapfile(rlevels)}-l4area {current_node.value}, len area {len(areaelectors)}")
+    print(f"__PDdownST- {current_node.mapfile()}-l4area {current_node.value}, len area {len(areaelectors)}")
 
     print ("_________ROUTE/PDdownST/",path, request.method)
 
@@ -3054,9 +3062,9 @@ def PDdownST(path):
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
+        fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels),static=False):
+        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
             if not fullpath.exists():
                 abort(404, f" Route/PDdownST at level {current_node.level} File not found: {fullpath}")
             print (f"_________ROUTE/PDdownST at {current_node.value} display file created:{fullpath}")
@@ -3107,8 +3115,8 @@ def LGdownST(path):
         flash("No data for the selected election available!")
         flash("Can't find any elector data for this Polling District.")
         print("Can't find any elector data for this Polling District.")
-        if os.path.exists(current_node.mapfile(rlevels)):
-            os.remove(current_node.mapfile(rlevels))
+        if os.path.exists(current_node.mapfile()):
+            os.remove(current_node.mapfile())
 
         streetnodelist = PD_node.childrenoftype('street')
         for street_node in streetnodelist:
@@ -3179,9 +3187,9 @@ def WKdownST(path):
         raise Exception ("Can't find any elector data for this Area.")
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile(rlevels)
+        fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels),static=False):
+        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
             if not fullpath.exists():
                 abort(404, f" _________ROUTE/WKdownST File not found: {fullpath}")
             print (f"_________ROUTE/WKdownST at {current_node.value} display file created:{fullpath}")
@@ -3500,7 +3508,7 @@ def upbut(path):
     current_node = previous_node.parent
 
     base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile(rlevels)
+    fullpath = base / current_node.mapfile()
 # the previous node's type determines the 'face' of the destination node
     atype = CElection.node_type(current_node.level) # destination type
     #formdata['username'] = session["username"]
@@ -3513,16 +3521,16 @@ def upbut(path):
 #    print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
 
 
-    if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile(rlevels))):
+    if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile())):
 
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
         current_node.create_area_map(rlevels, static=False)
 
-    print("________chosen node url",current_node.mapfile(rlevels))
+    print("________chosen node url",current_node.mapfile())
     base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile(rlevels)
-    if current_node.endpoint_created(rlevels,current_node.mapfile(rlevels),static=False):
+    fullpath = base / current_node.mapfile()
+    if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
         if not fullpath.exists():
             abort(404, f" Route/upbut File not found: {fullpath}")
         print (f"_________ROUTE/upbut from {previous_node.value} to endpoint at {current_node.value} display file created:{fullpath}")
@@ -3610,7 +3618,7 @@ def calendar_partial(path):
     task_tags, outcome_tags, all_tags = CElection.get_tags()
 
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
-    print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile(rlevels)} - OPTIONS html {OPTIONS['areas']}")
+    print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
 
 
     return render_template(
@@ -3620,7 +3628,7 @@ def calendar_partial(path):
         current_election=current_election,
         options=OPTIONS,
         constants=CElection,
-        mapfile=current_node.mapfile(rlevels)
+        mapfile=current_node.mapfile()
     )
 
 
@@ -3848,7 +3856,7 @@ def walks():
 #    formdata['username'] = session['username']
         session['current_node_id'] = current_node.nid
 
-        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(elevels))
+        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -4056,7 +4064,7 @@ def firstpage():
     print('_______ROUTE/firstpage at :',current_node.value )
 
     print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
-    print("____Firstpage Mapfile",current_node.mapfile(rlevels), current_node.value)
+    print("____Firstpage Mapfile",current_node.mapfile(), current_node.value)
     atype = current_node.child_type(rlevels)
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
@@ -4070,7 +4078,7 @@ def firstpage():
     ELECTIONS = get_available_elections()
 
 #
-    print(f"🧪 firstpage level {current_election} - current_node mapfile:{current_node.mapfile(rlevels)} - OPTIONS html {OPTIONS['areas']}")
+    print(f"🧪 firstpage level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
     persist(Treepolys,Fullpolys, Geo_index)
     return render_template(
         "Dash0.html",
@@ -4079,7 +4087,7 @@ def firstpage():
         current_election=current_election,
         options=OPTIONS,
         constants=CElection,
-        mapfile=current_node.mapfile(elevels)
+        mapfile=current_node.mapfile()
     )
 
 
@@ -4120,7 +4128,7 @@ def cards():
 
                 group = prodcards[0]
                 ELECTIONS = get_available_elections()
-                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(elevels))
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")

@@ -920,7 +920,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         tag = str(herenode.value)
         typetag = "streets in "+str(herenode.type)+" "+str(herenode.value)
         here = [float(f"{herenode.latlongroid[0]:.6f}"), float(f"{herenode.latlongroid[1]:.6f}")]
-        pathref = herenode.mapfile(elevels)
+        pathref = herenode.mapfile()
         mapfile = '/transfer/'+pathref
         # Turn into HTML list items
 
@@ -1142,7 +1142,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         uptag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         limbX['UPDOWN'] = uptag+"<br>"+c.value+"<br>"  + downtag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile(elevels)
+                        mapfile = "/transfer/"+c.mapfile()
     #                        self.children.append(c)
                     elif herenode.level == 1:
                         wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,type)
@@ -1155,7 +1155,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
                         limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ wardreporttag + divreporttag+"<br>"+ downconstag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile(elevels)
+                        mapfile = "/transfer/"+c.mapfile()
     #                        self.children.append(c)
                     elif herenode.level == 2:
                         downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,"ward")
@@ -1167,7 +1167,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downwardstag + " " + downdivstag
     #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile(elevels)
+                        mapfile = "/transfer/"+c.mapfile()
     #                        self.children.append(c)
                     elif herenode.level == 3:
                         upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,herenode.type)
@@ -1194,7 +1194,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         else:
                             limbX['UPDOWN'] = "<br>"+c.value+"<br>"
     #                    c.tagno = len(self._children)+1
-                        pathref = c.mapfile(elevels)
+                        pathref = c.mapfile()
                         mapfile = '/transfer/'+pathref
     #                        self.children.append(c)
 
@@ -1329,7 +1329,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         ),
                     ).add_to(self)
 
-                    pathref = c.mapfile(elevels)
+                    pathref = c.mapfile()
                     mapfile = '/transfer/'+pathref
 
 
@@ -1402,7 +1402,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             num = str(c.tagno)
             tag = str(c.value)
             fill = herenode.col
-            pathref = c.mapfile(elevels)
+            pathref = c.mapfile()
             mapfile = '/transfer/'+pathref
 
             print("______Display childrenx:",c.value, c.level,type,c.latlongroid )

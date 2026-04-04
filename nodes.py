@@ -1137,9 +1137,15 @@ class TreeNode:
                 node = node.parent
         return node
 
-    def mapfile(self, elevels):
+    def mapfile(self):
+        from flask import session
+        from elections import CurrentElection
+        rlevels = CurrentElection.load(session.get("current_election")).resolved_levels
         # This unpacks the single key-value pair from the dictionary
-
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked mapfile election: {c_election}")
         return f"{self.dir}/{self.file(elevels)}"
 
 
@@ -1217,7 +1223,7 @@ class TreeNode:
 
         # ──────────────────────────────
         # Step 1: clean paths
-        self_path = split_clean_path(self.mapfile(elevels))
+        self_path = split_clean_path(self.mapfile())
         dest_parts = split_clean_path(path_str)
 
         print(f"🪜 [DEBUG] self_path: {self_path}")
@@ -1985,7 +1991,7 @@ class TreeNode:
             width='100%',
             height='800px'
         )
-        print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile(elevels))
+        print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile())
 
         counters = make_counters()
 
@@ -2801,7 +2807,7 @@ class TreeNode:
         # File paths
         results_path = self.locfilepath(results_filename)
         datafile = f"/STupdate/{self.dir}/{streetfile_name}-SDATA.csv"
-        mapfile = f"/upbut/{self.parent.mapfile(elevels)}"
+        mapfile = f"/upbut/{self.parent.mapfile()}"
 
         # Fill missing data to prevent template errors
         electorwalks = electorwalks.fillna("")

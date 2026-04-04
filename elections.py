@@ -380,7 +380,7 @@ class CurrentElection(dict):
         self['cid'] = node.nid
         self['cidLat'] = node.latlongroid[0]
         self['cidLong'] = node.latlongroid[1]
-        newlist = self.add_breadcrumb(node.mapfile(elevels))
+        newlist = self.add_breadcrumb(node.mapfile())
 
         self.save()
         print(f"=== VISIT NODE === {node.nid}")

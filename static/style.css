@@ -1510,9 +1510,10 @@ html {
 }
 
 
-dl, fieldset, h1, h2, h3, h4, h5, h6, ol, p, {
-	margin: 0;
-    padding:20 20;
+/* Fix the spacing leak */
+dl, fieldset, h1, h2, h3, h4, h5, h6, ol, p { /* Removed trailing comma */
+    margin: 0;
+    padding: 0; /* Changed from 20 20 to 0 or something much smaller */
 }
 
 dd, figure {
