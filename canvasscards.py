@@ -120,13 +120,6 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 
     gapnode.parent.locmappath("")
 
-#    here = Point(Decimal(Countyboundary["LONG"].values[0]),Decimal(Countyboundary["LAT"].values[0]))
-#    sw = [Countyboundary.geometry.bounds.miny.to_list()[0],Countyboundary.geometry.bounds.minx.to_list()[0]]
-#    ne = [Countyboundary.geometry.bounds.maxy.to_list()[0],Countyboundary.geometry.bounds.maxx.to_list()[0]]
-#    swne = [sw,ne]
-#
-#    Countymap = create_area_map (swne)
-#    Countymap.add_child(flayers[1].fg)
     print("______Directory:", os.getcwd())
 
 
@@ -216,7 +209,8 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
     sw = [Conboundary.geometry.bounds.miny.to_list()[0],Conboundary.geometry.bounds.minx.to_list()[0]]
     ne = [Conboundary.geometry.bounds.maxy.to_list()[0],Conboundary.geometry.bounds.maxx.to_list()[0]]
     swne = [sw,ne]
-    Conmap = gapnode.create_area_map (flayers,allelectors)
+    rlevels = CElection.resolved_levels
+    Conmap = gapnode.create_area_map(rlevels, static=False)
 
     PDs = set(allelectors.PD.values)
     print("PDs", PDs)
@@ -380,7 +374,9 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           ne = wardelectors[['Lat', 'Long']].max().values.tolist()
           swne = [sw,ne]
 
-      Wardmap = ward_node.create_area_map (flayers,wardelectors)
+      rlevels = CElection.resolved_levels
+      Wardmap = ward_node.create_area_map(rlevels, static=False)
+
 
       Ward = Ward+"-MAP.html"
       ward_node.locmappath("")
@@ -487,7 +483,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
         sw = PDelectors[['Lat', 'Long']].min().values.tolist()
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
-        PDmap = PD_node.create_area_map (flayers,PDelectors)
+        PDmap = PD_node.create_area_map(current_election, CElection, static=False)
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
 

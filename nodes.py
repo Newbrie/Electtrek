@@ -1,24 +1,39 @@
-from config import workdirectories, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE
+from config import workdirectories, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
 import os
 import state
 import layers
 import json
+import logging
 import pandas as pd
 import geopandas as gpd
 import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context, render_template, current_app
 from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-from elections import route, CurrentElection, stepify
+import elections
 from folium import Map, Element
 import folium
 import uuid
 from pathlib import Path
 from datetime import datetime
-from state import branchcolours, normalname
+
 import sys, math, stat, json
+import tempfile
 
 
+FACEENDING = {
+    'elector': "-PRINT.html",
+    'street': "-MAP.html",
+    'walkleg': "-MAP.html",
+    'polling_district': "-PDS.html",
+    'walk': "-WALKS.html",
+    'ward': "-WARDS.html",
+    'division': "-DIVS.html",
+    'constituency': "-MAP.html",
+    'county': "-MAP.html",
+    'nation': "-MAP.html",
+    'country': "-MAP.html",
+}
 
 def create_root_node() -> "TreeNode":
     return TreeNode(
@@ -31,7 +46,6 @@ def create_root_node() -> "TreeNode":
 
 def get_root() -> "TreeNode":
     """Always returns the single root node. Creates it if needed."""
-    global TREK_NODES_BY_ID
 
     # If the root already exists, return it
     for node in TREK_NODES_BY_ID.values():
@@ -75,6 +89,11 @@ def reset_nodes():
 
 
 def save_nodes(path):
+
+    print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
+    print(f"[DEBUG] registry size in save_nodes: {len(TREK_NODES_BY_ID)}")
+    sum_of_all_nodes = len(TREK_NODES_BY_ID)
+
     for node in TREK_NODES_BY_ID.values():
         if node.parent and node.parent.nid not in TREK_NODES_BY_ID:
             raise RuntimeError(
@@ -86,14 +105,14 @@ def save_nodes(path):
 
     with open(path, "w") as f:
         json.dump([n.to_dict() for n in TREK_NODES_BY_ID.values()], f, indent=2)
-        print(f"✅ [DEBUG] All nodes saved to {path}")
+        print(f"✅ [DEBUG] All {sum_of_all_nodes} nodes saved to {path}")
 
 def load_nodes(path):
     """
     Load tree nodes from JSON file at `path`, wiring parents/children.
     Resilient: missing parents or children are logged but skipped.
     """
-    global TREK_NODES_BY_ID
+
 
     if not path.exists() or path.stat().st_size == 0:
         print(f"[WARN] Node file missing or empty: {path}")
@@ -272,7 +291,7 @@ def is_safe_url(target):
     return test_url.scheme in ('http', 'https') and \
             ref_url.netloc == test_url.netloc
 
-def get_layer_table(nodelist,title,rlevels):
+def get_layer_table(nodelist,title,elevels):
     from state import VNORM
     def safe_float(val, default=0.0):
         try:
@@ -296,11 +315,11 @@ def get_layer_table(nodelist,title,rlevels):
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
             elif x.type == 'walk':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
             else:
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file(rlevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
             # 1. Identify grandparent
             grandparent = x.parent.parent if x.parent else None
 
@@ -335,7 +354,7 @@ def get_layer_table(nodelist,title,rlevels):
             dfy.loc[i,'turn'] = safe_float(x.turnout)
             dfy.loc[i,'gotv'] = safe_float(x.gotv)
             dfy.loc[i,'toget'] = 0
-#            dfy.loc[i,'toget'] = int(((safe_float(x.electorate)*safe_float(x.turnout))/2+1)/safe_float(CurrentElection['GOTV'])) - int(x.VI.get(CurrentElection['yourparty'],0))
+#            dfy.loc[i,'toget'] = int(((safe_float(x.electorate)*safe_float(x.turnout))/2+1)/safe_float(elections.CurrenetElection['GOTV'])) - int(x.VI.get(elections.CurrenetElection['yourparty'],0))
             i = i + 1
 
         # Step 1: Define numeric columns
@@ -420,6 +439,33 @@ def atomic_pickle_dump(obj, path):
         tmp = tf.name
     os.replace(tmp, path)
 
+
+def atomic_json_dump(obj, path):
+    """
+    Safely writes a JSON file by writing to a temp file first,
+    then replacing the original. Prevents 'forgetting' branches
+    due to file corruption during a crash.
+    """
+    d = os.path.dirname(path) or "."
+    tmp_path = None
+
+    try:
+        # 1. Use 'w' mode (text) and 'utf-8' encoding
+        # delete=False is required so we can rename it after closing
+        with tempfile.NamedTemporaryFile(mode='w', dir=d, delete=False, encoding='utf-8', suffix='.tmp') as tf:
+            json.dump(obj, tf, indent=4) # indent=4 makes it human-readable for debugging
+            tmp_path = tf.name
+
+        # 2. Atomic replacement (OS level move)
+        os.replace(tmp_path, path)
+
+    except Exception as e:
+        logging.error(f"❌ Atomic JSON dump failed for {path}: {e}")
+        # Clean up the temp file if it was created but not moved
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise  # Re-raise to let the caller know the save failed
+
 def safe_pickle_load(path, default):
     try:
         if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -432,24 +478,52 @@ def safe_pickle_load(path, default):
         print(f"❌ Pickle load failed for {path}: {e}")
         return default
 
+def safe_json_load(path, default):
+    """
+    Safely loads a JSON file. Returns 'default' if the file is missing,
+    empty, or corrupted.
+    """
+    try:
+        # 1. Check if file exists and isn't empty
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            logging.info(f"📂 {path} not found or empty. Using default.")
+            return default
+
+        # 2. Open in text mode for JSON
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        # Use JSON-specific error handling instead of Pickle
+        logging.error(f"❌ JSON load failed for {path}: {e}")
+
+        # IMPORTANT: Return the default so the app doesn't crash,
+        # but consider backing up the 'broken' file first if it has data.
+        return default
 
 
-def restore_from_persist(treepolys, fullpolys):
-    print(f'____Restore from persist under !{route()} called to restore nodes and polys! ')
+
+def restore_from_persist(treepolys, fullpolys, geo_index):
+    print(f'____Restore from persist under !{elections.route()} called to restore nodes and polys! ')
 
     safe_pickle_load(TREEPOLY_FILE,treepolys)
 
     safe_pickle_load(FULLPOLY_FILE,fullpolys)
 
     load_nodes(TREKNODE_FILE)
+
+    # Load from file
+    safe_json_load(GEO_INDEX_FILE, geo_index)
     print("AFTER LOAD:")
     return
 
-def persist(treepolys, fullpolys):
-    print(f'___persisting pickle under !{route()}', TREEPOLY_FILE)
+def persist(treepolys, fullpolys, geo_index):
+    print(f'___persisting pickle under !{elections.route()}', TREEPOLY_FILE)
     atomic_pickle_dump(treepolys,TREEPOLY_FILE)
     print('___persisting pickle ', FULLPOLY_FILE)
     atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
+    print('___persisting json ', geo_index)
+    atomic_json_dump(geo_index,GEO_INDEX_FILE)
     return
 
 def restore_fullpolys(node_type):
@@ -513,14 +587,14 @@ def find_node_by_path(basepath: str, debug=False):
     if not basepath:
         return None
 
-    parts = [normalname(p) for p in basepath.strip("/").split("/") if p]
+    parts = [state.normalname(p) for p in basepath.strip("/").split("/") if p]
     if not parts:
         return None
 
     root = get_root()
     node = root
 
-    if normalname(root.value) != parts[0]:
+    if state.normalname(root.value) != parts[0]:
         if debug:
             print("[DEBUG] Root mismatch")
         return None
@@ -529,7 +603,7 @@ def find_node_by_path(basepath: str, debug=False):
         if debug:
             print(f"[DEBUG] Descending to: {part}")
 
-        matches = [c for c in node.children if normalname(c.value) == part]
+        matches = [c for c in node.children if state.normalname(c.value) == part]
         if not matches:
             if debug:
                 print(f"[DEBUG] No child match for '{part}'")
@@ -574,7 +648,7 @@ class TreeNode:
         # If not (new node) → generate one
         self.nid = nid if nid is not None else str(uuid.uuid4())
 
-        self.value = normalname(str(value))
+        self.value = state.normalname(str(value))
         self.fid = fid
         self.latlongroid = roid
         self._child_index = {}
@@ -604,23 +678,12 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
-    def file(self, rlevels: dict[int, str]) -> str:
+    def file(self, elevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
-        FACEENDING = {
-            'elector': "-PRINT.html",
-            'street': "-MAP.html",
-            'walkleg': "-MAP.html",
-            'polling_district': "-PDS.html",
-            'walk': "-WALKS.html",
-            'ward': "-WARDS.html",
-            'division': "-DIVS.html",
-            'constituency': "-MAP.html",
-            'county': "-MAP.html",
-            'nation': "-MAP.html",
-            'country': "-MAP.html",
-        }
 
-        child = self.child_type(rlevels)
+        # This unpacks the single key-value pair from the dictionary
+
+        child = self.child_type(elevels)
         suffix = FACEENDING.get(child, "")
         if self.type == "street":
             filename = f"{self.parent.value}--{self.value}{suffix}"
@@ -677,7 +740,7 @@ class TreeNode:
         }
 
 
-    def path_options(self, rlevels, *, include_self=True):
+    def path_options(self, elevels, *, include_self=True):
         """
         Returns a list of dropdown items where:
         - key = full mapfile path for each step
@@ -710,18 +773,22 @@ class TreeNode:
 
 
 
-    def available_tables(self,rlevels):
+    def available_tables(self,elevels):
         return {
         "TABLE_TYPES": state.TABLE_TYPES
         }
 
-    def available_layers(self,rlevels):
+    def available_layers(self,elevels):
         return {
         "LAYERS": state.LAYERS
         }
 
     def get_options(self, *, program=None, electionctx=None):
             rlevels = electionctx.ce.resolved_levels
+            assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+            # The clean unpack
+            (c_election, elevels), = rlevels.items()
             next_level = self.level + 1
 
 
@@ -735,17 +802,17 @@ class TreeNode:
                 # navigation capabilities
                 "has_parent": self.parent is not None,
                 "child_types": (
-                    [rlevels[next_level]] if next_level in rlevels else []
+                    [elevels[next_level]] if next_level in elevels else []
                 ),
 
                 # available UI elements
-                "tables_available": self.available_tables(rlevels),
-                "layers_available": self.available_layers(rlevels),
+                "tables_available": self.available_tables(elevels),
+                "layers_available": self.available_layers(elevels),
                 "areas": self.get_areas(),
 
                 # relationships
                 "children": [c.value for c in self.children],
-                "territory": self.path_options(rlevels, include_self=True)
+                "territory": self.path_options(elevels, include_self=True)
             }
 
 
@@ -795,68 +862,86 @@ class TreeNode:
             return f"{self.parent.dir}/{self.value}"
 
 
-    def child_type(self, rlevels: dict[int, str]) -> str | None:
-        """
-        Return the child node type for this node.
-        Safely returns None if this is a leaf node.
-        """
-        if not rlevels:
+    def child_type(self, elevels: dict) -> str | None:
+        if not elevels:
             return None
-
-        next_level = self.level + 1
-
-        # If the next level does not exist in rlevels, this is a leaf
-        if next_level not in rlevels:
-            return None
-
-        return rlevels[next_level]
+        # 3. Safe access
+        return elevels.get(self.level + 1)
 
 
 
-    def endpoint_created(self, c_elect, CurrEL, newpath, static=False):
+    def endpoint_created(self, rlevels, newpath, static=False):
+        from flask import session
         """
         Creates a map node (HTML) if it doesn't already exist or
         the one that does exist is older than the node's last modification.
         """
 
-        from pathlib import Path
-        from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-        from elections import route
-        import os
-        from datetime import datetime
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
-        rlevels = CurrEL.resolved_levels
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
         next_level = self.level + 1
 
-        print(f"___under {route()} for {c_elect} testing endpoint:", newpath)
+        print(f"___under {elections.route()} testing endpoint:", newpath)
         print("endpoint children:", [c.value for c in self.children])
 
-        if next_level > max(rlevels, default=0):
+        # 1. Extract the inner dictionary of {int: str}
+
+
+        # 2. Find the maximum level integer (e.g., 5)
+        max_level = max(elevels)
+
+        if next_level > max_level:
             return False  # No further levels to process
 
-        atype = rlevels[next_level]
+        atype = elevels[next_level]
 
         workdir = workdirectories.get('workdir')
         if not workdir:
             print("⚠️ [ERROR] 'workdir' not found in workdirectories!")
             return False
 
+
         fullpath = Path(workdir) / newpath
 
         # Determine if the map is stale
         endpoint_created = False
 
+
         if not fullpath.exists():
             endpoint_created = True
-
         elif hasattr(self, 'last_modified') and self.last_modified:
             file_mtime = datetime.utcfromtimestamp(fullpath.stat().st_mtime)
             if self.last_modified > file_mtime:
                 endpoint_created = True
 
-        if self.level < 6 and endpoint_created:
-            self.create_area_map(c_elect, CurrEL, static=static)
+        if next_level <= max_level and endpoint_created:
+            self.create_area_map(rlevels, static=static)
 
+        accumulate = session.get("accumulate", False)
+# if the endpoint doesn t exist or we area accumulating
+        render_node = self
+        if accumulate:
+            render_node = self.parent if self.parent else self
+            endpoint_created = True
+            print(f"=== ACCUMULATING === {self.nid}")
+            print(f"DEBUG: Current Session List BEFORE: {session.get('accumulated_nodes')}")
+
+            # 1. Update the list
+            lst = session.get("accumulated_nodes", [])
+            if self.nid not in lst:
+                lst.append(self.nid)
+            session["accumulated_nodes"] = lst
+            session.modified = True
+
+            # 2. TRIGGER THE PARENT UPDATE
+            # This ensures that even though we are 'visiting' a child,
+            # we force the parent map to re-render with the updated session list.
+            if self.parent:
+                print(f"--- Triggering Parent Map Update for: {self.parent.value}")
+                # Call create_area_map on the parent
+                self.parent.create_area_map(rlevels, static=static)
         return endpoint_created
 
 
@@ -973,11 +1058,20 @@ class TreeNode:
 
 
 
-    def build_eventlist_dataframe(self,CElection):
+    def build_eventlist_dataframe(self, rlevels):
         """
         Produce an eventlist dataframe matching the intent of the JS summary.
         """
+        from election import CurrentElection
 
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+
+        CElection = CurrentElection.load(c_election)
         slots = CElection["calendar_plan"]["slots"]
         rows = []
         print("__Building events from slots:",slots)
@@ -1043,38 +1137,48 @@ class TreeNode:
                 node = node.parent
         return node
 
-    def mapfile(self,rlevels):
-        return self.dir+"/"+self.file(rlevels)
+    def mapfile(self, elevels):
+        # This unpacks the single key-value pair from the dictionary
+
+        return f"{self.dir}/{self.file(elevels)}"
 
 
 
-    def ping_node(self, rlevels, c_election, dest_path, create=True, accumulate=False):
+    def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
         from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
-        from nodes import TREK_NODES_BY_ID
         from flask import session
-        from elections import route
         from elector import electors
 
-        for lev, ltype in rlevels.items():
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+
+
+        for lev, ltype in elevels.items():
+            # lev is now 0, 1, 2...
+            # ltype is now 'country', 'ward', 'street'...
+            print(f"Processing Level {lev}: {ltype}")
             tree_gdf = Treepolys.get(ltype)
             if tree_gdf is None or tree_gdf.empty:
-                print(f"____Ping/Treepolys {ltype} ->{route()}- EMPTY")
+                print(f"____Ping/Treepolys {ltype} ->{elections.route()}- EMPTY")
                 continue
             tot_tree = len(tree_gdf)
             unique_name_tree = tree_gdf['NAME'].nunique()
             unique_fid_tree = tree_gdf['FID'].nunique()
-            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} ->{route()} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
+            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} ->{elections.route()} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
 
                 # Same for Fullpolys
             full_gdf = Fullpolys.get(ltype)
             if full_gdf is None or full_gdf.empty:
-                print(f"____Ping/Fullpolys {ltype} - EMPTY ->{route()}")
+                print(f"____Ping/Fullpolys {ltype} - EMPTY ->{elections.route()}")
                 continue
 
             tot_full = len(full_gdf)
             unique_name_full = full_gdf['NAME'].nunique()
             unique_fid_full = full_gdf['FID'].nunique()
-            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full} ->{route()}")
+            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full} ->{elections.route()}")
 
 
         def strip_leaf_from_path(path):
@@ -1113,7 +1217,7 @@ class TreeNode:
 
         # ──────────────────────────────
         # Step 1: clean paths
-        self_path = split_clean_path(self.mapfile(rlevels))
+        self_path = split_clean_path(self.mapfile(elevels))
         dest_parts = split_clean_path(path_str)
 
         print(f"🪜 [DEBUG] self_path: {self_path}")
@@ -1141,34 +1245,42 @@ class TreeNode:
         print(f"⬇️ [DEBUG] Moving down path: {down_path}")
 
         moved = False
+        levels_dict = elevels
+
+        # 2. Find the maximum level integer (e.g., 5)
+        max_level = max(elevels)
 
         for part in down_path:
             next_level = node.level + 1
-            if next_level > max(rlevels):
-                raise Exception("Resolved level overflow")
+            # 1. Extract the inner dictionary of {int: str}
 
-            ntype = rlevels[next_level]
+            # 3. Perform the check
+            if next_level > max_level:
+                # Your logic for exceeding the tree depth
+                pass
+
+            ntype = elevels[next_level]
 
             print(f"➡️ [DEBUG] At node: {node.value} (L{node.level}), looking for part '{part}' at level {next_level} (type={ntype})")
             print(f"   Children before match: {[c.value for c in node.children]}")
 
-            matches = [c for c in node.children if c.value == part]
+            match = next((c for c in node.children if c.value == part), None)
 
-            if create and not matches:
+            if create and not match:
                 print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
                 try:
                     if next_level <= 4:
-                        node.create_map_branch(rlevels, c_election)
+                        node.create_map_branch(rlevels)
                     else:
-                        node.create_data_branch(rlevels, c_election)
+                        node.create_data_branch(rlevels)
                 except Exception as e:
                     print(f"   ⚠️ [DEBUG] Branch creation failed: {e}")
 
-                matches = [c for c in node.children if c.value == part]
+                match = next((c for c in node.children if c.value == part), None)
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
-            if not matches:
+            if not match:
                 # no mstch found so best to return current node
                 if node.parent:
                     print(f"[DEBUG] Ascended to: {node.parent.value} "
@@ -1179,7 +1291,7 @@ class TreeNode:
 
                 return node.parent  # or raise a controlled exception
 
-            node = matches[0]
+            node = match
 
             moved = True
             print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
@@ -1197,41 +1309,37 @@ class TreeNode:
         # ──────────────────────────────
         # Step 6: always expand children at final node
         next_level = node.level
-        print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max(rlevels)} createmode :{create} rlevels: {rlevels}")
 
-        if next_level <= max(rlevels) and create:
-            children_type = rlevels[next_level]
-            print(f"🌿 [DEBUG] Expanding children of {node.value} as {children_type}")
+        print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max_level} createmode :{create} rlevels: {rlevels}")
+
+        if next_level <= max_level and create:
+            children_type = elevels[next_level]
+            print(f"🌿 [DEBUG] Expanding children of {node.level}-{node.value} as {children_type}")
             try:
                 if node.level < 4:
-                    node.create_map_branch(rlevels, c_election)
+                    node.create_map_branch(rlevels)
                 else:
-                    node.create_data_branch(rlevels, c_election)
+                    node.create_data_branch(rlevels)
             except Exception as e:
                 print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
-
-        if accumulate:
-            # Get the list of accumulated nodes from the session, or initialize it as an empty list if not available
-            lst = session.get("accumulated_nodes", [])
-
-            # Only add the node to the list if it's not already there
-            if node.nid not in lst:
-                lst.append(node.nid)
-
-            # Update the session with the new list of accumulated nodes
-            session["accumulated_nodes"] = lst
-            session.modified = True
-
 
 
         return node
 
 
 
-    def getselectedlayers(self, rlevels, this_election, path, static=False):
+    def getselectedlayers(self, rlevels, path, static=False):
         from layers import make_feature_layers
         from flask import session
         from state import Treepolys, Fullpolys
+
+
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
 
         selected = []
         layers = make_feature_layers()
@@ -1248,20 +1356,11 @@ class TreeNode:
                 # Get accumulated node IDs from the session
                 node_ids = session.get("accumulated_nodes", [])
                 valid_nodes = []
-                stale_ids = []
 
                 for nid in node_ids:
                     node = TREK_NODES_BY_ID.get(nid)
                     if node and node.parent:   # ensure parent exists
                         valid_nodes.append(node)
-                    else:
-                        stale_ids.append(nid)
-
-                if stale_ids:
-                    print("⚠️ Removing stale node IDs from session:", stale_ids)
-                    session["accumulated_nodes"] = [
-                        nid for nid in node_ids if nid not in stale_ids
-                    ]
 
                 nodelist = valid_nodes
                 session.modified = True
@@ -1281,8 +1380,8 @@ class TreeNode:
             # Render the child layer
             print(f"__LAYER NODE LIST (Child Layer): {[n.value for n in nodelist]} ")
 
-            child_layer = layers[rlevels[self.level + 1]]
-            child_layer.create_layer(this_election, nodelist, static=False)
+            child_layer = layers[elevels[self.level + 1]]
+            child_layer.create_layer(rlevels, nodelist, static=False)
             child_layer.show = True
             selected.append(child_layer)
 
@@ -1290,16 +1389,16 @@ class TreeNode:
         # Handle the Sibling Layer (Current Level)
         # -------------------------------------------------
         if self.level > 0:
-            sibling_layer = layers[rlevels[self.level]]
-            sibling_layer.create_layer(this_election, [self.parent], static=False)
+            sibling_layer = layers[elevels[self.level]]
+            sibling_layer.create_layer(rlevels, [self.parent], static=False)
             selected.append(sibling_layer)
 
         # -------------------------------------------------
         # Handle the Parent Layer (Level - 1)
         # -------------------------------------------------
         if self.level > 1:
-            parent_layer = layers[rlevels[self.level - 1]]
-            parent_layer.create_layer(this_election, [self.parent.parent], static=False)
+            parent_layer = layers[elevels[self.level - 1]]
+            parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
             selected.append(parent_layer)
 
         # -------------------------------------------------
@@ -1334,7 +1433,7 @@ class TreeNode:
 #        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
-    def updateTurnout(self,rlevels):
+    def updateTurnout(self,elevels):
         from state import LastResults
 
         sname = self.value
@@ -1357,7 +1456,7 @@ class TreeNode:
         while casnode.parent:
             parent = casnode.parent
 
-            children = parent.childrenoftype(rlevels[parent.level])
+            children = parent.childrenoftype(elevels[parent.level])
             values = [c.turnout for c in children if c.turnout is not None]
             parent.turnout = sum(values) / len(values) if values else None
 
@@ -1365,11 +1464,12 @@ class TreeNode:
 
         return
 
-    def updateGOTV(self, gotv_pct, rlevels):
+    def updateGOTV(self, gotv_pct, elevels):
         """
         Compute absolute GOTV target:
             gotv = 0.5 * votes_cast + (gotv_pct / 100)
         """
+        # Guard: Ensure we have exactly one election to unpack
 
         casnode = self
 
@@ -1387,7 +1487,7 @@ class TreeNode:
         # --- Cascade upward (sum children) ---
         while casnode.parent:
             parent = casnode.parent
-            children = parent.childrenoftype(rlevels[parent.level])
+            children = parent.childrenoftype(elevels[parent.level])
 
             values = [c.gotv for c in children if c.gotv is not None]
             parent.gotv = sum(values) if values else None
@@ -1408,7 +1508,7 @@ class TreeNode:
         except Exception:
             party = "OTHER"
 
-        party = normalname(party)
+        party = state.normalname(party)
 
         if party not in VNORM:
             party = "OTHER"
@@ -1433,7 +1533,7 @@ class TreeNode:
         return
 
 
-    def updateCandidates(self,rlevels):
+    def updateCandidates(self,elevels):
         """Fill self.candidates from the global Candidates dict."""
         from state import Candidates
 
@@ -1444,8 +1544,9 @@ class TreeNode:
 
 
 
-    def updateElectorate(self, rlevels):
+    def updateElectorate(self, elevels):
         from state import LastResults
+        # Guard: Ensure we have exactly one election to unpack
 
         # --- Base electorate ---
         if self.level == 3:
@@ -1466,14 +1567,13 @@ class TreeNode:
             if parent.level != 3:
                 parent.electorate = sum(
                     c.electorate if c.electorate is not None else 0
-                    for c in parent.childrenoftype(rlevels[parent.level])
+                    for c in parent.childrenoftype(elevels[parent.level])
                 )
             casnode = parent
 
         return
 
-    def updateHouses(self,rlevels,pop):
-
+    def updateHouses(self,elevels,pop):
         sname = self.value
         pop = int(pop)
 
@@ -1485,7 +1585,7 @@ class TreeNode:
         for l in range(origin.level):
             sumnode.parent.houses = 0
             i=1
-            for x in sumnode.parent.childrenoftype(rlevels[sumnode.level]):
+            for x in sumnode.parent.childrenoftype(elevels[sumnode.level]):
                 sumnode.parent.houses = sumnode.parent.houses + x.houses
                 print ("_____Houseslevel:",x.level,x.value,x.houses,sumnode.houses)
                 i = i+1
@@ -1517,13 +1617,19 @@ class TreeNode:
         return str(target)
 
 
-    def create_name_nodes(self,resolved_levels,gotv_pct,elect,nodetype,namepoints,ending):
+    def create_name_nodes(self,resolved_levels,gotv_pct,nodetype,namepoints,ending):
         zonecolour = {
             "ZONE_0": "black", "ZONE_1": "red", "ZONE_2": "lime",
             "ZONE_3": "blue", "ZONE_4": "yellow", "ZONE_5": "cyan",
             "ZONE_6": "magenta", "ZONE_7": "orange", "ZONE_8": "purple",
             "ZONE_9": "brown", "ZONE_10": "gray"
         }
+
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+        # The clean unpack you like
+        (c_election, elevels), = resolved_levels.items()
 
 
         fam_nodes = []
@@ -1544,7 +1650,7 @@ class TreeNode:
 
         for index, limb in namepoints.iterrows():
 
-            newname = normalname(limb['Name'])
+            newname = state.normalname(limb['Name'])
 
             existing = next(
                 (c for c in self.children
@@ -1560,10 +1666,10 @@ class TreeNode:
                     value=newname,
                     fid=datafid,
                     roid=(limb['Lat'], limb['Long']),
-                    origin=elect,
+                    origin=c_election,
                     node_type=nodetype
                 )
-                egg = self.add_Tchild(child_node=newnode, etype=nodetype, elect=elect)
+                egg = self.add_Tchild(child_node=newnode, etype=nodetype, elect=c_election)
 
             # 🔥 Always update geometry
             lon = limb['Long']
@@ -1580,9 +1686,9 @@ class TreeNode:
 
             egg.defcol = zonecolour.get(limb['Zone'], 'black')
 
-            egg.updateTurnout(resolved_levels)
-            egg.updateElectorate(resolved_levels)
-            egg.updateGOTV(gotv_pct, resolved_levels)
+            egg.updateTurnout(elevels)
+            egg.updateElectorate(elevels)
+            egg.updateGOTV(gotv_pct, elevels)
 
             print('______Data nodes', egg.value, egg.fid,
                   egg.electorate, egg.houses, egg.target, egg.bbox)
@@ -1608,14 +1714,19 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self, resolved_levels, c_election):
+    def create_data_branch(self, resolved_levels):
         from elector import electors
         from state import Treepolys, Fullpolys
 
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+        # The clean unpack you like
+        (c_election, elevels), = resolved_levels.items()
 
         nodelist = []
-        CE = CurrentElection.load(c_election)
-        electtype = resolved_levels[self.level + 1]
+        CE = elections.CurrentElection.load(c_election)
+        electtype = elevels[self.level + 1]
         print(f"✅ Creating {electtype} Data branch for election {c_election}")
 
         # ----------------------------------------
@@ -1674,7 +1785,6 @@ class TreeNode:
                 nodelist = self.create_name_nodes(
                     resolved_levels,
                     gotv_pct,
-                    c_election,
                     electtype,
                     nodeelectors,
                     suffix_mapping.get(electtype, "-PRINT.html")
@@ -1698,151 +1808,141 @@ class TreeNode:
         return nodelist
 
 
-    def create_map_branch(self,resolved_levels,c_election):
-        from state import Treepolys, Fullpolys, Overlaps
-        import random
+    def create_map_branch(self, resolved_levels):
+        # Imports (keep them here if they are circular)
+        from state import Treepolys, Overlaps
+        from layers import get_children_within
+        import pandas as pd
+        import state
+        import elections
 
-        electtype = resolved_levels[self.level+1]
-        parenttype = resolved_levels[self.level]
-        print(f"🧭 create_map_branch 1Y {electtype} filteredby ({parenttype}) : {Treepolys[parenttype]}:")
-        if Treepolys.get(parenttype, []).empty:
-            raise ValueError(f"Parent Layer '{self.type}' not found in Treepolys")
+        # 1. Debug the incoming structure
+        print(f"DEBUG: Entering create_map_branch for {self.value} (Level {self.level})")
+        print(f"DEBUG: resolved_levels keys: {list(resolved_levels.keys())}")
 
-# need to know the CE['territories'] value to determine division or ward
-        # NOW THIS IS SAFE
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
+        # The clean unpack
+        (c_election, elevels), = resolved_levels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
 
-        parent_poly = Treepolys[parenttype]
+        # Use .get() to prevent crashes at the leaf level
+        electtype = elevels.get(self.level + 1)
+        parenttype = elevels.get(self.level)
 
-        print(f"🧭 create_map_branch 2Y {electtype} filteredby ({parenttype}) :")
+        if not electtype:
+            print(f"DEBUG: No child level found for level {self.level + 1}. Exiting.")
+            return None
 
+        print(f"🧭 create_map_branch {electtype} filtered by ({parenttype})")
+
+        # Load parent and children layers
+        parent_poly = Treepolys.get(parenttype)
         if parent_poly is None or parent_poly.empty:
-            raise ValueError(f"No polygons loaded for layer '{self.type}'")
+            raise ValueError(f"No polygons loaded for layer '{parenttype}'")
 
-        print(
-            f"🧭 create_map_branch({parenttype}) polys loaded:",
-            parent_poly is not None and not parent_poly.empty
-        )
+        # 2. Debug FID lookup
+        try:
+            search_fid = int(self.fid)
+            print(f"DEBUG: Searching {parenttype} for FID: {search_fid}")
+            parent_row = parent_poly[parent_poly['FID'] == search_fid]
+        except Exception as e:
+            print(f"DEBUG: FID Conversion error: {e}")
+            raise
 
-        # existing logic continues...
+        if parent_row.empty:
+            # Check if FIDs are actually strings in this layer
+            print(f"DEBUG: FID not found. Sample FIDs in {parenttype}: {parent_poly['FID'].head().tolist()}")
+            raise Exception(f"EMPTY PARENT GEOMETRY for {self.value} (FID {self.fid})")
 
+        parent_geom = parent_row.geometry.values[0]
 
-        CE = CurrentElection.load(c_election)
-        gotv_pct = CE['GOTV']
+        # bbox
         block = pd.DataFrame()
+        self.bbox, self.latlongroid = self.get_bounding_box(parenttype, block)
 
+        # Load child polygons
+        ChildPolylayer = Treepolys.get(electtype)
+        if ChildPolylayer is None or ChildPolylayer.empty:
+            raise Exception(f"No geometries found for '{electtype}'")
 
-        # Filter the parent geometry based on the FID
-        parent_geom = parent_poly[parent_poly['FID'] == int(self.fid)]
+        print(f"📦 {len(ChildPolylayer)} candidate children for {self.value}")
 
-        print(f"🧭 create_map_branch 3Y parent_geom ({parent_geom}) :")
+        # Filter children
+        threshold = Overlaps.get(electtype, 0.5)
+        selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
+        print(f"✅ Selected {len(selected_children)} children above threshold {threshold}")
 
-        # If no matching geometry is found, handle the case where parent_geom is empty
-        if parent_geom.empty:
-            print(f"Adding back in Full '{parenttype}' boundaries for {self.value} FID {self.fid}")
-            raise Exception ("EMPTY COUNTRY PARENT GEOMETRY")
-        else:
-            print(f"___create_map_branch geometry for {self.value} FID {self.fid} is: ")
-            print(
-                f"parent type: {parenttype} "
-                f"size {len(parent_poly)} "
-                f"parent poly cols: {list(parent_poly.columns)} "
-                f"NID {self.nid}"
-            )
-            # If geometry was found, proceed with the matching geometry
-            parent_geom = parent_geom.geometry.values[0]
-        [self.bbox, self.latlongroid] = self.get_bounding_box(parenttype,block)
-
-        ChildPolylayer = Treepolys[electtype]
-
-        print(f"____There are {len(ChildPolylayer)} Children candidates for {self.value} bbox:[{self.bbox}] of type {electtype}" )
-
-        index = 0
         fam_nodes = self.childrenoftype(electtype)
+        fam_values = {x.value for x in fam_nodes}
 
-        # Check if there’s anything to process
-        if ChildPolylayer.empty:
-            raise Exception ("No geometries found!")
-            print(f"⚠️ No geometries found for children of type '{electtype}' under {self.value}. Skipping creation.")
-            return fam_nodes
+        CE = elections.CurrentElection.load(c_election)
+        gotv_pct = CE.get('GOTV', 0) # Safe get
 
-        i = 0
-        j = 0
         k = 0
-        for index, limb in ChildPolylayer.iterrows():
-            newname = normalname(limb.NAME)
-            print(f"____Considering inclusion of child {newname} in {self.value} of branch")
-            fam_values = [x.value for x in fam_nodes]
+        j = 0
 
+        for _, limb in selected_children.iterrows():
+            newname = state.normalname(limb.NAME)
 
-            centroid_point = limb.geometry.centroid
-            here = (centroid_point.y, centroid_point.x) # (lat , Long)
-            overlaparea = parent_geom.intersection(limb.geometry).area
-            overlap_margin = round(Overlaps[electtype], 8)  # 8 decimal places for safety
+            if newname in fam_values:
+                j += 1
+                continue
 
-            print(
-                f"________Trying map type {electtype} name {newname}, "
-                f"existing names: {fam_values}, level+1: {self.level+1}, "
-                f"area: {overlaparea}, margin: {overlap_margin}, "
-                f"test: {overlaparea > overlap_margin}"
+            centroid_point = limb.geometry.representative_point()
+            here = (centroid_point.y, centroid_point.x)
+
+            print(f"➕ Adding child {newname} (FID: {limb.FID})")
+
+            egg = TreeNode(
+                value=newname,
+                fid=limb.FID,
+                roid=here,
+                origin="ONS_MAPS",
+                node_type=electtype
             )
 
-            # Only create new node if doesn't already exist and passes the area overlap check
-            if overlaparea > overlap_margin:
-                existing_node = next((x for x in fam_nodes if x.value == newname), None)
-                print(f"existing: {existing_node}")
-                if not existing_node:
-                    # new boundary inside parent
-                    egg = TreeNode(
-                        value=newname,
-                        fid=limb.FID,
-                        roid=here,
-                        origin="ONS_MAPS",
-                        node_type=electtype
-                    )
-                    print(f"________Found missing type {electtype} name {newname} at level {self.level+1}, area {overlaparea}")
+            egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
 
-                    # Add as child and calculate bbox
-                    egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
-                    egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
-                    print(f"________bbox [{egg.bbox}] - child of type {electtype} at lev {self.level+1} of {self.value}")
-                    egg.defcol = branchcolours[k]
-                    # Update the node with latest stats
-                    fam_nodes.append(egg)
-                    try:
-                        egg.updateParty()
-                        egg.updateCandidates(resolved_levels)
-                        egg.updateTurnout(resolved_levels)
-                        egg.updateElectorate(resolved_levels)
-                        egg.updateGOTV(gotv_pct, resolved_levels)
-                        print(f"______Addedname: {egg.value}, type {egg.type}, level {egg.level}, party {egg.party}")
-                    except Exception:
-                        self.remove_child(egg)
-                        raise Exception ("Tree branching error")
-                    k += 1
-                else:
-                    j += 1
-                    # boundary name already a child node
-                    continue
-            else:
-                # boundary not inside parent ignore
-                continue
-            i += 1
+            # bbox + visuals
+            egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
 
-        if len(fam_nodes) == 0:
-            print(f"⚠️ No children of type '{electtype}' created for {self.value} at level {self.level+1}")
+            # Color safety
+            color_idx = k % len(state.branchcolours)
+            egg.defcol = state.branchcolours[color_idx]
 
-        print(f"___At {self.value}, level {self.level}, revised {electtype} type fam nodes: {fam_nodes}")
-        print(f"______create_map_branch added_nodes: {k} existing {j} new of {i} total, values: {[x.value for x in fam_nodes]}")
+            # 3. Debug the Update calls individually
+            try:
+                egg.updateParty()
+                egg.updateCandidates(elevels)
+                egg.updateTurnout(elevels)
+                egg.updateElectorate(elevels)
+                egg.updateGOTV(gotv_pct, elevels)
 
-        save_nodes(TREKNODE_FILE)
+                fam_nodes.append(egg)
+                fam_values.add(newname)
+                k += 1
+
+            except Exception as e:
+                print(f"❌ ERROR during node update for {newname}: {str(e)}")
+                # This will now tell you EXACTLY which part of updateParty/Turnout etc failed
+                self.remove_child(egg)
+                raise
+
+        if not fam_nodes:
+            print(f"⚠️ No children created for {self.value}")
+
+        print(f"___At {self.value}: added {k}, existing {j}, total now {len(fam_nodes)}")
+
+        # Ensure save_nodes and TREKNODE_FILE are defined globally or imported
+        # save_nodes(TREKNODE_FILE)
+
         return fam_nodes
 
 
 
-
-
-    def create_area_map(self, CE, CEdata, static=False):
+    def create_area_map(self, resolved_levels, static=False):
         global SERVER_PASSWORD
 
         from folium import IFrame
@@ -1852,16 +1952,40 @@ class TreeNode:
         import hashlib
         import re
         from pathlib import Path
-        rlevels = CEdata.resolved_levels
-        print(f"___BEFORE cal creation: in route {route()} creating cal for: ", self.value)
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+        # The clean unpack
+        (c_election, elevels), = resolved_levels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+
+        # ... imports ...
+
         accumulate = session.get("accumulate", False)
 
-        if accumulate and self.parent is not None:
-            mapfile = self.parent.mapfile(rlevels)
-        else:
-            mapfile = self.mapfile(rlevels)
+        # 1. DETERMINE CONTEXT (Who is the "Owner" of this map?)
+        # If accumulating, we act as if we are the parent
 
-        print(f"___AFTER map creation: on route {route()} acc: {accumulate} creating file: ", self.mapfile(rlevels))
+        # 2. SET UP FILE PATHS
+        # Use render_node for the filename so child updates overwrite the parent map
+        mapfile_name = self.file(elevels)
+        target = self.locfilepath(mapfile_name)
+
+        # 3. SET UP VISUALS (Title and Bounding Box)
+        title = self.value
+        # Use the parent's centroid and bbox so the map doesn't "zoom in" to just one child
+        map_center = self.latlongroid
+        map_zoom = LEVEL_ZOOM_MAP.get(self.type, 13)
+        map_bbox = self.bbox
+
+        # --- Create the map using the render_node's location ---
+        FolMap = folium.Map(
+            location=map_center,
+            zoom_start=map_zoom,
+            width='100%',
+            height='800px'
+        )
+        print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile(elevels))
 
         counters = make_counters()
 
@@ -1869,9 +1993,8 @@ class TreeNode:
 
         # 3️⃣ Select which layers to render for this map
         flayers = self.getselectedlayers(
-            rlevels=CEdata.resolved_levels,
-            this_election=CE,
-            path=mapfile,
+            rlevels=resolved_levels,
+            path=mapfile_name,
             static=static
         )
 
@@ -2166,14 +2289,6 @@ class TreeNode:
             """
 
 
-        # --- Create the map
-        FolMap = folium.Map(
-            location=self.latlongroid,
-            zoom_start=LEVEL_ZOOM_MAP[self.type],
-            width='100%',
-            height='800px'
-        )
-
         # Inject custom CSS
         css = """
         <style>
@@ -2430,42 +2545,30 @@ class TreeNode:
 
 
         # Fit map to bounding box
-        if self.level == 4:
-            print("_____bboxcheck", self.value, self.bbox)
-        if self.bbox and isinstance(self.bbox, list) and len(self.bbox) == 2:
+        # 4. APPLY BOUNDS (Consolidated)
+        if map_bbox:
             try:
-                sw, ne = self.bbox
+                # Destructure and validate coordinates in one go
+                (lat1, lon1), (lat2, lon2) = map_bbox
 
-                # Check each part is a pair
-                if not (isinstance(sw, (list, tuple)) and len(sw) == 2 and
-                        isinstance(ne, (list, tuple)) and len(ne) == 2):
-                    raise ValueError("BBox corners are not 2-element lists")
-
-                sw = [float(sw[0]), float(sw[1])]
-                ne = [float(ne[0]), float(ne[1])]
-
-                if sw == ne:
-                    print("⚠️ BBox corners are identical; using centroid instead")
-                    FolMap.location = self.latlongroid
-                    FolMap.zoom_start = LEVEL_ZOOM_MAP.get(self.type, 13)
+                if [lat1, lon1] == [lat2, lon2]:
+                    # It's a single point, not a box
+                    FolMap.location = map_center
+                    FolMap.zoom_start = map_zoom
                 else:
-                    print("✅ BBox is valid, applying fit_bounds")
-                    FolMap.fit_bounds([sw, ne], padding=(0, 0))
+                    # Valid box
+                    FolMap.fit_bounds([[lat1, lon1], [lat2, lon2]], padding=(10, 10))
 
-            except (TypeError, ValueError) as e:
-                print(f"⚠️ Invalid bbox values: {self.bbox} | Error: {e}")
+            except (TypeError, ValueError, IndexError):
+                print(f"⚠️ BBox format invalid: {map_bbox}. Falling back to centroid.")
+                FolMap.location = map_center
         else:
-            print(f"⚠️ BBox is missing or badly formatted: {self.bbox}")
-
-        # overwrite file
-        target = self.locfilepath(self.file(rlevels))
+            print("ℹ️ No BBox provided; using default center/zoom.")
+        # 5. SAVE TO THE PARENT'S PATH
         FolMap.save(target)
 
-        print("Centroid raw:", self.latlongroid)
-        print(f" ✅ _____saved map file in route: {route()}", target, len(flayers), self.value, self.dir, self.file(rlevels))
-
+        print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
         return FolMap
-
 
     def set_bounding_box(self,block):
       longmin = block.Long.min()
@@ -2566,58 +2669,79 @@ class TreeNode:
 
 
     def add_Tchild(self, child_node, etype, elect):
-        # 1. Assign type FIRST
+
         child_node.type = etype
 
-        # 1.1 🔒 DUPLICATE GUARD: same parent, same type, same fid
-        for existing in self.children:
-            if existing.type == etype:
+        registry = TREK_NODES_BY_ID
 
-                # Polygon nodes: use fid
-                if hasattr(child_node, "origin") and child_node.origin == "ONS_MAPS":
-                    if existing.fid == child_node.fid:
-                        return existing
+        print(f"[DEBUG] registry id in add_Tchild: {id(TREK_NODES_BY_ID)}")
+        print(f"[DEBUG] registry size in add_Tchild: {len(TREK_NODES_BY_ID)}")
+        print(f"\n🟢 [DEBUG] add_Tchild called for node '{child_node.value}' ({child_node.nid}), type: {child_node.type}")
+        print(f"   - Parent: {self.value if self else 'None'}")
+        print(f"   - Registry size before: {len(registry)}")
 
-                # Data nodes: use name
-                else:
-                    if existing.value == child_node.value:
-                        return existing
+        # ---------------------------------------------------------
+        # 1️⃣ Prevent multiple root country nodes
+        # ---------------------------------------------------------
+        if child_node.parent is None and etype == "country":
+            # Check if any existing node of type country is already a root
+            for existing in registry.values():
+                if existing.type == "country" and existing.parent is None:
+                    raise ValueError(
+                        f"Cannot add another root node of type 'country': {child_node.value}"
+                    )
 
 
-        # 2. Detach from old parent if needed
-        if child_node.parent and child_node in child_node.parent.children:
-            print(f"[DEBUG] Detaching child {child_node.value} from its previous parent.")
-            child_node.parent.children.remove(child_node)
-            # Update old parent's last_modified
-            from datetime import datetime
-            child_node.parent.last_modified = datetime.utcnow()
+        # ---------------------------------------------------------
+        # 2️⃣ Prevent duplicates of same type + value
+        # ---------------------------------------------------------
+        found_in_registry = False
+        for nid, existing in registry.items():
+            if existing.type != etype:
+                continue
 
-        # 3. Attach to new parent
-        child_node.parent = self
+            if existing.parent is None and etype == "country":
+                continue  # skip root country
+
+            is_ons_map = getattr(child_node, "origin", None) == "ONS_MAPS"
+            match_found = False
+            if is_ons_map and existing.fid == child_node.fid:
+                match_found = True
+            elif existing.value == child_node.value:
+                match_found = True
+
+            if match_found:
+                print(f"🔍 [DEBUG] Node matched in registry: {existing.value} ({existing.nid})")
+                child_node = existing
+                found_in_registry = True
+                break
+
+        print(f"   - Found in registry: {found_in_registry}")
+
+        # ---------------------------------------------------------
+        # 3️⃣ Attach to parent
+        # ---------------------------------------------------------
         if child_node not in self.children:
+            if child_node.parent and child_node.parent is not self:
+                # Detach from old parent
+                child_node.parent.children.remove(child_node)
+            child_node.parent = self
             self.children.append(child_node)
-            # Update new parent's last_modified
-            from datetime import datetime
-            self.last_modified = datetime.utcnow()
+            print(f"✅ Linked {child_node.value} to {self.value} (children now: {len(self.children)})")
+        else:
+            # Already attached
+            child_node.parent = self
 
-        # 4. Per-parent numbering (keeping siblings ordered)
-        same_type_siblings = [c for c in self.children if c is not child_node and c.type == etype]
-        child_node.tagno = len(same_type_siblings)
-
-        # 6. Register by ID only (safe)
-        if self.nid not in TREK_NODES_BY_ID:
-            TREK_NODES_BY_ID[self.nid] = self
-        if child_node.nid not in TREK_NODES_BY_ID:
-            TREK_NODES_BY_ID[child_node.nid] = child_node
-
-        print(
-            f"REGISTERED NODE: parent {self.nid}-{self.value}, "
-            f"child {child_node.nid}-{child_node.value}"
-        )
-
+        # ---------------------------------------------------------
+        # 4️⃣ Register node if new
+        # ---------------------------------------------------------
+        if child_node.nid not in registry:
+            registry[child_node.nid] = child_node
+            print(f"💾 Registered new node {child_node.value} ({child_node.nid})")
+        else:
+            print(f"ℹ️ Node {child_node.value} ({child_node.nid}) already in registry")
         save_nodes(TREKNODE_FILE)
         return child_node
-
 
 
     def create_streetsheet(self, c_election, rlevels, electorwalks):
@@ -2625,6 +2749,10 @@ class TreeNode:
         Generates an HTML streetsheet for a given walk/polling district.
         Uses Flask's render_template safely inside an app context.
         """
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rs.items()
 
         current_election = c_election
         print(f"___streetsheet: {current_election} and street data len {len(electorwalks)}")
@@ -2673,7 +2801,7 @@ class TreeNode:
         # File paths
         results_path = self.locfilepath(results_filename)
         datafile = f"/STupdate/{self.dir}/{streetfile_name}-SDATA.csv"
-        mapfile = f"/upbut/{self.parent.mapfile(rlevels)}"
+        mapfile = f"/upbut/{self.parent.mapfile(elevels)}"
 
         # Fill missing data to prevent template errors
         electorwalks = electorwalks.fillna("")
@@ -2710,11 +2838,11 @@ class TreeNode:
         parent_node.children.append(self)
         print("Children",parent_node.children)
 
-    def path_intersect(self, path, rlevels):
+    def path_intersect(self, path, elevels):
         # start at the leaf of path 1 and test membership of path 2
-        first = state.stepify(self.dir+"/"+self.file(rlevels))
-        second = state.stepify(path)
-        print("intersecting paths ",self.dir+"/"+self.file(rlevels), path)
+        first = state.state.stepify(self.dir+"/"+self.file(elevels))
+        second = state.state.stepify(path)
+        print("intersecting paths ",self.dir+"/"+self.file(elevels), path)
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}
         d3 = {k: d1[k] for k in d1 if k in d2}

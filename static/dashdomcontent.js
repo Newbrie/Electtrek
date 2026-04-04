@@ -29,6 +29,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 
 
 
+
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD
    * --------------------------------------------------------- */
@@ -69,54 +70,95 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
       }
   }
 
-  /* ---------------------------------------------------------
-   * CALENDAR LOGIN AND CALENDAR BUILD
-   * --------------------------------------------------------- */
-    const exportBtn = document.getElementById("export-html-btn");
-   if (exportBtn) {
-     console.log("Initial view set: calendar visible, map hidden");
-     exportBtn.addEventListener("click", async () => {
-       await saveCalendarPlan();
-       const btn = document.getElementById("export-html-btn");
-       btn.disabled = true;
-       btn.textContent = "🔄 Exporting...";
+/* ---------------------------------------------------------
+ * CALENDAR LOGIN AND CALENDAR BUILD
+ * --------------------------------------------------------- */
+  const exportBtn = document.getElementById("export-html-btn");
+ if (exportBtn) {
+   console.log("Initial view set: calendar visible, map hidden");
+   exportBtn.addEventListener("click", async () => {
+     await saveCalendarPlan();
+     const btn = document.getElementById("export-html-btn");
+     btn.disabled = true;
+     btn.textContent = "🔄 Exporting...";
 
-       try {
-         // Create a standalone HTML document
+     try {
+       // Create a standalone HTML document
 
-         const htmlContent = createStandaloneHTML();
+       const htmlContent = createStandaloneHTML();
 
-         // Create a Blob and FormData to send as 'file'
-         const blob = new Blob([htmlContent], { type: "text/html" });
-         const formData = new FormData();
-         formData.append("file", blob, "calendar.html");
+       // Create a Blob and FormData to send as 'file'
+       const blob = new Blob([htmlContent], { type: "text/html" });
+       const formData = new FormData();
+       formData.append("file", blob, "calendar.html");
 
-         // Upload to development backend
-         const response = await fetch("/api/upload-and-protect", {
-           method: "POST",
-           body: formData
-         });
+       // Upload to development backend
+       const response = await fetch("/api/upload-and-protect", {
+         method: "POST",
+         body: formData
+       });
 
-         const result = await response.json();
+       const result = await response.json();
 
-         if (!response.ok || !result.ok) {
-           throw new Error(result.error || "Upload failed");
-         }
-
-         btn.textContent = "✅ Exported & Protected";
-       } catch (err) {
-         console.error("Export failed:", err);
-         btn.textContent = "❌ Failed";
-       } finally {
-         setTimeout(() => {
-           btn.textContent = "🔐 Export Protected HTML";
-           btn.disabled = false;
-         }, 1500);
+       if (!response.ok || !result.ok) {
+         throw new Error(result.error || "Upload failed");
        }
-     });
-   }
 
+       btn.textContent = "✅ Exported & Protected";
+     } catch (err) {
+       console.error("Export failed:", err);
+       btn.textContent = "❌ Failed";
+     } finally {
+       setTimeout(() => {
+         btn.textContent = "🔐 Export Protected HTML";
+         btn.disabled = false;
+       }, 1500);
+     }
+   });
+ }
 
+ document.getElementById("btnRunGroupAction").addEventListener("click", function() {
+     const dropdown = document.getElementById("groupActionSelect");
+     const targetRoute = dropdown.value;
+
+     if (!targetRoute) {
+         alert("Please select an action from the dropdown first.");
+         return;
+     }
+
+     // 1. Gather all checked Node IDs
+     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
+                               .map(cb => cb.value);
+
+     if (selectedNids.length === 0) {
+         alert("No rows selected! Please tick at least one checkbox.");
+         return;
+     }
+
+     console.log(`🚀 Sending ${selectedNids.length} nodes to ${targetRoute}`);
+
+     // 2. Send to Flask
+     fetch(targetRoute, {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         credentials: "include",
+         body: JSON.stringify({
+             nids: selectedNids,
+             election: document.querySelector(".election-tab.active")?.dataset.election || ""
+         })
+     })
+     .then(res => res.json())
+     .then(data => {
+         if (data.success) {
+             alert(`Successfully processed ${selectedNids.length} nodes.`);
+             // Refresh the map or breadcrumbs if necessary
+             if (typeof refreshMap === "function") refreshMap();
+         } else {
+             console.error("Bulk action failed:", data.error);
+         }
+     })
+     .catch(err => console.error("Network Error:", err));
+ });
 
 
   document.addEventListener("click", function (e) {
@@ -497,57 +539,6 @@ document.getElementById("logout-button")?.addEventListener("click", () => {
 });
 
 
-/* ---------------------------------------------------------
-* RESET-ELECTION TERRITORY ON CHANGE TRIGGER
-* --------------------------------------------------------- */
-
-const territoryInput = document.getElementById("territoryInput"); // visible field
-const territoryValue = document.getElementById("territoryValue"); // hidden value
-const geoPanel = document.getElementById("geoPanel");
-const mapIframe = document.getElementById("iframe1");
-
-async function updateTerritory(path) {
-    if (!path) return;
-
-    try {
-        const res = await fetch("/update-territory", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ mapfile: path })
-        });
-
-        if (!res.ok) {
-            throw new Error("Failed to update territory");
-        }
-
-        mapIframe.src = `/upbut/${encodeURIComponent(path)}`;
-
-    } catch (err) {
-        console.error(err);
-        alert("Could not save territory selection");
-    }
-}
-
-function selectTerritory(path) {
-    currentPath = path;
-
-    // visible label
-
-    territoryInput.value = geoIndex[path].name;
-
-    // actual stored value (this replaces <select>.value)
-    territoryValue.value = path;
-
-    updateTerritory(path);
-
-    geoPanel.classList.add("hidden");
-}
-
-
-
-
 
 /* ---------------------------------------------------------
  * ELECTION RESOURCES DROPDOWN BUTTON
@@ -588,12 +579,12 @@ resourcesSelect?.addEventListener("blur", () => {
     fetch("/set-constant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
         body: JSON.stringify({
             election: tab.dataset.election,
             name: "resources",
             value: selected
-        })
+        }),
+        credentials: "include"
     })
     .then(res => res.json()) // ✅ convert response to JSON
     .then(resp => {

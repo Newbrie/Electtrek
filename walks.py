@@ -33,7 +33,6 @@ def find_boundary(polyfile,here):
     return
 
 def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
-    global MapRoot
     global allelectors
     global TreeNode
 

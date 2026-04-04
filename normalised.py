@@ -8,7 +8,8 @@ from requests.auth import HTTPDigestAuth
 import config
 from config import GENESYS_FILE
 from datetime import datetime
-from state import normalname
+import elections
+import state
 
 
 
@@ -528,7 +529,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
         num2 = safe_group(Addno2)
 
 
-        prefix = normalname(elector["Address1"])
+        prefix = state.normalname(elector["Address1"])
         print ("xx:", xx, "addr:", addr, "Addno1:", Addno1, "Addno2:", Addno2, "prefix:", prefix, "P1:",str(elector['Address2']),"P2:" ,str(elector['Postcode'])  )
 
         if Addno1 is None:
@@ -536,25 +537,25 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
             addr = str(elector.Address2)
             if Addno2 is None:
                 Addno = ""
-                street = normalname(elector.Address2)
+                street = state.normalname(elector.Address2)
                 electors2.loc[index,'StreetName'] = street
                 electors2.loc[index,'Address_1'] = elector["Address3"]
                 electors2.loc[index,'Address_2'] = elector["Address4"]
                 electors2.loc[index,'Address_3'] = elector["Address5"]
                 electors2.loc[index,'Address_4'] = elector.get('Address6', None)
-                prefix = normalname(elector["Address1"])
+                prefix = state.normalname(elector["Address1"])
                 print ("Case00","len00:", 0, "ind10:", 0, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
             else:
                 Addnolen = len(Addno2.group())
                 Addno = str(Addno2.group())
                 Addnoindex = addr.index(Addno)
                 addr = str(elector.Address2).lstrip()
-                street = normalname(addr[Addnolen+Addnoindex:])
+                street = state.normalname(addr[Addnolen+Addnoindex:])
                 electors2.loc[index,'Address_1'] = elector["Address2"]
                 electors2.loc[index,'Address_2'] = elector["Address3"]
                 electors2.loc[index,'Address_3'] = elector["Address4"]
                 electors2.loc[index,'Address_4'] = elector["Address5"]
-                prefix = normalname(elector["Address1"])
+                prefix = state.normalname(elector["Address1"])
                 print ("len01:", Addnolen, "ind10:", Addnoindex, "No:", Addno, "Addr:", addr, "str:", street, "addr1:", elector["Address1"], "addr2:", elector["Address2"])
                 if street == "" or street is None:
                     street = str(elector.Address3).lstrip()
@@ -570,7 +571,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
                 start_index1 = Addno1.end()
                 original_string1 = str(elector["Address1"])
 
-                street = normalname(original_string1[start_index1:])
+                street = state.normalname(original_string1[start_index1:])
 
                 electors2.loc[index,'Address_1'] = elector["Address1"]
                 electors2.loc[index,'Address_2'] = elector["Address2"]
@@ -580,7 +581,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
                 Addno = match_text1
                 print ("Case10","ind1:", start_index1, "No1:", match_text1, "ind2:", 0, "No2:", "", "Addr1:", original_string1, "Addr2:", "", "prefix:",prefix, "street:", street)
                 if street == "" or street is None:
-                    street = normalname(elector.Address2)
+                    street = state.normalname(elector.Address2)
                     electors2.loc[index,'Address_1'] = elector["Address2"]
                     electors2.loc[index,'Address_2'] = elector["Address3"]
                     electors2.loc[index,'Address_3'] = elector["Address4"]
@@ -595,7 +596,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
 
                     addr = str(elector["Address1"])
                     Addnoindex = addr.index(Addno)
-                    prefix = normalname(addr[Addnoindex+Addnolen:])
+                    prefix = state.normalname(addr[Addnoindex+Addnolen:])
                     electors2.loc[index,'Address_1'] = elector["Address1"]
                     electors2.loc[index,'Address_2'] = elector["Address2"]
                     electors2.loc[index,'Address_3'] = elector["Address3"]
@@ -605,13 +606,13 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
                     match_text1 = Addno1.group()
                     start_index1 = Addno1.end()
                     original_string1 = str(elector["Address1"])
-                    prefix = normalname(original_string1[start_index1:])
+                    prefix = state.normalname(original_string1[start_index1:])
                     match_text2 = Addno2.group()
                     start_index2 = Addno2.end()
                     original_string2 = str(elector["Address2"])
-                    street = normalname(original_string2[start_index2:])
+                    street = state.normalname(original_string2[start_index2:])
                     if street is None or street == "":
-                        street = normalname(elector["Address3"])
+                        street = state.normalname(elector["Address3"])
                         electors2.loc[index,'Address_1'] = elector["Address_4"]
                         electors2.loc[index,'Address_2'] = elector["Address_5"]
                         electors2.loc[index, 'Address_3'] = elector.get('Address6', None)
@@ -634,7 +635,7 @@ def NormaliseAddress(RunningVals2, Lookups, ImportFilename, df, progress):
 
                 print ("Case111","combaddno:", Addno,"ind1:", start_index1, "No1:", match_text1, "ind2:", start_index2, "No2:", match_text2, "Addr1:", original_string1, "Addr2:", original_string2, "prefix:",prefix, "street:", street)
 
-        prefix = normalname(prefix)
+        prefix = state.normalname(prefix)
         electors2.loc[index,'StreetName'] = street
         electors2.loc[index,'AddressNumber'] = Addno
         print("__AddressPrefix", electors2.loc[index,'AddressPrefix'])

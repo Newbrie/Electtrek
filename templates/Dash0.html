@@ -224,17 +224,29 @@
       </li>
       <li class="righted">
         Territory:
-        <div class="geo-select righted">
-          <!-- visible field -->
-          <input type="text" id="territoryInput" readonly placeholder="Select territory" />
 
-          <!-- hidden real value (replaces <select>.value) -->
-          <input type="hidden" name="territory" id="territoryValue" />
+        <div class="territory-container">
+          <div id="territory-display" class="territory-input">
+              <span id="display-path">UNITED_KINGDOM</span>
+              <span class="chevron">▼</span>
+          </div>
 
-          <!-- dropdown panel -->
-          <div id="geoPanel" class="panel hidden"></div>
+            <div id="territory-accordion" class="accordion-panel" style="display:none;">
+                <div id="parent-link" class="nav-section parent" onclick="selectNode(this.dataset.path)">
+                    <small>UP TO:</small> <span id="parent-name"></span>
+                </div>
+
+                <hr>
+
+                <div class="nav-header">Sub-Divisions (Drill Down)</div>
+                <div id="children-list" class="nav-list"></div>
+
+                <hr>
+
+                <div class="nav-header">Related Areas</div>
+                <div id="siblings-list" class="nav-list"></div>
+            </div>
         </div>
-        <br>
       </li>
       <li class="righted">
       Party selected: <select class="righted" name="yourparty" id="yourparty"></select><br>
@@ -252,7 +264,7 @@
         <div class="toggle-container">
           <span class="toggle-label">Accumulate: </span>
           <label class="switch">
-            <input type="checkbox" id="accumulate" name="accumulate" onchange="accumulateToggle(this)">
+            <input type="checkbox" id="accumulate" name="accumulate">
             <span class="slider"></span>
           </label>
         </div>
@@ -338,12 +350,24 @@
 <div id="datawin" class="innertube">
 
   <div id="tabletitle">
-    <span id="selectedTitle">Table Details</span>
-    <select id="tableSelector">
-      {% for key, value in table_types.items() %}
-      <option value="{{ key }}">{{ value }}</option>
-      {% endfor %}
-    </select>
+    <div class="title-group">
+      <span id="selectedTitle">Table Details</span>
+      <select id="tableSelector">
+        {% for key, value in table_types.items() %}
+        <option value="{{ key }}">{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="bulk-actions">
+      <select id="groupActionSelect">
+          <option value="">-- Bulk Action --</option>
+          <option value="/downbulk">Show Nextlevel</option>
+          <option value="/MWbulk">Show streets</option>
+          <option value="/PDbulkST">Show streets</option>
+      </select>
+      <button type="button" id="btnRunGroupAction">Run</button>
+    </div>
   </div>
 
   <div class="table-container">

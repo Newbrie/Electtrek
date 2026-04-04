@@ -133,7 +133,7 @@ class ElectorManager:
                 for node in nodelist:
                     col = shapecolumn.get(node.type)
                     if col is None or col not in df.columns:
-                        print(f"⚠️ Unknown or missing column for node type: {node.type}")
+                        print(f"⚠️ Unknown or missing column for node type: {node.type} ")
                         continue
 
                     # Determine key: either node value or election

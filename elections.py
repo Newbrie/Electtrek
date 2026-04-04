@@ -1,6 +1,5 @@
 import os
 import json
-from flask import has_request_context, request
 from pathlib import Path
 from config import ELECTIONS_FILE, BASEX_FILE, TABLE_FILE, RESOURCE_FILE
 import config
@@ -8,50 +7,8 @@ import state
 import re
 from shapely.geometry import Point
 import logging
-
-branchcolours = [
-    "#D32F2F",  # 0 strong red
-    "#1976D2",  # 1 strong blue
-    "#388E3C",  # 2 strong green
-    "#7B1FA2",  # 3 deep purple
-    "#F57C00",  # 4 strong orange
-    "#C2185B",  # 5 magenta
-    "#00796B",  # 6 teal
-    "#512DA8",  # 7 indigo
-    "#455A64",  # 8 blue-grey
-    "#000000",  # 9 black
-    "#795548",  # 10 brown
-    "#0097A7",  # 11 cyan
-    "#AFB42B",  # 12 olive
-]
-
-
-
-def stepify(path):
-    if not path:
-        return []
-
-    route = (
-        path.replace('/WALKS/', '/')
-            .replace('/PDS/', '/')
-            .replace('/WARDS/', '/')
-            .replace('/DIVS/', '/')
-    )
-    parts = route.split("/")
-    last = parts.pop()
-
-    if "-PRINT.html" in last:
-        leaf = subending(last, "").split("--").pop()
-        parts.append(leaf)
-
-    print("____LEAFNODE:", path, parts)
-    return parts
-
-
-def route():
-    if has_request_context():
-        return request.endpoint
-    return None  # or a default string like "no_request_context"
+import nodes
+from state import Treepolys, Fullpolys, Geo_index, normalname, route, stepify, resolve_here_or_redirect
 
 from pathlib import Path
 from typing import Optional
@@ -231,19 +188,6 @@ def resolve_ui_context(program, election, node):
 
 # This prints a script tag you can paste into your HTML
 
-def resolve_here_or_redirect(sourcepath, here):
-    # Only read request args if a request context exists
-    if has_request_context():
-        lat = request.args.get("lat", type=float)
-        lon = request.args.get("lon", type=float)
-
-        if lat is not None and lon is not None:
-            here = (lat, lon)
-
-        if sourcepath is None and here is None:
-            return None, redirect(url_for("get_location"))
-
-    return here, None
 
 
 class CurrentElection(dict):
@@ -303,7 +247,7 @@ class CurrentElection(dict):
 
 
 
-    def add_newarea(self, item):
+    def add_breadcrumb(self, item):
         def is_valid_mapfile_path(path):
             if not isinstance(path, str):
                 return False
@@ -343,49 +287,55 @@ class CurrentElection(dict):
 
     def get_last_node(self, *, create=True):
         """
-        Returns the last node for the current election.
+        Returns the last node for the current election using 4 sources.
+        first source is election cid, but cid node memory might fail
+        second source is browser GPS location , but this might not fire
+        third source is the stored election sourcepath derived from breadcrumb, but this might be corrupted
+        fourth source is the stored territory, which must ping.
+
         If `create=False`, do not call ping_node and return root if CID node is unavailable.
         """
-
-        from flask import redirect
-        from nodes import TREK_NODES_BY_ID, MapRoot
-        from state import Treepolys, Fullpolys
 
         cid = self.get("cid")
         cidLat = self.get("cidLat")
         cidLong = self.get("cidLong")
         here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
-        sourcepath = self.get("mapfiles", [None])[-1]
 
         # --- 1. CID lookup ---
-        if cid and cid in TREK_NODES_BY_ID:
-            last_node = TREK_NODES_BY_ID[cid]
+        if cid and cid in nodes.TREK_NODES_BY_ID:
+            last_node = nodes.TREK_NODES_BY_ID.get(cid,None)
             print(f"___under route: {route()} return to existing cid: {cid}")
             return last_node
 
-        print(f"___No cid : {cid} Get last Sourcepath {sourcepath} under {route()}")
+        print(f"___under route: {route()} no cid looking to GPS:")
 
         # --- 2. Resolve location or redirect ---
-        here, response = resolve_here_or_redirect(sourcepath, here)
+        here, response = resolve_here_or_redirect(here)
         if response:
             return response  # redirect response
 
-        print(f"___ {create}__ Last node under {route()} for {self.name} sourcepath: {sourcepath} create:{create}")
 
-        # --- 3. Resolve node from path ---
-        last_node = MapRoot.ping_node(
-                    self.resolved_levels,
-                    self.name,
-                    sourcepath,
-                    create=create,
-                    accumulate = False
-                )
+        # --- 3. Resolve node from sourcepath ---
+        print(f"___No cid or GPS : {cid}  under {route()}")
+
+        sourcepath = self.get("mapfiles", [None])[-1]
+        steps = stepify(sourcepath)
+        if not sourcepath or sourcepath == "" or len(steps)< 6:
+            sourcepath = self.get("territory", "")
+
+        print(f"___ Last node under {route()} for {self.name} sourcepath: {sourcepath} create:{create}")
+        last_node = nodes.MapRoot.ping_node(
+                self.resolved_levels,
+                sourcepath,
+                create=create,
+                accumulate = False
+            )
 
         # --- 4. Fallback to root ---
         if not last_node:
-            print(f"⚠️ GAP: {cid in TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
-            print(f"⚠️ @NODE INDEX DUMP:{TREK_NODES_BY_ID} ")
-            last_node = MapRoot
+            print(f"⚠️ GAP: {cid in nodes.TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
+            print(f"⚠️ @NODE INDEX DUMP:{nodes.TREK_NODES_BY_ID} ")
+            last_node = nodes.MapRoot
 
         print(
             f"___ RETRIEVED LAST DESTINATION - election: {self.name} "
@@ -398,15 +348,24 @@ class CurrentElection(dict):
 
 
     def visit_node(self, node):
-        from state import Treepolys, Fullpolys
+        from state import Treepolys, Fullpolys, Geo_index
         rlevels = self.resolved_levels
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
 
         # first check that the node is within the election territory
+        #   the node.nid must exist and be in the node list
+        #   next(iter(rlevels.values()))[level] == node.type
+        #   the territory path node must exist
+        #   the territory node fid must be in Treepoly[node.type]
+        #   the node.fid latlong must be within the Treepoly[node.type] geom
         try:
             territory = self.territory
             steps = stepify(territory)
             level = len(steps) - 1
-            parent_row = Treepolys[rlevels[level]]
+            parent_row = Treepolys[elevels[level]]
 
             # ----- LOOKUP BY LAT/LON ---------------------------------------
             latitude = node.latlongroid[0]
@@ -415,14 +374,14 @@ class CurrentElection(dict):
             matched = parent_row[parent_row.contains(point)]
         except:
             print(
-                f"___under {self.name} territory check exception: "
-                f"{self['mapfiles'][-1]}"
+                f"___under election {self.name} in a {elevels[level]} at {node.value} territory check exception : "
             )
 
         self['cid'] = node.nid
         self['cidLat'] = node.latlongroid[0]
         self['cidLong'] = node.latlongroid[1]
-        newlist = self.add_newarea(node.mapfile(rlevels))
+        newlist = self.add_breadcrumb(node.mapfile(elevels))
+
         self.save()
         print(f"=== VISIT NODE === {node.nid}")
         print(f"current children:{[c.value for c in node.children]}")
@@ -478,30 +437,25 @@ class CurrentElection(dict):
     # ---------- resolved levels ----------
 
     @property
-    def resolved_levels(self) -> dict[int, str]:
+    def resolved_levels(self) -> dict[str, dict[int, str]]:
         """
-        Lazily compute and cache resolved LEVELS for this election instance.
+        Lazily compute and cache resolved LEVELS wrapped in the election name.
         """
         if not hasattr(self, "_resolved_levels"):
             resolved: dict[int, str] = {}
 
             for level, name in sorted(LEVELS.items(), key=lambda x: x[0]):
                 if name == "ward/division":
-                    resolved[level] = (
-                        "division" if self.territories in ("C", "U") else "ward"
-                    )
+                    resolved[level] = "division" if self.territories in ("C", "U") else "ward"
                 elif name == "polling_district/walk":
-                    resolved[level] = (
-                        "polling_district" if self.adminmode else "walk"
-                    )
+                    resolved[level] = "polling_district" if self.adminmode else "walk"
                 elif name == "street/walkleg":
-                    resolved[level] = (
-                        "street" if self.adminmode else "walkleg"
-                    )
+                    resolved[level] = "street" if self.adminmode else "walkleg"
                 else:
                     resolved[level] = name
 
-            self._resolved_levels = resolved
+            # Wrap it in the election name
+            self._resolved_levels = {self.name: resolved}
 
         return self._resolved_levels
 
@@ -513,13 +467,24 @@ class CurrentElection(dict):
         parent_levels: dict[int, str] = {}
         territory_level = len(stepify(self.territory)) - 1 if self.territory else -1
         logging.debug(f"[DEBUG] territory_level: {territory_level}")
+        # 1. Extract the inner mapping once
+        # rlevels is now {'ElectionName': {0: 'country', 1: 'ward', ...}}
+        election_name = next(iter(self._resolved_levels))
+        inner_levels = self._resolved_levels[election_name]
 
-        rlevels = self._resolved_levels
-        for level, layer_type in rlevels.items():
-            parent_level = max(0, min(level - 1, territory_level)) # clamp parent level using territory level
-            parent_levels[level] = rlevels[parent_level]
+        # 2. Loop through the actual integer levels
+        for level, layer_type in inner_levels.items():
+            # Clamp parent level
+            parent_idx = max(0, min(level - 1, territory_level))
 
-            logging.debug(f"[DEBUG] level: {level}, layer_type: {layer_type}, parent_level: {parent_level}, parent_layer_type: {rlevels[parent_level]}")
+            # Access the parent type from our extracted dict
+            parent_type = inner_levels[parent_idx]
+            parent_levels[level] = parent_type
+
+            logging.debug(
+                f"[DEBUG] Election: {election_name} | level: {level} ({layer_type}) | "
+                f"parent: {parent_idx} ({parent_type})"
+            )
 
         self._parent_levels = parent_levels
         return self._parent_levels

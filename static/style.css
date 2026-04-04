@@ -168,6 +168,37 @@
     line-height: 1em;
   }
 
+  .territory-input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    background: #f9f9f9;
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+}
+
+.accordion-panel {
+    border: 1px solid #ccc;
+    border-top: none;
+    max-height: 400px;
+    overflow-y: auto;
+    background: white;
+    position: absolute; /* Floating dropdown effect */
+    width: 100%;
+    z-index: 1000;
+}
+
+.nav-item {
+    padding: 8px 15px;
+    cursor: pointer;
+}
+
+.nav-item:hover {
+    background-color: #007bff;
+    color: white;
+}
+
 
   /* ===============================
      Calendar Grid

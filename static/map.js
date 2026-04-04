@@ -194,19 +194,27 @@ fetch(`/displayareas`, {
     console.log(`🗺️ received json table ${tabtitle.innerHTML} details:${tabhead.innerHTML} body: ${tabbody.innerHTML}`);
     // Build table body
     rows.forEach(record => {
-        const row = document.createElement("tr");
+      // Inside your rows.forEach(record => { ... }) loop:
 
-        // Checkbox cell
-        const checkboxCell = document.createElement("td");
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = "selectRow[]";
-        checkbox.classList.add("selectRow");
-        checkboxCell.appendChild(checkbox);
-        row.appendChild(checkboxCell);
+      const checkboxCell = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "selectRow[]";
+      checkbox.classList.add("selectRow");
 
-        // Data cells
-        columnHeaders.forEach(header => {
+      // 🎯 SUCCESS: The 'nid' we added in Python is now available here!
+      checkbox.value = record.nid || "";
+
+      checkboxCell.appendChild(checkbox);
+      row.appendChild(checkboxCell);
+
+      // OPTIONAL: If you don't want the 'nid' column to actually show in the table
+      // even though it's in the data, you can skip rendering that specific cell:
+      columnHeaders.forEach(header => {
+          if (header === "nid") return; // Skip creating a visible column for NID
+
+          const cell = document.createElement("td");
+          // ... rest of your cell logic
           const cell = document.createElement("td");
           const value = record[header] !== undefined ? record[header] : "";
           cell.innerHTML = value;
@@ -218,7 +226,7 @@ fetch(`/displayareas`, {
           }
 
           row.appendChild(cell);
-          });
+      });
           tabbody.appendChild(row);
        });
    })
@@ -227,6 +235,8 @@ fetch(`/displayareas`, {
 li.appendChild(parent.document.createTextNode(old + ":completed"));
 ul.appendChild(li);
 };
+
+
 
 function email_csv(csv, filename) {
   var csvFile;

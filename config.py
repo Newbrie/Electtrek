@@ -19,8 +19,11 @@ TREEPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Treepo
 ELECTOR_FILE = Path(workdirectories['workdir']) /'static'/ 'registers' / 'allelectors.csv'
 TREKNODE_FILE = Path(workdirectories['workdir']) /'static'/ 'nodes' / 'Treknodes.json'
 FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Fullpolys.pkl')
+GEO_INDEX_FILE = Path(workdirectories['workdir']) /'static'/ 'nodes' / 'Geo_index.json'
 TABLE_FILE = os.path.join(workdirectories['workdir'],'static','registers','stream_data.json')
 RESOURCE_FILE = Path(workdirectories['workdir']) /'static'/ 'resources' / 'Resources.csv'
 BASEX_FILE = Path(workdirectories['workdir']) /'static'/ 'elections' / 'Elections-DEMO.json'
+POSTCODE_FILE = Path(workdirectories['bounddir']) /'NSPL_FEB_2026_UK.csv'
+
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }
