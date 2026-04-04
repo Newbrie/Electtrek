@@ -872,24 +872,23 @@ input:checked + .slider:before {
 }
 
 #nav {
-  z-index: 1000; /* above map */
-	position: fixed;
-	top: 0;
-	right: 0;
-	width: 310px;
-	background: #DAE9BC;
-  display: inline-block;
-  color: black;
-  font-weight: normal;
-  padding : 5px 5px ;
-  font-size: 1em;
-  border-radius: 3px;
-  border-color: indigo;
-  cursor: pointer;
-  opacity: 0.8;
-	height: 800px;
-
+    z-index: 1000;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 310px; /* Keep this */
+    background: #DAE9BC;
+    display: flex; /* Changed from inline-block */
+    flex-direction: column; /* Stack children vertically */
+    color: black;
+    padding: 10px;
+    border-left: 2px solid indigo;
+    opacity: 0.95; /* Increased for readability */
+    height: 100vh; /* Changed from 800px to fill the screen height */
+    overflow-y: auto; /* Scroll the sidebar if it gets too full */
+    overflow-x: hidden; /* STOP TABS POKING OUT THE SIDE */
 }
+
 #chartContainer {
   width: 250px;
   height: 250px;
