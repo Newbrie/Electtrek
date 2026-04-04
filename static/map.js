@@ -215,7 +215,6 @@ fetch(`/displayareas`, {
 
           const cell = document.createElement("td");
           // ... rest of your cell logic
-          const cell = document.createElement("td");
           const value = record[header] !== undefined ? record[header] : "";
           cell.innerHTML = value;
 

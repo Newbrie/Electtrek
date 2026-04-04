@@ -860,11 +860,11 @@ def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
 def has_treepoly(layer_type: str) -> bool:
     return layer_type in Treepolys and not Treepolys[layer_type].empty
 
-def check_level4_gap(rlevels: list) -> bool:
-    if len(rlevels) <= 4:
+def check_level4_gap(elevels: list) -> bool:
+    if len(elevels) <= 4:
         return True
 
-    level_type = next(iter(rlevels.values()))[4]
+    level_type = elevels[4]
     gdf = Treepolys.get(level_type)
 
     if gdf is None:

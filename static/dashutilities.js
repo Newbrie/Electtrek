@@ -598,55 +598,34 @@
            // =====================================================
            const mapfilesEl = document.getElementById("mapfiles");
 
-         if (mapfilesEl && Array.isArray(constants.mapfiles) && constants.mapfiles.length > 0) {
+       if (mapfilesEl && Array.isArray(constants.mapfiles) && constants.mapfiles.length > 0) {
+           mapfilesEl.innerHTML = "";
 
-             // 🟢 DEBUG: Check raw data from Python
-             console.log("🟢 Incoming constants.mapfiles:", constants.mapfiles);
-             console.log("🟢 Is constants.mapfile present? (should be false):", !!constants.mapfile);
+           constants.mapfiles.forEach(path => {
+               const o = document.createElement("option");
+               o.value = path;
+               o.textContent = path.split("/").pop();
+               mapfilesEl.appendChild(o);
+           });
 
-             mapfilesEl.innerHTML = "";
+           // Default to the most recent map in the array
+           const latestMap = constants.mapfiles[constants.mapfiles.length - 1];
+           mapfilesEl.value = latestMap;
 
-             constants.mapfiles.forEach((path, index) => {
-                 const o = document.createElement("option");
-                 o.value = path;
-                 o.textContent = path.split("/").pop();
+           mapfilesEl.onchange = () => {
+               if (window.isUpdatingConstants) return;
 
-                 // 🟡 DEBUG: Check each option value
-                 if (!path.includes('.')) {
-                     console.warn(`⚠️ Warning: Entry at index ${index} ("${path}") is missing an extension!`);
-                 }
+               const selectedValue = mapfilesEl.value;
 
-                 mapfilesEl.appendChild(o);
-             });
+               // Ensure the path has an extension before sending to the /thru/ route
+               const finalPath = selectedValue.includes('.')
+                   ? selectedValue
+                   : `${selectedValue}.html`;
 
-             // Default to the most recent map
-             const latestMap = constants.mapfiles[constants.mapfiles.length - 1];
-             mapfilesEl.value = latestMap;
-
-             console.log("🟢 Defaulting dropdown to:", latestMap);
-
-             mapfilesEl.onchange = () => {
-                 if (window.isUpdatingConstants) {
-                     console.log("⏸️ onchange skipped: isUpdatingConstants is true");
-                     return;
-                 }
-
-                 const selectedValue = mapfilesEl.value;
-                 console.log("🔵 User selected value:", selectedValue);
-
-                 // Safety check logic
-                 const finalPath = selectedValue.includes('.') ? selectedValue : `${selectedValue}.html`;
-
-                 if (finalPath !== selectedValue) {
-                     console.log(`🔧 Patch applied: converted "${selectedValue}" -> "${finalPath}"`);
-                 }
-
-                 const fullRoute = `/thru/${finalPath}`;
-                 console.log(`🎯 Triggering changeIframeSrc with: ${fullRoute}`);
-
-                 changeIframeSrc(fullRoute);
-             };
-         } else {
+               changeIframeSrc(`/thru/${finalPath}`);
+           };
+       }
+         else {
              // 🔴 DEBUG: Why did the block fail?
              if (!mapfilesEl) console.error("🔴 Element #mapfiles not found in DOM");
              if (!Array.isArray(constants.mapfiles)) console.error("🔴 constants.mapfiles is not an array:", constants.mapfiles);
@@ -754,57 +733,55 @@
 
 
  window.switchElection = async function (electionName) {
-   console.log("🔀 [START] Switching election to:", electionName);
+    // 1. UI: Highlight the active tab
+    document.querySelectorAll(".election-tab").forEach(tab =>
+        tab.classList.remove("active")
+    );
+    const clickedTab = [...document.querySelectorAll(".election-tab")]
+        .find(tab => tab.dataset.election === electionName);
+    if (clickedTab) clickedTab.classList.add("active");
 
-   // ... (UI highlight logic remains the same) ...
+    // 2. UI: Update title
+    const title = document.getElementById("calendar-title");
+    if (title) title.textContent = `${electionName} Campaigns Calendar`;
 
-   // Tell backend
-   const res = await fetch("/set-election", {
-       method: "POST",
-       headers: { "Content-Type": "application/json" },
-       credentials: "same-origin",
-       body: JSON.stringify({ election: electionName })
-   });
+    // 3. Backend: Set the election session
+    const res = await fetch("/set-election", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ election: electionName })
+    });
 
-   const data = await res.json();
-   console.log("📡 [FETCH OUTCOME] success:", data.success);
+    const data = await res.json();
 
-   // 🔍 DEBUG: Inspect the raw mapfiles array from the server
-   if (data.constants && data.constants.mapfiles) {
-       console.log("🟢 [DEBUG] mapfiles array from server:", data.constants.mapfiles);
-   } else {
-       console.warn("🔴 [DEBUG] data.constants.mapfiles is MISSING or EMPTY");
-   }
+    // 4. Update Global State
+    window.latestConstants = data.constants;
+    window.latestOptions = data.options;
+    updateConstantsUI(data.constants, data.options);
 
-   window.latestConstants = data.constants;
-   window.latestOptions = data.options;
-   updateConstantsUI(data.constants, data.options);
+    window.plan = data.constants?.calendar_plan;
+    const mapfiles = data.constants?.mapfiles || [];
+    const lastMapFile = mapfiles.slice(-1)[0];
 
-   window.plan = data.constants?.calendar_plan;
+    // 5. Load Calendar
+    if (window.plan && window.plan.slots) {
+        buildCalendarGrid("calendar-grid", 45);
+        populateDropdowns();
+        loadCalendarPlan(window.plan);
+    }
 
-   // 🔍 DEBUG: Check the specific file we are about to pick
-   const mapfiles = data.constants?.mapfiles || [];
-   const lastMapFile = mapfiles.slice(-1)[0];
+    // 6. Load Map (with extension safety check)
+    if (lastMapFile) {
+        const correctedPath = lastMapFile.includes('.')
+            ? lastMapFile
+            : `${lastMapFile}.html`;
 
-   console.log("🔍 [DEBUG] Extracted lastMapFile:", lastMapFile);
+        changeIframeSrc(`/thru/${correctedPath}`);
+    }
 
-   // ... (Calendar loading logic remains the same) ...
-
-   if (lastMapFile) {
-      // Final Safety Check: Force extension if the backend sent a "stem"
-      const correctedPath = lastMapFile.includes('.') ? lastMapFile : `${lastMapFile}.html`;
-
-      if (correctedPath !== lastMapFile) {
-          console.log(`🔧 [PATCH] Missing extension in switchElection. Fixed to: ${correctedPath}`);
-       }
-
-      console.log("📩 [ACTION] changing iframe src to:", `/thru/${correctedPath}`);
-      changeIframeSrc(`/thru/${correctedPath}`);
-   } else {
-      console.warn("⚠️ [SKIP] No mapfile found to display for this election.");
-   }
-
-   await fetchTableData("nodelist_xref");
+    // 7. Refresh Data Tables
+    await fetchTableData("nodelist_xref");
 };
 
 window.deleteElection = async function(electionName) {

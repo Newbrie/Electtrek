@@ -2446,6 +2446,13 @@ def index():
         # Load the current election context
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
+        resolved_levels = CurrentElection.resolved_levels
+
+        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+        # The clean unpack you like
+        (c_election, elevels), = resolved_levels.items()
+
         current_node = CElection.get_last_node(create=False)
 
         # Set up the program and election context
@@ -2454,7 +2461,7 @@ def index():
         OPTIONS = resolve_ui_context(program, election, current_node)
 
         # Log the current state for debugging
-        print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile(rlevels)}")
+        print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile(elevels)}")
 
         return render_template(
             "Dash0.html",
@@ -2463,7 +2470,7 @@ def index():
             current_election=current_election,
             options=OPTIONS,
             constants=CElection,
-            mapfile=current_node.mapfile(rlevels),
+            mapfile=current_node.mapfile(elevels),
             streamrag=streamrag  # Pass streamrag to the template for rendering
         )
 
@@ -3818,6 +3825,13 @@ def walks():
     restore_from_persist(Treepolys, Fullpolys, Geo_index)
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
+    resolved_levels = CurrentElection.resolved_levels
+
+    assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+    # The clean unpack you like
+    (c_election, elevels), = resolved_levels.items()
+
     current_node = CElection.get_last_node(create=False)
     flash('_______ROUTE/walks',session)
 
@@ -3834,7 +3848,7 @@ def walks():
 #    formdata['username'] = session['username']
         session['current_node_id'] = current_node.nid
 
-        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(rlevels))
+        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(elevels))
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -3988,6 +4002,13 @@ def firstpage():
     session["current_election"] = current_election
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels # driven by election type
+
+    assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+    # The clean unpack you like
+    (c_election, elevels), = rlevels.items()
+
+
     plevels = CElection.parent_levels
     territory = CElection['territory'] # limits election breadcrumbs and caps election geometries
     breadcrumb = CElection['mapfiles'][-1]
@@ -3995,7 +4016,7 @@ def firstpage():
     if not CElection:
         return jsonify(success=False, error="Election not found"), 404
 
-    missing_layer = check_level4_gap(rlevels)
+    missing_layer = check_level4_gap(elevels)
 
     if missing_layer:
         filepath, Geo_index = ensure_treepolys_with_index(
@@ -4005,8 +4026,7 @@ def firstpage():
                 resolved_levels=rlevels,
                 parent_levels=plevels
             )
-
-    print(f"____Route/firstpage- path: {filepath},Loaded election: {current_election} CE data: {CElection}")
+        print(f"____Route/firstpage- path: {filepath},Loaded election: {current_election} CE data: {CElection}")
 
 # nodes - will be restored throught load nodes process in restore_from_persist
 # cid should exist so why not just load from last_used_node
@@ -4059,7 +4079,7 @@ def firstpage():
         current_election=current_election,
         options=OPTIONS,
         constants=CElection,
-        mapfile=current_node.mapfile(rlevels)
+        mapfile=current_node.mapfile(elevels)
     )
 
 
@@ -4100,7 +4120,7 @@ def cards():
 
                 group = prodcards[0]
                 ELECTIONS = get_available_elections()
-                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(rlevels))
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile(elevels))
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")
