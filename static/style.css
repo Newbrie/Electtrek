@@ -1895,3 +1895,46 @@ html {
     font-family: var(--sds-g-font-family-monospace);
     aspect-ratio:var(--sds-g-ratio-square)
 }
+
+/* ============================================================
+   FORCED COMPACTNESS FIX (Add to bottom of CSS)
+   ============================================================ */
+
+/* 1. Fix the Election Tabs (nav-link) */
+#election-tabs .nav-link.election-tab {
+    padding: 4px 10px !important; /* Forces vertical shrink */
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    min-height: unset !important;
+    margin-bottom: 0 !important;
+}
+
+/* 2. Fix the Territory dropdown container */
+.territory-input {
+    padding: 4px 8px !important; /* Was likely being pushed by global padding */
+    min-height: 30px !important;
+    height: auto !important;
+    display: flex;
+    align-items: center;
+}
+
+/* 3. Tighten the sidebar list items */
+#constants-container li.righted {
+    margin-bottom: 4px !important; /* Reduce space between rows */
+    line-height: 1.2 !important;
+    padding: 2px 0 !important;
+}
+
+/* 4. Fix the global padding leak from the bottom of your file */
+/* This overrides that "dl, fieldset, p { padding: 20 20 }" error */
+#nav p, #nav ul, #nav li, #nav div {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+}
+
+/* 5. Ensure the Territory Accordion doesn't explode in size */
+.nav-item {
+    padding: 4px 10px !important; /* Tightens the drill-down list */
+}
