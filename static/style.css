@@ -872,23 +872,24 @@ input:checked + .slider:before {
 }
 
 #nav {
-    z-index: 1000;
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 310px; /* Keep this */
-    background: #DAE9BC;
-    display: flex; /* Changed from inline-block */
-    flex-direction: column; /* Stack children vertically */
-    color: black;
-    padding: 10px;
-    border-left: 2px solid indigo;
-    opacity: 0.95; /* Increased for readability */
-    height: 100vh; /* Changed from 800px to fill the screen height */
-    overflow-y: auto; /* Scroll the sidebar if it gets too full */
-    overflow-x: hidden; /* STOP TABS POKING OUT THE SIDE */
-}
+  z-index: 1000; /* above map */
+	position: fixed;
+	top: 0;
+	right: 0;
+	width: 310px;
+	background: #DAE9BC;
+  display: inline-block;
+  color: black;
+  font-weight: normal;
+  padding : 5px 5px ;
+  font-size: 1em;
+  border-radius: 3px;
+  border-color: indigo;
+  cursor: pointer;
+  opacity: 0.8;
+	height: 800px;
 
+}
 #chartContainer {
   width: 250px;
   height: 250px;
@@ -1894,76 +1895,3 @@ html {
     font-family: var(--sds-g-font-family-monospace);
     aspect-ratio:var(--sds-g-ratio-square)
 }
-
-/* ============================================================
-   FORCED COMPACTNESS FIX (Add to bottom of CSS)
-   ============================================================ */
-   /* ALLOW TABS TO WRAP WITHIN THE NAV DIV */
-   #election-tabs.nav-tabs {
-       display: flex !important;
-       flex-wrap: wrap !important;      /* 🔑 Key: allows tabs to drop to next line */
-       gap: 2px !important;             /* Small space between wrapped rows */
-       height: auto !important;         /* 🔑 Key: Let the container grow as tabs wrap */
-       min-height: 32px !important;
-       border-bottom: 1px solid #ccc !important;
-       padding: 2px !important;
-       margin-bottom: 10px !important;
-       width: 100% !important;          /* Ensure it respects the sidebar width */
-       overflow-x: hidden !important;   /* Prevent horizontal scroll */
-   }
-
-   #election-tabs .nav-item {
-       height: auto !important;         /* Allow items to stack */
-       display: inline-block !important;
-   }
-
-   #election-tabs .nav-link.election-tab {
-       padding: 4px 8px !important;
-       font-size: 12px !important;
-       line-height: 1.2 !important;
-       white-space: nowrap !important;  /* Keep the text inside one tab on one line */
-       margin-bottom: 2px !important;   /* Space between rows when wrapped */
-       border: 1px solid #ddd !important;
-       border-radius: 4px !important;   /* Rounded all around looks better when wrapped */
-   }
-
-   /* Ensure the 'NEW' button also wraps nicely */
-   #add-election-tab {
-       padding: 4px 8px !important;
-       font-size: 12px !important;
-       background-color: #e9ecef !important;
-       border: 1px dashed #6c757d !important;
-   }
-
-   /* FORCE TERRITORY SELECTOR TO SHRINK */
-   .territory-container {
-       margin-top: 5px !important;
-   }
-
-   .territory-input {
-       padding: 2px 8px !important;
-       height: 28px !important;      /* Fixed height */
-       min-height: 28px !important;
-       font-size: 13px !important;
-       line-height: 24px !important;
-       display: flex !important;
-       align-items: center !important;
-   }
-
-   /* REDUCE COMPONENT SPACING IN SIDEBAR */
-   #nav h3 {
-       margin: 5px 0 !important;
-       padding: 0 !important;
-       font-size: 14px !important;
-   }
-
-   #constants-container ul {
-       padding-left: 0 !important;
-       margin: 0 !important;
-   }
-
-   #constants-container li.righted {
-       margin-bottom: 2px !important;
-       padding: 2px 0 !important;
-       line-height: 1 !important;
-   }
