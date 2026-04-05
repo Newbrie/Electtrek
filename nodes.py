@@ -1751,12 +1751,7 @@ class TreeNode:
         try:
 
                 # Mapping of node type to column name in areaelectors
-            shapecolumn = {
-                "polling_district": "PD",
-                "walk": "WalkName",
-                "street": "StreetName",
-                "walkleg": "StreetName"  # same as street, but filtered by WalkName
-            }
+            from elector import shapecolumn
 
             # Optional mapping for output suffix per type
             suffix_mapping = {

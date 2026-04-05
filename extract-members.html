@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Contact Extractor</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; }
+        th { background: #eee; }
+    </style>
+</head>
+<body>
+
+<h2>Contact Extractor</h2>
+
+<input type="file" id="fileInput" accept=".html">
+<button onclick="extract()">Extract Contacts</button>
+
+<div id="output"></div>
+
+<script>
+function extract() {
+    const file = document.getElementById("fileInput").files[0];
+    if (!file) {
+        alert("Please select an HTML file first");
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        const html = e.target.result;
+
+        // Parse the HTML into a document
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        const rows = [];
+
+        // Each contact starts at an <h2>
+        const contacts = doc.querySelectorAll("h2");
+
+        contacts.forEach(h2 => {
+
+            const nameLink = h2.querySelector("a");
+            if (!nameLink) return;
+
+            const name = nameLink.textContent.replace(/\n/g, " ").trim();
+
+            let phone = "";
+            let email = "";
+
+            let el = h2.nextElementSibling;
+
+            // Walk forward until next contact
+            while (el && el.tagName !== "H2") {
+
+                const tel = el.querySelector("a[href^='tel:']");
+                if (tel) phone = tel.textContent.trim();
+
+                const mail = el.querySelector("a[href^='mailto:']");
+                if (mail) email = mail.getAttribute("href").replace("mailto:", "").trim();
+
+                el = el.nextElementSibling;
+            }
+
+            rows.push({ name, phone, email });
+        });
+
+        renderTable(rows);
+    };
+
+    reader.readAsText(file);
+}
+
+function renderTable(rows) {
+    let html = `
+        <table>
+            <tr>
+                <th>Name</th>
+                <th>Telephone</th>
+                <th>Email</th>
+            </tr>
+    `;
+
+    rows.forEach(r => {
+        html += `
+            <tr>
+                <td>${r.name}</td>
+                <td>${r.phone}</td>
+                <td>${r.email}</td>
+            </tr>
+        `;
+    });
+
+    html += "</table>";
+
+    document.getElementById("output").innerHTML = html;
+
+    console.log("Extracted", rows.length, "contacts");
+}
+</script>
+
+</body>
+</html>

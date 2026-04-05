@@ -1000,7 +1000,7 @@ async function fetchBackendURL() {
  /* ---------------------------------------------------------
   * FETCH CONSTANTS + UPDATE UI
   * --------------------------------------------------------- */
-  function refreshConstantsUI(callback) {
+  window.refreshConstantsUI = function(callback) {
       console.log("📩 refreshing constants");
 
       return fetch("/get-constants", { credentials: "same-origin" })

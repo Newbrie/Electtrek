@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 
 _lock = threading.RLock()
 
+shapecolumn = {
+    "street": "StreetName",
+    "walkleg": "StreetName",
+    "polling_district": "PD",
+    "walk": "WalkName",
+    "ward": "Area",
+    "division": "Area",
+    "constituency": "Constituency",
+    "county": "County",
+    "nation": "County",
+    "country": "County"
+}
 
 
 class ElectorManager:
@@ -106,18 +118,6 @@ class ElectorManager:
             else:
                 election_list = elections
 
-            shapecolumn = {
-                "street": "StreetName",
-                "walkleg": "StreetName",
-                "polling_district": "PD",
-                "walk": "WalkName",
-                "ward": "Area",
-                "division": "Area",
-                "constituency": "Area",
-                "nation": "Area",
-                "country": "Election"
-            }
-
             frames = []
 
             for ename in election_list:
@@ -150,6 +150,64 @@ class ElectorManager:
             else:
                 print("[DEBUG] No matching rows found")
                 return pd.DataFrame()
+
+    def delete_electors_for_node(self, nodelist=None, elections=None):
+        """
+        Delete electors matching nodes and/or elections using shapecolumn logic.
+        """
+        with _lock:
+
+            if nodelist is None:
+                logger.warning("No node provided for deletion")
+                return
+
+            if not isinstance(nodelist, list):
+                nodelist = [nodelist]
+
+            if elections is None:
+                election_list = list(self._elections.keys())
+            elif isinstance(elections, str):
+                election_list = [elections]
+            else:
+                election_list = elections
+
+            total_deleted = 0
+
+            for ename in election_list:
+                df = self._elections.get(ename)
+                if df is None or df.empty:
+                    continue
+
+                original_len = len(df)
+
+                mask = pd.Series([False] * len(df))
+
+                for node in nodelist:
+                    col = shapecolumn.get(node.type)
+
+                    if col is None or col not in df.columns:
+                        logger.warning(f"Missing column for node type: {node.type}")
+                        continue
+
+                    key = str(node.value).strip().upper()
+
+                    match = df[col].astype(str).str.strip().str.upper() == key
+
+                    mask = mask | match  # combine conditions
+
+                # ❗ KEEP rows that do NOT match (i.e. delete matches)
+                self._elections[ename] = df[~mask].copy()
+
+                deleted = original_len - len(self._elections[ename])
+                total_deleted += deleted
+
+                logger.debug(f"{deleted} rows deleted from election '{ename}'")
+
+            self.rebuild_combined()
+            self.save()
+
+            logger.info(f"Total rows deleted: {total_deleted}")
+
 
     def add_or_update(self, election, df: pd.DataFrame):
         # Your existing method for adding or updating election data
@@ -187,6 +245,7 @@ class ElectorManager:
             if all_df:
                 combined = pd.concat(all_df, ignore_index=True)
                 combined.to_csv(ELECTOR_FILE, sep='\t', encoding='utf-8', index=False)
+
 
 
 

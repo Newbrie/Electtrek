@@ -202,7 +202,7 @@ def filterArea(source, sourcekey,
     # Determine nodestep
     if not matched.empty:
         nodestep = normalname(matched['NAME'].iloc[0])
-        matched.to_file(destination, driver="GeoJSON", engine="fiona")
+        matched.to_file(destination, driver="GeoJSON", engine="fiona", mode='w')
         print(f"[filterArea] Found {nodestep} ({len(matched)} feature(s)), saved to {destination}")
     else:
         print(f"[filterArea] No matching feature found for name {name} or roid {roid}")

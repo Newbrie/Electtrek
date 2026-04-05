@@ -808,12 +808,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 # zonal nodes are added at same time as walk nodes, zone nodes generated from zone grouped means of electors
 # children of zones gnerated by a downZO route similar to downWK
 # zone hull data generated from zone mask of areaelectors.
-        shapecolumn = { 'polling_district' : 'PD','walk' : 'WalkName' ,'ward' : 'Area', 'division' : 'Area', 'constituency' : 'Area'}
+        from elector import electors, shapecolumn
 # if there is a selected file , then allelectors will be full of records
         print(f"____adding_shapenodes in election {c_election} layer {self.id} for {herenode.value} of type {stype}:")
 
-        mask = allelectors['Election'] == c_election
-        nodeelectors = allelectors[mask]
+        nodeelectors = electors.electors_at_node(herenode.findnodeat_level(3))
 
 #        mask2 = areaelectors[shapecolumn[stype]] == herenode.value
 #        nodeelectors = areaelectors[mask2]

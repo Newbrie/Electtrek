@@ -445,7 +445,7 @@ def assign_specific_area(electors_df, rlevels, area_name, progress=None):
 def assign_walks_and_zones(
     electors_df,
     teamsize,
-    Territory_path,
+    territory_path,
     rlevels,
     aprefix,
     max_walk_size=50,
@@ -641,14 +641,14 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         CElection = CurrentElection.load(current_election)
         resolved_levels = CElection.resolved_levels
         parent_levels = CElection.parent_levels
-        Territory_path = CElection['territory']
+        territory_path = CElection['territory']
         lastfilepath = CElection['mapfiles'][-1]
         here = (CElection.get('cidLat', None), CElection.get('cidLong', None))
 
         # reload layer areas for this election
 
         lastfilepath, Geo_index = ensure_treepolys_with_index(
-            territory=Territory_path,
+            territory=territory_path,
             sourcepath=lastfilepath,
             here=here,
             resolved_levels=resolved_levels,
@@ -656,6 +656,24 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         )
         print(f"____Route/background- path: {lastfilepath},Loaded election: {current_election} CE data: {CElection}")
 
+        # Define your hierarchy in order
+        levels = ["Country", "Nation", "County", "Constituency"]
+
+        # Get the parts of the path
+        path_parts = stepify(territory_path)
+
+        # Dictionary to hold the results
+        geo_context = {}
+
+        for i in range(len(path_parts)):
+            if i < len(levels):
+                # Create a key like 'Nation' and assign the value from the path
+                geo_context[levels[i]] = path_parts[i]
+
+        # Usage:
+        # print(geo_context['Nation'])
+        # To this (using the names you defined in your levels list):
+        print(f"Loading... Nation {geo_context.get('Nation')} County {geo_context.get('County')} Constituency {geo_context.get('Constituency')}")
         # Sort metadata items by order
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
         total_items = len(sorted_items)
@@ -696,8 +714,23 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress.update({"percent": 100, "status": "error", "message": "No valid files to process"})
             return
         new_df = pd.concat(all_new, ignore_index=True)
-        new_df['Election'] = current_election
 
+        # 3. Raise ValueError if path is less than 4 (must include Constituency)
+        if len(path_parts) < 4:
+            error_msg = (
+                f"❌ Path depth error: found {len(path_parts)} levels. "
+                f"Path '{territory_path}' is too shallow. "
+                "Minimum requirement: Country/Nation/County/Constituency."
+            )
+            print(error_msg)
+            raise ValueError(error_msg)
+
+        # 4. Proceed with assignment if check passes
+        for i, value in enumerate(path_parts):
+            if i < len(levels):
+                column_name = levels[i]
+                new_df[column_name] = value
+                print(f"✅ Contextualized column: {column_name} = {value}")
 
     # --- Stage 3: Load all existing electors for incremental assignment ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
@@ -727,7 +760,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         mainframe = assign_walks_and_zones(
             mainframe,
             teamsize,
-            Territory_path,
+            territory_path,
             resolved_levels,
             selprefix(current_election),
             max_walk_size=300,
@@ -1652,7 +1685,7 @@ def search_api():
             return False
 
     try:
-        print("___Route/search len of allelectors:", len(allelectors))
+        print(f"___Route/search for  of allelectors:", len(allelectors))
 
         matches = allelectors[allelectors.apply(row_matches, axis=1)]
 
@@ -2880,10 +2913,7 @@ def STupdate(path):
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
-    mask = (
-        (allelectors['Election'] == current_election) &
-        (allelectors['StreetName'] == street_node.value)
-    )
+    allelectors = electors_for_node(street_node)
     streetelectors = allelectors[mask]
 
 
@@ -3805,6 +3835,9 @@ def deactivate_election(election_name):
         rlevels = CElection.resolved_levels
 
         territory_node = nodes.MapRoot.ping_node(rlevels,territory_path, create=False,accumulate=session.get("accumulate", False))
+
+        electors.delete_electors_for_node(nodelist=[territory_node], elections=election_name)
+
         electors.deactivate_election(election_name)  # Call the method to deactivate the election
         print(f"PRUNING {territory_node.value}")
         prune_subtree(territory_node)
