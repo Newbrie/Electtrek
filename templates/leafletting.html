@@ -206,10 +206,10 @@ word-wrap: break-word;
     container.innerHTML = "";
 
     // Wait for constants to load
-    await window.refreshConstantsUI();
+//    await window.refreshConstantsUI();
 
     // Now task_tags should be populated
-    Object.entries(window.task_tags).forEach(([tag, desc]) => {
+    Object.entries(window.parent.task_tags).forEach(([tag, desc]) => {
 
       const label = document.createElement("label");
       label.setAttribute("for", `street-input-${tag}`);
