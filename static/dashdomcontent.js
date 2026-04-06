@@ -242,6 +242,8 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
          window.latestConstants.places[key] = window.places[key];
 
          updateConstantsUI(window.latestConstants, window.latestOptions);
+         // =====================================================
+         populateAllSelects(window.latestOptions, window.latestConstants);
 
 //         window.iframe.classList.add("dimmed");
          preventModalClose = false;
@@ -355,6 +357,7 @@ document.getElementById("saveNewResource").addEventListener("click", () => {
 
     populateDropdowns();
     updateConstantsUI(window.latestConstants, window.latestOptions);
+    populateAllSelects(window.latestOptions, window.latestConstants);
 
 
 });
@@ -389,7 +392,7 @@ document.getElementById("saveNewTag").addEventListener("click", () => {
     // Refresh UI
     populateDropdowns();
     updateConstantsUI(window.latestConstants, window.latestOptions);
-
+    populateAllSelects(window.latestOptions, window.latestConstants);
     addTaskTagForm.classList.add("d-none");
 });
 
@@ -592,6 +595,7 @@ resourcesSelect?.addEventListener("blur", () => {
 
         if (resp.constants) {
             updateConstantsUI(resp.constants, resourcesSelect.options); // ✅ pass defined options
+            populateAllSelects(resourcesSelect.options, resp.constants);
         }
 
         if (!resp.success) {

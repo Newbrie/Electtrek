@@ -690,8 +690,17 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             purpose = data.get('purpose')
             fixlevel = int(data.get('fixlevel', 0)) if data.get('fixlevel') else 0
 
+
             if file_path.upper().endswith('.CSV'):
-                dfx = pd.read_csv(file_path, sep=',', encoding='ISO-8859-1', keep_default_na=False)
+                # Update line 694 in Electtrek.py to this:
+                dfx = pd.read_csv(
+                    file_path,
+                    sep=None,             # <--- Tells pandas to guess the separator
+                    engine='python',      # <--- Required for sep=None
+                    encoding='ISO-8859-1',
+                    keep_default_na=False,
+                    on_bad_lines='warn'   # <--- Instead of crashing, it will just warn you about line 64
+                )
             elif file_path.upper().endswith('.XLSX'):
                 dfx = pd.read_excel(file_path, engine='openpyxl', keep_default_na=False)
             else:
@@ -1662,8 +1671,13 @@ def search_api():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
     allelectors = electors.electors_for_node(current_node)
-    if len(allelectors) != 0:
-        restore_from_persist(Treepolys, Fullpolys, Geo_index)
+
+    # SAFETY: Check if we have any data before proceeding
+    if allelectors is None or allelectors.empty:
+        return jsonify({'columns': [], 'data': []})
+
+    # Optional: ensure we have persistence if data exists
+    restore_from_persist(Treepolys, Fullpolys, Geo_index)
 
     query = request.args.get('q', '').strip()
     if not query:
@@ -1674,24 +1688,41 @@ def search_api():
 
     def row_matches(row):
         try:
+            # Added AddressPrefix and AddressNumber to the searchable haystack
             haystack = ' '.join([
-                textnorm(str(row.Surname)),
-                textnorm(str(row.Firstname)),
-                textnorm(str(row.StreetName))
+                str(getattr(row, 'AddressPrefix', '')),
+                str(getattr(row, 'AddressNumber', '')),
+                str(getattr(row, 'StreetName', '')),
+                str(getattr(row, 'Surname', '')),
+                str(getattr(row, 'Firstname', ''))
             ])
-            return all(part in haystack for part in norm_parts)
+            normalized_haystack = textnorm(haystack)
+            return all(part in normalized_haystack for part in norm_parts)
         except Exception as e:
-            print("❌ Error processing row:", e)
             return False
 
     try:
-        print(f"___Route/search for  of allelectors:", len(allelectors))
+        print(f"___Route/search for of allelectors: {len(allelectors)}")
 
+        # Perform the search
         matches = allelectors[allelectors.apply(row_matches, axis=1)]
 
-        # Select and clean columns
-        trimmed = matches[['Surname', 'Firstname', 'StreetName', 'Postcode', 'Tags', 'ENOP']].copy()
-        trimmed = trimmed.fillna('')  # Replace NaN with empty strings
+        # 1. Define all potential columns you want to show
+        display_cols = [
+            'AddressPrefix', 'AddressNumber', 'StreetName',
+            'Surname', 'Firstname', 'Postcode', 'Tags', 'ENOP'
+        ]
+
+        # 2. Filter for only those that actually exist in the dataframe
+        existing_cols = [c for c in display_cols if c in matches.columns]
+        trimmed = matches[existing_cols].copy()
+
+        # 3. Clean up the AddressNumber (remove .0 if it's a float)
+        if 'AddressNumber' in trimmed.columns:
+            trimmed['AddressNumber'] = trimmed['AddressNumber'].astype(str).replace(r'\.0$', '', regex=True)
+
+        # 4. Fill NaNs with empty strings
+        trimmed = trimmed.fillna('')
 
         # Ensure all values are JSON-safe
         def convert(v):
@@ -1717,8 +1748,9 @@ def search_api():
 
     except Exception as e:
         print("❗ Exception in /api/search:", e)
+        import traceback
+        traceback.print_exc() # Useful for debugging exactly which line failed
         return jsonify({'columns': [], 'data': [], 'error': str(e)}), 500
-
 
 
 @app.route('/search', methods=['GET', 'POST'])
