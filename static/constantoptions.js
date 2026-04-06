@@ -1,14 +1,20 @@
-function getTagsJson(electionTags) {
-  const task_tags = {};
-  const outcome_tags = {};
 
-  Object.entries(electionTags || {}).forEach(([tag, description]) => {
-      if (tag.startsWith("L")) {
-          task_tags[tag] = description;
-      } else if (tag.startsWith("M")) {
-          outcome_tags[tag] = description;
-      }
-  });
+  function getTagsJson(electionTags) {
+    const task_tags = {};
+    const outcome_tags = {};
+
+    Object.entries(electionTags || {}).forEach(([tag, description]) => {
+        if (tag.startsWith("L")) {
+            task_tags[tag] = description;
+        } else if (tag.startsWith("M")) {
+            outcome_tags[tag] = description;
+        }
+    });
+
+    console.log("___Dash Task Tags", task_tags);
+    console.log( "Outcome Tags:", outcome_tags);
+    return { task_tags, outcome_tags };
+}
 
 window.updateConstantsUI = function (constants, options) {
 

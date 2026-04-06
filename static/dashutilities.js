@@ -211,13 +211,6 @@
  }
 
 
-  
-
-    console.log("___Dash Task Tags", task_tags);
-    console.log( "Outcome Tags:", outcome_tags);
-    return { task_tags, outcome_tags };
-}
-
 
 
   function handleToggle(el) {
