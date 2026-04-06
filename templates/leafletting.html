@@ -129,13 +129,18 @@ word-wrap: break-word;
           resultContainer.innerHTML = '';
           results.forEach(loc => {
             const li = document.createElement('li');
-            li.textContent = loc.name; // Use 'name' instead of 'StreetName'
+            // Use the new combined display name
+            li.textContent = loc.display_name;
+
+            // Pass the whole location object so we have name AND area
             li.onclick = () => selectLocation(loc, tag, searchType);
             resultContainer.appendChild(li);
           });
+
         })
         .catch(error => console.error('Error fetching locations:', error));
     }
+
 
     function selectLocation(loc, tag, type) {
       const input = document.getElementById(`street-input-${tag}`);
@@ -146,13 +151,14 @@ word-wrap: break-word;
       resultContainer.innerHTML = '';
 
       fetch('/update_location_tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_type: type, // 'street' or 'walk'
-          location_index: loc.index,
-          tag: tag
-        })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              location_type: type,
+              location_name: loc.name, // e.g., "HIGH STREET"
+              location_area: loc.area, // e.g., "WARD A"
+              tag: tag
+          })
       })
       .then(response => response.json())
       .then(data => {

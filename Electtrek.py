@@ -1521,125 +1521,109 @@ def check_enop(enop):
         return jsonify({'exists': False, 'message': 'ENOP not found in electors.'})
 
 # Backend route to search for street names (filter on frontend for faster search)
-def search_streets(query):
-    from elector import electors
-    street_data = (
-        areaelectors[['StreetName']]
-        .drop_duplicates()
-        .reset_index()  # This keeps the original index in case it's needed
-        .rename(columns={'index': 'index'})  # Explicit naming
-    )
+def area_search(query, df, search_type):
+    """
+    Filters for unique street/area combinations.
+    """
+    if df.empty or not query:
+        return []
 
-    street_data['name'] = street_data['StreetName']  # For frontend compatibility
+    # Map the search type to the primary column
+    col = "StreetName" if search_type == "street" else "WalkName"
 
-    if query:
-        street_data = street_data[
-            street_data['name'].str.lower().str.contains(query.lower())
-        ]
+    if col not in df.columns:
+        return []
 
-    return street_data[['name', 'index']].to_dict(orient='records')
+    # 1. Filter rows by the query (case-insensitive)
+    mask = df[col].str.contains(query, case=False, na=False)
+    matches = df[mask]
 
-def search_walks(query):
-    from elector import electors
-    walk_data = (
-        areaelectors[['WalkName']]
-        .drop_duplicates()
-        .reset_index()  # This keeps the original index in case it's needed
-        .rename(columns={'index': 'index'})  # Explicit naming
-    )
+    # 2. Group by BOTH the target column and the Area column to get unique pairs
+    # This handles "High Street" in Ward A vs "High Street" in Ward B
+    unique_pairs = matches.groupby([col, 'Area']).size().reset_index()
 
-    walk_data['name'] = walk_data['WalkName']  # For frontend compatibility
+    results = []
+    for _, row in unique_pairs.iterrows():
+        name_val = str(row[col])
+        area_val = str(row['Area'])
 
-    if query:
-        walk_data = walk_data[
-            walk_data['name'].str.lower().str.contains(query.lower())
-        ]
+        results.append({
+            "name": name_val,
+            "area": area_val,
+            "display_name": f"{name_val} ({area_val})" # e.g. "HIGH STREET (SURREY HEATH)"
+        })
 
-    return walk_data[['name', 'index']].to_dict(orient='records')
-
+    # Sort alphabetically by the display name
+    return sorted(results, key=lambda x: x['display_name'])
 
 
 @app.route('/update_location_tags', methods=['POST'])
 @login_required
 def update_location_tags():
-    from elector import electors
-    restore_from_persist(Treepolys, Fullpolys, Geo_index)
-
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = CElection.get_last_node(create=False)
-
-    areaelectors = electors.electors_for_node(current_node)
+    from elector import electors # Import the manager instance
 
     data = request.get_json()
-
-    location_type = data.get('location_type')  # 'street' or 'walk'
-    index = data.get('location_index')
+    l_type = data.get('location_type')
+    l_name = data.get('location_name')
+    l_area = data.get('location_area') # New parameter
     delivery_tag = data.get('tag')
 
-    if location_type not in ['street', 'walk']:
-        return jsonify({'error': 'Invalid location type'}), 400
+    col = "StreetName" if l_type == "street" else "WalkName"
 
-    if index is None or index < 0:
-        return jsonify({'error': 'Invalid index'}), 400
+    current_election = CurrentElection.get_lastused()
+    master_df = electors.get(current_election)
 
-    affected_electors = pd.DataFrame()
+    # 🚨 THE CRITICAL SYNC: Filter by both Name AND Area
+    mask = (master_df[col].astype(str).str.upper() == str(l_name).upper()) & \
+           (master_df['Area'].astype(str).str.upper() == str(l_area).upper())
 
-    if location_type == 'street':
-        if index >= len(areaelectors):
-            return jsonify({'error': 'Street index out of range'}), 400
-        selected_street = areaelectors.iloc[index]['StreetName']
-        affected_electors = areaelectors[areaelectors['StreetName'] == selected_street]
-        location_name = selected_street
-
-    elif location_type == 'walk':
-        if index >= len(areaelectors):
-            return jsonify({'error': 'Walk index out of range'}), 400
-        selected_walk = areaelectors.iloc[index]['WalkName']
-        affected_electors = areaelectors[areaelectors['WalkName'] == selected_walk]
-        location_name = selected_walk
-
+    affected_indices = master_df[mask].index
+    
     updated_count = 0
+    for idx in affected_indices:
+        current_tags = str(master_df.at[idx, 'Tags']) if pd.notna(master_df.at[idx, 'Tags']) else ""
+        tags_list = current_tags.split()
 
-    for idx, row in affected_electors.iterrows():
-        current_tags = row.get('Tags', '')
-        current_tags_list = str(current_tags).split() if current_tags else []
-
-        if delivery_tag not in current_tags_list:
-            current_tags_list.append(delivery_tag)
-            allelectors.at[idx, 'Tags'] = ' '.join(current_tags_list)
+        if delivery_tag not in tags_list:
+            tags_list.append(delivery_tag)
+            # Update the manager's internal dataframe
+            electors._elections[current_election].at[idx, 'Tags'] = ' '.join(tags_list)
             updated_count += 1
 
-    persist(Treepolys, Fullpolys, Geo_index)
+    # 4. Save the changes to the TSV/CSV file
+    if updated_count > 0:
+        electors.save()
+        electors.rebuild_combined() # Keep memory in sync
 
     return jsonify({
-        'message': f'{updated_count} electors in {location_type} "{location_name}" updated with tag "{delivery_tag}".'
+        'message': f'Success: {updated_count} electors in {location_name} tagged with {delivery_tag}.'
     })
 
 @app.route('/locationsearch')
 @login_required
 def location_search():
     from elector import electors
-    restore_from_persist(Treepolys, Fullpolys, Geo_index)
+    from elections import CurrentElection
+
+    # 1. Get Context
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
-    areaelectors = electors.electors_for_node(current_node)
+    # 2. Get Data for this node
+    area_electors = electors.electors_for_node(current_node)
+
+    # 3. Get Params
     query = request.args.get("query", "").strip()
-    search_type = request.args.get("type", "street")
+    search_type = request.args.get("type", "street").lower()
 
-    if search_type == "street":
-        results = search_streets(query)
+    # 4. Use the General Searcher
+    try:
+        results = area_search(query, area_electors, search_type)
         return jsonify(results)
-
-    elif search_type == "walk":
-        results = search_walks(query)
-        return jsonify(results)
-
-    else:
-        return jsonify({'error': 'Invalid search type'}), 400
-
+    except Exception as e:
+        print(f"❌ Error in general_search: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def textnorm(s):
     return ''.join(c.lower() for c in s if c.isalnum() or c.isspace())
