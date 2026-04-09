@@ -268,16 +268,28 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
      const selectedParty = document.getElementById("yourparty")?.value;
 
      // Table body
-     rows.forEach(record => {
-       const row = document.createElement("tr");
-       row.innerHTML = `<td><input type="checkbox" class="selectRow" name="selectRow[]"></td>` +
-         columnHeaders.map(h => {
-           const value = record[h] ?? "";
-           const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
-           return `<td style="background-color:${color}">${value}</td>`;
-         }).join('');
-       tabBody.appendChild(row);
-     });
+     // Table body
+      rows.forEach(record => {
+        const row = document.createElement("tr");
+
+        // 1. Extract the NID from the record (Assuming the column name is 'nid')
+        const nid = record['nid'] || record['id'] || "";
+
+        // 2. Add the data-nid and value to the checkbox
+        row.innerHTML = `<td>
+            <input type="checkbox"
+                   class="selectRow"
+                   value="${nid}"
+                   data-nid="${nid}">
+          </td>` +
+          columnHeaders.map(h => {
+            const value = record[h] ?? "";
+            const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+            return `<td style="background-color:${color}">${value}</td>`;
+          }).join('');
+
+        tabBody.appendChild(row);
+      });
 
      console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
    } catch (err) {
