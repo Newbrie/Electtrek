@@ -706,7 +706,7 @@ function handleBulkAction() {
         if (data.success) {
             alert(`Success! Processed ${data.count} nodes.`);
             if (data.map_url) {
-                document.getElementById("map-iframe").src = data.map_url;
+                document.getElementById("iframe1").src = data.map_url;
             }
         } else {
             alert("Server Error: " + data.error);

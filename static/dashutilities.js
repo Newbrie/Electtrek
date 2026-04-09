@@ -42,7 +42,7 @@ window.selectNode = function(path) {
             }
 
             // Update the Iframe Map
-            const iframe = document.getElementById('map-iframe');
+            const iframe = document.getElementById('iframe1');
             if (iframe && data.map_url) {
                 iframe.src = data.map_url;
             }
@@ -126,7 +126,7 @@ window.handleDownBulk = function() {
     .then(res => res.json())
     .then(data => {
         // Update the iframe with the resulting multi-layer map
-        const iframe = document.getElementById('map-iframe');
+        const iframe = document.getElementById('iframe1');
         if (iframe && data.map_url) {
             iframe.src = data.map_url;
             console.log(`Successfully rendered ${data.count} layers.`);

@@ -2809,17 +2809,17 @@ def downbulk():
     print(f"💾 Session updated with 'accumulated_nodes'")
 
     # 4. Trigger the map creation
-    map_filename = current_node.mapfile()
+    map_filename = nodelist[0].parent.parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
     # We pass the nodelist explicitly to create_layer (if endpoint_created uses it)
     # or ensure current_node knows to render its 'accumulated' children.
-    created, totalleaf = current_node.endpoint_created(rlevels, map_filename, static=False)
+    created, totalleaf = nodelist[0].parent.parent.endpoint_created(rlevels, map_filename, static=False)
 
     print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
 
     # 5. File verification
-    CElection.visit_node(current_node)
+    CElection.visit_node(nodelist[0].parent.parent)
     base = Path(config.workdirectories['workdir'])
     fullpath = base / map_filename
 

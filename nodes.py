@@ -311,6 +311,9 @@ def get_layer_table(nodelist,title,elevels):
         for x in nodelist:
             dfy.loc[i,'LV'] = dflev
             dfy.loc[i,'No']= x.tagno
+            # --- 🔥 ADD THIS LINE HERE ---
+            dfy.loc[i,'nid'] = x.nid  # This preserves the ID for the checkbox
+            # -----------------------------
             VIoptions = x.VI
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
@@ -335,6 +338,7 @@ def get_layer_table(nodelist,title,elevels):
                 f'data-nid="{x.nid}" '
                 f'data-old-parent-nid="{x.parent.nid}">'
             )
+
 
             # Add DELETE option
             dropdown_html += '<option value="__DELETE__">Delete</option>'

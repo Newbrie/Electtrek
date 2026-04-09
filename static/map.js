@@ -148,9 +148,9 @@ const VCO = {
 //  fetchAndUpdateChart();
 
 fetch(`/displayareas`, {
-  method: "GET",
-  headers: { "Content-Type": "application/json" },
-  credentials: "same-origin"
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin"
 })
 .then(response => response.json())
 .then(data => {
@@ -161,75 +161,84 @@ fetch(`/displayareas`, {
         return;
     }
 
+    // --- FIX 1: Ensure these variable names match your earlier definitions ---
+    // If you used 'tabHead' earlier, use 'tabHead' here.
+    // I am assuming you have these defined at the top of your function:
+    const tabtitle = document.getElementById("selectedTitle");
+    const tabhead = document.querySelector("#captains-table thead");
+    const tabbody = document.querySelector("#captains-table tbody");
+    const yourparty = document.getElementById("yourparty");
+
     if (!tabhead || !tabbody || !tabtitle) {
-        console.error("tabhead or tabbody not found");
+        console.error("❌ Table elements not found in DOM");
         return;
     }
 
+    const columnHeaders = data[0];
+    const rows = data[1];
+    const title = data[2];
 
-    const columnHeaders = data[0];  // First element contains ordered column names
-    const rows = data[1];            // Second element contains data rows
-    const title = typeof data[2] === 'number' ? data[2].toString() : data[2]; // third element contains title
     // Clear previous content
-    tabtitle.innerHTML = "";
+    tabtitle.innerHTML = title;
     tabhead.innerHTML = "";
     tabbody.innerHTML = "";
 
     // Build table head row
-
     const headRow = document.createElement("tr");
     const checkboxHeader = document.createElement("th");
-
-    tabtitle.innerHTML = title;
     checkboxHeader.textContent = "?";
     headRow.appendChild(checkboxHeader);
 
     columnHeaders.forEach(header => {
+        if (header === "nid") return; // Skip NID in the header too!
         const th = document.createElement("th");
         th.textContent = header.toUpperCase();
         headRow.appendChild(th);
     });
-
     tabhead.appendChild(headRow);
-    console.log(`🗺️ received json table ${tabtitle.innerHTML} details:${tabhead.innerHTML} body: ${tabbody.innerHTML}`);
+
     // Build table body
     rows.forEach(record => {
-      // Inside your rows.forEach(record => { ... }) loop:
+        const row = document.createElement("tr");
 
-      const checkboxCell = document.createElement("td");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.name = "selectRow[]";
-      checkbox.classList.add("selectRow");
+        // Checkbox Cell
+        const checkboxCell = document.createElement("td");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "selectRow[]";
+        checkbox.classList.add("selectRow");
 
-      // 🎯 SUCCESS: The 'nid' we added in Python is now available here!
-      checkbox.value = record.nid || "";
+        // 🎯 The NID fix
+        const nidValue = record.nid || "";
+        checkbox.value = nidValue;
+        checkbox.setAttribute('data-nid', nidValue);
 
-      checkboxCell.appendChild(checkbox);
-      row.appendChild(checkboxCell);
+        checkboxCell.appendChild(checkbox);
+        row.appendChild(checkboxCell);
 
-      // OPTIONAL: If you don't want the 'nid' column to actually show in the table
-      // even though it's in the data, you can skip rendering that specific cell:
-      columnHeaders.forEach(header => {
-          if (header === "nid") return; // Skip creating a visible column for NID
+        // Data Cells
+        columnHeaders.forEach(header => {
+            if (header === "nid") return;
 
-          const cell = document.createElement("td");
-          // ... rest of your cell logic
-          const value = record[header] !== undefined ? record[header] : "";
-          cell.innerHTML = value;
+            const cell = document.createElement("td");
+            const value = record[header] !== undefined ? record[header] : "";
+            cell.innerHTML = value;
 
-          // Highlight the column whose name matches `yourparty`
-          if (header === yourparty.value) {
-              const color = VCO[yourparty.value] || "inherit";
-              cell.style.backgroundColor = color;
-          }
+            // Highlight Party
+            if (yourparty && header === yourparty.value) {
+                // Ensure VCO is defined globally
+                const color = (typeof VCO !== 'undefined') ? VCO[yourparty.value] : "inherit";
+                cell.style.backgroundColor = color;
+            }
 
-          row.appendChild(cell);
-      });
-          tabbody.appendChild(row);
-       });
-   })
-   .catch(error => console.error("Elector Table Fetch error:", error));
+            row.appendChild(cell);
+        });
+
+        tabbody.appendChild(row);
+    });
+})
+.catch(error => console.error("Elector Table Fetch error:", error));
+// --- FIX 2: Removed the stray braces that were causing the syntax error ---
 
 li.appendChild(parent.document.createTextNode(old + ":completed"));
 ul.appendChild(li);
