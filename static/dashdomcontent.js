@@ -674,16 +674,23 @@ function handleBulkAction() {
     // 1. Clear previous logs
     console.clear();
     console.log("🚀 Bulk Action Started");
-
-    // 2. Be extremely specific with the selector
+    // Inside your btnRunGroupAction click listener:
     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
-        .map(cb => cb.getAttribute('data-nid') || cb.value)
-        .filter(id => id && id !== "on" && id !== "");
+        .map(cb => {
+            // Try every possible way to find that ID
+            const id = cb.getAttribute('data-nid') || cb.dataset.nid || cb.value;
+            console.log("Checkbox element:", cb, "Extracted ID:", id);
+            return id;
+        })
+        .filter(id => id && id !== "on" && id !== "undefined");
 
-    if (selectedNids.length === 0) {
-        alert("No nodes selected on the frontend!");
+    // STOP if we have Nones
+    if (selectedNids.length === 0 || selectedNids.includes(undefined)) {
+        console.error("Selected NIDs contains invalid data:", selectedNids);
+        alert("Error: Checkboxes found, but IDs are missing from the elements.");
         return;
     }
+
 
     // 3. Disable the button to prevent "Quick Succession" double-clicks
     const btn = document.getElementById("btnRunGroupAction");
