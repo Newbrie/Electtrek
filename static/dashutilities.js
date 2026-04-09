@@ -21,90 +21,104 @@
   };
 
   // 2. Define the selection logic
-  window.selectNode = function(path) {
-      if (!path) return;
+  /**
+ * 1. Navigation Logic
+ * Fetches data for a specific node path and updates the UI
+ */
+window.selectNode = function(path) {
+    if (!path) return;
 
-      // Update label immediately for responsiveness
-      document.getElementById('display-path').innerText = path.split('/').pop().replace(/_/g, ' ');
+    // Immediate UI feedback for the breadcrumb/header
+    const displayTitle = path.split('/').pop().replace(/_/g, ' ');
+    const displayElement = document.getElementById('display-path');
+    if (displayElement) displayElement.innerText = displayTitle;
 
-      fetch(`/get_territory_data?nodepath=${encodeURIComponent(path)}`)
-              .then(res => res.json())
-              .then(data => {
-                  // 1. Update the Iframe Map
-                  const iframe = document.getElementById('map-iframe');
-                  if (iframe && data.map_url) {
-                      iframe.src = data.map_url;
-                  }
+    fetch(`/get_territory_data?nodepath=${encodeURIComponent(path)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                console.error("Server Error:", data.error);
+                return;
+            }
 
-                  // 2. Update Parent Link (Breadcrumb)
-                  const pLink = document.getElementById('parent-link');
-                  if (data.parent_path) {
-                      const parentName = data.parent_path.split('/').pop().replace(/_/g, ' ');
-                      pLink.style.display = 'block';
-                      // Note: We use the path string here for navigation
-                      pLink.onclick = () => selectNode(data.parent_path);
-                      document.getElementById('parent-name').innerText = parentName;
-                  } else {
-                      pLink.style.display = 'none';
-                  }
+            // Update the Iframe Map
+            const iframe = document.getElementById('map-iframe');
+            if (iframe && data.map_url) {
+                iframe.src = data.map_url;
+            }
 
-                  // 3. Render Children & Siblings (Passing the new Node Objects)
-                  renderNodeList('children-list', data.children);
-                  renderNodeList('siblings-list', data.siblings);
-              })
-              .catch(err => {
-                  console.error("Navigation Fetch Error:", err);
-                  // Optional: User feedback for network errors
-              });
+            // Update Parent/Back Link
+            const pLink = document.getElementById('parent-link');
+            if (data.parent_path) {
+                const parentName = data.parent_path.split('/').pop().replace(/_/g, ' ');
+                pLink.style.display = 'block';
+                // Use an anonymous function to prevent immediate execution
+                pLink.onclick = () => selectNode(data.parent_path);
+                document.getElementById('parent-name').innerText = parentName;
+            } else {
+                pLink.style.display = 'none';
+            }
 
-  // 3. Helper for rendering lists
-  // 3. Helper for rendering lists
-  function renderNodeList(elementId, nodeObjects) {
-      const container = document.getElementById(elementId);
-      if (!container) return;
+            // Render Lists (Backend now returns objects: {path, nid, name})
+            renderNodeList('children-list', data.children);
+            renderNodeList('siblings-list', data.siblings);
+        })
+        .catch(err => console.error("Navigation Fetch Error:", err));
+};
 
-      if (!nodeObjects || nodeObjects.length === 0) {
-          container.innerHTML = '<div class="none-found">No further divisions</div>';
-          return;
-      }
+/**
+ * 2. List Rendering Helper
+ * Generates HTML with checkboxes (for bulk) and text (for navigation)
+ */
+function renderNodeList(elementId, nodeObjects) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
 
-      container.innerHTML = nodeObjects.map(obj => {
-          // ERROR WAS HERE: 'obj' is an object {path, nid, name}, not a string.
-          const path = obj.path;
-          const nid = obj.nid;
-          // Use the name from the server, or fall back to parsing the path
-          const name = obj.name || path.split('/').pop().replace(/_/g, ' ');
-
-          return `
-              <div class="nav-item-wrapper" style="display: flex; align-items: center; margin-bottom: 4px;">
-                  <input type="checkbox"
-                         class="node-checkbox"
-                         data-nid="${nid}"
-                         onclick="event.stopPropagation();"
-                         style="margin-right: 8px; cursor: pointer;">
-                  <div class="nav-item"
-                       onclick="selectNode('${path}')"
-                       style="flex-grow: 1; cursor: pointer;">
-                      ${name}
-                  </div>
-              </div>`;
-      }).join('');
-  }
-
-  
-  window.handleDownBulk = function() {
-    // 1. Grab all checked checkboxes
-    const checked = document.querySelectorAll('.node-checkbox:checked');
-
-    // 2. Map them to their NIDs
-    const nids = Array.from(checked).map(cb => cb.getAttribute('data-nid') || cb.value);
-
-    if (nids.length === 0) {
-        alert("Please select at least one node.");
+    if (!nodeObjects || nodeObjects.length === 0) {
+        container.innerHTML = '<div class="none-found" style="padding:10px; color:#888;">No further divisions</div>';
         return;
     }
 
-    // 3. Send NIDs directly to /downbulk
+    container.innerHTML = nodeObjects.map(obj => {
+        // Access properties from the object provided by the backend
+        const path = obj.path;
+        const nid = obj.nid;
+        const name = obj.name || path.split('/').pop().replace(/_/g, ' ');
+
+        return `
+            <div class="nav-item-wrapper" style="display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #eee;">
+                <input type="checkbox"
+                       class="node-checkbox"
+                       data-nid="${nid}"
+                       onclick="event.stopPropagation();"
+                       style="margin-right: 12px; width: 18px; height: 18px; cursor: pointer;">
+                <div class="nav-item"
+                     onclick="selectNode('${path}')"
+                     style="flex-grow: 1; cursor: pointer; font-size: 14px; color: #333;">
+                    ${name}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+/**
+ * 3. Bulk Action Logic
+ * Collects checked NIDs and triggers the composite map generation
+ */
+window.handleDownBulk = function() {
+    // Collect all checked checkboxes using the class defined in renderNodeList
+    const checked = document.querySelectorAll('.node-checkbox:checked');
+
+    // Extract the NIDs
+    const nids = Array.from(checked).map(cb => cb.getAttribute('data-nid'));
+
+    if (nids.length === 0) {
+        alert("Please select at least one area to render.");
+        return;
+    }
+
+    console.log("Bulk rendering NIDs:", nids);
+
     fetch('/downbulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,11 +126,23 @@
     })
     .then(res => res.json())
     .then(data => {
+        // Update the iframe with the resulting multi-layer map
         const iframe = document.getElementById('map-iframe');
-        if (iframe && data.map_url) iframe.src = data.map_url;
-    });
+        if (iframe && data.map_url) {
+            iframe.src = data.map_url;
+            console.log(`Successfully rendered ${data.count} layers.`);
+        }
+    })
+    .catch(err => console.error("Bulk Action Error:", err));
 };
 
+/**
+ * 4. Select All Helper (Optional but highly recommended)
+ */
+window.toggleAllCheckboxes = function(masterCheckbox) {
+    const checkboxes = document.querySelectorAll('.node-checkbox');
+    checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+};
   // 4. Initial Load
   document.addEventListener('DOMContentLoaded', () => {
       selectNode('UNITED_KINGDOM');
