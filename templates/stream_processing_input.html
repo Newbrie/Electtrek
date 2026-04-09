@@ -4,10 +4,8 @@
 <h4 style="text-align:center;">Upload files for a single election and process</h4>
 
 <!-- Election selection -->
-<div style="margin-bottom: 10px;">
-  <label for="election-select">Select Election:</label>
-  <select id="election-select"></select>
-  <button id="load-election-btn">Load Election</button>
+<div style="margin-bottom: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+  <strong>Active Election:</strong> <span id="active-election-display">Loading...</span>
 </div>
 
 <!-- File table -->
@@ -83,6 +81,9 @@
 {% endblock %}
 
 <script>
+
+
+
   function updateStreamStatus() {
       fetch('/get_streamrag')  // Adjust the endpoint if needed
           .then(response => response.json())
@@ -145,6 +146,62 @@
 
   document.addEventListener("DOMContentLoaded", () => {
 
+    let selectedElection = "";
+
+    function syncWithParentTab() {
+        // 1. Find the active tab in the parent document
+        const activeTab = window.parent.document.querySelector('#election-tabs .election-tab.active');
+
+        if (activeTab) {
+            selectedElection = activeTab.getAttribute('data-election');
+
+            // Update local UI display
+            const display = document.getElementById('active-election-display');
+            if (display) display.textContent = selectedElection;
+
+            console.log("Child synced to Active Parent Tab:", selectedElection);
+
+            // 2. Load the data for this election
+            loadElectionData(selectedElection);
+        } else {
+            console.warn("No active election tab found in parent.");
+        }
+    }
+
+    // New version of your load logic
+    async function loadElectionData(ename) {
+        try {
+            // 1. Fetch the stream/file data from the server
+            const data = await fetch(`/get_stream_processing/${ename}`).then(r => r.json());
+            stream_processing = data;
+
+            // 2. REACH INTO THE PARENT (Dash0) for constants/options
+            // Check what Dash0 calls these variables (e.g., parent_constants, election_options)
+            const pConstants = window.parent.CONSTANTS || window.parent.constants;
+            const pOptions = window.parent.OPTIONS || window.parent.options;
+
+            // 3. Call the UI update function safely
+            if (typeof updateConstantsUI === "function") {
+                if (pConstants && pOptions) {
+                    updateConstantsUI(pConstants, pOptions);
+                } else {
+                    console.warn("Could not find constants/options in parent Dash0.");
+                }
+            }
+
+            // 4. Render the tables
+            renderFileTable();
+            updateStreamStatus();
+
+        } catch(err) {
+            console.error("Failed to load data for " + ename, err);
+        }
+    }
+
+    // Initial sync
+    syncWithParentTab();
+
+
   // ------------------------
   // DOM helpers
   // ------------------------
@@ -155,63 +212,6 @@
   // Single source of truth
   // ------------------------
   let stream_processing = { files: [], last_run: null, status: "idle" };
-  let selectedElection = "";
-
-  // ------------------------
-  // Load election list
-  // ------------------------
-  async function loadElectionOptions() {
-    try {
-      const elections = await fetch('/get_elections').then(r => r.json());
-      const select = qs('#election-select');
-      select.innerHTML = '';
-
-      if (!elections.length) {
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.textContent = "No elections found";
-        select.appendChild(opt);
-        return;
-      }
-
-      elections.forEach(e => {
-        const opt = document.createElement('option');
-        opt.value = e.cid;
-        opt.textContent = e.name;
-        select.appendChild(opt);
-      });
-    } catch(err) {
-      alert("Error loading elections: " + err.message);
-    }
-  }
-
-  // ------------------------
-  // Load a specific election's stream_processing
-  // ------------------------
-  async function loadElection() {
-      selectedElection = qs('#election-select').value;
-      if (!selectedElection) {
-          alert('Please select an election.');
-          return;
-      }
-
-      try {
-          const data = await fetch(`/get_stream_processing/${selectedElection}`).then(r => r.json());
-
-          if (!data.files) data.files = [];
-
-          // Keep any new local rows (added but not uploaded yet)
-          const localNewFiles = stream_processing.files.filter(f => !f.file_path);
-          stream_processing = { ...data, files: [...data.files, ...localNewFiles] };
-
-          renderFileTable();  // Re-render file table
-          updateStreamStatus();  // Refresh the RAG table after loading election data
-      } catch(err) {
-          alert("Error loading election: " + err.message);
-      }
-  }
-
-
 
   // ------------------------
   // Render the file table
@@ -518,19 +518,6 @@ document.addEventListener('click', function (e) {
 
 
 
-
-
-  // ------------------------
-  // Add event listener to Load Election button
-  // ------------------------
-  const loadElectionBtn = qs('#load-election-btn');
-  if (loadElectionBtn) {
-    loadElectionBtn.addEventListener('click', loadElection);
-  }
-
-
-  // Initialize dropdown on page load
-  loadElectionOptions();
 
 });
 

@@ -1337,80 +1337,76 @@ class TreeNode:
     def getselectedlayers(self, rlevels, path, static=False):
         from layers import make_feature_layers
         from flask import session
-        from state import Treepolys, Fullpolys
-
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-        # The clean unpack
         (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
 
+        # 1. We keep 'layers' as our master factory source
+        factory = make_feature_layers()
         selected = []
-        layers = make_feature_layers()
 
-        # Get the accumulate flag from the session
-        accumulate = session.get("accumulate", False)
-        print(f"___ACCUMULATE IN SESSION: {accumulate}")
+        # Track keys we've already used so we don't 'mix' into the same object
+        used_keys = set()
+
+        def get_safe_layer(level_idx):
+            """Helper to get a fresh layer even if the key is repeated."""
+            key = elevels.get(level_idx)
+            if not key:
+                return None
+
+            # If this key was already used for another level in this specific map,
+            # we generate a SECOND fresh instance of that layer type to prevent mixing.
+            if key in used_keys:
+                print(f"⚠️ Guard: Key '{key}' already used. Generating second instance for level {level_idx}")
+                new_layer_instance = make_feature_layers()[key]
+                # Optional: Rename it so the UI shows them as distinct
+                new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
+                return new_layer_instance
+
+            used_keys.add(key)
+            return factory[key]
 
         # -------------------------------------------------
-        # Handle the Child Layer (Level + 1)
+        # 1️⃣ Handle the Child Layer (Level + 1)
         # -------------------------------------------------
         if self.level < 7:
-            if accumulate:
-                # Get accumulated node IDs from the session
-                node_ids = session.get("accumulated_nodes", [])
-                valid_nodes = []
-
-                for nid in node_ids:
-                    node = TREK_NODES_BY_ID.get(nid)
-                    if node and node.parent:   # ensure parent exists
-                        valid_nodes.append(node)
-
-                nodelist = valid_nodes
-                session.modified = True
-
-                print("Accumulate SESSION IDS:", node_ids)
-
-                # Fetch nodes from TREK_NODES_BY_ID based on node_ids                nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
-                if not nodelist:
-                    print(f"Warning: No nodes found in TREK_NODES_BY_ID for IDs {node_ids}")
+            child_layer = get_safe_layer(self.level + 1)
+            if child_layer:
+                # Determine nodelist (Accumulate logic)
+                if session.get("accumulate", False):
+                    node_ids = session.get("accumulated_nodes", [])
+                    nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
                 else:
-                    print("Accumulated Nodes:", [n.value for n in nodelist])
+                    nodelist = [self]
 
-            else:
-                # If accumulation is off, render only the current node
-                nodelist = [self]
-
-            # Render the child layer
-            print(f"__LAYER NODE LIST (Child Layer): {[n.value for n in nodelist]} ")
-
-            child_layer = layers[elevels[self.level + 1]]
-            child_layer.create_layer(rlevels, nodelist, static=False)
-            child_layer.show = True
-            selected.append(child_layer)
+                if nodelist:
+                    child_layer.create_layer(rlevels, nodelist, static=False)
+                    child_layer.show = True
+                    selected.append(child_layer)
 
         # -------------------------------------------------
-        # Handle the Sibling Layer (Current Level)
+        # 2️⃣ Handle the Sibling Layer (Current Level)
         # -------------------------------------------------
         if self.level > 0:
-            sibling_layer = layers[elevels[self.level]]
-            sibling_layer.create_layer(rlevels, [self.parent], static=False)
-            selected.append(sibling_layer)
+            sibling_layer = get_safe_layer(self.level)
+            if sibling_layer:
+                sibling_layer.create_layer(rlevels, [self.parent], static=False)
+                selected.append(sibling_layer)
 
         # -------------------------------------------------
-        # Handle the Parent Layer (Level - 1)
+        # 3️⃣ Handle the Parent Layer (Level - 1)
         # -------------------------------------------------
         if self.level > 1:
-            parent_layer = layers[elevels[self.level - 1]]
-            parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
-            selected.append(parent_layer)
+            parent_layer = get_safe_layer(self.level - 1)
+            if parent_layer:
+                parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
+                selected.append(parent_layer)
 
         # -------------------------------------------------
-        # Always Add Marker Layer
+        # 4️⃣ Always Add Marker Layer
         # -------------------------------------------------
-        marker_layer = layers["marker"]
+        marker_layer = factory["marker"]
         selected.append(marker_layer)
 
         return list(reversed(selected))

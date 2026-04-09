@@ -28,44 +28,94 @@
       document.getElementById('display-path').innerText = path.split('/').pop().replace(/_/g, ' ');
 
       fetch(`/get_territory_data?nodepath=${encodeURIComponent(path)}`)
-          .then(res => res.json())
-          .then(data => {
-              // Update the Iframe Map
-              const iframe = document.getElementById('map-iframe');
-              if(iframe) iframe.src = data.map_url;
+              .then(res => res.json())
+              .then(data => {
+                  // 1. Update the Iframe Map
+                  const iframe = document.getElementById('map-iframe');
+                  if (iframe && data.map_url) {
+                      iframe.src = data.map_url;
+                  }
 
-              // Update Parent Link
-              const pLink = document.getElementById('parent-link');
-              if (data.parent_path) {
-                  pLink.style.display = 'block';
-                  pLink.setAttribute('onclick', `selectNode('${data.parent_path}')`);
-                  document.getElementById('parent-name').innerText = data.parent_path.split('/').pop();
-              } else {
-                  pLink.style.display = 'none';
-              }
+                  // 2. Update Parent Link (Breadcrumb)
+                  const pLink = document.getElementById('parent-link');
+                  if (data.parent_path) {
+                      const parentName = data.parent_path.split('/').pop().replace(/_/g, ' ');
+                      pLink.style.display = 'block';
+                      // Note: We use the path string here for navigation
+                      pLink.onclick = () => selectNode(data.parent_path);
+                      document.getElementById('parent-name').innerText = parentName;
+                  } else {
+                      pLink.style.display = 'none';
+                  }
 
-              // Render Children & Siblings
-              renderNodeList('children-list', data.children);
-              renderNodeList('siblings-list', data.siblings);
-          })
-          .catch(err => console.error("Fetch error:", err));
-  };
+                  // 3. Render Children & Siblings (Passing the new Node Objects)
+                  renderNodeList('children-list', data.children);
+                  renderNodeList('siblings-list', data.siblings);
+              })
+              .catch(err => {
+                  console.error("Navigation Fetch Error:", err);
+                  // Optional: User feedback for network errors
+              });
 
   // 3. Helper for rendering lists
-  function renderNodeList(elementId, paths) {
+  // 3. Helper for rendering lists
+  function renderNodeList(elementId, nodeObjects) {
       const container = document.getElementById(elementId);
       if (!container) return;
 
-      if (!paths || paths.length === 0) {
+      if (!nodeObjects || nodeObjects.length === 0) {
           container.innerHTML = '<div class="none-found">No further divisions</div>';
           return;
       }
 
-      container.innerHTML = paths.map(p => {
-          const name = p.split('/').pop().replace(/_/g, ' ');
-          return `<div class="nav-item" onclick="selectNode('${p}')">${name}</div>`;
+      container.innerHTML = nodeObjects.map(obj => {
+          // ERROR WAS HERE: 'obj' is an object {path, nid, name}, not a string.
+          const path = obj.path;
+          const nid = obj.nid;
+          // Use the name from the server, or fall back to parsing the path
+          const name = obj.name || path.split('/').pop().replace(/_/g, ' ');
+
+          return `
+              <div class="nav-item-wrapper" style="display: flex; align-items: center; margin-bottom: 4px;">
+                  <input type="checkbox"
+                         class="node-checkbox"
+                         data-nid="${nid}"
+                         onclick="event.stopPropagation();"
+                         style="margin-right: 8px; cursor: pointer;">
+                  <div class="nav-item"
+                       onclick="selectNode('${path}')"
+                       style="flex-grow: 1; cursor: pointer;">
+                      ${name}
+                  </div>
+              </div>`;
       }).join('');
   }
+
+  
+  window.handleDownBulk = function() {
+    // 1. Grab all checked checkboxes
+    const checked = document.querySelectorAll('.node-checkbox:checked');
+
+    // 2. Map them to their NIDs
+    const nids = Array.from(checked).map(cb => cb.getAttribute('data-nid') || cb.value);
+
+    if (nids.length === 0) {
+        alert("Please select at least one node.");
+        return;
+    }
+
+    // 3. Send NIDs directly to /downbulk
+    fetch('/downbulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nids: nids })
+    })
+    .then(res => res.json())
+    .then(data => {
+        const iframe = document.getElementById('map-iframe');
+        if (iframe && data.map_url) iframe.src = data.map_url;
+    });
+};
 
   // 4. Initial Load
   document.addEventListener('DOMContentLoaded', () => {

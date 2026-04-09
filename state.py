@@ -502,6 +502,7 @@ def t(msg, start=[time.perf_counter()]):
     print(f"[TIMER] {msg}: {now - start[0]:.3f}s")
     start[0] = now
 
+
 def ensure_treepolys_with_index(
     *,
     territory: str | None,
@@ -516,6 +517,11 @@ def ensure_treepolys_with_index(
     import logging
     from state import Treepolys, Geo_index
     from nodes import persist, FACEENDING
+
+# 1. Define constants first
+    ROOT = "UNITED_KINGDOM"
+    if ROOT not in Geo_index:
+        Geo_index[ROOT] = {"level": "root", "name": ROOT, "parent": None, "children": []}
 
     t("start")
 
@@ -536,11 +542,34 @@ def ensure_treepolys_with_index(
     steps = stepify(sourcepath) if sourcepath else []
 
     layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
-    active_parent_rows: dict[int, list] = {}
-    active_parent_rows[0] = [None]
+    # Instead of:
+    # active_parent_rows = {}
+    # active_parent_rows[0] = [None]
 
-    ROOT = "UNITED_KINGDOM"
-    Geo_index[ROOT] = {"level": "root", "name": ROOT, "parent": None, "children": []}
+    # Do this:
+    active_parent_rows = {}
+    for lvl, l_type in elevels.items():
+        existing_polys = get_treepoly(l_type)
+        if existing_polys is not None:
+            # Load everything we already know into the starting parent list
+            active_parent_rows[lvl] = [row for _, row in existing_polys.iterrows()]
+        else:
+            active_parent_rows[lvl] = []
+
+# Reconstruct the path lookup for all parents we just loaded from Treepolys
+    fid_to_path = {}
+    for lvl, rows in active_parent_rows.items():
+        for r in rows:
+            if r is not None and "FID" in r:
+                # If the row already has a path stored, use it
+                if "_parent_path" in r:
+                    child_name = normalname(r["NAME"])
+                    parent_path = r["_parent_path"]
+                    this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}/{child_name}"
+                    fid_to_path[r["FID"]] = this_path
+    # Ensure Level 0 always has the Root seed if empty
+    if not active_parent_rows.get(0):
+        active_parent_rows[0] = [None]
 
     fid_to_path = {}
     matched_path = ROOT
@@ -601,22 +630,23 @@ def ensure_treepolys_with_index(
                 roid=roid,
                 boundary_geom=boundary_geom
             )
-
             if tree_gdf is not None and not tree_gdf.empty:
-                tree_gdf = tree_gdf.copy()
+                            tree_gdf = tree_gdf.copy()
 
-                if parent_row is None:
-                    parent_path = ROOT
-                else:
-                    parent_fid = parent_row["FID"]
-                    if parent_fid not in fid_to_path:
-                        raise ValueError(
-                            f"[LEVEL {level}] Missing parent path for FID {parent_fid}"
-                        )
-                    parent_path = fid_to_path[parent_fid]
+                            # ✅ THE FIX: Level 0 has no parent FID to look up
+                            if level == 0 or parent_row is None:
+                                parent_path = ROOT
+                            else:
+                                parent_fid = parent_row["FID"]
+                                if parent_fid not in fid_to_path:
+                                    # Only raise error if we aren't at the top level
+                                    raise ValueError(
+                                        f"[LEVEL {level}] Missing parent path for FID {parent_fid}"
+                                    )
+                                parent_path = fid_to_path[parent_fid]
 
-                tree_gdf["_parent_path"] = parent_path
-                all_results.append(tree_gdf)
+                            tree_gdf["_parent_path"] = parent_path
+                            all_results.append(tree_gdf)
 
         # -------------------------------
         # Combine
@@ -698,14 +728,6 @@ def ensure_treepolys_with_index(
             if matched_this_level is None:
                 logging.warning(f"[LEVEL {level}] No match found for step: {expected_name}")
 
-        # -------------------------------
-        # ✅ Branch pruning (BIG WIN)
-        # -------------------------------
-        if matched_this_level:
-            next_parents = [
-                r for r in next_parents
-                if r["_parent_path"] == matched_this_level
-            ]
 
         active_parent_rows[next_level] = next_parents
 
@@ -715,6 +737,8 @@ def ensure_treepolys_with_index(
     persist(Treepolys, Fullpolys, Geo_index)
 
     return match_full_filepath, Geo_index
+
+
 
 def layer_loaded(layer_key):
     return (

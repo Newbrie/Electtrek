@@ -437,7 +437,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         intention_type = elevels[node.level+1]
 
         if intention_type == "marker":
-            self.add_genmarkers( rlevels, node, "marker", static)
+            self.add_genmarkers( rlevels, node, static)
 
         elif intention_type in ("street", "walkleg"):
             self.add_nodemarks(rlevels, node, static)
@@ -1043,7 +1043,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def add_genmarkers(self,rlevels, node, type, static):
+    def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)
         print(f" ___GenMarkers: under {elections.route()} eventlist: {eventlist}")
         for _, row in eventlist.iterrows():

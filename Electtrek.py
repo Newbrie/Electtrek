@@ -1578,7 +1578,7 @@ def update_location_tags():
            (master_df['Area'].astype(str).str.upper() == str(l_area).upper())
 
     affected_indices = master_df[mask].index
-    
+
     updated_count = 0
     for idx in affected_indices:
         current_tags = str(master_df.at[idx, 'Tags']) if pd.notna(master_df.at[idx, 'Tags']) else ""
@@ -2660,19 +2660,14 @@ def dashboard():
     global formdata
     global CElection
     restore_from_persist(Treepolys, Fullpolys, Geo_index)
-
-    current_election = "DEMO"
+    current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
     rlevels = CElection.resolved_levels
-    print ("___Route/Dashboard allelectors len: ",len(allelectors))
+    print ("___Route/Dashboard : ")
     if 'username' in session:
         print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
-        formdata = {}
-        current_node = nodes.TREK_NODES_BY_ID.get(CElection['cid'])
-        if not current_node:
-            raise Exception ("Current Election node does not exist")
 
         path = CElection['mapfiles'][-1]
         previous_node = current_node
@@ -2681,12 +2676,22 @@ def dashboard():
 
 
         print ("___Dashboard persisted filename: ",current_node.mapfile())
-        persist(Treepolys, Fullpolys, Geo_index)
-        if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile())):
-            current_node.create_area_map(rlevels, static=False)
+        base = Path(config.workdirectories['workdir'])  # or wherever files live
+        fullpath = base / current_node.mapfile()
 
-#        redirect(url_for('captains'))
-    return   send_from_directory(app.config['UPLOAD_FOLDER'],current_node.mapfile(), as_attachment=False)
+        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+            if not fullpath.exists():
+                abort(404, f" Route/dashboard File not found: {fullpath}")
+            print (f"_________ROUTE/dashboard at {current_node.value} display file created:{fullpath}")
+
+        if not CElection.visit_node(current_node):
+            flash("That node is outside of the election Territory")
+            print("That node is outside of the election Territory:")
+        persist(Treepolys, Fullpolys, Geo_index)
+
+        print (f"_________ROUTE/dashboard at sendinf file:{fullpath}")
+        return send_file(fullpath, as_attachment=False)
+
 
     flash('_______ROUTE/dashboard no login session ')
 
@@ -4316,18 +4321,28 @@ def get_territory_data():
     from state import Geo_index
     node_path = request.args.get('nodepath', 'UNITED_KINGDOM')
 
-    # Safety check: does the node exist?
     if node_path not in Geo_index:
         return jsonify({"error": "Node not found"}), 404
 
     current_node = Geo_index[node_path]
     parent_path = current_node['parent']
 
-    # 1. Get Siblings (Everyone who shares the same parent, excluding self)
-    siblings = []
+    # Helper to turn a path into a dict with NID and Path
+    def get_node_info(path):
+        return {
+            "path": path,
+            "nid": Geo_index[path].get('nid'),
+            "name": path.split('/').pop().replace('_', ' ')
+        }
+
+    # 1. Get Children with metadata
+    children_info = [get_node_info(c) for c in current_node['children']]
+
+    # 2. Get Siblings with metadata
+    siblings_info = []
     if parent_path and parent_path in Geo_index:
-        siblings = [
-            s for s in Geo_index[parent_path]['children']
+        siblings_info = [
+            get_node_info(s) for s in Geo_index[parent_path]['children']
             if s != node_path
         ]
 
@@ -4335,9 +4350,8 @@ def get_territory_data():
         "current_name": current_node['name'],
         "current_path": node_path,
         "parent_path": parent_path,
-        "children": current_node['children'],
-        "siblings": siblings,
-        # Construct the map path: StaticDir/Maps/UNITED_KINGDOM/ENGLAND/HAMPSHIRE.html
+        "children": children_info,  # Now a list of dicts
+        "siblings": siblings_info,  # Now a list of dicts
         "map_url": f"/static/maps/{node_path}.html"
     })
 
