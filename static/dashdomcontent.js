@@ -117,48 +117,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
    });
  }
 
- document.getElementById("btnRunGroupAction").addEventListener("click", function() {
-     const dropdown = document.getElementById("groupActionSelect");
-     const targetRoute = dropdown.value;
-
-     if (!targetRoute) {
-         alert("Please select an action from the dropdown first.");
-         return;
-     }
-
-     // 1. Gather all checked Node IDs
-     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
-          .map(cb => cb.dataset.nid); // .dataset.nid is the cleanest way to get data-nid
-
-     if (selectedNids.length === 0) {
-         alert("No rows selected! Please tick at least one checkbox.");
-         return;
-     }
-
-     console.log(`🚀 Sending ${selectedNids.length} nodes to ${targetRoute}`);
-
-     // 2. Send to Flask
-     fetch(targetRoute, {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         credentials: "include",
-         body: JSON.stringify({
-             nids: selectedNids,
-             election: document.querySelector(".election-tab.active")?.dataset.election || ""
-         })
-     })
-     .then(res => res.json())
-     .then(data => {
-         if (data.success) {
-             alert(`Successfully processed ${selectedNids.length} nodes.`);
-             // Refresh the map or breadcrumbs if necessary
-             if (typeof refreshMap === "function") refreshMap();
-         } else {
-             console.error("Bulk action failed:", data.error);
-         }
-     })
-     .catch(err => console.error("Network Error:", err));
- });
 
 
   document.addEventListener("click", function (e) {
@@ -708,40 +666,55 @@ resourcesSelect?.addEventListener("blur", () => {
   attachListenersToConstantFields(window.latestConstants);
 
 // Listtener for the bulkaction select
-document.getElementById("btnRunGroupAction").addEventListener("click", function() {
+// Use a named function to prevent accidental double-binding
+function handleBulkAction() {
     const dropdown = document.getElementById("groupActionSelect");
     const targetRoute = dropdown.value;
 
-    if (!targetRoute) {
-        alert("Please select an action from the dropdown first.");
-        return;
-    }
+    // 1. Clear previous logs
+    console.clear();
+    console.log("🚀 Bulk Action Started");
 
-    // ✅ CHANGE THIS LINE:
-    // Instead of .value, grab the data-nid attribute specifically
-    const selectedNids = Array.from(document.querySelectorAll(".node-checkbox:checked"))
-                              .map(cb => cb.getAttribute('data-nid'));
+    // 2. Be extremely specific with the selector
+    const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
+        .map(cb => cb.getAttribute('data-nid') || cb.value)
+        .filter(id => id && id !== "on" && id !== "");
 
     if (selectedNids.length === 0) {
-        alert("No rows selected! Please tick at least one checkbox.");
+        alert("No nodes selected on the frontend!");
         return;
     }
 
-    console.log(`🚀 Sending ${selectedNids.length} NIDs to ${targetRoute}:`, selectedNids);
+    // 3. Disable the button to prevent "Quick Succession" double-clicks
+    const btn = document.getElementById("btnRunGroupAction");
+    btn.disabled = true;
 
     fetch(targetRoute, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-            nids: selectedNids,
-            election: document.querySelector(".election-tab.active")?.dataset.election || ""
-        })
+        body: JSON.stringify({ nids: selectedNids })
     })
     .then(res => res.json())
     .then(data => {
-        // ... (rest of your iframe update logic)
+        if (data.success) {
+            alert(`Success! Processed ${data.count} nodes.`);
+            if (data.map_url) {
+                document.getElementById("map-iframe").src = data.map_url;
+            }
+        } else {
+            alert("Server Error: " + data.error);
+        }
+    })
+    .catch(err => console.error("Fetch error:", err))
+    .finally(() => {
+        btn.disabled = false; // Re-enable button
     });
-});
+}
+
+// Ensure we only attach the listener ONCE
+const bulkBtn = document.getElementById("btnRunGroupAction");
+bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing listeners
+document.getElementById("btnRunGroupAction").addEventListener("click", handleBulkAction);
+
 
 });
