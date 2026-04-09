@@ -127,9 +127,9 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
      }
 
      // 1. Gather all checked Node IDs
-     // Change this line in your "Run" listener
-     const selectedNids = Array.from(document.querySelectorAll(".node-checkbox:checked"))
+     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
           .map(cb => cb.dataset.nid); // .dataset.nid is the cleanest way to get data-nid
+
      if (selectedNids.length === 0) {
          alert("No rows selected! Please tick at least one checkbox.");
          return;
