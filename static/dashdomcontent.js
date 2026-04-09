@@ -127,9 +127,9 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
      }
 
      // 1. Gather all checked Node IDs
-     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
-                               .map(cb => cb.value);
-
+     // Change this line in your "Run" listener
+     const selectedNids = Array.from(document.querySelectorAll(".node-checkbox:checked"))
+          .map(cb => cb.dataset.nid); // .dataset.nid is the cleanest way to get data-nid
      if (selectedNids.length === 0) {
          alert("No rows selected! Please tick at least one checkbox.");
          return;
@@ -706,4 +706,42 @@ resourcesSelect?.addEventListener("blur", () => {
   clearSlotBtn.addEventListener("click", handleClearSlot);
   // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
+
+// Listtener for the bulkaction select
+document.getElementById("btnRunGroupAction").addEventListener("click", function() {
+    const dropdown = document.getElementById("groupActionSelect");
+    const targetRoute = dropdown.value;
+
+    if (!targetRoute) {
+        alert("Please select an action from the dropdown first.");
+        return;
+    }
+
+    // ✅ CHANGE THIS LINE:
+    // Instead of .value, grab the data-nid attribute specifically
+    const selectedNids = Array.from(document.querySelectorAll(".node-checkbox:checked"))
+                              .map(cb => cb.getAttribute('data-nid'));
+
+    if (selectedNids.length === 0) {
+        alert("No rows selected! Please tick at least one checkbox.");
+        return;
+    }
+
+    console.log(`🚀 Sending ${selectedNids.length} NIDs to ${targetRoute}:`, selectedNids);
+
+    fetch(targetRoute, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+            nids: selectedNids,
+            election: document.querySelector(".election-tab.active")?.dataset.election || ""
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        // ... (rest of your iframe update logic)
+    });
+});
+
 });

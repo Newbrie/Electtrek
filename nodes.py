@@ -876,7 +876,7 @@ class TreeNode:
         Creates a map node (HTML) if it doesn't already exist or
         the one that does exist is older than the node's last modification.
         """
-
+        totalleaf =  0
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
         # The clean unpack
@@ -917,7 +917,7 @@ class TreeNode:
                 endpoint_created = True
 
         if next_level <= max_level and endpoint_created:
-            self.create_area_map(rlevels, static=static)
+            map, totalleaf = self.create_area_map(rlevels, static=static)
 
         accumulate = session.get("accumulate", False)
 # if the endpoint doesn t exist or we area accumulating
@@ -941,8 +941,8 @@ class TreeNode:
             if self.parent:
                 print(f"--- Triggering Parent Map Update for: {self.parent.value}")
                 # Call create_area_map on the parent
-                self.parent.create_area_map(rlevels, static=static)
-        return endpoint_created
+                map, totalleaf = self.parent.create_area_map(rlevels, static=static)
+        return endpoint_created, totalleaf
 
 
 
@@ -1370,6 +1370,7 @@ class TreeNode:
         # -------------------------------------------------
         # 1️⃣ Handle the Child Layer (Level + 1)
         # -------------------------------------------------
+        totalleaf = 0
         if self.level < 7:
             child_layer = get_safe_layer(self.level + 1)
             if child_layer:
@@ -1381,7 +1382,7 @@ class TreeNode:
                     nodelist = [self]
 
                 if nodelist:
-                    child_layer.create_layer(rlevels, nodelist, static=False)
+                    totalleaf = child_layer.create_layer(rlevels, nodelist, static=False)
                     child_layer.show = True
                     selected.append(child_layer)
 
@@ -1409,7 +1410,7 @@ class TreeNode:
         marker_layer = factory["marker"]
         selected.append(marker_layer)
 
-        return list(reversed(selected))
+        return list(reversed(selected)), totalleaf
 
 
 
@@ -1989,7 +1990,7 @@ class TreeNode:
             # 2️⃣ Create fresh FeatureGroups for THIS map
 
         # 3️⃣ Select which layers to render for this map
-        flayers = self.getselectedlayers(
+        flayers, totalleaf = self.getselectedlayers(
             rlevels=resolved_levels,
             path=mapfile_name,
             static=static
@@ -2565,7 +2566,7 @@ class TreeNode:
         FolMap.save(target)
 
         print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
-        return FolMap
+        return FolMap, totalleaf
 
     def set_bounding_box(self,block):
       longmin = block.Long.min()

@@ -2055,7 +2055,7 @@ def set_election():
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
 
-        current_node.endpoint_created(rlevels, lastfilepath, static=False)
+        created, totalleaf = current_node.endpoint_created(rlevels, lastfilepath, static=False)
 
         options = resolve_ui_context(ProgramContext(),ElectionContext(CElection), current_node)
         constants = CElection
@@ -2374,7 +2374,7 @@ def update_territory():
 
     CElection['territory'] = mapfile
 
-    current_node.endpoint_created(rlevels, mapfile,static=False)
+    created, totalleaf = current_node.endpoint_created(rlevels, mapfile,static=False)
 
     CElection.save()
     print(f"______election:{current_election} Bookmarks : {CElection['mapfiles']} Updated-territory: {current_node.mapfile()}")
@@ -2678,8 +2678,8 @@ def dashboard():
         print ("___Dashboard persisted filename: ",current_node.mapfile())
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
-
-        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
+        if created:
             if not fullpath.exists():
                 abort(404, f" Route/dashboard File not found: {fullpath}")
             print (f"_________ROUTE/dashboard at {current_node.value} display file created:{fullpath}")
@@ -2739,8 +2739,8 @@ def downbut(path):
     else:
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
-
-        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
+        if created:
             if not fullpath.exists():
                 abort(404, f" Route/downbut File not found: {fullpath}")
             print (f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
@@ -2753,60 +2753,91 @@ def downbut(path):
         print (f"_________ROUTE/downbut at sendinf file:{fullpath}")
         return send_file(fullpath, as_attachment=False)
 
-@app.route('/downbulk', methods=['GET','POST'])
+@app.route('/downbulk', methods=['POST'])
 @login_required
-def downbulk(path):
+def downbulk():
     from state import Treepolys, Fullpolys, Geo_index
-    from flask import session
-    from elector import electors
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
-    from elections import CurrentElection
-    global layeritems
-    global constants
+    from nodes import TREK_NODES_BY_ID
+    from flask import request, session, jsonify
+    from pathlib import Path
+    import config
 
+    print("\n" + "="*40)
+    print("🚀 ENTERING ROUTE: /downbulk")
+    print("="*40)
 
-    print("____Route/downbulk:", path)
+    # 1. Get the list of NIDs from the request body
+    data = request.json
+    nids = data.get('nids', [])
+    print(f"📦 Payload received: {len(nids)} NIDs")
+    print(f"🔍 Raw NID list: {nids}")
 
+    if not nids:
+        print("❌ ERROR: No NIDs provided in request.")
+        return jsonify({"success": False, "error": "No nodes selected"}), 400
+
+    print("🔄 Restoring state from persist...")
     restore_from_persist(Treepolys, Fullpolys, Geo_index)
 
+    # 2. Convert NIDs to actual Node objects
+    nodelist = []
+    missing_nids = []
+    for nid in nids:
+        node = TREK_NODES_BY_ID.get(nid)
+        if node:
+            nodelist.append(node)
+        else:
+            missing_nids.append(nid)
+
+    print(f"✅ Successfully resolved {len(nodelist)} Node objects.")
+    if missing_nids:
+        print(f"⚠️ WARNING: Could not find objects for NIDs: {missing_nids}")
+
+    # 3. Setup Election context
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = CElection.get_last_node( create=True)
-
     rlevels = CElection.resolved_levels
+    print(f"🗳️ Election: {current_election} | Resolved Levels: {rlevels}")
 
-# a down button on a node has been selected on the map, so the new map must be displayed with new down options
-    session['current_election'] = current_election
-    session['current_node_id'] = current_node.nid
-    previous_node = current_node
-    areaelectors = electors.electors_for_node(current_node)
+    # Set up the context node (The "Parent" container for the render)
+    current_node = CElection.get_last_node(create=True)
+    print(f"📍 Context Node: {current_node.value} (NID: {current_node.nid})")
 
-# use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-    current_node = previous_node.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
+    # Update Session
+    session['accumulated_nodes'] = nids
+    session.modified = True
+    print(f"💾 Session updated with 'accumulated_nodes'")
 
+    # 4. Trigger the map creation
+    map_filename = current_node.mapfile()
+    print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
-    if current_node.level > 4 and len(areaelectors)  == 0:
-        flash("Can't find any elector data for this Area.")
-        print(f"Can't find elector data at {current_node.value} for election {current_election}" )
-        raise Exception ("Can't find any elector data for this Area.")
+    # We pass the nodelist explicitly to create_layer (if endpoint_created uses it)
+    # or ensure current_node knows to render its 'accumulated' children.
+    created, totalleaf = current_node.endpoint_created(rlevels, map_filename, static=False)
+
+    print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
+
+    # 5. File verification
+    CElection.visit_node(current_node)
+    base = Path(config.workdirectories['workdir'])
+    fullpath = base / map_filename
+
+    print(f"📂 Checking for file at: {fullpath}")
+    if fullpath.exists():
+        print(f"✨ File verified! Size: {fullpath.stat().st_size} bytes")
     else:
-        base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile()
+        print(f"🚨 ALERT: File does not exist after creation attempt!")
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
-            if not fullpath.exists():
-                abort(404, f" Route/downbulk File not found: {fullpath}")
-            print (f"_________ROUTE/downbulk at {current_node.value} display file created:{fullpath}")
+    persist(Treepolys, Fullpolys, Geo_index)
+    print("💾 State persisted. Sending response to frontend.")
+    print("="*40 + "\n")
 
-        if not CElection.visit_node(current_node):
-            flash("That node is outside of the election Territory")
-            print("That node is outside of the election Territory:")
-        persist(Treepolys, Fullpolys, Geo_index)
-
-        print (f"_________ROUTE/downbulk at sendinf file:{fullpath}")
-        return send_file(fullpath, as_attachment=False)
-
-
+    return jsonify({
+        "success": True,
+        "count": totalleaf,
+        "map_url": f"/transfer/{map_filename}"
+    })
 
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
@@ -2830,7 +2861,7 @@ def transfer(path):
 # use ping to populate the destination node with which to repaint the screen node map and markers
     current_node = get_root().ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
-    current_node.endpoint_created(rlevels, current_node.mapfile(),static=False)
+    created, totalleaf = current_node.endpoint_created(rlevels, current_node.mapfile(),static=False)
 
     CElection.visit_node(current_node)
     base = Path(config.workdirectories['workdir'])  # or wherever files live
@@ -2885,7 +2916,8 @@ def downMWbut(path):
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(), static=True):
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(), static=True)
+        if created:
             if not fullpath.exists():
                 abort(404, f" Route/downMW File not found: {fullpath}")
             print (f"_________ROUTE/downMW at {current_node.value} display file created:{fullpath}")
@@ -3115,7 +3147,8 @@ def PDdownST(path):
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
+        if created:
             if not fullpath.exists():
                 abort(404, f" Route/PDdownST at level {current_node.level} File not found: {fullpath}")
             print (f"_________ROUTE/PDdownST at {current_node.value} display file created:{fullpath}")
@@ -3240,7 +3273,8 @@ def WKdownST(path):
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
 
-        if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
+        if created:
             if not fullpath.exists():
                 abort(404, f" _________ROUTE/WKdownST File not found: {fullpath}")
             print (f"_________ROUTE/WKdownST at {current_node.value} display file created:{fullpath}")
@@ -3581,7 +3615,8 @@ def upbut(path):
     print("________chosen node url",current_node.mapfile())
     base = Path(config.workdirectories['workdir'])  # or wherever files live
     fullpath = base / current_node.mapfile()
-    if current_node.endpoint_created(rlevels,current_node.mapfile(),static=False):
+    created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
+    if created:
         if not fullpath.exists():
             abort(404, f" Route/upbut File not found: {fullpath}")
         print (f"_________ROUTE/upbut from {previous_node.value} to endpoint at {current_node.value} display file created:{fullpath}")
