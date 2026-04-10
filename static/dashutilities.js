@@ -142,10 +142,7 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
     const checkboxes = document.querySelectorAll('.node-checkbox');
     checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
 };
-  // 4. Initial Load
-  document.addEventListener('DOMContentLoaded', () => {
-      selectNode('UNITED_KINGDOM');
-  });
+
 /**
  * Populate the area accordion based on your areas dict.
  * @param {Object} areasDict - Structure: { childId: { node, children: [...] } }
@@ -226,77 +223,78 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
     console.groupEnd();
 }
 
- async function fetchTableData(tableName) {
+async function fetchTableData(tableName) {
    const table = document.getElementById("captains-table");
    const tabTitle = document.getElementById("selectedTitle");
 
    if (!table || !tabTitle) {
-     console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
-     return;
+       console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
+       return;
    }
 
    const tabHead = table.querySelector("thead");
    const tabBody = table.querySelector("tbody");
 
    if (!tabHead || !tabBody) {
-     console.error("❌ Table structure invalid: missing <thead> or <tbody>");
-     return;
+       console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+       return;
    }
-
-   console.log(`📥 Fetching data for table: ${tableName}`);
 
    try {
-     const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
-     if (!res.ok) throw new Error(`Server returned ${res.status}`);
-     const data = await res.json();
+       const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
+       if (!res.ok) throw new Error(`Server returned ${res.status}`);
+       const data = await res.json();
 
-     if (!Array.isArray(data) || data.length < 3) {
-       console.error("❌ Invalid data format received:", data);
-       return;
-     }
+       if (!Array.isArray(data) || data.length < 3) {
+           console.error("❌ Invalid data format received:", data);
+           return;
+       }
 
-     const [columnHeaders, rows, title] = data;
-     tabTitle.textContent = title;
-     tabHead.innerHTML = "";
-     tabBody.innerHTML = "";
+       const [columnHeaders, rows, title] = data;
+       tabTitle.textContent = title;
+       tabHead.innerHTML = "";
+       tabBody.innerHTML = "";
 
-     // Table header
-     const headRow = document.createElement("tr");
-     headRow.innerHTML = `<th>?</th>` + columnHeaders.map(h => `<th>${h.toUpperCase()}</th>`).join('');
-     tabHead.appendChild(headRow);
+       // --- 1. Filtered Table header ---
+       const headRow = document.createElement("tr");
+       headRow.innerHTML = `<th>?</th>` +
+           columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in header
+               .map(h => `<th>${h.toUpperCase()}</th>`)
+               .join('');
+       tabHead.appendChild(headRow);
 
-     const selectedParty = document.getElementById("yourparty")?.value;
+       const selectedParty = document.getElementById("yourparty")?.value;
 
-     // Table body
-     // Table body
-      rows.forEach(record => {
-        const row = document.createElement("tr");
+       // --- 2. Filtered Table body ---
+       rows.forEach(record => {
+           const row = document.createElement("tr");
 
-        // 1. Extract the NID from the record (Assuming the column name is 'nid')
-        const nid = record['nid'] || record['id'] || "";
+           // Extract the NID for the checkbox (it exists in 'record' but we won't show it in a cell)
+           const nid = record['nid'] || record['id'] || "";
 
-        // 2. Add the data-nid and value to the checkbox
-        row.innerHTML = `<td>
-            <input type="checkbox"
-                   class="selectRow"
-                   value="${nid}"
-                   data-nid="${nid}">
-          </td>` +
-          columnHeaders.map(h => {
-            const value = record[h] ?? "";
-            const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
-            return `<td style="background-color:${color}">${value}</td>`;
-          }).join('');
+           row.innerHTML = `<td>
+               <input type="checkbox"
+                      class="selectRow"
+                      value="${nid}"
+                      data-nid="${nid}">
+             </td>` +
+             columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in rows
+               .map(h => {
+                   const value = record[h] ?? "";
+                   const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+                   return `<td style="background-color:${color}">${value}</td>`;
+               }).join('');
 
-        tabBody.appendChild(row);
-      });
+           tabBody.appendChild(row);
+       });
 
-     console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
+       console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
    } catch (err) {
-     console.error("❌ Error fetching table data:", err);
+       console.error("❌ Error fetching table data:", err);
    }
- }
-
+}
 
 
 

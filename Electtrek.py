@@ -2809,12 +2809,12 @@ def downbulk():
     print(f"💾 Session updated with 'accumulated_nodes'")
 
     # 4. Trigger the map creation
-    map_filename = nodelist[0].parent.parent.mapfile()
+    map_filename = nodelist[0].parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
     # We pass the nodelist explicitly to create_layer (if endpoint_created uses it)
     # or ensure current_node knows to render its 'accumulated' children.
-    created, totalleaf = nodelist[0].parent.parent.endpoint_created(rlevels, map_filename, static=False)
+    created, totalleaf = nodelist[0].parent.endpoint_created(rlevels, map_filename, static=False)
 
     print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
 
@@ -4381,13 +4381,15 @@ def get_territory_data():
             if s != node_path
         ]
 
+
+    created, totalleaf = current_node.endpoint_created(rlevels, lastfilepath, static=False)
     return jsonify({
         "current_name": current_node['name'],
         "current_path": node_path,
         "parent_path": parent_path,
         "children": children_info,  # Now a list of dicts
         "siblings": siblings_info,  # Now a list of dicts
-        "map_url": f"/static/maps/{node_path}.html"
+        "map_url": f"/thru/{node_path}.html"
     })
 
 @app.route("/get_stream_processing/<ename>")

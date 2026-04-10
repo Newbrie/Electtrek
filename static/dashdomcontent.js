@@ -722,6 +722,9 @@ function handleBulkAction() {
 const bulkBtn = document.getElementById("btnRunGroupAction");
 bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing listeners
 document.getElementById("btnRunGroupAction").addEventListener("click", handleBulkAction);
+// 4. Initial Load
+
+selectNode(window.constants.territory);
 
 
 });

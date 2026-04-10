@@ -1149,7 +1149,7 @@ class TreeNode:
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         # The clean unpack
         (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked mapfile election: {c_election}")
+        print(f"DEBUG: Unpacked mapfile election: {c_election} - el:{elevels}")
         return f"{self.dir}/{self.file(elevels)}"
 
 
@@ -1371,11 +1371,26 @@ class TreeNode:
             used_keys.add(key)
             return factory[key]
 
-        # -------------------------------------------------
-        # 1️⃣ Handle the Child Layer (Level + 1)
-        # -------------------------------------------------
         totalleaf = 0
-        if self.level < 7:
+        if self.level < 5:
+            grandchild_layer = get_safe_layer(self.level + 2)
+            if grandchild_layer:
+                # Determine nodelist (Accumulate logic)
+                if session.get("accumulate", False):
+                    node_ids = session.get("accumulated_nodes", [])
+                    nodelist = [TREK_NODES_BY_ID.get(nid) for nid in node_ids if nid in TREK_NODES_BY_ID]
+                else:
+                    nodelist = [self]
+
+                if nodelist:
+                    totalleaf = grandchild_layer.create_layer(rlevels, nodelist, static=False)
+                    grandchild_layer.show = True
+                    selected.append(grandchild_layer)
+            # -------------------------------------------------
+            # 1️⃣ Handle the Child Layer (Level + 1)
+            # -------------------------------------------------
+
+        if self.level < 4:
             child_layer = get_safe_layer(self.level + 1)
             if child_layer:
                 # Determine nodelist (Accumulate logic)
