@@ -724,7 +724,8 @@ bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing 
 document.getElementById("btnRunGroupAction").addEventListener("click", handleBulkAction);
 // 4. Initial Load
 
-selectNode(window.constants.territory);
+const dataPath = document.getElementById('territory');
+selectNode(dataPath);
 
 
 });

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Alphanumeric Candidate Parser</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; max-width: 800px; margin: auto; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; background: #f9f9f9; }
+        #jsonOutput {
+            width: 100%; height: 400px; margin-top: 20px;
+            font-family: monospace; background: #272822; color: #f8f8f2;
+            padding: 10px; border-radius: 4px; white-space: pre-wrap;
+        }
+        button {
+            padding: 10px 20px; cursor: pointer; background: #28a745;
+            color: white; border: none; border-radius: 4px; font-weight: bold;
+        }
+        button:hover { background: #218838; }
+        .controls { display: flex; align-items: center; gap: 10px; }
+        h1 { color: #333; }
+    </style>
+</head>
+<body>
+
+    <h1>Candidate Data Parser</h1>
+    <p>Upload your HTML file. All special characters (hyphens, quotes, etc.) will be removed.</p>
+
+    <div class="container">
+        <div class="controls">
+            <input type="file" id="fileInput" accept=".html,.htm">
+            <button onclick="processFile()">Generate Clean JSON</button>
+        </div>
+
+        <textarea id="jsonOutput" readonly placeholder="Clean JSON will appear here..."></textarea>
+        <br>
+        <button id="downloadBtn" style="display:none;" onclick="downloadJson()">Download candidates.json</button>
+    </div>
+
+    <script>
+        let finalResult = null;
+
+        function processFile() {
+            const fileInput = document.getElementById('fileInput');
+            const outputArea = document.getElementById('jsonOutput');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            if (!fileInput.files[0]) {
+                alert("Please select an HTML file.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const htmlContent = e.target.result;
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+
+                const result = { "ward": {}, "division": {} };
+
+                const normalize = (str) => {
+                    // Check for empty content or <br> tags
+                    if (!str || str.trim() === "" || str.includes("br")) return "TBC";
+
+                    return str.trim()
+                        .toUpperCase()
+                        // Keep only A-Z, 0-9, and spaces
+                        .replace(/[^A-Z0-9\s]/g, '')
+                        // Convert remaining spaces to underscores
+                        .replace(/\s+/g, '_');
+                };
+
+                const tableAnchor = doc.querySelector('a[name="table0"]');
+                const table = tableAnchor ? tableAnchor.nextElementSibling : doc.querySelector('table');
+
+                if (!table) {
+                    outputArea.value = "Error: Table not found.";
+                    return;
+                }
+
+                const rows = table.querySelectorAll('tr');
+
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 3) {
+                        const divisionName = cells[0].innerText.trim();
+                        const cand1 = cells[1].innerText.trim();
+                        const cand2 = cells[2].innerText.trim();
+
+                        if (cand1.toLowerCase().includes("candidate")) return;
+                        if (!cand1 && !cand2) return;
+                        if (!divisionName) return;
+
+                        const key = normalize(divisionName);
+                        result.division[key] = {
+                            "Candidate_1": normalize(cand1),
+                            "Candidate_2": normalize(cand2)
+                        };
+                    }
+                });
+
+                finalResult = result;
+                outputArea.value = JSON.stringify(result, null, 2);
+                downloadBtn.style.display = 'block';
+            };
+
+            reader.readAsText(file);
+        }
+
+        function downloadJson() {
+            if (!finalResult) return;
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(finalResult, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "candidates_clean.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+    </script>
+</body>
+</html>

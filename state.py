@@ -764,7 +764,7 @@ def load_candidates():
 
         for _, row in Candidates_data.iterrows():
 
-            ward = row.get("Wardname")
+            ward = row.get("Division")
             c1 = row.get("Candidate 1")
             c2 = row.get("Candidate 2")
 

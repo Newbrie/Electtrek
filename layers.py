@@ -461,7 +461,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         counters = defaultdict(int)
         i = 0
         for n in nodelist:
-            n.defcol = branchcolours[i]
+            n.defcol = branchcolours[i%12]
             self._render_single_node(rlevels, n, static, counters)
             i = i+1
 

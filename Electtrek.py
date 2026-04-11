@@ -2808,6 +2808,9 @@ def downbulk():
     session.modified = True
     print(f"💾 Session updated with 'accumulated_nodes'")
 
+    # 4. ensure all nodes exist
+    for node in nodelist:
+        get_root().ping_node(rlevels,node.mapfile(), create=True, accumulate=session.get("accumulate", False))
     # 4. Trigger the map creation
     map_filename = nodelist[0].parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
