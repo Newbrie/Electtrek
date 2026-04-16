@@ -479,88 +479,81 @@ def assign_walks_and_zones(
     max_depth=10,
     progress=None
 ):
-    """
-    Incremental assignment of WalkName_hier, WalkName, and Zone.
-    Only updates electors with valid Area and blank WalkName.
-    """
     from sklearn.cluster import KMeans
     import numpy as np
     import pandas as pd
     from state import update_progress
 
-    if progress:
-        update_progress(progress, "assign_walks", 0.0, "Preparing walk & zone assignment...")
+    # 🛡️ Safety: Ensure columns exist
+    for col in ['WalkName', 'WalkName_hier', 'Zone']:
+        if col not in electors_df.columns:
+            electors_df[col] = np.nan
 
-    # Only select electors needing assignment
+    # 1. Identify electors needing assignment
     mask_assign = (electors_df['Area'].notna()) & (electors_df['Area'] != 'OUTSIDE') & (
         electors_df['WalkName'].isna() | (electors_df['WalkName'] == '')
     )
     to_assign = electors_df.loc[mask_assign]
 
     if to_assign.empty:
-        if progress:
-            update_progress(progress, "assign_walks", 1.0, "No electors require walk/zone assignment.")
         return electors_df
 
-    # -------------------------------
+    # ---------------------------------------------------------
+    # STEP 1: YOUR ORIGINAL WALK LOGIC (DO NOT CHANGE)
+    # This generates the high-quality clusters and walk names
+    # ---------------------------------------------------------
+    walk_labels = recursive_kmeans(to_assign, prefix=aprefix, max_walk_size=max_walk_size)
+    hier_series = pd.Series(walk_labels, index=to_assign.index)
+    electors_df.loc[to_assign.index, 'WalkName_hier'] = hier_series
 
-
-    walk_labels = recursive_kmeans(to_assign, prefix=aprefix,max_walk_size=max_walk_size)
-    hier_series = pd.Series(walk_labels).reindex(to_assign.index)
-    electors_df.loc[to_assign.index, 'WalkName_hier'] = hier_series.fillna('UNKNOWN')
-
-    # -------------------------------
-    # Convert hierarchical labels to serial WalkName (K01, K02...)
     unique_label_map = {}
     serial_series = pd.Series(index=to_assign.index, dtype=str)
+
+    # Calculate global walk count to keep naming unique across the whole import
+    existing_count = electors_df['WalkName'].dropna().nunique()
 
     for idx, raw_label in hier_series.items():
         label_key = str(raw_label).strip()
         if label_key not in unique_label_map:
-            unique_label_map[label_key] = f"{aprefix}{len(unique_label_map)+1:02}"
+            unique_label_map[label_key] = f"{aprefix}{len(unique_label_map) + existing_count + 1:02}"
         serial_series.loc[idx] = unique_label_map[label_key]
 
     electors_df.loc[to_assign.index, 'WalkName'] = serial_series
 
-    # -------------------------------
-    # Assign Zones (Logically by Walk)
-    # -------------------------------
-    # 1. Get the mean location of every walk we just created
-    walk_centers = electors_df.loc[to_assign.index].groupby('WalkName').agg({
-        'Lat': 'mean',
-        'Long': 'mean'
-    })
+    # ---------------------------------------------------------
+    # STEP 2: AREA-SPECIFIC ZONE LOGIC
+    # Now we just divide the walks into 8 zones PER area
+    # ---------------------------------------------------------
+    unique_areas = to_assign['Area'].unique()
 
-    num_unique_walks = len(walk_centers)
-    N = min(8, num_unique_walks)
+    for area_name in unique_areas:
+        # Filter for only the walks we just created inside this specific Area
+        area_mask = (electors_df['Area'] == area_name) & (electors_df.index.isin(to_assign.index))
+        area_indices = electors_df.index[area_mask]
 
-    if N > 1:
-        # 2. Cluster the WALKS, not the people
-        kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
-        walk_centers['ZoneLabel'] = kmeans.fit_predict(walk_centers[['Lat', 'Long']])
+        # Get centers of the walks within this specific area
+        walk_centers = electors_df.loc[area_indices].groupby('WalkName').agg({
+            'Lat': 'mean',
+            'Long': 'mean'
+        })
 
-        # 3. Create a mapping of {WalkName: ZONE_X}
-        zone_map = {
-            walk: f"ZONE_{label + 1}"
-            for walk, label in walk_centers['ZoneLabel'].items()
-        }
+        num_walks_in_area = len(walk_centers)
+        N = min(8, num_walks_in_area)
 
-        # 4. Apply the map to the main dataframe
-        electors_df.loc[to_assign.index, 'Zone'] = electors_df.loc[to_assign.index, 'WalkName'].map(zone_map)
-    else:
-        electors_df.loc[to_assign.index, 'Zone'] = 'ZONE_1'
+        if N > 1:
+            kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
+            walk_centers['ZoneLabel'] = kmeans.fit_predict(walk_centers[['Lat', 'Long']])
 
-        # Stage-aware progress
-        if progress:
-            update_progress(progress, "assign_walks", (idx_area+1)/len(to_assign['Area'].unique()),
-                            f"Assigning Zones ({idx_area+1}/{len(to_assign['Area'].unique())} areas)")
+            zone_map = {walk: f"ZONE_{label + 1}" for walk, label in walk_centers['ZoneLabel'].items()}
+            # Apply zones only to electors in this Area
+            electors_df.loc[area_indices, 'Zone'] = electors_df.loc[area_indices, 'WalkName'].map(zone_map)
+        else:
+            electors_df.loc[area_indices, 'Zone'] = 'ZONE_1'
 
     if progress:
         update_progress(progress, "assign_walks", 1.0, "Walk & zone assignment complete.")
 
     return electors_df
-
-
 
 def check_columns_consistency(mainframe, *frames, verbose=True):
     """

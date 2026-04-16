@@ -31,6 +31,70 @@ var showMore = function (msg,area, type) {
       /* When the user clicks on the button,
       toggle between hiding and showing the dropdown content */
 
+// --- MOVE THESE TO MAP.JS ---
+
+var BAKED_DATA = BAKED_DATA || {};
+
+// No changes needed here, as 'selectElement' carries its own context
+var loadHouseData = function(selectElement) {
+    var row = selectElement.closest('.canvass-row');
+    if (!row) return;
+    var street = row.getAttribute('data-street');
+    var house = selectElement.value;
+    var opt = selectElement.options[selectElement.selectedIndex];
+    var max = opt.getAttribute('data-max') || 1;
+
+    var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+    var viSelector = row.querySelector('.vi-selector');
+    var btn = row.querySelector('.vote-btn');
+
+    btn.setAttribute('data-max', max);
+    if (record) {
+        viSelector.value = record.vi;
+        btn.setAttribute('data-count', record.votes);
+        btn.innerText = record.votes + '/' + max;
+    } else {
+        viSelector.selectedIndex = 0;
+        btn.setAttribute('data-count', '0');
+        btn.innerText = '0/' + max;
+    }
+};
+
+// CHANGE: We add 'doc' parameter so the map can "see" the popup's table
+var deployUpdate = function(doc) {
+    var targetDoc = doc || document; // Use popup doc if provided, else main doc
+    targetDoc.querySelectorAll('.canvass-row').forEach(function(row) {
+        var street = row.getAttribute('data-street');
+        var house = row.querySelector('.unit-selector').value;
+        var vi = row.querySelector('.vi-selector').value;
+        var votes = row.querySelector('.vote-btn').getAttribute('data-count');
+        if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+        BAKED_DATA[street][house] = { vi: vi, votes: votes, ts: Date.now() };
+    });
+
+    var jsonString = JSON.stringify(BAKED_DATA);
+    var fullHtml = document.documentElement.outerHTML;
+
+    // Regex remains the same
+    var newHtml = fullHtml.replace(/var BAKED_DATA = BAKED_DATA \|\| \{.*?\};/, 'var BAKED_DATA = ' + jsonString + ';');
+
+    var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = "Canvass_Sheet_Updated.html";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+};
+
+var incrementVoteCount = function(btn) {
+    var count = parseInt(btn.getAttribute('data-count')) || 0;
+    var max = parseInt(btn.getAttribute('data-max')) || 1;
+    count = (count + 1) > max ? 0 : count + 1;
+    btn.setAttribute('data-count', count);
+    btn.innerText = count + '/' + max;
+};
+
 function bindEvent(element, eventName, eventHandler) {
   element.addEventListener(eventName, eventHandler, false);
 }

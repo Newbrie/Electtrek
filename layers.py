@@ -156,86 +156,20 @@ def build_street_list_html(streets_df, street_stats):
 
     # --- THE INJECTION: JavaScript Persistence Engine ---
     # --- THE INJECTION: JavaScript Persistence Engine ---
-    persistence_js = r'''
-    <script>
-    // This variable is the "Ledger" - it gets overwritten during 'Baking'
-    let BAKED_DATA = {};
+    persistence_js = '''
+        <script>
+            // Auto-init on load
+            setTimeout(function() {
+                document.querySelectorAll('.unit-selector').forEach(function(sel) { loadHouseData(sel); });
+            }, 200);
+        <\/script>
+        '''
 
-    function loadHouseData(selectElement) {
-        const row = selectElement.closest('.canvass-row');
-        if (!row) return;
-        const street = row.getAttribute('data-street');
-        const house = selectElement.value;
-        const record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
-
-        const viSelector = row.querySelector('.vi-selector');
-        const btn = row.querySelector('.vote-btn');
-
-        if (record) {
-            viSelector.value = record.vi;
-            btn.setAttribute('data-count', record.votes);
-            btn.innerText = record.votes + '/' + btn.getAttribute('data-max');
-        } else {
-            viSelector.selectedIndex = 0;
-            btn.setAttribute('data-count', '0');
-            btn.innerText = '0/' + btn.getAttribute('data-max');
-        }
-    }
-
-    function deployUpdate() {
-        // 1. Scrape current UI state into BAKED_DATA
-        document.querySelectorAll('.canvass-row').forEach(row => {
-            const street = row.getAttribute('data-street');
-            const house = row.querySelector('.unit-selector').value;
-            const vi = row.querySelector('.vi-selector').value;
-            const votes = row.querySelector('.vote-btn').getAttribute('data-count');
-
-            if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-            BAKED_DATA[street][house] = { vi, votes, ts: Date.now() };
-        });
-
-        // 2. Serialize and Replace
-        const jsonString = JSON.stringify(BAKED_DATA);
-        let fullHtml = document.documentElement.outerHTML;
-
-        // This regex finds the variable and swaps it for the new JSON string
-        const newHtml = fullHtml.replace(/let BAKED_DATA = \{.*?\};/, 'let BAKED_DATA = ' + jsonString + ';');
-
-        // 3. Trigger Download
-        const blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = "Canvass_Sheet_Updated.html";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    }
-
-    function updateMaxVote(selectElement) {
-        const row = selectElement.closest('.canvass-row');
-        const max = selectElement.options[selectElement.selectedIndex].getAttribute('data-max') || 1;
-        const btn = row.querySelector('.vote-btn');
-        btn.setAttribute('data-max', max);
-    }
-
-    function incrementVoteCount(btn) {
-        let count = parseInt(btn.getAttribute('data-count')) || 0;
-        let max = parseInt(btn.getAttribute('data-max')) || 1;
-        count = (count + 1) > max ? 0 : count + 1;
-        btn.setAttribute('data-count', count);
-        btn.innerText = count + '/' + max;
-    }
-
-    window.addEventListener('load', () => {
-        document.querySelectorAll('.unit-selector').forEach(sel => loadHouseData(sel));
-    });
-    <\/script>
-    '''
 
     # --- THE UI: Control Panel ---
     html = persistence_js + '''
     <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-        <button onclick="deployUpdate()" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+        <button onclick="parent.deployUpdate" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
             💾 Save & Deploy New File
         </button>
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
@@ -271,7 +205,7 @@ def build_street_list_html(streets_df, street_stats):
 
         # Unit dropdown
         unit_dropdown = f'''
-        <select class="unit-selector" onchange="updateMaxVote(this); loadHouseData(this);"
+        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this);"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
@@ -289,7 +223,7 @@ def build_street_list_html(streets_df, street_stats):
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
         vote_button = f'''
-        <button class="vote-btn" onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}"
+        <button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="0" data-max="{max_votes}"
                 style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
             0/{max_votes}
         </button>
@@ -707,9 +641,30 @@ class ExtendedFeatureGroup(FeatureGroup):
         for region_id, poly in region_polys.items():
             # ✂️ COOKIE CUTTER STEP
             # Intersect the Voronoi region with the ACTUAL multipolygon boundary
-            actual_shape_poly = poly.intersection(parent_boundary)
+            # ✂️ COOKIE CUTTER STEP
+            # This can sometimes create stray points or lines on the edges
+            raw_intersection = poly.intersection(parent_boundary)
 
-            if actual_shape_poly.is_empty:
+            if raw_intersection.is_empty:
+                continue
+            # 🛡️ THE FIX: Ensure we only have Polygons/MultiPolygons
+            # This strips out stray Points or Lines that cause the JS crash
+            if raw_intersection.geom_type == 'Polygon' or raw_intersection.geom_type == 'MultiPolygon':
+                actual_shape_poly = raw_intersection
+            elif raw_intersection.geom_type == 'GeometryCollection':
+                # Extract ONLY the polygonal parts from the collection
+                polys = [g for g in raw_intersection.geoms if g.geom_type in ['Polygon', 'MultiPolygon']]
+                if not polys:
+                    print(f"DEBUG: Skipping region {region_id} - no valid polygons in collection")
+                    continue
+                from shapely.ops import unary_union
+                actual_shape_poly = unary_union(polys)
+            else:
+                print(f"DEBUG: Skipping region {region_id} - geom_type was {raw_intersection.geom_type}")
+                continue
+
+            # Double-check: if it's still empty or invalid after filtering, skip it
+            if actual_shape_poly.is_empty or not actual_shape_poly.is_valid:
                 continue
 
             # 🔑 CRITICAL: Use 'actual_shape_poly' for your GeoJson, NOT 'poly'
