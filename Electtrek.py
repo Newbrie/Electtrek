@@ -250,6 +250,33 @@ def get_L4area(nodelist, here):
     print("____No Level 4 boundary matched for this point")
     return None
 
+# Recursive KMeans for hierarchical walks
+def recursive_kmeans(X, prefix='K', depth=0, max_depth=10, max_walk_size=300):
+    if depth >= max_depth or len(X) <= max_walk_size:
+        return {i: prefix for i in X.index}
+
+    k = min(int(np.ceil(len(X) / max_walk_size)), len(X))
+    coords = X[['Lat', 'Long']].values
+
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+    labels = kmeans.fit_predict(coords)
+
+    label_map = {}
+    for i in range(k):
+        idx = X.index[labels == i]
+        if len(idx) == 0:
+            continue
+        sub_df = X.loc[idx]
+        sub_label_map = recursive_kmeans(
+            sub_df,
+            prefix=f"{prefix}-{i+1}",
+            depth=depth+1,
+            max_depth=max_depth,       # Use the variable, not hardcoded 10
+            max_walk_size=max_walk_size # Pass this through or it will reset to 300!
+        )
+        label_map.update(sub_label_map)
+    return label_map
+
 def assign_areas(electors_df, rlevels, progress=None):
     import geopandas as gpd
 
@@ -448,7 +475,7 @@ def assign_walks_and_zones(
     territory_path,
     rlevels,
     aprefix,
-    max_walk_size=50,
+    max_walk_size=300,
     max_depth=10,
     progress=None
 ):
@@ -476,28 +503,9 @@ def assign_walks_and_zones(
         return electors_df
 
     # -------------------------------
-    # Recursive KMeans for hierarchical walks
-    def recursive_kmeans(X, prefix='K', depth=0):
-        if depth >= max_depth or len(X) <= max_walk_size:
-            return {i: prefix for i in X.index}
 
-        k = min(int(np.ceil(len(X) / max_walk_size)), len(X))
-        coords = X[['Lat', 'Long']].values
 
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
-        labels = kmeans.fit_predict(coords)
-
-        label_map = {}
-        for i in range(k):
-            idx = X.index[labels == i]
-            if len(idx) == 0:
-                continue
-            sub_df = X.loc[idx]
-            sub_label_map = recursive_kmeans(sub_df, prefix=f"{prefix}-{i+1}", depth=depth+1)
-            label_map.update(sub_label_map)
-        return label_map
-
-    walk_labels = recursive_kmeans(to_assign, prefix=aprefix)
+    walk_labels = recursive_kmeans(to_assign, prefix=aprefix,max_walk_size=max_walk_size)
     hier_series = pd.Series(walk_labels).reindex(to_assign.index)
     electors_df.loc[to_assign.index, 'WalkName_hier'] = hier_series.fillna('UNKNOWN')
 
@@ -515,19 +523,32 @@ def assign_walks_and_zones(
     electors_df.loc[to_assign.index, 'WalkName'] = serial_series
 
     # -------------------------------
-    # Assign Zones (only for electors just assigned)
-    for idx_area, area in enumerate(to_assign['Area'].unique()):
-        area_mask = (to_assign['Area'] == area)
-        area_df = to_assign.loc[area_mask]
-        num_walks = len(area_df)
-        N = min(teamsize, num_walks)
+    # Assign Zones (Logically by Walk)
+    # -------------------------------
+    # 1. Get the mean location of every walk we just created
+    walk_centers = electors_df.loc[to_assign.index].groupby('WalkName').agg({
+        'Lat': 'mean',
+        'Long': 'mean'
+    })
 
-        if N > 1:
-            kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
-            labels = kmeans.fit_predict(area_df[['Lat', 'Long']].values)
-            electors_df.loc[area_df.index, 'Zone'] = [f"ZONE_{j+1}" for j in labels]
-        else:
-            electors_df.loc[area_df.index, 'Zone'] = 'ZONE_0'
+    num_unique_walks = len(walk_centers)
+    N = min(8, num_unique_walks)
+
+    if N > 1:
+        # 2. Cluster the WALKS, not the people
+        kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
+        walk_centers['ZoneLabel'] = kmeans.fit_predict(walk_centers[['Lat', 'Long']])
+
+        # 3. Create a mapping of {WalkName: ZONE_X}
+        zone_map = {
+            walk: f"ZONE_{label + 1}"
+            for walk, label in walk_centers['ZoneLabel'].items()
+        }
+
+        # 4. Apply the map to the main dataframe
+        electors_df.loc[to_assign.index, 'Zone'] = electors_df.loc[to_assign.index, 'WalkName'].map(zone_map)
+    else:
+        electors_df.loc[to_assign.index, 'Zone'] = 'ZONE_1'
 
         # Stage-aware progress
         if progress:
@@ -741,46 +762,54 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 new_df[column_name] = value
                 print(f"✅ Contextualized column: {column_name} = {value}")
 
-    # --- Stage 3: Load all existing electors for incremental assignment ---
+    # --- Stage 3: Load all existing electors for reference ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
-        print(f"🔄 Loaded {len(existing_all)} existing electors across all elections")
 
-        # --- Merge current import with existing data ---
+        # 1. Tag the new data so we can find it after merging
+        new_df['is_new_import'] = True
+        if not existing_all.empty:
+            existing_all['is_new_import'] = False
+
+        # 2. Merge current import with existing data
+        # (We still need existing data to avoid ENOP duplicates)
         combined = pd.concat([existing_all, new_df], ignore_index=True)
 
-        # Deduplicate by unique key (ENOP) to avoid duplicates from re-imports
+        # 3. Deduplicate (Keep the 'last' which is our new import)
         if 'ENOP' in combined.columns:
             combined = combined.drop_duplicates(subset='ENOP', keep='last')
 
-        # --- Incremental Area Assignment ---
-        mainframe = assign_areas(combined, resolved_levels, progress=progress)
+        # 4. Create a mask for ONLY the rows we just imported
+        # This ensures assign_areas and assign_walks only process the new batch
+        mask_new = (combined['is_new_import'] == True)
 
-        # --- Incremental Walk & Zone Assignment ---
-        # --- Ensure WalkName columns exist before incremental assignment ---
-        if 'WalkName' not in mainframe.columns:
-            mainframe['WalkName'] = ''
-        if 'WalkName_hier' not in mainframe.columns:
-            mainframe['WalkName_hier'] = ''
-        if 'Zone' not in mainframe.columns:
-            mainframe['Zone'] = None
+        # --- Incremental Area Assignment ---
+        # Update assign_areas to respect the mask if your function supports it,
+        # or pass only the sliced dataframe:
+        new_only_df = combined[mask_new].copy()
+        assigned_df = assign_areas(new_only_df, resolved_levels, progress=progress)
 
         # --- Incremental Walk & Zone Assignment ---
         teamsize = int(CElection.get('teamsize', 5)) if CElection else 5
-        mainframe = assign_walks_and_zones(
-            mainframe,
+        max_walk_size = CElection.get('walksize', 300)
+
+        assigned_df = assign_walks_and_zones(
+            assigned_df, # Only passing the newly imported/assigned electors
             teamsize,
             territory_path,
             resolved_levels,
             selprefix(current_election),
-            max_walk_size=300,
+            max_walk_size=max_walk_size,
             max_depth=10,
             progress=progress
         )
 
-        # --- Save updated electors (current election only) ---
-        electors.add_or_update(current_election, mainframe)
+        # --- Final Save ---
+        # Save the processed new data back to the manager
+        electors.add_or_update(current_election, assigned_df)
         electors.save()
-        mainframe.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
+
+        # Save to CSV (This will now ONLY contain the last import)
+        assigned_df.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
 
         # --- Stage 6: Mark complete ---
         update_progress(progress, "assign_walks", 1.0, "All stages complete.")
@@ -1198,7 +1227,7 @@ def reassign_parent():
         # Perform reassignment
         print(f"_____subject node : {subject_node.value} from oldparent{old_parent_node.value} to newparent {new_parent_node.value}")
         subject_node.set_parent(new_parent_node)
-        allelectors = electors.electors_for_node(old_parent_node)
+        allelectors = electors.elector_for_path(current_election,old_parent_node.mapfile())
         # Regenerate affected maps
         old_parent_node.create_area_map(rlevels, static=False)
         new_parent_node.create_area_map(rlevels, static=False)
@@ -1296,7 +1325,7 @@ def kanban():
     rlevels = CElection.resolved_levels
     session['current_node_id'] = current_node.nid
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, allelectors.shape, areaelectors.shape, CElection['mapfiles'][-1] )
     print("Sample of areaelectors:", areaelectors.head())
     print("Sample raw Tags values:")
@@ -1426,7 +1455,7 @@ def update_walk_kanban():
     rlevels = CElection.resolved_levels
     Territory_node = current_node.ping_node(rlevels,CElection['territory'], create=True, accumulate=False)
 
-    areaelectors = electors.electors_for_node(Territory_node)
+    areaelectors = electors.elector_for_path(current_election,Territory_node.mapfile())
 
 
     if not mask.any():
@@ -1449,7 +1478,7 @@ def telling():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     valid_tags = CElection['tags']
     leaflet_tags = {}
     marked_tags = {}
@@ -1477,7 +1506,7 @@ def leafletting():
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     valid_tags = CElection['tags']
     leaflet_tags = {}
     marked_tags = {}
@@ -1611,7 +1640,7 @@ def location_search():
     current_node = CElection.get_last_node(create=False)
 
     # 2. Get Data for this node
-    area_electors = electors.electors_for_node(current_node)
+    area_electors = electors.elector_for_path(current_election,current_node.mapfile())
 
     # 3. Get Params
     query = request.args.get("query", "").strip()
@@ -1654,7 +1683,7 @@ def search_api():
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
     current_node = CElection.get_last_node(create=False)
-    allelectors = electors.electors_for_node(current_node)
+    allelectors = electors.elector_for_path(current_election,current_node.mapfile())
 
     # SAFETY: Check if we have any data before proceeding
     if allelectors is None or allelectors.empty:
@@ -2726,7 +2755,7 @@ def downbut(path):
     session['current_election'] = current_election
     session['current_node_id'] = current_node.nid
     previous_node = current_node
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
@@ -2903,7 +2932,7 @@ def downMWbut(path):
     print (f"_________ROUTE/downMWbut1 CE {current_election}", current_node.value, path)
 
     previous_node = current_node
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
 
     # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     current_node = previous_node.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
@@ -2969,7 +2998,7 @@ def STupdate(path):
     print(f"Selected street node: {current_node.value} type: {current_node.type}")
 
     street_node = current_node
-    allelectors = electors_for_node(street_node)
+    allelectors = elector_for_path(current_election,street_node.mapfile())
     streetelectors = allelectors[mask]
 
 
@@ -3105,14 +3134,14 @@ def PDdownST(path):
     rlevels = CElection.resolved_levels
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     current_node = nodes.MapRoot.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
     PD_node = current_node
 
 # now pointing at the STREETS.html node containing a map of street markers
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     print(f"__PDdownST- lenPD {len(areaelectors)}")
     streetnodelist = PD_node.childrenoftype('street')
 
@@ -3161,7 +3190,7 @@ def PDdownST(path):
             print("That street node is outside of the election Territory:")
         persist(Treepolys, Fullpolys, Geo_index)
 
-        print (f"_________ROUTE/downPD at sendinf file:{fullpath}")
+        print (f"_________ROUTE/PDdownST at sendinf file:{fullpath}")
         return send_file(fullpath, as_attachment=False)
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])
@@ -3192,7 +3221,7 @@ def LGdownST(path):
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
     mask2 = areaelectors['PD'] == PD_node.value
     PDelectors = areaelectors[mask2]
     if request.method == 'GET':
@@ -3252,7 +3281,7 @@ def WKdownST(path):
 
     walk_node = current_node
 
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
 
 # if there is a selected file , then areaelectors will be full of records
     print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
@@ -3895,7 +3924,7 @@ def deactivate_election(election_name):
 
         territory_node = nodes.MapRoot.ping_node(rlevels,territory_path, create=False,accumulate=session.get("accumulate", False))
 
-        electors.delete_electors_for_node(nodelist=[territory_node], elections=election_name)
+        electors.delete_elector_for_path(election_name,territory_node.mapfile())
 
         electors.deactivate_election(election_name)  # Call the method to deactivate the election
         print(f"PRUNING {territory_node.value}")
@@ -4139,7 +4168,7 @@ def firstpage():
 
     resources = OPTIONS['resources']
     print('_______Node: ', current_node.value)
-    areaelectors = electors.electors_for_node(current_node)
+    areaelectors = electors.elector_for_path(c_election,current_node.mapfile())
     print('_______areaelectors size: ', len(areaelectors))
     print('_______resources: ', resources)
 

@@ -2,6 +2,7 @@ import pandas as pd
 import threading
 import os
 import logging
+import state
 from config import ELECTOR_FILE
 
 # ------------------------
@@ -25,8 +26,8 @@ shapecolumn = {
     "division": "Area",
     "constituency": "Constituency",
     "county": "County",
-    "nation": "County",
-    "country": "County"
+    "nation": "Nation",
+    "country": "Country"
 }
 
 
@@ -90,134 +91,128 @@ class ElectorManager:
     # Updated method ignoring election
     # -------------------------------
 
-    def electors_for_node(self, nodelist=None, elections=None):
-        """
-        Return electors matching nodes and/or elections.
-
-        Parameters:
-            nodelist (Node or list[Node], optional): Node(s) to filter.
-            elections (str or list[str], optional): Election name(s) to filter.
-
-        Returns:
-            pd.DataFrame: Matching electors. Returns all if both nodelist and elections are None.
-        """
-        with _lock:
-            # If nothing is provided, return all electors
-            if nodelist is None and elections is None:
-                return self._combined.copy() if not self._combined.empty else pd.DataFrame()
-
-            # Normalize nodelist to list
-            if nodelist is not None and not isinstance(nodelist, list):
-                nodelist = [nodelist]
-
-            # Normalize elections to list
-            if elections is None:
-                election_list = list(self._elections.keys())
-            elif isinstance(elections, str):
-                election_list = [elections]
-            else:
-                election_list = elections
-
-            frames = []
-
-            for ename in election_list:
-                df = self._elections.get(ename)
+    def elector_for_path(self, election_name, raw_path):
+            from elections import CurrentElection
+            with _lock:
+                # 1. Access the specific election data
+                df = self._elections.get(election_name)
                 if df is None or df.empty:
-                    continue
+                    return pd.DataFrame()
 
-                # If no nodes, just append the full election dataframe
-                if nodelist is None:
-                    frames.append(df)
-                    continue
+                # 2. Get the clean steps (e.g., ['UK', 'SPELTHORNE', 'ASHFORD'])
+                parts = state.stepify(raw_path)
+                if len(parts) < 2:
+                    return df.copy() # Return all if we are only at the root level
 
-                for node in nodelist:
-                    col = shapecolumn.get(node.type)
-                    if col is None or col not in df.columns:
-                        print(f"⚠️ Unknown or missing column for node type: {node.type} ")
+                CElection = CurrentElection.load(election_name)
+                levels_map = CElection.resolved_levels.get(election_name, {})
+
+                # 3. Start "sieving" level by level
+                filtered_df = df.copy()
+
+                # --- REFACTOR: Skip depth 0 (Country/Root) ---
+                for depth, value in enumerate(parts):
+                    if depth == 0:
                         continue
 
-                    # Determine key: either node value or election
-                    key = str(node.value).strip().upper() if getattr(node, "parent", None) else str(ename).upper()
-
-                    matched = df[df[col].astype(str).str.strip().str.upper() == key]
-                    if not matched.empty:
-                        frames.append(matched)
-
-            if frames:
-                result = pd.concat(frames, ignore_index=True)
-                print(f"[DEBUG] Total rows matched: {len(result)}")
-                return result
-            else:
-                print("[DEBUG] No matching rows found")
-                return pd.DataFrame()
-
-    def delete_electors_for_node(self, nodelist=None, elections=None):
-        """
-        Delete electors matching nodes and/or elections using shapecolumn logic.
-        """
-        with _lock:
-
-            if nodelist is None:
-                logger.warning("No node provided for deletion")
-                return
-
-            if not isinstance(nodelist, list):
-                nodelist = [nodelist]
-
-            if elections is None:
-                election_list = list(self._elections.keys())
-            elif isinstance(elections, str):
-                election_list = [elections]
-            else:
-                election_list = elections
-
-            total_deleted = 0
-
-            for ename in election_list:
-                df = self._elections.get(ename)
-                if df is None or df.empty:
-                    continue
-
-                original_len = len(df)
-
-                mask = pd.Series([False] * len(df))
-
-                for node in nodelist:
-                    col = shapecolumn.get(node.type)
-
-                    if col is None or col not in df.columns:
-                        logger.warning(f"Missing column for node type: {node.type}")
+                    node_type = levels_map.get(depth)
+                    if not node_type:
                         continue
 
-                    key = str(node.value).strip().upper()
+                    col = shapecolumn.get(node_type)
 
-                    match = df[col].astype(str).str.strip().str.upper() == key
+                    if col and col in filtered_df.columns:
+                        target_val = str(value).strip().upper()
 
-                    mask = mask | match  # combine conditions
+                        # Apply the filter for this specific level (e.g., Constituency, Ward)
+                        filtered_df = filtered_df[
+                            filtered_df[col].astype(str).str.strip().str.upper() == target_val
+                        ]
 
-                # ❗ KEEP rows that do NOT match (i.e. delete matches)
-                self._elections[ename] = df[~mask].copy()
+                        if filtered_df.empty:
+                            print(f"[DEBUG] Search died at Level {depth} ({node_type}: {target_val})")
+                            return pd.DataFrame()
 
-                deleted = original_len - len(self._elections[ename])
-                total_deleted += deleted
+                print(f"[DEBUG] Full Path Match: {len(filtered_df)} rows for {raw_path}")
+                return filtered_df.copy()
 
-                logger.debug(f"{deleted} rows deleted from election '{ename}'")
 
-            self.rebuild_combined()
-            self.save()
+    def delete_elector_for_path(self, election_name, raw_path):
+        from elections import CurrentElection
+        """
+        Deletes electors by intersecting levels Step 1 (Constituency) and below.
+        """
+        with _lock:
+            # 1. Access the specific election data
+            df = self._elections.get(election_name)
+            if df is None or df.empty:
+                logger.warning(f"No data found for election '{election_name}'")
+                return 0
 
-            logger.info(f"Total rows deleted: {total_deleted}")
+            # 2. Get the clean steps
+            parts = state.stepify(raw_path)
+            if len(parts) < 2:
+                logger.warning(f"Path too shallow for targeted deletion: {raw_path}")
+                return 0
+
+            # 3. Load mapping
+            CElection = CurrentElection.load(election_name)
+            levels_map = CElection.resolved_levels.get(election_name, {})
+            original_len = len(df)
+
+            # 4. Build the "Intersection Mask"
+            # Start by selecting everything, then narrow it down
+            path_mask = pd.Series([True] * len(df), index=df.index)
+
+            for depth, value in enumerate(parts):
+                # --- REFACTOR: Skip Country Level ---
+                if depth == 0:
+                    continue
+
+                node_type = levels_map.get(depth)
+                if not node_type:
+                    continue
+
+                col = shapecolumn.get(node_type)
+                if col and col in df.columns:
+                    target_val = str(value).strip().upper()
+
+                    # Boolean AND: narrowing the target area
+                    level_match = df[col].astype(str).str.strip().str.upper() == target_val
+                    path_mask = path_mask & level_match
+
+            # 5. Execute Deletion
+            # Check if we actually matched anything before re-assigning
+            if path_mask.any():
+                # Keep only what is NOT in the path_mask
+                self._elections[election_name] = df[~path_mask].copy()
+                deleted_count = original_len - len(self._elections[election_name])
+            else:
+                deleted_count = 0
+
+            if deleted_count > 0:
+                # 6. Housekeeping
+                self.rebuild_combined()
+                self.save()
+                logger.info(f"Deleted {deleted_count} electors from '{election_name}' for path: {raw_path}")
+            else:
+                logger.debug(f"No electors found to delete for path: {raw_path}")
+
+            return deleted_count
 
 
     def add_or_update(self, election, df: pd.DataFrame):
-        # Your existing method for adding or updating election data
+        """
+        Overwrites the current election data with the new provided DataFrame.
+        This prevents duplicate rows from accumulating.
+        """
         with _lock:
-            if election in self._elections:
-                self._elections[election] = pd.concat([self._elections[election], df], ignore_index=True)
-            else:
-                self._elections[election] = df.copy()
+            # ✅ SWAP: Direct assignment replaces the old data with the new data
+            self._elections[election] = df.copy()
+
             self.rebuild_combined()
             self.save()
+            logger.info(f"Election '{election}' updated. Current count: {len(df)}")
 
 
     def deactivate_election(self, election_name):

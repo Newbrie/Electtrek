@@ -202,38 +202,33 @@ class CurrentElection(dict):
 
     @classmethod
     def getstreamrag(cls, elections_dict, election_manager):
-        """
-        Build RAG status for all elections.
-
-        Args:
-            elections_dict: dict of {election_name: CurrentElection_instance}
-            election_manager: instance of ElectionManager, to get loaded elector data
-
-        Returns:
-            dict: { election_name: {Alive, Loaded, Elect, RAG} }
-        """
-
         rag = {}
 
         for name, election in elections_dict.items():
-
-            # Alive: stream_processing exists and has files
+            # 1. Alive check
             alive = bool(
                 election.stream_processing
                 and election.stream_processing.get("files")
             )
 
-            # Loaded: check ElectionManager
-            data = election_manager.get(name)
-            loaded = not data.empty
-            elect_count = len(data) if loaded else 0
+            # 2. Access the manager's internal election dict
+            # Adjust '_elections' to whatever your ElectorManager uses to store DFs
+            data = getattr(election_manager, '_elections', {}).get(name)
 
-            # Determine RAG color
+            # 3. Accurate Loaded/Count check
+            if data is not None and not data.empty:
+                loaded = True
+                elect_count = len(data)
+            else:
+                loaded = False
+                elect_count = 0
+
+            # 4. RAG Logic
             if alive and loaded:
                 colour = "limegreen"
             elif alive and not loaded:
                 colour = "yellow"
-            else:  # not alive
+            else:
                 colour = "red"
 
             rag[name] = {
@@ -244,7 +239,6 @@ class CurrentElection(dict):
             }
 
         return rag
-
 
 
     def add_breadcrumb(self, item):

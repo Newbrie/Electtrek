@@ -42,17 +42,28 @@ def classify_namecolumn(series):
 
 def NormaliseName(df):
     df = df.copy()
+
+    # --- FIX START: Sanitize columns to strings to prevent Boolean/None addition errors ---
+    for col in ['Firstname', 'Surname', 'Initials']:
+        if col in df.columns:
+            df[col] = df[col].fillna('').astype(str)
+    # --- FIX END ---
+
     if 'ElectorName' not in df.columns:
         if 'Initials' not in df.columns:
-            df['ElectorName'] = df['Firstname']+" "+df['Surname']
+            # This line used to crash; now it's safe because of the sanitize block above
+            df['ElectorName'] = df['Firstname'] + " " + df['Surname']
             df['ElectorName_Normalized'] = df['ElectorName']
         else:
-            df['ElectorName'] = df['Firstname']+" "+df['Initials']+" "+df['Surname']
+            # Safe now
+            df['ElectorName'] = df['Firstname'] + " " + df['Initials'] + " " + df['Surname']
             df['ElectorName_Normalized'] = df['ElectorName']
     else:
         # Step 1: Split and extract initials
-        parts = df['ElectorName'].dropna().apply(lambda x: x.strip().split())
+        # Use fillna here too just in case ElectorName has nulls
+        parts = df['ElectorName'].fillna('').astype(str).apply(lambda x: x.strip().split())
         processed = parts.apply(lambda x: extract_initials(x))
+
         df['Initials'] = processed.apply(lambda x: x[1])
         df['part1'] = processed.apply(lambda x: x[0][0] if len(x[0]) > 0 else None)
         df['part2'] = processed.apply(lambda x: x[0][1] if len(x[0]) > 1 else None)
@@ -195,17 +206,16 @@ def checkForeName(data):
 
 
 def checkENOP(data):
-    pattern = r"([A-Za-z0-9]+)-(\d+)(?:/(\d+))?"
+    # Updated pattern to allow brackets in the PD prefix
+    pattern = r"([A-Za-z0-9\(\)]+)-(\d+)(?:[./](\d+))?"
+
     datamax = data.shape[0]
     for col in data.columns:
-        i = 0
-        for row in data[col]:
-            match = re.match(pattern, str(row))
-            print("value ", str(row), i, match)
-            if match :
-                i = i+1
-                if i > 0.95*(datamax) :
-                    return col
+        # Optimization: Only check string/object columns
+        if data[col].dtype == 'object':
+            matches = data[col].astype(str).str.match(pattern).sum()
+            if matches > 0.95 * datamax:
+                return col
     return None
 
 
@@ -215,15 +225,22 @@ def classify_column(series):
     Supports ENOP, ENOT, ENOS, ENO, PD, and Suffix.
     """
     series = series.dropna().astype(str).str.strip()
-
     patterns = {
-        'ENOP': r'^[A-Za-z]+\d+-\d+[./]\d+$',  # e.g. PD123-456/7 or PD123-456.7
-        'ENOT': r'^[A-Za-z]+\d+-\d+$',         # e.g. PD123-456
-        'ENOS': r'^\d+(?:[./]\d+)?$',               # e.g. 1234/2 or 1234.2
-        'ENO':  r'^[1-9]\d*$',                 # e.g. 1234
-        'PD':   r'^[A-Za-z]+\d+$',             # e.g. PD123
-        'Suffix': r'^[1-9]\d*$',               # e.g. 2
-    }
+            # Allows brackets in the prefix: e.g., (WA)123-456/7 or PD(2)123-456.7
+            'ENOP': r'^[A-Za-z\(\)\d]+-\d+[./]\d+$',
+
+            # Allows brackets in the prefix: e.g., (WA)123-456
+            'ENOT': r'^[A-Za-z\(\)\d]+-\d+$',
+
+            'ENOS': r'^\d+(?:[./]\d+)?$',
+            'ENO':  r'^[1-9]\d*$',
+
+            # Updated PD: Allows letters, numbers, and brackets anywhere
+            # e.g., PD123, PD(A)1, (WA)12
+            'PD':   r'^[A-Za-z0-9\(\)]+$',
+
+            'Suffix': r'^[1-9]\d*$',
+        }
 
     preferred_order = ['ENOP', 'ENOT', 'ENOS', 'ENO', 'PD', 'Suffix']
     best_label = 'Unknown'
@@ -238,7 +255,63 @@ def classify_column(series):
 
     return best_label if best_ratio >= 0.5 else 'Unknown'
 
+def normalise_eno_column(df):
+    df = df.copy()
 
+    # ... [Keep your classification_map logic as is] ...
+
+    if 'ENO' not in df.columns or 'PD' not in df.columns:
+        eno_source_col = None
+        source_label = None
+        for col, label in classification_map.items():
+            if label in {'ENOT', 'ENOP', 'ENOS'}:
+                eno_source_col = col
+                source_label = label
+                break
+
+        if eno_source_col:
+            parse_series = df[eno_source_col].astype(str).str.strip().str.replace('/', '.', regex=False)
+
+            if source_label in {'ENOT', 'ENOP'}:
+                # --- REFACTOR: Support brackets in the PD prefix ---
+                # We look for everything before the first hyphen as the PD
+                df['PD'] = parse_series.str.extract(r'^([A-Za-z0-9\(\)]+)-')[0]
+
+                # Extract ENO (numbers immediately following the hyphen)
+                df['ENO'] = parse_series.str.extract(r'-([1-9][0-9]*)')[0]
+
+                # Extract Suffix (numbers after the dot)
+                df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
+
+            elif source_label == 'ENOS':
+                df['ENO'] = parse_series.str.extract(r'^(\d+)')[0]
+                df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
+                df['Suffix'] = df['Suffix'].fillna(0)
+
+            # ... [Keep numeric coercion logic] ...
+
+    # Final cleanup (handling the suffix future warning)
+    df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce').fillna(0).astype(int)
+
+    # Derive ENOT/ENOP using the same sanitized string logic we used for Names
+    df['ENOT'] = None
+    valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
+    if valid_enot_mask.any():
+        df.loc[valid_enot_mask, 'ENOT'] = (
+            df.loc[valid_enot_mask, 'PD'].astype(str) +
+            '-' +
+            df.loc[valid_enot_mask, 'ENO'].astype(float).astype(int).astype(str)
+        )
+
+    df['ENOP'] = df['ENOT']
+    if valid_enot_mask.any():
+        df.loc[valid_enot_mask, 'ENOP'] = (
+            df.loc[valid_enot_mask, 'ENOT'] +
+            '.' +
+            df.loc[valid_enot_mask, 'Suffix'].astype(int).astype(str)
+        )
+
+    return df
 def normalise_eno_column(df):
     """
     Normalize and derive PD, ENO, Suffix, ENOT, and ENOP from potentially ambiguous columns.
@@ -260,7 +333,8 @@ def normalise_eno_column(df):
         if label in {'PD', 'ENO', 'Suffix'} and label not in df.columns:
             df.rename(columns={col: label}, inplace=True)
 
-    # Use ENOT/ENOP/ENOS to parse if PD or ENO missing
+    # ... [Keep your classification_map logic as is] ...
+
     if 'ENO' not in df.columns or 'PD' not in df.columns:
         eno_source_col = None
         source_label = None
@@ -274,8 +348,14 @@ def normalise_eno_column(df):
             parse_series = df[eno_source_col].astype(str).str.strip().str.replace('/', '.', regex=False)
 
             if source_label in {'ENOT', 'ENOP'}:
-                df['PD'] = parse_series.str.extract(r'^([A-Za-z]+[0-9]+)-')[0]
+                # --- REFACTOR: Support brackets in the PD prefix ---
+                # We look for everything before the first hyphen as the PD
+                df['PD'] = parse_series.str.extract(r'^([A-Za-z0-9\(\)]+)-')[0]
+
+                # Extract ENO (numbers immediately following the hyphen)
                 df['ENO'] = parse_series.str.extract(r'-([1-9][0-9]*)')[0]
+
+                # Extract Suffix (numbers after the dot)
                 df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
 
             elif source_label == 'ENOS':
@@ -283,32 +363,31 @@ def normalise_eno_column(df):
                 df['Suffix'] = parse_series.str.extract(r'\.(\d+)$')[0]
                 df['Suffix'] = df['Suffix'].fillna(0)
 
-            # Coerce numeric
-            df['ENO'] = pd.to_numeric(df['ENO'], errors='coerce')
-            df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce')
+            # ... [Keep numeric coercion logic] ...
 
-            df.loc[df['ENO'] <= 0, 'ENO'] = None
-            df.loc[df['Suffix'] < 0, 'Suffix'] = None
-
-    # Ensure suffix is numeric and default to 0 if missing
+    # Final cleanup (handling the suffix future warning)
     df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce').fillna(0).astype(int)
 
-    # Derive ENOT
+    # Derive ENOT/ENOP using the same sanitized string logic we used for Names
     df['ENOT'] = None
     valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
-    df.loc[valid_enot_mask, 'ENOT'] = (
-        df.loc[valid_enot_mask, 'PD'].astype(str) + '-' + df.loc[valid_enot_mask, 'ENO'].astype(int).astype(str)
-    )
+    if valid_enot_mask.any():
+        df.loc[valid_enot_mask, 'ENOT'] = (
+            df.loc[valid_enot_mask, 'PD'].astype(str) +
+            '-' +
+            df.loc[valid_enot_mask, 'ENO'].astype(float).astype(int).astype(str)
+        )
 
-    # Derive ENOP (always include suffix, default 0)
     df['ENOP'] = df['ENOT']
-    valid_enop_mask = valid_enot_mask
-    df.loc[valid_enop_mask, 'ENOP'] = (
-        df.loc[valid_enop_mask, 'ENOT'] + '.' + df.loc[valid_enop_mask, 'Suffix'].astype(str)
-    )
-
+    if valid_enot_mask.any():
+        df.loc[valid_enot_mask, 'ENOP'] = (
+            df.loc[valid_enot_mask, 'ENOT'] +
+            '.' +
+            df.loc[valid_enot_mask, 'Suffix'].astype(int).astype(str)
+        )
 
     return df
+
 
 def contactDetails(df):
     # Allowed statuses

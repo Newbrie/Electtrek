@@ -154,104 +154,162 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 def build_street_list_html(streets_df, street_stats):
     from state import VID
 
-    html = '''
-    <div style="
-        border: 2px solid #002b5c;
-        border-radius: 8px;
-        padding: 14px;
-        background-color: #003366;
-        color: #ffffff;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-        max-width: 720px;
-        overflow-x: auto;
-        font-family: Arial, Helvetica, sans-serif;
-        font-weight: 600;
-        font-size: 8pt;
-        white-space: nowrap;
-    ">
-        <table style="border-collapse: collapse; width: 100%;">
-            <thead>
-                <tr style="background-color:#001f3f;">
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Street Name</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Total</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Range</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Unit</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">VI</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffffff;">Votes</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffcc00;">Gaps</th>
-                </tr>
-            </thead>
-            <tbody>
+    # --- THE INJECTION: JavaScript Persistence Engine ---
+    # --- THE INJECTION: JavaScript Persistence Engine ---
+    persistence_js = r'''
+    <script>
+    // This variable is the "Ledger" - it gets overwritten during 'Baking'
+    let BAKED_DATA = {};
+
+    function loadHouseData(selectElement) {
+        const row = selectElement.closest('.canvass-row');
+        if (!row) return;
+        const street = row.getAttribute('data-street');
+        const house = selectElement.value;
+        const record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+
+        const viSelector = row.querySelector('.vi-selector');
+        const btn = row.querySelector('.vote-btn');
+
+        if (record) {
+            viSelector.value = record.vi;
+            btn.setAttribute('data-count', record.votes);
+            btn.innerText = record.votes + '/' + btn.getAttribute('data-max');
+        } else {
+            viSelector.selectedIndex = 0;
+            btn.setAttribute('data-count', '0');
+            btn.innerText = '0/' + btn.getAttribute('data-max');
+        }
+    }
+
+    function deployUpdate() {
+        // 1. Scrape current UI state into BAKED_DATA
+        document.querySelectorAll('.canvass-row').forEach(row => {
+            const street = row.getAttribute('data-street');
+            const house = row.querySelector('.unit-selector').value;
+            const vi = row.querySelector('.vi-selector').value;
+            const votes = row.querySelector('.vote-btn').getAttribute('data-count');
+
+            if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+            BAKED_DATA[street][house] = { vi, votes, ts: Date.now() };
+        });
+
+        // 2. Serialize and Replace
+        const jsonString = JSON.stringify(BAKED_DATA);
+        let fullHtml = document.documentElement.outerHTML;
+
+        // This regex finds the variable and swaps it for the new JSON string
+        const newHtml = fullHtml.replace(/let BAKED_DATA = \{.*?\};/, 'let BAKED_DATA = ' + jsonString + ';');
+
+        // 3. Trigger Download
+        const blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = "Canvass_Sheet_Updated.html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    function updateMaxVote(selectElement) {
+        const row = selectElement.closest('.canvass-row');
+        const max = selectElement.options[selectElement.selectedIndex].getAttribute('data-max') || 1;
+        const btn = row.querySelector('.vote-btn');
+        btn.setAttribute('data-max', max);
+    }
+
+    function incrementVoteCount(btn) {
+        let count = parseInt(btn.getAttribute('data-count')) || 0;
+        let max = parseInt(btn.getAttribute('data-max')) || 1;
+        count = (count + 1) > max ? 0 : count + 1;
+        btn.setAttribute('data-count', count);
+        btn.innerText = count + '/' + max;
+    }
+
+    window.addEventListener('load', () => {
+        document.querySelectorAll('.unit-selector').forEach(sel => loadHouseData(sel));
+    });
+    <\/script>
+    '''
+
+    # --- THE UI: Control Panel ---
+    html = persistence_js + '''
+    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
+        <button onclick="deployUpdate()" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+            💾 Save & Deploy New File
+        </button>
+        <span style="color:#00aaff; font-size:8pt; align-self:center;">
+            Data is stored inside the HTML file itself.
+        </span>
+    </div>
+    '''
+
+    # --- THE UI: Table Header ---
+    html += '''
+        <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 720px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
+            <table style="border-collapse: collapse; width: 100%;">
+                <thead>
+                    <tr style="background-color:#001f3f;">
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street Name</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
+                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff;">Unit</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Votes</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffcc00;">Gaps</th>
+                    </tr>
+                </thead>
+                <tbody>
     '''
 
     for i, (street_name, data) in enumerate(street_stats.items()):
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
         hos = data.get("houses", 0)
-
-        # Range display
-        if data.get("min_num") is not None:
-            num_display = f"({data['min_num']} - {data['max_num']})"
-        else:
-            num_display = "( - )"
-
-        # Count of gaps
+        num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
 
         # Unit dropdown
         unit_dropdown = f'''
-        <select onchange="updateMaxVote(this)"
-                style="width:100%; font-size:9pt; padding:3px;
-                       background:#e6f2ff; color:#001f3f;
-                       border:1px solid #007acc;">
+        <select class="unit-selector" onchange="updateMaxVote(this); loadHouseData(this);"
+                style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
         '''
 
         # VI select
-        vi_select = '<select style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">' + \
-                    ''.join(f'<option value="{key}">{value}</option>' for key, value in VID.items()) + '</select>'
+        vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
+        vi_select = f'''
+        <select class="vi-selector" style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
+            {vi_options}
+        </select>
+        '''
 
         # Vote button
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
         vote_button = f'''
-        <button onclick="incrementVoteCount(this)"
-                data-count="0"
-                data-max="{max_votes}"
-                style="
-                    font-size:9pt;
-                    padding:4px 8px;
-                    background:#00aaff;
-                    color:#ffffff;
-                    border:none;
-                    border-radius:4px;
-                    font-weight:bold;
-                    cursor:pointer;">
+        <button class="vote-btn" onclick="incrementVoteCount(this)" data-count="0" data-max="{max_votes}"
+                style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
             0/{max_votes}
         </button>
         '''
 
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
-        # Wrap street_name in <b data-name> for search
         html += f'''
-        <tr class="{row_class}">
+        <tr class="{row_class} canvass-row" data-street="{street_name}">
             <td style="padding:8px;"><b data-name="{street_name}">{street_name}</b></td>
-            <td style="padding:8px;"><i>{hos}</i></td>
-            <td style="padding:8px;">{num_display}</td>
-            <td style="padding:8px;">{unit_dropdown}</td>
+            <td style="padding:8px; font-size:7pt;"><i>{hos}</i></td>
+            <td style="padding:8px; font-size:7pt;">{num_display}</td>
+            <td style="padding:8px; width:60px;">{unit_dropdown}</td>
             <td style="padding:8px;">{vi_select}</td>
             <td style="padding:8px;">{vote_button}</td>
             <td style="padding:8px; color:#ffcc00;">{house_gaps_display}</td>
         </tr>
         '''
 
-    html += '''
-            </tbody>
-        </table>
-    </div>
-    '''
+    html += "</tbody></table></div>"
     return html
 #---------------------
 # Helper for node electors
@@ -488,6 +546,19 @@ class ExtendedFeatureGroup(FeatureGroup):
         import pandas as pd
         import folium
         from elector import electors  # your ElectorManager instance
+        zonecolour = {
+            "ZONE_0": "#1A1A1B",  # Deep Charcoal (Better than pure black)
+            "ZONE_1": "#E63946",  # Vibrant Red
+            "ZONE_2": "#2A9D8F",  # Deep Teal (Cleaner than Lime)
+            "ZONE_3": "#0077B6",  # Sapphire Blue
+            "ZONE_4": "#2D6A4F",  # Hunter Green
+            "ZONE_5": "#00B4D8",  # Sky Blue
+            "ZONE_6": "#7209B7",  # Deep Royal Purple
+            "ZONE_7": "#FB8500",  # Vivid Orange
+            "ZONE_8": "#B5179E",  # Deep Pink/Magenta
+            "ZONE_9": "#6F4E37",  # Coffee Brown
+            "ZONE_10": "#4A4E69"  # Slate Blue-Gray
+        }
 
 
         # Guard: Ensure we have exactly one election to unpack
@@ -500,6 +571,20 @@ class ExtendedFeatureGroup(FeatureGroup):
         pfile = Treepolys[elevels[node.level]]
         Territory_boundary = pfile[pfile['FID'] == int(node.fid)]
         node.geometry = Territory_boundary.union_all()
+
+        # --- Parent boundary logic ---
+        parent_boundary = node.geometry
+        if parent_boundary is None:
+            print("⚠️ Parent boundary missing")
+            return
+
+        # Ensure it's valid
+        if not parent_boundary.is_valid:
+            parent_boundary = parent_boundary.buffer(0)
+
+        # CREATE A CALCULATION HULL
+        # This bridges the islands so geovoronoi treats all 61 points as one set
+        calc_hull = parent_boundary.convex_hull
 
         children = node.childrenoftype(elevels[node.level+1])
         if not children:
@@ -516,7 +601,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         child_elector_map = {}
 
         for child in children:
-            child_elector_map[child] = electors.electors_for_node(child)
+            child_elector_map[child] = electors.elector_for_path(c_election,child.mapfile())
             if child.latlongroid and len(child.latlongroid) == 2:
                 child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
             else:
@@ -571,7 +656,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             point_to_child_fixed[new_pt] = point_to_child.get(
                 (round(pt[0], 6), round(pt[1], 6))
             )
-
+        print(f"DEBUG: N273 in point_to_child? {'Yes' if any(c.value == 'N273' for c in point_to_child.values()) else 'NO'}")
+        print(f"DEBUG: Number of unique points: {len(set(fixed_points))} out of {len(fixed_points)}")
         coords = np.array(fixed_points)
         point_to_child = point_to_child_fixed  # overwrite mapping
         # -------------------------------------------------
@@ -587,15 +673,16 @@ class ExtendedFeatureGroup(FeatureGroup):
             print(f"⚠️ Fixing invalid geometry for {self.name} using buffer(0)")
             parent_boundary = parent_boundary.buffer(0)
 
-        region_polys, region_pts = voronoi_regions_from_coords(coords, parent_boundary)
+        # Generate Voronoi using the Hull to prevent the "1 point in geometry" error
+        region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
 
-        print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons")
+        print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons using Convex Hull")
 
         # -------------------------------------------------
         # Load electors
         # -------------------------------------------------
 
-        nodeelectors = electors.electors_for_node(node)
+        nodeelectors = electors.elector_for_path(c_election,node.mapfile())
 
         if nodeelectors is None or nodeelectors.empty:
             print("DEBUG ELECTORS: ⚠️ No electors for node")
@@ -618,7 +705,15 @@ class ExtendedFeatureGroup(FeatureGroup):
         # -------------------------------------------------
 
         for region_id, poly in region_polys.items():
+            # ✂️ COOKIE CUTTER STEP
+            # Intersect the Voronoi region with the ACTUAL multipolygon boundary
+            actual_shape_poly = poly.intersection(parent_boundary)
 
+            if actual_shape_poly.is_empty:
+                continue
+
+            # 🔑 CRITICAL: Use 'actual_shape_poly' for your GeoJson, NOT 'poly'
+            # From here on, replace 'poly' with 'actual_shape_poly' in your Folium code
             total_regions += 1
             print(f"DEBUG REGION: Processing region {region_id}")
 
@@ -643,7 +738,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             print(f"DEBUG MATCH: Matched child {child.value}")
 
-            child.voronoi_region = poly
+            child.voronoi_region = actual_shape_poly
 
             # -------------------------
             # Electors
@@ -703,8 +798,22 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
             # Preprocess street data
             # -------------------------
+# -------------------------
+            # Preprocess street data
+            # -------------------------
             street_stats, house_count = preprocess_streets(region_electors)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
+
+            # --- NEW COLOR LOGIC ---
+            # Get the Zone from the first elector in this region
+            if not region_electors.empty:
+                # Assuming 'Zone' is a column in your region_electors dataframe
+                actual_zone = region_electors.iloc[0]['Zone']
+                # Use your zonecolour dictionary (ensure it's accessible in this scope)
+                region_color = zonecolour.get(actual_zone, 'black')
+            else:
+                region_color = 'black'
+            # -----------------------
 
             # Build tooltip
             tooltip_html = f"""
@@ -718,32 +827,30 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Build popup
             street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
 
+            # Update the style to use the NEW region_color
             style = {
-                    "fillColor": getattr(child, "defcol", "#3388ff") or "#3388ff",
-                    "color": "white",
-                    "weight": 2,
-                    "fillOpacity": 0.5,
-                }
+                "fillColor": region_color,  # Driven by elector Zone, not child.defcol
+                "color": "white",
+                "weight": 1,
+                "fillOpacity": 0.6,
+            }
 
             # -------------------------
             # Polygon (with tooltip only)
             # -------------------------
             try:
+                # Ensure we are passing a clean geometry
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
+                geojson_data = actual_shape_poly.__geo_interface__
 
                 gj = folium.GeoJson(
-                    poly.__geo_interface__,
-                    style_function=lambda x, s=style: s
+                    geojson_data,
+                    style_function=lambda x, s=style: s,
+                    # Move the tooltip INTO the GeoJson constructor
+                    tooltip=folium.Tooltip(tooltip_html, sticky=True)
                 )
 
-                # Tooltip stays on the polygon
-                folium.Tooltip(
-                    tooltip_html,
-                    sticky=True,
-                    interactive=False
-                ).add_to(gj)
-
-                # Add polygon to the map (no popup)
+                # Add to map
                 gj.add_to(self)
                 print(f"DEBUG LAYER: Children before add {len(self._children)}")
                 polygons_added += 1
@@ -757,9 +864,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Marker (with popup only)
             # -------------------------
             try:
-                centre = poly.point_on_surface()
+                centre = actual_shape_poly.point_on_surface()
                 tag = child.value
-                fcol = getattr(child, "defcol", "#cccccc")
+                fcol = region_color
 
                 mapfile = url_for("transfer", path=f"{child.dir}/{child.file(elevels)}")
 

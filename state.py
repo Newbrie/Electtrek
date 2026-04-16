@@ -79,36 +79,35 @@ def stepify(path):
 
 def normalname(name):
     def clean(s):
-        if not isinstance(s, str):
-            return s
+        if pd.isna(s):
+            return ""
 
+        s = str(s)
         s = s.replace(" & ", " AND ")
 
-        # ✅ KEEP underscores
-        s = re.sub(r"[^A-Za-z0-9 _]+", "", s)
+        # ✅ Added \( and \) to the "allow" list
+        s = re.sub(r"[^A-Za-z0-9 _\(\)]+", "", s)
 
-        # normalize whitespace
+        # Normalize whitespace
         s = re.sub(r"\s+", " ", s).strip()
 
-        # convert spaces to underscores
+        # Convert spaces to underscores
         s = s.replace(" ", "_")
 
-        # remove duplicate underscores
+        # Remove duplicate underscores
         s = re.sub(r"_+", "_", s)
 
-        # remove leading/trailing underscores
+        # Remove leading/trailing underscores
         s = s.strip("_")
 
         return s.upper().removesuffix("_ED")
 
-    if isinstance(name, str):
+    if isinstance(name, (str, bool, int, float)) or name is None:
         return clean(name)
-
     elif isinstance(name, pd.Series):
-        return name.apply(clean)
-
+        return name.fillna("").astype(str).apply(clean)
     else:
-        print("______ERROR: Can only normalise name in a string or series")
+        print(f"______ERROR: Unsupported type {type(name)}")
         return name
 
 

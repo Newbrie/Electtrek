@@ -1376,7 +1376,7 @@ class TreeNode:
         # -------------------------------------------------
 
         totalleaf = 0
-        if self.level < 5:
+        if self.level < 6:
             grandchild_layer = get_safe_layer(self.level + 2)
             if grandchild_layer:
                 # Determine childnodelist
@@ -1396,7 +1396,7 @@ class TreeNode:
         # 1️⃣ Handle the Child Layer (Level + 1)
         # -------------------------------------------------
 
-        if self.level < 4:
+        if self.level < 6:
             child_layer = get_safe_layer(self.level + 1)
             if child_layer:
                 # Determine childnodelist
@@ -1646,12 +1646,6 @@ class TreeNode:
 
 
     def create_name_nodes(self,resolved_levels,gotv_pct,nodetype,namepoints,ending):
-        zonecolour = {
-            "ZONE_0": "black", "ZONE_1": "red", "ZONE_2": "lime",
-            "ZONE_3": "blue", "ZONE_4": "yellow", "ZONE_5": "cyan",
-            "ZONE_6": "magenta", "ZONE_7": "orange", "ZONE_8": "purple",
-            "ZONE_9": "brown", "ZONE_10": "gray"
-        }
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
@@ -1712,8 +1706,6 @@ class TreeNode:
                 lat + delta
             ]
 
-            egg.defcol = zonecolour.get(limb['Zone'], 'black')
-
             egg.updateTurnout(elevels)
             egg.updateElectorate(elevels)
             egg.updateGOTV(gotv_pct, elevels)
@@ -1760,7 +1752,7 @@ class TreeNode:
         # ----------------------------------------
         # Load electors from ElectorManager
         # ----------------------------------------
-        areaelectors = electors.electors_for_node(self)
+        areaelectors = electors.elector_for_path(c_election,self.mapfile())
 
 
         if areaelectors.empty:
@@ -1770,12 +1762,12 @@ class TreeNode:
 
         gotv_pct = CE['GOTV']
 
+        # -------------------------------
+        # Refactored node elector processing
+        # -------------------------------
         try:
-
-                # Mapping of node type to column name in areaelectors
             from elector import shapecolumn
 
-            # Optional mapping for output suffix per type
             suffix_mapping = {
                 "polling_district": "-PDS.html",
                 "walk": "-WALKS.html",
@@ -1783,28 +1775,26 @@ class TreeNode:
                 "walkleg": "-PRINT.html"
             }
 
-            # -------------------------------
-            # Refactored node elector processing
-            # -------------------------------
             if electtype in shapecolumn:
                 colname = shapecolumn[electtype]
-                df = areaelectors.copy()
 
-                # Special filtering for street and walkleg types
-                if electtype == "street":
-                    df = df[df['PD'] == self.value]
-                elif electtype == "walkleg":
-                    df = df[df['WalkName'] == self.value]
+                # We rename the 'electtype' column to 'Name' for the groupby
+                # Note: No manual if/elif filtering needed here anymore!
 
-                # Select relevant columns
                 select_cols = [colname, 'ENOP', 'Long', 'Lat', 'Zone']
-                df = df[select_cols].rename(columns={colname: 'Name'})
+                # Only grab columns that actually exist in this specific CSV
+                existing_cols = [c for c in select_cols if c in areaelectors.columns]
 
-                # Aggregation dictionary
-                agg_dict = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count', 'Zone': 'first'}
+                df = areaelectors[existing_cols].rename(columns={colname: 'Name'})
+
+                # Aggregation
+                agg_dict = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count'}
+                if 'Zone' in df.columns:
+                    agg_dict['Zone'] = 'first'
+
                 nodeelectors = df.groupby(['Name']).agg(agg_dict).reset_index()
 
-                # Call the node creation function
+                # Node creation
                 nodelist = self.create_name_nodes(
                     resolved_levels,
                     gotv_pct,

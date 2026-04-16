@@ -471,36 +471,57 @@ function removeTag(electorId, tag) {
   }).then(() => location.reload());
 }
 
-function incrementVoteCount(button) {
-    let count = parseInt(button.getAttribute("data-count")) || 0;
-    let max = parseInt(button.getAttribute("data-max")) || 1;
-    count = (count + 1) % (max + 1);
-    button.setAttribute("data-count", count);
-    button.innerText = count + "/" + max;
+/**
+ * Updates the max vote count on the button when the house (unit) selection changes.
+ * This prevents assigning 5 votes to a house that only has 1 elector.
+ */
+function updateMaxVote(selectElement) {
+    const row = selectElement.closest('.canvass-row');
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    const maxVotes = selectedOption.getAttribute('data-max') || 1;
 
-    const row = button.closest("tr");
-    row.style.backgroundColor = count > 0 ? "#d4edda" : "";
+    const btn = row.querySelector('.vote-btn');
+
+    // Update the button's internal limit
+    btn.setAttribute('data-max', maxVotes);
+
+    // Reset the current count to 0 if the house changes (prevents carry-over errors)
+    btn.setAttribute('data-count', '0');
+    btn.innerText = `0/${maxVotes}`;
+
+    // Reset the VI selector for the new house (will be overwritten if baked data exists)
+    const viSelector = row.querySelector('.vi-selector');
+    viSelector.selectedIndex = 0;
 }
 
+/**
+ * Increments the vote count on click, up to the maximum allowed for that house.
+ * Clicking again after reaching max will reset it to 0.
+ */
+function incrementVoteCount(btn) {
+    let count = parseInt(btn.getAttribute('data-count')) || 0;
+    const max = parseInt(btn.getAttribute('data-max')) || 1;
 
-function updateMaxVote(selectElement) {
-  const selectedUnit = selectElement.value;
-  const row = selectElement.closest('tr');
-  const bTag = row.querySelector('b[data-unit-counts]');
-  const voteBtn = row.querySelector('button');
+    count++;
 
-  if (!bTag || !voteBtn) return;
+    // Loop back to zero if we exceed the number of electors in the house
+    if (count > max) {
+        count = 0;
+    }
 
-  const unitCounts = JSON.parse(bTag.dataset.unitCounts || '{}');
-  const max = unitCounts[selectedUnit] || 1;
+    btn.setAttribute('data-count', count);
+    btn.innerText = `${count}/${max}`;
 
-  // Reset count when unit changes
-  voteBtn.dataset.count = 0;
-  voteBtn.dataset.max = max;
-  voteBtn.innerText = `0/${max}`;
-
-  // Also reset background color
-  row.style.backgroundColor = "";
+    // Optional: Visual feedback if max is reached
+    if (count == max && max > 0) {
+        btn.style.background = "#28a745"; // Success Green
+    } else if (count > 0) {
+        btn.style.background = "#ffcc00"; // Pending Yellow
+        btn.style.color = "#001f3f";
+    } else {
+        btn.style.background = "#00aaff"; // Default Blue
+        btn.style.color = "#ffffff";
+    }
 }
 
 window.highlightLozenge = function highlightLozenge(loz) {
