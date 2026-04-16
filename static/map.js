@@ -62,29 +62,43 @@ var loadHouseData = function(selectElement) {
 
 // CHANGE: We add 'doc' parameter so the map can "see" the popup's table
 var deployUpdate = function(doc) {
-    var targetDoc = doc || document; // Use popup doc if provided, else main doc
-    targetDoc.querySelectorAll('.canvass-row').forEach(function(row) {
-        var street = row.getAttribute('data-street');
-        var house = row.querySelector('.unit-selector').value;
-        var vi = row.querySelector('.vi-selector').value;
-        var votes = row.querySelector('.vote-btn').getAttribute('data-count');
-        if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-        BAKED_DATA[street][house] = { vi: vi, votes: votes, ts: Date.now() };
-    });
+    // 1. Scrape the current popup data into our global ledger
+    if (doc) {
+        doc.querySelectorAll('.canvass-row').forEach(function(row) {
+            var street = row.getAttribute('data-street');
+            var house = row.querySelector('.unit-selector').value;
+            var vi = row.querySelector('.vi-selector').value;
+            var votes = row.querySelector('.vote-btn').getAttribute('data-count');
 
+            if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+            BAKED_DATA[street][house] = { vi: vi, votes: votes, ts: Date.now() };
+        });
+    }
+
+    // 2. Prepare the new "database" string
     var jsonString = JSON.stringify(BAKED_DATA);
+
+    // 3. Get the "Blueprint" of the current map
     var fullHtml = document.documentElement.outerHTML;
 
-    // Regex remains the same
-    var newHtml = fullHtml.replace(/var BAKED_DATA = BAKED_DATA \|\| \{.*?\};/, 'var BAKED_DATA = ' + jsonString + ';');
+    // 4. THE DEPLOYMENT: Swap the empty object for the full data object
+    // This regex targets the specific anchor line in your script
+    var newHtml = fullHtml.replace(/var BAKED_DATA = \{.*?\};/, 'var BAKED_DATA = ' + jsonString + ';');
 
+    // 5. Generate the physical file
     var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = "Canvass_Sheet_Updated.html";
+
+    // Create a timestamped filename so you don't overwrite blindly
+    var date = new Date().toISOString().slice(0,10);
+    a.download = "Canvass_Deployed_" + date + ".html";
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
+    alert("Deployment successful! Open the downloaded file to see updated data.");
 };
 
 var incrementVoteCount = function(btn) {
