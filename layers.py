@@ -158,10 +158,17 @@ def build_street_list_html(streets_df, street_stats):
     # --- THE INJECTION: JavaScript Persistence Engine ---
     persistence_js = '''
         <script>
-            // Auto-init on load
-            setTimeout(function() {
-                document.querySelectorAll('.unit-selector').forEach(function(sel) { loadHouseData(sel); });
-            }, 200);
+            (function() {
+                setTimeout(function() {
+                    // Reference the parent's functions
+                    var loader = parent.loadHouseData;
+                    if (loader) {
+                        document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                            loader(sel);
+                        });
+                    }
+                }, 150);
+            })();
         <\/script>
         '''
 

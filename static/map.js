@@ -58,6 +58,17 @@ var loadHouseData = function(selectElement) {
         btn.setAttribute('data-count', '0');
         btn.innerText = '0/' + max;
     }
+    // ADD THIS AT THE BOTTOM:
+    // This updates the row color AND the marker pin status
+    const row = selectElement.closest('.canvass-row');
+    const btn = row.querySelector('.vote-btn');
+    const max = parseInt(btn.getAttribute('data-max')) || 1;
+    const count = parseInt(btn.getAttribute('data-count')) || 0;
+
+    // Call the same appearance logic we use for increments
+    window.updateRowAppearance(row, count, max);
+    window.updateMarkerStatus(selectElement.ownerDocument);
+
 };
 
 var deployUpdate = function(doc) {
@@ -130,6 +141,75 @@ var incrementVoteCount = function(btn) {
             el.style.color = "inherit";
         });
     }
+};
+
+/**
+ * Checks if all streets in the active popup are marked 'Done'
+ * and updates the map marker color accordingly.
+ */
+window.updateMarkerStatus = function(doc) {
+    if (!window.fmap) return;
+
+    // 1. Check all rows in the provided document (the popup)
+    const rows = doc.querySelectorAll('.canvass-row');
+    if (rows.length === 0) return;
+
+    let allComplete = true;
+    rows.forEach(row => {
+        const btn = row.querySelector('.vote-btn');
+        const count = parseInt(btn.getAttribute('data-count')) || 0;
+        const max = parseInt(btn.getAttribute('data-max')) || 1;
+        if (count < max) allComplete = false;
+    });
+
+    // 2. Scan fmap for the marker that owns the open popup
+    window.fmap.eachLayer(function(layer) {
+        // This will find the marker in 'walk', 'marker', or any other layer
+        if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
+            const iconElement = layer.getElement();
+            if (!iconElement) return;
+
+            if (allComplete) {
+                // Apply the "Mission Complete" Green filter
+                iconElement.style.filter = "hue-rotate(120deg) brightness(0.9) saturate(2)";
+            } else {
+                // Return to original blue/canvas color
+                iconElement.style.filter = "";
+            }
+        }
+    });
+};
+
+/**
+ * Updated increment function to trigger marker check
+ */
+window.incrementVoteCount = function(btn) {
+    var count = parseInt(btn.getAttribute('data-count')) || 0;
+    var max = parseInt(btn.getAttribute('data-max')) || 1;
+
+    count = (count + 1) > max ? 0 : count + 1;
+
+    btn.setAttribute('data-count', count);
+    btn.innerText = count + '/' + max;
+
+    // Row color logic
+    var row = btn.closest('.canvass-row');
+    if (row) {
+        if (count >= max && max > 0) {
+            row.style.backgroundColor = "#28a745";
+            row.style.color = "#fff";
+        } else if (count > 0) {
+            row.style.backgroundColor = "#ffcc00";
+            row.style.color = "#000";
+        } else {
+            row.style.backgroundColor = "";
+            row.style.color = "#fff";
+        }
+        row.querySelectorAll('td, b, i, span').forEach(el => el.style.color = "inherit");
+    }
+
+    // Update the Marker on the map
+    window.updateMarkerStatus(btn.ownerDocument);
 };
 
 function bindEvent(element, eventName, eventHandler) {
