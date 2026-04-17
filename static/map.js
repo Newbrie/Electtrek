@@ -91,6 +91,8 @@ var deployUpdate = function(doc) {
     document.body.removeChild(a);
 };
 
+
+
 var incrementVoteCount = function(btn) {
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
@@ -100,16 +102,33 @@ var incrementVoteCount = function(btn) {
     btn.setAttribute('data-count', count);
     btn.innerText = count + '/' + max;
 
-    // --- COLOR LOGIC ---
-    if (count > 0 && count < max) {
-        btn.style.background = "#ffcc00"; // Yellow - Partial
-        btn.style.color = "#000";
-    } else if (count >= max) {
-        btn.style.background = "#28a745"; // Green - Done
-        btn.style.color = "#fff";
-    } else {
-        btn.style.background = "#00aaff"; // Blue - Reset/Empty
-        btn.style.color = "#fff";
+    // 1. Find the parent row
+    var row = btn.closest('.canvass-row');
+
+    // 2. APPLY COLOR LOGIC TO THE ROW
+    if (row) {
+        if (count > 0 && count < max) {
+            // Partial - Yellow Row
+            row.style.backgroundColor = "#ffcc00";
+            row.style.color = "#000";
+            btn.style.background = "#d4aa00"; // Slightly darker button for contrast
+        } else if (count >= max && max > 0) {
+            // Done - Green Row
+            row.style.backgroundColor = "#28a745";
+            row.style.color = "#fff";
+            btn.style.background = "#1e7e34";
+        } else {
+            // Reset - Original Dark Blue Row
+            row.style.backgroundColor = ""; // Clears the inline style, reverts to CSS
+            row.style.color = "#fff";
+            btn.style.background = "#00aaff";
+        }
+
+        // 3. FORCE CHILDREN TO INHERIT COLOR
+        // This ensures street names and icons don't stay black/blue
+        row.querySelectorAll('td, b, i, span').forEach(function(el) {
+            el.style.color = "inherit";
+        });
     }
 };
 
