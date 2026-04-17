@@ -35,14 +35,68 @@ var showMore = function (msg,area, type) {
 
 var BAKED_DATA = BAKED_DATA || {};
 
-// No changes needed here, as 'selectElement' carries its own context
+// --- HELPER: Centralized Color Logic ---
+// This ensures rows always look the same whether clicking or loading
+window.updateRowAppearance = function(row, count, max) {
+    if (!row) return;
+    var btn = row.querySelector('.vote-btn');
+
+    if (count >= max && max > 0) {
+        row.style.backgroundColor = "#28a745"; // Green - Done
+        row.style.color = "#fff";
+        if (btn) btn.style.background = "#1e7e34";
+    } else if (count > 0) {
+        row.style.backgroundColor = "#ffcc00"; // Yellow - Partial
+        row.style.color = "#000";
+        if (btn) btn.style.background = "#d4aa00";
+    } else {
+        row.style.backgroundColor = "";        // Default/Reset
+        row.style.color = "#fff";
+        if (btn) btn.style.background = "#00aaff";
+    }
+
+    row.querySelectorAll('td, b, i, span').forEach(el => el.style.color = "inherit");
+};
+
+// --- MARKER UPDATE LOGIC ---
+window.updateMarkerStatus = function(doc) {
+    if (!window.fmap) return;
+
+    const rows = doc.querySelectorAll('.canvass-row');
+    if (rows.length === 0) return;
+
+    let allComplete = true;
+    rows.forEach(row => {
+        const btn = row.querySelector('.vote-btn');
+        const count = parseInt(btn.getAttribute('data-count')) || 0;
+        const max = parseInt(btn.getAttribute('data-max')) || 1;
+        if (count < max) allComplete = false;
+    });
+
+    window.fmap.eachLayer(function(layer) {
+        if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
+            const iconElement = layer.getElement();
+            if (!iconElement) return;
+
+            if (allComplete) {
+                // Highlighting the 'walk' layer marker green
+                iconElement.style.filter = "hue-rotate(120deg) brightness(0.9) saturate(2)";
+            } else {
+                iconElement.style.filter = "";
+            }
+        }
+    });
+};
+
+// --- DATA LOADING ---
 var loadHouseData = function(selectElement) {
     var row = selectElement.closest('.canvass-row');
     if (!row) return;
+
     var street = row.getAttribute('data-street');
     var house = selectElement.value;
     var opt = selectElement.options[selectElement.selectedIndex];
-    var max = opt.getAttribute('data-max') || 1;
+    var max = parseInt(opt.getAttribute('data-max')) || 1;
 
     var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
     var viSelector = row.querySelector('.vi-selector');
@@ -58,23 +112,35 @@ var loadHouseData = function(selectElement) {
         btn.setAttribute('data-count', '0');
         btn.innerText = '0/' + max;
     }
-    // ADD THIS AT THE BOTTOM:
-    // This updates the row color AND the marker pin status
-    const row = selectElement.closest('.canvass-row');
-    const btn = row.querySelector('.vote-btn');
-    const max = parseInt(btn.getAttribute('data-max')) || 1;
+
     const count = parseInt(btn.getAttribute('data-count')) || 0;
 
-    // Call the same appearance logic we use for increments
+    // Apply visuals
     window.updateRowAppearance(row, count, max);
     window.updateMarkerStatus(selectElement.ownerDocument);
-
 };
 
+// --- INCREMENT BUTTON ---
+var incrementVoteCount = function(btn) {
+    var count = parseInt(btn.getAttribute('data-count')) || 0;
+    var max = parseInt(btn.getAttribute('data-max')) || 1;
+
+    count = (count + 1) > max ? 0 : count + 1;
+
+    btn.setAttribute('data-count', count);
+    btn.innerText = count + '/' + max;
+
+    var row = btn.closest('.canvass-row');
+
+    // Trigger the shared visual updates
+    window.updateRowAppearance(row, count, max);
+    window.updateMarkerStatus(btn.ownerDocument);
+};
+
+// --- SAVE SYSTEM ---
 var deployUpdate = function(doc) {
     var targetDoc = doc || document;
 
-    // 1. Update the ledger
     targetDoc.querySelectorAll('.canvass-row').forEach(function(row) {
         var street = row.getAttribute('data-street');
         var house = row.querySelector('.unit-selector').value;
@@ -88,11 +154,8 @@ var deployUpdate = function(doc) {
     var jsonString = JSON.stringify(BAKED_DATA);
     var fullHtml = document.documentElement.outerHTML;
 
-    // 2. THE FIX: Flexible Regex
-    // This matches both 'var BAKED_DATA = {};' AND 'var BAKED_DATA = BAKED_DATA || {};'
     var newHtml = fullHtml.replace(/var BAKED_DATA\s*=\s*[^;]+;/, 'var BAKED_DATA = ' + jsonString + ';');
 
-    // 3. Download Logic
     var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -102,115 +165,6 @@ var deployUpdate = function(doc) {
     document.body.removeChild(a);
 };
 
-
-
-var incrementVoteCount = function(btn) {
-    var count = parseInt(btn.getAttribute('data-count')) || 0;
-    var max = parseInt(btn.getAttribute('data-max')) || 1;
-
-    count = (count + 1) > max ? 0 : count + 1;
-
-    btn.setAttribute('data-count', count);
-    btn.innerText = count + '/' + max;
-
-    // 1. Find the parent row
-    var row = btn.closest('.canvass-row');
-
-    // 2. APPLY COLOR LOGIC TO THE ROW
-    if (row) {
-        if (count > 0 && count < max) {
-            // Partial - Yellow Row
-            row.style.backgroundColor = "#ffcc00";
-            row.style.color = "#000";
-            btn.style.background = "#d4aa00"; // Slightly darker button for contrast
-        } else if (count >= max && max > 0) {
-            // Done - Green Row
-            row.style.backgroundColor = "#28a745";
-            row.style.color = "#fff";
-            btn.style.background = "#1e7e34";
-        } else {
-            // Reset - Original Dark Blue Row
-            row.style.backgroundColor = ""; // Clears the inline style, reverts to CSS
-            row.style.color = "#fff";
-            btn.style.background = "#00aaff";
-        }
-
-        // 3. FORCE CHILDREN TO INHERIT COLOR
-        // This ensures street names and icons don't stay black/blue
-        row.querySelectorAll('td, b, i, span').forEach(function(el) {
-            el.style.color = "inherit";
-        });
-    }
-};
-
-/**
- * Checks if all streets in the active popup are marked 'Done'
- * and updates the map marker color accordingly.
- */
-window.updateMarkerStatus = function(doc) {
-    if (!window.fmap) return;
-
-    // 1. Check all rows in the provided document (the popup)
-    const rows = doc.querySelectorAll('.canvass-row');
-    if (rows.length === 0) return;
-
-    let allComplete = true;
-    rows.forEach(row => {
-        const btn = row.querySelector('.vote-btn');
-        const count = parseInt(btn.getAttribute('data-count')) || 0;
-        const max = parseInt(btn.getAttribute('data-max')) || 1;
-        if (count < max) allComplete = false;
-    });
-
-    // 2. Scan fmap for the marker that owns the open popup
-    window.fmap.eachLayer(function(layer) {
-        // This will find the marker in 'walk', 'marker', or any other layer
-        if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
-            const iconElement = layer.getElement();
-            if (!iconElement) return;
-
-            if (allComplete) {
-                // Apply the "Mission Complete" Green filter
-                iconElement.style.filter = "hue-rotate(120deg) brightness(0.9) saturate(2)";
-            } else {
-                // Return to original blue/canvas color
-                iconElement.style.filter = "";
-            }
-        }
-    });
-};
-
-/**
- * Updated increment function to trigger marker check
- */
-window.incrementVoteCount = function(btn) {
-    var count = parseInt(btn.getAttribute('data-count')) || 0;
-    var max = parseInt(btn.getAttribute('data-max')) || 1;
-
-    count = (count + 1) > max ? 0 : count + 1;
-
-    btn.setAttribute('data-count', count);
-    btn.innerText = count + '/' + max;
-
-    // Row color logic
-    var row = btn.closest('.canvass-row');
-    if (row) {
-        if (count >= max && max > 0) {
-            row.style.backgroundColor = "#28a745";
-            row.style.color = "#fff";
-        } else if (count > 0) {
-            row.style.backgroundColor = "#ffcc00";
-            row.style.color = "#000";
-        } else {
-            row.style.backgroundColor = "";
-            row.style.color = "#fff";
-        }
-        row.querySelectorAll('td, b, i, span').forEach(el => el.style.color = "inherit");
-    }
-
-    // Update the Marker on the map
-    window.updateMarkerStatus(btn.ownerDocument);
-};
 
 function bindEvent(element, eventName, eventHandler) {
   element.addEventListener(eventName, eventHandler, false);
@@ -675,35 +629,6 @@ function updateMaxVote(selectElement) {
     viSelector.selectedIndex = 0;
 }
 
-/**
- * Increments the vote count on click, up to the maximum allowed for that house.
- * Clicking again after reaching max will reset it to 0.
- */
-function incrementVoteCount(btn) {
-    let count = parseInt(btn.getAttribute('data-count')) || 0;
-    const max = parseInt(btn.getAttribute('data-max')) || 1;
-
-    count++;
-
-    // Loop back to zero if we exceed the number of electors in the house
-    if (count > max) {
-        count = 0;
-    }
-
-    btn.setAttribute('data-count', count);
-    btn.innerText = `${count}/${max}`;
-
-    // Optional: Visual feedback if max is reached
-    if (count == max && max > 0) {
-        btn.style.background = "#28a745"; // Success Green
-    } else if (count > 0) {
-        btn.style.background = "#ffcc00"; // Pending Yellow
-        btn.style.color = "#001f3f";
-    } else {
-        btn.style.background = "#00aaff"; // Default Blue
-        btn.style.color = "#ffffff";
-    }
-}
 
 window.highlightLozenge = function highlightLozenge(loz) {
 document.querySelectorAll('.lozenge.selected').forEach(el => {
