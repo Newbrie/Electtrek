@@ -60,14 +60,16 @@ var loadHouseData = function(selectElement) {
     }
 };
 
-// CHANGE: We add 'doc' parameter so the map can "see" the popup's table
 var deployUpdate = function(doc) {
-    var targetDoc = doc || document; // Use popup doc if provided, else main doc
+    var targetDoc = doc || document;
+
+    // 1. Update the ledger
     targetDoc.querySelectorAll('.canvass-row').forEach(function(row) {
         var street = row.getAttribute('data-street');
         var house = row.querySelector('.unit-selector').value;
         var vi = row.querySelector('.vi-selector').value;
         var votes = row.querySelector('.vote-btn').getAttribute('data-count');
+
         if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
         BAKED_DATA[street][house] = { vi: vi, votes: votes, ts: Date.now() };
     });
@@ -75,9 +77,11 @@ var deployUpdate = function(doc) {
     var jsonString = JSON.stringify(BAKED_DATA);
     var fullHtml = document.documentElement.outerHTML;
 
-    // Regex remains the same
-    var newHtml = fullHtml.replace(/var BAKED_DATA = BAKED_DATA \|\| \{.*?\};/, 'var BAKED_DATA = ' + jsonString + ';');
+    // 2. THE FIX: Flexible Regex
+    // This matches both 'var BAKED_DATA = {};' AND 'var BAKED_DATA = BAKED_DATA || {};'
+    var newHtml = fullHtml.replace(/var BAKED_DATA\s*=\s*[^;]+;/, 'var BAKED_DATA = ' + jsonString + ';');
 
+    // 3. Download Logic
     var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -90,9 +94,23 @@ var deployUpdate = function(doc) {
 var incrementVoteCount = function(btn) {
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
+
     count = (count + 1) > max ? 0 : count + 1;
+
     btn.setAttribute('data-count', count);
     btn.innerText = count + '/' + max;
+
+    // --- COLOR LOGIC ---
+    if (count > 0 && count < max) {
+        btn.style.background = "#ffcc00"; // Yellow - Partial
+        btn.style.color = "#000";
+    } else if (count >= max) {
+        btn.style.background = "#28a745"; // Green - Done
+        btn.style.color = "#fff";
+    } else {
+        btn.style.background = "#00aaff"; // Blue - Reset/Empty
+        btn.style.color = "#fff";
+    }
 };
 
 function bindEvent(element, eventName, eventHandler) {
