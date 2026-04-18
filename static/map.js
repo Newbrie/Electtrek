@@ -116,8 +116,12 @@ window.loadHouseData = function(selectElement) {
         btn.innerText = '0/' + max;
     }
 
-    window.updateRowAppearance(row, parseInt(btn.getAttribute('data-count')), max);
+    // After setting the data, refresh the colors of the list
+    window.refreshDropdownColors(selectElement);
+
+    window.updateRowAppearance(row, count, max);
     window.updateMarkerStatus(selectElement.ownerDocument);
+
 };
 
 window.incrementVoteCount = function(btn) {
@@ -156,8 +160,16 @@ window.incrementVoteCount = function(btn) {
     }
     // ------------------------------------------
 
+    var row = btn.closest('.canvass-row');
+    var selectElement = row.querySelector('.unit-selector');
+
+    if (selectElement) {
+        window.refreshDropdownColors(selectElement);
+    }
+
     window.updateRowAppearance(row, count, max);
     window.updateMarkerStatus(btn.ownerDocument);
+
 };
 
 // --- SAVE SYSTEM ---
@@ -651,6 +663,47 @@ function updateMaxVote(selectElement) {
     const viSelector = row.querySelector('.vi-selector');
     viSelector.selectedIndex = 0;
 }
+
+window.refreshDropdownColors = function(selectElement) {
+    var row = selectElement.closest('.canvass-row');
+    var street = row.getAttribute('data-street');
+
+    Array.from(selectElement.options).forEach(opt => {
+        var house = opt.value;
+        var max = parseInt(opt.getAttribute('data-max')) || 1;
+
+        // Look up the record in our JS memory
+        var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+        var votes = record ? parseInt(record.votes) : 0;
+
+        // Apply styles to the individual <option>
+        if (votes >= max && max > 0) {
+            opt.style.backgroundColor = "#28a745";
+            opt.style.color = "white";
+        } else if (votes > 0) {
+            opt.style.backgroundColor = "#ffcc00";
+            opt.style.color = "black";
+        } else {
+            opt.style.backgroundColor = "";
+            opt.style.color = "";
+        }
+    });
+
+    // Also color the main select box to match the currently selected house
+    var currentVotes = parseInt(row.querySelector('.vote-btn').getAttribute('data-count')) || 0;
+    var currentMax = parseInt(row.querySelector('.vote-btn').getAttribute('data-max')) || 1;
+
+    if (currentVotes >= currentMax && currentMax > 0) {
+        selectElement.style.backgroundColor = "#28a745";
+        selectElement.style.color = "white";
+    } else if (currentVotes > 0) {
+        selectElement.style.backgroundColor = "#ffcc00";
+        selectElement.style.color = "black";
+    } else {
+        selectElement.style.backgroundColor = "";
+        selectElement.style.color = "";
+    }
+};
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
 window.updateVI = function(selectElement) {

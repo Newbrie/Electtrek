@@ -174,16 +174,25 @@ def build_street_list_html(streets_df, street_stats):
 
 
     # --- THE UI: Control Panel ---
-    html = persistence_js + '''
-    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-        <button onclick="parent.deployUpdate" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
-            💾 Save & Deploy New File
-        </button>
-        <span style="color:#00aaff; font-size:8pt; align-self:center;">
-            Data is stored inside the HTML file itself.
-        </span>
-    </div>
-    '''
+    persistence_js = '''
+        <script>
+            (function() {
+                setTimeout(function() {
+                    // 1. Reference the parent functions
+                    var loader = parent.loadHouseData;
+                    var colorizer = parent.refreshDropdownColors;
+
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                        // 2. Load the specific data for the current house
+                        if (loader) loader(sel);
+
+                        // 3. Color all options in the dropdown list
+                        if (colorizer) colorizer(sel);
+                    });
+                }, 150);
+            })();
+        <\/script>
+        '''
 
     # --- THE UI: Table Header ---
     html += '''
@@ -219,6 +228,7 @@ def build_street_list_html(streets_df, street_stats):
         '''
 
         # VI select
+        vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
         vi_select = f'''
         <select class="vi-selector"
                 style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
@@ -226,6 +236,7 @@ def build_street_list_html(streets_df, street_stats):
             {vi_options}
         </select>
         '''
+
 
         # Vote button
         first_unit = unit_list[0] if unit_list else None
