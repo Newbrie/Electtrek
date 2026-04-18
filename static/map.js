@@ -708,40 +708,35 @@ window.refreshDropdownColors = function(selectElement) {
     var row = selectElement.closest('.canvass-row');
     var street = row.getAttribute('data-street');
 
-    // 1. Color every <option> inside the list
     Array.from(selectElement.options).forEach(opt => {
         var h = opt.value;
         var m = parseInt(opt.getAttribute('data-max')) || 1;
         var rec = (BAKED_DATA[street] && BAKED_DATA[street][h]) ? BAKED_DATA[street][h] : null;
         var v = rec ? parseInt(rec.votes) : 0;
 
+        // Base text (the house number)
+        let baseText = h;
+
+        // Apply Text Indicators
         if (v >= m && m > 0) {
-            opt.style.backgroundColor = "#28a745"; // Green
-            opt.style.color = "white";
+            opt.text = baseText + " ✅"; // Completed
+            opt.style.color = "#28a745";   // Still works in some browsers
         } else if (v > 0) {
-            opt.style.backgroundColor = "#ffcc00"; // Yellow
-            opt.style.color = "black";
+            opt.text = baseText + " 🟡"; // Partial
+            opt.style.color = "#ffcc00";
         } else {
-            opt.style.backgroundColor = ""; // Default
+            opt.text = baseText;        // Empty/New
             opt.style.color = "";
         }
     });
 
-    // 2. Color the visible "Face" of the dropdown box
-    var currentBtn = row.querySelector('.vote-btn');
-    var cv = parseInt(currentBtn.getAttribute('data-count')) || 0;
-    var cm = parseInt(currentBtn.getAttribute('data-max')) || 1;
+    // Keep the "Face" of the dropdown colored as a primary indicator
+    const btn = row.querySelector('.vote-btn');
+    const cv = parseInt(btn.getAttribute('data-count')) || 0;
+    const cm = parseInt(btn.getAttribute('data-max')) || 1;
 
-    if (cv >= cm && cm > 0) {
-        selectElement.style.backgroundColor = "#28a745";
-        selectElement.style.color = "white";
-    } else if (cv > 0) {
-        selectElement.style.backgroundColor = "#ffcc00";
-        selectElement.style.color = "black";
-    } else {
-        selectElement.style.backgroundColor = "";
-        selectElement.style.color = "";
-    }
+    selectElement.style.backgroundColor = (cv >= cm && cm > 0) ? "#28a745" : (cv > 0 ? "#ffcc00" : "");
+    selectElement.style.color = (cv >= cm && cm > 0) ? "white" : (cv > 0 ? "black" : "");
 };
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
