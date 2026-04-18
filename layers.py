@@ -267,54 +267,73 @@ def build_street_list_html(region_electors, street_stats, task_tags):
     html += "</tbody></table></div>"
     return html
 
-def build_street_list_html(streets_df, street_stats, task_tags): # Added task_tags here
+def build_street_list_html(streets_df, street_stats, task_tags):
     from state import VID
 
     # Sort codes so columns are consistent (e.g., L1, L2, L3)
     sorted_task_codes = sorted(task_tags.keys())
 
     # --- THE INJECTION: JavaScript Persistence Engine ---
-    persistence_js = '''
+    # Note: Use double {{ }} for CSS/JS braces because this is an f-string
+    persistence_js = f'''
         <script>
-            (function() {
-                setTimeout(function() {
+            (function() {{
+                setTimeout(function() {{
                     var loader = parent.loadHouseData;
                     var colorizer = parent.refreshDropdownColors;
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
                         if (loader) loader(sel);
                         if (colorizer) colorizer(sel);
-                    });
-                }, 150);
-            })();
+                        updateTagToggles(sel); // Initial sync
+                    }});
+                }}, 150);
+            }})();
 
-            // Function to handle the y/n toggle UI
-            window.toggleTagUI = function(span, street, unit, code) {
+            // This updates the y/n display when the dropdown changes
+            function updateTagToggles(sel) {{
+                const row = sel.closest('tr');
+                const street = row.getAttribute('data-street');
+                const unit = sel.value;
+                const baked = (parent.BAKED_DATA && parent.BAKED_DATA[street]) ? parent.BAKED_DATA[street][unit] : null;
+                const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
+
+                row.querySelectorAll('.tag-toggle').forEach(span => {{
+                    const code = span.getAttribute('data-code');
+                    const hasTag = currentTags.includes(code);
+                    span.innerText = hasTag ? 'y' : 'n';
+                    span.className = 'tag-toggle ' + (hasTag ? 'tag-active' : 'tag-inactive');
+                }});
+            }}
+
+            // Renamed to match your HTML's "handleTagClick"
+            window.handleTagClick = function(span) {{
+                const row = span.closest('tr');
+                const sel = row.querySelector('.unit-selector');
+                const street = row.getAttribute('data-street');
+                const unit = sel.value;
+                const code = span.getAttribute('data-code');
+
                 let isNowActive = span.innerText.trim() === 'n';
                 span.innerText = isNowActive ? 'y' : 'n';
                 span.className = 'tag-toggle ' + (isNowActive ? 'tag-active' : 'tag-inactive');
 
-                // Signal to the parent (map.js) to update the BAKED_DATA
-                if(parent.updateElectorTag) {
+                if(parent.updateElectorTag) {{
                     parent.updateElectorTag(street, unit, code, isNowActive);
-                }
-            };
-        <\/script>
+                }}
+            }};
+        </script>
         <style>
-            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; }
-            .tag-active { background: #28a745; color: white; }
-            .tag-inactive { background: #444; color: #999; }
-            .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 8px; border-bottom: 2px solid #00aaff; }
+            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; }}
+            .tag-active {{ background: #28a745; color: white; }}
+            .tag-inactive {{ background: #444; color: #999; }}
+            .tag-header {{ color: #00aaff; font-size: 7pt; text-align: center; padding: 8px; border-bottom: 2px solid #00aaff; }}
         </style>
     '''
 
-    # --- THE UI: Control Panel ---
-    html = persistence_js + '''... (keep your control panel html) ...'''
-
     # --- THE UI: Table Header ---
-    # We dynamically inject the Task Tag headers here
     tag_headers_html = "".join([f'<th class="tag-header">{code}</th>' for code in sorted_task_codes])
 
-    html += f'''
+    html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 720px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
                 <thead>
@@ -323,7 +342,8 @@ def build_street_list_html(streets_df, street_stats, task_tags): # Added task_ta
                         <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
                         <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
                         <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff;">Unit</th>
-                        {tag_headers_html} <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
+                        {tag_headers_html}
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
                         <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Votes</th>
                     </tr>
                 </thead>
@@ -331,34 +351,42 @@ def build_street_list_html(streets_df, street_stats, task_tags): # Added task_ta
     '''
 
     for i, (street_name, data) in enumerate(street_stats.items()):
-        # ... (keep your unit_list, unit_counts, etc. logic) ...
+        unit_list = data.get("unit_list", [])
+        unit_counts = data.get("unit_counts", {})
+        hos = data.get("houses", 0)
+        num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
 
-        # --- NEW: Generate Tag Toggle Cells ---
-        # Note: This checks the first_unit's tags.
-        # (Real-time updates happen via JS when dropdown changes)
+        # --- GENERATE TAG CELLS ---
         tag_cells = ""
-        first_unit = unit_list[0] if unit_list else ""
-        # We assume BAKED_DATA is available or passed to check initial y/n
-        # For the initial render, we can default to 'n' or check your source DF
         for code in sorted_task_codes:
-            tag_cells += f'''
-            <td style="padding:8px; text-align:center;">
-                <span class="tag-toggle tag-inactive"
-                      data-code="{code}"
-                      onclick="window.toggleTagUI(this, '{street_name}', '{first_unit}', '{code}')">n</span>
-            </td>'''
+            tag_cells += f"""
+                <td style="padding:8px; text-align:center;">
+                    <span class="tag-toggle tag-inactive"
+                          data-code="{code}"
+                          onclick="handleTagClick(this)">n</span>
+                </td>"""
 
-        # ... (keep your unit_dropdown, vi_select, vote_button logic) ...
+        # --- BUILD DROPDOWN ---
+        options_html = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
+        unit_dropdown = f"""
+            <select class="unit-selector"
+                    onchange="parent.updateMaxVote(this); parent.loadHouseData(this); updateTagToggles(this);"
+                    style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
+                {options_html}
+            </select>
+        """
 
+        row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
         html += f'''
-        <tr class="{row_class} canvass-row" data-street="{street_name}">
-            <td style="padding:8px;"><b data-name="{street_name}">{street_name}</b></td>
-            <td style="padding:8px; font-size:7pt;"><i>{hos}</i></td>
-            <td style="padding:8px; font-size:7pt;">{num_display}</td>
-            <td style="padding:8px; width:60px;">{unit_dropdown}</td>
-            {tag_cells} <td style="padding:8px;">{vi_select}</td>
-            <td style="padding:8px;">{vote_button}</td>
-        </tr>
+            <tr class="{row_class} canvass-row" data-street="{street_name}">
+                <td style="padding:8px;"><b data-name="{street_name}">{street_name}</b></td>
+                <td style="padding:8px; font-size:7pt;"><i>{hos}</i></td>
+                <td style="padding:8px; font-size:7pt;">{num_display}</td>
+                <td style="padding:8px; width:60px;">{unit_dropdown}</td>
+                {tag_cells}
+                <td style="padding:8px;">... (VI Select) ...</td>
+                <td style="padding:8px;">... (Vote Button) ...</td>
+            </tr>
         '''
 
     html += "</tbody></table></div>"
