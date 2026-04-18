@@ -162,7 +162,9 @@ def build_street_list_html(region_electors, street_stats, task_tags):
 
     # --- UPDATED JAVASCRIPT ---
     # We add a function to refresh the y/n toggles when the unit dropdown changes
-    persistence_js = f'''
+
+# Use TRIPLE quotes to avoid internal quote issues
+    persistence_js = f"""
         <script>
             (function() {{
                 setTimeout(function() {{
@@ -218,7 +220,7 @@ def build_street_list_html(region_electors, street_stats, task_tags):
             .tag-active {{ background: #28a745; color: white; }}
             .tag-inactive {{ background: #444; color: #999; }}
         </style>
-    '''
+    """
 
     # ... Setup Table Header ...
     # Add {tag_headers_html} into your <thead> string
