@@ -664,46 +664,64 @@ function updateMaxVote(selectElement) {
     viSelector.selectedIndex = 0;
 }
 
+window.loadHouseData = function(selectElement) {
+    var row = selectElement.closest('.canvass-row');
+    if (!row) return;
+
+    var street = row.getAttribute('data-street');
+    var house = selectElement.value;
+    var opt = selectElement.options[selectElement.selectedIndex];
+    var max = parseInt(opt.getAttribute('data-max')) || 1;
+
+    // 1. Fetch the record for this SPECIFIC house
+    var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+    var btn = row.querySelector('.vote-btn');
+    var viSelector = row.querySelector('.vi-selector');
+
+    // 2. Update Button and Selectors BEFORE coloring
+    btn.setAttribute('data-max', max);
+    if (record) {
+        if (viSelector) viSelector.value = record.vi;
+        btn.setAttribute('data-count', record.votes);
+        btn.innerText = record.votes + '/' + max;
+    } else {
+        if (viSelector) viSelector.selectedIndex = 0;
+        btn.setAttribute('data-count', '0');
+        btn.innerText = '0/' + max;
+    }
+
+    // 3. FORCE RE-COLORING
+    // Get the fresh count we just set
+    const currentCount = parseInt(btn.getAttribute('data-count')) || 0;
+
+    // This updates the Row background and the Button background
+    window.updateRowAppearance(row, currentCount, max);
+
+    // This updates the Dropdown's own color AND all the options inside it
+    window.refreshDropdownColors(selectElement);
+
+    // Finally, check if the map marker should change
+    window.updateMarkerStatus(selectElement.ownerDocument);
+};
+
 window.refreshDropdownColors = function(selectElement) {
     var row = selectElement.closest('.canvass-row');
     var street = row.getAttribute('data-street');
 
+    // Color every <option> in the list based on BAKED_DATA
     Array.from(selectElement.options).forEach(opt => {
-        var house = opt.value;
-        var max = parseInt(opt.getAttribute('data-max')) || 1;
+        var h = opt.value;
+        var m = parseInt(opt.getAttribute('data-max')) || 1;
+        var rec = (BAKED_DATA[street] && BAKED_DATA[street][h]) ? BAKED_DATA[street][h] : null;
+        var v = rec ? parseInt(rec.votes) : 0;
 
-        // Look up the record in our JS memory
-        var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
-        var votes = record ? parseInt(record.votes) : 0;
-
-        // Apply styles to the individual <option>
-        if (votes >= max && max > 0) {
-            opt.style.backgroundColor = "#28a745";
+        if (v >= m && m > 0) {
+            opt.style.backgroundColor = "#28a745"; // Green
             opt.style.color = "white";
-        } else if (votes > 0) {
-            opt.style.backgroundColor = "#ffcc00";
-            opt.style.color = "black";
-        } else {
-            opt.style.backgroundColor = "";
-            opt.style.color = "";
-        }
-    });
+        } else if (v > 0) {
+            opt.style.backgroundColor = "#ffcc00"; // Yellow
 
-    // Also color the main select box to match the currently selected house
-    var currentVotes = parseInt(row.querySelector('.vote-btn').getAttribute('data-count')) || 0;
-    var currentMax = parseInt(row.querySelector('.vote-btn').getAttribute('data-max')) || 1;
 
-    if (currentVotes >= currentMax && currentMax > 0) {
-        selectElement.style.backgroundColor = "#28a745";
-        selectElement.style.color = "white";
-    } else if (currentVotes > 0) {
-        selectElement.style.backgroundColor = "#ffcc00";
-        selectElement.style.color = "black";
-    } else {
-        selectElement.style.backgroundColor = "";
-        selectElement.style.color = "";
-    }
-};
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
 window.updateVI = function(selectElement) {
