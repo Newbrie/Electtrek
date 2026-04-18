@@ -35,35 +35,38 @@ var showMore = function (msg,area, type) {
 
 var BAKED_DATA = BAKED_DATA || {};
 
-// --- HELPER: Centralized Color Logic ---
-// This ensures rows always look the same whether clicking or loading
 window.updateRowAppearance = function(row, count, max) {
     if (!row) return;
-    var btn = row.querySelector('.vote-btn');
+    console.log(`🎨 Updating Row: ${row.getAttribute('data-street')} | Count: ${count}/${max}`);
 
+    var btn = row.querySelector('.vote-btn');
     if (count >= max && max > 0) {
-        row.style.backgroundColor = "#28a745"; // Green - Done
+        row.style.backgroundColor = "#28a745";
         row.style.color = "#fff";
         if (btn) btn.style.background = "#1e7e34";
     } else if (count > 0) {
-        row.style.backgroundColor = "#ffcc00"; // Yellow - Partial
+        row.style.backgroundColor = "#ffcc00";
         row.style.color = "#000";
         if (btn) btn.style.background = "#d4aa00";
     } else {
-        row.style.backgroundColor = "";        // Default/Reset
+        row.style.backgroundColor = "";
         row.style.color = "#fff";
         if (btn) btn.style.background = "#00aaff";
     }
-
     row.querySelectorAll('td, b, i, span').forEach(el => el.style.color = "inherit");
 };
 
-// --- MARKER UPDATE LOGIC ---
 window.updateMarkerStatus = function(doc) {
-    if (!window.fmap) return;
+    if (!window.fmap) {
+        console.warn("⚠️ Marker Update Failed: window.fmap not found.");
+        return;
+    }
 
     const rows = doc.querySelectorAll('.canvass-row');
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+        console.warn("⚠️ Marker Update Failed: No .canvass-row elements found in popup.");
+        return;
+    }
 
     let allComplete = true;
     rows.forEach(row => {
@@ -73,23 +76,26 @@ window.updateMarkerStatus = function(doc) {
         if (count < max) allComplete = false;
     });
 
+    console.log(`Checking Walk Marker: All Streets Complete? ${allComplete}`);
+
+    let markerFound = false;
     window.fmap.eachLayer(function(layer) {
         if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
+            markerFound = true;
             const iconElement = layer.getElement();
-            if (!iconElement) return;
-
-            if (allComplete) {
-                // Highlighting the 'walk' layer marker green
-                iconElement.style.filter = "hue-rotate(120deg) brightness(0.9) saturate(2)";
-            } else {
-                iconElement.style.filter = "";
+            if (iconElement) {
+                console.log("📍 Found active marker, applying filter...");
+                iconElement.style.filter = allComplete
+                    ? "hue-rotate(120deg) brightness(0.9) saturate(2)"
+                    : "";
             }
         }
     });
+    if (!markerFound) console.warn("⚠️ No active/open marker found on map to update.");
 };
 
-// --- DATA LOADING ---
-var loadHouseData = function(selectElement) {
+window.loadHouseData = function(selectElement) {
+    console.log("🏠 loadHouseData triggered for:", selectElement.value);
     var row = selectElement.closest('.canvass-row');
     if (!row) return;
 
@@ -99,29 +105,23 @@ var loadHouseData = function(selectElement) {
     var max = parseInt(opt.getAttribute('data-max')) || 1;
 
     var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
-    var viSelector = row.querySelector('.vi-selector');
     var btn = row.querySelector('.vote-btn');
 
     btn.setAttribute('data-max', max);
     if (record) {
-        viSelector.value = record.vi;
         btn.setAttribute('data-count', record.votes);
         btn.innerText = record.votes + '/' + max;
     } else {
-        viSelector.selectedIndex = 0;
         btn.setAttribute('data-count', '0');
         btn.innerText = '0/' + max;
     }
 
-    const count = parseInt(btn.getAttribute('data-count')) || 0;
-
-    // Apply visuals
-    window.updateRowAppearance(row, count, max);
+    window.updateRowAppearance(row, parseInt(btn.getAttribute('data-count')), max);
     window.updateMarkerStatus(selectElement.ownerDocument);
 };
 
-// --- INCREMENT BUTTON ---
-var incrementVoteCount = function(btn) {
+window.incrementVoteCount = function(btn) {
+    console.log("➕ incrementVoteCount clicked");
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
 
@@ -131,8 +131,6 @@ var incrementVoteCount = function(btn) {
     btn.innerText = count + '/' + max;
 
     var row = btn.closest('.canvass-row');
-
-    // Trigger the shared visual updates
     window.updateRowAppearance(row, count, max);
     window.updateMarkerStatus(btn.ownerDocument);
 };
