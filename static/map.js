@@ -37,23 +37,23 @@ var BAKED_DATA = BAKED_DATA || {};
 
 window.updateRowAppearance = function(row, count, max) {
     if (!row) return;
-    console.log(`🎨 Updating Row: ${row.getAttribute('data-street')} | Count: ${count}/${max}`);
 
-    var btn = row.querySelector('.vote-btn');
     if (count >= max && max > 0) {
-        row.style.backgroundColor = "#28a745";
-        row.style.color = "#fff";
-        if (btn) btn.style.background = "#1e7e34";
+        row.style.backgroundColor = "#28a745"; // Green
+        row.style.color = "#ffffff";
     } else if (count > 0) {
-        row.style.backgroundColor = "#ffcc00";
-        row.style.color = "#000";
-        if (btn) btn.style.background = "#d4aa00";
+        row.style.backgroundColor = "#ffcc00"; // Yellow
+        row.style.color = "#000000";
     } else {
+        // CRITICAL: This resets the row when switching to an unvoted house
         row.style.backgroundColor = "";
-        row.style.color = "#fff";
-        if (btn) btn.style.background = "#00aaff";
+        row.style.color = "#ffffff";
     }
-    row.querySelectorAll('td, b, i, span').forEach(el => el.style.color = "inherit");
+
+    // Force all text to respect the new background
+    row.querySelectorAll('td, b, i, span').forEach(el => {
+        el.style.color = "inherit";
+    });
 };
 
 window.updateMarkerStatus = function(doc) {
@@ -708,7 +708,7 @@ window.refreshDropdownColors = function(selectElement) {
     var row = selectElement.closest('.canvass-row');
     var street = row.getAttribute('data-street');
 
-    // Color every <option> in the list based on BAKED_DATA
+    // 1. Color every <option> inside the list
     Array.from(selectElement.options).forEach(opt => {
         var h = opt.value;
         var m = parseInt(opt.getAttribute('data-max')) || 1;
@@ -720,23 +720,22 @@ window.refreshDropdownColors = function(selectElement) {
             opt.style.color = "white";
         } else if (v > 0) {
             opt.style.backgroundColor = "#ffcc00"; // Yellow
-
             opt.style.color = "black";
         } else {
-            opt.style.backgroundColor = ""; // Reset
+            opt.style.backgroundColor = ""; // Default
             opt.style.color = "";
         }
     });
 
-    // Color the background of the SELECT box itself to match the CURRENTLY SELECTED house
-    const btn = row.querySelector('.vote-btn');
-    const v = parseInt(btn.getAttribute('data-count')) || 0;
-    const m = parseInt(btn.getAttribute('data-max')) || 1;
+    // 2. Color the visible "Face" of the dropdown box
+    var currentBtn = row.querySelector('.vote-btn');
+    var cv = parseInt(currentBtn.getAttribute('data-count')) || 0;
+    var cm = parseInt(currentBtn.getAttribute('data-max')) || 1;
 
-    if (v >= m && m > 0) {
+    if (cv >= cm && cm > 0) {
         selectElement.style.backgroundColor = "#28a745";
         selectElement.style.color = "white";
-    } else if (v > 0) {
+    } else if (cv > 0) {
         selectElement.style.backgroundColor = "#ffcc00";
         selectElement.style.color = "black";
     } else {
@@ -744,7 +743,6 @@ window.refreshDropdownColors = function(selectElement) {
         selectElement.style.color = "";
     }
 };
-
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
 window.updateVI = function(selectElement) {
