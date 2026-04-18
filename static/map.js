@@ -724,7 +724,6 @@ window.loadHouseData = function(selectElement) {
     window.updateMarkerStatus(selectElement.ownerDocument);
 };
 
-// Function to sync the Y/N toggles based on the current dropdown selection
 window.updateTagToggles = function(sel) {
     const row = sel.closest('tr');
     if (!row) return;
@@ -734,95 +733,97 @@ window.updateTagToggles = function(sel) {
 
     // Access the central data store
     const baked = (window.BAKED_DATA && window.BAKED_DATA[street]) ? window.BAKED_DATA[street][unit] : null;
-    const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
 
+    // --- NEW: Sync the VI Selector Color ---
+    const viSel = row.querySelector('.vi-selector');
+    if (viSel) {
+        // Update the value to what's in BAKED_DATA (or default to empty)
+        viSel.value = (baked && baked.vi) ? baked.vi : "";
+        // Manually trigger the color refresh
+        if (window.refreshDropdownColors) {
+            window.refreshDropdownColors(viSel);
+        }
+    }
+
+    // --- Existing Tag Logic ---
+    const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
     row.querySelectorAll('.tag-toggle').forEach(span => {
         const code = span.getAttribute('data-code');
         const hasTag = currentTags.includes(code);
-
         span.innerText = hasTag ? 'y' : 'n';
         span.className = 'tag-toggle ' + (hasTag ? 'tag-active' : 'tag-inactive');
     });
 };
 
-// Function to handle the actual click on a tag
-window.handleTagClick = function(span) {
-    const row = span.closest('tr');
-    const sel = row.querySelector('.unit-selector');
-    const street = row.getAttribute('data-street');
-    const unit = sel.value;
-    const code = span.getAttribute('data-code');
-
-    let isNowActive = span.innerText.trim() === 'n';
-
-    // Update the parent's data store
-    if (window.updateElectorTag) {
-        window.updateElectorTag(street, unit, code, isNowActive);
-    }
-
-    // Refresh the UI for this specific row
-    window.updateTagToggles(sel);
-};
-
 window.refreshDropdownColors = function(selectElement) {
     if (!selectElement) return;
+    var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+    if (!row) return;
 
-      // Use 'tr' as a backup if the class search fails
-      var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+    // Check which dropdown we are dealing with
+    const isUnitSelector = selectElement.classList.contains('unit-selector');
+    const isVISelector = selectElement.classList.contains('vi-selector');
 
-      if (!row) {
-          console.error("Could not find parent row for select:", selectElement);
-          return;
-      }
+    // --- LOGIC A: UNIT SELECTOR (Vote Counts) ---
+    if (isUnitSelector) {
+        var street = row.getAttribute('data-street');
+        Array.from(selectElement.options).forEach(opt => {
+            var h = opt.value;
+            var m = parseInt(opt.getAttribute('data-max')) || 1;
+            var rec = (BAKED_DATA[street] && BAKED_DATA[street][h]) ? BAKED_DATA[street][h] : null;
+            var v = rec ? parseInt(rec.votes) : 0;
 
-      var street = row.getAttribute('data-street');
-      if (!street) return;
+            if (v >= m && m > 0) {
+                opt.text = h + " ✅";
+                opt.style.color = "#28a745";
+            } else if (v > 0) {
+                opt.text = h + " 🟡";
+                opt.style.color = "#ffcc00";
+            } else {
+                opt.text = h;
+                opt.style.color = "";
+            }
+        });
 
-    Array.from(selectElement.options).forEach(opt => {
-        var h = opt.value;
-        var m = parseInt(opt.getAttribute('data-max')) || 1;
-        var rec = (BAKED_DATA[street] && BAKED_DATA[street][h]) ? BAKED_DATA[street][h] : null;
-        var v = rec ? parseInt(rec.votes) : 0;
+        // Color the face of the Unit Dropdown
+        const btn = row.querySelector('.vote-btn');
+        const cv = parseInt(btn.getAttribute('data-count')) || 0;
+        const cm = parseInt(btn.getAttribute('data-max')) || 1;
+        selectElement.style.backgroundColor = (cv >= cm && cm > 0) ? "#28a745" : (cv > 0 ? "#ffcc00" : "");
+        selectElement.style.color = (cv >= cm && cm > 0) ? "white" : (cv > 0 ? "black" : "");
+    }
 
-        // Base text (the house number)
-        let baseText = h;
-
-        // Apply Text Indicators
-        if (v >= m && m > 0) {
-            opt.text = baseText + " ✅"; // Completed
-            opt.style.color = "#28a745";   // Still works in some browsers
-        } else if (v > 0) {
-            opt.text = baseText + " 🟡"; // Partial
-            opt.style.color = "#ffcc00";
-        } else {
-            opt.text = baseText;        // Empty/New
-            opt.style.color = "";
-        }
-    });
-
-    // Keep the "Face" of the dropdown colored as a primary indicator
-    const btn = row.querySelector('.vote-btn');
-    const cv = parseInt(btn.getAttribute('data-count')) || 0;
-    const cm = parseInt(btn.getAttribute('data-max')) || 1;
-
-    selectElement.style.backgroundColor = (cv >= cm && cm > 0) ? "#28a745" : (cv > 0 ? "#ffcc00" : "");
-    selectElement.style.color = (cv >= cm && cm > 0) ? "white" : (cv > 0 ? "black" : "");
+    // --- LOGIC B: VI SELECTOR (Political Intent Colors) ---
+    if (isVISelector) {
+        const val = selectElement.value;
+        const colors = {
+            '1': '#28a745', // Strong Green
+            '2': '#94d3a2', // Light Green
+            '3': '#ffffcc', // Yellow
+            '4': '#ffcccc', // Light Red
+            '5': '#dc3545'  // Dark Red
+        };
+        selectElement.style.backgroundColor = colors[val] || '#ffffff';
+        selectElement.style.color = (val === '1' || val === '5') ? 'white' : 'black';
+    }
 };
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
 window.updateVI = function(selectElement) {
-    var row = selectElement.closest('.canvass-row');
+    var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
-    var votes = row.querySelector('.vote-btn').getAttribute('data-count');
 
     if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-    BAKED_DATA[street][house] = {
-        vi: selectElement.value,
-        votes: votes,
-        ts: Date.now()
-    };
-    console.log(`📝 Updated Intent for ${street} ${house}: ${selectElement.value}`);
+    if (!BAKED_DATA[street][house]) BAKED_DATA[street][house] = { votes: 0, tags: "" };
+
+    // Update only the VI and timestamp
+    BAKED_DATA[street][house].vi = selectElement.value;
+    BAKED_DATA[street][house].ts = Date.now();
+
+    // Re-color the dropdown immediately
+    window.refreshDropdownColors(selectElement);
+    console.log(`📝 Saved Intent for ${street} ${house}: ${selectElement.value}`);
 };
 
 window.highlightLozenge = function highlightLozenge(loz) {
