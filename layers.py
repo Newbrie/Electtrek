@@ -158,7 +158,7 @@ def build_street_list_html(streets_df, street_stats, task_tags):
     sorted_task_codes = sorted(task_tags.keys())
 
     # 2. THE INJECTION (Raw String - No 'f' prefix here to avoid brace hell)
-    persistence_js = r'''
+    persistence_js = """
     <style>
         .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; border: 1px solid #555; }
         .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
@@ -176,8 +176,8 @@ def build_street_list_html(streets_df, street_stats, task_tags):
                 });
             }, 150);
         })();
-    </script>
-    '''
+    <\/script>
+    """
 
     # 3. THE UI: Table Header
     tag_headers_html = "".join([f'<th class="tag-header">{code}</th>' for code in sorted_task_codes])
