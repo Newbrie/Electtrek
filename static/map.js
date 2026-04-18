@@ -725,8 +725,18 @@ window.loadHouseData = function(selectElement) {
 };
 
 window.refreshDropdownColors = function(selectElement) {
-    var row = selectElement.closest('.canvass-row');
-    var street = row.getAttribute('data-street');
+    if (!selectElement) return;
+
+      // Use 'tr' as a backup if the class search fails
+      var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+
+      if (!row) {
+          console.error("Could not find parent row for select:", selectElement);
+          return;
+      }
+
+      var street = row.getAttribute('data-street');
+      if (!street) return;
 
     Array.from(selectElement.options).forEach(opt => {
         var h = opt.value;
