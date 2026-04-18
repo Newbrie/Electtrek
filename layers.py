@@ -154,49 +154,63 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 def build_street_list_html(streets_df, street_stats, task_tags):
     from state import VID
 
-    # 1. Consistent Column Order
+    # 1. Prepare dynamic tag headers
     sorted_task_codes = sorted(task_tags.keys())
+    tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-    # 2. Injection Block (Parent-referenced)
-    persistence_js = '''
-    <style>
-        .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
-        .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
-        .tag-inactive { background: #444; color: #999; border-color: #333; }
-        .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 4px; border-bottom: 2px solid #00aaff; }
-    </style>
-    <script>
-        (function() {
-            setTimeout(function() {
-                document.querySelectorAll('.unit-selector').forEach(function(sel) {
-                    if (parent.loadHouseData) parent.loadHouseData(sel);
-                    if (parent.refreshDropdownColors) parent.refreshDropdownColors(sel);
-                    if (parent.updateTagToggles) parent.updateTagToggles(sel);
-                });
-            }, 150);
-        })();
-    <\/script>
+    # 2. THE INJECTION: JavaScript & CSS
+    persistence_js = r'''
+        <style>
+            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
+            .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
+            .tag-inactive { background: #444; color: #999; border-color: #333; }
+        </style>
+        <script>
+            (function() {
+                setTimeout(function() {
+                    var loader = parent.loadHouseData;
+                    var colorizer = parent.refreshDropdownColors;
+                    var tagger = parent.updateTagToggles;
+
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                        if (loader) loader(sel);
+                        if (colorizer) colorizer(sel);
+                        if (tagger) tagger(sel);
+                    });
+                }, 150);
+            })();
+        </script>
+        '''
+
+    # 3. THE UI: Control Panel
+    html = persistence_js + '''
+    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
+        <button onclick="parent.deployUpdate()" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+            💾 Save & Deploy New File
+        </button>
+        <span style="color:#00aaff; font-size:8pt; align-self:center;">
+            Data is stored inside the HTML file itself.
+        </span>
+    </div>
     '''
 
-    # 3. Dynamic Headers
-    tag_headers_html = "".join([f'<th class="tag-header">{code}</th>' for code in sorted_task_codes])
-
-    # 4. Table Start
-    html = persistence_js + f'''
-    <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 10px; background-color: #003366; color: #ffffff; max-width: 900px; overflow-x: auto; font-family: sans-serif; font-size: 8pt;">
-        <table style="border-collapse: collapse; width: 100%; white-space: nowrap;">
-            <thead>
-                <tr style="background-color:#001f3f;">
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street</th>
-                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
-                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; width:80px;">Unit</th>
-                    {tag_headers_html}
-                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; width:100px;">VI</th>
-                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
+    # 4. THE UI: Table Header (Added dynamic tag headers)
+    html += f'''
+        <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
+            <table style="border-collapse: collapse; width: 100%;">
+                <thead>
+                    <tr style="background-color:#001f3f;">
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street Name</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
+                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff;">Unit</th>
+                        {tag_headers_html}
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Votes</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffcc00;">Gaps</th>
+                    </tr>
+                </thead>
+                <tbody>
     '''
 
     # 5. Build Rows
@@ -204,41 +218,65 @@ def build_street_list_html(streets_df, street_stats, task_tags):
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
         hos = data.get("houses", 0)
-        num_display = f"{data['min_num']}-{data['max_num']}" if data.get("min_num") else "-"
+        num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
+        house_gaps_display = data.get("house_gaps", 0)
 
-        # Tag Spans
+        # Dynamic Tag Cells
         tag_cells = "".join([
             f'<td style="text-align:center; padding:4px;"><span class="tag-toggle tag-inactive" data-code="{code}" onclick="parent.handleTagClick(this)">n</span></td>'
             for code in sorted_task_codes
         ])
 
-        # Unit Selector
-        opts = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
-        unit_dropdown = f'''<select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);" style="font-size:8pt; padding:2px; background:#e6f2ff;">{opts}</select>'''
+        # Unit dropdown (Added tagger to onchange)
+        unit_dropdown = f'''
+        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
+                style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
+            {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
+        </select>
+        '''
 
-        # VI Selector (The missing piece)
-        vi_options = "".join([f'<option value="{code}">{label}</option>' for code, label in VID.items()])
-        vi_dropdown = f'''<select class="vi-selector" onchange="parent.saveHouseData(this)" style="font-size:8pt; padding:2px; background:#fff;">{vi_options}</select>'''
+        # VI select
+        vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
+        vi_select = f'''
+        <select class="vi-selector"
+                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
+                onchange="parent.updateVI(this)">
+            {vi_options}
+        </select>
+        '''
 
-        # Vote Button
-        vote_btn = f'''<button onclick="parent.incrementVoteCount(this)" style="background:#28a745; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer;">Vote</button>'''
+        # Vote button
+        first_unit = unit_list[0] if unit_list else None
+        max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
+        vote_button = f'''
+        <button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="0" data-max="{max_votes}"
+                style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
+            0/{max_votes}
+        </button>
+        '''
 
-        row_bg = "rgba(255,255,255,0.05)" if i % 2 == 0 else "transparent"
+        row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
-            <tr style="background:{row_bg}; border-bottom: 1px solid rgba(255,255,255,0.1);" data-street="{street_name}">
-                <td style="padding:8px;"><b>{street_name}</b></td>
-                <td style="padding:8px; text-align:center;">{hos}</td>
-                <td style="padding:8px; text-align:center; font-size:7pt;">{num_display}</td>
-                <td style="padding:8px;">{unit_dropdown}</td>
-                {tag_cells}
-                <td style="padding:8px;">{vi_dropdown}</td>
-                <td style="padding:8px; text-align:center;">{vote_btn}</td>
-            </tr>
+        <tr class="{row_class} canvass-row" data-street="{street_name}">
+            <td style="padding:8px;"><b data-name="{street_name}">{street_name}</b></td>
+            <td style="padding:8px; font-size:7pt; text-align:center;"><i>{hos}</i></td>
+            <td style="padding:8px; font-size:7pt; text-align:center;">{num_display}</td>
+            <td style="padding:8px; width:60px;">{unit_dropdown}</td>
+            {tag_cells}
+            <td style="padding:8px;">{vi_select}</td>
+            <td style="padding:8px;">{vote_button}</td>
+            <td style="padding:8px; color:#ffcc00; text-align:center;">{house_gaps_display}</td>
+        </tr>
         '''
 
     html += "</tbody></table></div>"
     return html
+#---------------------
+# Helper for node electors
+# ------------------------
+
+
 
 def preprocess_streets(df):
     import pandas as pd
@@ -469,7 +507,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         import pandas as pd
         import folium
         from elector import electors  # your ElectorManager instance
-        from elections import CurrentElection
         zonecolour = {
             "ZONE_0": "#1A1A1B",  # Deep Charcoal (Better than pure black)
             "ZONE_1": "#E63946",  # Vibrant Red
@@ -627,12 +664,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         # -------------------------------------------------
         # Loop regions
         # -------------------------------------------------
-        (c_election, elevels), = rlevels.items()
-        CE = CurrentElection.load(c_election)
-        # 1. Get the tags from your existing method
-        task_tags, outcome_tags, all_tags = CE.get_tags()
-
-
 
         for region_id, poly in region_polys.items():
             # ✂️ COOKIE CUTTER STEP
@@ -776,7 +807,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             """
 
             # Build popup
-            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats, task_tags)
+            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
 
             # Update the style to use the NEW region_color
             style = {
