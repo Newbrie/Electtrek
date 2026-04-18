@@ -1439,7 +1439,7 @@ class TreeNode:
 
 
 
-    def updateVI(self,viValue):
+    def sumupVI(self,viValue):
         origin = self
         if self.type == 'street' or self.type == 'walkleg':
             sumnode = origin

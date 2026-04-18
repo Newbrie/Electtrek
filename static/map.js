@@ -131,6 +131,31 @@ window.incrementVoteCount = function(btn) {
     btn.innerText = count + '/' + max;
 
     var row = btn.closest('.canvass-row');
+
+    // --- NEW: Sync to BAKED_DATA immediately ---
+    if (row) {
+        var street = row.getAttribute('data-street');
+        var houseSelector = row.querySelector('.unit-selector');
+        var viSelector = row.querySelector('.vi-selector');
+
+        if (houseSelector) {
+            var house = houseSelector.value;
+            var vi = viSelector ? viSelector.value : "";
+
+            // Ensure the nested objects exist
+            if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+
+            // Update the central ledger
+            BAKED_DATA[street][house] = {
+                vi: vi,
+                votes: count.toString(),
+                ts: Date.now()
+            };
+            console.log(`💾 Saved to memory: ${street} No. ${house} = ${count} votes`);
+        }
+    }
+    // ------------------------------------------
+
     window.updateRowAppearance(row, count, max);
     window.updateMarkerStatus(btn.ownerDocument);
 };
@@ -627,6 +652,21 @@ function updateMaxVote(selectElement) {
     viSelector.selectedIndex = 0;
 }
 
+// Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
+window.updateVI = function(selectElement) {
+    var row = selectElement.closest('.canvass-row');
+    var street = row.getAttribute('data-street');
+    var house = row.querySelector('.unit-selector').value;
+    var votes = row.querySelector('.vote-btn').getAttribute('data-count');
+
+    if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+    BAKED_DATA[street][house] = {
+        vi: selectElement.value,
+        votes: votes,
+        ts: Date.now()
+    };
+    console.log(`📝 Updated Intent for ${street} ${house}: ${selectElement.value}`);
+};
 
 window.highlightLozenge = function highlightLozenge(loz) {
 document.querySelectorAll('.lozenge.selected').forEach(el => {

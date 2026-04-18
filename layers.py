@@ -219,9 +219,10 @@ def build_street_list_html(streets_df, street_stats):
         '''
 
         # VI select
-        vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
         vi_select = f'''
-        <select class="vi-selector" style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
+        <select class="vi-selector"
+                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
+                onchange="parent.updateVI(this)">
             {vi_options}
         </select>
         '''

@@ -3052,7 +3052,7 @@ def STupdate(path):
                             changefields.loc[i,'VR'] = VR_value
                         if VI_value != "":
                             allelectors.loc[mask, "VI"] = VI_value
-                            street_node.updateVI(VI_value)
+                            street_node.sumupVI(VI_value)
                             changefields.loc[i,'VI'] = VI_value
                         if Notes_value != "":
                             allelectors.loc[mask, "Notes"] = Notes_value
