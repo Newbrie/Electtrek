@@ -56,6 +56,23 @@ window.updateRowAppearance = function(row, count, max) {
     });
 };
 
+window.updateElectorTag = function(street, unit, code, isActive) {
+    if (!window.BAKED_DATA[street]) return;
+    if (!window.BAKED_DATA[street][unit]) window.BAKED_DATA[street][unit] = { votes: 0, tags: "" };
+
+    let currentTags = window.BAKED_DATA[street][unit].tags || "";
+    let tagList = currentTags.split(',').filter(t => t.trim() !== "");
+
+    if (isActive) {
+        if (!tagList.includes(code)) tagList.push(code);
+    } else {
+        tagList = tagList.filter(t => t !== code);
+    }
+
+    window.BAKED_DATA[street][unit].tags = tagList.join(',');
+    console.log(`Updated ${street} ${unit} tags: ${window.BAKED_DATA[street][unit].tags}`);
+};
+
 window.updateMarkerStatus = function(doc) {
     const rows = doc.querySelectorAll('.canvass-row');
     let allComplete = true;
