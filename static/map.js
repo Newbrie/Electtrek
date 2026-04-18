@@ -721,6 +721,29 @@ window.refreshDropdownColors = function(selectElement) {
         } else if (v > 0) {
             opt.style.backgroundColor = "#ffcc00"; // Yellow
 
+            opt.style.color = "black";
+        } else {
+            opt.style.backgroundColor = ""; // Reset
+            opt.style.color = "";
+        }
+    });
+
+    // Color the background of the SELECT box itself to match the CURRENTLY SELECTED house
+    const btn = row.querySelector('.vote-btn');
+    const v = parseInt(btn.getAttribute('data-count')) || 0;
+    const m = parseInt(btn.getAttribute('data-max')) || 1;
+
+    if (v >= m && m > 0) {
+        selectElement.style.backgroundColor = "#28a745";
+        selectElement.style.color = "white";
+    } else if (v > 0) {
+        selectElement.style.backgroundColor = "#ffcc00";
+        selectElement.style.color = "black";
+    } else {
+        selectElement.style.backgroundColor = "";
+        selectElement.style.color = "";
+    }
+};
 
 
 // Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
