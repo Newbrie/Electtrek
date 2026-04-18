@@ -159,56 +159,24 @@ def build_street_list_html(streets_df, street_stats, task_tags):
 
     # 2. THE INJECTION (Raw String - No 'f' prefix here to avoid brace hell)
     persistence_js = r'''
-        <style>
-            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; border: 1px solid #555; }
-            .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
-            .tag-inactive { background: #444; color: #999; border-color: #333; }
-            .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 8px; border-bottom: 2px solid #00aaff; min-width: 30px; }
-        </style>
-        <script>
-            (function() {
-                setTimeout(function() {
-                    var loader = parent.loadHouseData;
-                    var colorizer = parent.refreshDropdownColors;
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
-                        if (loader) loader(sel);
-                        if (colorizer) colorizer(sel);
-                        updateTagToggles(sel);
-                    });
-                }, 150);
-            })();
-
-            function updateTagToggles(sel) {
-                const row = sel.closest('tr');
-                const street = row.getAttribute('data-street');
-                const unit = sel.value;
-                const baked = (parent.BAKED_DATA && parent.BAKED_DATA[street]) ? parent.BAKED_DATA[street][unit] : null;
-                const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
-
-                row.querySelectorAll('.tag-toggle').forEach(span => {
-                    const code = span.getAttribute('data-code');
-                    const hasTag = currentTags.includes(code);
-                    span.innerText = hasTag ? 'y' : 'n';
-                    span.className = 'tag-toggle ' + (hasTag ? 'tag-active' : 'tag-inactive');
+    <style>
+        .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; border: 1px solid #555; }
+        .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
+        .tag-inactive { background: #444; color: #999; border-color: #333; }
+        .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 8px; border-bottom: 2px solid #00aaff; }
+    </style>
+    <script>
+        (function() {
+            setTimeout(function() {
+                document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                    // We call the functions from the parent window directly
+                    if (parent.loadHouseData) parent.loadHouseData(sel);
+                    if (parent.refreshDropdownColors) parent.refreshDropdownColors(sel);
+                    if (parent.updateTagToggles) parent.updateTagToggles(sel);
                 });
-            }
-
-            window.handleTagClick = function(span) {
-                const row = span.closest('tr');
-                const sel = row.querySelector('.unit-selector');
-                const street = row.getAttribute('data-street');
-                const unit = sel.value;
-                const code = span.getAttribute('data-code');
-
-                let isNowActive = span.innerText.trim() === 'n';
-                span.innerText = isNowActive ? 'y' : 'n';
-                span.className = 'tag-toggle ' + (isNowActive ? 'tag-active' : 'tag-inactive');
-
-                if(parent.updateElectorTag) {
-                    parent.updateElectorTag(street, unit, code, isNowActive);
-                }
-            };
-        </script>
+            }, 150);
+        })();
+    </script>
     '''
 
     # 3. THE UI: Table Header

@@ -724,6 +724,46 @@ window.loadHouseData = function(selectElement) {
     window.updateMarkerStatus(selectElement.ownerDocument);
 };
 
+// Function to sync the Y/N toggles based on the current dropdown selection
+window.updateTagToggles = function(sel) {
+    const row = sel.closest('tr');
+    if (!row) return;
+
+    const street = row.getAttribute('data-street');
+    const unit = sel.value;
+
+    // Access the central data store
+    const baked = (window.BAKED_DATA && window.BAKED_DATA[street]) ? window.BAKED_DATA[street][unit] : null;
+    const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
+
+    row.querySelectorAll('.tag-toggle').forEach(span => {
+        const code = span.getAttribute('data-code');
+        const hasTag = currentTags.includes(code);
+
+        span.innerText = hasTag ? 'y' : 'n';
+        span.className = 'tag-toggle ' + (hasTag ? 'tag-active' : 'tag-inactive');
+    });
+};
+
+// Function to handle the actual click on a tag
+window.handleTagClick = function(span) {
+    const row = span.closest('tr');
+    const sel = row.querySelector('.unit-selector');
+    const street = row.getAttribute('data-street');
+    const unit = sel.value;
+    const code = span.getAttribute('data-code');
+
+    let isNowActive = span.innerText.trim() === 'n';
+
+    // Update the parent's data store
+    if (window.updateElectorTag) {
+        window.updateElectorTag(street, unit, code, isNowActive);
+    }
+
+    // Refresh the UI for this specific row
+    window.updateTagToggles(sel);
+};
+
 window.refreshDropdownColors = function(selectElement) {
     if (!selectElement) return;
 
