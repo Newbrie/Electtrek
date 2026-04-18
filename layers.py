@@ -167,6 +167,18 @@ def build_street_list_html(streets_df, street_stats):
                             loader(sel);
                         });
                     }
+                    // 1. Reference the parent functions
+                var loader = parent.loadHouseData;
+                var colorizer = parent.refreshDropdownColors;
+
+                document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                    // 2. Load the specific data for the current house
+                    if (loader) loader(sel);
+
+                    // 3. Color all options in the dropdown list
+                    if (colorizer) colorizer(sel);
+                });
+
                 }, 150);
             })();
         <\/script>
@@ -174,25 +186,16 @@ def build_street_list_html(streets_df, street_stats):
 
 
     # --- THE UI: Control Panel ---
-    persistence_js = '''
-        <script>
-            (function() {
-                setTimeout(function() {
-                    // 1. Reference the parent functions
-                    var loader = parent.loadHouseData;
-                    var colorizer = parent.refreshDropdownColors;
-
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
-                        // 2. Load the specific data for the current house
-                        if (loader) loader(sel);
-
-                        // 3. Color all options in the dropdown list
-                        if (colorizer) colorizer(sel);
-                    });
-                }, 150);
-            })();
-        <\/script>
-        '''
+    html = persistence_js + '''
+    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
+        <button onclick="parent.deployUpdate" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+            💾 Save & Deploy New File
+        </button>
+        <span style="color:#00aaff; font-size:8pt; align-self:center;">
+            Data is stored inside the HTML file itself.
+        </span>
+    </div>
+    '''
 
     # --- THE UI: Table Header ---
     html += '''
