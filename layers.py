@@ -507,6 +507,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         import pandas as pd
         import folium
         from elector import electors  # your ElectorManager instance
+        from elections import CurrentElection
         zonecolour = {
             "ZONE_0": "#1A1A1B",  # Deep Charcoal (Better than pure black)
             "ZONE_1": "#E63946",  # Vibrant Red
@@ -528,6 +529,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         # The clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
+        CE = CurrentElection.load(c_election)
+        task_tags, outcome_tags, all_tags = CE.get_tags()
 
         pfile = Treepolys[elevels[node.level]]
         Territory_boundary = pfile[pfile['FID'] == int(node.fid)]
@@ -806,8 +809,10 @@ class ExtendedFeatureGroup(FeatureGroup):
             House gaps: {missing_total}
             """
 
+
+
             # Build popup
-            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats)
+            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats, task_tags)
 
             # Update the style to use the NEW region_color
             style = {
@@ -952,7 +957,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         # The clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
-
+        CE = CurrentElection.load(c_election)
+        task_tags, outcome_tags, all_tags = CE.get_tags()
 
         points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
         print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
@@ -997,7 +1003,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-            streetstag = build_street_list_html(datablock)
+            streetstag = build_street_list_html(datablock, street_stats, task_tags)
             limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+ downtag+"<br>"+ streetstag+"<br></div>"
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
 
