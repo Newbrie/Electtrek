@@ -57,41 +57,44 @@ window.updateRowAppearance = function(row, count, max) {
 };
 
 window.updateMarkerStatus = function(doc) {
-    if (!window.fmap) {
-        console.warn("⚠️ Marker Update Failed: window.fmap not found.");
-        return;
-    }
-
     const rows = doc.querySelectorAll('.canvass-row');
-    if (rows.length === 0) {
-        console.warn("⚠️ Marker Update Failed: No .canvass-row elements found in popup.");
-        return;
-    }
-
     let allComplete = true;
-    rows.forEach(row => {
-        const btn = row.querySelector('.vote-btn');
+    let anyStarted = false;
+
+    rows.forEach(r => {
+        const btn = r.querySelector('.vote-btn');
         const count = parseInt(btn.getAttribute('data-count')) || 0;
         const max = parseInt(btn.getAttribute('data-max')) || 1;
         if (count < max) allComplete = false;
+        if (count > 0) anyStarted = true;
     });
 
-    console.log(`Checking Walk Marker: All Streets Complete? ${allComplete}`);
-
-    let markerFound = false;
-    window.fmap.eachLayer(function(layer) {
-        if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
-            markerFound = true;
-            const iconElement = layer.getElement();
-            if (iconElement) {
-                console.log("📍 Found active marker, applying filter...");
-                iconElement.style.filter = allComplete
-                    ? "hue-rotate(120deg) brightness(0.9) saturate(2)"
-                    : "";
+    if (window.fmap) {
+        window.fmap.eachLayer(layer => {
+            // Find the marker that is currently open
+            if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
+                const el = layer.getElement();
+                if (el) {
+                    // Target the span specifically
+                    const tagSpan = el.querySelector('.voronoi-tag');
+                    if (tagSpan) {
+                        if (allComplete) {
+                            tagSpan.style.setProperty('background', '#28a745', 'important');
+                            tagSpan.style.color = "white";
+                        } else if (anyStarted) {
+                            tagSpan.style.setProperty('background', '#ffcc00', 'important');
+                            tagSpan.style.color = "black";
+                        } else {
+                            // Reset to original color - we pull this from a data attribute or leave as is
+                            // If you want to reset to the original fcol, we should store it
+                            tagSpan.style.background = "";
+                            tagSpan.style.color = "";
+                        }
+                    }
+                }
             }
-        }
-    });
-    if (!markerFound) console.warn("⚠️ No active/open marker found on map to update.");
+        });
+    }
 };
 
 window.loadHouseData = function(selectElement) {
