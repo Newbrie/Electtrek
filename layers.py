@@ -154,16 +154,16 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 def build_street_list_html(streets_df, street_stats, task_tags):
     from state import VID
 
-    # 1. Sort codes for consistent columns
+    # 1. Consistent Column Order
     sorted_task_codes = sorted(task_tags.keys())
 
-    # 2. THE INJECTION (Raw String)
+    # 2. Injection Block (Parent-referenced)
     persistence_js = '''
     <style>
-        .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 12px; text-align: center; border: 1px solid #555; }
+        .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
         .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
         .tag-inactive { background: #444; color: #999; border-color: #333; }
-        .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 8px; border-bottom: 2px solid #00aaff; }
+        .tag-header { color: #00aaff; font-size: 7pt; text-align: center; padding: 4px; border-bottom: 2px solid #00aaff; }
     </style>
     <script>
         (function() {
@@ -178,71 +178,67 @@ def build_street_list_html(streets_df, street_stats, task_tags):
     <\/script>
     '''
 
-    # 3. THE UI: Table Header
+    # 3. Dynamic Headers
     tag_headers_html = "".join([f'<th class="tag-header">{code}</th>' for code in sorted_task_codes])
 
+    # 4. Table Start
     html = persistence_js + f'''
-        <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: sans-serif; font-size: 8pt; white-space: nowrap;">
-            <table style="border-collapse: collapse; width: 100%;">
-                <thead>
-                    <tr style="background-color:#001f3f;">
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street Name</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
-                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff;">Unit</th>
-                        {tag_headers_html}
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Votes</th>
-                    </tr>
-                </thead>
-                <tbody>
+    <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 10px; background-color: #003366; color: #ffffff; max-width: 900px; overflow-x: auto; font-family: sans-serif; font-size: 8pt;">
+        <table style="border-collapse: collapse; width: 100%; white-space: nowrap;">
+            <thead>
+                <tr style="background-color:#001f3f;">
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street</th>
+                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
+                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; width:80px;">Unit</th>
+                    {tag_headers_html}
+                    <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; width:100px;">VI</th>
+                    <th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
     '''
 
-    # --- THE LOOP ---
+    # 5. Build Rows
     for i, (street_name, data) in enumerate(street_stats.items()):
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
         hos = data.get("houses", 0)
-        num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
+        num_display = f"{data['min_num']}-{data['max_num']}" if data.get("min_num") else "-"
 
-        # Generate Tag Cells - Calling parent.handleTagClick
-        tag_cells = ""
-        for code in sorted_task_codes:
-            tag_cells += f'''
-                <td style="padding:8px; text-align:center;">
-                    <span class="tag-toggle tag-inactive" data-code="{code}" onclick="parent.handleTagClick(this)">n</span>
-                </td>'''
+        # Tag Spans
+        tag_cells = "".join([
+            f'<td style="text-align:center; padding:4px;"><span class="tag-toggle tag-inactive" data-code="{code}" onclick="parent.handleTagClick(this)">n</span></td>'
+            for code in sorted_task_codes
+        ])
 
-        # Build Dropdown - Calling parent.updateTagToggles
-        options_html = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
+        # Unit Selector
+        opts = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
+        unit_dropdown = f'''<select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);" style="font-size:8pt; padding:2px; background:#e6f2ff;">{opts}</select>'''
 
-        unit_dropdown = f'''
-            <select class="unit-selector"
-                    onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
-                    style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
-                {options_html}
-            </select>
-        '''
+        # VI Selector (The missing piece)
+        vi_options = "".join([f'<option value="{code}">{label}</option>' for code, label in VID.items()])
+        vi_dropdown = f'''<select class="vi-selector" onchange="parent.saveHouseData(this)" style="font-size:8pt; padding:2px; background:#fff;">{vi_options}</select>'''
 
-        row_style = "background:rgba(255,255,255,0.05);" if i % 2 == 0 else "background:transparent;"
+        # Vote Button
+        vote_btn = f'''<button onclick="parent.incrementVoteCount(this)" style="background:#28a745; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer;">Vote</button>'''
+
+        row_bg = "rgba(255,255,255,0.05)" if i % 2 == 0 else "transparent"
 
         html += f'''
-            <tr style="{row_style}" data-street="{street_name}">
+            <tr style="background:{row_bg}; border-bottom: 1px solid rgba(255,255,255,0.1);" data-street="{street_name}">
                 <td style="padding:8px;"><b>{street_name}</b></td>
-                <td style="padding:8px; font-size:7pt;"><i>{hos}</i></td>
-                <td style="padding:8px; font-size:7pt;">{num_display}</td>
-                <td style="padding:8px; width:60px;">{unit_dropdown}</td>
+                <td style="padding:8px; text-align:center;">{hos}</td>
+                <td style="padding:8px; text-align:center; font-size:7pt;">{num_display}</td>
+                <td style="padding:8px;">{unit_dropdown}</td>
                 {tag_cells}
-                <td style="padding:8px;">(VI)</td>
-                <td style="padding:8px;">(Btn)</td>
+                <td style="padding:8px;">{vi_dropdown}</td>
+                <td style="padding:8px; text-align:center;">{vote_btn}</td>
             </tr>
         '''
 
-    # --- CLOSE THE TABLE OUTSIDE THE LOOP ---
     html += "</tbody></table></div>"
-
     return html
-
 
 def preprocess_streets(df):
     import pandas as pd
