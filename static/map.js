@@ -35,6 +35,16 @@ var showMore = function (msg,area, type) {
 
 var BAKED_DATA = BAKED_DATA || {};
 
+// 1. Declare it globally (outside of any function)
+var map;
+
+function initMap() {
+    // 2. Assign the leaflet object to that global variable
+    map = L.map('map-div-id').setView([lat, lon], zoom);
+
+    L.tileLayer('...').addTo(map);
+}
+
 window.updateRowAppearance = function(row, count, max) {
     if (!row) return;
 
@@ -78,13 +88,18 @@ window.updateMarkerStatus = function(region_id) {
 
     let completedUnits = 0;
     let expectedHouses = 0;
-
-    // A. Find the polygon to get the "expected" house count
-    map.eachLayer(function(layer) {
-        if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
-            expectedHouses = layer.feature.properties.expected_houses || 0;
-        }
-    });
+    var mapObject = window.map || parent.map;
+    if (mapObject) {
+        // A. Find the polygon to get the "expected" house count
+        map.eachLayer(function(layer) {
+            if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
+                expectedHouses = layer.feature.properties.expected_houses || 0;
+            }
+        });
+    } else {
+        console.error("The 'map' variable is still undefined!");
+        return
+    }
 
     // B. Count how many unique houses in BAKED_DATA have votes
     if (window.BAKED_DATA[region_id]) {
