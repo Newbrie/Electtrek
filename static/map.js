@@ -35,14 +35,98 @@ var showMore = function (msg,area, type) {
 
 var BAKED_DATA = BAKED_DATA || {};
 
-// 1. Declare it globally (outside of any function)
-var map;
+/* --- Top of map.js --- */
+var map; // The global "Handle"
 
-function initMap() {
-    // 2. Assign the leaflet object to that global variable
-    map = L.map('map-div-id').setView([lat, lon], zoom);
+// This self-invoking function starts looking for the map immediately
+(function startMapCatcher() {
+    const findMap = () => {
+        for (const key in window) {
+            // Check if the variable looks like a Folium/Leaflet map
+            if (key.startsWith('map_') && window[key] instanceof L.Map) {
+                map = window[key];
+                window.map = map; // Ensure it's reachable via window.map
+                console.log("🎯 map.js: Successfully linked to map instance:", key);
+                return true;
+            }
+        }
+        return false;
+    };
 
-    L.tileLayer('...').addTo(map);
+    // If not found, check every 100ms
+    if (!findMap()) {
+        const interval = setInterval(() => {
+            if (findMap()) clearInterval(interval);
+        }, 100);
+
+        // Safety: Stop looking after 10 seconds if no map is found
+        setTimeout(() => clearInterval(interval), 10000);
+    }
+})();
+
+// 2. Calendar Toggle Logic
+let toggleSent = false;
+window.handleCalendarClick = function() {
+    if (!toggleSent) {
+        window.parent.postMessage({ type: "toggleView" }, "*");
+        toggleSent = true;
+        setTimeout(() => { toggleSent = false }, 500);
+    }
+};
+
+// 3. Search Logic
+async function searchMap() {
+    const query = document.getElementById("searchInput").value.trim();
+    const fmap = window.map; // Use our standard map variable
+    if (!query || !fmap) return;
+
+    // Postcode Pattern
+    const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+    if (postcodePattern.test(query)) {
+        const cleanPostcode = query.replace(/\s+/g, '');
+        try {
+            const res = await fetch(`http://api.getthedata.com/postcode/${cleanPostcode}`);
+            const data = await res.json();
+            if (data.status === "match" && data.data) {
+                const { latitude, longitude } = data.data;
+                fmap.setView([latitude, longitude], 17);
+                L.marker([latitude, longitude]).addTo(fmap).bindPopup(`<b>${query.toUpperCase()}</b>`).openPopup();
+                return;
+            }
+        } catch (err) { console.error("Postcode fail:", err); }
+    }
+
+    // Layer Search Logic
+    const normalizedQuery = query.toLowerCase();
+    let found = false;
+
+    fmap.eachLayer(function (layer) {
+        if (found) return;
+
+        // Search Popups
+        if (layer.getPopup && layer.getPopup()) {
+            const content = layer.getPopup().getContent();
+            const text = (content instanceof HTMLElement) ? content.innerText : String(content);
+            if (text.toLowerCase().includes(normalizedQuery)) {
+                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                fmap.setView(latlng, 17);
+                layer.openPopup();
+                found = true;
+            }
+        }
+
+        // Search Tooltips
+        if (!found && layer.getTooltip && layer.getTooltip()) {
+            const tooltipContent = String(layer.getTooltip().getContent());
+            if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
+                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                fmap.setView(latlng, 17);
+                found = true;
+            }
+        }
+    });
+
+    if (!found) alert("No matching location found.");
 }
 
 window.updateRowAppearance = function(row, count, max) {

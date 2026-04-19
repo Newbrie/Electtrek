@@ -2123,184 +2123,23 @@ class TreeNode:
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
             <style>
-            #customSearchBox {
-                position: absolute;
-                top: 10px;
-                left: 50px;          /* shift 40px to the right */
-                z-index: 1000;
-                background: white;
-                padding: 8px 10px;
-                border: 1px solid #ccc;
-                display: flex;
-                flex-direction: column;
-                gap: 5px;
-                font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-            }
-
-            #customSearchBox h2 {
-                margin: 0;
-                font-variant: small-caps;
-                font-size: 12px;
-                color: black;
-            }
-
-            #customSearchBox input {
-                padding: 4px 6px;
-                font-size: 14px;
-            }
-
-            #customSearchBox button {
-                padding: 4px 8px;
-                font-size: 14px;
-                cursor: pointer;
-            }
-
-            /* Change cursor to crosshair when in add-place mode */
-            .leaflet-container.add-place-mode {
-                cursor: crosshair;
-            }
+                #customSearchBox {
+                    position: absolute; top: 10px; left: 50px; z-index: 1000;
+                    background: white; padding: 8px 10px; border: 1px solid #ccc;
+                    display: flex; flex-direction: column; gap: 5px;
+                    font-family: sans-serif;
+                }
+                #customSearchBox input, #customSearchBox button { padding: 4px; font-size: 14px; }
             </style>
 
             <div id="customSearchBox">
-                <h2></h2>
                 <div style="display: flex; gap: 8px;">
                     <input type="text" id="searchInput" placeholder="Search..." />
                     <button onclick="searchMap()">Search</button>
-                    <button id="backToCalendarBtn">📅 Calendar</button>
+                    <button id="backToCalendarBtn" onclick="handleCalendarClick()">📅 Calendar</button>
                 </div>
             </div>
-
-            <script>
-            document.addEventListener("DOMContentLoaded", function () {
-                function waitForMap() {
-                    for (const key in window) {
-                        if (window.hasOwnProperty(key)) {
-                            const val = window[key];
-                            if (val && val instanceof L.Map) {
-                                window.fmap = val;
-                                return;
-                            }
-                        }
-                    }
-                    setTimeout(waitForMap, 100);
-                }
-                waitForMap();
-            });
-
-            let toggleSent = false;
-            document.getElementById("backToCalendarBtn").addEventListener("click", () => {
-                if (!toggleSent) {
-                    window.parent.postMessage({ type: "toggleView" }, "*");
-                    toggleSent = true;
-                    setTimeout(() => { toggleSent = false }, 500);
-                }
-            });
-
-            async function searchMap() {
-                const query = document.getElementById("searchInput").value.trim();
-                if (!query) return;
-
-                const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
-                if (postcodePattern.test(query)) {
-                    const cleanPostcode = query.replace(/\s+/g, '');
-                    const url = `http://api.getthedata.com/postcode/${cleanPostcode}`;
-                    try {
-                        const res = await fetch(url);
-                        if (!res.ok) throw new Error("Network error");
-                        const data = await res.json();
-
-                        if (data.status === "match" && data.data) {
-                            const { latitude, longitude } = data.data;
-                            fmap.setView([latitude, longitude], 17);
-                            L.marker([latitude, longitude])
-                                .addTo(fmap)
-                                .bindPopup(`<b>${query.toUpperCase()}</b><br>Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`)
-                                .openPopup();
-                            return;
-                        } else {
-                            alert("Postcode not found.");
-                            return;
-                        }
-                    } catch (err) {
-                        console.error("Postcode lookup failed:", err);
-                        if (!fmap.getCenter()) alert("Error looking up postcode.");
-                        return;
-                    }
-                }
-
-                const normalizedQuery = query.toLowerCase();
-                let found = false;
-
-                fmap.eachLayer(function (layer) {
-                    if (found) return;
-
-                    if (layer.getPopup && layer.getPopup()) {
-                        let bElements = [];
-                        const content = layer.getPopup().getContent();
-
-                        if (content instanceof HTMLElement) {
-                            bElements = content.querySelectorAll('b[data-name]');
-                        } else if (typeof content === 'string') {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(content, 'text/html');
-                            bElements = doc.querySelectorAll('b[data-name]');
-                        }
-
-                        for (let b of bElements) {
-                            const dataName = b.getAttribute('data-name');
-                            const normalizedDataName = dataName.toLowerCase().replace(/_/g, ' ');
-                            if (normalizedDataName.includes(normalizedQuery)) {
-                                let latlng = null;
-                                if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                                else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
-
-                                if (latlng) {
-                                    fmap.setView(latlng, 17);
-                                    if (typeof layer.openPopup === 'function') layer.openPopup();
-                                    found = true;
-                                    return;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!found && layer.getTooltip && layer.getTooltip()) {
-                        const tooltipContent = layer.getTooltip().getContent();
-                        if (tooltipContent && tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                            let latlng = null;
-                            if (typeof layer.getLatLng === 'function') latlng = layer.getLatLng();
-                            else if (typeof layer.getBounds === 'function') latlng = layer.getBounds().getCenter();
-
-                            if (latlng) {
-                                fmap.setView(latlng, 17);
-                                found = true;
-                                return;
-                            }
-                        }
-                    }
-
-                    if (!found && window.MarkerLayer && layer instanceof L.Marker && window.MarkerLayer.hasLayer(layer)) {
-                        if (layer.options.icon instanceof L.DivIcon) {
-                            const html = layer.options.icon.options.html || "";
-                            if (html.toLowerCase().includes(normalizedQuery)) {
-                                const latlng = layer.getLatLng();
-                                fmap.setView(latlng, 17);
-                                layer.openPopup?.();
-                                layer._icon?.style && (layer._icon.style.border = "2px solid red");
-                                found = true;
-                                return;
-                            }
-                        }
-                    }
-                });
-
-                if (!found) {
-                    alert("No matching location found.");
-                }
-            }
-            </script>
             """
-
 
         # Inject custom CSS
         css = """
