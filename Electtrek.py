@@ -3793,7 +3793,7 @@ def upload_data():
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
 
         # 2. Use your manager to persist it to the file
-        BAKED_DATA.save(new_data)
+        baked_data.save(new_data)
 
         # 3. Return success to the browser
         return jsonify({

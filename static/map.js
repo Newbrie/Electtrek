@@ -48,34 +48,33 @@ var getBakedData = function() {
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
   /* --- Inside your startMapCatcher in map.js --- */
-const findMap = () => {
-    // 1. Check current window first
-    for (const key in window) {
-        if (key.startsWith('map_') && window[key] instanceof L.Map) {
-            fmap = window[key];
-            window.fmap = fmap;
-            return true;
-        }
-    }
+  const findMap = () => {
+      // 1. Check current window
+      for (const key in window) {
+          // Use 'window.L' to ensure it exists here
+          if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
+              fmap = window[key];
+              window.fmap = fmap;
+              return true;
+          }
+      }
 
-    // 2. Target iframe1 specifically
-    const frame = document.getElementById('iframe1');
-    if (frame && frame.contentWindow) {
-        const frameWin = frame.contentWindow;
-        for (const key in frameWin) {
-            if (key.startsWith('map_') && frameWin[key] instanceof L.Map) {
-                fmap = frameWin[key];
-                // CRITICAL: We store the map on the parent window
-                // so all other scripts can see it as 'fmap'
-                window.fmap = fmap;
-                console.log("🎯 map.js: Found Folium map inside iframe1:", key);
-                return true;
-            }
-        }
-    }
-    return false;
-};
-
+      // 2. Target iframe1 specifically
+      const frame = document.getElementById('iframe1');
+      if (frame && frame.contentWindow) {
+          const frameWin = frame.contentWindow;
+          // Look for the map using the IFRAME'S version of Leaflet (frameWin.L)
+          for (const key in frameWin) {
+              if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
+                  fmap = frameWin[key];
+                  window.fmap = fmap;
+                  console.log("🎯 map.js: Found Folium map inside iframe1:", key);
+                  return true;
+              }
+          }
+      }
+      return false;
+  };
 
     // If not found, check every 100ms
     if (!findMap()) {
