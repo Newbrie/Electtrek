@@ -432,19 +432,45 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            // This log will fire for EVERY layer (Tiles, Markers, Polygons)
-            console.log("Found a layer type:", layer.constructor.name);
-
-            if (layer.feature) {
-                console.log("✅ Feature detected! Properties:", layer.feature.properties);
-            } else if (layer._layers) {
-                console.log("📦 This layer is a Group/Container containing:", Object.keys(layer._layers).length, "sub-layers.");
-                // OPTIONAL: Recurse into groups if standard eachLayer is missing them
-                layer.eachLayer(sub => {
-                    if (sub.feature) console.log("   ↳ Sub-feature found:", sub.feature.properties);
+            // 1. Direct Check: Is this layer the polygon itself?
+            if (layer.feature && layer.feature.properties) {
+                processLayer(layer, region_id, completedHousesInWalk);
+            }
+            // 2. Recursive Check: Is this a group containing polygons?
+            else if (typeof layer.eachLayer === 'function') {
+                console.log("📦 Found a Group, diving in...");
+                layer.eachLayer(function(subLayer) {
+                    if (subLayer.feature && subLayer.feature.properties) {
+                        processLayer(subLayer, region_id, completedHousesInWalk);
+                    }
                 });
             }
         });
+
+        // Helper function to keep the code clean
+        function processLayer(layer, region_id, completedHouses) {
+            const props = layer.feature.properties;
+
+            // Normalize IDs to handle string/number differences
+            const polyId = String(props.region_id || props.walk_id || "");
+            const targetId = String(region_id);
+
+            if (polyId === targetId) {
+                foundPolygon = true;
+                const expected = props.expected_houses || 0;
+                const pct = expected > 0 ? (completedHouses / expected) * 100 : 0;
+
+                console.log(`🎯 MATCH: ${polyId} | Progress: ${pct.toFixed(1)}%`);
+
+                const color = (pct >= 100) ? "#28a745" : (pct > 0 ? "#ffcc00" : null);
+
+                layer.setStyle({
+                    fillColor: color || props.fcol || "#808080",
+                    fillOpacity: color ? 0.8 : 0.4,
+                    weight: color ? 3 : 1
+                });
+            }
+        }
     }
 
     if (activeMap) {
