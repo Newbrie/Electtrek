@@ -2,7 +2,7 @@ from canvasscards import prodcards, find_boundary
 from walks import prodwalks
 #import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
 import config
-from config import POSTCODE_FILE,TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS, NATIONAL_DIVISION_FILE
+from config import POSTCODE_FILE,TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS, NATIONAL_DIVISION_FILE,DATA_FILE
 from normalised import normz
 #import normz
 
@@ -3776,6 +3776,27 @@ def showmore(path):
 
     return current_node.parent.render_face(current_election,CElection,True)
 
+
+@app.route('/upload_data', methods=['POST'])
+@login_required
+def upload_data():
+    try:
+        # Get the JSON sent from map.js
+        new_data = request.get_json()
+
+        if not new_data:
+            return jsonify({"status": "error", "message": "No data received"}), 400
+
+        # Save it to a physical file on the server
+        with open(DATA_FILE, 'w') as f:
+            json.dump(new_data, f, indent=4)
+
+        print("✅ BAKED_DATA updated on server.")
+        return jsonify({"status": "success"}), 200
+
+    except Exception as e:
+        print(f"❌ Server Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/upload_file', methods=['POST'])
 @login_required

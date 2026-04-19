@@ -33,26 +33,49 @@ var showMore = function (msg,area, type) {
 
 // --- MOVE THESE TO MAP.JS ---
 
-var BAKED_DATA = BAKED_DATA || {};
+var BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
 
 /* --- Top of map.js --- */
-var fmap; // The global "Handle"
+/* --- Top of map.js --- */
+// 1. Map Handle
+var fmap;
+
+// 2. Data Handle: Use local data if it exists, otherwise reach out to the parent
+var getBakedData = function() {
+    return window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
+};
 
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
-    const findMap = () => {
-        for (const key in window) {
-            // Check if the variable looks like a Folium/Leaflet map
-            if (key.startsWith('map_') && window[key] instanceof L.Map) {
-                fmap = window[key];
-                window.fmap = fmap; // Ensure it's reachable via window.map
-                if (window.parent) window.parent.fmap = fmap;
-                console.log("🎯 map.js: Successfully linked to map instance:", key);
+  /* --- Inside your startMapCatcher in map.js --- */
+const findMap = () => {
+    // 1. Check current window first
+    for (const key in window) {
+        if (key.startsWith('map_') && window[key] instanceof L.Map) {
+            fmap = window[key];
+            window.fmap = fmap;
+            return true;
+        }
+    }
+
+    // 2. Target iframe1 specifically
+    const frame = document.getElementById('iframe1');
+    if (frame && frame.contentWindow) {
+        const frameWin = frame.contentWindow;
+        for (const key in frameWin) {
+            if (key.startsWith('map_') && frameWin[key] instanceof L.Map) {
+                fmap = frameWin[key];
+                // CRITICAL: We store the map on the parent window
+                // so all other scripts can see it as 'fmap'
+                window.fmap = fmap;
+                console.log("🎯 map.js: Found Folium map inside iframe1:", key);
                 return true;
             }
         }
-        return false;
-    };
+    }
+    return false;
+};
+
 
     // If not found, check every 100ms
     if (!findMap()) {
@@ -63,6 +86,16 @@ var fmap; // The global "Handle"
         // Safety: Stop looking after 10 seconds if no map is found
         setTimeout(() => clearInterval(interval), 10000);
     }
+    /* Add this to the end of your startMapCatcher function */
+if (window.parent && window.parent !== window) {
+    // If I am the iframe, I'll tell my parent I have a map
+    for (const key in window) {
+        if (key.startsWith('map_') && window[key] instanceof L.Map) {
+            window.parent.fmap = window[key];
+            console.log("📢 Iframe pushed map to Parent");
+        }
+    }
+}
 })();
 
 // 2. Calendar Toggle Logic
@@ -233,15 +266,32 @@ window.handleTagClick = function(span) {
 window.updateMarkerStatus = function(region_id) {
     if (!region_id) return;
 
+    // Use the helper to find the data regardless of scope
+    const currentData = getBakedData();
+    const regionData = currentData[region_id] || {};
+
     let completedUnits = 0;
+    Object.values(regionData).forEach(unit => {
+        if (parseInt(unit.votes) > 0) completedUnits++;
+    });
+
     let expectedHouses = 0;
 
     // Check both local and parent scope for the map instance
-    var mapObject = window.fmap || parent.fmap;
 
-    if (mapObject) {
-        // A. Find the polygon using mapObject, NOT 'map'
-        mapObject.eachLayer(function(layer) {
+    // Standardize: Look for fmap locally, then on parent, then on top
+        const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
+
+        if (!activeMap) {
+            console.warn("fmap not found. Is iframe1 loaded yet?");
+            return;
+        }
+
+        // Now use activeMap instead of fmap or activeMap    var activeMap = window.fmap || parent.fmap;
+
+    if (activeMap) {
+        // A. Find the polygon using activeMap, NOT 'map'
+        activeMap.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
                 expectedHouses = layer.feature.properties.expected_houses || 0;
             }
@@ -277,8 +327,8 @@ window.updateMarkerStatus = function(region_id) {
         }
     }
 
-    // B. Update the Polygon using mapObject
-    mapObject.eachLayer(function(layer) {
+    // B. Update the Polygon using activeMap
+    activeMap.eachLayer(function(layer) {
         if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
             if (healthColor) {
                 layer.setStyle({
@@ -364,25 +414,40 @@ window.incrementVoteCount = function(btn) {
         }
     }
 };
+var deployUpdate = async function() {
+    // 1. Get the centralized Master Data
+    var masterData = window.BAKED_DATA || (parent && parent.BAKED_DATA);
 
-// --- SAVE SYSTEM ---
-var deployUpdate = function(doc) {
-    var targetDoc = doc || document;
+    if (!masterData || Object.keys(masterData).length === 0) {
+        alert("No data found to deploy!");
+        return;
+    }
 
-    targetDoc.querySelectorAll('.canvass-row').forEach(function(row) {
-        var street = row.getAttribute('data-street');
-        var house = row.querySelector('.unit-selector').value;
-        var vi = row.querySelector('.vi-selector').value;
-        var votes = row.querySelector('.vote-btn').getAttribute('data-count');
+    // --- PART A: PERSIST TO BACKEND ---
+    try {
+        console.log("📡 Sending data to backend...");
+        const response = await fetch('/upload_data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(masterData)
+        });
 
-        if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-        BAKED_DATA[street][house] = { vi: vi, votes: votes, ts: Date.now() };
-    });
+        if (response.ok) {
+            console.log("✅ Backend updated successfully.");
+        } else {
+            console.error("❌ Backend update failed.");
+        }
+    } catch (err) {
+        console.error("📡 Network error during deploy:", err);
+    }
 
-    var jsonString = JSON.stringify(BAKED_DATA);
-    var fullHtml = document.documentElement.outerHTML;
+    // --- PART B: PERSIST TO LOCAL FILE (The "Download" backup) ---
+    var jsonString = JSON.stringify(masterData);
+    var mainDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+    var fullHtml = mainDoc.documentElement.outerHTML;
 
-    var newHtml = fullHtml.replace(/var BAKED_DATA\s*=\s*[^;]+;/, 'var BAKED_DATA = ' + jsonString + ';');
+    // Replace the old variable with the new data string
+    var newHtml = fullHtml.replace(/var BAKED_DATA\s*=\s*[^;]*;/, 'var BAKED_DATA = ' + jsonString + ';');
 
     var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
     var a = document.createElement('a');
@@ -391,8 +456,9 @@ var deployUpdate = function(doc) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-};
 
+    alert("🚀 Data Deployed to Backend & Backup Downloaded!");
+};
 
 function bindEvent(element, eventName, eventHandler) {
   element.addEventListener(eventName, eventHandler, false);

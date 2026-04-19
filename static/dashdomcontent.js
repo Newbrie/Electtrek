@@ -8,7 +8,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
     // Call the function to fetch the backend URL used as window.API
   await fetchBackendURL();
 
-
+  window.BAKED_DATA = {{ your_json_data|safe }};
   let selectedPlaceData = null; // Store data from the map
   let preventModalClose = false;
   let addPlaceActive = false;
