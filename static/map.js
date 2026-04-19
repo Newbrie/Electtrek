@@ -423,6 +423,31 @@ window.updateWalkVisuals = function(region_id) {
     let expectedHouses = 0;
 
     if (activeMap) {
+        // Audit the map content
+        const layerCount = Object.keys(activeMap._layers).length;
+        console.log(`Initial Map Audit: ${layerCount} total layers in _layers object.`);
+
+        if (layerCount === 0) {
+            console.error("CRITICAL: Map object exists but _layers is empty. You are likely targeting the wrong map instance or the layers haven't loaded yet.");
+        }
+
+        activeMap.eachLayer(function(layer) {
+            // This log will fire for EVERY layer (Tiles, Markers, Polygons)
+            console.log("Found a layer type:", layer.constructor.name);
+
+            if (layer.feature) {
+                console.log("✅ Feature detected! Properties:", layer.feature.properties);
+            } else if (layer._layers) {
+                console.log("📦 This layer is a Group/Container containing:", Object.keys(layer._layers).length, "sub-layers.");
+                // OPTIONAL: Recurse into groups if standard eachLayer is missing them
+                layer.eachLayer(sub => {
+                    if (sub.feature) console.log("   ↳ Sub-feature found:", sub.feature.properties);
+                });
+            }
+        });
+    }
+
+    if (activeMap) {
         activeMap.eachLayer(function(layer) {
             console.log("layer.feature:",layer.feature)
             console.log("layer.feature.properties:",layer.feature.properties)
