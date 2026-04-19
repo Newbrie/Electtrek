@@ -414,6 +414,7 @@ window.incrementVoteCount = function(btn) {
         }
     }
 };
+
 var deployUpdate = async function() {
     // 1. Get the centralized Master Data
     var masterData = window.BAKED_DATA || (parent && parent.BAKED_DATA);

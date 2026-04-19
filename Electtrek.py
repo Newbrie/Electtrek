@@ -2485,6 +2485,7 @@ def validate_tags():
 from flask import render_template, flash, session
 from elector import ElectorManager
 from elections import CurrentElection
+from baked_data import baked_data
 
 @app.route("/", methods=['POST', 'GET'])
 def index():
@@ -2516,7 +2517,7 @@ def index():
 
         # Restore the persisted state (treepolys, fullpolys)
         restore_from_persist(Treepolys, Fullpolys, Geo_index)
-
+        BAKED_DATA = baked_data.load()
         # Load the current election context
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
@@ -2544,6 +2545,7 @@ def index():
             current_election=current_election,
             options=OPTIONS,
             constants=CElection,
+            baked_data=BAKED_DATA,
             mapfile=current_node.mapfile(),
             streamrag=streamrag  # Pass streamrag to the template for rendering
         )
@@ -3730,7 +3732,7 @@ def calendar_partial(path):
 
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
     print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
-
+    BAKED_DATA = baked_data.load()
 
     return render_template(
         "Dash0.html",
@@ -3739,6 +3741,7 @@ def calendar_partial(path):
         current_election=current_election,
         options=OPTIONS,
         constants=CElection,
+        baked_data=BAKED_DATA,
         mapfile=current_node.mapfile()
     )
 
@@ -3777,26 +3780,32 @@ def showmore(path):
     return current_node.parent.render_face(current_election,CElection,True)
 
 
+from baked_data import baked_data  # Import the instance you created
+
 @app.route('/upload_data', methods=['POST'])
 @login_required
 def upload_data():
     try:
-        # Get the JSON sent from map.js
+        # 1. Parse the JSON sent from the 'Deploy' button
         new_data = request.get_json()
 
-        if not new_data:
-            return jsonify({"status": "error", "message": "No data received"}), 400
+        if new_data is None:
+            return jsonify({"status": "error", "message": "No JSON data received"}), 400
 
-        # Save it to a physical file on the server
-        with open(DATA_FILE, 'w') as f:
-            json.dump(new_data, f, indent=4)
+        # 2. Use your manager to persist it to the file
+        BAKED_DATA.save(new_data)
 
-        print("✅ BAKED_DATA updated on server.")
-        return jsonify({"status": "success"}), 200
+        # 3. Return success to the browser
+        return jsonify({
+            "status": "success",
+            "message": "BAKED_DATA successfully deployed to server"
+        }), 200
 
     except Exception as e:
-        print(f"❌ Server Error: {e}")
+        # Log the error on the server console for debugging
+        print(f"🚨 Deployment Error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/upload_file', methods=['POST'])
 @login_required
@@ -3958,6 +3967,8 @@ def walks():
 
     from elector import electors
     from state import Treepolys, Fullpolys, Geo_index
+    from baked_data import baked_data
+
 
     global streamrag
     global CElection
@@ -3977,7 +3988,7 @@ def walks():
 
     current_node = CElection.get_last_node(create=False)
     flash('_______ROUTE/walks',session)
-
+    BAKED_DATA = baked_data.load()
 
     if len(request.form) > 0:
         formdata = {}
@@ -3991,7 +4002,7 @@ def walks():
 #    formdata['username'] = session['username']
         session['current_node_id'] = current_node.nid
 
-        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
+        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, baked_data=BAKED_DATA,group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
     return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
@@ -4046,6 +4057,7 @@ def firstpage():
     import json
     import re
     from pathlib import Path
+    from baked_data import baked_data
 
 
     def clean_text(value):
@@ -4212,6 +4224,8 @@ def firstpage():
 
     ELECTIONS = get_available_elections()
 
+    BAKED_DATA = baked_data.load()
+
 #
     print(f"🧪 firstpage level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
     persist(Treepolys,Fullpolys, Geo_index)
@@ -4222,6 +4236,7 @@ def firstpage():
         current_election=current_election,
         options=OPTIONS,
         constants=CElection,
+        baked_data=BAKED_DATA,
         mapfile=current_node.mapfile()
     )
 
@@ -4233,10 +4248,13 @@ def cards():
 
     from elector import electors
     from state import Treepolys, Fullpolys, Geo_index
+    from baked_data import baked_data
+
 
     global streamrag
     global environment
     global TABLE_TYPES
+
 
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
@@ -4263,7 +4281,7 @@ def cards():
 
                 group = prodcards[0]
                 ELECTIONS = get_available_elections()
-                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
+                return render_template('Dash0.html',  table_types=TABLE_TYPES,formdata=formdata,current_election=CElection[session.get("current_election","DEMO")], ELECTIONS=ELECTIONS, baked_data=BAKED_DATA, group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile())
             else:
                 flash ( "Data file does not match selected constituency!")
                 print ( "Data file does not match selected constituency!")
