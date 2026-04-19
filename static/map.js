@@ -432,13 +432,27 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            if (layer.options) {
-                // Log any layer that has a name or a 'mytag'
-                if (layer.options.name || layer.options.mytag) {
-                    console.log("🔍 Found Named Layer:", {
-                        name: layer.options.name,
-                        mytag: layer.options.mytag,
-                        type: layer.constructor.name
+            const diagnostic = {
+                id: layer._leaflet_id,
+                constructor: layer.constructor.name,
+                // Check every common place Folium hides names
+                optionName: layer.options?.name,
+                optionId: layer.options?.id,
+                mytag: layer.options?.mytag,
+                featureId: layer.feature?.id,
+                // For FeatureGroups, check the first child
+                hasChildren: !!layer.eachLayer
+            };
+
+            if (diagnostic.optionName || diagnostic.mytag || diagnostic.hasChildren) {
+                console.log("🕵️ Layer Audit:", diagnostic);
+
+                // If it's a group, let's see what the first child looks like
+                if (layer.eachLayer) {
+                    layer.eachLayer(sub => {
+                        if (sub.feature && !diagnostic.childSample) {
+                            console.log("   ↳ Group Child Properties:", sub.feature.properties);
+                        }
                     });
                 }
             }
