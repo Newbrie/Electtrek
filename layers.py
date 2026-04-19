@@ -179,7 +179,7 @@ def build_street_list_html(streets_df, street_stats, task_tags):
                     });
                 }, 150);
             })();
-        </script>
+        <\/script>
         '''
 
     # 3. THE UI: Control Panel
