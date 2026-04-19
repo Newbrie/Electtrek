@@ -386,64 +386,63 @@ window.incrementVoteCount = function(btn) {
 };
 
 window.deployUpdate = function() {
-    // 1. THE ALERT: Approve the download/save
-    if (!confirm("⚠️ Save to Database?\n\nThis will sync all current visibility and vote data to the server.")) {
-        return;
-    }
+    if (!confirm("⚠️ Save and Deploy to Server?")) return;
 
-    // 2. Identify the source of truth
-    // We start with a fresh object or the existing parent data
+    // Start with a clean local object for this specific "scrape"
+    // This prevents the old flat structure from 'polluting' the new save
+    const updatedData = {};
+
+    // If parent has data, we merge into it to keep other walks safe
     const masterData = (parent && parent.BAKED_DATA) ? parent.BAKED_DATA : {};
 
-    // 3. Target the rows (Handling iframe scope)
-    const rows = document.querySelectorAll('.canvass-row');
-
-    rows.forEach(row => {
-        const walk = row.getAttribute('data-walk'); // This is "N267" in your example
+    document.querySelectorAll('.canvass-row').forEach(row => {
+        const walk = row.getAttribute('data-walk');
         const street = row.getAttribute('data-street');
-        const district = row.getAttribute('data-district');
+        const house = row.querySelector('.unit-selector').value;
+        const vi = row.querySelector('.vi-selector').value;
+        const votes = row.querySelector('.vote-btn').getAttribute('data-count');
+        const pd = row.getAttribute('data-district');
 
-        const selector = row.querySelector('.unit-selector');
-        if (!selector) return;
-
-        const house = selector.value;
-        const btn = row.querySelector('.vote-btn');
-        const viSelector = row.querySelector('.vi-selector');
-
-        // --- THE NESTING LOGIC ---
-        // If walk exists, we MUST use it as the top-level key.
-        if (walk) {
-            if (!masterData[walk]) masterData[walk] = {};
-            if (!masterData[walk][street]) masterData[walk][street] = {};
-
-            masterData[walk][street][house] = {
-                vi: viSelector.value,
-                votes: btn.getAttribute('data-count'),
-                pd: district,
-                ts: Date.now()
-            };
-        } else {
-            // This is what was happening before - fallback to flat
-            console.error("Skipping row: No data-walk attribute found for " + street);
+        // CRITICAL CHECK:
+        if (!walk || walk === "None" || walk === "") {
+            console.error(`MISSING WALK for ${street}. Check Python injection.`);
+            return;
         }
+
+        // Initialize levels in our temporary object
+        if (!updatedData[walk]) updatedData[walk] = {};
+        if (!updatedData[walk][street]) updatedData[walk][street] = {};
+
+        updatedData[walk][street][house] = {
+            vi: vi,
+            votes: votes,
+            pd: pd,
+            ts: Date.now()
+        };
     });
 
-    // 4. Send the bundle to the server
+    // Deep merge the updatedData into masterData
+    for (let w in updatedData) {
+        if (!masterData[w]) masterData[w] = {};
+        for (let s in updatedData[w]) {
+            masterData[w][s] = updatedData[w][s];
+        }
+    }
+
+    console.log("FINAL OBJECT TO BE SENT:");
+    console.dir(masterData);
+
     fetch('/upload_data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(masterData)
     })
-    .then(response => response.json())
+    .then(res => res.json())
     .then(result => {
-        alert("✅ Success: Data saved to baked_data.json");
-        // Sync the parent state so the map updates immediately
+        alert("✅ Success! Check baked_data.json now.");
         if (parent) parent.BAKED_DATA = masterData;
     })
-    .catch(err => {
-        alert("❌ Error: Failed to save data to server.");
-        console.error("Deploy failed:", err);
-    });
+    .catch(err => alert("❌ Save failed."));
 };
 
 function bindEvent(element, eventName, eventHandler) {
