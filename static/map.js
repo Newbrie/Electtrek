@@ -445,6 +445,8 @@ window.updateWalkVisuals = function(region_id) {
             }
         });
 
+    }
+
     if (activeMap) {
         activeMap.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
