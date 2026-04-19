@@ -882,53 +882,47 @@ function updateMaxVote(selectElement) {
 
 window.loadHouseData = function(selectElement) {
     const row = selectElement.closest('.canvass-row');
+    if (!row) return;
+
+    // 1. Extract IDs from the row attributes
     const walk = row.getAttribute('data-walk');
     const street = row.getAttribute('data-street');
     const house = selectElement.value;
-    var district = row.getAttribute('data-district'); // The new PD field
 
-    // Direct path: no messy loops
-    const record = BAKED_DATA[walk]?.[street]?.[house] || { vi: "U", votes: "0" };
-    if (!row) return;
+    // 2. Get dropdown/button elements
+    const opt = selectElement.options[selectElement.selectedIndex];
+    const max = parseInt(opt.getAttribute('data-max')) || 1;
+    const btn = row.querySelector('.vote-btn');
+    const viSelector = row.querySelector('.vi-selector');
 
-    var opt = selectElement.options[selectElement.selectedIndex];
-    var max = parseInt(opt.getAttribute('data-max')) || 1;
+    // 3. Fetch record using the new 3-tier hierarchy: Walk > Street > House
+    // Uses optional chaining (?.) for a much cleaner lookup
+    const record = BAKED_DATA[walk]?.[street]?.[house];
 
-    // 1. Fetch the record using the 3-tier hierarchy
-    // We safely check: BAKED_DATA -> District -> Street -> House
-    var record = null;
-    if (BAKED_DATA[district] &&
-        BAKED_DATA[district][street] &&
-        BAKED_DATA[district][street][house]) {
-        record = BAKED_DATA[district][street][house];
-    }
-
-    var btn = row.querySelector('.vote-btn');
-    var viSelector = row.querySelector('.vi-selector');
-
-    // 2. Update Button and Selectors BEFORE coloring
+    // 4. Update UI State based on whether a record exists
     btn.setAttribute('data-max', max);
+
     if (record) {
         if (viSelector) viSelector.value = record.vi;
         btn.setAttribute('data-count', record.votes);
-        btn.innerText = record.votes + '/' + max;
+        btn.innerText = `${record.votes}/${max}`;
     } else {
+        // Default state if no data is baked yet
         if (viSelector) viSelector.selectedIndex = 0;
         btn.setAttribute('data-count', '0');
-        btn.innerText = '0/' + max;
+        btn.innerText = `0/${max}`;
     }
 
-    // 3. FORCE RE-COLORING
+    // 5. Trigger visual updates
     const currentCount = parseInt(btn.getAttribute('data-count')) || 0;
 
-    // Updates Row and Button backgrounds
+    // Refresh row/button colors
     window.updateRowAppearance(row, currentCount, max);
 
-    // Updates Dropdown colors
+    // Refresh dropdown styling
     window.refreshDropdownColors(selectElement);
 
-    // Update Map Marker
-    // Note: If updateMarkerStatus needs the district/street, you can pass them here
+    // Update the specific Walk (Region) on the map
     window.updateMarkerStatus(walk);
 };
 
