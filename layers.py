@@ -151,7 +151,7 @@ def create_boundary_geom(elector_df, buffer_meters=50):
     return hull_wgs84
 
 
-def build_street_list_html(streets_df, street_stats, task_tags):
+def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
     from state import VID
 
     # 1. Prepare dynamic tag headers
@@ -268,7 +268,7 @@ def build_street_list_html(streets_df, street_stats, task_tags):
 
         html += f'''
         <tr class="{row_class} canvass-row"
-            data-walk="{region_id}"
+            data-walk="{reg_id}"
             data-street="{street_name}"
             data-district="{pd_code}">
             <td style="padding:8px;">
@@ -798,9 +798,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
             # Preprocess street data
             # -------------------------
-# -------------------------
-            # Preprocess street data
-            # -------------------------
+
             street_stats, house_count = preprocess_streets(region_electors)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
 
@@ -827,7 +825,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
             # Build popup
-            street_html = nav_html + "<hr>" + build_street_list_html(region_electors, street_stats, task_tags)
+            street_html = nav_html + "<hr>" + build_street_list_html(region_id,region_electors, street_stats, task_tags)
 
             # Update the style to use the NEW region_color
             style = {
@@ -1021,7 +1019,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-            streetstag = build_street_list_html(datablock, street_stats, task_tags)
+            streetstag = build_street_list_html(herenode.value,datablock, street_stats, task_tags)
             limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+ downtag+"<br>"+ streetstag+"<br></div>"
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
 
