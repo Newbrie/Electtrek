@@ -424,6 +424,8 @@ window.updateWalkVisuals = function(region_id) {
 
     if (activeMap) {
         activeMap.eachLayer(function(layer) {
+            console.log("layer.feature:",layer.feature)
+            console.log("layer.feature.properties:",layer.feature.properties)
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 console.log("props:",props)
