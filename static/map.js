@@ -83,6 +83,68 @@ window.updateElectorTag = function(street, unit, code, isActive) {
     console.log(`Updated ${street} ${unit} tags: ${window.BAKED_DATA[street][unit].tags}`);
 };
 
+window.updateTagToggles = function(selector) {
+    var row = selector.closest('.canvass-row') || selector.closest('tr');
+    var street = row.getAttribute('data-street');
+    var house = selector.value;
+
+    var houseData = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+    var tags = (houseData && houseData.tags) ? houseData.tags : {};
+
+    row.querySelectorAll('.tag-toggle').forEach(span => {
+        var code = span.getAttribute('data-code');
+        var val = tags[code] || 'n'; // default to 'n'
+
+        if (val === 'y') {
+            span.classList.remove('tag-inactive');
+            span.classList.add('tag-active');
+            span.innerText = 'y';
+        } else {
+            span.classList.remove('tag-active');
+            span.classList.add('tag-inactive');
+            span.innerText = 'n';
+        }
+    });
+};
+
+window.handleTagClick = function(span) {
+    // 1. Get the current state
+    var isInactive = span.classList.contains('tag-inactive');
+    var newValue = isInactive ? 'y' : 'n';
+    var code = span.getAttribute('data-code'); // e.g., "LAV", "DEL"
+
+    // 2. Visual Toggle
+    if (isInactive) {
+        span.classList.remove('tag-inactive');
+        span.classList.add('tag-active');
+        span.innerText = 'y';
+    } else {
+        span.classList.remove('tag-active');
+        span.classList.add('tag-inactive');
+        span.innerText = 'n';
+    }
+
+    // 3. Save to BAKED_DATA
+    // Reach up to find the row data
+    var row = span.closest('.canvass-row') || span.closest('tr');
+    var street = row.getAttribute('data-street');
+    var house = row.querySelector('.unit-selector').value;
+
+    if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+    if (!BAKED_DATA[street][house]) BAKED_DATA[street][house] = { votes: "0", tags: {} };
+
+    // Ensure tags object exists
+    if (typeof BAKED_DATA[street][house].tags !== 'object') {
+        BAKED_DATA[street][house].tags = {};
+    }
+
+    // Update the specific tag code
+    BAKED_DATA[street][house].tags[code] = newValue;
+    BAKED_DATA[street][house].ts = Date.now();
+
+    console.log(`🏷️ Tag ${code} set to ${newValue} for ${street} ${house}`);
+};
+
 window.updateMarkerStatus = function(region_id) {
     if (!region_id) return;
 
