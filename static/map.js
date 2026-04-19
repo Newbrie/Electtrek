@@ -426,7 +426,7 @@ window.updateWalkVisuals = function(region_id) {
         activeMap.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
-
+                console.log("props:",props)
                 if (props.region_id === region_id) {
                     foundPolygon = true;
                     expectedHouses = props.expected_houses || 0;
