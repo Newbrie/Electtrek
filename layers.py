@@ -816,7 +816,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Build tooltip
             tooltip_html = f"""
             <b>{child.value}</b><br>
-            Walk: {reg_id)}<br>
+            Walk: {reg_id}<br>
             Electors: {len(region_electors)}<br>
             Houses: {house_count}<br>
             Elector/house: {round(len(region_electors)/house_count,2) if house_count else 0}<br>
