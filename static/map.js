@@ -432,35 +432,23 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            // We only care about containers (groups)
-            if (layer.eachLayer && !layer.feature) {
-                let featureCount = 0;
-                let sampleProps = null;
+            // Look for the tag in the options object
+            if (layer.options && layer.options.mytag === 'walk') {
+                let count = 0;
+                layer.eachLayer(() => count++);
+                console.log(`✅ Found Walk Layer Group! Sub-layers: ${count}`);
 
-                layer.eachLayer(function(sub) {
-                    if (sub.feature) {
-                        featureCount++;
-                        if (!sampleProps) sampleProps = sub.feature.properties;
-                    }
+                // Peek at the first polygon inside this group
+                layer.eachLayer(sub => {
+                    if (sub.feature) console.log("Sample Walk Properties:", sub.feature.properties);
                 });
-
-                if (featureCount > 0) {
-                    console.log(`📂 Found Data Group | Features: ${featureCount} | Sample ID:`,
-                        sampleProps.region_id || sampleProps.walk_id || "No ID Key Found");
-                    console.log("   Full Properties:", sampleProps);
-                }
             }
         });
 
-    }
-
     if (activeMap) {
         activeMap.eachLayer(function(layer) {
-            console.log("layer.feature:",layer.feature)
-            console.log("layer.feature.properties:",layer.feature.properties)
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
-                console.log("props:",props)
                 if (props.region_id === region_id) {
                     foundPolygon = true;
                     expectedHouses = props.expected_houses || 0;
