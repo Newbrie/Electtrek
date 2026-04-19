@@ -1,4 +1,6 @@
 from config import DATA_FILE
+import os
+import json
 
 class BakedDataManager:
     def __init__(self, filename=DATA_FILE):
