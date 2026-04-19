@@ -36,7 +36,7 @@ var showMore = function (msg,area, type) {
 var BAKED_DATA = BAKED_DATA || {};
 
 /* --- Top of map.js --- */
-var map; // The global "Handle"
+var fmap; // The global "Handle"
 
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
@@ -44,8 +44,9 @@ var map; // The global "Handle"
         for (const key in window) {
             // Check if the variable looks like a Folium/Leaflet map
             if (key.startsWith('map_') && window[key] instanceof L.Map) {
-                map = window[key];
-                window.map = map; // Ensure it's reachable via window.map
+                fmap = window[key];
+                window.fmap = fmap; // Ensure it's reachable via window.map
+                if (window.parent) window.parent.fmap = fmap;
                 console.log("🎯 map.js: Successfully linked to map instance:", key);
                 return true;
             }
@@ -236,7 +237,7 @@ window.updateMarkerStatus = function(region_id) {
     let expectedHouses = 0;
 
     // Check both local and parent scope for the map instance
-    var mapObject = window.map || parent.map;
+    var mapObject = window.fmap || parent.fmap;
 
     if (mapObject) {
         // A. Find the polygon using mapObject, NOT 'map'
@@ -266,7 +267,7 @@ window.updateMarkerStatus = function(region_id) {
 
     // Update Label
     const labelSpan = document.getElementById(`label-${region_id}`);
-    if (labelSpan && healthColor) {
+    if (labelSpan) {
         if (healthColor) {
             labelSpan.style.background = healthColor;
             labelSpan.style.color = "white";
