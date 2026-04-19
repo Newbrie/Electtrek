@@ -73,45 +73,56 @@ window.updateElectorTag = function(street, unit, code, isActive) {
     console.log(`Updated ${street} ${unit} tags: ${window.BAKED_DATA[street][unit].tags}`);
 };
 
-window.updateMarkerStatus = function(doc) {
-    const rows = doc.querySelectorAll('.canvass-row');
-    let allComplete = true;
-    let anyStarted = false;
+window.updateMarkerStatus = function(region_id) {
+    if (!region_id) return;
 
-    rows.forEach(r => {
-        const btn = r.querySelector('.vote-btn');
-        const count = parseInt(btn.getAttribute('data-count')) || 0;
-        const max = parseInt(btn.getAttribute('data-max')) || 1;
-        if (count < max) allComplete = false;
-        if (count > 0) anyStarted = true;
+    let completedUnits = 0;
+    let expectedHouses = 0;
+
+    // A. Find the polygon to get the "expected" house count
+    map.eachLayer(function(layer) {
+        if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
+            expectedHouses = layer.feature.properties.expected_houses || 0;
+        }
     });
 
-    if (window.fmap) {
-        window.fmap.eachLayer(layer => {
-            // Find the marker that is currently open
-            if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().isOpen()) {
-                const el = layer.getElement();
-                if (el) {
-                    // Target the span specifically
-                    const tagSpan = el.querySelector('.voronoi-tag');
-                    if (tagSpan) {
-                        if (allComplete) {
-                            tagSpan.style.setProperty('background', '#28a745', 'important');
-                            tagSpan.style.color = "white";
-                        } else if (anyStarted) {
-                            tagSpan.style.setProperty('background', '#ffcc00', 'important');
-                            tagSpan.style.color = "black";
-                        } else {
-                            // Reset to original color - we pull this from a data attribute or leave as is
-                            // If you want to reset to the original fcol, we should store it
-                            tagSpan.style.background = "";
-                            tagSpan.style.color = "";
-                        }
-                    }
-                }
-            }
+    // B. Count how many unique houses in BAKED_DATA have votes
+    if (window.BAKED_DATA[region_id]) {
+        Object.values(window.BAKED_DATA[region_id]).forEach(unit => {
+            if (parseInt(unit.votes) > 0) completedUnits++;
         });
     }
+
+    // C. Determine Color logic
+    // Green: All houses have at least 1 vote
+    // Yellow: Some houses have votes
+    // Null/Original: No activity
+    const healthColor = (completedUnits >= expectedHouses && expectedHouses > 0) ? "#28a745" :
+                        (completedUnits > 0 ? "#ffcc00" : null);
+
+    // D. Update Label
+    const labelSpan = document.getElementById(`label-${region_id}`);
+    if (labelSpan) {
+        if (healthColor) {
+            labelSpan.style.background = healthColor;
+            labelSpan.style.color = "white";
+        } else {
+            // Restore original zone color if no votes (requires storing original fcol)
+            // For now, let's just keep it visible
+        }
+    }
+
+    // E. Update Polygon
+    map.eachLayer(function(layer) {
+        if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
+            if (healthColor) {
+                layer.setStyle({ fillColor: healthColor, fillOpacity: 0.6 });
+            } else {
+                // If votes cleared, reset to original style (optional)
+                layer.setStyle({ fillOpacity: 0.4 });
+            }
+        }
+    });
 };
 
 window.loadHouseData = function(selectElement) {
@@ -156,9 +167,8 @@ window.incrementVoteCount = function(btn) {
 
     var row = btn.closest('.canvass-row');
 
-    // --- NEW: Sync to BAKED_DATA immediately ---
     if (row) {
-        var street = row.getAttribute('data-street');
+        var street = row.getAttribute('data-street'); // This is your Region ID
         var houseSelector = row.querySelector('.unit-selector');
         var viSelector = row.querySelector('.vi-selector');
 
@@ -166,7 +176,6 @@ window.incrementVoteCount = function(btn) {
             var house = houseSelector.value;
             var vi = viSelector ? viSelector.value : "";
 
-            // Ensure the nested objects exist
             if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
 
             // Update the central ledger
@@ -176,20 +185,18 @@ window.incrementVoteCount = function(btn) {
                 ts: Date.now()
             };
             console.log(`💾 Saved to memory: ${street} No. ${house} = ${count} votes`);
+
+            // --- REFRESH UI ---
+            window.refreshDropdownColors(houseSelector);
+            window.updateRowAppearance(row, count, max);
+
+            // --- REFRESH MAP MARKER ---
+            // Pass the street name/ID so the marker knows to change color
+            if (window.updateMarkerStatus) {
+                window.updateMarkerStatus(street);
+            }
         }
     }
-    // ------------------------------------------
-
-    var row = btn.closest('.canvass-row');
-    var selectElement = row.querySelector('.unit-selector');
-
-    if (selectElement) {
-        window.refreshDropdownColors(selectElement);
-    }
-
-    window.updateRowAppearance(row, count, max);
-    window.updateMarkerStatus(btn.ownerDocument);
-
 };
 
 // --- SAVE SYSTEM ---
@@ -808,7 +815,6 @@ window.refreshDropdownColors = function(selectElement) {
     }
 };
 
-// Add to your HTML: <select class="vi-selector" onchange="parent.updateVI(this)">
 window.updateVI = function(selectElement) {
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
     var street = row.getAttribute('data-street');
@@ -823,15 +829,14 @@ window.updateVI = function(selectElement) {
 
     // Re-color the dropdown immediately
     window.refreshDropdownColors(selectElement);
+
+    // --- NEW: Trigger the Map Marker/Polygon refresh ---
+    if (window.updateMarkerStatus) {
+        window.updateMarkerStatus(street);
+    }
+
     console.log(`📝 Saved Intent for ${street} ${house}: ${selectElement.value}`);
 };
-
-window.highlightLozenge = function highlightLozenge(loz) {
-document.querySelectorAll('.lozenge.selected').forEach(el => {
-  el.classList.remove('selected');
-});
-loz.classList.add('selected');
-}
 
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {

@@ -821,7 +821,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                 "weight": 1,
                 "fillOpacity": 0.6,
             }
-
             # -------------------------
             # Polygon (with tooltip only)
             # -------------------------
@@ -829,7 +828,11 @@ class ExtendedFeatureGroup(FeatureGroup):
                 # Ensure we are passing a clean geometry
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
                 geojson_data = actual_shape_poly.__geo_interface__
-
+                geojson_data['properties'] = {
+                    'region_id': child.value,
+                    'type': 'voronoi_poly',
+                    'expected_houses': house_count  # <-- Pass the real total her
+                }
                 gj = folium.GeoJson(
                     geojson_data,
                     style_function=lambda x, s=style: s,
@@ -865,7 +868,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         class_name="",
                         html=f"""
                             <div class="voronoi-label">
-                            <span class="voronoi-tag" style="background:{fcol}">
+                            <span id="label-{tag}" class="voronoi-tag" style="background:{region_color}">
                             {tag}
                             </span>
                             </div>
