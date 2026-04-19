@@ -371,52 +371,83 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateWalkVisuals = function(walkId) {
-    // 1. Target the iframe or document where the table lives
-    // If the table is in an iframe, use that iframe's document
-    const tableDoc = document.querySelector('iframe').contentDocument || document;
+window.updateWalkVisuals = function(region_id) {
+    if (!region_id) return;
 
-    let totalHouses = 0;
-    let completedHouses = 0;
+    // 1. Get current data state (BAKED_DATA includes your tags)
+    const currentData = getBakedData();
+    const regionData = currentData[region_id] || {};
 
-    // 2. Select rows belonging to the specific Walk
-    const rows = tableDoc.querySelectorAll(`.canvass-row[data-walk="${walkId}"]`);
+    let totalHousesInWalk = 0;
+    let completedHousesInWalk = 0;
 
-    rows.forEach(row => {
-        const houses = parseInt(row.getAttribute('data-houses')) || 0;
-        const l1Tag = row.querySelector('.l1-trigger');
-        const isActive = l1Tag && l1Tag.classList.contains('tag-active');
+    // 2. Locate the active map instance
+    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
 
-        totalHouses += houses;
-        if (isActive) {
-            completedHouses += houses;
+    if (!activeMap) {
+        console.warn("fmap not found for polygon update.");
+        return;
+    }
+
+    // 3. First Pass: Get the expected houses from the polygon properties
+    // (This ensures we are scaling against the geographic total)
+    activeMap.eachLayer(function(layer) {
+        if (layer.feature?.properties?.region_id === region_id) {
+            totalHousesInWalk = layer.feature.properties.expected_houses || 0;
         }
     });
 
-    const percentage = totalHouses > 0 ? (completedHouses / totalHouses) * 100 : 0;
+    // 4. Second Pass: Calculate L1 Completion from Baked Data
+    // We assume the data structure is: BAKED_DATA[region_id][street_name] = { tags: ['L1', ...], houses: 20 }
+    Object.values(regionData).forEach(street => {
+        const houseCount = parseInt(street.houses) || 0;
+        const tags = street.tags || [];
 
-    // 3. Update the Leaflet/Mapbox Polygon
-    // Assuming your polygons are stored in an object or a Leaflet FeatureGroup
-    updatePolygonStyle(walkId, percentage);
+        if (tags.includes('L1')) {
+            completedHousesInWalk += houseCount;
+        }
+    });
+
+    // 5. Determine Color based on L1 Percentage
+    // 100% = Green, >0% = Yellow/Orange ramp, 0% = Null/Original
+    const pct = totalHousesInWalk > 0 ? (completedHousesInWalk / totalHousesInWalk) * 100 : 0;
+
+    let healthColor = null;
+    if (pct >= 100) {
+        healthColor = "#28a745"; // Solid Green
+    } else if (pct > 0) {
+        healthColor = "#ffcc00"; // Progressing Yellow
+    }
+
+    // 6. Apply Styles to Polygon
+    activeMap.eachLayer(function(layer) {
+        if (layer.feature?.properties?.region_id === region_id) {
+            if (healthColor) {
+                layer.setStyle({
+                    fillColor: healthColor,
+                    fillOpacity: 0.8,
+                    weight: 2
+                });
+            } else {
+                // Optional: Restore original style if no L1 tags exist
+                const originalColor = layer.feature.properties.fcol || "#808080";
+                layer.setStyle({
+                    fillColor: originalColor,
+                    fillOpacity: 0.4,
+                    weight: 1
+                });
+            }
+        }
+    });
+
+    // 7. Update UI Label if it exists
+    const labelSpan = document.getElementById(`label-${region_id}`);
+    if (labelSpan && healthColor) {
+        labelSpan.style.background = healthColor;
+        labelSpan.style.color = "white";
+    }
 };
 
-
-function updatePolygonStyle(walkId, pct) {
-    // Example: Using a simple color ramp based on completion
-    const color = pct === 100 ? '#1a9850' :
-                  pct > 75  ? '#d9ef8b' :
-                  pct > 50  ? '#fee08b' :
-                  pct > 25  ? '#fc8d59' :
-                  pct > 0   ? '#d73027' : '#444444';
-
-    // Find the polygon layer associated with this walkId
-    // If using Leaflet:
-    walkLayers.eachLayer(layer => {
-        if (layer.feature.properties.walk_id === walkId) {
-            layer.setStyle({ fillColor: color, fillOpacity: 0.7 });
-        }
-    });
-}
 
 
 window.incrementVoteCount = function(btn) {
