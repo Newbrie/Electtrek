@@ -372,82 +372,96 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    if (!region_id) return;
+    console.group(`DEBUG: updateWalkVisuals for [${region_id}]`);
 
-    // 1. Get current data state (BAKED_DATA includes your tags)
-    const currentData = getBakedData();
-    const regionData = currentData[region_id] || {};
-
-    let totalHousesInWalk = 0;
-    let completedHousesInWalk = 0;
-
-    // 2. Locate the active map instance
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
-
-    if (!activeMap) {
-        console.warn("fmap not found for polygon update.");
+    if (!region_id) {
+        console.error("No region_id provided to function.");
+        console.groupEnd();
         return;
     }
 
-    // 3. First Pass: Get the expected houses from the polygon properties
-    // (This ensures we are scaling against the geographic total)
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === region_id) {
-            totalHousesInWalk = layer.feature.properties.expected_houses || 0;
-        }
-    });
+    // 1. Check Data Source
+    const currentData = typeof getBakedData === 'function' ? getBakedData() : window.BAKED_DATA;
+    console.log("Current Data Source:", currentData);
 
-    // 4. Second Pass: Calculate L1 Completion from Baked Data
-    // We assume the data structure is: BAKED_DATA[region_id][street_name] = { tags: ['L1', ...], houses: 20 }
-    Object.values(regionData).forEach(street => {
-        const houseCount = parseInt(street.houses) || 0;
-        const tags = street.tags || [];
-
-        if (tags.includes('L1')) {
-            completedHousesInWalk += houseCount;
-        }
-    });
-
-    // 5. Determine Color based on L1 Percentage
-    // 100% = Green, >0% = Yellow/Orange ramp, 0% = Null/Original
-    const pct = totalHousesInWalk > 0 ? (completedHousesInWalk / totalHousesInWalk) * 100 : 0;
-
-    let healthColor = null;
-    if (pct >= 100) {
-        healthColor = "#28a745"; // Solid Green
-    } else if (pct > 0) {
-        healthColor = "#ffcc00"; // Progressing Yellow
+    const regionData = currentData ? currentData[region_id] : null;
+    if (!regionData) {
+        console.warn(`No data found in BAKED_DATA for region: ${region_id}`);
+    } else {
+        console.log(`Found ${Object.keys(regionData).length} streets in data for this region.`);
     }
 
-    // 6. Apply Styles to Polygon
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === region_id) {
-            if (healthColor) {
-                layer.setStyle({
-                    fillColor: healthColor,
-                    fillOpacity: 0.8,
-                    weight: 2
-                });
-            } else {
-                // Optional: Restore original style if no L1 tags exist
-                const originalColor = layer.feature.properties.fcol || "#808080";
-                layer.setStyle({
-                    fillColor: originalColor,
-                    fillOpacity: 0.4,
-                    weight: 1
-                });
+    let completedHousesInWalk = 0;
+    let streetsWithL1 = 0;
+
+    // 2. Map Instance Check
+    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
+
+    if (!activeMap) {
+        console.error("MAP ERROR: fmap instance not found in window, parent, or iframe1.");
+    } else {
+        console.log("Map instance located successfully.");
+    }
+
+    // 3. Calculate from Data
+    if (regionData) {
+        Object.entries(regionData).forEach(([streetName, street]) => {
+            const houses = parseInt(street.houses) || 0;
+            const tags = street.tags || [];
+            const hasL1 = tags.includes('L1');
+
+            if (hasL1) {
+                completedHousesInWalk += houses;
+                streetsWithL1++;
             }
-        }
-    });
-
-    // 7. Update UI Label if it exists
-    const labelSpan = document.getElementById(`label-${region_id}`);
-    if (labelSpan && healthColor) {
-        labelSpan.style.background = healthColor;
-        labelSpan.style.color = "white";
+        });
     }
-};
+    console.log(`Calculation Results: ${streetsWithL1} L1 streets, ${completedHousesInWalk} total L1 houses.`);
 
+    // 4. Polygon & Property Check
+    let foundPolygon = false;
+    let expectedHouses = 0;
+
+    if (activeMap) {
+        activeMap.eachLayer(function(layer) {
+            if (layer.feature && layer.feature.properties) {
+                const props = layer.feature.properties;
+
+                if (props.region_id === region_id) {
+                    foundPolygon = true;
+                    expectedHouses = props.expected_houses || 0;
+
+                    const pct = expectedHouses > 0 ? (completedHousesInWalk / expectedHouses) * 100 : 0;
+                    console.log(`Polygon Found! Target: ${expectedHouses} houses. Calculated Pct: ${pct.toFixed(2)}%`);
+
+                    const healthColor = (pct >= 100) ? "#28a745" : (pct > 0 ? "#ffcc00" : null);
+
+                    if (healthColor) {
+                        console.log(`Applying style: ${healthColor} to layer.`);
+                        layer.setStyle({
+                            fillColor: healthColor,
+                            fillOpacity: 0.8,
+                            weight: 3
+                        });
+                    } else {
+                        console.log("No L1 progress; resetting to original style.");
+                        layer.setStyle({
+                            fillColor: props.fcol || "#808080",
+                            fillOpacity: 0.4,
+                            weight: 1
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    if (!foundPolygon) {
+        console.warn(`Could not find a polygon on the map with properties.region_id === "${region_id}"`);
+    }
+
+    console.groupEnd();
+};
 
 
 window.incrementVoteCount = function(btn) {
