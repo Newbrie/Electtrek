@@ -183,11 +183,26 @@ window.updateRowAppearance = function(row, count, max) {
     });
 };
 
-window.updateElectorTag = function(street, unit, code, isActive) {
-    if (!window.BAKED_DATA[street]) return;
-    if (!window.BAKED_DATA[street][unit]) window.BAKED_DATA[street][unit] = { votes: 0, tags: "" };
+window.updateElectorTag = function(walk, street, unit, code, isActive) {
+    // 1. Get the data source (check parent if local is empty)
+    const data = (parent && parent.BAKED_DATA) ? parent.BAKED_DATA : window.BAKED_DATA;
 
-    let currentTags = window.BAKED_DATA[street][unit].tags || "";
+    if (!data) return;
+
+    // 2. Ensure the Walk > Street > Unit path exists
+    if (!data[walk]) data[walk] = {};
+    if (!data[walk][street]) data[walk][street] = {};
+    if (!data[walk][street][unit]) {
+        data[walk][street][unit] = {
+            vi: "U",
+            votes: "0",
+            tags: "",
+            ts: Date.now()
+        };
+    }
+
+    // 3. Process the tags
+    let currentTags = data[walk][street][unit].tags || "";
     let tagList = currentTags.split(',').filter(t => t.trim() !== "");
 
     if (isActive) {
@@ -196,21 +211,32 @@ window.updateElectorTag = function(street, unit, code, isActive) {
         tagList = tagList.filter(t => t !== code);
     }
 
-    window.BAKED_DATA[street][unit].tags = tagList.join(',');
-    console.log(`Updated ${street} ${unit} tags: ${window.BAKED_DATA[street][unit].tags}`);
+    // 4. Save back and log
+    data[walk][street][unit].tags = tagList.join(',');
+    data[walk][street][unit].ts = Date.now(); // Update timestamp
+
+    console.log(`✅ Updated ${walk} > ${street} [${unit}] tags: ${data[walk][street][unit].tags}`);
 };
 
 window.updateTagToggles = function(selector) {
     var row = selector.closest('.canvass-row') || selector.closest('tr');
+    var walk = row.getAttribute('data-walk'); // Grab the Walk ID from the HTML
     var street = row.getAttribute('data-street');
     var house = selector.value;
 
-    var houseData = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+    // Navigate the 3-tier hierarchy: Walk -> Street -> House
+    var houseData = (window.BAKED_DATA[walk] &&
+                     window.BAKED_DATA[walk][street] &&
+                     window.BAKED_DATA[walk][street][house])
+                     ? window.BAKED_DATA[walk][street][house]
+                     : null;
+
     var tags = (houseData && houseData.tags) ? houseData.tags : {};
 
     row.querySelectorAll('.tag-toggle').forEach(span => {
         var code = span.getAttribute('data-code');
-        var val = tags[code] || 'n'; // default to 'n'
+        // Since tags is an object, we check the specific code (e.g., tags['L1'])
+        var val = tags[code] || 'n';
 
         if (val === 'y') {
             span.classList.remove('tag-inactive');
@@ -228,7 +254,7 @@ window.handleTagClick = function(span) {
     // 1. Get the current state
     var isInactive = span.classList.contains('tag-inactive');
     var newValue = isInactive ? 'y' : 'n';
-    var code = span.getAttribute('data-code'); // e.g., "LAV", "DEL"
+    var code = span.getAttribute('data-code');
 
     // 2. Visual Toggle
     if (isInactive) {
@@ -241,25 +267,29 @@ window.handleTagClick = function(span) {
         span.innerText = 'n';
     }
 
-    // 3. Save to BAKED_DATA
-    // Reach up to find the row data
+    // 3. Reach up to find the row data
     var row = span.closest('.canvass-row') || span.closest('tr');
+    var walk = row.getAttribute('data-walk');     // <--- THE VITAL KEY
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
 
-    if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-    if (!BAKED_DATA[street][house]) BAKED_DATA[street][house] = { votes: "0", tags: {} };
-
-    // Ensure tags object exists
-    if (typeof BAKED_DATA[street][house].tags !== 'object') {
-        BAKED_DATA[street][house].tags = {};
+    // 4. Ensure the 3-tier hierarchy exists in BAKED_DATA
+    if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
+    if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
+    if (!BAKED_DATA[walk][street][house]) {
+        BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
     }
 
-    // Update the specific tag code
-    BAKED_DATA[street][house].tags[code] = newValue;
-    BAKED_DATA[street][house].ts = Date.now();
+    // 5. Ensure tags object exists inside the house data
+    if (typeof BAKED_DATA[walk][street][house].tags !== 'object') {
+        BAKED_DATA[walk][street][house].tags = {};
+    }
 
-    console.log(`🏷️ Tag ${code} set to ${newValue} for ${street} ${house}`);
+    // 6. Update the specific tag code and timestamp
+    BAKED_DATA[walk][street][house].tags[code] = newValue;
+    BAKED_DATA[walk][street][house].ts = Date.now();
+
+    console.log(`🏷️ Tag ${code} set to ${newValue} for Walk: ${walk}, Street: ${street}, House: ${house}`);
 };
 
 window.updateMarkerStatus = function(region_id) {
@@ -346,6 +376,7 @@ window.incrementVoteCount = function(btn) {
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
 
+    // Cycle count: 0 -> 1 -> 2 -> 0
     count = (count + 1) > max ? 0 : count + 1;
 
     btn.setAttribute('data-count', count);
@@ -354,7 +385,9 @@ window.incrementVoteCount = function(btn) {
     var row = btn.closest('.canvass-row');
 
     if (row) {
-        var street = row.getAttribute('data-street'); // This is your Region ID
+        // 1. Grab all three identifiers
+        var walk = row.getAttribute('data-walk');     // e.g., "N267"
+        var street = row.getAttribute('data-street'); // e.g., "FOXLEIGH_GRANGE"
         var houseSelector = row.querySelector('.unit-selector');
         var viSelector = row.querySelector('.vi-selector');
 
@@ -362,22 +395,30 @@ window.incrementVoteCount = function(btn) {
             var house = houseSelector.value;
             var vi = viSelector ? viSelector.value : "";
 
-            if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
+            // 2. Ensure the 3-tier hierarchy exists in memory
+            if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
+            if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
 
-            // Update the central ledger
-            BAKED_DATA[street][house] = {
+            // 3. Update the specific house entry
+            // We preserve existing tags if they exist by merging
+            var existingData = BAKED_DATA[walk][street][house] || {};
+
+            BAKED_DATA[walk][street][house] = {
+                ...existingData, // Keep tags and other metadata
                 vi: vi,
                 votes: count.toString(),
                 ts: Date.now()
             };
-            console.log(`💾 Saved to memory: ${street} No. ${house} = ${count} votes`);
+
+            console.log(`💾 Saved to memory: [${walk}] ${street} No. ${house} = ${count} votes`);
 
             // --- REFRESH UI ---
             window.refreshDropdownColors(houseSelector);
             window.updateRowAppearance(row, count, max);
 
             // --- REFRESH MAP MARKER ---
-            // Pass the street name/ID so the marker knows to change color
+            // Important: We still pass 'street' to updateMarkerStatus if
+            // your map uses street names as the keys for markers.
             if (window.updateMarkerStatus) {
                 window.updateMarkerStatus(street);
             }
@@ -954,68 +995,48 @@ window.loadHouseData = function(selectElement) {
     window.updateMarkerStatus(walk);
 };
 
-window.updateTagToggles = function(sel) {
-    const row = sel.closest('tr');
-    if (!row) return;
-
-    const street = row.getAttribute('data-street');
-    const unit = sel.value;
-
-    // Access the central data store
-    const baked = (window.BAKED_DATA && window.BAKED_DATA[street]) ? window.BAKED_DATA[street][unit] : null;
-
-    // --- NEW: Sync the VI Selector Color ---
-    const viSel = row.querySelector('.vi-selector');
-    if (viSel) {
-        // Update the value to what's in BAKED_DATA (or default to empty)
-        viSel.value = (baked && baked.vi) ? baked.vi : "";
-        // Manually trigger the color refresh
-        if (window.refreshDropdownColors) {
-            window.refreshDropdownColors(viSel);
-        }
-    }
-
-    // --- Existing Tag Logic ---
-    const currentTags = (baked && baked.tags) ? baked.tags.split(',') : [];
-    row.querySelectorAll('.tag-toggle').forEach(span => {
-        const code = span.getAttribute('data-code');
-        const hasTag = currentTags.includes(code);
-        span.innerText = hasTag ? 'y' : 'n';
-        span.className = 'tag-toggle ' + (hasTag ? 'tag-active' : 'tag-inactive');
-    });
-};
 
 window.refreshDropdownColors = function(selectElement) {
     if (!selectElement) return;
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
     if (!row) return;
 
-    // Check which dropdown we are dealing with
     const isUnitSelector = selectElement.classList.contains('unit-selector');
     const isVISelector = selectElement.classList.contains('vi-selector');
 
     // --- LOGIC A: UNIT SELECTOR (Vote Counts) ---
     if (isUnitSelector) {
+        // 1. Get both Walk and Street to find the correct data shelf
+        var walk = row.getAttribute('data-walk');
         var street = row.getAttribute('data-street');
+
         Array.from(selectElement.options).forEach(opt => {
-            var h = opt.value;
+            var h = opt.value; // House Number/Name
             var m = parseInt(opt.getAttribute('data-max')) || 1;
-            var rec = (BAKED_DATA[street] && BAKED_DATA[street][h]) ? BAKED_DATA[street][h] : null;
+
+            // 2. Deep look-up: Walk -> Street -> House
+            var rec = (window.BAKED_DATA[walk] &&
+                       window.BAKED_DATA[walk][street] &&
+                       window.BAKED_DATA[walk][street][h])
+                       ? window.BAKED_DATA[walk][street][h]
+                       : null;
+
             var v = rec ? parseInt(rec.votes) : 0;
 
+            // 3. UI Indicators (Checkmarks and Dots)
             if (v >= m && m > 0) {
                 opt.text = h + " ✅";
-                opt.style.color = "#28a745";
+                opt.style.color = "#28a745"; // Green
             } else if (v > 0) {
                 opt.text = h + " 🟡";
-                opt.style.color = "#ffcc00";
+                opt.style.color = "#ffcc00"; // Yellow
             } else {
                 opt.text = h;
                 opt.style.color = "";
             }
         });
 
-        // Color the face of the Unit Dropdown
+        // Color the main face of the dropdown based on the currently selected house
         const btn = row.querySelector('.vote-btn');
         const cv = parseInt(btn.getAttribute('data-count')) || 0;
         const cm = parseInt(btn.getAttribute('data-max')) || 1;
@@ -1023,44 +1044,54 @@ window.refreshDropdownColors = function(selectElement) {
         selectElement.style.color = (cv >= cm && cm > 0) ? "white" : (cv > 0 ? "black" : "");
     }
 
-    // --- LOGIC B: VI SELECTOR (Political Intent Colors) ---
+    // --- LOGIC B: VI SELECTOR (Unchanged, as it doesn't rely on BAKED_DATA) ---
     if (isVISelector) {
         const val = selectElement.value;
         const colors = {
-            '1': '#28a745', // Strong Green
-            '2': '#94d3a2', // Light Green
-            '3': '#ffffcc', // Yellow
-            '4': '#ffcccc', // Light Red
-            '5': '#dc3545'  // Dark Red
+            'R': '#00aaff', // Example: Reform Blue
+            'C': '#0087dc', // Conservative Blue
+            'S': '#dc3545', // Labour Red
+            'LD': '#faa61a', // Lib Dem Orange
+            'G': '#6ab023'  // Green
         };
-        selectElement.style.backgroundColor = colors[val] || '#ffffff';
-        selectElement.style.color = (val === '1' || val === '5') ? 'white' : 'black';
+        // Note: I updated these keys to match your VI codes (R, C, S) instead of 1, 2, 3
+        selectElement.style.backgroundColor = colors[val] || '#e6f2ff';
+        selectElement.style.color = (val === 'R' || val === 'C' || val === 'S') ? 'white' : 'black';
     }
 };
 
 window.updateVI = function(selectElement) {
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+
+    // 1. Grab all three identifiers (Walk, Street, House)
+    var walk = row.getAttribute('data-walk');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
 
-    if (!BAKED_DATA[street]) BAKED_DATA[street] = {};
-    if (!BAKED_DATA[street][house]) BAKED_DATA[street][house] = { votes: 0, tags: "" };
+    // 2. Ensure the 3-tier hierarchy exists
+    if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
+    if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
 
-    // Update only the VI and timestamp
-    BAKED_DATA[street][house].vi = selectElement.value;
-    BAKED_DATA[street][house].ts = Date.now();
+    // 3. Ensure house record exists without wiping out existing votes or tags
+    if (!BAKED_DATA[walk][street][house]) {
+        BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
+    }
 
-    // Re-color the dropdown immediately
+    // 4. Update only the VI and timestamp
+    BAKED_DATA[walk][street][house].vi = selectElement.value;
+    BAKED_DATA[walk][street][house].ts = Date.now();
+
+    // 5. Re-color the dropdown UI immediately
     window.refreshDropdownColors(selectElement);
 
-    // --- NEW: Trigger the Map Marker/Polygon refresh ---
+    // 6. Trigger the Map Marker/Polygon refresh
+    // (Still passing 'street' assuming your map uses street-level markers)
     if (window.updateMarkerStatus) {
         window.updateMarkerStatus(street);
     }
 
-    console.log(`📝 Saved Intent for ${street} ${house}: ${selectElement.value}`);
+    console.log(`📝 Saved Intent for [${walk}] ${street} ${house}: ${selectElement.value}`);
 };
-
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {
  const div = document.createElement("div");
