@@ -340,35 +340,6 @@ window.updateMarkerStatus = function(region_id) {
 };
 
 
-window.loadHouseData = function(selectElement) {
-    console.log("🏠 loadHouseData triggered for:", selectElement.value);
-    var row = selectElement.closest('.canvass-row');
-    if (!row) return;
-
-    var street = row.getAttribute('data-street');
-    var house = selectElement.value;
-    var opt = selectElement.options[selectElement.selectedIndex];
-    var max = parseInt(opt.getAttribute('data-max')) || 1;
-
-    var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
-    var btn = row.querySelector('.vote-btn');
-
-    btn.setAttribute('data-max', max);
-    if (record) {
-        btn.setAttribute('data-count', record.votes);
-        btn.innerText = record.votes + '/' + max;
-    } else {
-        btn.setAttribute('data-count', '0');
-        btn.innerText = '0/' + max;
-    }
-
-    // After setting the data, refresh the colors of the list
-    window.refreshDropdownColors(selectElement);
-
-    window.updateRowAppearance(row, count, max);
-    window.updateMarkerStatus(selectElement.ownerDocument);
-
-};
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
@@ -414,50 +385,36 @@ window.incrementVoteCount = function(btn) {
     }
 };
 
-var deployUpdate = async function() {
-    // 1. Get the centralized Master Data
-    var masterData = window.BAKED_DATA || (parent && parent.BAKED_DATA);
+window.deployUpdate = function() {
+    const masterData = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
 
-    if (!masterData || Object.keys(masterData).length === 0) {
-        alert("No data found to deploy!");
-        return;
-    }
+    document.querySelectorAll('.canvass-row').forEach(row => {
+        const walk = row.getAttribute('data-walk');
+        const street = row.getAttribute('data-street');
+        const house = row.querySelector('.unit-selector').value;
 
-    // --- PART A: PERSIST TO BACKEND ---
-    try {
-        console.log("📡 Sending data to backend...");
-        const response = await fetch('/upload_data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(masterData)
-        });
+        // Initialize levels
+        if (!masterData[walk]) masterData[walk] = {};
+        if (!masterData[walk][street]) masterData[walk][street] = {};
 
-        if (response.ok) {
-            console.log("✅ Backend updated successfully.");
-        } else {
-            console.error("❌ Backend update failed.");
-        }
-    } catch (err) {
-        console.error("📡 Network error during deploy:", err);
-    }
+        // Save house data + metadata
+        masterData[walk][street][house] = {
+            vi: row.querySelector('.vi-selector').value,
+            votes: row.querySelector('.vote-btn').getAttribute('data-count'),
+            pd: row.getAttribute('data-district'), // Keep the PD inside for reporting
+            ts: Date.now()
+        };
+    });
 
-    // --- PART B: PERSIST TO LOCAL FILE (The "Download" backup) ---
-    var jsonString = JSON.stringify(masterData);
-    var mainDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-    var fullHtml = mainDoc.documentElement.outerHTML;
-
-    // Replace the old variable with the new data string
-    var newHtml = fullHtml.replace(/var BAKED_DATA\s*=\s*[^;]*;/, 'var BAKED_DATA = ' + jsonString + ';');
-
-    var blob = new Blob(["<!DOCTYPE html>\n" + newHtml], { type: 'text/html' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = "Canvass_Sheet_Updated.html";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    alert("🚀 Data Deployed to Backend & Backup Downloaded!");
+    // Send the whole bundle to the server
+    fetch('/upload_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(masterData)
+    })
+    .then(response => response.json())
+    .then(result => console.log("✅ Deployed:", result))
+    .catch(err => console.error("❌ Deploy failed:", err));
 };
 
 function bindEvent(element, eventName, eventHandler) {
@@ -924,16 +881,28 @@ function updateMaxVote(selectElement) {
 }
 
 window.loadHouseData = function(selectElement) {
-    var row = selectElement.closest('.canvass-row');
+    const row = selectElement.closest('.canvass-row');
+    const walk = row.getAttribute('data-walk');
+    const street = row.getAttribute('data-street');
+    const house = selectElement.value;
+    var district = row.getAttribute('data-district'); // The new PD field
+
+    // Direct path: no messy loops
+    const record = BAKED_DATA[walk]?.[street]?.[house] || { vi: "U", votes: "0" };
     if (!row) return;
 
-    var street = row.getAttribute('data-street');
-    var house = selectElement.value;
     var opt = selectElement.options[selectElement.selectedIndex];
     var max = parseInt(opt.getAttribute('data-max')) || 1;
 
-    // 1. Fetch the record for this SPECIFIC house
-    var record = (BAKED_DATA[street] && BAKED_DATA[street][house]) ? BAKED_DATA[street][house] : null;
+    // 1. Fetch the record using the 3-tier hierarchy
+    // We safely check: BAKED_DATA -> District -> Street -> House
+    var record = null;
+    if (BAKED_DATA[district] &&
+        BAKED_DATA[district][street] &&
+        BAKED_DATA[district][street][house]) {
+        record = BAKED_DATA[district][street][house];
+    }
+
     var btn = row.querySelector('.vote-btn');
     var viSelector = row.querySelector('.vi-selector');
 
@@ -950,17 +919,17 @@ window.loadHouseData = function(selectElement) {
     }
 
     // 3. FORCE RE-COLORING
-    // Get the fresh count we just set
     const currentCount = parseInt(btn.getAttribute('data-count')) || 0;
 
-    // This updates the Row background and the Button background
+    // Updates Row and Button backgrounds
     window.updateRowAppearance(row, currentCount, max);
 
-    // This updates the Dropdown's own color AND all the options inside it
+    // Updates Dropdown colors
     window.refreshDropdownColors(selectElement);
 
-    // Finally, check if the map marker should change
-    window.updateMarkerStatus(selectElement.ownerDocument);
+    // Update Map Marker
+    // Note: If updateMarkerStatus needs the district/street, you can pass them here
+    window.updateMarkerStatus(walk);
 };
 
 window.updateTagToggles = function(sel) {

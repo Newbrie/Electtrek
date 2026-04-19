@@ -158,7 +158,7 @@ def build_street_list_html(streets_df, street_stats, task_tags):
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-    # 2. THE INJECTION: JavaScript & CSS
+    # 2. THE INJECTION: JavaScript & CSS (No changes needed here)
     persistence_js = r'''
         <style>
             .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
@@ -189,12 +189,12 @@ def build_street_list_html(streets_df, street_stats, task_tags):
             💾 Save & Deploy New File
         </button>
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
-            Data is stored inside the HTML file itself.
+            Data is stored inside the HTML file itself & synced to backend.
         </span>
     </div>
     '''
 
-    # 4. THE UI: Table Header (Added dynamic tag headers)
+    # 4. THE UI: Table Header
     html += f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
@@ -215,6 +215,13 @@ def build_street_list_html(streets_df, street_stats, task_tags):
 
     # 5. Build Rows
     for i, (street_name, data) in enumerate(street_stats.items()):
+        # --- NEW: Get the Polling District (PD) for this street ---
+        # We look up the first occurrence of this street in the dataframe to get its PD
+        try:
+            pd_code = streets_df[streets_df['STREET'] == street_name]['PD'].iloc[0]
+        except (KeyError, IndexError):
+            pd_code = "UNKNOWN"
+
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
         hos = data.get("houses", 0)
@@ -227,7 +234,7 @@ def build_street_list_html(streets_df, street_stats, task_tags):
             for code in sorted_task_codes
         ])
 
-        # Unit dropdown (Added tagger to onchange)
+        # Unit dropdown
         unit_dropdown = f'''
         <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
@@ -257,9 +264,17 @@ def build_street_list_html(streets_df, street_stats, task_tags):
 
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
+        # --- MODIFIED: Added data-district to the tr tag ---
+
         html += f'''
-        <tr class="{row_class} canvass-row" data-street="{street_name}">
-            <td style="padding:8px;"><b data-name="{street_name}">{street_name}</b></td>
+        <tr class="{row_class} canvass-row"
+            data-walk="{region_id}"
+            data-street="{street_name}"
+            data-district="{pd_code}">
+            <td style="padding:8px;">
+                <b data-name="{street_name}">{street_name}</b>
+                <small style="color:#888;">({pd_code})</small>
+            </td>
             <td style="padding:8px; font-size:7pt; text-align:center;"><i>{hos}</i></td>
             <td style="padding:8px; font-size:7pt; text-align:center;">{num_display}</td>
             <td style="padding:8px; width:60px;">{unit_dropdown}</td>
