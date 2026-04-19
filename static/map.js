@@ -386,35 +386,65 @@ window.incrementVoteCount = function(btn) {
 };
 
 window.deployUpdate = function() {
-    const masterData = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
+    // 1. THE CONFIRMATION ALERT
+    // This stops the process unless the user clicks "OK"
+    if (!confirm("Are you sure you want to save and deploy these changes to the server?")) {
+        console.log("Deployment cancelled by user.");
+        return;
+    }
+
+    const masterData = (parent && parent.BAKED_DATA) ? parent.BAKED_DATA : window.BAKED_DATA || {};
 
     document.querySelectorAll('.canvass-row').forEach(row => {
         const walk = row.getAttribute('data-walk');
         const street = row.getAttribute('data-street');
-        const house = row.querySelector('.unit-selector').value;
+        const district = row.getAttribute('data-district');
 
-        // Initialize levels
+        const selector = row.querySelector('.unit-selector');
+        if (!selector) return; // Skip if no selector found
+
+        const house = selector.value;
+        const btn = row.querySelector('.vote-btn');
+        const vi = row.querySelector('.vi-selector').value;
+
+        // 2. THE NESTING FIX
+        // Ensure walk exists as a key, otherwise data becomes 'flat'
+        if (!walk) {
+            console.error("Missing data-walk attribute for street:", street);
+            return;
+        }
+
         if (!masterData[walk]) masterData[walk] = {};
         if (!masterData[walk][street]) masterData[walk][street] = {};
 
-        // Save house data + metadata
         masterData[walk][street][house] = {
-            vi: row.querySelector('.vi-selector').value,
-            votes: row.querySelector('.vote-btn').getAttribute('data-count'),
-            pd: row.getAttribute('data-district'), // Keep the PD inside for reporting
+            vi: vi,
+            votes: btn.getAttribute('data-count'),
+            pd: district,
             ts: Date.now()
         };
     });
 
-    // Send the whole bundle to the server
+    // 3. THE BACKEND CALL
     fetch('/upload_data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(masterData)
     })
-    .then(response => response.json())
-    .then(result => console.log("✅ Deployed:", result))
-    .catch(err => console.error("❌ Deploy failed:", err));
+    .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+    })
+    .then(result => {
+        // 4. THE SUCCESS ALERT
+        alert("🚀 Success! Data has been baked and deployed.");
+        console.log("Deployment result:", result);
+    })
+    .catch(err => {
+        // 5. THE ERROR ALERT
+        alert("❌ Failed to deploy data. Check your connection or server logs.");
+        console.error("Deploy failed:", err);
+    });
 };
 
 function bindEvent(element, eventName, eventHandler) {
