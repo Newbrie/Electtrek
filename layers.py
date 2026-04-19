@@ -816,7 +816,6 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Build tooltip
             tooltip_html = f"""
             <b>{child.value}</b><br>
-            Walk: {region_id}<br>
             Electors: {len(region_electors)}<br>
             Houses: {house_count}<br>
             Elector/house: {round(len(region_electors)/house_count,2) if house_count else 0}<br>
@@ -826,7 +825,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
             # Build popup
-            street_html = nav_html + "<hr>" + build_street_list_html(region_id,region_electors, street_stats, task_tags)
+            street_html = nav_html + "<hr>" + build_street_list_html(child.value,region_electors, street_stats, task_tags)
 
             # Update the style to use the NEW region_color
             style = {
