@@ -397,6 +397,8 @@ window.deployUpdate = function() {
 
     document.querySelectorAll('.canvass-row').forEach(row => {
         const walk = row.getAttribute('data-walk');
+        console.log("DEBUG: Found row for street " + row.getAttribute('data-street'));
+        console.log("DEBUG: walk attribute value is: [" + walk + "]");
         const street = row.getAttribute('data-street');
         const district = row.getAttribute('data-district');
 
