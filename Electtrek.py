@@ -3792,6 +3792,8 @@ def upload_data():
         if new_data is None:
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
 
+        print("Route/upload_data : Received", new_data)
+
         # 2. Use your manager to persist it to the file
         baked_data.save(new_data)
 
