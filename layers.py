@@ -230,18 +230,18 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
         house_gaps_display = data.get("house_gaps", 0)
 
 
-        # Update the onclick in your Python script
+
+        # Change from parent.updateWalkVisuals to checking both local and parent
         tag_cells = "".join([
             f'''<td style="text-align:center; padding:4px;">
                     <span class="tag-toggle tag-inactive {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
-                          onclick="parent.handleTagClick(this); if('{code}'=='L1') {{ parent.updateWalkVisuals('{reg_id}'); }}">
+                          onclick="parent.handleTagClick(this); (window.updateWalkVisuals || parent.updateWalkVisuals || function(){{}})('{reg_id}');">
                         n
                     </span>
                 </td>'''
             for code in sorted_task_codes
         ])
-
         # Unit dropdown
         unit_dropdown = f'''
         <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
