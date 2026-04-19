@@ -432,16 +432,15 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            // Look for the tag in the options object
-            if (layer.options && layer.options.mytag === 'walk') {
-                let count = 0;
-                layer.eachLayer(() => count++);
-                console.log(`✅ Found Walk Layer Group! Sub-layers: ${count}`);
-
-                // Peek at the first polygon inside this group
-                layer.eachLayer(sub => {
-                    if (sub.feature) console.log("Sample Walk Properties:", sub.feature.properties);
-                });
+            if (layer.options) {
+                // Log any layer that has a name or a 'mytag'
+                if (layer.options.name || layer.options.mytag) {
+                    console.log("🔍 Found Named Layer:", {
+                        name: layer.options.name,
+                        mytag: layer.options.mytag,
+                        type: layer.constructor.name
+                    });
+                }
             }
         });
 
