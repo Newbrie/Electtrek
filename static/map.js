@@ -432,51 +432,26 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            // Check if the layer is a Group (contains other layers)
-            if (layer instanceof L.FeatureGroup || layer instanceof L.LayerGroup || typeof layer.eachLayer === 'function') {
+            // We only care about containers (groups)
+            if (layer.eachLayer && !layer.feature) {
+                let featureCount = 0;
+                let sampleProps = null;
 
-                // Folium often gives these groups names in the options or via a custom property
-                const groupName = layer.options?.name || layer._leaflet_id;
-                console.log(`📂 Found FeatureGroup/LayerGroup: [${groupName}]`);
-
-                // Now peek inside to see if it contains our data
-                let sampleFeature = null;
-                layer.eachLayer(sub => {
-                    if (sub.feature) sampleFeature = sub.feature;
+                layer.eachLayer(function(sub) {
+                    if (sub.feature) {
+                        featureCount++;
+                        if (!sampleProps) sampleProps = sub.feature.properties;
+                    }
                 });
 
-                if (sampleFeature) {
-                    console.log(`   ✅ This group contains Features. Sample Properties:`, sampleFeature.properties);
-                } else {
-                    console.log(`   ⚪ This group appears to be empty or contains non-feature layers.`);
+                if (featureCount > 0) {
+                    console.log(`📂 Found Data Group | Features: ${featureCount} | Sample ID:`,
+                        sampleProps.region_id || sampleProps.walk_id || "No ID Key Found");
+                    console.log("   Full Properties:", sampleProps);
                 }
             }
         });
 
-        // Helper function to keep the code clean
-        function processLayer(layer, region_id, completedHouses) {
-            const props = layer.feature.properties;
-
-            // Normalize IDs to handle string/number differences
-            const polyId = String(props.region_id || props.walk_id || "");
-            const targetId = String(region_id);
-
-            if (polyId === targetId) {
-                foundPolygon = true;
-                const expected = props.expected_houses || 0;
-                const pct = expected > 0 ? (completedHouses / expected) * 100 : 0;
-
-                console.log(`🎯 MATCH: ${polyId} | Progress: ${pct.toFixed(1)}%`);
-
-                const color = (pct >= 100) ? "#28a745" : (pct > 0 ? "#ffcc00" : null);
-
-                layer.setStyle({
-                    fillColor: color || props.fcol || "#808080",
-                    fillOpacity: color ? 0.8 : 0.4,
-                    weight: color ? 3 : 1
-                });
-            }
-        }
     }
 
     if (activeMap) {
