@@ -150,17 +150,20 @@ window.updateMarkerStatus = function(region_id) {
 
     let completedUnits = 0;
     let expectedHouses = 0;
+
+    // Check both local and parent scope for the map instance
     var mapObject = window.map || parent.map;
+
     if (mapObject) {
-        // A. Find the polygon to get the "expected" house count
-        map.eachLayer(function(layer) {
+        // A. Find the polygon using mapObject, NOT 'map'
+        mapObject.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
                 expectedHouses = layer.feature.properties.expected_houses || 0;
             }
         });
     } else {
         console.error("The 'map' variable is still undefined!");
-        return
+        return;
     }
 
     // B. Count how many unique houses in BAKED_DATA have votes
@@ -169,17 +172,17 @@ window.updateMarkerStatus = function(region_id) {
             if (parseInt(unit.votes) > 0) completedUnits++;
         });
     }
-
     // C. Determine Color logic
     // Green: All houses have at least 1 vote
     // Yellow: Some houses have votes
     // Null/Original: No activity
+
     const healthColor = (completedUnits >= expectedHouses && expectedHouses > 0) ? "#28a745" :
                         (completedUnits > 0 ? "#ffcc00" : null);
 
-    // D. Update Label
+    // Update Label
     const labelSpan = document.getElementById(`label-${region_id}`);
-    if (labelSpan) {
+    if (labelSpan && healthColor) {
         if (healthColor) {
             labelSpan.style.background = healthColor;
             labelSpan.style.color = "white";
@@ -189,18 +192,19 @@ window.updateMarkerStatus = function(region_id) {
         }
     }
 
-    // E. Update Polygon
-    map.eachLayer(function(layer) {
+    // B. Update the Polygon using mapObject
+    mapObject.eachLayer(function(layer) {
         if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
             if (healthColor) {
-                layer.setStyle({ fillColor: healthColor, fillOpacity: 0.6 });
-            } else {
-                // If votes cleared, reset to original style (optional)
-                layer.setStyle({ fillOpacity: 0.4 });
+                layer.setStyle({
+                    fillColor: healthColor,
+                    fillOpacity: 0.8
+                });
             }
         }
     });
 };
+
 
 window.loadHouseData = function(selectElement) {
     console.log("🏠 loadHouseData triggered for:", selectElement.value);
