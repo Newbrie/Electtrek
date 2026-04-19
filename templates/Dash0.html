@@ -2,7 +2,8 @@
 {% block map %}
 <script>
     // Initialize empty if no data exists yet
-    window.BAKED_DATA = {{ baked_data }};
+    window.BAKED_DATA = {{ baked_data | safe }};
+
 </script>
 <div id="mapwin" class="innertube">
 
