@@ -432,18 +432,24 @@ window.updateWalkVisuals = function(region_id) {
         }
 
         activeMap.eachLayer(function(layer) {
-            // 1. Direct Check: Is this layer the polygon itself?
-            if (layer.feature && layer.feature.properties) {
-                processLayer(layer, region_id, completedHousesInWalk);
-            }
-            // 2. Recursive Check: Is this a group containing polygons?
-            else if (typeof layer.eachLayer === 'function') {
-                console.log("📦 Found a Group, diving in...");
-                layer.eachLayer(function(subLayer) {
-                    if (subLayer.feature && subLayer.feature.properties) {
-                        processLayer(subLayer, region_id, completedHousesInWalk);
-                    }
+            // Check if the layer is a Group (contains other layers)
+            if (layer instanceof L.FeatureGroup || layer instanceof L.LayerGroup || typeof layer.eachLayer === 'function') {
+
+                // Folium often gives these groups names in the options or via a custom property
+                const groupName = layer.options?.name || layer._leaflet_id;
+                console.log(`📂 Found FeatureGroup/LayerGroup: [${groupName}]`);
+
+                // Now peek inside to see if it contains our data
+                let sampleFeature = null;
+                layer.eachLayer(sub => {
+                    if (sub.feature) sampleFeature = sub.feature;
                 });
+
+                if (sampleFeature) {
+                    console.log(`   ✅ This group contains Features. Sample Properties:`, sampleFeature.properties);
+                } else {
+                    console.log(`   ⚪ This group appears to be empty or contains non-feature layers.`);
+                }
             }
         });
 
