@@ -214,6 +214,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
     '''
 
     # 5. Build Rows
+
     for i, (street_name, data) in enumerate(street_stats.items()):
         # --- NEW: Get the Polling District (PD) for this street ---
         # We look up the first occurrence of this street in the dataframe to get its PD
@@ -228,9 +229,16 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
 
-        # Dynamic Tag Cells
+
+        # Update the onclick in your Python script
         tag_cells = "".join([
-            f'<td style="text-align:center; padding:4px;"><span class="tag-toggle tag-inactive" data-code="{code}" onclick="parent.handleTagClick(this)">n</span></td>'
+            f'''<td style="text-align:center; padding:4px;">
+                    <span class="tag-toggle tag-inactive {'l1-trigger' if code == 'L1' else ''}"
+                          data-code="{code}"
+                          onclick="parent.handleTagClick(this); if('{code}'=='L1') {{ parent.updateWalkVisuals('{reg_id}'); }}">
+                        n
+                    </span>
+                </td>'''
             for code in sorted_task_codes
         ])
 

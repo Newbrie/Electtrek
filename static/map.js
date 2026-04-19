@@ -369,6 +369,54 @@ window.updateMarkerStatus = function(region_id) {
     });
 };
 
+// map.js
+
+window.updateWalkVisuals = function(walkId) {
+    // 1. Target the iframe or document where the table lives
+    // If the table is in an iframe, use that iframe's document
+    const tableDoc = document.querySelector('iframe').contentDocument || document;
+
+    let totalHouses = 0;
+    let completedHouses = 0;
+
+    // 2. Select rows belonging to the specific Walk
+    const rows = tableDoc.querySelectorAll(`.canvass-row[data-walk="${walkId}"]`);
+
+    rows.forEach(row => {
+        const houses = parseInt(row.getAttribute('data-houses')) || 0;
+        const l1Tag = row.querySelector('.l1-trigger');
+        const isActive = l1Tag && l1Tag.classList.contains('tag-active');
+
+        totalHouses += houses;
+        if (isActive) {
+            completedHouses += houses;
+        }
+    });
+
+    const percentage = totalHouses > 0 ? (completedHouses / totalHouses) * 100 : 0;
+
+    // 3. Update the Leaflet/Mapbox Polygon
+    // Assuming your polygons are stored in an object or a Leaflet FeatureGroup
+    updatePolygonStyle(walkId, percentage);
+};
+
+
+function updatePolygonStyle(walkId, pct) {
+    // Example: Using a simple color ramp based on completion
+    const color = pct === 100 ? '#1a9850' :
+                  pct > 75  ? '#d9ef8b' :
+                  pct > 50  ? '#fee08b' :
+                  pct > 25  ? '#fc8d59' :
+                  pct > 0   ? '#d73027' : '#444444';
+
+    // Find the polygon layer associated with this walkId
+    // If using Leaflet:
+    walkLayers.eachLayer(layer => {
+        if (layer.feature.properties.walk_id === walkId) {
+            layer.setStyle({ fillColor: color, fillOpacity: 0.7 });
+        }
+    });
+}
 
 
 window.incrementVoteCount = function(btn) {
