@@ -218,7 +218,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
         # --- NEW: Get the Polling District (PD) for this street ---
         # We look up the first occurrence of this street in the dataframe to get its PD
         try:
-            pd_code = streets_df[streets_df['STREET'] == street_name]['PD'].iloc[0]
+            pd_code = streets_df[streets_df['StreetName'] == street_name]['PD'].iloc[0]
         except (KeyError, IndexError):
             pd_code = "UNKNOWN"
 
