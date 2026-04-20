@@ -184,12 +184,46 @@ async function searchMap() {
 
         // Search Tooltips
         if (!found && layer.getTooltip && layer.getTooltip()) {
-            const tooltipContent = String(layer.getTooltip().getContent());
+            const tooltip = layer.getTooltip();
+            const tooltipContent = String(tooltip.getContent());
 
             if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                console.log("Tooltip Text:", tooltipContent);
+                console.log("🎯 Match found in tooltip for layer:", layer._leaflet_id);
+
+                // 1. Capture the original style so we can revert it
+                const originalStyle = {
+                    color: layer.options.color,
+                    weight: layer.options.weight,
+                    fillOpacity: layer.options.fillOpacity
+                };
+
+                // 2. Apply the Highlight Style
+                if (layer.setStyle) {
+                    layer.setStyle({
+                        color: '#00FFFF', // Bright Cyan
+                        weight: 5,
+                        fillOpacity: 0.7
+                    });
+
+                    // Bring to front so it's not hidden by other overlapping polygons
+                    if (layer.bringToFront) layer.bringToFront();
+                }
+
+                // 3. Move the map
                 const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
                 fmap.setView(latlng, 17);
+
+                // Open the tooltip so the user sees the match
+                layer.openTooltip();
+
+                // 4. Setup Reset (Revert when another search starts or after a delay)
+                // You can also trigger this on 'tooltipclose'
+                layer.once('tooltipclose', function() {
+                    if (layer.setStyle) {
+                        layer.setStyle(originalStyle);
+                    }
+                });
+
                 found = true;
             }
         }
