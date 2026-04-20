@@ -111,53 +111,64 @@ window.handleCalendarClick = function() {
 async function searchMap() {
     const queryInput = document.getElementById("searchInput").value.trim();
     const fmap = window.fmap;
-    if (!queryInput || !fmap) return;
+    if (!queryInput || !fmap) {
+        console.warn("⚠️ Search cancelled: Missing query or map instance.");
+        return;
+    }
 
     const normalizedQuery = queryInput.toLowerCase();
     let found = false;
 
+    console.log(`🔎 Starting search for: "${normalizedQuery}"`);
+
     // --- 1. POSTCODE SEARCH ---
     const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
     if (postcodePattern.test(queryInput)) {
+        console.log("📮 Postcode pattern detected. Fetching...");
         const cleanPostcode = queryInput.replace(/\s+/g, '');
         try {
             const res = await fetch(`http://api.getthedata.com/postcode/${cleanPostcode}`);
             const data = await res.json();
             if (data.status === "match" && data.data) {
                 const { latitude, longitude } = data.data;
+                console.log(`✅ Postcode match: ${latitude}, ${longitude}`);
                 fmap.setView([latitude, longitude], 17);
                 L.marker([latitude, longitude]).addTo(fmap).bindPopup(`<b>${queryInput.toUpperCase()}</b>`).openPopup();
                 return;
             }
-        } catch (err) { console.error("Postcode fail:", err); }
+        } catch (err) { console.error("❌ Postcode API fail:", err); }
     }
 
     // --- 2. LAYER SEARCH ---
     fmap.eachLayer(function(layer) {
         if (found) return;
 
-        let matchType = null; // To track: 'region', 'tooltip', or 'popup'
+        let matchType = null;
 
-        // A. Priority 1: region_id (Standardized path)
+        // A. Priority 1: region_id
         if (layer.feature && layer.feature.properties && layer.feature.properties.region_id) {
-            if (String(layer.feature.properties.region_id).toLowerCase().includes(normalizedQuery)) {
+            const rid = String(layer.feature.properties.region_id).toLowerCase();
+            if (rid.includes(normalizedQuery)) {
+                console.log(`🎯 Match found in region_id: ${layer.feature.properties.region_id}`);
                 matchType = 'region';
             }
         }
 
-        // B. Priority 2: Tooltips (General stats)
+        // B. Priority 2: Tooltips
         if (!matchType && layer.getTooltip && layer.getTooltip()) {
             const content = String(layer.getTooltip().getContent());
             if (content.toLowerCase().includes(normalizedQuery)) {
+                console.log(`📝 Match found in Tooltip text.`);
                 matchType = 'tooltip';
             }
         }
 
-        // C. Priority 3: Popups (Street names)
+        // C. Priority 3: Popups
         if (!matchType && layer.getPopup && layer.getPopup()) {
             const content = layer.getPopup().getContent();
             const plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
             if (plainText.toLowerCase().includes(normalizedQuery)) {
+                console.log(`💬 Match found in Popup content.`);
                 matchType = 'popup';
             }
         }
@@ -165,8 +176,8 @@ async function searchMap() {
         // --- 3. EXECUTE HIGHLIGHT & UI ---
         if (matchType) {
             found = true;
+            console.log(`📍 Navigating to layer ID: ${layer._leaflet_id}`);
 
-            // Navigation
             const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
             fmap.setView(latlng, 17);
 
@@ -182,11 +193,10 @@ async function searchMap() {
             }).addTo(fmap);
             if (highlightClone.bringToFront) highlightClone.bringToFront();
 
-            // Open the appropriate interface
             if (matchType === 'popup' || layer.getPopup()) {
                 layer.openPopup();
                 if (matchType === 'popup') {
-                    // Specific row-highlight logic if it was a street name match
+                    console.log("🖋️ Highlighting specific row in popup...");
                     setTimeout(() => {
                         const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
                         elements.forEach(el => {
@@ -207,15 +217,22 @@ async function searchMap() {
                 layer.openTooltip();
             }
 
-            // Clean up the clone
-            const removeClone = () => { if (fmap.hasLayer(highlightClone)) fmap.removeLayer(highlightClone); };
+            const removeClone = () => {
+                if (fmap.hasLayer(highlightClone)) {
+                    console.log("🗑️ Cleanup: Removing black highlight clone.");
+                    fmap.removeLayer(highlightClone);
+                }
+            };
             fmap.once('click', removeClone);
             layer.once('popupclose', removeClone);
             layer.once('tooltipclose', removeClone);
         }
     });
 
-    if (!found) alert("No matching Region ID or street found.");
+    if (!found) {
+        console.warn(`❌ No results found for "${queryInput}"`);
+        alert("No matching Region ID or street found.");
+    }
 }
 
 window.updateRowAppearance = function(row, count, max) {
