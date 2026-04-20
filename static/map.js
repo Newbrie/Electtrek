@@ -452,24 +452,25 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`🔄 Recalculating Walk Progress: [${region_id}]`);
+    console.group(`🔄 Recalculating Progress: [${region_id}]`);
 
-    const regionData = window.BAKED_DATA[region_id];
-    if (!regionData) {
+    if (!region_id || !window.BAKED_DATA[region_id]) {
         console.groupEnd();
         return;
     }
 
+    const regionData = window.BAKED_DATA[region_id];
+
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // Iterate through Streets
-    Object.entries(regionData).forEach(([streetName, houses]) => {
-        // Iterate through Houses in that street
-        Object.values(houses).forEach(houseData => {
+    // 1. Correct Tally for 3-tier Hierarchy [walk][street][house]
+    Object.values(regionData).forEach(streetObj => {
+        // streetObj here is actually a collection of houses
+        Object.values(streetObj).forEach(houseData => {
             totalPossibleHouses++;
 
-            // Check the specific tag code (e.g., 'L1') inside the house tags object
+            // Check for 'y' in the house-level tags object
             if (houseData.tags && houseData.tags['L1'] === 'y') {
                 completedHouses++;
             }
@@ -479,32 +480,45 @@ window.updateWalkVisuals = function(region_id) {
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} houses marked L1`);
+    console.log(`Live Update -> Total Houses: ${totalPossibleHouses} | Done: ${completedHouses} | Pct: ${(deliveryPct * 100).toFixed(1)}%`);
 
-    // --- Map Update Logic ---
-    const activeMap = window.fmap || parent.fmap;
-    if (activeMap) {
-        activeMap.eachLayer(layer => {
-            if (layer.feature?.properties?.region_id === region_id) {
-                // Ensure Ghost exists
-                if (!layer._greyGhost) {
-                    layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
-                        style: { color: "transparent", fillColor: "#333", fillOpacity: 0, interactive: false }
-                    }).addTo(activeMap);
-                    layer._greyGhost.bringToFront();
-                }
-
-                // Update Opacity - will now drop if you toggle a 'y' back to 'n'
-                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
-
-                // Update Label
-                const labelEl = document.getElementById(`label-${region_id}`);
-                if (labelEl) {
-                    labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
-                }
-            }
-        });
+    // 2. Update Map Graphics
+    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    if (!activeMap) {
+        console.groupEnd();
+        return;
     }
+
+    activeMap.eachLayer(function(layer) {
+        if (layer.feature?.properties?.region_id === region_id) {
+
+            if (!layer._greyGhost) {
+                layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
+                    style: {
+                        color: "transparent",
+                        fillColor: "#333333",
+                        fillOpacity: 0,
+                        interactive: false
+                    }
+                }).addTo(activeMap);
+                layer._greyGhost.bringToFront();
+            }
+
+            // Set the opacity based on the house-level calculation
+            layer._greyGhost.setStyle({
+                fillOpacity: progressOpacity
+            });
+
+            // Update Label
+            const labelEl = document.getElementById(`label-${region_id}`);
+            if (labelEl) {
+                const pctInt = Math.round(deliveryPct * 100);
+                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
+                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
+            }
+        }
+    });
+
     console.groupEnd();
 };
 
