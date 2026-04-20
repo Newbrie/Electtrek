@@ -445,27 +445,46 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`🎨 Inverse Opacity Update: [${region_id}]`);
+    console.group(`🎨 Inverted Progress Update: [${region_id}]`);
 
     if (!region_id) {
         console.groupEnd();
         return;
     }
 
-    // 1. Get Progress Data
+    // 1. Get Data Source
     const currentData = typeof getBakedData === 'function' ? getBakedData() : window.BAKED_DATA;
     const regionData = currentData ? currentData[region_id] : null;
 
-    let completedHouses = 0;
-    if (regionData) {
-        Object.values(regionData).forEach(street => {
-            if (street.tags?.includes('L1')) {
-                completedHouses += (parseInt(street.houses) || 0);
-            }
-        });
+    if (!regionData) {
+        console.warn(`No BAKED_DATA found for region: ${region_id}`);
+        console.groupEnd();
+        return;
     }
 
-    // 2. Locate Map
+    // 2. Calculate Totals (All houses vs L1 houses)
+    let totalPossibleHouses = 0;
+    let completedHouses = 0;
+
+    Object.values(regionData).forEach(street => {
+        const houseCount = parseInt(street.houses) || 0;
+        totalPossibleHouses += houseCount;
+
+        // Requirement: Include all houses if L1 is exactly 'y'
+        if (street.tags && street.tags.includes('L1')) {
+            completedHouses += houseCount;
+        }
+    });
+
+    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+
+    // Inverted Opacity: 0% delivery = 0 opacity, 100% delivery = 0.8 opacity
+    const progressOpacity = 0.8 * deliveryPct;
+
+    console.log(`Region Total: ${totalPossibleHouses} | Completed: ${completedHouses}`);
+    console.log(`Delivery: ${(deliveryPct * 100).toFixed(1)}% | Applied Opacity: ${progressOpacity.toFixed(2)}`);
+
+    // 3. Locate Map & Update Layer
     const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
     if (!activeMap) {
         console.error("Map instance not found.");
@@ -473,58 +492,48 @@ window.updateWalkVisuals = function(region_id) {
         return;
     }
 
-    // 3. Update Layers
     activeMap.eachLayer(function(layer) {
         // Standard Option 1 Structure
         if (layer.feature?.properties?.region_id === region_id) {
-            const props = layer.feature.properties;
-            const expected = props.expected_houses || 0;
 
-            // pct = 0 (nothing done) to 1 (fully done)
-            const pct = expected > 0 ? Math.min(completedHouses / expected, 1) : 0;
-
-            // Calculate inverse opacity for the Grey Clone
-            // 0% delivered = 0.8 opacity (heavy grey)
-            // 100% delivered = 0.0 opacity (invisible)
-            const greyOpacity = 0.8 * (1 - pct);
-
-            console.log(`Region: ${region_id} | Progress: ${(pct * 100).toFixed(1)}% | Grey Opacity: ${greyOpacity.toFixed(2)}`);
-
-            // --- THE GREY CLONE (INVERSE PROGRESS) ---
+            // --- THE GREY PROGRESS CLONE ---
             if (!layer._greyGhost) {
-                console.log("Creating grey 'fog' clone layer...");
+                console.log("Creating Grey Progress Clone...");
                 layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
                     style: {
                         color: "transparent",
-                        fillColor: "#333333", // The "Incomplete" Fog
-                        fillOpacity: 0.8,
+                        fillColor: "#333333",
+                        fillOpacity: 0, // Start invisible
                         interactive: false
                     }
                 }).addTo(activeMap);
 
-                // Important: The ghost must be ABOVE the main layer to hide it
+                // Bring to front so it layers OVER the zone color
                 layer._greyGhost.bringToFront();
             }
 
-            // --- UPDATE THE CLONE ---
+            // Update the clone opacity to show progress
             layer._greyGhost.setStyle({
-                fillOpacity: greyOpacity
+                fillOpacity: progressOpacity
             });
 
-            // --- STYLE MAIN LAYER (ZONAL COLOR) ---
-            // Keep the underlying color bright and constant
+            // Keep the underlying zone layer consistent
             layer.setStyle({
-                fillColor: (pct >= 1) ? "#28a745" : (props.fcol || "#666"),
-                fillOpacity: 0.8,
                 weight: 2,
-                color: "white"
+                color: "white",
+                fillOpacity: 0.5
             });
 
-            // Optional: Update the Label Tag
+            // 4. Update the Label UI
             const labelEl = document.getElementById(`label-${region_id}`);
             if (labelEl) {
-                labelEl.innerHTML = `${region_id} <small>${Math.round(pct * 100)}%</small>`;
-                if (pct >= 1) labelEl.style.background = "#28a745";
+                const pctText = Math.round(deliveryPct * 100);
+                labelEl.innerHTML = `${region_id} <small>${pctText}%</small>`;
+
+                // Visual feedback on the label if finished
+                if (deliveryPct >= 1) {
+                    labelEl.style.background = "#28a745"; // Green label when 100%
+                }
             }
         }
     });
