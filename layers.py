@@ -846,18 +846,23 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Polygon (with tooltip only)
             # -------------------------
             try:
-                # Ensure we are passing a clean geometry
+
+                # Wrap the shapely geometry in a standard Feature structure
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
-                geojson_data = actual_shape_poly.__geo_interface__
-                geojson_data['properties'] = {
-                    'region_id': child.value,
-                    'type': 'voronoi_poly',
-                    'expected_houses': house_count  # <-- Pass the real total her
+
+                geojson_feature = {
+                    "type": "Feature",
+                    "geometry": actual_shape_poly.__geo_interface__,
+                    "properties": {
+                        'region_id': child.value,
+                        'type': 'voronoi_poly',
+                        'expected_houses': house_count
+                    }
                 }
+
                 gj = folium.GeoJson(
-                    geojson_data,
+                    geojson_feature,  # Pass the Feature, not just the Geometry
                     style_function=lambda x, s=style: s,
-                    # Move the tooltip INTO the GeoJson constructor
                     tooltip=folium.Tooltip(tooltip_html, sticky=True)
                 )
 

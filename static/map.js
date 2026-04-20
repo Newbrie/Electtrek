@@ -109,57 +109,68 @@ window.handleCalendarClick = function() {
 
 // 3. Search Logic
 async function searchMap() {
-    const query = document.getElementById("searchInput").value.trim();
-    const fmap = window.fmap; // Use our standard map variable
-    if (!query || !fmap) return;
+    const queryInput = document.getElementById("searchInput").value.trim();
+    const fmap = window.fmap;
+    if (!queryInput || !fmap) return;
 
-    // Postcode Pattern
+    const normalizedQuery = queryInput.toLowerCase();
+    let found = false;
+
+    // --- 1. POSTCODE SEARCH ---
     const postcodePattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
-    if (postcodePattern.test(query)) {
-        const cleanPostcode = query.replace(/\s+/g, '');
+    if (postcodePattern.test(queryInput)) {
+        const cleanPostcode = queryInput.replace(/\s+/g, '');
         try {
             const res = await fetch(`http://api.getthedata.com/postcode/${cleanPostcode}`);
             const data = await res.json();
             if (data.status === "match" && data.data) {
                 const { latitude, longitude } = data.data;
                 fmap.setView([latitude, longitude], 17);
-                L.marker([latitude, longitude]).addTo(fmap).bindPopup(`<b>${query.toUpperCase()}</b>`).openPopup();
+                L.marker([latitude, longitude]).addTo(fmap).bindPopup(`<b>${queryInput.toUpperCase()}</b>`).openPopup();
                 return;
             }
         } catch (err) { console.error("Postcode fail:", err); }
     }
 
-    // Layer Search Logic
-    const normalizedQuery = query.toLowerCase();
-    let found = false;
-
+    // --- 2. LAYER SEARCH ---
     fmap.eachLayer(function(layer) {
         if (found) return;
 
-        let isMatch = false;
-        const query = normalizedQuery.toLowerCase();
+        let matchType = null; // To track: 'region', 'tooltip', or 'popup'
 
-        // 1. Direct Region ID Search (Priority)
+        // A. Priority 1: region_id (Standardized path)
         if (layer.feature && layer.feature.properties && layer.feature.properties.region_id) {
-            if (String(layer.feature.properties.region_id).toLowerCase().includes(query)) {
-                console.log("🎯 Match found in region_id:", layer.feature.properties.region_id);
-                isMatch = true;
+            if (String(layer.feature.properties.region_id).toLowerCase().includes(normalizedQuery)) {
+                matchType = 'region';
             }
         }
 
-        // 2. Fallback to Popup/Tooltip text (for street names)
-        if (!isMatch) {
-            const tooltipText = layer.getTooltip ? String(layer.getTooltip().getContent()) : "";
-            const popupText = layer.getPopup ? String(layer.getPopup().getContent()) : "";
-            if (tooltipText.toLowerCase().includes(query) || popupText.toLowerCase().includes(query)) {
-                isMatch = true;
+        // B. Priority 2: Tooltips (General stats)
+        if (!matchType && layer.getTooltip && layer.getTooltip()) {
+            const content = String(layer.getTooltip().getContent());
+            if (content.toLowerCase().includes(normalizedQuery)) {
+                matchType = 'tooltip';
             }
         }
 
-        if (isMatch) {
-            // --- HIGHLIGHT LOGIC ---
+        // C. Priority 3: Popups (Street names)
+        if (!matchType && layer.getPopup && layer.getPopup()) {
+            const content = layer.getPopup().getContent();
+            const plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
+            if (plainText.toLowerCase().includes(normalizedQuery)) {
+                matchType = 'popup';
+            }
+        }
 
-            // Create the Black Ghost Clone
+        // --- 3. EXECUTE HIGHLIGHT & UI ---
+        if (matchType) {
+            found = true;
+
+            // Navigation
+            const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+            fmap.setView(latlng, 17);
+
+            // Universal Highlight Clone
             const highlightClone = L.geoJson(layer.toGeoJSON(), {
                 style: {
                     color: '#000000',
@@ -169,136 +180,42 @@ async function searchMap() {
                     interactive: false
                 }
             }).addTo(fmap);
-
             if (highlightClone.bringToFront) highlightClone.bringToFront();
 
-            // Navigate
-            const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-            fmap.setView(latlng, 17);
-
-            // Open appropriate UI
-            if (layer.getPopup()) {
+            // Open the appropriate interface
+            if (matchType === 'popup' || layer.getPopup()) {
                 layer.openPopup();
+                if (matchType === 'popup') {
+                    // Specific row-highlight logic if it was a street name match
+                    setTimeout(() => {
+                        const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
+                        elements.forEach(el => {
+                            if (el.innerText.toLowerCase().includes(normalizedQuery)) {
+                                const row = el.closest('tr') || el.closest('li') || el;
+                                row.style.outline = "3px solid black";
+                                row.style.outlineOffset = "-3px";
+                                row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+                                layer.once('popupclose', () => {
+                                    row.style.outline = "none";
+                                    row.style.backgroundColor = "";
+                                });
+                            }
+                        });
+                    }, 50);
+                }
             } else if (layer.getTooltip()) {
                 layer.openTooltip();
             }
 
-            // --- CLEANUP LOGIC ---
-            const removeClone = () => {
-                if (fmap.hasLayer(highlightClone)) {
-                    fmap.removeLayer(highlightClone);
-                    console.log("🗑️ Highlight cleared");
-                }
-            };
-
-            // Revert on click or close
+            // Clean up the clone
+            const removeClone = () => { if (fmap.hasLayer(highlightClone)) fmap.removeLayer(highlightClone); };
             fmap.once('click', removeClone);
             layer.once('popupclose', removeClone);
             layer.once('tooltipclose', removeClone);
-
-            found = true;
         }
-
-        if (found) return;
-
-
-        // Search Tooltips
-        if (!found && layer.getTooltip && layer.getTooltip()) {
-            const tooltip = layer.getTooltip();
-            const tooltipContent = String(tooltip.getContent());
-
-            if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                console.log("🎯 Match found! Creating temporary highlight clone for layer:", layer._leaflet_id);
-
-                // 1. Create the Clone
-                // We use toGeoJSON to get the geometry, then create a new Leaflet layer from it
-                const highlightClone = L.geoJson(layer.toGeoJSON(), {
-                    style: {
-                        color: '#000000',      // Black border
-                        fillColor: '#000000',  // Black fill
-                        weight: 6,
-                        fillOpacity: 0.5,
-                        interactive: false     // Important: Allows clicks to "pass through" to the map
-                    }
-                }).addTo(fmap);
-
-                // 2. Ensure it's on top
-                highlightClone.eachLayer(l => {
-                    if (l.bringToFront) l.bringToFront();
-                });
-
-                // 3. Move the map
-                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-                fmap.setView(latlng, 17);
-                layer.openTooltip();
-
-                // 4. Cleanup Logic: Remove the clone when the user interacts elsewhere
-                const removeClone = () => {
-                    if (fmap.hasLayer(highlightClone)) {
-                        console.log("🗑️ Removing highlight clone");
-                        fmap.removeLayer(highlightClone);
-                    }
-                };
-
-                // Remove when tooltip closes OR user clicks anywhere on the map
-                layer.once('tooltipclose', removeClone);
-                fmap.once('click', removeClone);
-
-                // Safety: also remove if another search is triggered
-                layer.once('popupopen', removeClone);
-
-                found = true;
-            }
-        }
-
-        if (found) return;
-
-        // Search Popups
-        if (layer.getPopup && layer.getPopup()) {
-            const popup = layer.getPopup();
-            const content = popup.getContent();
-
-            // 1. Check for match without changing anything yet
-            let plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
-
-            if (plainText.toLowerCase().includes(normalizedQuery)) {
-                // 2. Open the popup first so the elements exist in the document
-                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-                fmap.setView(latlng, 17);
-                layer.openPopup();
-
-                // 3. Find and style the row directly in the DOM
-                setTimeout(() => {
-                    // Find all table cells or divs in the popup
-                    const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
-
-                    elements.forEach(el => {
-                        if (el.innerText.toLowerCase().includes(normalizedQuery)) {
-                            // Find the parent row
-                            const row = el.closest('tr') || el.closest('li') || el;
-
-                            // Apply the black border to the row
-                            row.style.outline = "3px solid black";
-                            row.style.outlineOffset = "-3px";
-                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-
-                            // Ensure the cleanup happens when the popup closes
-                            layer.once('popupclose', () => {
-                                row.style.outline = "none";
-                                row.style.backgroundColor = "";
-                            });
-                        }
-                    });
-                }, 50); // Small delay to ensure the popup is fully rendered
-
-                found = true;
-            }
-        }
-
-
     });
 
-    if (!found) alert("No matching location found.");
+    if (!found) alert("No matching Region ID or street found.");
 }
 
 window.updateRowAppearance = function(row, count, max) {
