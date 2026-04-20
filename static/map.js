@@ -110,7 +110,7 @@ window.handleCalendarClick = function() {
 // 3. Search Logic
 async function searchMap() {
     const query = document.getElementById("searchInput").value.trim();
-    const fmap = window.map; // Use our standard map variable
+    const fmap = window.fmap; // Use our standard map variable
     if (!query || !fmap) return;
 
     // Postcode Pattern
