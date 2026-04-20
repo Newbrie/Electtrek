@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Extractor</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    button {
+        padding: 10px 15px;
+        margin-top: 10px;
+        cursor: pointer;
+    }
+    table {
+        margin-top: 20px;
+        border-collapse: collapse;
+        width: 400px;
+    }
+    td {
+        border: 1px solid #ccc;
+        padding: 8px;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>Email Extractor</h2>
+
+<input type="file" id="fileInput" accept=".html,.htm">
+<br>
+<button onclick="extractEmails()">Extract Emails</button>
+<button onclick="copyEmails()">Copy to Clipboard</button>
+
+<table id="resultTable">
+    <tbody></tbody>
+</table>
+
+<script>
+function extractEmails() {
+    const fileInput = document.getElementById('fileInput');
+    const tableBody = document.querySelector('#resultTable tbody');
+    tableBody.innerHTML = '';
+
+    if (!fileInput.files.length) {
+        alert("Please select a file first.");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        const text = e.target.result;
+
+        // Email regex
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/g;
+
+        let emails = text.match(emailRegex) || [];
+
+        // Remove duplicates
+        emails = [...new Set(emails)];
+
+        // Display in table
+        emails.forEach(email => {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.textContent = email;
+            row.appendChild(cell);
+            tableBody.appendChild(row);
+        });
+    };
+
+    reader.readAsText(file);
+}
+
+function copyEmails() {
+    const rows = document.querySelectorAll('#resultTable td');
+    const emails = Array.from(rows).map(td => td.textContent).join('\n');
+
+    navigator.clipboard.writeText(emails)
+        .then(() => alert("Copied to clipboard"))
+        .catch(() => alert("Copy failed"));
+}
+</script>
+
+</body>
+</html>

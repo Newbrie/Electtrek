@@ -188,69 +188,62 @@ async function searchMap() {
             const tooltipContent = String(tooltip.getContent());
 
             if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
-                console.log("🎯 Match found in tooltip for layer:", layer._leaflet_id);
+              console.log("🎯 Match found in tooltip for layer:", layer._leaflet_id);
 
-                // 1. Capture the original style so we can revert it
-                const originalStyle = {
-                    color: layer.options.color,
-                    weight: layer.options.weight,
-                    fillOpacity: layer.options.fillOpacity
-                };
+              if (layer.setStyle) {
+                  // 1. Capture the EXACT current style before the highlight
+                  // We use the current options so it reverts to the 'L1' color if it was already updated
+                  const originalStyle = {
+                      color: layer.options.color,
+                      fillColor: layer.options.fillColor,
+                      weight: layer.options.weight,
+                      fillOpacity: layer.options.fillOpacity,
+                      dashArray: layer.options.dashArray || ''
+                  };
 
-                // 2. Apply the Highlight Style
-                if (layer.setStyle) {
-                    console.log("Applying styles to layer path:", layer._path);
+                  // 2. Apply High-Contrast BLACK Highlight
+                  layer.setStyle({
+                      color: '#000000',      // Black border
+                      fillColor: '#000000',  // Black fill
+                      weight: 8,             // Noticeably thick
+                      fillOpacity: 0.7,      // Semi-transparent black
+                      dashArray: ''
+                  });
 
-                    // 1. Save original style (if not already saved)
-                    const originalStyle = {
-                        color: layer.options.color || '#3388ff',
-                        weight: layer.options.weight || 3,
-                        fillOpacity: layer.options.fillOpacity || 0.2,
-                        fillColor: layer.options.fillColor || '#3388ff'
-                    };
+                  // 3. Leaflet rendering fixes
+                  if (layer.bringToFront) layer.bringToFront();
 
-                    // 2. Apply high-contrast highlight
-                    layer.setStyle({
-                        color: '#FF00FF',     // Bright Magenta
-                        fillColor: '#FF00FF', // Match fill to stroke
-                        weight: 10,           // Make it very thick
-                        fillOpacity: 0.9,     // Almost solid
-                        dashArray: ''         // Ensure it's not a dashed line
-                    });
+                  // Direct SVG path injection for instant visual feedback
+                  if (layer._path) {
+                      layer._path.style.stroke = "#000000";
+                      layer._path.style.fill = "#000000";
+                      layer._path.style.strokeWidth = "8px";
+                  }
 
-                    // 3. Leaflet rendering fixes
-                    if (layer.bringToFront) layer.bringToFront();
+                  // 4. Robust Revert Logic
+                  // We define the revert function separately to use it in multiple listeners
+                  const revert = function() {
+                      console.log("✨ Reverting highlight for layer:", layer._leaflet_id);
+                      layer.setStyle(originalStyle);
 
-                    // Sometimes the browser needs a tiny nudge to repaint the SVG
-                    if (layer._path) {
-                        layer._path.style.stroke = "#FF00FF";
-                        layer._path.style.fill = "#FF00FF";
-                    }
+                      // Clean up direct path styles
+                      if (layer._path) {
+                          layer._path.style.strokeWidth = originalStyle.weight + "px";
+                      }
+                  };
 
-                    // 4. Revert logic
-                    layer.once('tooltipclose', function() {
-                        console.log("Reverting style for layer:", layer._leaflet_id);
-                        layer.setStyle(originalStyle);
-                    });
-                }
+                  // Revert when tooltip closes OR if the popup closes (user clicks away)
+                  layer.once('tooltipclose', revert);
+                  layer.once('popupclose', revert);
 
-                // 3. Move the map
-                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-                fmap.setView(latlng, 17);
+                  // Safety: Auto-revert after 8 seconds in case events don't fire
+                  setTimeout(revert, 8000);
+              }
 
-                // Open the tooltip so the user sees the match
-                layer.openTooltip();
-
-                // 4. Setup Reset (Revert when another search starts or after a delay)
-                // You can also trigger this on 'tooltipclose'
-                layer.once('tooltipclose', function() {
-                    if (layer.setStyle) {
-                        layer.setStyle(originalStyle);
-                    }
-                });
-
-                found = true;
-            }
+              const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+              fmap.setView(latlng, 17);
+              found = true;
+          }
         }
     });
 
