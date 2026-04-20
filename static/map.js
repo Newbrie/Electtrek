@@ -185,7 +185,9 @@ async function searchMap() {
         // Search Tooltips
         if (!found && layer.getTooltip && layer.getTooltip()) {
             const tooltipContent = String(layer.getTooltip().getContent());
+
             if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
+                console.log("Tooltip Text:", tooltipContent);
                 const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
                 fmap.setView(latlng, 17);
                 found = true;
