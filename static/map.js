@@ -145,14 +145,9 @@ async function searchMap() {
             let plainText = (originalContent instanceof HTMLElement) ? originalContent.innerText : String(originalContent);
 
             if (plainText.toLowerCase().includes(normalizedQuery)) {
-                // 1. Wrap the text in a temporary marker span with a black border style
-                // We apply 'display: block' or target the parent row via JS
+                // 1. Wrap the match in a unique class (no extra text, no bolding)
                 const regex = new RegExp(`(${normalizedQuery})`, 'gi');
-
-                // This span acts as our "anchor"
-                const highlightedHtml = htmlString.replace(regex,
-                    `<span class="temp-search-match" style="outline: 3px solid black; outline-offset: 4px; padding: 2px; font-weight: bold;">$1</span>`
-                );
+                const highlightedHtml = htmlString.replace(regex, `<span class="search-hit">$1</span>`);
 
                 popup.setContent(highlightedHtml);
 
@@ -160,24 +155,23 @@ async function searchMap() {
                 fmap.setView(latlng, 17);
                 layer.openPopup();
 
-                // 2. DOM Nudge: If you want to highlight the actual <tr> or <li> row:
-                // We wait a tiny bit for Leaflet to inject the HTML into the DOM
+                // 2. Highlight the Row
+                // We wait for the popup to render in the DOM, then find the parent row
                 setTimeout(() => {
-                    const matchSpan = document.querySelector('.temp-search-match');
-                    if (matchSpan) {
-                        // Find the nearest table row or list item
-                        const row = matchSpan.closest('tr') || matchSpan.closest('li') || matchSpan.parentElement;
+                    const hit = document.querySelector('.search-hit');
+                    if (hit) {
+                        const row = hit.closest('tr') || hit.closest('li') || hit.parentElement;
                         if (row) {
-                            row.style.border = "2px solid black";
-                            row.style.backgroundColor = "#f0f0f0"; // Optional: subtle grey background for the row
+                            row.style.outline = "3px solid black";
+                            row.style.outlineOffset = "-3px"; // Keeps border inside the row
+                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
                         }
                     }
                 }, 10);
 
-                // 3. Cleanup: Revert to original content when closed
+                // 3. Revert Content (removes the span and the row styling)
                 layer.once('popupclose', function() {
                     popup.setContent(originalContent);
-                    console.log("✨ Popup reset: Row highlight removed.");
                 });
 
                 found = true;
