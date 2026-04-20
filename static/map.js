@@ -141,44 +141,46 @@ async function searchMap() {
             const popup = layer.getPopup();
             const originalContent = popup.getContent();
 
-            // Get the text version for the search check
             let htmlString = (originalContent instanceof HTMLElement) ? originalContent.innerHTML : String(originalContent);
             let plainText = (originalContent instanceof HTMLElement) ? originalContent.innerText : String(originalContent);
 
             if (plainText.toLowerCase().includes(normalizedQuery)) {
-                console.group(`🔍 Search Match Found [ID: ${layer._leaflet_id}]`);
-                console.log("Original Text:", plainText);
-                console.log("Query:", normalizedQuery);
+                // 1. Wrap the text in a temporary marker span with a black border style
+                // We apply 'display: block' or target the parent row via JS
+                const regex = new RegExp(`(${normalizedQuery})`, 'gi');
 
-                try {
-                    const regex = new RegExp(`(${normalizedQuery})`, 'gi');
+                // This span acts as our "anchor"
+                const highlightedHtml = htmlString.replace(regex,
+                    `<span class="temp-search-match" style="outline: 3px solid black; outline-offset: 4px; padding: 2px; font-weight: bold;">$1</span>`
+                );
 
-                    // 1. Create the highlighted version
-                    const highlightedHtml = htmlString.replace(regex, '<span class="search-highlight" style="background-color: yellow; color: black; font-weight: bold; border: 1px solid orange;">$1</span>');
+                popup.setContent(highlightedHtml);
 
-                    console.log("Regex used:", regex);
-                    console.log("Highlighted HTML Preview:", highlightedHtml.substring(0, 100) + "...");
+                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                fmap.setView(latlng, 17);
+                layer.openPopup();
 
-                    // 2. Apply and Open
-                    popup.setContent(highlightedHtml);
-                    const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                // 2. DOM Nudge: If you want to highlight the actual <tr> or <li> row:
+                // We wait a tiny bit for Leaflet to inject the HTML into the DOM
+                setTimeout(() => {
+                    const matchSpan = document.querySelector('.temp-search-match');
+                    if (matchSpan) {
+                        // Find the nearest table row or list item
+                        const row = matchSpan.closest('tr') || matchSpan.closest('li') || matchSpan.parentElement;
+                        if (row) {
+                            row.style.border = "2px solid black";
+                            row.style.backgroundColor = "#f0f0f0"; // Optional: subtle grey background for the row
+                        }
+                    }
+                }, 10);
 
-                    console.log("Flying to LatLng:", latlng);
-                    fmap.setView(latlng, 17);
-                    layer.openPopup();
+                // 3. Cleanup: Revert to original content when closed
+                layer.once('popupclose', function() {
+                    popup.setContent(originalContent);
+                    console.log("✨ Popup reset: Row highlight removed.");
+                });
 
-                    // 3. The "Unhighlight" Hook
-                    layer.once('popupclose', function() {
-                        popup.setContent(originalContent);
-                        console.log(`✨ Cleanup: Highlight removed from layer ${layer._leaflet_id}`);
-                    });
-
-                    found = true;
-                } catch (err) {
-                    console.error("❌ Debug Error during highlighting:", err);
-                }
-
-                console.groupEnd();
+                found = true;
             }
         }
 
