@@ -188,62 +188,47 @@ async function searchMap() {
             const tooltipContent = String(tooltip.getContent());
 
             if (tooltipContent.toLowerCase().includes(normalizedQuery)) {
-              console.log("🎯 Match found in tooltip for layer:", layer._leaflet_id);
+                console.log("🎯 Match found! Creating temporary highlight clone for layer:", layer._leaflet_id);
 
-              if (layer.setStyle) {
-                  // 1. Capture the EXACT current style before the highlight
-                  // We use the current options so it reverts to the 'L1' color if it was already updated
-                  const originalStyle = {
-                      color: layer.options.color,
-                      fillColor: layer.options.fillColor,
-                      weight: layer.options.weight,
-                      fillOpacity: layer.options.fillOpacity,
-                      dashArray: layer.options.dashArray || ''
-                  };
+                // 1. Create the Clone
+                // We use toGeoJSON to get the geometry, then create a new Leaflet layer from it
+                const highlightClone = L.geoJson(layer.toGeoJSON(), {
+                    style: {
+                        color: '#000000',      // Black border
+                        fillColor: '#000000',  // Black fill
+                        weight: 6,
+                        fillOpacity: 0.5,
+                        interactive: false     // Important: Allows clicks to "pass through" to the map
+                    }
+                }).addTo(fmap);
 
-                  // 2. Apply High-Contrast BLACK Highlight
-                  layer.setStyle({
-                      color: '#000000',      // Black border
-                      fillColor: '#000000',  // Black fill
-                      weight: 8,             // Noticeably thick
-                      fillOpacity: 0.7,      // Semi-transparent black
-                      dashArray: ''
-                  });
+                // 2. Ensure it's on top
+                highlightClone.eachLayer(l => {
+                    if (l.bringToFront) l.bringToFront();
+                });
 
-                  // 3. Leaflet rendering fixes
-                  if (layer.bringToFront) layer.bringToFront();
+                // 3. Move the map
+                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                fmap.setView(latlng, 17);
+                layer.openTooltip();
 
-                  // Direct SVG path injection for instant visual feedback
-                  if (layer._path) {
-                      layer._path.style.stroke = "#000000";
-                      layer._path.style.fill = "#000000";
-                      layer._path.style.strokeWidth = "8px";
-                  }
+                // 4. Cleanup Logic: Remove the clone when the user interacts elsewhere
+                const removeClone = () => {
+                    if (fmap.hasLayer(highlightClone)) {
+                        console.log("🗑️ Removing highlight clone");
+                        fmap.removeLayer(highlightClone);
+                    }
+                };
 
-                  // 4. Robust Revert Logic
-                  // We define the revert function separately to use it in multiple listeners
-                  const revert = function() {
-                      console.log("✨ Reverting highlight for layer:", layer._leaflet_id);
-                      layer.setStyle(originalStyle);
+                // Remove when tooltip closes OR user clicks anywhere on the map
+                layer.once('tooltipclose', removeClone);
+                fmap.once('click', removeClone);
 
-                      // Clean up direct path styles
-                      if (layer._path) {
-                          layer._path.style.strokeWidth = originalStyle.weight + "px";
-                      }
-                  };
+                // Safety: also remove if another search is triggered
+                layer.once('popupopen', removeClone);
 
-                  // Revert when tooltip closes OR if the popup closes (user clicks away)
-                  layer.once('tooltipclose', revert);
-                  layer.once('popupclose', revert);
-
-                  // Safety: Auto-revert after 8 seconds in case events don't fire
-                  setTimeout(revert, 8000);
-              }
-
-              const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-              fmap.setView(latlng, 17);
-              found = true;
-          }
+                found = true;
+            }
         }
     });
 
