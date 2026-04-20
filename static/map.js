@@ -133,50 +133,74 @@ async function searchMap() {
     const normalizedQuery = query.toLowerCase();
     let found = false;
 
-    fmap.eachLayer(function (layer) {
+    fmap.eachLayer(function(layer) {
         if (found) return;
 
-        // Search Popups
-        if (layer.getPopup && layer.getPopup()) {
-            const popup = layer.getPopup();
-            const content = popup.getContent();
+        let isMatch = false;
+        const query = normalizedQuery.toLowerCase();
 
-            // 1. Check for match without changing anything yet
-            let plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
-
-            if (plainText.toLowerCase().includes(normalizedQuery)) {
-                // 2. Open the popup first so the elements exist in the document
-                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-                fmap.setView(latlng, 17);
-                layer.openPopup();
-
-                // 3. Find and style the row directly in the DOM
-                setTimeout(() => {
-                    // Find all table cells or divs in the popup
-                    const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
-
-                    elements.forEach(el => {
-                        if (el.innerText.toLowerCase().includes(normalizedQuery)) {
-                            // Find the parent row
-                            const row = el.closest('tr') || el.closest('li') || el;
-
-                            // Apply the black border to the row
-                            row.style.outline = "3px solid black";
-                            row.style.outlineOffset = "-3px";
-                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-
-                            // Ensure the cleanup happens when the popup closes
-                            layer.once('popupclose', () => {
-                                row.style.outline = "none";
-                                row.style.backgroundColor = "";
-                            });
-                        }
-                    });
-                }, 50); // Small delay to ensure the popup is fully rendered
-
-                found = true;
+        // 1. Direct Region ID Search (Priority)
+        if (layer.feature && layer.feature.properties && layer.feature.properties.region_id) {
+            if (String(layer.feature.properties.region_id).toLowerCase().includes(query)) {
+                console.log("🎯 Match found in region_id:", layer.feature.properties.region_id);
+                isMatch = true;
             }
         }
+
+        // 2. Fallback to Popup/Tooltip text (for street names)
+        if (!isMatch) {
+            const tooltipText = layer.getTooltip ? String(layer.getTooltip().getContent()) : "";
+            const popupText = layer.getPopup ? String(layer.getPopup().getContent()) : "";
+            if (tooltipText.toLowerCase().includes(query) || popupText.toLowerCase().includes(query)) {
+                isMatch = true;
+            }
+        }
+
+        if (isMatch) {
+            // --- HIGHLIGHT LOGIC ---
+
+            // Create the Black Ghost Clone
+            const highlightClone = L.geoJson(layer.toGeoJSON(), {
+                style: {
+                    color: '#000000',
+                    fillColor: '#000000',
+                    weight: 7,
+                    fillOpacity: 0.4,
+                    interactive: false
+                }
+            }).addTo(fmap);
+
+            if (highlightClone.bringToFront) highlightClone.bringToFront();
+
+            // Navigate
+            const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+            fmap.setView(latlng, 17);
+
+            // Open appropriate UI
+            if (layer.getPopup()) {
+                layer.openPopup();
+            } else if (layer.getTooltip()) {
+                layer.openTooltip();
+            }
+
+            // --- CLEANUP LOGIC ---
+            const removeClone = () => {
+                if (fmap.hasLayer(highlightClone)) {
+                    fmap.removeLayer(highlightClone);
+                    console.log("🗑️ Highlight cleared");
+                }
+            };
+
+            // Revert on click or close
+            fmap.once('click', removeClone);
+            layer.once('popupclose', removeClone);
+            layer.once('tooltipclose', removeClone);
+
+            found = true;
+        }
+
+        if (found) return;
+
 
         // Search Tooltips
         if (!found && layer.getTooltip && layer.getTooltip()) {
@@ -226,6 +250,52 @@ async function searchMap() {
                 found = true;
             }
         }
+
+        if (found) return;
+
+        // Search Popups
+        if (layer.getPopup && layer.getPopup()) {
+            const popup = layer.getPopup();
+            const content = popup.getContent();
+
+            // 1. Check for match without changing anything yet
+            let plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
+
+            if (plainText.toLowerCase().includes(normalizedQuery)) {
+                // 2. Open the popup first so the elements exist in the document
+                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+                fmap.setView(latlng, 17);
+                layer.openPopup();
+
+                // 3. Find and style the row directly in the DOM
+                setTimeout(() => {
+                    // Find all table cells or divs in the popup
+                    const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
+
+                    elements.forEach(el => {
+                        if (el.innerText.toLowerCase().includes(normalizedQuery)) {
+                            // Find the parent row
+                            const row = el.closest('tr') || el.closest('li') || el;
+
+                            // Apply the black border to the row
+                            row.style.outline = "3px solid black";
+                            row.style.outlineOffset = "-3px";
+                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+
+                            // Ensure the cleanup happens when the popup closes
+                            layer.once('popupclose', () => {
+                                row.style.outline = "none";
+                                row.style.backgroundColor = "";
+                            });
+                        }
+                    });
+                }, 50); // Small delay to ensure the popup is fully rendered
+
+                found = true;
+            }
+        }
+
+
     });
 
     if (!found) alert("No matching location found.");
