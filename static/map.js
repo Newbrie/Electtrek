@@ -139,40 +139,40 @@ async function searchMap() {
         // Search Popups
         if (layer.getPopup && layer.getPopup()) {
             const popup = layer.getPopup();
-            const originalContent = popup.getContent();
+            const content = popup.getContent();
 
-            let htmlString = (originalContent instanceof HTMLElement) ? originalContent.innerHTML : String(originalContent);
-            let plainText = (originalContent instanceof HTMLElement) ? originalContent.innerText : String(originalContent);
+            // 1. Check for match without changing anything yet
+            let plainText = (content instanceof HTMLElement) ? content.innerText : String(content);
 
             if (plainText.toLowerCase().includes(normalizedQuery)) {
-                // 1. Wrap the match in a unique class (no extra text, no bolding)
-                const regex = new RegExp(`(${normalizedQuery})`, 'gi');
-                const highlightedHtml = htmlString.replace(regex, `<span class="search-hit">$1</span>`);
-
-                popup.setContent(highlightedHtml);
-
+                // 2. Open the popup first so the elements exist in the document
                 const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
                 fmap.setView(latlng, 17);
                 layer.openPopup();
 
-                // 2. Highlight the Row
-                // We wait for the popup to render in the DOM, then find the parent row
+                // 3. Find and style the row directly in the DOM
                 setTimeout(() => {
-                    const hit = document.querySelector('.search-hit');
-                    if (hit) {
-                        const row = hit.closest('tr') || hit.closest('li') || hit.parentElement;
-                        if (row) {
-                            row.style.outline = "3px solid black";
-                            row.style.outlineOffset = "-3px"; // Keeps border inside the row
-                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-                        }
-                    }
-                }, 10);
+                    // Find all table cells or divs in the popup
+                    const elements = document.querySelectorAll('.leaflet-popup-content td, .leaflet-popup-content div');
 
-                // 3. Revert Content (removes the span and the row styling)
-                layer.once('popupclose', function() {
-                    popup.setContent(originalContent);
-                });
+                    elements.forEach(el => {
+                        if (el.innerText.toLowerCase().includes(normalizedQuery)) {
+                            // Find the parent row
+                            const row = el.closest('tr') || el.closest('li') || el;
+
+                            // Apply the black border to the row
+                            row.style.outline = "3px solid black";
+                            row.style.outlineOffset = "-3px";
+                            row.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+
+                            // Ensure the cleanup happens when the popup closes
+                            layer.once('popupclose', () => {
+                                row.style.outline = "none";
+                                row.style.backgroundColor = "";
+                            });
+                        }
+                    });
+                }, 50); // Small delay to ensure the popup is fully rendered
 
                 found = true;
             }
