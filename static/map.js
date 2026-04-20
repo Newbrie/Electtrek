@@ -199,14 +199,39 @@ async function searchMap() {
 
                 // 2. Apply the Highlight Style
                 if (layer.setStyle) {
+                    console.log("Applying styles to layer path:", layer._path);
+
+                    // 1. Save original style (if not already saved)
+                    const originalStyle = {
+                        color: layer.options.color || '#3388ff',
+                        weight: layer.options.weight || 3,
+                        fillOpacity: layer.options.fillOpacity || 0.2,
+                        fillColor: layer.options.fillColor || '#3388ff'
+                    };
+
+                    // 2. Apply high-contrast highlight
                     layer.setStyle({
-                        color: '#00FFFF', // Bright Cyan
-                        weight: 5,
-                        fillOpacity: 0.7
+                        color: '#FF00FF',     // Bright Magenta
+                        fillColor: '#FF00FF', // Match fill to stroke
+                        weight: 10,           // Make it very thick
+                        fillOpacity: 0.9,     // Almost solid
+                        dashArray: ''         // Ensure it's not a dashed line
                     });
 
-                    // Bring to front so it's not hidden by other overlapping polygons
+                    // 3. Leaflet rendering fixes
                     if (layer.bringToFront) layer.bringToFront();
+
+                    // Sometimes the browser needs a tiny nudge to repaint the SVG
+                    if (layer._path) {
+                        layer._path.style.stroke = "#FF00FF";
+                        layer._path.style.fill = "#FF00FF";
+                    }
+
+                    // 4. Revert logic
+                    layer.once('tooltipclose', function() {
+                        console.log("Reverting style for layer:", layer._leaflet_id);
+                        layer.setStyle(originalStyle);
+                    });
                 }
 
                 // 3. Move the map
