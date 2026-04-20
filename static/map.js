@@ -452,27 +452,40 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`🔄 Recalculating Progress: [${region_id}]`);
+    console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
-    if (!region_id || !window.BAKED_DATA[region_id]) {
+    const regionData = window.BAKED_DATA[region_id];
+    if (!regionData) {
         console.groupEnd();
         return;
     }
 
-    const regionData = window.BAKED_DATA[region_id];
-
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // 1. Correct Tally for 3-tier Hierarchy [walk][street][house]
-    Object.values(regionData).forEach(streetObj => {
-        // streetObj here is actually a collection of houses
-        Object.values(streetObj).forEach(houseData => {
-            totalPossibleHouses++;
+    // 1. Identify all unique streets in this walk from the HTML table
+    // We do this to get the 'hos' (total potential) for each street
+    const streetRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
+    const streetTotals = {};
 
-            // Check for 'y' in the house-level tags object
-            if (houseData.tags && houseData.tags['L1'] === 'y') {
-                completedHouses++;
+    streetRows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        // Find the house count from the 2nd cell (where {hos} is rendered)
+        const hosCount = parseInt(row.cells[1].innerText) || 0;
+        streetTotals[streetName] = hosCount;
+    });
+
+    // Sum up the potential houses for the denominator
+    totalPossibleHouses = Object.values(streetTotals).reduce((a, b) => a + b, 0);
+
+    // 2. Tally the units marked 'y' from BAKED_DATA
+    Object.values(regionData).forEach(streetObj => {
+        Object.values(streetObj).forEach(houseData => {
+            // Check if houseData is an object (to avoid metadata keys)
+            if (houseData && typeof houseData === 'object') {
+                if (houseData.tags && houseData.tags['L1'] === 'y') {
+                    completedHouses++;
+                }
             }
         });
     });
@@ -480,48 +493,34 @@ window.updateWalkVisuals = function(region_id) {
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Live Update -> Total Houses: ${totalPossibleHouses} | Done: ${completedHouses} | Pct: ${(deliveryPct * 100).toFixed(1)}%`);
+    console.log(`📊 Denominator (Total Potential): ${totalPossibleHouses}`);
+    console.log(`📊 Numerator (Units with L1 'y'): ${completedHouses}`);
+    console.log(`📊 Progress: ${(deliveryPct * 100).toFixed(1)}%`);
 
-    // 2. Update Map Graphics
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
-    if (!activeMap) {
-        console.groupEnd();
-        return;
-    }
+    // 3. Map Update
+    const activeMap = window.fmap || parent.fmap;
+    if (activeMap) {
+        activeMap.eachLayer(layer => {
+            if (layer.feature?.properties?.region_id === region_id) {
+                if (!layer._greyGhost) {
+                    layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
+                        style: { color: "transparent", fillColor: "#333", fillOpacity: 0, interactive: false }
+                    }).addTo(activeMap);
+                }
 
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === region_id) {
-
-            if (!layer._greyGhost) {
-                layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: "#333333",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
-                }).addTo(activeMap);
+                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
                 layer._greyGhost.bringToFront();
+
+                const labelEl = document.getElementById(`label-${region_id}`);
+                if (labelEl) {
+                    labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
+                    labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
+                }
             }
-
-            // Set the opacity based on the house-level calculation
-            layer._greyGhost.setStyle({
-                fillOpacity: progressOpacity
-            });
-
-            // Update Label
-            const labelEl = document.getElementById(`label-${region_id}`);
-            if (labelEl) {
-                const pctInt = Math.round(deliveryPct * 100);
-                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
-                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
-            }
-        }
-    });
-
+        });
+    }
     console.groupEnd();
 };
-
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
