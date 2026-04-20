@@ -445,130 +445,89 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`DEBUG: updateWalkVisuals for [${region_id}]`);
+    console.group(`🎨 Inverse Opacity Update: [${region_id}]`);
 
     if (!region_id) {
-        console.error("No region_id provided to function.");
         console.groupEnd();
         return;
     }
 
-    // 1. Check Data Source
+    // 1. Get Progress Data
     const currentData = typeof getBakedData === 'function' ? getBakedData() : window.BAKED_DATA;
-    console.log("Current Data Source:", currentData);
-
     const regionData = currentData ? currentData[region_id] : null;
-    if (!regionData) {
-        console.warn(`No data found in BAKED_DATA for region: ${region_id}`);
-    } else {
-        console.log(`Found ${Object.keys(regionData).length} streets in data for this region.`);
-    }
 
-    let completedHousesInWalk = 0;
-    let streetsWithL1 = 0;
-
-    // 2. Map Instance Check
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
-
-    if (!activeMap) {
-        console.error("MAP ERROR: fmap instance not found in window, parent, or iframe1.");
-    } else {
-        console.log("Map instance located successfully.");
-    }
-
-    // 3. Calculate from Data
+    let completedHouses = 0;
     if (regionData) {
-        Object.entries(regionData).forEach(([streetName, street]) => {
-            const houses = parseInt(street.houses) || 0;
-            const tags = street.tags || [];
-            const hasL1 = tags.includes('L1');
-
-            if (hasL1) {
-                completedHousesInWalk += houses;
-                streetsWithL1++;
+        Object.values(regionData).forEach(street => {
+            if (street.tags?.includes('L1')) {
+                completedHouses += (parseInt(street.houses) || 0);
             }
         });
     }
-    console.log(`Calculation Results: ${streetsWithL1} L1 streets, ${completedHousesInWalk} total L1 houses.`);
 
-    // 4. Polygon & Property Check
-    let foundPolygon = false;
-    let expectedHouses = 0;
-
-    if (activeMap) {
-        // Audit the map content
-        const layerCount = Object.keys(activeMap._layers).length;
-        console.log(`Initial Map Audit: ${layerCount} total layers in _layers object.`);
-
-        if (layerCount === 0) {
-            console.error("CRITICAL: Map object exists but _layers is empty. You are likely targeting the wrong map instance or the layers haven't loaded yet.");
-        }
-
-        activeMap.eachLayer(function(layer) {
-            const diagnostic = {
-                id: layer._leaflet_id,
-                constructor: layer.constructor.name,
-                // Check every common place Folium hides names
-                optionName: layer.options?.name,
-                optionId: layer.options?.id,
-                mytag: layer.options?.mytag,
-                featureId: layer.feature?.id,
-                // For FeatureGroups, check the first child
-                hasChildren: !!layer.eachLayer
-            };
-
-            if (diagnostic.optionName || diagnostic.mytag || diagnostic.hasChildren) {
-                console.log("🕵️ Layer Audit:", diagnostic);
-
-                // If it's a group, let's see what the first child looks like
-                if (layer.eachLayer) {
-                    layer.eachLayer(sub => {
-                        if (sub.feature && !diagnostic.childSample) {
-                            console.log("   ↳ Group Child Properties:", sub.feature.properties);
-                        }
-                    });
-                }
-            }
-        });
-
+    // 2. Locate Map
+    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    if (!activeMap) {
+        console.error("Map instance not found.");
+        console.groupEnd();
+        return;
     }
 
-    if (activeMap) {
-        activeMap.eachLayer(function(layer) {
-            if (layer.feature && layer.feature.properties) {
-                const props = layer.feature.properties;
-                if (props.region_id === region_id) {
-                    foundPolygon = true;
-                    expectedHouses = props.expected_houses || 0;
+    // 3. Update Layers
+    activeMap.eachLayer(function(layer) {
+        // Standard Option 1 Structure
+        if (layer.feature?.properties?.region_id === region_id) {
+            const props = layer.feature.properties;
+            const expected = props.expected_houses || 0;
 
-                    const pct = expectedHouses > 0 ? (completedHousesInWalk / expectedHouses) * 100 : 0;
-                    console.log(`Polygon Found! Target: ${expectedHouses} houses. Calculated Pct: ${pct.toFixed(2)}%`);
+            // pct = 0 (nothing done) to 1 (fully done)
+            const pct = expected > 0 ? Math.min(completedHouses / expected, 1) : 0;
 
-                    const healthColor = (pct >= 100) ? "#28a745" : (pct > 0 ? "#ffcc00" : null);
+            // Calculate inverse opacity for the Grey Clone
+            // 0% delivered = 0.8 opacity (heavy grey)
+            // 100% delivered = 0.0 opacity (invisible)
+            const greyOpacity = 0.8 * (1 - pct);
 
-                    if (healthColor) {
-                        console.log(`Applying style: ${healthColor} to layer.`);
-                        layer.setStyle({
-                            fillColor: healthColor,
-                            fillOpacity: 0.8,
-                            weight: 3
-                        });
-                    } else {
-                        console.log("No L1 progress; resetting to original style.");
-                        layer.setStyle({
-                            fillColor: props.fcol || "#808080",
-                            fillOpacity: 0.4,
-                            weight: 1
-                        });
+            console.log(`Region: ${region_id} | Progress: ${(pct * 100).toFixed(1)}% | Grey Opacity: ${greyOpacity.toFixed(2)}`);
+
+            // --- THE GREY CLONE (INVERSE PROGRESS) ---
+            if (!layer._greyGhost) {
+                console.log("Creating grey 'fog' clone layer...");
+                layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
+                    style: {
+                        color: "transparent",
+                        fillColor: "#333333", // The "Incomplete" Fog
+                        fillOpacity: 0.8,
+                        interactive: false
                     }
-                }
-            }
-        });
-    }
+                }).addTo(activeMap);
 
-    if (!foundPolygon) {
-        console.warn(`Could not find a polygon on the map with properties.region_id === "${region_id}"`);
-    }
+                // Important: The ghost must be ABOVE the main layer to hide it
+                layer._greyGhost.bringToFront();
+            }
+
+            // --- UPDATE THE CLONE ---
+            layer._greyGhost.setStyle({
+                fillOpacity: greyOpacity
+            });
+
+            // --- STYLE MAIN LAYER (ZONAL COLOR) ---
+            // Keep the underlying color bright and constant
+            layer.setStyle({
+                fillColor: (pct >= 1) ? "#28a745" : (props.fcol || "#666"),
+                fillOpacity: 0.8,
+                weight: 2,
+                color: "white"
+            });
+
+            // Optional: Update the Label Tag
+            const labelEl = document.getElementById(`label-${region_id}`);
+            if (labelEl) {
+                labelEl.innerHTML = `${region_id} <small>${Math.round(pct * 100)}%</small>`;
+                if (pct >= 1) labelEl.style.background = "#28a745";
+            }
+        }
+    });
 
     console.groupEnd();
 };
