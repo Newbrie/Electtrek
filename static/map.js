@@ -146,25 +146,39 @@ async function searchMap() {
             let plainText = (originalContent instanceof HTMLElement) ? originalContent.innerText : String(originalContent);
 
             if (plainText.toLowerCase().includes(normalizedQuery)) {
-                const regex = new RegExp(`(${normalizedQuery})`, 'gi');
+                console.group(`🔍 Search Match Found [ID: ${layer._leaflet_id}]`);
+                console.log("Original Text:", plainText);
+                console.log("Query:", normalizedQuery);
 
-                // 1. Create the highlighted version
-                const highlightedHtml = htmlString.replace(regex, '<span class="search-highlight" style="background-color: yellow; color: black;">$1</span>');
+                try {
+                    const regex = new RegExp(`(${normalizedQuery})`, 'gi');
 
-                // 2. Apply and Open
-                popup.setContent(highlightedHtml);
-                const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
-                fmap.setView(latlng, 17);
-                layer.openPopup();
+                    // 1. Create the highlighted version
+                    const highlightedHtml = htmlString.replace(regex, '<span class="search-highlight" style="background-color: yellow; color: black; font-weight: bold; border: 1px solid orange;">$1</span>');
 
-                // 3. The "Unhighlight" Hook
-                // We use .once() so the listener cleans itself up after firing
-                layer.once('popupclose', function() {
-                    popup.setContent(originalContent);
-                    console.log("Cleanup: Highlight removed from layer", layer._leaflet_id);
-                });
+                    console.log("Regex used:", regex);
+                    console.log("Highlighted HTML Preview:", highlightedHtml.substring(0, 100) + "...");
 
-                found = true;
+                    // 2. Apply and Open
+                    popup.setContent(highlightedHtml);
+                    const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
+
+                    console.log("Flying to LatLng:", latlng);
+                    fmap.setView(latlng, 17);
+                    layer.openPopup();
+
+                    // 3. The "Unhighlight" Hook
+                    layer.once('popupclose', function() {
+                        popup.setContent(originalContent);
+                        console.log(`✨ Cleanup: Highlight removed from layer ${layer._leaflet_id}`);
+                    });
+
+                    found = true;
+                } catch (err) {
+                    console.error("❌ Debug Error during highlighting:", err);
+                }
+
+                console.groupEnd();
             }
         }
 
