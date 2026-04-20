@@ -138,12 +138,32 @@ async function searchMap() {
 
         // Search Popups
         if (layer.getPopup && layer.getPopup()) {
-            const content = layer.getPopup().getContent();
-            const text = (content instanceof HTMLElement) ? content.innerText : String(content);
-            if (text.toLowerCase().includes(normalizedQuery)) {
+            const popup = layer.getPopup();
+            const originalContent = popup.getContent();
+
+            // Get the text version for the search check
+            let htmlString = (originalContent instanceof HTMLElement) ? originalContent.innerHTML : String(originalContent);
+            let plainText = (originalContent instanceof HTMLElement) ? originalContent.innerText : String(originalContent);
+
+            if (plainText.toLowerCase().includes(normalizedQuery)) {
+                const regex = new RegExp(`(${normalizedQuery})`, 'gi');
+
+                // 1. Create the highlighted version
+                const highlightedHtml = htmlString.replace(regex, '<span class="search-highlight" style="background-color: yellow; color: black;">$1</span>');
+
+                // 2. Apply and Open
+                popup.setContent(highlightedHtml);
                 const latlng = layer.getLatLng ? layer.getLatLng() : layer.getBounds().getCenter();
                 fmap.setView(latlng, 17);
                 layer.openPopup();
+
+                // 3. The "Unhighlight" Hook
+                // We use .once() so the listener cleans itself up after firing
+                layer.once('popupclose', function() {
+                    popup.setContent(originalContent);
+                    console.log("Cleanup: Highlight removed from layer", layer._leaflet_id);
+                });
+
                 found = true;
             }
         }
