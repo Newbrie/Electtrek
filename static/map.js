@@ -503,15 +503,16 @@ window.updateWalkVisuals = function(region_id) {
         }
     }
 
-    // 6. FINAL MATH & SAFETY CHECK
-    // If the denominator is 0 or only one row was found in a multi-street walk, abort update
-    if (walkRows.length <= 1 && totalPossibleHouses > 1) {
-        console.warn("Abort: Only 1 row found. Preventing 100% jump.");
-        console.groupEnd();
-        return;
-    }
+    // 6. FINAL MATH
+      // We only need to ensure we don't divide by zero.
+      // Single-street walks will now correctly calculate (e.g., 50/50 = 100%).
+      if (totalPossibleHouses === 0) {
+          console.warn("Calculation aborted: No houses found in this walk.");
+          console.groupEnd();
+          return;
+      }
 
-    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    const deliveryPct = completedHouses / totalPossibleHouses;
     const progressOpacity = 0.8 * deliveryPct;
 
     console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
