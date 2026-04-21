@@ -472,23 +472,24 @@ window.updateWalkVisuals = function(region_id) {
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
     // --- STEP 2: SYNC UI ---
+        walkRows.forEach(row => {
+            const streetName = row.getAttribute('data-street');
+            const selector = row.querySelector('.unit-selector');
+            const streetData = bakedData[streetName];
 
-    // --- STEP 2: SYNC UI ---
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const selector = row.querySelector('.unit-selector');
+            if (selector && streetData) {
+                // Check if ANY house in this street has L1: 'y'
+                const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
 
-        // Access tags directly from the street object, not a house number
-        const streetTags = bakedData[streetName]?.tags;
-
-        if (selector && streetTags?.L1 === 'y') {
-            // Since the whole street is 'y', we set the selector to 'y'
-            // (Or if your selector values are house numbers,
-            // you might set it to the first available house)
-            selector.value = 'y';
-            console.log(`📍 Street Sync: ${streetName} marked as complete.`);
-        }
-    });
+                if (isStreetFinished) {
+                    // If the street is done, ensure the UI shows 'y'
+                    // Note: If your selector value must be a house number,
+                    // pick the first one that has the 'y'.
+                    const firstDoneUnit = Object.keys(streetData).find(k => streetData[k]?.tags?.L1 === 'y');
+                    selector.value = firstDoneUnit;
+                }
+            }
+        });
 
     // 3. GET STATIC TOTAL (Denominator)
     let totalPossibleHouses = 0;
@@ -501,23 +502,23 @@ window.updateWalkVisuals = function(region_id) {
 
     // --- STEP 4: CALCULATE NUMERATOR ---
     let completedHouses = 0;
-
     walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
         const streetWeight = parseInt(row.cells[1].innerText) || 0;
+        const streetData = bakedData[streetName];
 
-        // Look for the tag directly on the street object
-        const streetTags = bakedData[streetName]?.tags;
+        if (streetData) {
+            // If any unit in this street is 'y', the whole street weight is added
+            const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
 
-        if (streetTags && streetTags.L1 === 'y') {
-            completedHouses += streetWeight;
-            console.log(`✅ ${streetName}: Street-level 'y' found. Adding ${streetWeight}.`);
-        } else {
-            console.log(`❌ ${streetName}: No street-level tag found.`);
+            if (isStreetFinished) {
+                completedHouses += streetWeight;
+                console.log(`✅ ${streetName} contributes ${streetWeight} to total.`);
+            }
         }
     });
 
-    // Final math remains the same
+    // 5. FINAL MATH & VISUALS
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
