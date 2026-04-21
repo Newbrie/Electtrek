@@ -471,27 +471,25 @@ window.updateWalkVisuals = function(region_id) {
     );
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
-    // 2. SYNC UI TO DATA (Fixes the "hidden historical y" problem)
-    // 2. SYNC UI TO DATA (Data-First Approach)
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const selector = row.querySelector('.unit-selector');
+    // --- STEP 2: SYNC UI ---
+        walkRows.forEach(row => {
+            const streetName = row.getAttribute('data-street');
+            const selector = row.querySelector('.unit-selector');
+            const streetData = bakedData[streetName];
 
-        if (selector && bakedData[streetName]) {
-            // Get all house numbers stored in the data for this street
-            const houseNumbers = Object.keys(bakedData[streetName]);
+            if (selector && streetData) {
+                // Check if ANY house in this street has L1: 'y'
+                const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
 
-            // If the street has data, find the first house marked 'y'
-            // (Or adjust this logic if you have multiple houses per street)
-            houseNumbers.forEach(unitNum => {
-                const status = bakedData[streetName][unitNum]?.tags?.L1;
-                if (status === 'y') {
-                    selector.value = unitNum; // Set the dropdown to that house number
-                    console.log(`📍 Auto-selected ${unitNum} for ${streetName} (Historical 'y')`);
+                if (isStreetFinished) {
+                    // If the street is done, ensure the UI shows 'y'
+                    // Note: If your selector value must be a house number,
+                    // pick the first one that has the 'y'.
+                    const firstDoneUnit = Object.keys(streetData).find(k => streetData[k]?.tags?.L1 === 'y');
+                    selector.value = firstDoneUnit;
                 }
-            });
-        }
-    });
+            }
+        });
 
     // 3. GET STATIC TOTAL (Denominator)
     let totalPossibleHouses = 0;
@@ -501,22 +499,21 @@ window.updateWalkVisuals = function(region_id) {
         }
     });
 
-    // 4. CALCULATE COMPLETED (Numerator)
+
+    // --- STEP 4: CALCULATE NUMERATOR ---
     let completedHouses = 0;
     walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
         const streetWeight = parseInt(row.cells[1].innerText) || 0;
-        const selector = row.querySelector('.unit-selector');
+        const streetData = bakedData[streetName];
 
-        if (selector) {
-            const currentUnit = selector.value;
-            const houseData = bakedData[streetName]?.[currentUnit];
+        if (streetData) {
+            // If any unit in this street is 'y', the whole street weight is added
+            const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
 
-            if (houseData?.tags?.L1 === 'y') {
+            if (isStreetFinished) {
                 completedHouses += streetWeight;
-                console.log(`✅ ${streetName}: Finished (${streetWeight})`);
-            } else {
-                console.log(`❌ ${streetName}: Pending`);
+                console.log(`✅ ${streetName} contributes ${streetWeight} to total.`);
             }
         }
     });
