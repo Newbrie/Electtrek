@@ -552,10 +552,84 @@ window.updateWalkVisuals = function(region_id) {
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
     // ... Apply deliveryPct to Grey Ghost opacity and Label innerHTML as before ...
+};
+
+window.updateWalkVisuals = function(region_id) {
+    const cleanId = String(region_id).trim();
+    console.group(`🔄 Recalculating Walk: [${cleanId}]`);
+
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
+    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
+
+    if (!activeMap || !Leaflet || !bakedData) {
+        console.warn("Missing components", cleanId);
+        console.groupEnd();
+        return;
+    }
+
+    // 1. SYNC UI (Only if rows exist in DOM)
+    const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
+        Array.from(parent.document.querySelectorAll('.canvass-row'))
+    );
+    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
+
+    walkRows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        const streetData = bakedData[streetName];
+        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
+
+        if (tagSpan && streetData) {
+            const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
+            if (isAnyHouseDone) {
+                tagSpan.classList.remove('tag-inactive');
+                tagSpan.classList.add('tag-active');
+                tagSpan.innerText = 'y';
+            } else {
+                tagSpan.classList.remove('tag-active');
+                tagSpan.classList.add('tag-inactive');
+                tagSpan.innerText = 'n';
+            }
+        }
+    });
+
+    // 2. CALCULATE MATH FROM DATA (Not from UI)
+    let completedHouses = 0;
+    let totalPossibleHouses = 0;
+
+    activeMap.eachLayer(function(layer) {
+        // Only target the main polygon for this walk
+        if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
+
+            // Get total from layer properties
+            totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
+
+            // Get the street weights dictionary from layer properties
+            const weights = layer.feature.properties.street_weights || {};
+
+            Object.keys(weights).forEach(streetName => {
+                const streetWeight = weights[streetName] || 0;
+                const streetData = bakedData[streetName];
+
+                if (streetData) {
+                    // Global Interpretation: Any house = 'y' means street is done
+                    const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
+
+                    if (isStreetFinished) {
+                        completedHouses += streetWeight;
+                    }
+                }
+            });
+        }
+    });
+
+    // 3. FINAL VISUALS
+    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === cleanId) {
+            // Update or Create Grey Ghost
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
@@ -563,6 +637,7 @@ window.updateWalkVisuals = function(region_id) {
             }
             layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
 
+            // Update Label
             const labelEl = document.getElementById(`label-${cleanId}`);
             if (labelEl) {
                 const pctInt = Math.round(deliveryPct * 100);
@@ -572,6 +647,7 @@ window.updateWalkVisuals = function(region_id) {
         }
     });
 
+    console.log(`📊 Result for ${cleanId}: ${completedHouses}/${totalPossibleHouses} (${Math.round(deliveryPct*100)}%)`);
     console.groupEnd();
 };
 
