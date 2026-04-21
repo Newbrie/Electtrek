@@ -452,32 +452,32 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`🔄 Recalculating Walk: [${region_id}]`);
+    // 1. DEFINE cleanId IMMEDIATELY
+    const cleanId = String(region_id).trim();
+    console.group(`🔄 Recalculating Walk: [${cleanId}]`);
 
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    // 2. Locate Map, Leaflet, and Data (with better parent/window fallbacks)
+    const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
-    const bakedData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
+    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
 
     if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Map, Leaflet, or Data not found for", region_id);
+        console.warn("Missing components for", cleanId, { map: !!activeMap, L: !!Leaflet, data: !!bakedData });
         console.groupEnd();
         return;
     }
 
-    // --- NEW WEIGHTED MATH START ---
-
-    // 1. Identify all rows for this walk - check both local and parent scope
+    // 3. SELECT ROWS (Checking both local and parent document)
     const doc = document.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`).length > 0 ? document : parent.document;
     const walkRows = doc.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`);
 
-    // 2. PRE-CALCULATE CONSTANT TOTAL
-    // This MUST be a standalone loop to lock the denominator
+    // 4. PRE-CALCULATE CONSTANT TOTAL (The Denominator)
     let totalPossibleHouses = 0;
     for (let i = 0; i < walkRows.length; i++) {
         totalPossibleHouses += (parseInt(walkRows[i].cells[1].innerText) || 0);
     }
 
-    // 3. CALCULATE COMPLETED
+    // 5. CALCULATE COMPLETED (The Numerator)
     let completedHouses = 0;
     for (let i = 0; i < walkRows.length; i++) {
         const row = walkRows[i];
@@ -494,38 +494,29 @@ window.updateWalkVisuals = function(region_id) {
         }
     }
 
-    // 4. FINAL SAFETY CHECK
-    // If the script only found 1 row but the table has more,
-    // we skip the update to prevent the "100% leap" visual glitch.
-    if (walkRows.length <= 1 && totalPossibleHouses > 0) {
-        console.warn("Calculation aborted: Only one row detected. Preventing 100% leap.");
+    // 6. FINAL MATH & SAFETY CHECK
+    // If the denominator is 0 or only one row was found in a multi-street walk, abort update
+    if (walkRows.length <= 1 && totalPossibleHouses > 1) {
+        console.warn("Abort: Only 1 row found. Preventing 100% jump.");
         console.groupEnd();
         return;
     }
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-  // --- NEW WEIGHTED MATH END ---
-
     const progressOpacity = 0.8 * deliveryPct;
 
     console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
 
-    // 3. Update Map Graphics
+    // 7. Update Map Graphics
     activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === region_id) {
+        if (layer.feature?.properties?.region_id === cleanId) {
 
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: "#333333",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
+                    style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
                 }).addTo(activeMap);
             }
 
-            // Update visuals
             if (layer._greyGhost.setStyle) {
                 layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
             }
@@ -533,11 +524,10 @@ window.updateWalkVisuals = function(region_id) {
                 layer._greyGhost.bringToFront();
             }
 
-            // Update Label
-            const labelEl = document.getElementById(`label-${region_id}`);
+            const labelEl = document.getElementById(`label-${cleanId}`);
             if (labelEl) {
                 const pctInt = Math.round(deliveryPct * 100);
-                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
+                labelEl.innerHTML = `${cleanId} <small>${pctInt}%</small>`;
                 labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
             }
         }
