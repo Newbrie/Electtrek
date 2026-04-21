@@ -511,82 +511,47 @@ window.updateMarkerStatus = function(region_id) {
 
 window.updateWalkVisuals = function(region_id) {
     const cleanId = String(region_id).trim();
-    console.group(`🔄 Recalculating Walk: [${cleanId}]`);
-
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
     const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
+    const activeMap = window.fmap || parent.fmap;
 
-    if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Missing components", cleanId);
-        console.groupEnd();
-        return;
-    }
+    if (!bakedData || !activeMap) return;
 
-    // 1. SELECT ALL ROWS
-    const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
-        Array.from(parent.document.querySelectorAll('.canvass-row'))
-    );
-    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
-
-    // --- STEP 2: SYNC UI ---
-    // --- STEP 2: SYNC UI ---
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetData = bakedData[streetName];
-        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
-
-        if (tagSpan && streetData) {
-            // Look for 'y' anywhere in the street's houses
-            const isAnyHouseDone = Object.values(streetData).some(unit =>
-                unit?.tags?.L1 === 'y'
-            );
-
-            if (isAnyHouseDone) {
-                tagSpan.classList.replace('tag-inactive', 'tag-active');
-                tagSpan.innerText = 'y';
-            } else {
-                // Reset to 'n' if no 'y' is found in bakedData
-                tagSpan.classList.replace('tag-active', 'tag-inactive');
-                tagSpan.innerText = 'n';
-            }
-        }
-    });
-
-
-    // 3. GET STATIC TOTAL (Denominator)
+    let completedHouses = 0;
     let totalPossibleHouses = 0;
+
+    // --- NEW STRATEGY: Look at the Map Layers, not the Table Rows ---
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
+
+            // 1. Get the Static Total (Denominator)
             totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
+
+            // 2. Get the Street Weights from the Tooltip/Properties
+            // Assuming your Python code put a dictionary of weights in the properties
+            const weights = layer.feature.properties.street_weights || {};
+
+            // 3. Calculate Numerator based on BAKED_DATA
+            Object.keys(weights).forEach(streetName => {
+                const streetWeight = weights[streetName] || 0;
+                const streetData = bakedData[streetName];
+
+                if (streetData) {
+                    // Check if ANY house has a 'y' (Our Global Interpretation)
+                    const isDone = Object.values(streetData).some(u => u?.tags?.L1 === 'y') ||
+                                   (streetData.tags?.L1 === 'y');
+
+                    if (isDone) {
+                        completedHouses += streetWeight;
+                    }
+                }
+            });
         }
     });
 
-
-    // --- STEP 4: CALCULATE NUMERATOR ---
-    let completedHouses = 0;
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetWeight = parseInt(row.cells[1].innerText) || 0;
-        const streetData = bakedData[streetName];
-
-        if (streetData) {
-            // INTERPRETATION: Look for 'y' in ANY house on this street
-            const isStreetFinished = Object.values(streetData).some(unit =>
-                unit?.tags?.L1 === 'y'
-            );
-
-            if (isStreetFinished) {
-                completedHouses += streetWeight;
-                console.log(`✅ ${streetName}: Finished (found 'y' in historical house data)`);
-            } else {
-                console.log(`❌ ${streetName}: No houses have 'y'`);
-            }
-        }
-    });
-
-    // 5. FINAL MATH & VISUALS
+    // --- FINAL MATH & VISUALS ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+
+    // ... Apply deliveryPct to Grey Ghost opacity and Label innerHTML as before ...
     const progressOpacity = 0.8 * deliveryPct;
 
     activeMap.eachLayer(function(layer) {
