@@ -478,12 +478,26 @@ window.updateWalkVisuals = function(region_id) {
     console.log(`DEBUG: Found ${walkRows.length} rows for walk ${cleanId}`);
 
     // 4. PRE-CALCULATE CONSTANT TOTAL (The Denominator)
+    // 4. GET THE STATIC TOTAL FROM LAYER PROPERTIES (Source of Truth)
     let totalPossibleHouses = 0;
-    walkRows.forEach(row => {
-        // Use a more robust way to get the text from the 2nd cell
-        const cellText = row.cells[1] ? row.cells[1].innerText : "0";
-        totalPossibleHouses += (parseInt(cellText) || 0);
+
+    activeMap.eachLayer(function(layer) {
+        // We find the original polygon layer for this region
+        if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
+            // Pull the count directly from the Python-baked properties
+            totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
+        }
     });
+
+    // FALLBACK: If properties are missing, use the table sum
+    if (totalPossibleHouses === 0) {
+        console.warn(`Property 'expected_houses' not found for ${cleanId}. Falling back to table sum.`);
+        walkRows.forEach(row => {
+            totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
+        });
+    }
+
+    console.log(`📊 Denominator Locked: ${totalPossibleHouses} (from Layer Properties)`);
 
 
     // 5. CALCULATE COMPLETED (The Numerator)
