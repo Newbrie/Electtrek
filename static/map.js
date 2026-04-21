@@ -474,26 +474,46 @@ window.updateWalkVisuals = function(region_id) {
     console.log(`DEBUG: Found ${walkRows.length} total streets for walk ${cleanId}`);
 
     // 2. Pre-calculate the CONSTANT denominator
+    const cleanId = String(region_id).trim();
+
+    // 1. Identify all rows for this walk - check both local and parent scope
+    const doc = document.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`).length > 0 ? document : parent.document;
+    const walkRows = doc.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`);
+
+    // 2. PRE-CALCULATE CONSTANT TOTAL
+    // This MUST be a standalone loop to lock the denominator
     let totalPossibleHouses = 0;
-    walkRows.forEach(row => {
-        totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
-    });
+    for (let i = 0; i < walkRows.length; i++) {
+        totalPossibleHouses += (parseInt(walkRows[i].cells[1].innerText) || 0);
+    }
 
-    // 3. Calculate numerator
+    // 3. CALCULATE COMPLETED
     let completedHouses = 0;
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
+    for (let i = 0; i < walkRows.length; i++) {
+        const row = walkRows[i];
         const streetWeight = (parseInt(row.cells[1].innerText) || 0);
-        const currentUnit = row.querySelector('.unit-selector').value;
-        const houseData = bakedData[streetName]?.[currentUnit];
+        const streetName = row.getAttribute('data-street');
+        const selector = row.querySelector('.unit-selector');
 
-        if (houseData?.tags?.L1 === 'y') {
-            completedHouses += streetWeight;
+        if (selector) {
+            const currentUnit = selector.value;
+            const houseData = bakedData[streetName]?.[currentUnit];
+            if (houseData?.tags?.L1 === 'y') {
+                completedHouses += streetWeight;
+            }
         }
-    });
+    }
+
+    // 4. FINAL SAFETY CHECK
+    // If the script only found 1 row but the table has more,
+    // we skip the update to prevent the "100% leap" visual glitch.
+    if (walkRows.length <= 1 && totalPossibleHouses > 0) {
+        console.warn("Calculation aborted: Only one row detected. Preventing 100% leap.");
+        console.groupEnd();
+        return;
+    }
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    // --- NEW WEIGHTED MATH END ---
 
     const progressOpacity = 0.8 * deliveryPct;
 
