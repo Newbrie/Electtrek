@@ -454,80 +454,62 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id) {
     console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
-    // 1. Identify Leaflet (L) and Map Scope
-    // We check both local and parent window scopes
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
+    const dataRef = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
 
-    if (!activeMap || !Leaflet) {
-        console.error("Critical Error: Map or Leaflet library (L) could not be located in window or parent.");
+    if (!activeMap || !dataRef) {
+        console.warn("Missing Map or Data for", region_id);
         console.groupEnd();
         return;
     }
 
-    // 2. Tally Totals
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // Denominator: Get the 'hos' value from the 2nd cell of each row in the table
-    const streetRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
-    streetRows.forEach(row => {
-        totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
+    // 1. FIXED DENOMINATOR: Only sum 'hos' for THIS walk
+    // We use a selector to find rows specific to this region_id
+    const rows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
+
+    rows.forEach(row => {
+        // row.cells[1] is the <td> with {hos}
+        const hosValue = parseInt(row.cells[1].innerText) || 0;
+        totalPossibleHouses += hosValue;
     });
 
-    // Numerator: Count houses in BAKED_DATA where L1 === 'y'
-    const regionData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
-    if (regionData) {
-        Object.values(regionData).forEach(streetObj => {
-            Object.values(streetObj).forEach(houseData => {
-                if (houseData?.tags?.L1 === 'y') {
-                    completedHouses++;
-                }
-            });
+    // 2. FIXED NUMERATOR: Tally 'y' marks
+    Object.values(dataRef).forEach(streetObj => {
+        Object.values(streetObj).forEach(houseData => {
+            if (houseData?.tags?.L1 === 'y') {
+                completedHouses++;
+            }
         });
-    }
+    });
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} delivered (${(deliveryPct * 100).toFixed(1)}%)`);
+    console.log(`Target Walk: ${region_id}`);
+    console.log(`Denominator (Total Expected): ${totalPossibleHouses}`);
+    console.log(`Numerator (Total 'y'): ${completedHouses}`);
+    console.log(`Calculation: (${completedHouses} / ${totalPossibleHouses}) = ${(deliveryPct * 100).toFixed(1)}%`);
 
-    // 3. Update Map Layers
+    // 3. APPLY TO MAP
     activeMap.eachLayer(function(layer) {
-        // Option 1 Standard Path: Directly access feature.properties
         if (layer.feature?.properties?.region_id === region_id) {
 
-            // Handle the Grey Ghost creation
             if (!layer._greyGhost) {
-                console.log("🛠️ Initializing Grey Clone Layer");
-
-                // Use the factory function Leaflet.geoJSON (lowercase g)
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: "#333333",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
+                    style: { color: "transparent", fillColor: "#333", fillOpacity: 0, interactive: false }
                 }).addTo(activeMap);
             }
 
-            // Apply the updated opacity based on delivery percentage
-            if (layer._greyGhost.setStyle) {
-                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
-            }
+            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
+            layer._greyGhost.bringToFront();
 
-            // Ensure the progress indicator is on top of the base color
-            if (layer._greyGhost.bringToFront) {
-                layer._greyGhost.bringToFront();
-            }
-
-            // Update UI Label
             const labelEl = document.getElementById(`label-${region_id}`);
             if (labelEl) {
-                const pctInt = Math.round(deliveryPct * 100);
-                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
-                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
+                labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
             }
         }
     });
