@@ -514,6 +514,26 @@ window.updateWalkVisuals = function(region_id) {
     }
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    let totalPossibleHouses = 0;
+    walkRows.forEach(row => {
+        totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
+    });
+
+    // 3. Calculate numerator
+    let completedHouses = 0;
+    walkRows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        const streetWeight = (parseInt(row.cells[1].innerText) || 0);
+        const currentUnit = row.querySelector('.unit-selector').value;
+        const houseData = bakedData[streetName]?.[currentUnit];
+
+        if (houseData?.tags?.L1 === 'y') {
+            completedHouses += streetWeight;
+        }
+    });
+
+    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    // --- NEW WEIGHTED MATH END ---
 
     const progressOpacity = 0.8 * deliveryPct;
 
