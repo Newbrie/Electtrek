@@ -452,75 +452,79 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    console.group(`🔄 Recalculating Walk: [${region_id}]`);
+    console.group(`🔄 Recalculating Walk via Tooltip: [${region_id}]`);
 
-    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const bakedData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
 
-    if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Map, Leaflet, or Data not found for", region_id);
+    if (!activeMap || !bakedData) {
         console.groupEnd();
         return;
     }
 
-    let totalPossibleHouses = 0;
+    // --- STEP 1: SCRAPE THE DENOMINATOR FROM TOOLTIP ---
+    let totalWalkHouses = 0;
+    // We look for the label element which usually contains the tooltip text
+    const labelEl = document.getElementById(`label-${region_id}`);
+
+    if (labelEl) {
+        // Assuming your tooltip/label has text like "Walk A: 150 houses"
+        // We use regex to find the first number in that string
+        const match = labelEl.innerText.match(/\d+/);
+        if (match) {
+            totalWalkHouses = parseInt(match[0]);
+        }
+    }
+
+    // FALLBACK: If tooltip isn't rendered yet, sum the 'hos' column as a backup
+    if (totalWalkHouses === 0) {
+        document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`).forEach(row => {
+            totalWalkHouses += (parseInt(row.cells[1].innerText) || 0);
+        });
+    }
+
+    // --- STEP 2: CALCULATE THE COMPLETED NUMERATOR ---
     let completedHouses = 0;
+    const allRowsInWalk = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
 
-    // 1. Get the rows for THIS walk
-    const rows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
-
-    rows.forEach(row => {
+    allRowsInWalk.forEach(row => {
         const streetName = row.getAttribute('data-street');
-        const streetWeight = parseInt(row.cells[1].innerText) || 0; // This is {hos}
+        const streetHos = parseInt(row.cells[1].innerText) || 0;
 
-        totalPossibleHouses += streetWeight;
-
-        // 2. CHECK STATUS: Is this street marked L1 'y'?
-        // Since tags are saved per unit, we check the CURRENT selected unit in the dropdown
         const currentUnit = row.querySelector('.unit-selector').value;
         const houseData = bakedData[streetName]?.[currentUnit];
 
         if (houseData?.tags?.L1 === 'y') {
-            // WEIGHTED ADDITION: Add the full street count, not just '1'
-            completedHouses += streetWeight;
+            completedHouses += streetHos;
         }
     });
 
-    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    const deliveryPct = totalWalkHouses > 0 ? (completedHouses / totalWalkHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
+    console.log(`📊 Tooltip Total: ${totalWalkHouses} | Done: ${completedHouses} | %: ${Math.round(deliveryPct * 100)}`);
 
-    // 3. Update Map Graphics
+    // --- STEP 3: UPDATE MAP ---
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === region_id) {
 
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: "#333333",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
+                    style: { color: "transparent", fillColor: "#333", fillOpacity: 0, interactive: false }
                 }).addTo(activeMap);
             }
 
-            // Update visuals
-            if (layer._greyGhost.setStyle) {
-                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
-            }
-            if (layer._greyGhost.bringToFront) {
-                layer._greyGhost.bringToFront();
-            }
+            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
+            layer._greyGhost.bringToFront();
 
-            // Update Label
-            const labelEl = document.getElementById(`label-${region_id}`);
+            // Update the percentage in the label
             if (labelEl) {
                 const pctInt = Math.round(deliveryPct * 100);
-                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
-                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
+                // Keep your original tooltip text but append/update the %
+                // Example: "Walk_1 (150) 25%"
+                labelEl.innerHTML = `${region_id} (${totalWalkHouses}) <small>${pctInt}%</small>`;
+                if (deliveryPct >= 1) labelEl.style.background = "#28a745";
             }
         }
     });
