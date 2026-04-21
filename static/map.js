@@ -55,6 +55,27 @@ var getBakedData = function() {
           if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
               fmap = window[key];
               window.fmap = fmap;
+              // ... inside your findMap function ...
+
+              if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
+                  fmap = window[key];
+                  window.fmap = fmap;
+
+                  // --- ADD THE POPUP LISTENER HERE ---
+                  fmap.on('popupopen', function(e) {
+                      const container = e.popup._contentNode;
+                      const firstRow = container.querySelector('.canvass-row');
+                      if (firstRow) {
+                          const region_id = firstRow.getAttribute('data-walk');
+                          if (window.updateWalkVisuals) {
+                              window.updateWalkVisuals(region_id);
+                          }
+                      }
+                  });
+
+                  return true;
+              }
+
               return true;
           }
       }
@@ -68,6 +89,19 @@ var getBakedData = function() {
               if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
                   fmap = frameWin[key];
                   window.fmap = fmap;
+                  // ... repeat the same for the iframe success block ...
+                  if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
+                      fmap = frameWin[key];
+                      window.fmap = fmap;
+
+                      // --- AND HERE ---
+                      fmap.on('popupopen', function(e) {
+                          // ... same logic as above ...
+                      });
+
+                      console.log("🎯 map.js: Found Folium map inside iframe1:", key);
+                      return true;
+                  }
                   console.log("🎯 map.js: Found Folium map inside iframe1:", key);
                   return true;
               }
@@ -473,30 +507,27 @@ window.updateWalkVisuals = function(region_id) {
 
     // --- STEP 2: SYNC UI ---
     // --- STEP 2: SYNC UI ---
-        walkRows.forEach(row => {
-            const streetName = row.getAttribute('data-street');
-            const selector = row.querySelector('.unit-selector');
-            const streetData = bakedData[streetName];
+    walkRows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        const streetData = bakedData[streetName];
+        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
 
-            if (selector && streetData) {
-                // Check if ANY house in this street contains the 'y' tag
-                const isAnyHouseDone = Object.values(streetData).some(unit =>
-                    unit?.tags?.L1 === 'y'
-                );
+        if (tagSpan && streetData) {
+            // Look for 'y' anywhere in the street's houses
+            const isAnyHouseDone = Object.values(streetData).some(unit =>
+                unit?.tags?.L1 === 'y'
+            );
 
-                if (isAnyHouseDone) {
-                    // IMPORTANT: We don't change the selector value here because
-                    // you want to keep the house setting as-is, but we can
-                    // visually mark the street tag span if needed.
-                    const tagSpan = row.querySelector('.tag-inactive, .tag-active');
-                    if (tagSpan) {
-                        tagSpan.classList.remove('tag-inactive');
-                        tagSpan.classList.add('tag-active');
-                        tagSpan.innerText = 'y';
-                    }
-                }
+            if (isAnyHouseDone) {
+                tagSpan.classList.replace('tag-inactive', 'tag-active');
+                tagSpan.innerText = 'y';
+            } else {
+                // Reset to 'n' if no 'y' is found in bakedData
+                tagSpan.classList.replace('tag-active', 'tag-inactive');
+                tagSpan.innerText = 'n';
             }
-        });
+        }
+    });
 
 
     // 3. GET STATIC TOTAL (Denominator)
