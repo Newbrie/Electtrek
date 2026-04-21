@@ -452,58 +452,48 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id) {
-    // 1. DEFINE cleanId IMMEDIATELY
     const cleanId = String(region_id).trim();
     console.group(`🔄 Recalculating Walk: [${cleanId}]`);
 
-    // 2. Locate Map, Leaflet, and Data (with better parent/window fallbacks)
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
 
     if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Missing components for", cleanId, { map: !!activeMap, L: !!Leaflet, data: !!bakedData });
+        console.warn("Missing components", cleanId);
         console.groupEnd();
         return;
     }
 
-    // 3. SELECT ROWS (Checking both local and parent document)
-    // 3. SELECT ROWS (The Bulletproof Way)
-    // We grab EVERY row on the page and filter by ID to ensure we don't miss any
+    // 1. SELECT ALL ROWS
     const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
         Array.from(parent.document.querySelectorAll('.canvass-row'))
     );
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
-    console.log(`DEBUG: Found ${walkRows.length} rows for walk ${cleanId}`);
+    // 2. SYNC UI TO DATA (Fixes the "hidden historical y" problem)
+    walkRows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        const selector = row.querySelector('.unit-selector');
+        if (selector) {
+            const currentUnit = selector.value;
+            const status = bakedData[streetName]?.[currentUnit]?.tags?.L1;
+            if (status === 'y') {
+                selector.value = 'y'; // This makes the "Yes" visible to the user
+            }
+        }
+    });
 
-    // 4. PRE-CALCULATE CONSTANT TOTAL (The Denominator)
-    // 4. GET THE STATIC TOTAL FROM LAYER PROPERTIES (Source of Truth)
+    // 3. GET STATIC TOTAL (Denominator)
     let totalPossibleHouses = 0;
-
     activeMap.eachLayer(function(layer) {
-        // We find the original polygon layer for this region
         if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
-            // Pull the count directly from the Python-baked properties
             totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
         }
     });
 
-    // FALLBACK: If properties are missing, use the table sum
-    if (totalPossibleHouses === 0) {
-        console.warn(`Property 'expected_houses' not found for ${cleanId}. Falling back to table sum.`);
-        walkRows.forEach(row => {
-            totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
-        });
-    }
-
-    console.log(`📊 Denominator Locked: ${totalPossibleHouses} (from Layer Properties)`);
-
-
-    // 5. CALCULATE COMPLETED (The Numerator)
-    // 5. CALCULATE COMPLETED (The Numerator)
+    // 4. CALCULATE COMPLETED (Numerator)
     let completedHouses = 0;
-
     walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
         const streetWeight = parseInt(row.cells[1].innerText) || 0;
@@ -511,43 +501,29 @@ window.updateWalkVisuals = function(region_id) {
 
         if (selector) {
             const currentUnit = selector.value;
-            // Lookup the specific street and unit in our data
-            const streetInfo = bakedData[streetName];
-            const unitInfo = streetInfo ? streetInfo[currentUnit] : null;
+            const houseData = bakedData[streetName]?.[currentUnit];
 
-            // STRICT CHECK: Only add weight if L1 is exactly 'y'
-            if (unitInfo && unitInfo.tags && unitInfo.tags.L1 === 'y') {
+            if (houseData?.tags?.L1 === 'y') {
                 completedHouses += streetWeight;
-                console.log(`✅ ${streetName}: Finished (${streetWeight} houses)`);
+                console.log(`✅ ${streetName}: Finished (${streetWeight})`);
             } else {
-                // This will show in your console for the other 6 streets
-                console.log(`❌ ${streetName}: Not finished (0/${streetWeight})`);
+                console.log(`❌ ${streetName}: Pending`);
             }
         }
     });
 
-    // Final math using the static denominator from Step 4
+    // 5. FINAL MATH & VISUALS
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
-
-    // 7. Update Map Graphics
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === cleanId) {
-
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
                 }).addTo(activeMap);
             }
-
-            if (layer._greyGhost.setStyle) {
-                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
-            }
-            if (layer._greyGhost.bringToFront) {
-                layer._greyGhost.bringToFront();
-            }
+            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
 
             const labelEl = document.getElementById(`label-${cleanId}`);
             if (labelEl) {
