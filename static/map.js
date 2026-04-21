@@ -472,15 +472,24 @@ window.updateWalkVisuals = function(region_id) {
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
     // 2. SYNC UI TO DATA (Fixes the "hidden historical y" problem)
+    // 2. SYNC UI TO DATA (Data-First Approach)
     walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
         const selector = row.querySelector('.unit-selector');
-        if (selector) {
-            const currentUnit = selector.value;
-            const status = bakedData[streetName]?.[currentUnit]?.tags?.L1;
-            if (status === 'y') {
-                selector.value = 'y'; // This makes the "Yes" visible to the user
-            }
+
+        if (selector && bakedData[streetName]) {
+            // Get all house numbers stored in the data for this street
+            const houseNumbers = Object.keys(bakedData[streetName]);
+
+            // If the street has data, find the first house marked 'y'
+            // (Or adjust this logic if you have multiple houses per street)
+            houseNumbers.forEach(unitNum => {
+                const status = bakedData[streetName][unitNum]?.tags?.L1;
+                if (status === 'y') {
+                    selector.value = unitNum; // Set the dropdown to that house number
+                    console.log(`📍 Auto-selected ${unitNum} for ${streetName} (Historical 'y')`);
+                }
+            });
         }
     });
 
