@@ -1347,3 +1347,16 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
 
  return div;
 }
+
+window.addEventListener('load', function() {
+    // Small delay to ensure Leaflet and BAKED_DATA are fully initialized
+    setTimeout(() => {
+        const data = window.BAKED_DATA || parent.BAKED_DATA;
+        if (data) {
+            console.log("🚀 Initializing Map Visuals from Baked Data...");
+            Object.keys(data).forEach(region_id => {
+                window.updateWalkVisuals(region_id);
+            });
+        }
+    }, 500);
+});
