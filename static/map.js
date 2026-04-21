@@ -622,14 +622,15 @@ window.updateWalkVisuals = function(region_id) {
             }
         }
     });
-
-    // --- STEP 3: FINAL VISUALS ---
+    // --- STEP 3: FINAL VISUALS (Polygons & Tooltips) ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    const pctInt = Math.round(deliveryPct * 100);
     const progressOpacity = 0.8 * deliveryPct;
 
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === cleanId) {
-            // Update or Create Grey Ghost
+
+            // A. Handle the Grey Ghost (The Progress Overlay)
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
@@ -637,15 +638,31 @@ window.updateWalkVisuals = function(region_id) {
             }
             layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
 
-            // Update Label
+            // B. Handle the Tooltip (Adding the % Data)
+            // We check if the layer has a tooltip, then update its content
+            if (layer.getTooltip()) {
+                const originalContent = layer.feature.properties.original_tooltip || layer.getTooltip().getContent();
+
+                // Store the original so we don't keep appending percentages forever
+                if (!layer.feature.properties.original_tooltip) {
+                    layer.feature.properties.original_tooltip = originalContent;
+                }
+
+                // Append the new percentage clearly at the bottom
+                const updatedTooltip = `${layer.feature.properties.original_tooltip}<br><b>Progress: ${pctInt}%</b>`;
+                layer.setTooltipContent(updatedTooltip);
+            }
+
+            // C. Update the Label (Simplified to just the ID)
             const labelEl = document.getElementById(`label-${cleanId}`);
             if (labelEl) {
-                const pctInt = Math.round(deliveryPct * 100);
-                labelEl.innerHTML = `${cleanId} <small>${pctInt}%</small>`;
+                labelEl.innerHTML = cleanId; // Removed the % from the label
                 labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
+                labelEl.style.color = (deliveryPct >= 1) ? "white" : "";
             }
         }
     });
+
 
     console.log(`📊 Result for ${cleanId}: ${completedHouses}/${totalPossibleHouses} (${Math.round(deliveryPct*100)}%)`);
     console.groupEnd();
