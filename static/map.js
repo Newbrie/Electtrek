@@ -455,11 +455,12 @@ window.updateWalkVisuals = function(region_id) {
     console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
     // 1. Identify Leaflet (L) and Map Scope
+    // We check both local and parent window scopes
     const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
     const Leaflet = window.L || parent.L;
 
     if (!activeMap || !Leaflet) {
-        console.error("Map or Leaflet library not found.");
+        console.error("Critical Error: Map or Leaflet library (L) could not be located in window or parent.");
         console.groupEnd();
         return;
     }
@@ -468,18 +469,20 @@ window.updateWalkVisuals = function(region_id) {
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // Denominator from HTML table {hos}
+    // Denominator: Get the 'hos' value from the 2nd cell of each row in the table
     const streetRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
     streetRows.forEach(row => {
         totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
     });
 
-    // Numerator from BAKED_DATA
+    // Numerator: Count houses in BAKED_DATA where L1 === 'y'
     const regionData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
     if (regionData) {
         Object.values(regionData).forEach(streetObj => {
             Object.values(streetObj).forEach(houseData => {
-                if (houseData?.tags?.L1 === 'y') completedHouses++;
+                if (houseData?.tags?.L1 === 'y') {
+                    completedHouses++;
+                }
             });
         });
     }
@@ -487,43 +490,43 @@ window.updateWalkVisuals = function(region_id) {
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} (${(deliveryPct * 100).toFixed(1)}%)`);
+    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} delivered (${(deliveryPct * 100).toFixed(1)}%)`);
 
-    // 3. Update Map Layer
+    // 3. Update Map Layers
     activeMap.eachLayer(function(layer) {
+        // Option 1 Standard Path: Directly access feature.properties
         if (layer.feature?.properties?.region_id === region_id) {
 
-            // Create Ghost if it doesn't exist
+            // Handle the Grey Ghost creation
             if (!layer._greyGhost) {
-                console.log("🛠️ Creating Grey Ghost...");
+                console.log("🛠️ Initializing Grey Clone Layer");
 
-                // Use the existing layer's type to create an identical clone
-                const style = {
-                    color: "transparent",
-                    fillColor: "#333333",
-                    fillOpacity: 0,
-                    interactive: false
-                };
-
-                // Create a generic GeoJSON layer (lowercase g)
-                layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), { style: style }).addTo(activeMap);
+                // Use the factory function Leaflet.geoJSON (lowercase g)
+                layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
+                    style: {
+                        color: "transparent",
+                        fillColor: "#333333",
+                        fillOpacity: 0,
+                        interactive: false
+                    }
+                }).addTo(activeMap);
             }
 
-            // Update Opacity
-            // Since Leaflet.geoJSON returns a FeatureGroup, we use setStyle on the group
+            // Apply the updated opacity based on delivery percentage
             if (layer._greyGhost.setStyle) {
                 layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
             }
 
-            // Bring to front so it sits over the base color
+            // Ensure the progress indicator is on top of the base color
             if (layer._greyGhost.bringToFront) {
                 layer._greyGhost.bringToFront();
             }
 
-            // Update Label
+            // Update UI Label
             const labelEl = document.getElementById(`label-${region_id}`);
             if (labelEl) {
-                labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
+                const pctInt = Math.round(deliveryPct * 100);
+                labelEl.innerHTML = `${region_id} <small>${pctInt}%</small>`;
                 labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
             }
         }
