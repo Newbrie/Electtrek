@@ -72,6 +72,13 @@ var getBakedData = function() {
                           }
                       }
                   });
+                  const data = window.BAKED_DATA || parent.BAKED_DATA;
+                  if (data) {
+                      console.log("🎯 Map found! Initializing all region visuals...");
+                      Object.keys(data).forEach(region_id => {
+                          window.updateWalkVisuals(region_id);
+                      });
+                  }
 
                   return true;
               }
@@ -401,6 +408,23 @@ window.handleTagClick = function(span) {
     // ⚡️ THE TRIGGER: Tell the map to recalculate based on this change
     if (window.updateWalkVisuals) {
         window.updateWalkVisuals(walk);
+    }
+
+    // ... inside handleTagClick after determining newValue is 'n' ...
+
+    if (newValue === 'n') {
+        const streetData = BAKED_DATA[walk][street];
+        if (streetData) {
+            // Loop through every house recorded for this street
+            Object.keys(streetData).forEach(houseKey => {
+                if (streetData[houseKey].tags) {
+                    streetData[houseKey].tags[code] = 'n'; // Force all to 'n'
+                }
+            });
+        }
+    } else {
+        // If setting to 'y', just set it for the CURRENT house as usual
+        BAKED_DATA[walk][street][house].tags[code] = 'y';
     }
 
 
@@ -1396,16 +1420,3 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
 
  return div;
 }
-
-window.addEventListener('load', function() {
-    // Small delay to ensure Leaflet and BAKED_DATA are fully initialized
-    setTimeout(() => {
-        const data = window.BAKED_DATA || parent.BAKED_DATA;
-        if (data) {
-            console.log("🚀 Initializing Map Visuals from Baked Data...");
-            Object.keys(data).forEach(region_id => {
-                window.updateWalkVisuals(region_id);
-            });
-        }
-    }, 500);
-});
