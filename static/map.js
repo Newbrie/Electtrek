@@ -454,71 +454,75 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id) {
     console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
-    const regionData = window.BAKED_DATA[region_id];
-    if (!regionData) {
+    const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
+    if (!activeMap) {
+        console.error("Map not found");
         console.groupEnd();
         return;
     }
 
+    // Use the Leaflet instance from the map's window
+    const L = window.L || parent.L;
+
+    // 1. Tally Totals
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // 1. Identify all unique streets in this walk from the HTML table
-    // We do this to get the 'hos' (total potential) for each street
-    const streetRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
-    const streetTotals = {};
-
-    streetRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        // Find the house count from the 2nd cell (where {hos} is rendered)
-        const hosCount = parseInt(row.cells[1].innerText) || 0;
-        streetTotals[streetName] = hosCount;
+    // Denominator: Sum 'hos' from the HTML table
+    document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`).forEach(row => {
+        totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
     });
 
-    // Sum up the potential houses for the denominator
-    totalPossibleHouses = Object.values(streetTotals).reduce((a, b) => a + b, 0);
-
-    // 2. Tally the units marked 'y' from BAKED_DATA
-    Object.values(regionData).forEach(streetObj => {
-        Object.values(streetObj).forEach(houseData => {
-            // Check if houseData is an object (to avoid metadata keys)
-            if (houseData && typeof houseData === 'object') {
-                if (houseData.tags && houseData.tags['L1'] === 'y') {
-                    completedHouses++;
-                }
-            }
+    // Numerator: Count 'y' from BAKED_DATA
+    const regionData = window.BAKED_DATA[region_id] || parent.BAKED_DATA[region_id];
+    if (regionData) {
+        Object.values(regionData).forEach(streetObj => {
+            Object.values(streetObj).forEach(houseData => {
+                if (houseData?.tags?.L1 === 'y') completedHouses++;
+            });
         });
-    });
+    }
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`📊 Denominator (Total Potential): ${totalPossibleHouses}`);
-    console.log(`📊 Numerator (Units with L1 'y'): ${completedHouses}`);
-    console.log(`📊 Progress: ${(deliveryPct * 100).toFixed(1)}%`);
+    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} (${(deliveryPct*100).toFixed(1)}%)`);
 
-    // 3. Map Update
-    const activeMap = window.fmap || parent.fmap;
-    if (activeMap) {
-        activeMap.eachLayer(layer => {
-            if (layer.feature?.properties?.region_id === region_id) {
-                if (!layer._greyGhost) {
-                    layer._greyGhost = L.geoJson(layer.toGeoJSON(), {
-                        style: { color: "transparent", fillColor: "#333", fillOpacity: 0, interactive: false }
-                    }).addTo(activeMap);
-                }
+    // 2. Map Layer Logic
+    activeMap.eachLayer(function(layer) {
+        if (layer.feature?.properties?.region_id === region_id) {
 
-                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
-                layer._greyGhost.bringToFront();
+            // FIX: Create the ghost as a single Polygon/MultiPolygon, not a GeoJSON group
+            if (!layer._greyGhost) {
+                const geojson = layer.toGeoJSON();
+                layer._greyGhost = L.GeoJSON.geometryToLayer(geojson);
 
-                const labelEl = document.getElementById(`label-${region_id}`);
-                if (labelEl) {
-                    labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
-                    labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
-                }
+                layer._greyGhost.setStyle({
+                    color: "transparent",
+                    fillColor: "#333333",
+                    fillOpacity: 0,
+                    interactive: false
+                });
+
+                layer._greyGhost.addTo(activeMap);
             }
-        });
-    }
+
+            // Apply Opacity
+            layer._greyGhost.setStyle({
+                fillOpacity: progressOpacity
+            });
+
+            // Ensure visual stacking
+            layer._greyGhost.bringToFront();
+
+            // Update Label
+            const labelEl = document.getElementById(`label-${region_id}`);
+            if (labelEl) {
+                labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
+            }
+        }
+    });
+
     console.groupEnd();
 };
 
