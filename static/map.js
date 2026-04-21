@@ -468,14 +468,23 @@ window.updateWalkVisuals = function(region_id) {
     }
 
     // 3. SELECT ROWS (Checking both local and parent document)
-    const doc = document.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`).length > 0 ? document : parent.document;
-    const walkRows = doc.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`);
+    // 3. SELECT ROWS (The Bulletproof Way)
+    // We grab EVERY row on the page and filter by ID to ensure we don't miss any
+    const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
+        Array.from(parent.document.querySelectorAll('.canvass-row'))
+    );
+    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
+
+    console.log(`DEBUG: Found ${walkRows.length} rows for walk ${cleanId}`);
 
     // 4. PRE-CALCULATE CONSTANT TOTAL (The Denominator)
     let totalPossibleHouses = 0;
-    for (let i = 0; i < walkRows.length; i++) {
-        totalPossibleHouses += (parseInt(walkRows[i].cells[1].innerText) || 0);
-    }
+    walkRows.forEach(row => {
+        // Use a more robust way to get the text from the 2nd cell
+        const cellText = row.cells[1] ? row.cells[1].innerText : "0";
+        totalPossibleHouses += (parseInt(cellText) || 0);
+    });
+
 
     // 5. CALCULATE COMPLETED (The Numerator)
     let completedHouses = 0;
