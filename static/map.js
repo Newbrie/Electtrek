@@ -501,32 +501,33 @@ window.updateWalkVisuals = function(region_id) {
 
 
     // 5. CALCULATE COMPLETED (The Numerator)
+    // 5. CALCULATE COMPLETED (The Numerator)
     let completedHouses = 0;
-    for (let i = 0; i < walkRows.length; i++) {
-        const row = walkRows[i];
-        const streetWeight = (parseInt(row.cells[1].innerText) || 0);
+
+    walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
+        const streetWeight = parseInt(row.cells[1].innerText) || 0;
         const selector = row.querySelector('.unit-selector');
 
         if (selector) {
             const currentUnit = selector.value;
-            const houseData = bakedData[streetName]?.[currentUnit];
-            if (houseData?.tags?.L1 === 'y') {
+            // Lookup the specific street and unit in our data
+            const streetInfo = bakedData[streetName];
+            const unitInfo = streetInfo ? streetInfo[currentUnit] : null;
+
+            // STRICT CHECK: Only add weight if L1 is exactly 'y'
+            if (unitInfo && unitInfo.tags && unitInfo.tags.L1 === 'y') {
                 completedHouses += streetWeight;
+                console.log(`✅ ${streetName}: Finished (${streetWeight} houses)`);
+            } else {
+                // This will show in your console for the other 6 streets
+                console.log(`❌ ${streetName}: Not finished (0/${streetWeight})`);
             }
         }
-    }
+    });
 
-    // 6. FINAL MATH
-      // We only need to ensure we don't divide by zero.
-      // Single-street walks will now correctly calculate (e.g., 50/50 = 100%).
-      if (totalPossibleHouses === 0) {
-          console.warn("Calculation aborted: No houses found in this walk.");
-          console.groupEnd();
-          return;
-      }
-
-    const deliveryPct = completedHouses / totalPossibleHouses;
+    // Final math using the static denominator from Step 4
+    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
     console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
