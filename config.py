@@ -24,6 +24,6 @@ TABLE_FILE = os.path.join(workdirectories['workdir'],'static','registers','strea
 RESOURCE_FILE = Path(workdirectories['workdir']) /'static'/ 'resources' / 'Resources.csv'
 BASEX_FILE = Path(workdirectories['workdir']) /'static'/ 'elections' / 'Elections-DEMO.json'
 POSTCODE_FILE = Path(workdirectories['bounddir']) /'NSPL_FEB_2026_UK.csv'
-DATA_FILE = Path(workdirectories['workdir']) /'static'/ 'registers' / 'baked_data.json'
+DATA_FILE = Path(workdirectories['workdir']) / 'static' / 'registers' / 'baked_data.js'
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }
