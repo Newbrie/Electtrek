@@ -454,27 +454,28 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id) {
     console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
+    // 1. Identify Leaflet (L) and Map Scope
     const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
-    if (!activeMap) {
-        console.error("Map not found");
+    const Leaflet = window.L || parent.L;
+
+    if (!activeMap || !Leaflet) {
+        console.error("Map or Leaflet library not found.");
         console.groupEnd();
         return;
     }
 
-    // Use the Leaflet instance from the map's window
-    const L = window.L || parent.L;
-
-    // 1. Tally Totals
+    // 2. Tally Totals
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // Denominator: Sum 'hos' from the HTML table
-    document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`).forEach(row => {
+    // Denominator from HTML table {hos}
+    const streetRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
+    streetRows.forEach(row => {
         totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
     });
 
-    // Numerator: Count 'y' from BAKED_DATA
-    const regionData = window.BAKED_DATA[region_id] || parent.BAKED_DATA[region_id];
+    // Numerator from BAKED_DATA
+    const regionData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
     if (regionData) {
         Object.values(regionData).forEach(streetObj => {
             Object.values(streetObj).forEach(houseData => {
@@ -486,39 +487,44 @@ window.updateWalkVisuals = function(region_id) {
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} (${(deliveryPct*100).toFixed(1)}%)`);
+    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} (${(deliveryPct * 100).toFixed(1)}%)`);
 
-    // 2. Map Layer Logic
+    // 3. Update Map Layer
     activeMap.eachLayer(function(layer) {
         if (layer.feature?.properties?.region_id === region_id) {
 
-            // FIX: Create the ghost as a single Polygon/MultiPolygon, not a GeoJSON group
+            // Create Ghost if it doesn't exist
             if (!layer._greyGhost) {
-                const geojson = layer.toGeoJSON();
-                layer._greyGhost = L.GeoJSON.geometryToLayer(geojson);
+                console.log("🛠️ Creating Grey Ghost...");
 
-                layer._greyGhost.setStyle({
+                // Use the existing layer's type to create an identical clone
+                const style = {
                     color: "transparent",
                     fillColor: "#333333",
                     fillOpacity: 0,
                     interactive: false
-                });
+                };
 
-                layer._greyGhost.addTo(activeMap);
+                // Create a generic GeoJSON layer (lowercase g)
+                layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), { style: style }).addTo(activeMap);
             }
 
-            // Apply Opacity
-            layer._greyGhost.setStyle({
-                fillOpacity: progressOpacity
-            });
+            // Update Opacity
+            // Since Leaflet.geoJSON returns a FeatureGroup, we use setStyle on the group
+            if (layer._greyGhost.setStyle) {
+                layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
+            }
 
-            // Ensure visual stacking
-            layer._greyGhost.bringToFront();
+            // Bring to front so it sits over the base color
+            if (layer._greyGhost.bringToFront) {
+                layer._greyGhost.bringToFront();
+            }
 
             // Update Label
             const labelEl = document.getElementById(`label-${region_id}`);
             if (labelEl) {
                 labelEl.innerHTML = `${region_id} <small>${Math.round(deliveryPct * 100)}%</small>`;
+                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
             }
         }
     });
