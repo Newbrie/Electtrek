@@ -631,6 +631,7 @@ window.updateWalkVisuals = function(region_id) {
         if (layer.feature?.properties?.region_id === cleanId) {
 
             // A. Handle the Grey Ghost (The Progress Overlay)
+            // interactive: false is CRITICAL so it doesn't block the tooltip hover
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
@@ -638,27 +639,39 @@ window.updateWalkVisuals = function(region_id) {
             }
             layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
 
-            // B. Handle the Tooltip (Adding the % Data)
-            // We check if the layer has a tooltip, then update its content
+            // B. Handle the Tooltip (Data-Safe Update)
             if (layer.getTooltip()) {
-                const originalContent = layer.feature.properties.original_tooltip || layer.getTooltip().getContent();
-
-                // Store the original so we don't keep appending percentages forever
+                // 1. Capture the "Clean" version of the tooltip once
                 if (!layer.feature.properties.original_tooltip) {
-                    layer.feature.properties.original_tooltip = originalContent;
+                    layer.feature.properties.original_tooltip = layer.getTooltip().getContent();
                 }
 
-                // Append the new percentage clearly at the bottom
-                const updatedTooltip = `${layer.feature.properties.original_tooltip}<br><b>Progress: ${pctInt}%</b>`;
-                layer.setTooltipContent(updatedTooltip);
+                // 2. Build the updated HTML string using the cached clean version
+                const baseText = layer.feature.properties.original_tooltip;
+                const progressHtml = `<br><span style="color:#007bff; font-weight:bold;">Progress: ${pctInt}%</span>`;
+
+                // 3. Update content and force Leaflet to refresh the internal state
+                layer.setTooltipContent(baseText + progressHtml);
+
+                // 4. Force immediate DOM update if the tooltip is currently visible
+                if (activeMap.hasLayer(layer.getTooltip())) {
+                    layer.getTooltip().update();
+                }
             }
 
             // C. Update the Label (Simplified to just the ID)
             const labelEl = document.getElementById(`label-${cleanId}`);
             if (labelEl) {
-                labelEl.innerHTML = cleanId; // Removed the % from the label
-                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
-                labelEl.style.color = (deliveryPct >= 1) ? "white" : "";
+                labelEl.innerHTML = cleanId;
+                labelEl.style.whiteSpace = "nowrap"; // Keep ID on one line
+
+                if (deliveryPct >= 1) {
+                    labelEl.style.background = "#28a745";
+                    labelEl.style.color = "white";
+                } else {
+                    labelEl.style.background = ""; // Reset if status changed back
+                    labelEl.style.color = "";
+                }
             }
         }
     });
