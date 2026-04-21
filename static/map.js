@@ -381,53 +381,53 @@ window.handleTagClick = function(span) {
         span.innerText = 'n';
     }
 
-    // 3. Reach up to find the row data
+    // 3. Data Extraction
     var row = span.closest('.canvass-row') || span.closest('tr');
-    var walk = row.getAttribute('data-walk');     // <--- THE VITAL KEY
+    var walk = row.getAttribute('data-walk');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
 
-    // 4. Ensure the 3-tier hierarchy exists in BAKED_DATA
+    // --- THE NEW VITAL KEY: Capture the weight from the table ---
+    var streetWeight = parseInt(row.cells[1].innerText) || 0;
+
+    // 4. Ensure Hierarchy & Store Street-Level Metadata
     if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
     if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
-    if (!BAKED_DATA[walk][street][house]) {
-        BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
+
+    // Store the weight at the street level so math works even when popup is closed
+    BAKED_DATA[walk][street].street_weight = streetWeight;
+
+    // 5. Update Storage based on Value
+    if (newValue === 'n') {
+        // GLOBAL WIPE: If setting to 'n', remove 'y' from ALL houses on this street
+        const streetObject = BAKED_DATA[walk][street];
+        Object.keys(streetObject).forEach(key => {
+            // Only target house objects, skip the 'street_weight' or 'ts' keys
+            if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
+                streetObject[key].tags[code] = 'n';
+            }
+        });
+        console.log(`🚫 Street ${street} wiped to 'n'`);
+    } else {
+        // SPECIFIC SET: If setting to 'y', ensure current house exists and tag it
+        if (!BAKED_DATA[walk][street][house]) {
+            BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
+        }
+        if (!BAKED_DATA[walk][street][house].tags) {
+            BAKED_DATA[walk][street][house].tags = {};
+        }
+
+        BAKED_DATA[walk][street][house].tags[code] = 'y';
+        console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
     }
 
-    // 5. Ensure tags object exists inside the house data
-    if (typeof BAKED_DATA[walk][street][house].tags !== 'object') {
-        BAKED_DATA[walk][street][house].tags = {};
-    }
+    // 6. Global Metadata
+    BAKED_DATA[walk][street].ts = Date.now();
 
-    // 6. Update the specific tag code and timestamp
-    BAKED_DATA[walk][street][house].tags[code] = newValue;
-    BAKED_DATA[walk][street][house].ts = Date.now();
-
-    console.log(`🏷️ Tag ${code} set to ${newValue} for Walk: ${walk}, Street: ${street}, House: ${house}`);
-
-    // ⚡️ THE TRIGGER: Tell the map to recalculate based on this change
+    // ⚡️ TRIGGER: Recalculate
     if (window.updateWalkVisuals) {
         window.updateWalkVisuals(walk);
     }
-
-    // ... inside handleTagClick after determining newValue is 'n' ...
-
-    if (newValue === 'n') {
-        const streetData = BAKED_DATA[walk][street];
-        if (streetData) {
-            // Loop through every house recorded for this street
-            Object.keys(streetData).forEach(houseKey => {
-                if (streetData[houseKey].tags) {
-                    streetData[houseKey].tags[code] = 'n'; // Force all to 'n'
-                }
-            });
-        }
-    } else {
-        // If setting to 'y', just set it for the CURRENT house as usual
-        BAKED_DATA[walk][street][house].tags[code] = 'y';
-    }
-
-
 };
 
 window.updateMarkerStatus = function(region_id) {
@@ -563,12 +563,12 @@ window.updateWalkVisuals = function(region_id) {
     const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
 
     if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Missing components", cleanId);
+        console.warn("Missing components or data for:", cleanId);
         console.groupEnd();
         return;
     }
 
-    // 1. SYNC UI (Only if rows exist in DOM)
+    // --- STEP 1: SYNC UI (Tag Spans) ---
     const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
         Array.from(parent.document.querySelectorAll('.canvass-row'))
     );
@@ -593,37 +593,37 @@ window.updateWalkVisuals = function(region_id) {
         }
     });
 
-    // 2. CALCULATE MATH FROM DATA (Not from UI)
+    // --- STEP 2: CALCULATE MATH FROM BAKED_DATA ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
+    // A. Get the Denominator from the Map Layer
     activeMap.eachLayer(function(layer) {
-        // Only target the main polygon for this walk
         if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
-
-            // Get total from layer properties
             totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
-
-            // Get the street weights dictionary from layer properties
-            const weights = layer.feature.properties.street_weights || {};
-
-            Object.keys(weights).forEach(streetName => {
-                const streetWeight = weights[streetName] || 0;
-                const streetData = bakedData[streetName];
-
-                if (streetData) {
-                    // Global Interpretation: Any house = 'y' means street is done
-                    const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
-
-                    if (isStreetFinished) {
-                        completedHouses += streetWeight;
-                    }
-                }
-            });
         }
     });
 
-    // 3. FINAL VISUALS
+    // B. Get the Numerator from the JSON (using stored street_weight)
+    Object.keys(bakedData).forEach(streetName => {
+        const streetInfo = bakedData[streetName];
+
+        // Ensure we are looking at a street object and not a metadata key
+        if (streetInfo && typeof streetInfo === 'object') {
+            const weight = streetInfo.street_weight || 0;
+
+            // Interpretation: If any house in this street object has a 'y'
+            const isStreetFinished = Object.values(streetInfo).some(unit =>
+                unit && typeof unit === 'object' && unit.tags?.L1 === 'y'
+            );
+
+            if (isStreetFinished) {
+                completedHouses += weight;
+            }
+        }
+    });
+
+    // --- STEP 3: FINAL VISUALS ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
@@ -650,7 +650,6 @@ window.updateWalkVisuals = function(region_id) {
     console.log(`📊 Result for ${cleanId}: ${completedHouses}/${totalPossibleHouses} (${Math.round(deliveryPct*100)}%)`);
     console.groupEnd();
 };
-
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
