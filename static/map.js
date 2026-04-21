@@ -472,24 +472,32 @@ window.updateWalkVisuals = function(region_id) {
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
     // --- STEP 2: SYNC UI ---
+    // --- STEP 2: SYNC UI ---
         walkRows.forEach(row => {
             const streetName = row.getAttribute('data-street');
             const selector = row.querySelector('.unit-selector');
             const streetData = bakedData[streetName];
 
             if (selector && streetData) {
-                // Check if ANY house in this street has L1: 'y'
-                const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
+                // Check if ANY house in this street contains the 'y' tag
+                const isAnyHouseDone = Object.values(streetData).some(unit =>
+                    unit?.tags?.L1 === 'y'
+                );
 
-                if (isStreetFinished) {
-                    // If the street is done, ensure the UI shows 'y'
-                    // Note: If your selector value must be a house number,
-                    // pick the first one that has the 'y'.
-                    const firstDoneUnit = Object.keys(streetData).find(k => streetData[k]?.tags?.L1 === 'y');
-                    selector.value = firstDoneUnit;
+                if (isAnyHouseDone) {
+                    // IMPORTANT: We don't change the selector value here because
+                    // you want to keep the house setting as-is, but we can
+                    // visually mark the street tag span if needed.
+                    const tagSpan = row.querySelector('.tag-inactive, .tag-active');
+                    if (tagSpan) {
+                        tagSpan.classList.remove('tag-inactive');
+                        tagSpan.classList.add('tag-active');
+                        tagSpan.innerText = 'y';
+                    }
                 }
             }
         });
+
 
     // 3. GET STATIC TOTAL (Denominator)
     let totalPossibleHouses = 0;
@@ -508,12 +516,16 @@ window.updateWalkVisuals = function(region_id) {
         const streetData = bakedData[streetName];
 
         if (streetData) {
-            // If any unit in this street is 'y', the whole street weight is added
-            const isStreetFinished = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
+            // INTERPRETATION: Look for 'y' in ANY house on this street
+            const isStreetFinished = Object.values(streetData).some(unit =>
+                unit?.tags?.L1 === 'y'
+            );
 
             if (isStreetFinished) {
                 completedHouses += streetWeight;
-                console.log(`✅ ${streetName} contributes ${streetWeight} to total.`);
+                console.log(`✅ ${streetName}: Finished (found 'y' in historical house data)`);
+            } else {
+                console.log(`❌ ${streetName}: No houses have 'y'`);
             }
         }
     });
