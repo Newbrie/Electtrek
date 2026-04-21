@@ -465,16 +465,6 @@ window.updateWalkVisuals = function(region_id) {
     }
 
     // --- NEW WEIGHTED MATH START ---
-    const cleanId = String(region_id).trim();
-
-    // 1. Force search across the entire page (handling iframe isolation)
-    const allRows = document.querySelectorAll('.canvass-row');
-    const walkRows = Array.from(allRows).filter(row => row.getAttribute('data-walk') === cleanId);
-
-    console.log(`DEBUG: Found ${walkRows.length} total streets for walk ${cleanId}`);
-
-    // 2. Pre-calculate the CONSTANT denominator
-    const cleanId = String(region_id).trim();
 
     // 1. Identify all rows for this walk - check both local and parent scope
     const doc = document.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`).length > 0 ? document : parent.document;
