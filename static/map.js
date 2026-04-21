@@ -464,30 +464,34 @@ window.updateWalkVisuals = function(region_id) {
         return;
     }
 
+    // --- NEW WEIGHTED MATH START ---
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // 1. Get the rows for THIS walk
-    const rows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
+    // 1. Get all rows belonging to THIS specific walk
+    const walkRows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
 
-    rows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetWeight = parseInt(row.cells[1].innerText) || 0; // This is {hos}
+    walkRows.forEach(row => {
+        // Get the street-level house count (hos) from the second column
+        const streetWeight = parseInt(row.cells[1].innerText) || 0;
 
+        // Add this street's total to the Walk's total denominator
         totalPossibleHouses += streetWeight;
 
-        // 2. CHECK STATUS: Is this street marked L1 'y'?
-        // Since tags are saved per unit, we check the CURRENT selected unit in the dropdown
+        // 2. Check if the currently selected unit for this street is marked 'y'
+        const streetName = row.getAttribute('data-street');
         const currentUnit = row.querySelector('.unit-selector').value;
         const houseData = bakedData[streetName]?.[currentUnit];
 
         if (houseData?.tags?.L1 === 'y') {
-            // WEIGHTED ADDITION: Add the full street count, not just '1'
+            // If 'y', add the WHOLE street weight to the numerator
             completedHouses += streetWeight;
         }
     });
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    // --- NEW WEIGHTED MATH END ---
+    
     const progressOpacity = 0.8 * deliveryPct;
 
     console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
