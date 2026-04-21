@@ -466,20 +466,24 @@ window.updateWalkVisuals = function(region_id) {
 
     // --- NEW WEIGHTED MATH START ---
     const cleanId = String(region_id).trim();
-    const walkRows = document.querySelectorAll(`.canvass-row[data-walk="${cleanId}"]`);
 
-    // --- STEP 1: Pre-calculate the CONSTANT denominator ---
+    // 1. Force search across the entire page (handling iframe isolation)
+    const allRows = document.querySelectorAll('.canvass-row');
+    const walkRows = Array.from(allRows).filter(row => row.getAttribute('data-walk') === cleanId);
+
+    console.log(`DEBUG: Found ${walkRows.length} total streets for walk ${cleanId}`);
+
+    // 2. Pre-calculate the CONSTANT denominator
     let totalPossibleHouses = 0;
     walkRows.forEach(row => {
         totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
     });
 
-    // --- STEP 2: Calculate the numerator based on that constant ---
+    // 3. Calculate numerator
     let completedHouses = 0;
     walkRows.forEach(row => {
         const streetName = row.getAttribute('data-street');
         const streetWeight = (parseInt(row.cells[1].innerText) || 0);
-
         const currentUnit = row.querySelector('.unit-selector').value;
         const houseData = bakedData[streetName]?.[currentUnit];
 
@@ -489,7 +493,7 @@ window.updateWalkVisuals = function(region_id) {
     });
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-        // --- NEW WEIGHTED MATH END ---
+    // --- NEW WEIGHTED MATH END ---
 
     const progressOpacity = 0.8 * deliveryPct;
 
