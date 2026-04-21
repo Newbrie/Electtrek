@@ -1,24 +1,38 @@
 
 
 
-  function createStandaloneHTML() {
+function createStandaloneHTML() {
     const doctype = "<!DOCTYPE html>\n";
-
-    // ✅ Clone once
     const clone = document.documentElement.cloneNode(true);
 
-    // ✅ Remove duplicate calendar content
+    // 1. Cleanup
     const calendar = clone.querySelector("#calendar-grid");
-    if (calendar) {
-      calendar.innerHTML = "";
-    }
+    if (calendar) calendar.innerHTML = "";
 
-    // ✅ Serialize the edited clone
-    let htmlString = doctype + clone.outerHTML;
+    // 2. Data Preparation
+    // We pull the current election data that was loaded from CE.calendar_plan
+    // Assuming your JS variable is named 'currentElection' or similar
+    const bakedDataStr = JSON.stringify(window.BAKED_DATA || {});
+    const calendarPlanStr = JSON.stringify(window.currentElection?.calendar_plan || []);
 
-    // ✅ Replace placeholder with final API URL
+    // 3. The Injection String
+    const dataInjection = `
+    <script>
+        // This simulates the CE.calendar_plan from your Python object
+        window.BAKED_DATA = ${bakedDataStr};
+        window.currentElection = {
+            calendar_plan: ${calendarPlanStr}
+        };
+        console.log("Election data and Calendar plan baked into standalone.");
+    </script>
+    `;
+
+    // 4. Final Assembly
+    let htmlString = clone.outerHTML;
+    htmlString = htmlString.replace("</head>", dataInjection + "</head>");
+
     const FINAL_API_URL = DEVURLS['prod'];
-    htmlString = htmlString.replace(/__REPLACE_WITH_API_URL__/g, FINAL_API_URL);
+    htmlString = doctype + htmlString.replace(/__REPLACE_WITH_API_URL__/g, FINAL_API_URL);
 
     return htmlString;
   }
