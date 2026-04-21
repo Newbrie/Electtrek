@@ -454,54 +454,49 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id) {
     console.group(`🔄 Recalculating Walk: [${region_id}]`);
 
-    // 1. Identify Leaflet (L) and Map Scope
-    // We check both local and parent window scopes
     const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1')?.contentWindow.fmap);
     const Leaflet = window.L || parent.L;
+    const bakedData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
 
-    if (!activeMap || !Leaflet) {
-        console.error("Critical Error: Map or Leaflet library (L) could not be located in window or parent.");
+    if (!activeMap || !Leaflet || !bakedData) {
+        console.warn("Map, Leaflet, or Data not found for", region_id);
         console.groupEnd();
         return;
     }
 
-    // 2. Tally Totals
     let totalPossibleHouses = 0;
     let completedHouses = 0;
 
-    // Denominator: Get the 'hos' value from the 2nd cell of each row in the table
-    const rows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`); // Only grabs rows for THIS walk
-    rows.forEach(row => {
-        totalPossibleHouses += (parseInt(row.cells[1].innerText) || 0);
-    });
+    // 1. Get the rows for THIS walk
+    const rows = document.querySelectorAll(`.canvass-row[data-walk="${region_id}"]`);
 
-    // Numerator: Count houses in BAKED_DATA where L1 === 'y'
-    const regionData = window.BAKED_DATA?.[region_id] || parent.BAKED_DATA?.[region_id];
-    if (regionData) {
-        Object.values(regionData).forEach(streetObj => {
-            Object.values(streetObj).forEach(houseData => {
-                if (houseData?.tags?.L1 === 'y') {
-                    completedHouses++;
-                }
-            });
-        });
-    }
+    rows.forEach(row => {
+        const streetName = row.getAttribute('data-street');
+        const streetWeight = parseInt(row.cells[1].innerText) || 0; // This is {hos}
+
+        totalPossibleHouses += streetWeight;
+
+        // 2. CHECK STATUS: Is this street marked L1 'y'?
+        // Since tags are saved per unit, we check the CURRENT selected unit in the dropdown
+        const currentUnit = row.querySelector('.unit-selector').value;
+        const houseData = bakedData[streetName]?.[currentUnit];
+
+        if (houseData?.tags?.L1 === 'y') {
+            // WEIGHTED ADDITION: Add the full street count, not just '1'
+            completedHouses += streetWeight;
+        }
+    });
 
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     const progressOpacity = 0.8 * deliveryPct;
 
-    console.log(`Stats: ${completedHouses}/${totalPossibleHouses} delivered (${(deliveryPct * 100).toFixed(1)}%)`);
+    console.log(`Final Calc -> ${completedHouses} / ${totalPossibleHouses} houses = ${(deliveryPct * 100).toFixed(1)}%`);
 
-    // 3. Update Map Layers
+    // 3. Update Map Graphics
     activeMap.eachLayer(function(layer) {
-        // Option 1 Standard Path: Directly access feature.properties
         if (layer.feature?.properties?.region_id === region_id) {
 
-            // Handle the Grey Ghost creation
             if (!layer._greyGhost) {
-                console.log("🛠️ Initializing Grey Clone Layer");
-
-                // Use the factory function Leaflet.geoJSON (lowercase g)
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: {
                         color: "transparent",
@@ -512,17 +507,15 @@ window.updateWalkVisuals = function(region_id) {
                 }).addTo(activeMap);
             }
 
-            // Apply the updated opacity based on delivery percentage
+            // Update visuals
             if (layer._greyGhost.setStyle) {
                 layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
             }
-
-            // Ensure the progress indicator is on top of the base color
             if (layer._greyGhost.bringToFront) {
                 layer._greyGhost.bringToFront();
             }
 
-            // Update UI Label
+            // Update Label
             const labelEl = document.getElementById(`label-${region_id}`);
             if (labelEl) {
                 const pctInt = Math.round(deliveryPct * 100);
@@ -534,6 +527,7 @@ window.updateWalkVisuals = function(region_id) {
 
     console.groupEnd();
 };
+
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
