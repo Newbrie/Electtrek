@@ -737,7 +737,7 @@ window.incrementVoteCount = function(btn) {
 };
 
 window.deployUpdate = function() {
-    if (!confirm("⚠️ Save and Deploy to Server?")) return;
+//    if (!confirm("⚠️ Save and Deploy to Server?")) return;
 
     // Start with a clean local object for this specific "scrape"
     // This prevents the old flat structure from 'polluting' the new save
@@ -790,7 +790,7 @@ window.deployUpdate = function() {
     })
     .then(res => res.json())
     .then(result => {
-        alert("✅ Success! Check baked_data.json now.");
+//        alert("✅ Success! Check baked_data.json now.");
         if (parent) parent.BAKED_DATA = masterData;
     })
     .catch(err => alert("❌ Save failed."));
