@@ -413,8 +413,7 @@ if (window.isDev) {
 
 } else {
     // Normal login behaviour
-//    loginScreen.style.visibility = "visible";
-    loginScreen.style.visibility = "hidden";
+    loginScreen.style.visibility = "visible";
     console.log("Setting initial view: MAP visible");
 
    // --- Map visible ---
@@ -434,8 +433,7 @@ if (window.isDev) {
 
    // --- Toggle button should switch TO the calendar ---
    toggleBtn.textContent = "📅 View Calendar";
-//    window.loggedIn = false;
-  window.loggedIn = true;
+    window.loggedIn = false;
 }
 
 
