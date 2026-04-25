@@ -686,6 +686,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         missing_child = 0
         no_electors = 0
         polygons_added = 0
+        total_electorate = 0
+        total_houses = 0
 
         # -------------------------------------------------
         # Loop regions
@@ -809,7 +811,10 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             street_stats, house_count = preprocess_streets(region_electors)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
-
+            child.electorate = len(region_electors)
+            child.houses = house_count
+            total_electorate += len(region_electors)
+            total_houses += house_count
             # --- NEW COLOR LOGIC ---
             # Get the Zone from the first elector in this region
             if not region_electors.empty:
@@ -911,6 +916,9 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             except Exception as e:
                 print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
+
+        node.electorate = total_electorate
+        node.houses = total_houses
         # -------------------------------------------------
         # Summary
         # -------------------------------------------------

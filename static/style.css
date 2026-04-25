@@ -558,7 +558,7 @@ input:checked + .slider:before {
 #mapwin {
   position: relative;
   display: flex;
-  height: 100vh;     /* FULL screen height */
+  height: 100%;     /* FULL screen height */
   overflow: hidden;
 /*        overflow: hidden;    prevents outer scrolling */
     border: 1px solid #ddd;

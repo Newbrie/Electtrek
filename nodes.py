@@ -1,4 +1,4 @@
-from config import workdirectories, TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
+from config import workdirectories, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
 import os
 import state
 import layers
@@ -2120,6 +2120,51 @@ class TreeNode:
         ">{title} MAP</h2>
         '''
 
+        import base64
+
+        # 1. Convert your PNG to a Base64 string so it's portable
+        with open(LOGO_FILE, "rb") as f:
+            b64_str = base64.b64encode(f.read()).decode('utf-8')
+
+        # 2. Define the injection HTML
+        # We use the 'mask-image' trick to force the PNG to take a specific color
+        logo_html = f"""
+            <style>
+                #bottomLeftLogo {{
+                    position: absolute;
+                    bottom: 20px;
+                    left: 20px;
+                    z-index: 1001;
+                    width: 80px;  /* Adjust size as needed */
+                    height: 80px;
+
+                    /* THE COLOR YOU WANT */
+                    background-color: #007bff;
+
+                    /* THE IMAGE INJECTION */
+                    -webkit-mask-image: url("data:image/png;base64,{b64_str}");
+                    mask-image: url("data:image/png;base64,{b64_str}");
+
+                    -webkit-mask-size: contain;
+                    mask-size: contain;
+                    -webkit-mask-repeat: no-repeat;
+                    mask-repeat: no-repeat;
+
+                    /* Optional: make it slightly transparent or add a hover effect */
+                    opacity: 0.8;
+                    transition: opacity 0.3s;
+                }}
+                #bottomLeftLogo:hover {{
+                    opacity: 1;
+                }}
+            </style>
+
+            <div id="bottomLeftLogo" title="Canvassing Tool v1.0"></div>
+            """
+
+    # Now append 'logo_html' to your page content just like you do with 'search_bar_html'
+
+
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
             <style>
@@ -2386,6 +2431,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(street_row_css))
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
+        FolMap.get_root().html.add_child(folium.Element(logo_html))
 
         # Add the LatLngPopup plugin
         FolMap.add_child(folium.LatLngPopup())
@@ -2418,7 +2464,7 @@ class TreeNode:
             print("ℹ️ No BBox provided; using default center/zoom.")
         # 5. SAVE TO THE PARENT'S PATH
         FolMap.save(target)
-
+        save_nodes(TREKNODE_FILE)
         print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
         return FolMap, totalleaf
 
