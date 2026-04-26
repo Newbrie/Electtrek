@@ -1644,6 +1644,20 @@ input[type=search] {
     z-index: 1000;
 }
 
+/* Make the layer toggle box match your #17B9D1 theme */
+.leaflet-control-layers {
+    border: 2px solid #17B9D1 !important;
+    border-radius: 8px !important;
+    font-family: sans-serif;
+    font-weight: bold;
+    padding: 10px !important;
+}
+
+.leaflet-control-layers-overlays label {
+    margin-bottom: 5px;
+    cursor: pointer;
+}
+
 input[type=text] {
     border: none;
 }

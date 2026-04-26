@@ -632,13 +632,41 @@ window.updateWalkVisuals = function(region_id) {
 
             // A. Handle the Grey Ghost (The Progress Overlay)
             // interactive: false is CRITICAL so it doesn't block the tooltip hover
+            // --- STEP 3-A: Handle the Grey Ghost (Organized by Tag Layer) ---
+
+            // 1. Identify the Tag Name (e.g., 'L1')
+            let tagName = "Default Progress";
+            try {
+                const firstStreet = Object.values(bakedData)[0];
+                const firstHouse = Object.values(firstStreet).find(u => u?.tags);
+                if (firstHouse) tagName = Object.keys(firstHouse.tags)[0];
+            } catch(e) { console.error("Could not find tag name", e); }
+
+            // 2. Ensure Global Layer Management exists
+            if (!activeMap._tagGroups) activeMap._tagGroups = {};
+            if (!window.mapLayerControl) {
+                // Create the control if it doesn't exist
+                window.mapLayerControl = Leaflet.control.layers(null, {}, { collapsed: false }).addTo(activeMap);
+            }
+
+            // 3. Create the Group for this Tag if it's new
+            if (!activeMap._tagGroups[tagName]) {
+                activeMap._tagGroups[tagName] = Leaflet.layerGroup().addTo(activeMap);
+                // Add it to the UI Toggle Menu
+                window.mapLayerControl.addOverlay(activeMap._tagGroups[tagName], `Progress: ${tagName}`);
+            }
+
+            const targetGroup = activeMap._tagGroups[tagName];
+
+            // 4. Create/Update the Ghost
             if (!layer._greyGhost) {
                 layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
-                }).addTo(activeMap);
+                });
+                targetGroup.addLayer(layer._greyGhost);
             }
-            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
 
+            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
             // B. Handle the Tooltip (Data-Safe Update)
             if (layer.getTooltip()) {
                 // 1. Capture the "Clean" version of the tooltip once
