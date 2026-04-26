@@ -2131,17 +2131,33 @@ class TreeNode:
         logo_html = f"""
             <style>
                 #bottomLeftLogo {{
-                    position: absolute;
-                    bottom: 20px;
+                    /* Keeps it pinned to the bottom of the browser window */
+                    position: fixed;
+                    bottom: 15px;
                     left: 20px;
-                    z-index: 1001;
-                    width: 80px;  /* Adjust size as needed */
-                    height: 80px;
+                    z-index: 10000;
 
-                    /* THE COLOR YOU WANT */
-                    background-color: #007bff;
+                    /* Define the area for the logo */
+                    height: 60px;
+                    width: 160px;
 
-                    /* THE IMAGE INJECTION */
+                    /* Transparent background - no lozenge */
+                    background-color: transparent;
+
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    pointer-events: none; /* Allows you to click 'through' the transparent area to the map */
+                }}
+
+                #logoIcon {{
+                    width: 100%;
+                    height: 100%;
+
+                    /* This is the color that fills your logo shape */
+                    background-color: #17B9D1;
+
+                    /* The Mask logic - uses the transparency of your PNG */
                     -webkit-mask-image: url("data:image/png;base64,{b64_str}");
                     mask-image: url("data:image/png;base64,{b64_str}");
 
@@ -2149,19 +2165,15 @@ class TreeNode:
                     mask-size: contain;
                     -webkit-mask-repeat: no-repeat;
                     mask-repeat: no-repeat;
-
-                    /* Optional: make it slightly transparent or add a hover effect */
-                    opacity: 0.8;
-                    transition: opacity 0.3s;
-                }}
-                #bottomLeftLogo:hover {{
-                    opacity: 1;
+                    -webkit-mask-position: center;
+                    mask-position: center;
                 }}
             </style>
 
-            <div id="bottomLeftLogo" title="Canvassing Tool v1.0"></div>
+            <div id="bottomLeftLogo">
+                <div id="logoIcon"></div>
+            </div>
             """
-
     # Now append 'logo_html' to your page content just like you do with 'search_bar_html'
 
 

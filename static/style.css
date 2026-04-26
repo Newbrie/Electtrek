@@ -1,4 +1,11 @@
 
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent the 'outer' scrollbar so only the map/sidebar scroll */
+}
    /* ===============================
      Fixed Buttons
      =============================== */
@@ -411,14 +418,12 @@ body.unlocked #login { display: none; }
 
 
 #main {
-	break-before: always;
-	position: fixed;
-	top: 110px;
-	right : 240px;
-	left: 20px;
-	bottom: 10px; /* Set this to the height of the footer */
-	overflow-y: auto;
-	background: white;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
 }
 
 #header {
@@ -587,7 +592,7 @@ input:checked + .slider:before {
 #app-layout {
     display: flex;
     width: 100%;
-    height: 65vh;
+    height: 100%;
 }
 
 #main-content {
