@@ -131,34 +131,29 @@
     </script>
 
     <main class="container-fluid p-0">
-
-        <!-- TOP AREA -->
         <div id="app-layout">
 
-            <div id="main-content">
-                {% block map %}{% endblock %}
-            </div>
             <div id="sidebar">
                 {% block nav %}{% endblock %}
             </div>
 
-        </div>
+            <div id="main-content">
 
-        <!-- LOWER AREA -->
-        <div id="lower-layout">
+                {% block map %}{% endblock %}
 
-            <div id="lower-main">
-                {% block captains %}{% endblock %}
+                <div id="lower-layout">
+                    <div id="lower-main">
+                        {% block captains %}{% endblock %}
+                    </div>
+
+                    <div id="lower-sidebar">
+                        {% block log %}{% endblock %}
+                    </div>
+                </div>
+
             </div>
-
-            <div id="lower-sidebar">
-                {% block log %}{% endblock %}
-            </div>
-
-        </div>
-
-
-    </main>
+          </div>
+      </main>
 
 
 

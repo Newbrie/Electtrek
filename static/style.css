@@ -642,12 +642,6 @@ input:checked + .slider:before {
 }
 
 
-#logwin {
-    position: relative;
-    width: 100%;
-    height: 100%;
-}
-
 
 #calendar {
     position: absolute;
@@ -893,8 +887,6 @@ input:checked + .slider:before {
     border-collapse: collapse;
 }
 
-
-
 #captains-table th,
 #captains-table td {
     overflow: hidden;
@@ -902,26 +894,18 @@ input:checked + .slider:before {
     white-space: nowrap;
 }
 
-
 #nav {
-  z-index: 1000; /* above map */
-	position: fixed;
-	top: 0;
-	right: 0;
-	width: 310px;
-	background: #DAE9BC;
-  display: inline-block;
-  color: black;
-  font-weight: normal;
-  padding : 5px 5px ;
-  font-size: 1em;
-  border-radius: 3px;
-  border-color: indigo;
-  cursor: pointer;
-  opacity: 0.8;
-	height: 800px;
-
+    /* REMOVE: position: fixed, top, right, height: 800px */
+    width: 100%;       /* Fill the 310px sidebar */
+    background: #DAE9BC;
+    color: black;
+    padding: 5px;
+    font-size: 1em;
+    opacity: 0.8;
+    /* Optional: if you want it to scroll if it's too long */
+    overflow-y: auto;
 }
+
 #chartContainer {
   width: 250px;
   height: 250px;
@@ -935,26 +919,16 @@ input:checked + .slider:before {
 }
 
 #logwin {
-  height: 200px;  /* Adjust height as needed */
-  background: #111;
-  color: #0f0; /* Green text for a terminal look */
-  padding: 5px 5px;
-  font-family: monospace;
-  border: 1px solid #444;
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	z-index: 1001;
-	position: fixed;
-	bottom: 0;
-	right: 0;
-	width: 310px;
-	font-weight: normal;
-  font-size: 1em;
-  border-radius: 3px;
-  border-color: indigo;
-  cursor: pointer;
-  opacity: 0.8;
+    /* REMOVE: position: fixed, bottom, right, width: 310px */
+    height: 100%;      /* Fill the height of the 35% lower area */
+    width: 100%;       /* Fill the width of #lower-sidebar */
+    background: #111;
+    color: #0f0;
+    padding: 5px;
+    font-family: monospace;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .innertube {
