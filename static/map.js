@@ -1,12 +1,19 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-const pessages = [];
-var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
+// Remove the single quotes around the Jinja expression
+var pack = {{ get_flashed_messages() | tojson | safe }};
 
-for (let x in pack) {
-pessages.push(pack[x]);
-};
+// Now you can loop through them or push them to your array
+const pessages = [];
+if (pack && pack.length > 0) {
+    pack.forEach(msg => {
+        pessages.push(msg);
+        console.log("Flash Message:", msg);
+    });
+}
+
+
 
 var iframeEl = document.getElementsByName('iframe1');
 
