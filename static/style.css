@@ -560,6 +560,8 @@ input:checked + .slider:before {
     flex: 1;
     height: 100%; /* Inherit the 100vh from app-layout */
     position: relative;
+    margin-left: 0; /* Remove any legacy margins */
+    padding: 0;
 }
 
 
@@ -590,23 +592,29 @@ input:checked + .slider:before {
     min-width: 0;     /* 🔑 CRITICAL for flexbox */
     overflow: hidden;
 }
-/* TOP ROW */
+
 #app-layout {
     display: flex;
-    width: 100%;
-    height: 100vh;;
+    gap: 11px; /* This is approximately 3mm */
+    width: 100vw;
+    height: 100vh;
 }
 
 
+
+
 #sidebar {
-  flex: 0 0 360px;
+  flex: 1;
   display: flex;
   flex-direction: column;
-    width: 320px;
-    flex-shrink: 0;
-    overflow-y: auto;
-    border-right: 1px solid #ccc;
-    background: #f8f9fa;
+  flex: 1;
+  margin-left: 0; /* Remove any legacy margins */
+  padding: 0;
+  width: 310px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #ccc;
+  background: #f8f9fa;
 }
 /* BOTTOM ROW */
 #lower-layout {
