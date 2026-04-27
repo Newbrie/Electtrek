@@ -2120,47 +2120,32 @@ class TreeNode:
         ">{title} MAP</h2>
         '''
 
-        import base64
-
-        # 1. Convert your PNG to a Base64 string so it's portable
+    # 1. Convert PNG to Base64 (Keep as is)
         with open(LOGO_FILE, "rb") as f:
             b64_str = base64.b64encode(f.read()).decode('utf-8')
 
-        # 2. Define the injection HTML
-        # We use the 'mask-image' trick to force the PNG to take a specific color
-        logo_html = f"""
+        # 2. Updated Styles (Remove 'position: fixed' and 'bottom/left')
+        # We let Leaflet handle the positioning now.
+        logo_styles = f"""
             <style>
-                #bottomLeftLogo {{
-                    /* Keeps it pinned to the bottom of the browser window */
-                    position: fixed;
-                    bottom: 15px;
-                    left: 20px;
-                    z-index: 10000;
-
-                    /* Define the area for the logo */
+                .leaflet-logo-container {{
                     height: 60px;
                     width: 160px;
-
-                    /* Transparent background - no lozenge */
                     background-color: transparent;
-
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    pointer-events: none; /* Allows you to click 'through' the transparent area to the map */
+                    pointer-events: none;
+                    margin-bottom: 10px !important; /* Spacing from map edge */
+                    margin-left: 10px !important;
                 }}
 
-                #logoIcon {{
+                .leaflet-logo-icon {{
                     width: 100%;
                     height: 100%;
-
-                    /* This is the color that fills your logo shape */
-                    background-color: #17B9D1;
-
-                    /* The Mask logic - uses the transparency of your PNG */
+                    background-color: #17B9D1; /* Your brand color */
                     -webkit-mask-image: url("data:image/png;base64,{b64_str}");
                     mask-image: url("data:image/png;base64,{b64_str}");
-
                     -webkit-mask-size: contain;
                     mask-size: contain;
                     -webkit-mask-repeat: no-repeat;
@@ -2169,11 +2154,7 @@ class TreeNode:
                     mask-position: center;
                 }}
             </style>
-
-            <div id="bottomLeftLogo">
-                <div id="logoIcon"></div>
-            </div>
-            """
+        """
     # Now append 'logo_html' to your page content just like you do with 'search_bar_html'
 
 

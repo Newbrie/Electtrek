@@ -47,11 +47,11 @@ login_manager.needs_refresh_message = "<h1>You really need to re-login to access
 allelectors = []
 mapfile = ""
 testdir = "/Users/newbrie/Documents/ReformUK/ElectoralRegisters/Test"
-staticdir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek"
+appdir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek"
 workdir = "/Users/newbrie/Sites"
 templdir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/templates"
 bounddir = "/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/Boundaries/"
-os.chdir(staticdir)
+os.chdir(appdir)
 # Database Model
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
