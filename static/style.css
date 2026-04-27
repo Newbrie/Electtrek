@@ -347,13 +347,69 @@ body.unlocked #login { display: none; }
     overflow: hidden; /* Prevents the whole page from scrolling */
 }
 
-#header {
-	top: 0;
-	right : 230px;
-	left: 20px;
-	height: 100px;
-	overflow: hidden; /* Disables scrollbars on the header frame. To enable scrollbars, change "hidden" to "scroll" */
-	background: white;
+header {
+    height: 50px; /* Example height */
+}
+
+/* 1. The Outer Frame */
+#app-layout {
+    display: flex;
+    flex-direction: row; /* Main left, Sidebar right */
+    width: 100vw;
+    height: 100vh;
+    gap: 11px;
+    overflow: hidden;
+}
+
+/* 2. The Right Sidebar (The Stack) */
+#sidebar {
+    flex: 0 0 310px;
+    display: flex;
+    flex-direction: column; /* This stacks Nav and Logs vertically */
+    height: 100%;
+    background: #f8f9fa;
+    border-left: 1px solid #ccc;
+    overflow: hidden;   /* Don't let the sidebar itself scroll */
+}
+
+/* 3. The Nav (Top of Sidebar) */
+#nav-sidebar {
+    flex: 1; /* Grows to fill available space */
+    overflow-y: auto;
+    border-bottom: 2px solid #ccc;
+    min-height: 0;
+}
+
+/* 4. The Logs (Bottom of Sidebar) */
+#log-sidebar-container {
+    flex: 0 0 30%; /* Gives logs the bottom 30% of the sidebar */
+    min-height: 200px;
+    background: #fff;
+    overflow-y: auto;
+}
+#logwin {
+    /* REMOVE: position: fixed, bottom, right, width: 310px */
+    height: 100%;      /* Fill the height of the 35% lower area */
+    width: 100%;       /* Fill the width of #lower-sidebar */
+    background: #111;
+    color: #0f0;
+    padding: 5px;
+    font-family: monospace;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+#lower-sidebar {
+    flex: 0 0 300px;    /* This says: "Stay exactly 300px tall at the bottom" */
+    flex: 0 0 310px; /* Symmetry with left sidebar */
+    border-left: 1px solid #ccc;
+    height: 300px;
+    background: #111;   /* Black background for logs */
+    border-top: 2px solid #444;
+    overflow-y: auto;   /* Scroll inside the log window */
+    display: block !important;
+    visibility: visible !important;
 }
 
 #footer {
@@ -465,21 +521,7 @@ input:checked + .slider:before {
 
 
 /* 1. Main Layout: Sidebar vs Content */
-#app-layout {
-    display: flex;
-    flex-direction: row;
-    width: 100vw;
-    height: 100vh;
-    gap: 11px; /* 3mm Gap */
-    overflow: hidden;
-}
 
-#sidebar {
-    flex: 0 0 310px;
-    height: 100%;
-    background: #f8f9fa;
-    border-right: 1px solid #ccc;
-}
 
 /* 2. Content Column: Map (Top) vs Data/Logs (Bottom) */
 #main-content {
@@ -549,16 +591,6 @@ input:checked + .slider:before {
     overflow: hidden;
     white-space: nowrap; /* Prevents text from wrapping */
 }
-
-/* 6. Log area within the Lower Section */
-#lower-sidebar {
-    flex: 0 0 310px; /* Symmetry with left sidebar */
-    border-left: 1px solid #ccc;
-    background: white;
-    overflow-y: auto;
-}
-
-
 
 #calendar {
     position: absolute;
@@ -835,18 +867,7 @@ input:checked + .slider:before {
   height: 100%;
 }
 
-#logwin {
-    /* REMOVE: position: fixed, bottom, right, width: 310px */
-    height: 100%;      /* Fill the height of the 35% lower area */
-    width: 100%;       /* Fill the width of #lower-sidebar */
-    background: #111;
-    color: #0f0;
-    padding: 5px;
-    font-family: monospace;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
+
 
 .innertube {
 	margin: 5px; /* Provides padding for the content */

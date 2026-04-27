@@ -134,32 +134,22 @@
         <div id="app-layout">
 
             <div id="main-content">
-
-                {% block map %}{% endblock %}
-
-                <div id="lower-layout">
+                {% block map %}{% endblock %} <div id="lower-layout">
                     <div id="lower-main">
-                        {% block captains %}{% endblock %}
-                    </div>
-                    <div id="lower-sidebar">
-                        {% block log %}{% endblock %}
-                    </div>
-
+                        {% block captains %}{% endblock %} </div>
                 </div>
-
             </div>
+
             <div id="sidebar">
-              <div id="nav-container">
-                  {% block nav %}{% endblock %}
-              </div>
+                <div id="nav-sidebar">
+                    {% block nav %}{% endblock %} </div>
 
-              <div id="log-container">
-                  {% block log %}{% endblock %}
-              </div>
+                <div id="log-sidebar-container">
+                    {% block log %}{% endblock %} </div>
             </div>
-          </div>
-      </main>
 
+        </div>
+    </main>
 
 
     <!-- ALL MODALS SHOULD BE HERE -->
