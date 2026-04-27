@@ -39,91 +39,12 @@ html, body {
   /* ===============================
      Collapsible/Floating Palette
      =============================== */
-  .collapsible-palette {
-    position: fixed;
-    display: flex;
-    flex-direction: row;
-    background: #f8f9fa;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-    overflow: hidden;
-    font-size: 14px;
-    width: 120px;
-    z-index: 1000;
-    transition: all 0.3s ease;
-  }
-
-  .collapsible-palette:hover {
-    box-shadow: 0 6px 14px rgba(0,0,0,0.2);
-  }
-
-  .collapsible-palette.floating-palette {
-    position: absolute;
-    z-index: 9999;
-    cursor: grab;
-  }
-
-  .collapsible-palette.dragging {
-    cursor: grabbing;
-    opacity: 0.95;
-  }
-
-  .collapsible-palette.collapsed {
-    width: 40px;
-  }
-
-  .collapsible-palette.collapsed .palette-body,
-  .collapsible-palette.collapsed > div[id$="-content"] {
-    display: none;
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  /* Palette header */
-  .collapsible-palette .vertical-header,
-  .vertical-header {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    background-color: #004080;
-    color: white;
-    font-weight: bold;
-    text-align: center;
-    padding: 8px 10px;
-    cursor: grab;
-    border-bottom: 1px solid #002d5a;
-    font-size: 14px;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-  }
 
   .vertical-header:active {
     cursor: grabbing;
   }
 
   /* Palette body */
-  .collapsible-palette .palette-body,
-  .collapsible-palette > div[id$="-content"] {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 6px 10px;
-    background: white;
-    max-width: 360px;
-    max-height: 500px;
-    overflow-x: auto;
-    overflow-y: auto;
-    transition: all 0.3s ease;
-  }
-
-  .collapsible-palette:not(.collapsed) .palette-body {
-    animation: fadeIn 0.25s ease-in-out;
-  }
 
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
@@ -417,18 +338,16 @@ body.unlocked #content { display: block; }
 body.unlocked #login { display: none; }
 
 
+
 #main {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevents the whole page from scrolling */
 }
 
 #header {
-	z-index: 10;
-	position: fixed;
 	top: 0;
 	right : 230px;
 	left: 20px;
@@ -438,8 +357,6 @@ body.unlocked #login { display: none; }
 }
 
 #footer {
-	z-index: 10;
-	position: fixed;
 	bottom: 0;
 	right : 230px;
 	left: 20px;
