@@ -966,7 +966,7 @@ fetch(`/displayareas`, {
     const title = data[2];
 
     // Clear previous content
-    tabtitle.innerHTML = title;
+  //  tabtitle.innerHTML = title;
     tabhead.innerHTML = "";
     tabbody.innerHTML = "";
 
