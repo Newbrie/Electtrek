@@ -363,29 +363,29 @@ header {
 
 /* 2. The Right Sidebar (The Stack) */
 #sidebar {
-    flex: 0 0 310px;
-    display: flex;
-    flex-direction: column; /* This stacks Nav and Logs vertically */
-    height: 100%;
-    background: #f8f9fa;
-    border-left: 1px solid #ccc;
-    overflow: hidden;   /* Don't let the sidebar itself scroll */
-}
+      display: flex;
+      flex-direction: column;
+      height: 100vh;      /* Force sidebar to be exactly the screen height */
+      overflow: hidden;   /* DO NOT let the sidebar itself scroll */
+      flex: 0 0 310px;
+      width: 310px;}
 
 /* 3. The Nav (Top of Sidebar) */
 #nav-sidebar {
-    flex: 1; /* Grows to fill available space */
-    overflow-y: auto;
-    border-bottom: 2px solid #ccc;
-    min-height: 0;
+    flex: 1;            /* Take all available space... */
+    min-height: 0;      /* ...BUT allow it to be smaller than its content */
+    overflow-y: auto;   /* Show a scrollbar ONLY here if the list is long */
+    background: #DAE9BC;
 }
 
 /* 4. The Logs (Bottom of Sidebar) */
 #log-sidebar-container {
-    flex: 0 0 30%; /* Gives logs the bottom 30% of the sidebar */
-    min-height: 200px;
-    background: #fff;
-    overflow-y: auto;
+  flex: 0 0 200px;    /* Lock this to exactly 200px (adjust as needed) */
+  height: 200px;
+  background: #111;   /* Black background so it stands out */
+  color: #0f0;
+  border-top: 3px solid #444;
+  overflow-y: auto;   /* Internal scrolling for logs */
 }
 #logwin {
     /* REMOVE: position: fixed, bottom, right, width: 310px */
