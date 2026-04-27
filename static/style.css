@@ -518,8 +518,8 @@ input:checked + .slider:before {
 
 /* 2. Lock the Map height using calc to account for gaps/borders */
 #mapwin {
-    flex: 0 0 calc(65% - 11px); /* Subtracting the layout gap */
-    height: calc(65% - 11px) !important;
+  flex: 0 0 calc(70% - 11px) !important;
+    height: calc(70% - 11px) !important;
     width: 100%;
     position: relative;
     overflow: hidden;
@@ -539,8 +539,8 @@ input:checked + .slider:before {
 
 /* 4. Lock the Lower Section to the remaining 35% */
 #lower-layout {
-    flex: 0 0 35%;
-    height: 35% !important;
+  flex: 0 0 30% !important;
+    height: 30% !important;
     display: flex;
     flex-direction: row;
     border-top: 2px solid #ccc;
@@ -554,6 +554,7 @@ input:checked + .slider:before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    height: 100%; /* Fills the 30% parent */
 }
 
 /* Ensure the datawin inside #lower-main fills it correctly */
