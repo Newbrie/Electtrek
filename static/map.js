@@ -77,6 +77,7 @@ var getBakedData = function() {
                   const data = window.BAKED_DATA || parent.BAKED_DATA;
                   if (data) {
                       console.log("🎯 Map found! Initializing all region visuals...");
+                      addMapLogo(fmap);
                       Object.keys(data).forEach(region_id => {
                           window.updateWalkVisuals(region_id);
                       });
@@ -157,8 +158,6 @@ const addMapLogo = (map) => {
     logoControl.addTo(map);
 };
 
-// Call it!
-addMapLogo(window.fmap);
 
 // 2. Calendar Toggle Logic
 let toggleSent = false;
