@@ -133,10 +133,6 @@
     <main class="container-fluid p-0">
         <div id="app-layout">
 
-            <div id="sidebar">
-                {% block nav %}{% endblock %}
-            </div>
-
             <div id="main-content">
 
                 {% block map %}{% endblock %}
@@ -145,12 +141,15 @@
                     <div id="lower-main">
                         {% block captains %}{% endblock %}
                     </div>
-
                     <div id="lower-sidebar">
                         {% block log %}{% endblock %}
                     </div>
+
                 </div>
 
+            </div>
+            <div id="sidebar">
+                {% block nav %}{% endblock %}
             </div>
           </div>
       </main>
