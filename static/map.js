@@ -90,6 +90,8 @@ const addMapLogo = (map) => {
                           }
                       }
                   });
+                  // Inside your findMap() success block:
+                  fmap.invalidateSize();
                   const data = window.BAKED_DATA || parent.BAKED_DATA;
                   if (data) {
                       console.log("🎯 Map found! Initializing all region visuals...");

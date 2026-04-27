@@ -571,11 +571,20 @@ input:checked + .slider:before {
     min-width: 0; /* Prevents table from stretching the width */
 }
 
-/* 4. The Map gets the top chunk (e.g., 65% of height) */
+/* Update this section in your CSS */
 #mapwin {
-    flex: 0 0 65%; /* Change 65% to whatever looks best */
+    flex: 0 0 65%;
     position: relative;
     width: 100%;
+    height: 65% !important; /* Explicitly match the flex basis */
+    overflow: hidden;       /* Clip anything that tries to leak out */
+    display: block;
+}
+
+/* Ensure the Leaflet container inside also respects the height */
+#mapwin > .folium-map {
+    height: 100% !important;
+    width: 100% !important;
 }
 
 /* 5. The Data Window gets the bottom chunk (e.g., 35% of height) */
