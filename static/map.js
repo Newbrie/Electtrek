@@ -913,7 +913,7 @@ function updateMessages() {
   const li = parent.document.createElement("li");
 
   const tabletitle = parent.document.getElementById("tabletitle");
-  const table = parent.document.getElementById("captains-table");
+  const table = parent.document.getElementById("content-table");
 
   const tabtitle = parent.document.getElementById("selectedTitle");
   const tabhead = table.querySelector("thead");
@@ -952,8 +952,8 @@ fetch(`/displayareas`, {
     // If you used 'tabHead' earlier, use 'tabHead' here.
     // I am assuming you have these defined at the top of your function:
     const tabtitle = document.getElementById("selectedTitle");
-    const tabhead = document.querySelector("#captains-table thead");
-    const tabbody = document.querySelector("#captains-table tbody");
+    const tabhead = document.querySelector("#content-table thead");
+    const tabbody = document.querySelector("#content-table tbody");
     const yourparty = document.getElementById("yourparty");
 
     if (!tabhead || !tabbody || !tabtitle) {

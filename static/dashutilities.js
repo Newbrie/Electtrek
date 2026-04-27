@@ -224,11 +224,11 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
 }
 
 async function fetchTableData(tableName) {
-   const table = document.getElementById("captains-table");
+   const table = document.getElementById("content-table");
    const tabTitle = document.getElementById("selectedTitle");
 
    if (!table || !tabTitle) {
-       console.error("❌ Required DOM elements not found: #captains-table or #selectedTitle");
+       console.error("❌ Required DOM elements not found: #content-table or #selectedTitle");
        return;
    }
 
