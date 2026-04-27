@@ -32,7 +32,7 @@ bindEvent( window, 'message', function (e) {
   var li = document.createElement("li");
   li.appendChild(document.createTextNode(e.data));
   ul.appendChild(li);
-  alert("_____onmessage: "+e.data);
+  console.log("_____FlashPostedmessage: ",e.data);
 });
 
 
@@ -74,6 +74,9 @@ var BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
 /* --- Top of map.js --- */
 // 1. Map Handle
 var fmap;
+
+// This acts as your "Fast Lookup" dictionary
+window.mapLayerIndex = {};
 
 // 2. Data Handle: Use local data if it exists, otherwise reach out to the parent
 var getBakedData = function() {
@@ -204,6 +207,8 @@ window.handleCalendarClick = function() {
         setTimeout(() => { toggleSent = false }, 500);
     }
 };
+
+
 
 // 3. Search Logic
 async function searchMap() {
@@ -566,50 +571,7 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateWalkVisuals = function(region_id) {
-    const cleanId = String(region_id).trim();
-    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
-    const activeMap = window.fmap || parent.fmap;
 
-    if (!bakedData || !activeMap) return;
-
-    let completedHouses = 0;
-    let totalPossibleHouses = 0;
-
-    // --- NEW STRATEGY: Look at the Map Layers, not the Table Rows ---
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
-
-            // 1. Get the Static Total (Denominator)
-            totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
-
-            // 2. Get the Street Weights from the Tooltip/Properties
-            // Assuming your Python code put a dictionary of weights in the properties
-            const weights = layer.feature.properties.street_weights || {};
-
-            // 3. Calculate Numerator based on BAKED_DATA
-            Object.keys(weights).forEach(streetName => {
-                const streetWeight = weights[streetName] || 0;
-                const streetData = bakedData[streetName];
-
-                if (streetData) {
-                    // Check if ANY house has a 'y' (Our Global Interpretation)
-                    const isDone = Object.values(streetData).some(u => u?.tags?.L1 === 'y') ||
-                                   (streetData.tags?.L1 === 'y');
-
-                    if (isDone) {
-                        completedHouses += streetWeight;
-                    }
-                }
-            });
-        }
-    });
-
-    // --- FINAL MATH & VISUALS ---
-    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-
-    // ... Apply deliveryPct to Grey Ghost opacity and Label innerHTML as before ...
-};
 
 window.updateWalkVisuals = function(region_id) {
     const cleanId = String(region_id).trim();
