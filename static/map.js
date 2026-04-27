@@ -1,6 +1,34 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
+const pessages = [];
+var pack = JSON.parse('{{ get_flashed_messages()|tojson|safe }}');
+
+for (let x in pack) {
+pessages.push(pack[x]);
+};
+
+var iframeEl = document.getElementsByName('iframe1');
+
+function bindEvent( element, eventName, eventHandler) {
+ if (element.addEventListener){
+     element.addEventListener(eventName, eventHandler, false);
+ } else if (element.attachEvent) {
+     element.attachEvent('on' + eventName, eventHandler);
+ };
+};
+
+bindEvent( window, 'message', function (e) {
+  pessages.pop();
+  pessages.push(e.data);
+  var ul = document.getElementById("logwin");
+  var li = document.createElement("li");
+  li.appendChild(document.createTextNode(e.data));
+  ul.appendChild(li);
+  alert("_____onmessage: "+e.data);
+});
+
+
 var moveDown = function (msg, area, type) {
     window.parent.postMessage({ type: `Drilling down to ${type} level within ${area}`}, '*');
 
