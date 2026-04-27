@@ -611,20 +611,6 @@ input:checked + .slider:before {
 }
 
 
-#datawin table thead {
-    position: sticky;
-    top: 0;
-    background: white;
-    z-index: 100;
-}
-
-#datawin > div {
-    flex: 1 1 auto;
-    overflow-y: auto;
-}
-
-
-
 /* LOWER SECTION (log + data side-by-side) */
 
 
