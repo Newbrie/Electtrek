@@ -805,35 +805,39 @@ input:checked + .slider:before {
 
 /* Title stays fixed at top */
 
-tabletitle {
+
+#tabletitle {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 10px; /* Reduced vertical padding from usually 15-20px to 4px */
+    flex-direction: row;        /* Forces horizontal layout */
+    justify-content: space-between; /* Pushes Title/Selector to left, Bulk Actions to right */
+    align-items: center;        /* Vertically centers everything on the same line */
+    padding: 2px 10px;          /* Minimal vertical padding to save space */
     background: #f1f1f1;
     border-bottom: 1px solid #ccc;
-    margin: 0; /* Ensure no outside margins are pushing it away */
+    min-height: 35px;           /* Ensures a consistent, slim height */
 }
 
 .title-group, .bulk-actions {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0; /* Kill any default paragraph or div margins */
+    flex-direction: row;        /* Ensures the items inside the groups are also horizontal */
+    align-items: center;        /* Centers buttons with selects */
+    gap: 8px;                   /* Space between the label, the select, and the button */
+}
+
+/* Remove default margins that push buttons off-alignment */
+#tabletitle select,
+#tabletitle button,
+#tabletitle span {
+    margin: 0;
+    font-size: 0.85rem;         /* Slightly smaller text keeps the bar slim */
+    height: 28px;               /* Force everything to the same physical height */
+    line-height: 1;
 }
 
 #tableSelector, #groupActionSelect, #btnRunGroupAction {
     margin: 2px 0; /* Tighten up the vertical footprint of the inputs */
     padding: 2px 5px;
     font-size: 0.9rem;
-}
-
-/* Scrolling container for table */
-.table-container {
-    width: 100%;
-    height: 100%;
-    flex: 1 1 auto;
-    overflow: auto;          /* scroll here */
 }
 
 #lower-main {
