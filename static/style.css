@@ -551,29 +551,41 @@ input:checked + .slider:before {
 /* Top-level app layout */
 
 /* Sidebar (NAV) */
-
-
-/* Main area (MAP + calendar inside it) */
-#main-content {
+/* 1. The Container: Force it to be the full screen width */
+#app-layout {
     display: flex;
-    flex-direction: column;
-    flex: 1;
-    height: 100%; /* Inherit the 100vh from app-layout */
-    position: relative;
-    margin-left: 0; /* Remove any legacy margins */
-    padding: 0;
+    flex-direction: row; /* Sidebar and Map side-by-side */
+    width: 100vw;
+    height: 100vh;
+    gap: 11px;           /* This is your 3mm gap exactly */
+    overflow: hidden;
 }
 
+/* 2. The Sidebar: Fixed width, no more, no less */
+#sidebar {
+    flex: 0 0 310px;    /* Do not grow, do not shrink, stay 310px */
+    width: 310px;
+    height: 100%;
+    background: #f8f9fa;
+    border-right: 1px solid #ccc;
+    z-index: 10;        /* Ensure it stays above the map edge */
+}
 
+/* 3. The Main Content: Take EVERY pixel that is left */
+#main-content {
+    flex: 1 1 auto;     /* 1 means "take all remaining space" */
+    height: 100%;
+    position: relative;
+    overflow: hidden;   /* Prevent the map from creating scrollbars */
+}
+
+/* 4. The Map: Fill the Main Content completely */
 #mapwin {
-    flex: 1;         /* Take up all remaining space in main-content */
-    height: 100%;     /* Fallback */
-    min-height: 500px; /* Safety net: the map will never be smaller than 500px */
-    width: 100%;
-    position: relative;
-    display: block !important;
-    border: 1px solid #ddd;
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
 }
+
 
 /* LOWER SECTION (log + data side-by-side) */
 
@@ -593,29 +605,7 @@ input:checked + .slider:before {
     overflow: hidden;
 }
 
-#app-layout {
-    display: flex;
-    gap: 11px; /* This is approximately 3mm */
-    width: 100vw;
-    height: 100vh;
-}
 
-
-
-
-#sidebar {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  margin-left: 0; /* Remove any legacy margins */
-  padding: 0;
-  width: 310px;
-  flex-shrink: 0;
-  overflow-y: auto;
-  border-right: 1px solid #ccc;
-  background: #f8f9fa;
-}
 /* BOTTOM ROW */
 #lower-layout {
     display: flex;
