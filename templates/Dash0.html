@@ -3,6 +3,8 @@
 <script>
     // Initialize empty if no data exists yet
     window.BAKED_DATA = {{ baked_data | safe }};
+        // Grab the messages here where Jinja can actually see them
+    window.flaskMessages = {{ get_flashed_messages() | tojson | safe }};
 
 </script>
 <div id="mapwin" class="innertube">

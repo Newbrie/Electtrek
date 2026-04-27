@@ -2,7 +2,7 @@
 toggle between hiding and showing the dropdown content */
 
 // Remove the single quotes around the Jinja expression
-var pack = {{ get_flashed_messages() | tojson | safe }};
+var pack = window.flaskMessages ;
 
 // Now you can loop through them or push them to your array
 const pessages = [];
