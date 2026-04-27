@@ -149,7 +149,13 @@
 
             </div>
             <div id="sidebar">
-                {% block nav %}{% endblock %}
+              <div id="nav-container">
+                  {% block nav %}{% endblock %}
+              </div>
+
+              <div id="log-container">
+                  {% block log %}{% endblock %}
+              </div>
             </div>
           </div>
       </main>
