@@ -906,130 +906,89 @@ function displayMap (url) {
 		window.location.href = url;
 	};
 
-
-function updateMessages() {
+async function fetchTableData(tableName) {
   const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
 
-  const tabletitle = parent.document.getElementById("tabletitle");
-  const table = parent.document.getElementById("content-table");
+  const PARTY_COLORS = {
+    O: "brown", R: "cyan", C: "blue", S: "red",
+    LD: "yellow", G: "limegreen", I: "indigo",
+    PC: "darkred", SD: "orange", Z: "lightgray",
+    W: "white", X: "darkgray"
+  };
+   const table = document.getElementById("content-table");
+   const tabTitle = document.getElementById("selectedTitle");
 
-  const tabtitle = parent.document.getElementById("selectedTitle");
-  const tabhead = table.querySelector("thead");
-  const tabbody = table.querySelector("tbody");
+   if (!table || !tabTitle) {
+       console.error("❌ Required DOM elements not found: #content-table or #selectedTitle");
+       return;
+   }
 
-  // Update the <h2> to match the current selection
-  const tableSelector = tabletitle.querySelector("#tableSelector");
-  const selectedText = tableSelector.options[tableSelector.selectedIndex].text;
-  tabtitle.textContent = `Details for: ${selectedText}`;
+   const tabHead = table.querySelector("thead");
+   const tabBody = table.querySelector("tbody");
 
+   if (!tabHead || !tabBody) {
+       console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+       return;
+   }
 
-// Define your party color lookup
-const VCO = {
-    "O": "brown", "R": "cyan", "C": "blue", "S": "red",
-    "LD": "yellow", "G": "limegreen", "I": "indigo",
-    "PC": "darkred", "SD": "orange", "Z": "lightgray",
-    "W": "white", "X": "darkgray"
-};
-//  fetchAndUpdateChart();
+   try {
+       const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
+       if (!res.ok) throw new Error(`Server returned ${res.status}`);
+       const data = await res.json();
 
-fetch(`/displayareas`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin"
-})
-.then(response => response.json())
-.then(data => {
-    console.log("Display Data received:", data);
+       if (!Array.isArray(data) || data.length < 3) {
+           console.error("❌ Invalid data format received:", data);
+           return;
+       }
 
-    if (!Array.isArray(data) || data.length < 3) {
-        console.error("Invalid or incomplete data:", data);
-        return;
-    }
+       const [columnHeaders, rows, title] = data;
+//       tabTitle.textContent = title;
+       tabHead.innerHTML = "";
+       tabBody.innerHTML = "";
 
-    // --- FIX 1: Ensure these variable names match your earlier definitions ---
-    // If you used 'tabHead' earlier, use 'tabHead' here.
-    // I am assuming you have these defined at the top of your function:
-    const tabtitle = document.getElementById("selectedTitle");
-    const tabhead = document.querySelector("#content-table thead");
-    const tabbody = document.querySelector("#content-table tbody");
-    const yourparty = document.getElementById("yourparty");
+       // --- 1. Filtered Table header ---
+       const headRow = document.createElement("tr");
+       headRow.innerHTML = `<th>?</th>` +
+           columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in header
+               .map(h => `<th>${h.toUpperCase()}</th>`)
+               .join('');
+       tabHead.appendChild(headRow);
 
-    if (!tabhead || !tabbody || !tabtitle) {
-        console.error("❌ Table elements not found in DOM");
-        return;
-    }
+       const selectedParty = document.getElementById("yourparty")?.value;
 
-    const columnHeaders = data[0];
-    const rows = data[1];
-    const title = data[2];
+       // --- 2. Filtered Table body ---
+       rows.forEach(record => {
+           const row = document.createElement("tr");
 
-    // Clear previous content
-  //  tabtitle.innerHTML = title;
-    tabhead.innerHTML = "";
-    tabbody.innerHTML = "";
+           // Extract the NID for the checkbox (it exists in 'record' but we won't show it in a cell)
+           const nid = record['nid'] || record['id'] || "";
 
-    // Build table head row
-    const headRow = document.createElement("tr");
-    const checkboxHeader = document.createElement("th");
-    checkboxHeader.textContent = "?";
-    headRow.appendChild(checkboxHeader);
+           row.innerHTML = `<td>
+               <input type="checkbox"
+                      class="selectRow"
+                      value="${nid}"
+                      data-nid="${nid}">
+             </td>` +
+             columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in rows
+               .map(h => {
+                   const value = record[h] ?? "";
+                   const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+                   return `<td style="background-color:${color}">${value}</td>`;
+               }).join('');
 
-    columnHeaders.forEach(header => {
-        if (header === "nid") return; // Skip NID in the header too!
-        const th = document.createElement("th");
-        th.textContent = header.toUpperCase();
-        headRow.appendChild(th);
-    });
-    tabhead.appendChild(headRow);
+           tabBody.appendChild(row);
+       });
 
-    // Build table body
-    rows.forEach(record => {
-        const row = document.createElement("tr");
+       console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
+   } catch (err) {
+       console.error("❌ Error fetching table data:", err);
+   }
+}
 
-        // Checkbox Cell
-        const checkboxCell = document.createElement("td");
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = "selectRow[]";
-        checkbox.classList.add("selectRow");
-
-        // 🎯 The NID fix
-        const nidValue = record.nid || "";
-        checkbox.value = nidValue;
-        checkbox.setAttribute('data-nid', nidValue);
-
-        checkboxCell.appendChild(checkbox);
-        row.appendChild(checkboxCell);
-
-        // Data Cells
-        columnHeaders.forEach(header => {
-            if (header === "nid") return;
-
-            const cell = document.createElement("td");
-            const value = record[header] !== undefined ? record[header] : "";
-            cell.innerHTML = value;
-
-            // Highlight Party
-            if (yourparty && header === yourparty.value) {
-                // Ensure VCO is defined globally
-                const color = (typeof VCO !== 'undefined') ? VCO[yourparty.value] : "inherit";
-                cell.style.backgroundColor = color;
-            }
-
-            row.appendChild(cell);
-        });
-
-        tabbody.appendChild(row);
-    });
-})
-.catch(error => console.error("Elector Table Fetch error:", error));
-// --- FIX 2: Removed the stray braces that were causing the syntax error ---
-
-li.appendChild(parent.document.createTextNode(old + ":completed"));
-ul.appendChild(li);
-};
 
 
 
