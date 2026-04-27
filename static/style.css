@@ -459,14 +459,6 @@ body.unlocked #login { display: none; }
 /* Bottom panel */
 
 
-#logwin,
-#datawin {
-    position: relative;
-    width: 100%;
-    height: 100%;
-}
-
-
 .stay-on-top {
   z-index: 999999 !important;
   position: relative !important;
@@ -552,39 +544,85 @@ input:checked + .slider:before {
 
 /* Sidebar (NAV) */
 /* 1. The Container: Force it to be the full screen width */
+/* 1. Sidebar on left, content area on right */
 #app-layout {
     display: flex;
-    flex-direction: row; /* Sidebar and Map side-by-side */
+    flex-direction: row;
     width: 100vw;
     height: 100vh;
-    gap: 11px;           /* This is your 3mm gap exactly */
+    gap: 11px; /* Your 3mm gap */
     overflow: hidden;
 }
 
-/* 2. The Sidebar: Fixed width, no more, no less */
+/* 2. The Sidebar stays 310px wide */
 #sidebar {
-    flex: 0 0 310px;    /* Do not grow, do not shrink, stay 310px */
-    width: 310px;
+    flex: 0 0 310px;
     height: 100%;
     background: #f8f9fa;
     border-right: 1px solid #ccc;
-    z-index: 10;        /* Ensure it stays above the map edge */
 }
 
-/* 3. The Main Content: Take EVERY pixel that is left */
+/* 3. The Right Side: This container stacks Map (top) and Data (bottom) */
 #main-content {
-    flex: 1 1 auto;     /* 1 means "take all remaining space" */
+    flex: 1;
+    display: flex;
+    flex-direction: column; /* Stack vertically! */
     height: 100%;
-    position: relative;
-    overflow: hidden;   /* Prevent the map from creating scrollbars */
+    min-width: 0; /* Prevents table from stretching the width */
 }
 
-/* 4. The Map: Fill the Main Content completely */
+/* 4. The Map gets the top chunk (e.g., 65% of height) */
 #mapwin {
-    width: 100% !important;
-    height: 100% !important;
-    display: block;
+    flex: 0 0 65%; /* Change 65% to whatever looks best */
+    position: relative;
+    width: 100%;
 }
+
+/* 5. The Data Window gets the bottom chunk (e.g., 35% of height) */
+#datawin {
+    flex: 1; /* Fills the remaining vertical space */
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-top: 2px solid #ccc; /* Separator line */
+    overflow: hidden;
+}
+
+/* Ensure the table scrolling still works */
+#datawin > div {
+    flex: 1;
+    overflow-y: auto;
+}
+
+#logwin {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+#datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
+#datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
+#datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
+ { /* 2-13 columns */
+    width: 12px;
+    min-width: 12px;
+    max-width: 12px;
+    overflow: hidden;
+    white-space: nowrap; /* Prevents text from wrapping */
+}
+
+
+#datawin table thead {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 100;
+}
+
+#datawin > div {
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+
 
 
 /* LOWER SECTION (log + data side-by-side) */
@@ -844,16 +882,7 @@ input:checked + .slider:before {
     background: #f0f0f0;
 }
 
-#datawin  td:nth-child(1), #datawin  th:nth-child(1),#datawin  td:nth-child(2), #datawin  th:nth-child(2),#datawin  td:nth-child(3), #datawin  th:nth-child(3),#datawin  td:nth-child(4), #datawin  th:nth-child(4),#datawin  td:nth-child(5), #datawin  th:nth-child(5),
-#datawin  td:nth-child(6), #datawin  th:nth-child(6),#datawin  td:nth-child(7), #datawin  th:nth-child(7),#datawin  td:nth-child(8), #datawin  th:nth-child(8),#datawin  td:nth-child(9), #datawin  th:nth-child(9),
-#datawin  td:nth-child(10), #datawin  th:nth-child(10),#datawin  td:nth-child(11), #datawin  th:nth-child(11),#datawin  td:nth-child(12), #datawin  th:nth-child(12),#datawin  td:nth-child(13), #datawin  th:nth-child(13),#datawin  td:nth-child(14), #datawin  th:nth-child(14)
- { /* 2-13 columns */
-    width: 12px;
-    min-width: 12px;
-    max-width: 12px;
-    overflow: hidden;
-    white-space: nowrap; /* Prevents text from wrapping */
-}
+
 
 /* Title stays fixed at top */
 #tabletitle {
@@ -884,11 +913,7 @@ input:checked + .slider:before {
     border-collapse: collapse;
 }
 
-#datawin {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
+
 
 #captains-table th,
 #captains-table td {
@@ -897,17 +922,6 @@ input:checked + .slider:before {
     white-space: nowrap;
 }
 
-#datawin table thead {
-    position: sticky;
-    top: 0;
-    background: white;
-    z-index: 100;
-}
-
-#datawin > div {
-    flex: 1 1 auto;
-    overflow-y: auto;
-}
 
 #nav {
   z-index: 1000; /* above map */
