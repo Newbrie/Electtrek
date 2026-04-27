@@ -2119,7 +2119,7 @@ class TreeNode:
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         ">{title} MAP</h2>
         '''
-
+        import base64
     # 1. Convert PNG to Base64 (Keep as is)
         with open(LOGO_FILE, "rb") as f:
             b64_str = base64.b64encode(f.read()).decode('utf-8')
@@ -2155,7 +2155,6 @@ class TreeNode:
                 }}
             </style>
         """
-    # Now append 'logo_html' to your page content just like you do with 'search_bar_html'
 
 
         # --- Search bar with map detection and one single searchMap() function
@@ -2424,7 +2423,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(street_row_css))
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
-        FolMap.get_root().html.add_child(folium.Element(logo_html))
+        FolMap.get_root().html.add_child(folium.Element(logo_styles))
 
         # Add the LatLngPopup plugin
         FolMap.add_child(folium.LatLngPopup())

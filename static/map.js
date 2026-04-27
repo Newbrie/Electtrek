@@ -45,6 +45,8 @@ var getBakedData = function() {
     return window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
 };
 
+
+
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
   /* --- Inside your startMapCatcher in map.js --- */
@@ -137,6 +139,26 @@ if (window.parent && window.parent !== window) {
     }
 }
 })();
+
+// --- Add this to your JS file ---
+const addMapLogo = (map) => {
+    const logoControl = L.control({ position: 'bottomleft' });
+
+    logoControl.onAdd = function() {
+        // Create the outer container defined in your CSS
+        const div = L.DomUtil.create('div', 'leaflet-logo-container');
+
+        // Create the inner icon div that uses the mask
+        const icon = L.DomUtil.create('div', 'leaflet-logo-icon', div);
+
+        return div;
+    };
+
+    logoControl.addTo(map);
+};
+
+// Call it!
+addMapLogo(window.fmap);
 
 // 2. Calendar Toggle Logic
 let toggleSent = false;
