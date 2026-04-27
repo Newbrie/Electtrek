@@ -570,6 +570,8 @@ input:checked + .slider:before {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 /* Ensure the table scrolling still works */
