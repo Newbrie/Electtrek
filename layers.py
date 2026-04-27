@@ -848,38 +848,45 @@ class ExtendedFeatureGroup(FeatureGroup):
                 "fillOpacity": 0.6,
             }
             # -------------------------
-            # Polygon (with tooltip only)
+            # Polygon (with tooltip and nid)
             # -------------------------
             try:
-
-                # Wrap the shapely geometry in a standard Feature structure
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
+
+                # Prepare properties for JS interaction
+                feature_properties = {
+                    'nid': child.nid,               # 🔑 THE KEY REF: Link to node in JS
+                    'region_id': child.value,        # Human readable ID (e.g., PD tag)
+                    'type': 'voronoi_poly',
+                    'expected_houses': house_count,
+                    'level': child.level             # Helpful for filtering in JS
+                }
+
+                # If this specific call was for a ghost layer, we flag it here
+                if getattr(self, 'is_ghost', False):
+                    feature_properties['style_type'] = 'grey_ghost'
+                    # You can also pre-calculate the ghost opacity here if you want
+                    # feature_properties['ghost_opacity'] = ...
 
                 geojson_feature = {
                     "type": "Feature",
                     "geometry": actual_shape_poly.__geo_interface__,
-                    "properties": {
-                        'region_id': child.value,
-                        'type': 'voronoi_poly',
-                        'expected_houses': house_count
-                    }
+                    "properties": feature_properties
                 }
 
                 gj = folium.GeoJson(
-                    geojson_feature,  # Pass the Feature, not just the Geometry
+                    geojson_feature,
                     style_function=lambda x, s=style: s,
                     tooltip=folium.Tooltip(tooltip_html, sticky=True)
                 )
 
-                # Add to map
+                # Add to the ExtendedFeatureGroup (self)
                 gj.add_to(self)
-                print(f"DEBUG LAYER: Children before add {len(self._children)}")
                 polygons_added += 1
-                print(f"DEBUG SUCCESS: Added polygon for {child.value} with tooltip only")
 
             except Exception as e:
                 print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
-                continue
+
 
             # -------------------------
             # Marker (with popup only)
