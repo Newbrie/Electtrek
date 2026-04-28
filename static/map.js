@@ -660,39 +660,53 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) targetGroup = l;
     });
 
-    // --- STEP 3: MAP VISUALS ---
-    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    const progressOpacity = 0.8 * deliveryPct;
+    // --- STEP 2.5: FIND THE PARENT GROUP ---
+    let targetGroup = null;
+    activeMap.eachLayer(l => {
+        // We look for the FeatureGroup created by Python (e.g., "Data Overlay: [L1]")
+        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
+            targetGroup = l;
+        }
+    });
 
+    // --- STEP 3: CREATE OR UPDATE GHOST ---
     activeMap.eachLayer(layer => {
-        if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
+        // Only target the base ward boundary
+        if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
+
             const ghostKey = `_ghost_${targetTag}`;
 
-            // Create Ghost
             if (!layer[ghostKey]) {
+                console.log(`👻 Parenting new ghost to group: ${targetGroup ? targetGroup.options.name : 'Map Root'}`);
+
                 const ghostGeoJSON = layer.toGeoJSON();
                 ghostGeoJSON.properties.is_ghost = true;
+
                 layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
-                    style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
+                    style: {
+                        color: "transparent",
+                        fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
+                        fillOpacity: 0,
+                        interactive: false
+                    }
                 });
 
+                // 🔑 THE FIX: Add to the group, not the map
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
-                    // Filter Check: If the group is unticked, don't show the ghost
-                    if (!activeMap.hasLayer(targetGroup)) activeMap.removeLayer(layer[ghostKey]);
+
+                    // 🛡️ Safety Sync: If the user already unticked the box,
+                    // Leaflet won't automatically hide a NEWLY added child.
+                    if (!activeMap.hasLayer(targetGroup)) {
+                        activeMap.removeLayer(layer[ghostKey]);
+                    }
                 } else {
                     layer[ghostKey].addTo(activeMap);
                 }
             }
 
-            // Update Opacity
-            layer[ghostKey].setStyle({ fillOpacity: progressOpacity });
-
-            // Tooltip Update
-            if (layer.getTooltip()) {
-                if (!layer.feature.properties.orig_tip) layer.feature.properties.orig_tip = layer.getTooltip().getContent();
-                layer.setTooltipContent(`${layer.feature.properties.orig_tip}<br><span style="color:#007bff; font-weight:bold;">${targetTag}: ${Math.round(deliveryPct * 100)}%</span>`);
-            }
+            // Apply the calculated opacity
+            layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
         }
     });
 };
