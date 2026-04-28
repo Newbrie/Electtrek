@@ -701,63 +701,62 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 };
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    const cleanId = String(region_id).trim();
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
-    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
+  window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
+      const cleanId = String(region_id).trim();
 
-    if (!activeMap || !Leaflet || !bakedData) return;
+      // 1. Better Component Retrieval
+      const activeMap = window.fmap || parent.fmap || (typeof fmap !== 'undefined' ? fmap : null);
+      const Leaflet = window.L || parent.L || (typeof L !== 'undefined' ? L : null);
+      const bakedData = (window.BAKED_DATA && window.BAKED_DATA[cleanId]) ||
+                        (parent.BAKED_DATA && parent.BAKED_DATA[cleanId]);
 
-    // --- STEP 1: SYNC UI (Tag Spans in Table) ---
-    const allRows = Array.from(document.querySelectorAll('.canvass-row'))
-        .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
+      // 2. Debug Milestone: Start
+      console.log(`🚀 [VISUALIZER] Triggered for: ${cleanId} | Tag: ${targetTag}`);
 
-    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
+      if (!activeMap) { console.error("❌ Map (fmap) not found in window or parent."); return; }
+      if (!Leaflet) { console.error("❌ Leaflet (L) not found."); return; }
+      if (!bakedData) { console.warn(`⚠️ No Baked Data found for Region: ${cleanId}`); return; }
 
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetData = bakedData[streetName];
-        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
+      // --- STEP 1: SYNC TABLE UI (Sidebars) ---
+      const allRows = Array.from(document.querySelectorAll('.canvass-row'))
+          .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
 
-        if (tagSpan && streetData) {
-            // Use the dynamic targetTag instead of hardcoded L1
-            const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.[targetTag] === 'y');
-            tagSpan.className = isAnyHouseDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
-            tagSpan.innerText = isAnyHouseDone ? 'y' : 'n';
-        }
-    });
+      const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
-    // --- STEP 2: CALCULATE MATH ---
-    let completedHouses = 0;
-    let totalPossibleHouses = 0;
+      walkRows.forEach(row => {
+          const streetName = row.getAttribute('data-street');
+          const streetData = bakedData[streetName];
+          // Query for both potential classes to find the existing span
+          const tagSpan = row.querySelector('.tag-inactive, .tag-active');
 
-    // A. Get Denominator from Master Layer
-    activeMap.eachLayer(l => {
-        if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
-            totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
-        }
-    });
+          if (tagSpan && streetData) {
+              // Check only the specific tag we are currently updating
+              const isAnyHouseDone = Object.values(streetData).some(unit =>
+                  unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
+              );
 
-    // B. Get Numerator from BAKED_DATA
-    Object.keys(bakedData).forEach(streetName => {
-        const streetInfo = bakedData[streetName];
-        if (streetInfo && typeof streetInfo === 'object') {
-            const weight = streetInfo.street_weight || 0;
-            // Check if ANY house on this street has the current targetTag set to 'y'
-            const isStreetFinished = Object.values(streetInfo).some(unit =>
-                unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
-            );
-            if (isStreetFinished) completedHouses += weight;
-        }
-    });
+              tagSpan.className = isAnyHouseDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
+              tagSpan.innerText = isAnyHouseDone ? 'y' : 'n';
+          }
+      });
 
-    // --- STEP 2.5: Find the Accordion Group ---
-    let targetGroup = null;
-    activeMap.eachLayer(l => {
-        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
-            targetGroup = l;
-        }
-    });
+      console.log(`✅ [VISUALIZER] Table UI Synced for ${cleanId}`);
+
+      // --- STEP 2: FIND THE ACCORDION GROUP (The Filtering Secret) ---
+      let targetGroup = null;
+      activeMap.eachLayer(l => {
+          if (l.options && l.options.name && l.options.name.includes(`[${targetTag}]`)) {
+              targetGroup = l;
+          }
+      });
+
+      if (targetGroup) {
+          console.log(`✅ [VISUALIZER] Found Accordion Group: ${targetGroup.options.name}`);
+      } else {
+          console.warn(`⚠️ [VISUALIZER] No Layer Group found for [${targetTag}]. Ghost will be unfilterable!`);
+      }
+
+      // ... Proceed to Math and Step 3 (Ghost Creation) ...
 
     // --- STEP 3: UPDATE VISUALS ---
     // --- STEP 3: FINAL VISUALS (Polygons & Tooltips) ---
@@ -772,22 +771,29 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
             const ghostKey = `_ghost_${targetTag}`;
 
             // 1️⃣ CREATE the ghost if it doesn't exist yet
+            // 1️⃣ CREATE the ghost if it doesn't exist yet
             if (!layer[ghostKey]) {
                 const ghostGeoJSON = layer.toGeoJSON();
-                ghostGeoJSON.properties.is_ghost = true; // Mark it so we don't loop forever
+                ghostGeoJSON.properties.is_ghost = true;
 
                 layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
                     style: {
                         color: "transparent",
                         fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
-                        fillOpacity: 0, // Initial
+                        fillOpacity: 0,
                         interactive: false
                     }
                 });
 
-                // Add to the Accordion FeatureGroup we found in Step 2.5
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
+
+                    // 🛠 NEW: If the accordion group is currently HIDDEN,
+                    // make sure the new ghost starts hidden too.
+                    if (!activeMap.hasLayer(targetGroup)) {
+                        // Some Leaflet versions need a manual remove if the parent is off
+                        activeMap.removeLayer(layer[ghostKey]);
+                    }
                 } else {
                     layer[ghostKey].addTo(activeMap);
                 }
