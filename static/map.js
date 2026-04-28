@@ -599,102 +599,69 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-      const rawId = region_id;
-      const cleanId = String(region_id).trim();
+    const cleanId = String(region_id).trim();
 
-      console.group(`🕵️‍♂️ [DEBUG SESSION] Walk: ${cleanId}`);
+    // 1. Retrieval
+    const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
+    const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
+    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.parent && window.parent.BAKED_DATA);
 
-      // 1. Trace the Libraries
-      const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
-      const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
+    // 2. Focused Matching
+    let bakedData = null;
+    let dataFoundSuccess = false;
 
-      // 2. Trace the Data Store
-      const localData = window.BAKED_DATA;
-      const parentData = parent.BAKED_DATA;
-      const grandparentData = (window.parent && window.parent.BAKED_DATA);
-      const fullData = localData || parentData || grandparentData;
-
-      console.log("📍 Search Context:", {
-          id_passed: rawId,
-          id_cleaned: cleanId,
-          map_found: !!activeMap,
-          leaflet_found: !!Leaflet,
-          data_locations: {
-              local: !!localData,
-              parent: !!parentData,
-              grandparent: !!grandparentData
-          }
-      });
-
-      // 3. Inspect Data Keys if fullData exists
-      let bakedData = null;
-      if (fullData) {
-          console.log("🔑 Available Keys in BAKED_DATA:", Object.keys(fullData));
-
-          // Exact Match
-          bakedData = fullData[cleanId];
-          if (bakedData) {
-              console.log("✅ Exact match found.");
-          } else {
-              // Fuzzy Match
-              console.log("🔍 Exact match failed. Attempting fuzzy match...");
-              const fuzzyKey = Object.keys(fullData).find(k => k.trim().toUpperCase() === cleanId.toUpperCase());
-              if (fuzzyKey) {
-                  bakedData = fullData[fuzzyKey];
-                  console.log(`🎯 Fuzzy match success! Found via key: "${fuzzyKey}"`);
-              } else {
-                  console.error("❌ Fuzzy match failed. No key matches the requested ID.");
-              }
-          }
-      } else {
-          console.error("🚫 BAKED_DATA is undefined in all searched scopes.");
-      }
-
-      console.groupEnd();
-
-      // 4. Hard Guard
-      if (!activeMap || !Leaflet || !bakedData) {
-          console.error("❌ [STOP] Component Failure:", {
-              Map: !!activeMap,
-              Leaflet: !!Leaflet,
-              Data: !!bakedData,
-              Requested: cleanId
-          });
-          return;
-      }
-
-      // ... Proceed to Step 1, 2, 3 ...
-
-    // --- STEP 1: TABLE UI SYNC ---
-    const allRows = Array.from(document.querySelectorAll('.canvass-row'))
-        .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
-
-    allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId).forEach(row => {
-        const streetData = bakedData[row.getAttribute('data-street')];
-        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
-        if (tagSpan && streetData) {
-            const isDone = Object.values(streetData).some(u => u?.tags?.[targetTag] === 'y');
-            tagSpan.className = isDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
-            tagSpan.innerText = isDone ? 'y' : 'n';
+    if (fullData) {
+        // Direct Check
+        if (fullData[cleanId]) {
+            bakedData = fullData[cleanId];
+            dataFoundSuccess = true;
+            console.log(`✅ [SUCCESS] Data found for ${cleanId}`);
+        } else {
+            // Fuzzy Check
+            const fuzzyKey = Object.keys(fullData).find(k => k.trim() === cleanId);
+            if (fuzzyKey) {
+                bakedData = fullData[fuzzyKey];
+                dataFoundSuccess = true;
+                console.log(`🎯 [SUCCESS] Fuzzy data found via key: ${fuzzyKey}`);
+            }
         }
-    });
+    }
+
+    // 3. THE FIXED GUARD: Use the boolean, not the object itself
+    if (!activeMap || !Leaflet || !dataFoundSuccess) {
+        console.error("❌ [STOP] Component Failure:", {
+            Map: !!activeMap,
+            Leaflet: !!Leaflet,
+            Data: dataFoundSuccess,
+            Id: cleanId
+        });
+        return;
+    }
 
     // --- STEP 2: MATH ---
+    // If the error was happening because bakedData was an empty object {},
+    // the math below will now safely handle it.
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
+    // Get expected houses from map layer
     activeMap.eachLayer(l => {
         if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
             totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
         }
     });
 
+    // Calculate completed based on weights
     Object.values(bakedData).forEach(streetInfo => {
-        if (streetInfo && typeof streetInfo === 'object') {
+        if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
             const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
             if (isStreetFinished) completedHouses += (streetInfo.street_weight || 0);
         }
     });
+
+    console.log(`📊 Math Check: ${completedHouses} / ${totalPossibleHouses}`);
+
+    // ... Proceed to Step 2.5 (Find Group) and Step 3 (Map Visuals) ...
 
     // --- STEP 2.5: FIND ACCORDION GROUP ---
     let targetGroup = null;
