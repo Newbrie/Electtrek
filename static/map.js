@@ -599,48 +599,36 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-      const cleanId = String(region_id).trim();
-      const activeMap = window.fmap || parent.fmap;
-      const Leaflet = window.L || parent.L;
+    const cleanId = String(region_id).trim();
 
-      // 1. Grab the WHOLE data object from wherever it lives
-      const fullData = window.BAKED_DATA || parent.BAKED_DATA;
+    // 1. Aggressive Retrieval (Checks window, then parent, then parent's parent)
+    const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
+    const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
+    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.parent && window.parent.BAKED_DATA);
 
-      // 2. Debug: What keys actually exist?
-      if (fullData) {
-          console.log("🔑 Available IDs in BAKED_DATA:", Object.keys(fullData));
-      } else {
-          console.error("🚫 CRITICAL: BAKED_DATA is missing entirely from window and parent!");
-      }
+    // Fuzzy Matcher to handle any hidden spaces or case issues
+    let bakedData = fullData ? fullData[cleanId] : null;
+    if (fullData && !bakedData) {
+        const fuzzyKey = Object.keys(fullData).find(k => k.trim().toUpperCase() === cleanId.toUpperCase());
+        if (fuzzyKey) bakedData = fullData[fuzzyKey];
+    }
 
-      const bakedData = fullData ? fullData[cleanId] : null;
+    if (!activeMap || !Leaflet || !bakedData) {
+        console.error("❌ [STOP] Component Failure:", { Map: !!activeMap, Leaflet: !!Leaflet, Data: !!bakedData });
+        return;
+    }
 
-      console.log(`🔍 [START] Region: "${cleanId}" | Tag: ${targetTag}`);
-
-      if (!activeMap || !Leaflet || !bakedData) {
-          console.error("❌ [STOP] Missing core components:", {
-              activeMap: !!activeMap,
-              Leaflet: !!Leaflet,
-              bakedData: !!bakedData,
-              requestedId: cleanId
-          });
-          return;
-      }
-      // ... rest of function ...
-    // --- STEP 1: UI SYNC ---
+    // --- STEP 1: TABLE UI SYNC ---
     const allRows = Array.from(document.querySelectorAll('.canvass-row'))
         .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
-    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetData = bakedData[streetName];
+    allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId).forEach(row => {
+        const streetData = bakedData[row.getAttribute('data-street')];
         const tagSpan = row.querySelector('.tag-inactive, .tag-active');
-
         if (tagSpan && streetData) {
-            const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.[targetTag] === 'y');
-            tagSpan.className = isAnyHouseDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
-            tagSpan.innerText = isAnyHouseDone ? 'y' : 'n';
+            const isDone = Object.values(streetData).some(u => u?.tags?.[targetTag] === 'y');
+            tagSpan.className = isDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
+            tagSpan.innerText = isDone ? 'y' : 'n';
         }
     });
 
@@ -654,88 +642,54 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
-    Object.keys(bakedData).forEach(streetName => {
-        const streetInfo = bakedData[streetName];
+    Object.values(bakedData).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object') {
-            const weight = streetInfo.street_weight || 0;
-            const isStreetFinished = Object.values(streetInfo).some(unit =>
-                unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
-            );
-            if (isStreetFinished) completedHouses += weight;
+            const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
+            if (isStreetFinished) completedHouses += (streetInfo.street_weight || 0);
         }
     });
 
-    console.log(`📊 [MATH] ${cleanId} (${targetTag}): ${completedHouses}/${totalPossibleHouses}`);
-
-    // --- STEP 2.5: FIND GROUP ---
+    // --- STEP 2.5: FIND ACCORDION GROUP ---
     let targetGroup = null;
     activeMap.eachLayer(l => {
-        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
-            targetGroup = l;
-        }
+        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) targetGroup = l;
     });
 
-    if (targetGroup) {
-        console.log(`📁 [GROUP] Found matching layer group: "${targetGroup.options.name}"`);
-    } else {
-        console.warn(`⚠️ [GROUP] No group found for [${targetTag}]. Filtering will fail.`);
-    }
-
-    // --- STEP 3: UPDATE VISUALS ---
+    // --- STEP 3: MAP VISUALS ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    const pctInt = Math.round(deliveryPct * 100);
     const progressOpacity = 0.8 * deliveryPct;
 
     activeMap.eachLayer(layer => {
         if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
-
             const ghostKey = `_ghost_${targetTag}`;
 
-            // Create Ghost if missing
+            // Create Ghost
             if (!layer[ghostKey]) {
-                console.log(`👻 [CREATE] Generating new ghost for ${cleanId} on tag ${targetTag}`);
                 const ghostGeoJSON = layer.toGeoJSON();
                 ghostGeoJSON.properties.is_ghost = true;
-
                 layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
+                    style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
                 });
 
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
-                    console.log(`➕ [MEMBERSHIP] Added ghost to Group: ${targetGroup.options.name}`);
-
-                    // Force state sync
-                    if (!activeMap.hasLayer(targetGroup)) {
-                        console.log("🙈 [STATE] Group is hidden. Removing ghost from view.");
-                        activeMap.removeLayer(layer[ghostKey]);
-                    }
+                    // Filter Check: If the group is unticked, don't show the ghost
+                    if (!activeMap.hasLayer(targetGroup)) activeMap.removeLayer(layer[ghostKey]);
                 } else {
                     layer[ghostKey].addTo(activeMap);
-                    console.log("🗺️ [MEMBERSHIP] No group. Added ghost to global map.");
                 }
             }
 
             // Update Opacity
-            console.log(`🎨 [STYLE] Updating ${ghostKey} opacity to ${progressOpacity.toFixed(2)}`);
             layer[ghostKey].setStyle({ fillOpacity: progressOpacity });
 
             // Tooltip Update
             if (layer.getTooltip()) {
-                if (!layer.feature.properties.original_tooltip) {
-                    layer.feature.properties.original_tooltip = layer.getTooltip().getContent();
-                }
-                const baseText = layer.feature.properties.original_tooltip;
-                layer.setTooltipContent(`${baseText}<br><span style="color:#007bff; font-weight:bold;">${targetTag}: ${pctInt}%</span>`);
+                if (!layer.feature.properties.orig_tip) layer.feature.properties.orig_tip = layer.getTooltip().getContent();
+                layer.setTooltipContent(`${layer.feature.properties.orig_tip}<br><span style="color:#007bff; font-weight:bold;">${targetTag}: ${Math.round(deliveryPct * 100)}%</span>`);
             }
         }
     });
-    console.log("🏁 [END] Visual update complete.");
 };
 
 window.incrementVoteCount = function(btn) {
