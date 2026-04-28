@@ -599,24 +599,71 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    const cleanId = String(region_id).trim();
+      const rawId = region_id;
+      const cleanId = String(region_id).trim();
 
-    // 1. Aggressive Retrieval (Checks window, then parent, then parent's parent)
-    const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
-    const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
-    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.parent && window.parent.BAKED_DATA);
+      console.group(`🕵️‍♂️ [DEBUG SESSION] Walk: ${cleanId}`);
 
-    // Fuzzy Matcher to handle any hidden spaces or case issues
-    let bakedData = fullData ? fullData[cleanId] : null;
-    if (fullData && !bakedData) {
-        const fuzzyKey = Object.keys(fullData).find(k => k.trim().toUpperCase() === cleanId.toUpperCase());
-        if (fuzzyKey) bakedData = fullData[fuzzyKey];
-    }
+      // 1. Trace the Libraries
+      const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
+      const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
 
-    if (!activeMap || !Leaflet || !bakedData) {
-        console.error("❌ [STOP] Component Failure:", { Map: !!activeMap, Leaflet: !!Leaflet, Data: !!bakedData });
-        return;
-    }
+      // 2. Trace the Data Store
+      const localData = window.BAKED_DATA;
+      const parentData = parent.BAKED_DATA;
+      const grandparentData = (window.parent && window.parent.BAKED_DATA);
+      const fullData = localData || parentData || grandparentData;
+
+      console.log("📍 Search Context:", {
+          id_passed: rawId,
+          id_cleaned: cleanId,
+          map_found: !!activeMap,
+          leaflet_found: !!Leaflet,
+          data_locations: {
+              local: !!localData,
+              parent: !!parentData,
+              grandparent: !!grandparentData
+          }
+      });
+
+      // 3. Inspect Data Keys if fullData exists
+      let bakedData = null;
+      if (fullData) {
+          console.log("🔑 Available Keys in BAKED_DATA:", Object.keys(fullData));
+
+          // Exact Match
+          bakedData = fullData[cleanId];
+          if (bakedData) {
+              console.log("✅ Exact match found.");
+          } else {
+              // Fuzzy Match
+              console.log("🔍 Exact match failed. Attempting fuzzy match...");
+              const fuzzyKey = Object.keys(fullData).find(k => k.trim().toUpperCase() === cleanId.toUpperCase());
+              if (fuzzyKey) {
+                  bakedData = fullData[fuzzyKey];
+                  console.log(`🎯 Fuzzy match success! Found via key: "${fuzzyKey}"`);
+              } else {
+                  console.error("❌ Fuzzy match failed. No key matches the requested ID.");
+              }
+          }
+      } else {
+          console.error("🚫 BAKED_DATA is undefined in all searched scopes.");
+      }
+
+      console.groupEnd();
+
+      // 4. Hard Guard
+      if (!activeMap || !Leaflet || !bakedData) {
+          console.error("❌ [STOP] Component Failure:", {
+              Map: !!activeMap,
+              Leaflet: !!Leaflet,
+              Data: !!bakedData,
+              Requested: cleanId
+          });
+          return;
+      }
+
+      // ... Proceed to Step 1, 2, 3 ...
 
     // --- STEP 1: TABLE UI SYNC ---
     const allRows = Array.from(document.querySelectorAll('.canvass-row'))
