@@ -599,18 +599,34 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    const cleanId = String(region_id).trim();
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
-    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
+      const cleanId = String(region_id).trim();
+      const activeMap = window.fmap || parent.fmap;
+      const Leaflet = window.L || parent.L;
 
-    console.log(`🔍 [START] Region: ${cleanId} | Tag: ${targetTag}`);
+      // 1. Grab the WHOLE data object from wherever it lives
+      const fullData = window.BAKED_DATA || parent.BAKED_DATA;
 
-    if (!activeMap || !Leaflet || !bakedData) {
-        console.error("❌ [STOP] Missing core components:", { activeMap: !!activeMap, Leaflet: !!Leaflet, bakedData: !!bakedData });
-        return;
-    }
+      // 2. Debug: What keys actually exist?
+      if (fullData) {
+          console.log("🔑 Available IDs in BAKED_DATA:", Object.keys(fullData));
+      } else {
+          console.error("🚫 CRITICAL: BAKED_DATA is missing entirely from window and parent!");
+      }
 
+      const bakedData = fullData ? fullData[cleanId] : null;
+
+      console.log(`🔍 [START] Region: "${cleanId}" | Tag: ${targetTag}`);
+
+      if (!activeMap || !Leaflet || !bakedData) {
+          console.error("❌ [STOP] Missing core components:", {
+              activeMap: !!activeMap,
+              Leaflet: !!Leaflet,
+              bakedData: !!bakedData,
+              requestedId: cleanId
+          });
+          return;
+      }
+      // ... rest of function ...
     // --- STEP 1: UI SYNC ---
     const allRows = Array.from(document.querySelectorAll('.canvass-row'))
         .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
