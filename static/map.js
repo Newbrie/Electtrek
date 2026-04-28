@@ -618,10 +618,6 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     return;
     }
 
-    if (!bakedData) {
-    console.warn(`⚠️ No data for region ${cleanId} — treating as 0% complete.`);
-    }
-
 
     // --- STEP 2: MATH & DENOMINATOR FIX ---
     let completedHouses = 0;
@@ -638,12 +634,32 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
+    if (!fullData) {
+        console.error("❌ No BAKED_DATA container available");
+        return;
+    }
+
+    // Ensure region bucket exists
+    if (!fullData[cleanId]) {
+        console.warn(`🆕 Initializing data for new region ${cleanId}`);
+
+        fullData[cleanId] = {}; // create empty region
+    }
+
+    const bakedData = fullData[cleanId];
+
+    // Now ALWAYS run the same logic
     Object.values(bakedData).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
-            const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
-            if (isStreetFinished) completedHouses += (streetInfo.street_weight || 0);
+            const isStreetFinished = Object.values(streetInfo)
+                .some(u => u?.tags?.[targetTag] === 'y');
+
+            if (isStreetFinished) {
+                completedHouses += (streetInfo.street_weight || 0);
+            }
         }
     });
+
 
     // 🔑 THE MISSING LINE: Calculate the percentage variable
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
