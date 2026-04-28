@@ -597,132 +597,68 @@ window.updateMarkerStatus = function(region_id) {
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
-
-    // 1. REACH UP: Try every possible window level for Leaflet and Map
     const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
     const Leaflet = window.L || parent.L || (window.top && window.top.L);
-    const fullData = getBakedData()
+    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
 
-    // 2. THE GUARD
-    if (!activeMap || !Leaflet) {
-    console.error("❌ [STOP] Core Failure:", {
-        Leaflet: !!Leaflet,
-        Map: !!activeMap
-        });
-    return;
-    }
+    // --- DEBUG: WHAT IS ACTUALLY ON THE MAP? ---
+    console.group("🔍 Layer Name Investigation");
+    const foundNames = [];
+    activeMap.eachLayer(l => {
+        if (l.options && (l.options.name || l.options.label)) {
+            foundNames.push(`"${l.options.name || l.options.label}"`);
+        }
+    });
+    console.log("Registered Group Names:", foundNames);
+    console.log("Looking for Tag:", `[${targetTag}]`);
+    console.groupEnd();
 
+    // --- REST OF THE LOGIC ---
+    let bakedData = fullData ? fullData[cleanId] : null;
+    if (!activeMap || !Leaflet || !bakedData) return;
 
-
-
-    if (!fullData) {
-        console.error("❌ No BAKED_DATA container available");
-        return;
-    }
-
-    // Ensure region bucket exists
-    if (!fullData[cleanId]) {
-        console.warn(`🆕 Initializing data for new region ${cleanId}`);
-
-        fullData[cleanId] = {}; // create empty region
-    }
-
-
-    // --- STEP 2: MATH & DENOMINATOR FIX ---
+    // STEP 2: MATH
     let completedHouses = 0;
     let totalPossibleHouses = 0;
-
     activeMap.eachLayer(l => {
-        if (l.feature && l.feature.properties) {
-            const props = l.feature.properties;
-            const featId = String(props.region_id || "").trim();
-
-            if (featId === cleanId && !props.is_ghost) {
-                totalPossibleHouses = parseInt(props.expected_houses) || 0;
-            }
+        if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
+            totalPossibleHouses = parseInt(l.feature.properties.expected_houses || 0);
         }
     });
 
-
-    // Now ALWAYS run the same logic
-    Object.values(fullData[cleanId]).forEach(streetInfo => {
-        if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
-            const isStreetFinished = Object.values(streetInfo)
-                .some(u => u?.tags?.[targetTag] === 'y');
-
-            if (isStreetFinished) {
-                completedHouses += (streetInfo.street_weight || 0);
-            }
+    Object.values(bakedData).forEach(s => {
+        if (s && typeof s === 'object' && s.street_weight) {
+            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) completedHouses += s.street_weight;
         }
     });
 
-
-    // 🔑 THE MISSING LINE: Calculate the percentage variable
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses} (${Math.round(pct * 100)}%)`);
+    // STEP 2.5: THE SEARCH THAT FAILED
+    let targetGroup = null;
+    activeMap.eachLayer(l => {
+        const n = l.options?.name || l.options?.label || "";
+        if (n.includes(`[${targetTag}]`)) targetGroup = l;
+    });
 
-    // --- STEP 2.5: ROBUST GROUP FINDER ---
-      let targetGroup = null;
-      activeMap.eachLayer(l => {
-          // Look for the specific progress group (e.g., "[L1]")
-          if (l.options && l.options.name && l.options.name.includes(`[${targetTag}]`)) {
-              targetGroup = l;
-          }
-      });
+    // STEP 3: APPLY
+    activeMap.eachLayer(layer => {
+        if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
+            const ghostKey = `_ghost_${targetTag}`;
+            if (!layer[ghostKey]) {
+                layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
+                    style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
+                });
 
-      if (!targetGroup) {
-          console.warn(`⚠️ Group "[${targetTag}]" not found. Ghosts will be added to the map root.`);
-      }
-
-      // --- STEP 3: GHOST CREATION & PANE SYNC ---
-      activeMap.eachLayer(layer => {
-          if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
-
-              const ghostKey = `_ghost_${targetTag}`;
-
-              if (!layer[ghostKey]) {
-                  const ghostGeoJSON = layer.toGeoJSON();
-                  ghostGeoJSON.properties.is_ghost = true;
-
-                  // Create the ghost with a high z-index pane if needed
-                  layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
-                      style: {
-                          color: "transparent",
-                          fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
-                          fillOpacity: 0, // Start invisible
-                          interactive: false
-                      }
-                  });
-
-                  // Attach to Group or Map
-                  if (targetGroup) {
-                      layer[ghostKey].addTo(targetGroup);
-                  } else {
-                      layer[ghostKey].addTo(activeMap);
-                  }
-              }
-
-              // 🔑 THE RE-APPEARANCE FIX:
-              // If the group is active, ensure the ghost is actually on the map.
-              // If the group is hidden, Leaflet handles the group children,
-              // but we add a safety check here.
-              if (targetGroup && activeMap.hasLayer(targetGroup)) {
-                  if (!activeMap.hasLayer(layer[ghostKey])) {
-                      layer[ghostKey].addTo(targetGroup);
-                  }
-              }
-
-              // Update Opacity - ensure it's not effectively 0
-              const finalOpacity = 0.8 * pct;
-              console.log(`👻 Ghost ${cleanId} opacity setting:`, finalOpacity);
-
-              layer[ghostKey].setStyle({
-                  fillOpacity: finalOpacity,
-                  fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080"
-              });
-          }
-      });
+                if (targetGroup) {
+                    layer[ghostKey].addTo(targetGroup);
+                } else {
+                    layer[ghostKey].addTo(activeMap);
+                }
+            }
+            layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
+        }
+    });
 };
 
 window.incrementVoteCount = function(btn) {
