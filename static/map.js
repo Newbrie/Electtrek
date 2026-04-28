@@ -601,42 +601,45 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
 
-    // 1. Aggressive Context Retrieval
-    // We prioritize the 'parent' because that's usually where the Map and Leaflet live
-    const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
-    const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
-    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.parent && window.parent.BAKED_DATA);
+    // 1. REACH UP: Try every possible window level for Leaflet and Map
+    const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
+    const Leaflet = window.L || parent.L || (window.top && window.top.L);
+    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
 
     let bakedData = fullData ? fullData[cleanId] : null;
     let dataFoundSuccess = !!bakedData;
 
-    // 2. THE GUARD (Now more flexible)
+    // 2. THE GUARD
     if (!activeMap || !Leaflet || !dataFoundSuccess) {
         console.error("❌ [STOP] Component Failure:", {
-            Leaflet: !!Leaflet,
+            Leaflet: !!Leaflet, // If this is still false, the script can't find L
             Map: !!activeMap,
             Data: dataFoundSuccess
         });
         return;
     }
 
-    // --- STEP 2: MATH ---
+    // --- STEP 2: MATH & DENOMINATOR FIX ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
-    // DENOMINATOR: Look through the map layers
+    console.log(`🔎 Searching map layers for region_id: "${cleanId}"`);
+
     activeMap.eachLayer(l => {
-        // We look for the original boundary (not a ghost)
+        // We only care about layers that have feature properties
         if (l.feature && l.feature.properties) {
-            const featId = String(l.feature.properties.region_id).trim();
-            if (featId === cleanId && !l.feature.properties.is_ghost) {
-                totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
-                console.log(`📐 Found Master Boundary. Expected: ${totalPossibleHouses}`);
+            const props = l.feature.properties;
+            const featId = String(props.region_id || "").trim();
+
+            // Check if this is our master boundary (not a ghost)
+            if (featId === cleanId && !props.is_ghost) {
+                totalPossibleHouses = parseInt(props.expected_houses) || 0;
+                console.log(`📐 FOUND MATCH: ID=${featId}, Expected=${totalPossibleHouses}`);
             }
         }
     });
 
-    // NUMERATOR: Weights from Data
+    // Calculate Numerator
     Object.values(bakedData).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
             const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
@@ -645,11 +648,10 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     });
 
     console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses}`);
-
     if (totalPossibleHouses === 0) {
         console.warn("⚠️ Math Error: Denominator is 0. Is 'expected_houses' set in the GeoJSON?");
     }
-  
+
     // ... Proceed to Step 2.5 (Find Group) and Step 3 (Map Visuals) ...
 
     // --- STEP 2.5: FIND ACCORDION GROUP ---
