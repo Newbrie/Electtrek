@@ -610,14 +610,18 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     let dataFoundSuccess = !!bakedData;
 
     // 2. THE GUARD
-    if (!activeMap || !Leaflet || !dataFoundSuccess) {
-        console.error("❌ [STOP] Component Failure:", {
-            Leaflet: !!Leaflet,
-            Map: !!activeMap,
-            Data: dataFoundSuccess
+    if (!activeMap || !Leaflet) {
+    console.error("❌ [STOP] Core Failure:", {
+        Leaflet: !!Leaflet,
+        Map: !!activeMap
         });
-        return;
+    return;
     }
+
+    if (!bakedData) {
+    console.warn(`⚠️ No data for region ${cleanId} — treating as 0% complete.`);
+    }
+
 
     // --- STEP 2: MATH & DENOMINATOR FIX ---
     let completedHouses = 0;
@@ -646,47 +650,67 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses} (${Math.round(pct * 100)}%)`);
 
-    // --- STEP 2.5: FIND ACCORDION GROUP ---
-    let targetGroup = null;
-    activeMap.eachLayer(l => {
-        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
-            targetGroup = l;
-        }
-    });
+    // --- STEP 2.5: ROBUST GROUP FINDER ---
+      let targetGroup = null;
+      activeMap.eachLayer(l => {
+          // Look for the specific progress group (e.g., "[L1]")
+          if (l.options && l.options.name && l.options.name.includes(`[${targetTag}]`)) {
+              targetGroup = l;
+          }
+      });
 
-    // --- STEP 3: CREATE OR UPDATE GHOST ---
-    activeMap.eachLayer(layer => {
-        if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
+      if (!targetGroup) {
+          console.warn(`⚠️ Group "[${targetTag}]" not found. Ghosts will be added to the map root.`);
+      }
 
-            const ghostKey = `_ghost_${targetTag}`;
+      // --- STEP 3: GHOST CREATION & PANE SYNC ---
+      activeMap.eachLayer(layer => {
+          if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
 
-            if (!layer[ghostKey]) {
-                const ghostGeoJSON = layer.toGeoJSON();
-                ghostGeoJSON.properties.is_ghost = true;
+              const ghostKey = `_ghost_${targetTag}`;
 
-                layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
-                });
+              if (!layer[ghostKey]) {
+                  const ghostGeoJSON = layer.toGeoJSON();
+                  ghostGeoJSON.properties.is_ghost = true;
 
-                if (targetGroup) {
-                    layer[ghostKey].addTo(targetGroup);
-                    if (!activeMap.hasLayer(targetGroup)) {
-                        activeMap.removeLayer(layer[ghostKey]);
-                    }
-                } else {
-                    layer[ghostKey].addTo(activeMap);
-                }
-            }
+                  // Create the ghost with a high z-index pane if needed
+                  layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
+                      style: {
+                          color: "transparent",
+                          fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
+                          fillOpacity: 0, // Start invisible
+                          interactive: false
+                      }
+                  });
 
-            // Apply the calculated opacity (pct is now defined!)
-            layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
-        }
-    });
+                  // Attach to Group or Map
+                  if (targetGroup) {
+                      layer[ghostKey].addTo(targetGroup);
+                  } else {
+                      layer[ghostKey].addTo(activeMap);
+                  }
+              }
+
+              // 🔑 THE RE-APPEARANCE FIX:
+              // If the group is active, ensure the ghost is actually on the map.
+              // If the group is hidden, Leaflet handles the group children,
+              // but we add a safety check here.
+              if (targetGroup && activeMap.hasLayer(targetGroup)) {
+                  if (!activeMap.hasLayer(layer[ghostKey])) {
+                      layer[ghostKey].addTo(targetGroup);
+                  }
+              }
+
+              // Update Opacity - ensure it's not effectively 0
+              const finalOpacity = 0.8 * pct;
+              console.log(`👻 Ghost ${cleanId} opacity setting:`, finalOpacity);
+
+              layer[ghostKey].setStyle({
+                  fillOpacity: finalOpacity,
+                  fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080"
+              });
+          }
+      });
 };
 
 window.incrementVoteCount = function(btn) {
