@@ -12,14 +12,14 @@ function createStandaloneHTML() {
     // 2. Data Preparation
     // We pull the current election data that was loaded from CE.calendar_plan
     // Assuming your JS variable is named 'currentElection' or similar
-    const bakedDataStr = JSON.stringify(window.BAKED_DATA || {});
+    const bakedDataStr = JSON.stringify(currentData || {});
     const calendarPlanStr = JSON.stringify(window.currentElection?.calendar_plan || []);
 
     // 3. The Injection String
     const dataInjection = `
     <script>
         // This simulates the CE.calendar_plan from your Python object
-        window.BAKED_DATA = ${bakedDataStr};
+        currentData = ${bakedDataStr};
         window.currentElection = {
             calendar_plan: ${calendarPlanStr}
         };

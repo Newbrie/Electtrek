@@ -68,7 +68,7 @@ var showMore = function (msg,area, type) {
 
 // --- MOVE THESE TO MAP.JS ---
 
-var BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
+window.BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
 
 /* --- Top of map.js --- */
 /* --- Top of map.js --- */
@@ -141,16 +141,16 @@ const addMapLogo = (map) => {
                   });
                   // Inside your findMap() success block:
                   fmap.invalidateSize();
-                  const data = window.BAKED_DATA || parent.BAKED_DATA;
+                  const currentData = getBakedData()
                   const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
                   const tagCodes = Object.keys(tagRegistry);
 
-                  if (data) {
+                  if (currentData) {
                       console.log("🎯 Map found! Initializing all region visuals for all tags...");
                       addMapLogo(fmap);
 
                       // Iterate through every Walk/Region in your data
-                      Object.keys(data).forEach(region_id => {
+                      Object.keys(currentData).forEach(region_id => {
 
                           // Check if we have multiple tags to initialize
                           if (tagCodes.length > 0) {
@@ -385,15 +385,15 @@ window.updateRowAppearance = function(row, count, max) {
 
 window.updateElectorTag = function(walk, street, unit, code, isActive) {
     // 1. Get the data source (check parent if local is empty)
-    const data = (parent && parent.BAKED_DATA) ? parent.BAKED_DATA : window.BAKED_DATA;
+    const currentData = getBakedData()
 
-    if (!data) return;
+    if (!currentData) return;
 
     // 2. Ensure the Walk > Street > Unit path exists
-    if (!data[walk]) data[walk] = {};
-    if (!data[walk][street]) data[walk][street] = {};
-    if (!data[walk][street][unit]) {
-        data[walk][street][unit] = {
+    if (!currentData[walk]) currentData[walk] = {};
+    if (!currentData[walk][street]) currentData[walk][street] = {};
+    if (!currentData[walk][street][unit]) {
+        currentData[walk][street][unit] = {
             vi: "U",
             votes: "0",
             tags: "",
@@ -402,7 +402,7 @@ window.updateElectorTag = function(walk, street, unit, code, isActive) {
     }
 
     // 3. Process the tags
-    let currentTags = data[walk][street][unit].tags || "";
+    let currentTags = currentData[walk][street][unit].tags || "";
     let tagList = currentTags.split(',').filter(t => t.trim() !== "");
 
     if (isActive) {
@@ -412,10 +412,10 @@ window.updateElectorTag = function(walk, street, unit, code, isActive) {
     }
 
     // 4. Save back and log
-    data[walk][street][unit].tags = tagList.join(',');
-    data[walk][street][unit].ts = Date.now(); // Update timestamp
+    currentData[walk][street][unit].tags = tagList.join(',');
+    currentData[walk][street][unit].ts = Date.now(); // Update timestamp
 
-    console.log(`✅ Updated ${walk} > ${street} [${unit}] tags: ${data[walk][street][unit].tags}`);
+    console.log(`✅ Updated ${walk} > ${street} [${unit}] tags: ${currentData[walk][street][unit].tags}`);
 };
 
 window.updateTagToggles = function(selector) {
@@ -423,12 +423,13 @@ window.updateTagToggles = function(selector) {
     var walk = row.getAttribute('data-walk'); // Grab the Walk ID from the HTML
     var street = row.getAttribute('data-street');
     var house = selector.value;
+    currentData = getBakedData()
 
     // Navigate the 3-tier hierarchy: Walk -> Street -> House
-    var houseData = (window.BAKED_DATA[walk] &&
-                     window.BAKED_DATA[walk][street] &&
-                     window.BAKED_DATA[walk][street][house])
-                     ? window.BAKED_DATA[walk][street][house]
+    var houseData = (currentData[walk] &&
+                     currentData[walk][street] &&
+                     currentData[walk][street][house])
+                     ? currentData[walk][street][house]
                      : null;
 
     var tags = (houseData && houseData.tags) ? houseData.tags : {};
@@ -455,6 +456,7 @@ window.handleTagClick = function(span) {
     var isInactive = span.classList.contains('tag-inactive');
     var newValue = isInactive ? 'y' : 'n';
     var code = span.getAttribute('data-code');
+    currentData = getBakedData()
 
     // 2. Visual Toggle
     if (isInactive) {
@@ -477,16 +479,16 @@ window.handleTagClick = function(span) {
     var streetWeight = parseInt(row.cells[1].innerText) || 0;
 
     // 4. Ensure Hierarchy & Store Street-Level Metadata
-    if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
-    if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
+    if (!currentData[walk]) currentData[walk] = {};
+    if (!currentData[walk][street]) currentData[walk][street] = {};
 
     // Store the weight at the street level so math works even when popup is closed
-    BAKED_DATA[walk][street].street_weight = streetWeight;
+    currentData[walk][street].street_weight = streetWeight;
 
     // 5. Update Storage based on Value
     if (newValue === 'n') {
         // GLOBAL WIPE: If setting to 'n', remove 'y' from ALL houses on this street
-        const streetObject = BAKED_DATA[walk][street];
+        const streetObject = currentData[walk][street];
         Object.keys(streetObject).forEach(key => {
             // Only target house objects, skip the 'street_weight' or 'ts' keys
             if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
@@ -496,19 +498,19 @@ window.handleTagClick = function(span) {
         console.log(`🚫 Street ${street} wiped to 'n'`);
     } else {
         // SPECIFIC SET: If setting to 'y', ensure current house exists and tag it
-        if (!BAKED_DATA[walk][street][house]) {
-            BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
+        if (!currentData[walk][street][house]) {
+            currentData[walk][street][house] = { votes: "0", tags: {} };
         }
-        if (!BAKED_DATA[walk][street][house].tags) {
-            BAKED_DATA[walk][street][house].tags = {};
+        if (!currentData[walk][street][house].tags) {
+            currentData[walk][street][house].tags = {};
         }
 
-        BAKED_DATA[walk][street][house].tags[code] = 'y';
+        currentData[walk][street][house].tags[code] = 'y';
         console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
     }
 
     // 6. Global Metadata
-        BAKED_DATA[walk][street].ts = Date.now();
+        currentData[walk][street].ts = Date.now();
 
         // ⚡️ TRIGGER: Recalculate
         // We pass both the 'walk' (region_id) and the 'code' (tag key like L1, M1)
@@ -557,12 +559,7 @@ window.updateMarkerStatus = function(region_id) {
         return;
     }
 
-    // B. Count how many unique houses in BAKED_DATA have votes
-    if (window.BAKED_DATA[region_id]) {
-        Object.values(window.BAKED_DATA[region_id]).forEach(unit => {
-            if (parseInt(unit.votes) > 0) completedUnits++;
-        });
-    }
+
     // C. Determine Color logic
     // Green: All houses have at least 1 vote
     // Yellow: Some houses have votes
@@ -604,10 +601,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     // 1. REACH UP: Try every possible window level for Leaflet and Map
     const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
     const Leaflet = window.L || parent.L || (window.top && window.top.L);
-    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
-
-    let bakedData = fullData ? fullData[cleanId] : null;
-    let dataFoundSuccess = !!bakedData;
+    const fullData = getBakedData()
 
     // 2. THE GUARD
     if (!activeMap || !Leaflet) {
@@ -616,6 +610,21 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         Map: !!activeMap
         });
     return;
+    }
+
+
+
+
+    if (!fullData) {
+        console.error("❌ No BAKED_DATA container available");
+        return;
+    }
+
+    // Ensure region bucket exists
+    if (!fullData[cleanId]) {
+        console.warn(`🆕 Initializing data for new region ${cleanId}`);
+
+        fullData[cleanId] = {}; // create empty region
     }
 
 
@@ -634,22 +643,9 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
-    if (!fullData) {
-        console.error("❌ No BAKED_DATA container available");
-        return;
-    }
-
-    // Ensure region bucket exists
-    if (!fullData[cleanId]) {
-        console.warn(`🆕 Initializing data for new region ${cleanId}`);
-
-        fullData[cleanId] = {}; // create empty region
-    }
-
-    const bakedData = fullData[cleanId];
 
     // Now ALWAYS run the same logic
-    Object.values(bakedData).forEach(streetInfo => {
+    Object.values(fullData[cleanId]).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
             const isStreetFinished = Object.values(streetInfo)
                 .some(u => u?.tags?.[targetTag] === 'y');
@@ -733,6 +729,7 @@ window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
+    currentData = getBakedData()
 
     // Cycle count: 0 -> 1 -> 2 -> 0
     count = (count + 1) > max ? 0 : count + 1;
@@ -754,14 +751,14 @@ window.incrementVoteCount = function(btn) {
             var vi = viSelector ? viSelector.value : "";
 
             // 2. Ensure the 3-tier hierarchy exists in memory
-            if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
-            if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
+            if (!currentData[walk]) currentData[walk] = {};
+            if (!currentData[walk][street]) currentData[walk][street] = {};
 
             // 3. Update the specific house entry
             // We preserve existing tags if they exist by merging
-            var existingData = BAKED_DATA[walk][street][house] || {};
+            var existingData = currentData[walk][street][house] || {};
 
-            BAKED_DATA[walk][street][house] = {
+            currentData[walk][street][house] = {
                 ...existingData, // Keep tags and other metadata
                 vi: vi,
                 votes: count.toString(),
@@ -785,6 +782,7 @@ window.incrementVoteCount = function(btn) {
 };
 
 window.deployUpdate = function() {
+
 //    if (!confirm("⚠️ Save and Deploy to Server?")) return;
 
     // Start with a clean local object for this specific "scrape"
@@ -792,7 +790,7 @@ window.deployUpdate = function() {
     const updatedData = {};
 
     // If parent has data, we merge into it to keep other walks safe
-    const masterData = (parent && parent.BAKED_DATA) ? parent.BAKED_DATA : {};
+    const masterData = getBakedData();
 
     document.querySelectorAll('.canvass-row').forEach(row => {
         const walk = row.getAttribute('data-walk');
@@ -843,10 +841,6 @@ window.deployUpdate = function() {
     })
     .catch(err => alert("❌ Save failed."));
 };
-
-function bindEvent(element, eventName, eventHandler) {
-  element.addEventListener(eventName, eventHandler, false);
-}
 
 async function getVIData(path) {
 
@@ -1267,6 +1261,7 @@ function updateMaxVote(selectElement) {
 }
 
 window.loadHouseData = function(selectElement) {
+  const currentData = getBakedData()
     const row = selectElement.closest('.canvass-row');
     if (!row) return;
 
@@ -1283,7 +1278,7 @@ window.loadHouseData = function(selectElement) {
 
     // 3. Fetch record using the new 3-tier hierarchy: Walk > Street > House
     // Uses optional chaining (?.) for a much cleaner lookup
-    const record = BAKED_DATA[walk]?.[street]?.[house];
+    const record = currentData[walk]?.[street]?.[house];
 
     // 4. Update UI State based on whether a record exists
     btn.setAttribute('data-max', max);
@@ -1314,9 +1309,11 @@ window.loadHouseData = function(selectElement) {
 
 
 window.refreshDropdownColors = function(selectElement) {
+    const currentData = getBakedData();
     if (!selectElement) return;
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
     if (!row) return;
+
 
     const isUnitSelector = selectElement.classList.contains('unit-selector');
     const isVISelector = selectElement.classList.contains('vi-selector');
@@ -1332,10 +1329,10 @@ window.refreshDropdownColors = function(selectElement) {
             var m = parseInt(opt.getAttribute('data-max')) || 1;
 
             // 2. Deep look-up: Walk -> Street -> House
-            var rec = (window.BAKED_DATA[walk] &&
-                       window.BAKED_DATA[walk][street] &&
-                       window.BAKED_DATA[walk][street][h])
-                       ? window.BAKED_DATA[walk][street][h]
+            var rec = (currentData[walk] &&
+                       currentData[walk][street] &&
+                       currentData[walk][street][h])
+                       ? currentData[walk][street][h]
                        : null;
 
             var v = rec ? parseInt(rec.votes) : 0;
@@ -1378,6 +1375,7 @@ window.refreshDropdownColors = function(selectElement) {
 };
 
 window.updateVI = function(selectElement) {
+  currentData = getBakedData()
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
 
     // 1. Grab all three identifiers (Walk, Street, House)
@@ -1386,17 +1384,17 @@ window.updateVI = function(selectElement) {
     var house = row.querySelector('.unit-selector').value;
 
     // 2. Ensure the 3-tier hierarchy exists
-    if (!BAKED_DATA[walk]) BAKED_DATA[walk] = {};
-    if (!BAKED_DATA[walk][street]) BAKED_DATA[walk][street] = {};
+    if (!currentData[walk]) currentData[walk] = {};
+    if (!currentData[walk][street]) currentData[walk][street] = {};
 
     // 3. Ensure house record exists without wiping out existing votes or tags
-    if (!BAKED_DATA[walk][street][house]) {
-        BAKED_DATA[walk][street][house] = { votes: "0", tags: {} };
+    if (!currentData[walk][street][house]) {
+        currentData[walk][street][house] = { votes: "0", tags: {} };
     }
 
     // 4. Update only the VI and timestamp
-    BAKED_DATA[walk][street][house].vi = selectElement.value;
-    BAKED_DATA[walk][street][house].ts = Date.now();
+    currentData[walk][street][house].vi = selectElement.value;
+    currentData[walk][street][house].ts = Date.now();
 
     // 5. Re-color the dropdown UI immediately
     window.refreshDropdownColors(selectElement);
