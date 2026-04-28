@@ -601,57 +601,42 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
 
-    // 1. Retrieval
+    // 1. Aggressive Context Retrieval
+    // We prioritize the 'parent' because that's usually where the Map and Leaflet live
     const activeMap = window.fmap || parent.fmap || (window.parent && window.parent.fmap);
     const Leaflet = window.L || parent.L || (window.parent && window.parent.L);
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.parent && window.parent.BAKED_DATA);
 
-    // 2. Focused Matching
-    let bakedData = null;
-    let dataFoundSuccess = false;
+    let bakedData = fullData ? fullData[cleanId] : null;
+    let dataFoundSuccess = !!bakedData;
 
-    if (fullData) {
-        // Direct Check
-        if (fullData[cleanId]) {
-            bakedData = fullData[cleanId];
-            dataFoundSuccess = true;
-            console.log(`✅ [SUCCESS] Data found for ${cleanId}`);
-        } else {
-            // Fuzzy Check
-            const fuzzyKey = Object.keys(fullData).find(k => k.trim() === cleanId);
-            if (fuzzyKey) {
-                bakedData = fullData[fuzzyKey];
-                dataFoundSuccess = true;
-                console.log(`🎯 [SUCCESS] Fuzzy data found via key: ${fuzzyKey}`);
-            }
-        }
-    }
-
-    // 3. THE FIXED GUARD: Use the boolean, not the object itself
+    // 2. THE GUARD (Now more flexible)
     if (!activeMap || !Leaflet || !dataFoundSuccess) {
         console.error("❌ [STOP] Component Failure:", {
-            Map: !!activeMap,
             Leaflet: !!Leaflet,
-            Data: dataFoundSuccess,
-            Id: cleanId
+            Map: !!activeMap,
+            Data: dataFoundSuccess
         });
         return;
     }
 
     // --- STEP 2: MATH ---
-    // If the error was happening because bakedData was an empty object {},
-    // the math below will now safely handle it.
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
-    // Get expected houses from map layer
+    // DENOMINATOR: Look through the map layers
     activeMap.eachLayer(l => {
-        if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
-            totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
+        // We look for the original boundary (not a ghost)
+        if (l.feature && l.feature.properties) {
+            const featId = String(l.feature.properties.region_id).trim();
+            if (featId === cleanId && !l.feature.properties.is_ghost) {
+                totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
+                console.log(`📐 Found Master Boundary. Expected: ${totalPossibleHouses}`);
+            }
         }
     });
 
-    // Calculate completed based on weights
+    // NUMERATOR: Weights from Data
     Object.values(bakedData).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
             const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
@@ -659,8 +644,12 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
-    console.log(`📊 Math Check: ${completedHouses} / ${totalPossibleHouses}`);
+    console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses}`);
 
+    if (totalPossibleHouses === 0) {
+        console.warn("⚠️ Math Error: Denominator is 0. Is 'expected_houses' set in the GeoJSON?");
+    }
+  
     // ... Proceed to Step 2.5 (Find Group) and Step 3 (Map Visuals) ...
 
     // --- STEP 2.5: FIND ACCORDION GROUP ---
