@@ -121,24 +121,48 @@ const addMapLogo = (map) => {
                   fmap.on('popupopen', function(e) {
                       const container = e.popup._contentNode;
                       const firstRow = container.querySelector('.canvass-row');
+
                       if (firstRow) {
                           const region_id = firstRow.getAttribute('data-walk');
+
                           if (window.updateWalkVisuals) {
-                              window.updateWalkVisuals(region_id);
+                              // 1. Get all tag codes that actually exist in your data
+                              // Or use: Object.keys(window.TAG_TO_GROUP_MAPPING)
+                              const tagsToUpdate = ['L1', 'L2', 'L3', 'M1', 'M2', 'M3'];
+
+                              // 2. Refresh every ghost layer for this specific walk
+                              tagsToUpdate.forEach(tagCode => {
+                                  window.updateWalkVisuals(region_id, tagCode);
+                              });
+
+                              console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
                           }
                       }
                   });
                   // Inside your findMap() success block:
                   fmap.invalidateSize();
                   const data = window.BAKED_DATA || parent.BAKED_DATA;
+                  const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
+                  const tagCodes = Object.keys(tagRegistry);
+
                   if (data) {
-                      console.log("🎯 Map found! Initializing all region visuals...");
+                      console.log("🎯 Map found! Initializing all region visuals for all tags...");
                       addMapLogo(fmap);
+
+                      // Iterate through every Walk/Region in your data
                       Object.keys(data).forEach(region_id => {
-                          window.updateWalkVisuals(region_id);
+
+                          // Check if we have multiple tags to initialize
+                          if (tagCodes.length > 0) {
+                              tagCodes.forEach(code => {
+                                  window.updateWalkVisuals(region_id, code);
+                              });
+                          } else {
+                              // Fallback to L1 if no registry found
+                              window.updateWalkVisuals(region_id, 'L1');
+                          }
                       });
                   }
-
                   return true;
               }
 
@@ -484,12 +508,15 @@ window.handleTagClick = function(span) {
     }
 
     // 6. Global Metadata
-    BAKED_DATA[walk][street].ts = Date.now();
+        BAKED_DATA[walk][street].ts = Date.now();
 
-    // ⚡️ TRIGGER: Recalculate
-    if (window.updateWalkVisuals) {
-        window.updateWalkVisuals(walk);
-    }
+        // ⚡️ TRIGGER: Recalculate
+        // We pass both the 'walk' (region_id) and the 'code' (tag key like L1, M1)
+        if (window.updateWalkVisuals) {
+            window.updateWalkVisuals(walk, code);
+        } else if (parent.updateWalkVisuals) {
+            parent.updateWalkVisuals(walk, code);
+        }
 };
 
 window.updateMarkerStatus = function(region_id) {
@@ -571,92 +598,121 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
+window.updateWalkVisuals = function(region_id, targetTag = 'L1') { // 👈 Added targetTag param
+  const cleanId = String(region_id).trim();
+  console.group(`🔄 Recalculating Walk: [${cleanId}]`);
 
+  const activeMap = window.fmap || parent.fmap;
+  const Leaflet = window.L || parent.L;
+  const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
 
-window.updateWalkVisuals = function(region_id) {
-    const cleanId = String(region_id).trim();
-    console.group(`🔄 Recalculating Walk: [${cleanId}]`);
+  if (!activeMap || !Leaflet || !bakedData) {
+      console.warn("Missing components or data for:", cleanId);
+      console.groupEnd();
+      return;
+  }
 
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
-    const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
+  // --- STEP 1: SYNC UI (Tag Spans) ---
+  const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
+      Array.from(parent.document.querySelectorAll('.canvass-row'))
+  );
+  const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
-    if (!activeMap || !Leaflet || !bakedData) {
-        console.warn("Missing components or data for:", cleanId);
-        console.groupEnd();
-        return;
-    }
+  walkRows.forEach(row => {
+      const streetName = row.getAttribute('data-street');
+      const streetData = bakedData[streetName];
+      const tagSpan = row.querySelector('.tag-inactive, .tag-active');
 
-    // --- STEP 1: SYNC UI (Tag Spans) ---
-    const allRows = Array.from(document.querySelectorAll('.canvass-row')).concat(
-        Array.from(parent.document.querySelectorAll('.canvass-row'))
-    );
-    const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
+      if (tagSpan && streetData) {
+          const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.[targetTag] === 'y');
+          if (isAnyHouseDone) {
+              tagSpan.classList.remove('tag-inactive');
+              tagSpan.classList.add('tag-active');
+              tagSpan.innerText = 'y';
+          } else {
+              tagSpan.classList.remove('tag-active');
+              tagSpan.classList.add('tag-inactive');
+              tagSpan.innerText = 'n';
+          }
+      }
+  });
 
-    walkRows.forEach(row => {
-        const streetName = row.getAttribute('data-street');
-        const streetData = bakedData[streetName];
-        const tagSpan = row.querySelector('.tag-inactive, .tag-active');
+  // --- STEP 2: CALCULATE MATH FROM BAKED_DATA ---
+  let completedHouses = 0;
+  let totalPossibleHouses = 0;
 
-        if (tagSpan && streetData) {
-            const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.L1 === 'y');
-            if (isAnyHouseDone) {
-                tagSpan.classList.remove('tag-inactive');
-                tagSpan.classList.add('tag-active');
-                tagSpan.innerText = 'y';
-            } else {
-                tagSpan.classList.remove('tag-active');
-                tagSpan.classList.add('tag-inactive');
-                tagSpan.innerText = 'n';
-            }
+  // A. Get the Denominator from the Map Layer
+  activeMap.eachLayer(function(layer) {
+      if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
+          totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
+      }
+  });
+
+  // B. Get the Numerator from the JSON (using stored street_weight)
+  Object.keys(bakedData).forEach(streetName => {
+      const streetInfo = bakedData[streetName];
+
+      // Ensure we are looking at a street object and not a metadata key
+      if (streetInfo && typeof streetInfo === 'object') {
+          const weight = streetInfo.street_weight || 0;
+
+          // Interpretation: If any house in this street object has a 'y'
+          const isStreetFinished = Object.values(streetInfo).some(unit =>
+              unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
+          );
+
+          if (isStreetFinished) {
+              completedHouses += weight;
+          }
+      }
+  });
+
+    // --- NEW STEP 2.5: Find the Correct FeatureGroup from Python ---
+    let targetGroup = null;
+    activeMap.eachLayer(function(l) {
+        // Search for the group created in Python by looking for the tag in brackets
+        if (l.options && l.options.name && l.options.name.includes(`[${targetTag}]`)) {
+            targetGroup = l;
         }
     });
 
-    // --- STEP 2: CALCULATE MATH FROM BAKED_DATA ---
-    let completedHouses = 0;
-    let totalPossibleHouses = 0;
-
-    // A. Get the Denominator from the Map Layer
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === cleanId && !layer._greyGhost) {
-            totalPossibleHouses = parseInt(layer.feature.properties.expected_houses) || 0;
-        }
-    });
-
-    // B. Get the Numerator from the JSON (using stored street_weight)
-    Object.keys(bakedData).forEach(streetName => {
-        const streetInfo = bakedData[streetName];
-
-        // Ensure we are looking at a street object and not a metadata key
-        if (streetInfo && typeof streetInfo === 'object') {
-            const weight = streetInfo.street_weight || 0;
-
-            // Interpretation: If any house in this street object has a 'y'
-            const isStreetFinished = Object.values(streetInfo).some(unit =>
-                unit && typeof unit === 'object' && unit.tags?.L1 === 'y'
-            );
-
-            if (isStreetFinished) {
-                completedHouses += weight;
-            }
-        }
-    });
-    // --- STEP 3: FINAL VISUALS (Polygons & Tooltips) ---
+    // --- STEP 3: FINAL VISUALS ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    const pctInt = Math.round(deliveryPct * 100);
     const progressOpacity = 0.8 * deliveryPct;
 
     activeMap.eachLayer(function(layer) {
-        if (layer.feature?.properties?.region_id === cleanId) {
+        // Find the Master Shape
+        if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
 
-            // A. Handle the Grey Ghost (The Progress Overlay)
-            // interactive: false is CRITICAL so it doesn't block the tooltip hover
-            if (!layer._greyGhost) {
-                layer._greyGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: { color: "transparent", fillColor: "#333333", fillOpacity: 0, interactive: false }
-                }).addTo(activeMap);
+            const ghostKey = `_ghost_${targetTag}`;
+
+            if (!layer[ghostKey]) {
+                // 1. Create the ghost
+                const ghostGeoJSON = layer.toGeoJSON();
+
+                // 2. Mark it as a ghost so it's ignored by future parent searches
+                ghostGeoJSON.properties.is_ghost = true;
+
+                layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
+                    style: {
+                        color: "transparent",
+                        fillColor: (targetTag === 'L1') ? "#333" : "#800080",
+                        fillOpacity: 0,
+                        interactive: false
+                    }
+                });
+
+                // 3. 🎯 ADD TO THE FEATURE GROUP (The Accordion Layer)
+                if (targetGroup) {
+                    layer[ghostKey].addTo(targetGroup);
+                } else {
+                    // Fallback to map if group not found
+                    layer[ghostKey].addTo(activeMap);
+                }
             }
-            layer._greyGhost.setStyle({ fillOpacity: progressOpacity });
+
+            // Update opacity
+            layer[ghostKey].setStyle({ fillOpacity: progressOpacity });
 
             // B. Handle the Tooltip (Data-Safe Update)
             if (layer.getTooltip()) {
@@ -667,8 +723,7 @@ window.updateWalkVisuals = function(region_id) {
 
                 // 2. Build the updated HTML string using the cached clean version
                 const baseText = layer.feature.properties.original_tooltip;
-                const progressHtml = `<br><span style="color:#007bff; font-weight:bold;">Progress: ${pctInt}%</span>`;
-
+                const progressHtml = `<br><span style="color:#007bff; font-weight:bold;">${targetTag} Progress: ${pctInt}%</span>`;
                 // 3. Update content and force Leaflet to refresh the internal state
                 layer.setTooltipContent(baseText + progressHtml);
 
@@ -694,11 +749,11 @@ window.updateWalkVisuals = function(region_id) {
             }
         }
     });
-
-
     console.log(`📊 Result for ${cleanId}: ${completedHouses}/${totalPossibleHouses} (${Math.round(deliveryPct*100)}%)`);
     console.groupEnd();
 };
+
+
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");

@@ -236,7 +236,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
             f'''<td style="text-align:center; padding:4px;">
                     <span class="tag-toggle tag-inactive {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
-                          onclick="parent.handleTagClick(this); (window.updateWalkVisuals || parent.updateWalkVisuals || function(){{}})('{reg_id}');">
+                          onclick="parent.handleTagClick(this);
+                                   (window.updateWalkVisuals || parent.updateWalkVisuals || function(){{}})('{reg_id}', '{code}');">
                         n
                     </span>
                 </td>'''

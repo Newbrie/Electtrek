@@ -1336,38 +1336,33 @@ class TreeNode:
 
         return node
 
-
-
-    def getselectedlayers(self, rlevels, path, static=False):
-        from layers import make_feature_layers
+    def get_feature_layers(self, rlevels, path, static=False):
+        from layers import make_feature_layers, ExtendedFeatureGroup
         from flask import session
+        import folium
+        from elections import CurrentElection # Ensure this is imported
 
-        # Guard: Ensure we have exactly one election to unpack
+
+        # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
 
-        # 1. We keep 'layers' as our master factory source
+        # --- 🟢 NEW: Get tags for Ghost Layers ---
+        CE = CurrentElection.load(c_election)
+        task_tags, outcome_tags, all_tags = CE.get_tags()
+        # -----------------------------------------
+
         factory = make_feature_layers()
         selected = []
-
-        # Track keys we've already used so we don't 'mix' into the same object
         used_keys = set()
 
         def get_safe_layer(level_idx):
-            """Helper to get a fresh layer even if the key is repeated."""
             key = elevels.get(level_idx)
-            if not key:
-                return None
-
-            # If this key was already used for another level in this specific map,
-            # we generate a SECOND fresh instance of that layer type to prevent mixing.
+            if not key: return None
             if key in used_keys:
-                print(f"⚠️ Guard: Key '{key}' already used. Generating second instance for level {level_idx}")
                 new_layer_instance = make_feature_layers()[key]
-                # Optional: Rename it so the UI shows them as distinct
                 new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
                 return new_layer_instance
-
             used_keys.add(key)
             return factory[key]
 
@@ -1435,7 +1430,31 @@ class TreeNode:
         marker_layer = factory["marker"]
         selected.append(marker_layer)
 
+        # -------------------------------------------------
+        # 5️⃣ 👻 NEW: Add Ghost Tag Layers as ExtendedFeatureGroups
+        # -------------------------------------------------
+        # Using your dictionary structure: {"L1": "Leaflet1", "L2": "SecondLeaflet", ...}
+        for tag_code, tag_desc in task_tags.items():
+
+            # Format the name for the Layer Control & Accordion
+            # Output: "Data Overlay: [L1] Leaflet1"
+            display_name = f"Data Overlay: [{tag_code}] {tag_desc}"
+
+            ghost_layer = ExtendedFeatureGroup(
+                name=display_name,
+                overlay=True,
+                control=True,
+                show=False  # Starts hidden so the map isn't messy
+            )
+
+            # Store the metadata on the Python object
+            ghost_layer.mytag = tag_code
+            ghost_layer.key = f"ghost_{tag_code.lower()}"
+
+            selected.append(ghost_layer)
+
         return list(reversed(selected)), totalleaf
+
 
 
 
@@ -2005,11 +2024,127 @@ class TreeNode:
             # 2️⃣ Create fresh FeatureGroups for THIS map
 
         # 3️⃣ Select which layers to render for this map
-        flayers, totalleaf = self.getselectedlayers(
+        flayers, totalleaf = self.get_feature_layers(
             rlevels=resolved_levels,
             path=mapfile_name,
             static=static
         )
+
+        # 1. Define the CSS for the accordion
+        accordion_css = """
+        <style>
+            .ghost-accordion {
+                background: #f8f9fa;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                margin-top: 10px;
+            }
+            .ghost-accordion summary {
+                padding: 5px 10px;
+                cursor: pointer;
+                font-weight: bold;
+                outline: none;
+            }
+            .ghost-accordion-content {
+                padding: 5px 10px;
+                border-top: 1px solid #ddd;
+            }
+        </style>
+        """
+
+    # Define the Accordion Injection
+# You can place this right before you return from your map generation method
+        accordion_html = """
+            <style>
+                .ghost-accordion {
+                    background-color: #ffffff;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    margin-top: 8px;
+                    font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+                }
+                .ghost-accordion summary {
+                    padding: 6px 10px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    font-size: 12px;
+                    color: #333;
+                    outline: none;
+                    list-style: none;
+                }
+                .ghost-accordion summary::-webkit-details-marker {
+                    display: none;
+                }
+                .ghost-accordion-content {
+                    padding: 5px 0 10px 0;
+                    max-height: 200px;
+                    overflow-y: auto;
+                    border-top: 1px solid #eee;
+                }
+                /* Make the inner labels look like standard Leaflet rows */
+                .ghost-accordion-content label {
+                    display: block;
+                    margin: 0;
+                    padding: 3px 10px;
+                    font-size: 11px;
+                    cursor: pointer;
+                }
+                .ghost-accordion-content label:hover {
+                    background-color: #f4f4f4;
+                }
+            </style>
+
+            <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                // Use a MutationObserver to wait for the Leaflet Control to actually exist in the DOM
+                var observer = new MutationObserver(function(mutations, me) {
+                    var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
+                    if (controlContainer) {
+                        setupAccordion(controlContainer);
+                        me.disconnect(); // Stop looking once found
+                        return;
+                    }
+                });
+
+                observer.observe(document.body, { childList: true, subtree: true });
+
+                function setupAccordion(container) {
+                    var details = document.createElement('details');
+                    details.className = 'ghost-accordion';
+
+                    var summary = document.createElement('summary');
+                    summary.innerHTML = '📊 Data Overlays';
+
+                    var contentDiv = document.createElement('div');
+                    contentDiv.className = 'ghost-accordion-content';
+
+                    details.appendChild(summary);
+                    details.appendChild(contentDiv);
+
+                    var labels = container.querySelectorAll('label');
+                    var foundAny = false;
+
+                    labels.forEach(function(label) {
+                        // Match the 'Data Overlay:' prefix set in Python
+                        if (label.innerText.includes('Data Overlay:')) {
+                            // Clean prefix for UI
+                            var span = label.querySelector('span');
+                            if (span) {
+                                span.innerHTML = span.innerHTML.replace('Data Overlay:', '').trim();
+                            }
+                            contentDiv.appendChild(label);
+                            foundAny = true;
+                        }
+                    });
+
+                    if (foundAny) {
+                        container.appendChild(details);
+                    }
+                }
+            });
+            </script>
+            """
+
 
         street_row_css = """
             <style>
@@ -2424,6 +2559,9 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
         FolMap.get_root().html.add_child(folium.Element(logo_styles))
+        # Add layer control accordion to your Folium map
+        FolMap.get_root().header.add_child(folium.Element(accordion_css))
+        FolMap.get_root().header.add_child(folium.Element(accordion_html))
 
         # Add the LatLngPopup plugin
         FolMap.add_child(folium.LatLngPopup())
