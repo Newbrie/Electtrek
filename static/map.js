@@ -599,25 +599,43 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
     const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
     const Leaflet = window.L || parent.L || (window.top && window.top.L);
-    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
 
-    // --- DEBUG: WHAT IS ACTUALLY ON THE MAP? ---
-    console.group("🔍 Layer Name Investigation");
-    const foundNames = [];
+    // --- 🕵️‍♂️ THE GROUP DNA DEBUGGER ---
+    console.group(`🔍 Investigating Groups for Tag: [${targetTag}]`);
+    let targetGroup = null;
+    let layerCount = 0;
+
     activeMap.eachLayer(l => {
-        if (l.options && (l.options.name || l.options.label)) {
-            foundNames.push(`"${l.options.name || l.options.label}"`);
+        layerCount++;
+        // We look at the three most common places Folium/Leaflet stores names
+        const nameOption = l.options?.name;
+        const labelOption = l.options?.label;
+        const layerId = l._leaflet_id;
+
+        if (nameOption || labelOption) {
+            const actualName = nameOption || labelOption;
+            console.log(`📡 Layer found: "${actualName}" (ID: ${layerId})`);
+
+            // THE TEST: Does it actually contain our tag?
+            if (actualName.includes(`[${targetTag}]`)) {
+                targetGroup = l;
+                console.log(`✅ MATCH FOUND! Linked to group: "${actualName}"`);
+            }
         }
     });
-    console.log("Registered Group Names:", foundNames);
-    console.log("Looking for Tag:", `[${targetTag}]`);
+
+    if (!targetGroup) {
+        console.error(`❌ FAILURE: Scanned ${layerCount} layers but none matched "[${targetTag}]"`);
+        console.log("Check if the group name in your Python script exactly matches the targetTag string.");
+    }
     console.groupEnd();
 
-    // --- REST OF THE LOGIC ---
+    // --- STOP HERE IF DATA IS MISSING ---
+    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
     if (!activeMap || !Leaflet || !bakedData) return;
 
-    // STEP 2: MATH
+    // --- MATH ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
     activeMap.eachLayer(l => {
@@ -628,28 +646,25 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     Object.values(bakedData).forEach(s => {
         if (s && typeof s === 'object' && s.street_weight) {
-            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) completedHouses += s.street_weight;
+            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
+                completedHouses += s.street_weight;
+            }
         }
     });
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // STEP 2.5: THE SEARCH THAT FAILED
-    let targetGroup = null;
-    activeMap.eachLayer(l => {
-        const n = l.options?.name || l.options?.label || "";
-        if (n.includes(`[${targetTag}]`)) targetGroup = l;
-    });
-
-    // STEP 3: APPLY
+    // --- STEP 3: APPLY GHOST ---
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
+
             if (!layer[ghostKey]) {
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
                 });
 
+                // 🔑 CRITICAL: This is where we decide if it goes to the group or the root map
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
                 } else {
