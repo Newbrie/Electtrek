@@ -655,12 +655,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     // ... Proceed to Step 2.5 (Find Group) and Step 3 (Map Visuals) ...
 
     // --- STEP 2.5: FIND ACCORDION GROUP ---
-    let targetGroup = null;
-    activeMap.eachLayer(l => {
-        if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) targetGroup = l;
-    });
 
-    // --- STEP 2.5: FIND THE PARENT GROUP ---
     let targetGroup = null;
     activeMap.eachLayer(l => {
         // We look for the FeatureGroup created by Python (e.g., "Data Overlay: [L1]")
