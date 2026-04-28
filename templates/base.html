@@ -11,6 +11,7 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
   <!-- 🎨 Core stylesheets -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://newbrie.github.io/Electtrek/static/style.css" media="screen">
   <link rel="stylesheet" href="https://newbrie.github.io/Electtrek/static/print.css" media="print">
 
@@ -155,6 +156,9 @@
     <!-- ALL MODALS SHOULD BE HERE -->
     {% block modals %}
     {% endblock %}
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 
   <script src="https://newbrie.github.io/Electtrek/static/constantoptions.js"></script>
 
