@@ -612,7 +612,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     // 2. THE GUARD
     if (!activeMap || !Leaflet || !dataFoundSuccess) {
         console.error("❌ [STOP] Component Failure:", {
-            Leaflet: !!Leaflet, // If this is still false, the script can't find L
+            Leaflet: !!Leaflet,
             Map: !!activeMap,
             Data: dataFoundSuccess
         });
@@ -623,23 +623,17 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
-    console.log(`🔎 Searching map layers for region_id: "${cleanId}"`);
-
     activeMap.eachLayer(l => {
-        // We only care about layers that have feature properties
         if (l.feature && l.feature.properties) {
             const props = l.feature.properties;
             const featId = String(props.region_id || "").trim();
 
-            // Check if this is our master boundary (not a ghost)
             if (featId === cleanId && !props.is_ghost) {
                 totalPossibleHouses = parseInt(props.expected_houses) || 0;
-                console.log(`📐 FOUND MATCH: ID=${featId}, Expected=${totalPossibleHouses}`);
             }
         }
     });
 
-    // Calculate Numerator
     Object.values(bakedData).forEach(streetInfo => {
         if (streetInfo && typeof streetInfo === 'object' && streetInfo.street_weight) {
             const isStreetFinished = Object.values(streetInfo).some(u => u?.tags?.[targetTag] === 'y');
@@ -647,18 +641,14 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
-    console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses}`);
-    if (totalPossibleHouses === 0) {
-        console.warn("⚠️ Math Error: Denominator is 0. Is 'expected_houses' set in the GeoJSON?");
-    }
+    // 🔑 THE MISSING LINE: Calculate the percentage variable
+    const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // ... Proceed to Step 2.5 (Find Group) and Step 3 (Map Visuals) ...
+    console.log(`📊 Final Math: ${completedHouses} / ${totalPossibleHouses} (${Math.round(pct * 100)}%)`);
 
     // --- STEP 2.5: FIND ACCORDION GROUP ---
-
     let targetGroup = null;
     activeMap.eachLayer(l => {
-        // We look for the FeatureGroup created by Python (e.g., "Data Overlay: [L1]")
         if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
             targetGroup = l;
         }
@@ -666,14 +656,11 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     // --- STEP 3: CREATE OR UPDATE GHOST ---
     activeMap.eachLayer(layer => {
-        // Only target the base ward boundary
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
 
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
-                console.log(`👻 Parenting new ghost to group: ${targetGroup ? targetGroup.options.name : 'Map Root'}`);
-
                 const ghostGeoJSON = layer.toGeoJSON();
                 ghostGeoJSON.properties.is_ghost = true;
 
@@ -686,12 +673,8 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
-                // 🔑 THE FIX: Add to the group, not the map
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
-
-                    // 🛡️ Safety Sync: If the user already unticked the box,
-                    // Leaflet won't automatically hide a NEWLY added child.
                     if (!activeMap.hasLayer(targetGroup)) {
                         activeMap.removeLayer(layer[ghostKey]);
                     }
@@ -700,7 +683,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                 }
             }
 
-            // Apply the calculated opacity
+            // Apply the calculated opacity (pct is now defined!)
             layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
         }
     });
