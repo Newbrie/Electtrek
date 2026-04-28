@@ -1444,7 +1444,7 @@ class TreeNode:
                 name=display_name,
                 overlay=True,
                 control=True,
-                show=False  # Starts hidden so the map isn't messy
+                show=True  # Starts hidden so the map isn't messy
             )
 
             # Store the metadata on the Python object

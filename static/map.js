@@ -604,12 +604,16 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const Leaflet = window.L || parent.L;
     const bakedData = window.BAKED_DATA?.[cleanId] || parent.BAKED_DATA?.[cleanId];
 
-    if (!activeMap || !Leaflet || !bakedData) return;
+    console.log(`🔍 [START] Region: ${cleanId} | Tag: ${targetTag}`);
 
-    // --- STEP 1: SYNC UI (Tag Spans in Table) ---
+    if (!activeMap || !Leaflet || !bakedData) {
+        console.error("❌ [STOP] Missing core components:", { activeMap: !!activeMap, Leaflet: !!Leaflet, bakedData: !!bakedData });
+        return;
+    }
+
+    // --- STEP 1: UI SYNC ---
     const allRows = Array.from(document.querySelectorAll('.canvass-row'))
         .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
-
     const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
 
     walkRows.forEach(row => {
@@ -618,30 +622,26 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         const tagSpan = row.querySelector('.tag-inactive, .tag-active');
 
         if (tagSpan && streetData) {
-            // Use the dynamic targetTag instead of hardcoded L1
             const isAnyHouseDone = Object.values(streetData).some(unit => unit?.tags?.[targetTag] === 'y');
             tagSpan.className = isAnyHouseDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
             tagSpan.innerText = isAnyHouseDone ? 'y' : 'n';
         }
     });
 
-    // --- STEP 2: CALCULATE MATH ---
+    // --- STEP 2: MATH ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
-    // A. Get Denominator from Master Layer
     activeMap.eachLayer(l => {
         if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
             totalPossibleHouses = parseInt(l.feature.properties.expected_houses) || 0;
         }
     });
 
-    // B. Get Numerator from BAKED_DATA
     Object.keys(bakedData).forEach(streetName => {
         const streetInfo = bakedData[streetName];
         if (streetInfo && typeof streetInfo === 'object') {
             const weight = streetInfo.street_weight || 0;
-            // Check if ANY house on this street has the current targetTag set to 'y'
             const isStreetFinished = Object.values(streetInfo).some(unit =>
                 unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
             );
@@ -649,13 +649,21 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     });
 
-    // --- STEP 2.5: Find the Accordion Group ---
+    console.log(`📊 [MATH] ${cleanId} (${targetTag}): ${completedHouses}/${totalPossibleHouses}`);
+
+    // --- STEP 2.5: FIND GROUP ---
     let targetGroup = null;
     activeMap.eachLayer(l => {
         if (l.options?.name && l.options.name.includes(`[${targetTag}]`)) {
             targetGroup = l;
         }
     });
+
+    if (targetGroup) {
+        console.log(`📁 [GROUP] Found matching layer group: "${targetGroup.options.name}"`);
+    } else {
+        console.warn(`⚠️ [GROUP] No group found for [${targetTag}]. Filtering will fail.`);
+    }
 
     // --- STEP 3: UPDATE VISUALS ---
     const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
@@ -669,110 +677,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
             // Create Ghost if missing
             if (!layer[ghostKey]) {
-                const ghostGeoJSON = layer.toGeoJSON();
-                ghostGeoJSON.properties.is_ghost = true;
-
-                layer[ghostKey] = Leaflet.geoJSON(ghostGeoJSON, {
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L')) ? "#333" : "#800080",
-                        fillOpacity: 0,
-                        interactive: false
-                    }
-                });
-
-                if (targetGroup) layer[ghostKey].addTo(targetGroup);
-                else layer[ghostKey].addTo(activeMap);
-            }
-
-            // 🎯 Update Opacity (ALWAYS runs)
-            layer[ghostKey].setStyle({ fillOpacity: progressOpacity });
-
-            // Update Tooltip
-            if (layer.getTooltip()) {
-                if (!layer.feature.properties.original_tooltip) {
-                    layer.feature.properties.original_tooltip = layer.getTooltip().getContent();
-                }
-                const baseText = layer.feature.properties.original_tooltip;
-                layer.setTooltipContent(`${baseText}<br><span style="color:#007bff; font-weight:bold;">${targetTag}: ${pctInt}%</span>`);
-            }
-        }
-    });
-};
-
-window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-  window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-      const cleanId = String(region_id).trim();
-
-      // 1. Better Component Retrieval
-      const activeMap = window.fmap || parent.fmap || (typeof fmap !== 'undefined' ? fmap : null);
-      const Leaflet = window.L || parent.L || (typeof L !== 'undefined' ? L : null);
-      const bakedData = (window.BAKED_DATA && window.BAKED_DATA[cleanId]) ||
-                        (parent.BAKED_DATA && parent.BAKED_DATA[cleanId]);
-
-      // 2. Debug Milestone: Start
-      console.log(`🚀 [VISUALIZER] Triggered for: ${cleanId} | Tag: ${targetTag}`);
-
-      if (!activeMap) { console.error("❌ Map (fmap) not found in window or parent."); return; }
-      if (!Leaflet) { console.error("❌ Leaflet (L) not found."); return; }
-      if (!bakedData) { console.warn(`⚠️ No Baked Data found for Region: ${cleanId}`); return; }
-
-      // --- STEP 1: SYNC TABLE UI (Sidebars) ---
-      const allRows = Array.from(document.querySelectorAll('.canvass-row'))
-          .concat(Array.from(parent.document.querySelectorAll('.canvass-row')));
-
-      const walkRows = allRows.filter(row => String(row.getAttribute('data-walk')).trim() === cleanId);
-
-      walkRows.forEach(row => {
-          const streetName = row.getAttribute('data-street');
-          const streetData = bakedData[streetName];
-          // Query for both potential classes to find the existing span
-          const tagSpan = row.querySelector('.tag-inactive, .tag-active');
-
-          if (tagSpan && streetData) {
-              // Check only the specific tag we are currently updating
-              const isAnyHouseDone = Object.values(streetData).some(unit =>
-                  unit && typeof unit === 'object' && unit.tags?.[targetTag] === 'y'
-              );
-
-              tagSpan.className = isAnyHouseDone ? 'tag-toggle tag-active' : 'tag-toggle tag-inactive';
-              tagSpan.innerText = isAnyHouseDone ? 'y' : 'n';
-          }
-      });
-
-      console.log(`✅ [VISUALIZER] Table UI Synced for ${cleanId}`);
-
-      // --- STEP 2: FIND THE ACCORDION GROUP (The Filtering Secret) ---
-      let targetGroup = null;
-      activeMap.eachLayer(l => {
-          if (l.options && l.options.name && l.options.name.includes(`[${targetTag}]`)) {
-              targetGroup = l;
-          }
-      });
-
-      if (targetGroup) {
-          console.log(`✅ [VISUALIZER] Found Accordion Group: ${targetGroup.options.name}`);
-      } else {
-          console.warn(`⚠️ [VISUALIZER] No Layer Group found for [${targetTag}]. Ghost will be unfilterable!`);
-      }
-
-      // ... Proceed to Math and Step 3 (Ghost Creation) ...
-
-    // --- STEP 3: UPDATE VISUALS ---
-    // --- STEP 3: FINAL VISUALS (Polygons & Tooltips) ---
-    const deliveryPct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    const pctInt = Math.round(deliveryPct * 100);
-    const progressOpacity = 0.8 * deliveryPct;
-
-    activeMap.eachLayer(function(layer) {
-        // Only target the "Master" boundary for this specific walk
-        if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
-
-            const ghostKey = `_ghost_${targetTag}`;
-
-            // 1️⃣ CREATE the ghost if it doesn't exist yet
-            // 1️⃣ CREATE the ghost if it doesn't exist yet
-            if (!layer[ghostKey]) {
+                console.log(`👻 [CREATE] Generating new ghost for ${cleanId} on tag ${targetTag}`);
                 const ghostGeoJSON = layer.toGeoJSON();
                 ghostGeoJSON.properties.is_ghost = true;
 
@@ -787,52 +692,35 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
+                    console.log(`➕ [MEMBERSHIP] Added ghost to Group: ${targetGroup.options.name}`);
 
-                    // 🛠 NEW: If the accordion group is currently HIDDEN,
-                    // make sure the new ghost starts hidden too.
+                    // Force state sync
                     if (!activeMap.hasLayer(targetGroup)) {
-                        // Some Leaflet versions need a manual remove if the parent is off
+                        console.log("🙈 [STATE] Group is hidden. Removing ghost from view.");
                         activeMap.removeLayer(layer[ghostKey]);
                     }
                 } else {
                     layer[ghostKey].addTo(activeMap);
+                    console.log("🗺️ [MEMBERSHIP] No group. Added ghost to global map.");
                 }
             }
 
-            // 2️⃣ UPDATE the opacity (CRITICAL: Keep this OUTSIDE the "if" above)
-            // This ensures every time the data changes, the ghost updates visually
-            layer[ghostKey].setStyle({
-                fillOpacity: progressOpacity
-            });
+            // Update Opacity
+            console.log(`🎨 [STYLE] Updating ${ghostKey} opacity to ${progressOpacity.toFixed(2)}`);
+            layer[ghostKey].setStyle({ fillOpacity: progressOpacity });
 
-            // 3️⃣ UPDATE the Master Layer properties and Tooltip
-            layer.feature.properties[`pct_${targetTag}`] = pctInt; // Store data on master
-
+            // Tooltip Update
             if (layer.getTooltip()) {
                 if (!layer.feature.properties.original_tooltip) {
                     layer.feature.properties.original_tooltip = layer.getTooltip().getContent();
                 }
-
                 const baseText = layer.feature.properties.original_tooltip;
-                // Show the specific tag progress in the tooltip
                 layer.setTooltipContent(`${baseText}<br><span style="color:#007bff; font-weight:bold;">${targetTag}: ${pctInt}%</span>`);
-
-                if (activeMap.hasLayer(layer.getTooltip())) {
-                    layer.getTooltip().update();
-                }
-            }
-
-            // 4️⃣ Update the Sidebar Label Color (Optional)
-            const labelEl = document.getElementById(`label-${cleanId}`);
-            if (labelEl && targetTag === 'L1') { // Usually we only color the label for primary progress
-                labelEl.style.background = (deliveryPct >= 1) ? "#28a745" : "";
-                labelEl.style.color = (deliveryPct >= 1) ? "white" : "";
             }
         }
     });
+    console.log("🏁 [END] Visual update complete.");
 };
-
-
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
