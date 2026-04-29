@@ -765,21 +765,17 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
     })();
     // --- 4. DRAWING & STRICT PARENTING ---
+    // --- 4. THE CLEAN CONNECTION ---
     activeMap.eachLayer(layer => {
         if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
 
-            // 1. Creation (Only runs once)
             if (!layer[ghostKey]) {
-                console.log(`🏗️ Creating Ghost and locking to Bucket [${targetTag}]`);
-
-                // Clone geometry to ensure independence
+                // Create independent geometry
                 const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
-
                 layer[ghostKey] = Leaflet.geoJSON({
                     type: "Feature",
-                    geometry: geometry,
-                    properties: { is_ghost: true }
+                    geometry: geometry
                 }, {
                     pane: 'overlayPane',
                     style: {
@@ -792,29 +788,11 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
                 layer[ghostKey].is_ghost = true;
 
-                // 🔗 THE ONLY CONNECTION:
-                // Add the ghost to the group. DO NOT call .addTo(activeMap).
+                // ONLY add to the group. Leaflet handles the rest.
                 targetGroup.addLayer(layer[ghostKey]);
-            }
-
-            // 2. Update Style
-            try {
+            } else {
+                // Update style only
                 layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
-
-                // 🔄 FORCED SYNC:
-                // If the user just toggled the checkbox, Leaflet might need a nudge
-                // to show layers that were added while the group was hidden.
-                if (activeMap.hasLayer(targetGroup)) {
-                    if (!activeMap.hasLayer(layer[ghostKey])) {
-                        layer[ghostKey].addTo(activeMap);
-                    }
-                } else {
-                    if (activeMap.hasLayer(layer[ghostKey])) {
-                        activeMap.removeLayer(layer[ghostKey]);
-                    }
-                }
-            } catch (e) {
-                console.warn("⏳ Sync postponed: Renderer is re-indexing.");
             }
         }
     });
