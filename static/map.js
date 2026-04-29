@@ -598,47 +598,35 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
     const Leaflet = window.L || parent.L || (window.top && window.top.L);
+    const searchTag = `[${targetTag}]`;
 
-    // --- 1. THE REGISTRY SEARCH (Essential) ---
     let targetGroup = null;
-    const searchTag = `[${targetTag}]`; // Matches Python's "Data Overlay: [L1]..."
 
-
-    // --- 🕵️‍♂️ REGISTRY DEBUGGER ---
-        console.group("🔎 Registry Investigation");
-        if (activeMap._layers) {
-            Object.entries(activeMap._layers).forEach(([id, entry]) => {
-              console.log(`ID: ${id} | entry in Registry`);
-                if (entry.name) {
-                    console.log(`ID: ${id} | Name in Registry: "${entry.name}"`);
+    // --- 🎯 QUERY THE LAYER CONTROL ---
+    activeMap.eachControl(control => {
+        // Most Layer Controls (including grouped/accordion ones)
+        // store their data in an internal '_layers' array
+        if (control._layers && Array.isArray(control._layers)) {
+            control._layers.forEach(entry => {
+                // 'name' is the label in the Accordion UI
+                if (entry.name && entry.name.includes(searchTag)) {
+                    targetGroup = entry.layer;
+                    console.log(`✅ Found Bucket in Layer Control: "${entry.name}"`);
                 }
             });
-        } else {
-            console.error("❌ Registry (activeMap._layers) is totally empty!");
         }
-        console.groupEnd();
-
-    if (activeMap._layers) {
-        // We iterate the internal Leaflet Registry
-        Object.values(activeMap._layers).forEach(entry => {
-            // entry.name is the string from the Layer Control Menu
-            if (entry.name && entry.name.includes(searchTag)) {
-                targetGroup = entry.layer;
-                console.log(`✅ Linked JS Ghost to Python Group: "${entry.name}"`);
-            }
-        });
-    }
+    });
 
     if (!targetGroup) {
-        console.warn(`⚠️ Pre-created layer for ${searchTag} not found in Registry. Rooting to Map.`);
+        console.error(`❌ Could not find "${searchTag}" in the Layer Control Registry.`);
+        return;
     }
 
-    // --- 2. RETRIEVAL & MATH ---
+    // --- PROCEED TO DATA & MATH ---
     const cleanId = String(region_id).trim();
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
-
-    if (!activeMap || !Leaflet || !bakedData) return;
+    if (!bakedData) return;
 
     let completedHouses = 0;
     let totalPossibleHouses = 0;
@@ -657,29 +645,19 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // --- 3. ATTACH TO THE PRE-CREATED BUCKET ---
+    // --- ATTACH GHOST TO THE CONTROL'S LAYER ---
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                        fillOpacity: 0,
-                        interactive: false
-                    }
+                    style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
                 });
 
-                // Parent the ghost to the Python-created group
-                if (targetGroup) {
-                    layer[ghostKey].addTo(targetGroup);
-                } else {
-                    layer[ghostKey].addTo(activeMap);
-                }
+                // 🔑 Add to the bucket we found in the Control
+                layer[ghostKey].addTo(targetGroup);
             }
-            // Update the existing ghost
             layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
         }
     });
