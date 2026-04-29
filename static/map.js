@@ -596,22 +596,24 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
+    console.group(`🔍 Debug: UpdateWalkVisuals [Region: ${region_id} | Tag: ${targetTag}]`);
+
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const searchTag = `[${targetTag}]`;
 
     // --- 1. FIND THE BUCKET (Dictionary Search) ---
     let targetGroup = null;
+    let foundInKey = null;
 
     for (const key in window) {
         if (key.startsWith("layer_control_") && (window[key].overlays || window[key]._layers)) {
             const layers = window[key].overlays || window[key]._layers;
-
             for (const layerName in layers) {
                 if (layerName.includes(searchTag)) {
-                    // Logic to extract the actual Layer object from the Control Registry
                     targetGroup = layers[layerName].layer || layers[layerName];
-                    console.log(`🎯 Dictionary Match: Found "${layerName}" in ${key}`);
+                    foundInKey = key;
+                    console.log(`🎯 Found Bucket: "${layerName}" inside ${key}`);
                     break;
                 }
             }
@@ -620,7 +622,8 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     if (!targetGroup) {
-        // Tag not defined in Python yet (e.g. M1, M2)
+        console.warn(`⚠️ No Bucket found for ${searchTag}. (Expected if tag not in Python)`);
+        console.groupEnd();
         return;
     }
 
@@ -628,7 +631,12 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
-    if (!bakedData) return;
+
+    if (!bakedData) {
+        console.error(`❌ No BAKED_DATA found for region ID: ${cleanId}`);
+        console.groupEnd();
+        return;
+    }
 
     // --- 3. MATH (TOTALS & PERCENTAGE) ---
     let completedHouses = 0;
@@ -649,14 +657,17 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     });
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
+    console.log(`📊 Math: ${completedHouses} / ${totalPossibleHouses} houses (${(pct * 100).toFixed(1)}%)`);
 
     // --- 4. ATTACH/UPDATE GHOST ---
+    let layerFound = false;
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
+            layerFound = true;
             const ghostKey = `_ghost_${targetTag}`;
 
-            // A. Create the Ghost if it doesn't exist
             if (!layer[ghostKey]) {
+                console.log(`👻 Creating new Ghost Layer for ${cleanId}`);
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: {
                         color: "transparent",
@@ -666,28 +677,37 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
-                // B. Logical Parentage: Add to the Python-created Group
-                // This ensures the Layer Control can toggle it.
+                // Parenting
                 layer[ghostKey].addTo(targetGroup);
+                console.log(`🔗 Ghost attached to Target Group (ID: ${targetGroup._leaflet_id})`);
 
-                // C. Visual Sync: If the group is currently visible, force the ghost to show
+                // Visual Sync
                 if (activeMap.hasLayer(targetGroup)) {
                     layer[ghostKey].addTo(activeMap);
+                    console.log("👁️ Parent is visible; Ghost added to Map.");
+                } else {
+                    console.log("🌑 Parent is hidden; Ghost kept in memory only.");
                 }
             }
 
-            // D. Update Style
-            layer[ghostKey].setStyle({
-                fillOpacity: 0.8 * pct
-            });
+            // Update Style
+            const newOpacity = 0.8 * pct;
+            layer[ghostKey].setStyle({ fillOpacity: newOpacity });
+            console.log(`✨ Ghost Opacity updated to: ${newOpacity.toFixed(2)}`);
 
-            // E. Cleanup/Consistency Check
-            // Ensures the ghost never stays visible if its parent group is toggled off
+            // Cleanup check
             if (!activeMap.hasLayer(targetGroup) && activeMap.hasLayer(layer[ghostKey])) {
+                console.log("🧹 Cleanup: Removing orphaned ghost because parent is toggled off.");
                 activeMap.removeLayer(layer[ghostKey]);
             }
         }
     });
+
+    if (!layerFound) {
+        console.warn(`❓ No base layer found for region ${cleanId} to attach ghost to.`);
+    }
+
+    console.groupEnd();
 };
 
 window.incrementVoteCount = function(btn) {
