@@ -697,45 +697,6 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
 
-    (function safeInterrogate() {
-    const iframe = document.getElementById('iframe1');
-    const mapWin = iframe ? iframe.contentWindow : window;
-
-    // 1. Find the Control Instance
-    let lcKey = Object.keys(mapWin).find(k => k.startsWith('layer_control_'));
-    let lc = mapWin[lcKey];
-
-    if (!lc || !lc._layers) {
-        return console.error("❌ Layer Control or _layers dictionary is missing.");
-    }
-
-    console.log("--- 📂 TARGET OBJECT INTERROGATION ---");
-
-    const layers = lc._layers;
-    for (let id in layers) {
-        // SAFETY: Skip if the entry or the name property is missing
-        if (!layers[id] || typeof layers[id].name !== 'string') continue;
-
-        if (layers[id].name.includes('[L1]')) {
-            const bucket = layers[id].layer;
-            console.group(`🎯 Found Bucket: ${layers[id].name}`);
-            console.log("Constructor:", bucket ? bucket.constructor.name : "NULL");
-            console.log("Leaflet ID:", id);
-
-            if (bucket) {
-                console.log("Properties:", Object.keys(bucket));
-                console.log("Internal Children (_layers):", bucket._layers);
-                // Check for your Python metadata
-                console.log("Python 'mytag':", bucket.mytag || "Not Found");
-
-                // Inspect the Prototype (Inheritance)
-                let proto = Object.getPrototypeOf(bucket);
-                console.log("Inherits From:", proto.constructor.name);
-            }
-            console.groupEnd();
-        }
-    }
-})();
 
     // --- 3. DICTIONARY SEARCH (Targeting the Iframe) ---
     const findBucket = () => {
@@ -763,7 +724,46 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         console.groupEnd();
         return;
     }
+    (function interrogateYourBucket() {
+        const iframe = document.getElementById('iframe1');
+        const mapWin = iframe ? iframe.contentWindow : window;
+        let targetGroup = null;
+        let targetTag = 'L1'; // The one we want to test
 
+        // YOUR PROVEN SEARCH LOGIC
+        for (const key in mapWin) {
+            if (key.startsWith("layer_control_")) {
+                const layers = mapWin[key].overlays || mapWin[key]._layers;
+                for (const name in layers) {
+                    if (name.includes(`[${targetTag}]`)) {
+                        targetGroup = layers[name].layer || layers[name];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!targetGroup) {
+            return console.error(`❌ findBucket logic failed to find [${targetTag}] this time.`);
+        }
+
+        console.log(`--- 🔍 ANALYSIS: ${targetTag} ---`);
+        console.log("1. Object Constructor:", targetGroup.constructor.name);
+        console.log("2. Is it currently on the map?:", mapWin.fmap.hasLayer(targetGroup));
+        console.log("3. Internal Children (_layers):", targetGroup._layers);
+        console.log("4. Python Metadata (mytag):", targetGroup.mytag || "Not found");
+
+        // TEST: If we add a dummy layer to it, does it show up?
+        console.log("5. Testing 'addLayer' functionality...");
+        try {
+            const testLayer = mapWin.L.circle([0, 0], {radius: 10, color: 'red'});
+            targetGroup.addLayer(testLayer);
+            console.log("✅ .addLayer() executed without crashing.");
+            console.log("6. Is testLayer on map now?:", mapWin.fmap.hasLayer(testLayer));
+        } catch (e) {
+            console.error("❌ .addLayer() failed:", e.message);
+        }
+    })();
     // --- 4. DRAWING & STRICT PARENTING ---
     activeMap.eachLayer(layer => {
         if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
