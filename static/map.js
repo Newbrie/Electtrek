@@ -479,46 +479,76 @@ window.handleTagClick = function(span) {
     var streetWeight = parseInt(row.cells[1].innerText) || 0;
 
     // 4. Ensure Hierarchy & Store Street-Level Metadata
-    if (!currentData[walk]) currentData[walk] = {};
-    if (!currentData[walk][street]) currentData[walk][street] = {};
+    window.handleTagClick = function(span) {
+        // 1. Get the current state
+        var isInactive = span.classList.contains('tag-inactive');
+        var newValue = isInactive ? 'y' : 'n';
+        var code = span.getAttribute('data-code');
+        currentData = getBakedData()
 
-    // Store the weight at the street level so math works even when popup is closed
-    currentData[walk][street].street_weight = streetWeight;
+        // 2. Visual Toggle
+        if (isInactive) {
+            span.classList.remove('tag-inactive');
+            span.classList.add('tag-active');
+            span.innerText = 'y';
+        } else {
+            span.classList.remove('tag-active');
+            span.classList.add('tag-inactive');
+            span.innerText = 'n';
+        }
 
-    // 5. Update Storage based on Value
-    if (newValue === 'n') {
-        // GLOBAL WIPE: If setting to 'n', remove 'y' from ALL houses on this street
-        const streetObject = currentData[walk][street];
-        Object.keys(streetObject).forEach(key => {
-            // Only target house objects, skip the 'street_weight' or 'ts' keys
-            if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
-                streetObject[key].tags[code] = 'n';
+        // 3. Data Extraction
+        var row = span.closest('.canvass-row') || span.closest('tr');
+        var walk = row.getAttribute('data-walk');
+        var street = row.getAttribute('data-street');
+        var house = row.querySelector('.unit-selector').value;
+
+        // --- THE NEW VITAL KEY: Capture the weight from the table ---
+        var streetWeight = parseInt(row.cells[1].innerText) || 0;
+
+        // 4. Ensure Hierarchy & Store Street-Level Metadata
+        if (!currentData[walk]) currentData[walk] = {};
+        if (!currentData[walk][street]) currentData[walk][street] = {};
+
+        // Store the weight at the street level so math works even when popup is closed
+        currentData[walk][street].street_weight = streetWeight;
+
+        // 5. Update Storage based on Value
+        if (newValue === 'n') {
+            // GLOBAL WIPE: If setting to 'n', remove 'y' from ALL houses on this street
+            const streetObject = currentData[walk][street];
+            Object.keys(streetObject).forEach(key => {
+                // Only target house objects, skip the 'street_weight' or 'ts' keys
+                if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
+                    streetObject[key].tags[code] = 'n';
+                }
+            });
+            console.log(`🚫 Street ${street} wiped to 'n'`);
+        } else {
+            // SPECIFIC SET: If setting to 'y', ensure current house exists and tag it
+            if (!currentData[walk][street][house]) {
+                currentData[walk][street][house] = { votes: "0", tags: {} };
             }
-        });
-        console.log(`🚫 Street ${street} wiped to 'n'`);
-    } else {
-        // SPECIFIC SET: If setting to 'y', ensure current house exists and tag it
-        if (!currentData[walk][street][house]) {
-            currentData[walk][street][house] = { votes: "0", tags: {} };
-        }
-        if (!currentData[walk][street][house].tags) {
-            currentData[walk][street][house].tags = {};
+            if (!currentData[walk][street][house].tags) {
+                currentData[walk][street][house].tags = {};
+            }
+
+            currentData[walk][street][house].tags[code] = 'y';
+            console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
         }
 
-        currentData[walk][street][house].tags[code] = 'y';
-        console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
-    }
+        // 6. Global Metadata
+            currentData[walk][street].ts = Date.now();
 
-    // 6. Global Metadata
-        currentData[walk][street].ts = Date.now();
+            // ⚡️ TRIGGER: Recalculate
+            // We pass both the 'walk' (region_id) and the 'code' (tag key like L1, M1)
+            if (window.updateWalkVisuals) {
+                window.updateWalkVisuals(walk, code);
+            } else if (parent.updateWalkVisuals) {
+                parent.updateWalkVisuals(walk, code);
+            }
+    };
 
-        // ⚡️ TRIGGER: Recalculate
-        // We pass both the 'walk' (region_id) and the 'code' (tag key like L1, M1)
-        if (window.updateWalkVisuals) {
-            window.updateWalkVisuals(walk, code);
-        } else if (parent.updateWalkVisuals) {
-            parent.updateWalkVisuals(walk, code);
-        }
 };
 
 window.updateMarkerStatus = function(region_id) {
@@ -596,129 +626,103 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    console.group(`🔎 GHOST DEBUG: [Region: ${region_id}] [Tag: ${targetTag}]`);
+    console.group(`🔎 GHOST UPDATE: ${region_id} [${targetTag}]`);
 
-    const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
-    const Leaflet = window.L || parent.L || (window.top && window.top.L);
-    const searchTag = `[${targetTag}]`;
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
+    const cleanId = String(region_id).trim();
 
-    // --- 1. FIND THE BUCKET (Dictionary Search) ---
+    // 1. GET DATA
+    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
+    const regionData = fullData[cleanId];
+
+    if (!regionData) {
+        console.error("❌ No data found for region in BAKED_DATA");
+        console.groupEnd();
+        return;
+    }
+
+    // 2. MATH (Self-Contained)
+    let completedWeight = 0;
+    // Get the denominator we stored in handleTagClick
+    let totalPossible = regionData.region_total_houses || 0;
+
+    // Safety fallback: if total is still 0, the ghost will be invisible.
+    // Let's log it clearly.
+    if (totalPossible === 0) {
+        console.warn("⚠️ total_houses is 0. Opacity will be 0. Check handleTagClick extraction!");
+    }
+
+    Object.values(regionData).forEach(street => {
+        if (street && typeof street === 'object' && street.street_weight) {
+            // Check if any unit on this street has targetTag === 'y'
+            const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
+            if (isTagged) {
+                completedWeight += street.street_weight;
+            }
+        }
+    });
+
+    const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
+    const finalOpacity = 0.8 * pct;
+
+    console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}%`);
+
+    // 3. FIND BUCKET (Dictionary Search)
     let targetGroup = null;
-    let foundInKey = null;
-
-    console.time("Dictionary Search");
     for (const key in window) {
-        if (key.startsWith("layer_control_") && (window[key].overlays || window[key]._layers)) {
+        if (key.startsWith("layer_control_")) {
             const layers = window[key].overlays || window[key]._layers;
-            for (const layerName in layers) {
-                if (layerName.includes(searchTag)) {
-                    targetGroup = layers[layerName].layer || layers[layerName];
-                    foundInKey = key;
+            for (const name in layers) {
+                if (name.includes(`[${targetTag}]`)) {
+                    targetGroup = layers[name].layer || layers[name];
                     break;
                 }
             }
         }
         if (targetGroup) break;
     }
-    console.timeEnd("Dictionary Search");
 
     if (!targetGroup) {
-        console.warn(`❌ FAILURE: No Bucket found for ${searchTag}. Ghost will have no parent.`);
+        console.error(`❌ Bucket [${targetTag}] not found in Layer Control.`);
         console.groupEnd();
         return;
-    } else {
-        console.log(`🎯 SUCCESS: Found Bucket in "${foundInKey}" (Leaflet ID: ${targetGroup._leaflet_id})`);
     }
 
-    // --- 2. DATA RETRIEVAL ---
-    const cleanId = String(region_id).trim();
-    // Use your getBakeData() getter
-    const fullData = typeof getBakeData === 'function' ? getBakeData() : (window.BAKED_DATA || {});
-    let bakedData = fullData[cleanId];
+    // 4. DRAWING
+    activeMap.eachLayer(layer => {
+        if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
+            const ghostKey = `_ghost_${targetTag}`;
 
-    if (!bakedData) {
-        console.warn(`⚠️ BAKED_DATA missing for ${cleanId}. Initializing empty state.`);
-        bakedData = {}; // Initialize so math doesn't crash
-    }
-
-    // --- 3. MATH (TOTALS & PERCENTAGE) ---
-    let completedHouses = 0;
-    let totalPossibleHouses = 0;
-
-    activeMap.eachLayer(l => {
-        // Find the BASE layer (Must be a Polygon, match the ID, and NOT be a ghost)
-        if (l.feature?.properties?.region_id === cleanId) {
-            const houses = parseInt(l.feature.properties.expected_houses || 0);
-
-            // CRITICAL: Only accept the house count from the REAL polygon
-            // We ignore layers that are ghosts or lack the houses property
-            if (houses > 0 && !l.is_ghost && !l.feature?.properties?.is_ghost) {
-                totalPossibleHouses = houses;
-            }
-        }
-    });
-
-    // Sum weights from bakedData (This part is working: it found 36!)
-    Object.values(bakedData).forEach(s => {
-        if (s?.street_weight && Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
-            completedHouses += s.street_weight;
-        }
-    });
-
-    // Final Math Check
-    const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    console.log(`📊 Fixed Math: ${completedHouses} / ${totalPossibleHouses} = ${(pct * 100).toFixed(1)}%`);
-    // --- 4. ATTACH/UPDATE GHOST (Single-Instance Logic) ---
-        activeMap.eachLayer(layer => {
-            // Target ONLY the base polygon, ignore existing ghosts
-            if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
-
-                const ghostKey = `_ghost_${targetTag}`;
-
-                // 🛑 CASE A: THE GHOST ALREADY EXISTS
-                if (layer[ghostKey]) {
-                    console.log(`✨ [Update] Ghost ${layer[ghostKey]._leaflet_id} already exists for ${cleanId}. Updating opacity.`);
-                    layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
-                }
-                // 🐣 CASE B: THE GHOST IS NEW
-                else {
-                    console.log(`👻 [Create] Creating the FIRST ghost for ${cleanId} | Tag: ${targetTag}`);
-
-                    const newGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
-                        style: {
-                            color: "transparent",
-                            fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                            fillOpacity: 0.8 * pct,
-                            interactive: false
-                        }
-                    });
-
-                    // Tag it immediately so the loop doesn't get confused next time
-                    newGhost.eachLayer(sub => {
-                        if (sub.feature) sub.feature.properties.is_ghost = true;
-                    });
-                    newGhost.feature = { properties: { is_ghost: true } };
-
-                    // Store it on the base layer
-                    layer[ghostKey] = newGhost;
-
-                    // Add to the Bucket
-                    newGhost.addTo(targetGroup);
-
-                    // Add to Map only if Parent is visible
-                    if (activeMap.hasLayer(targetGroup)) {
-                        newGhost.addTo(activeMap);
+            if (!layer[ghostKey]) {
+                console.log("🏗️ Creating new Ghost Layer...");
+                layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
+                    pane: 'overlayPane', // Ensure it's above tiles
+                    style: {
+                        color: "transparent",
+                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                        fillOpacity: finalOpacity,
+                        interactive: false
                     }
-                }
+                });
 
-                // 🧹 PERSISTENCE SYNC:
-                // If the ghost is on the map but the bucket is hidden, kill it.
-                if (activeMap.hasLayer(layer[ghostKey]) && !activeMap.hasLayer(targetGroup)) {
-                    console.warn(`🧹 [Cleanup] Removing orphaned ghost ${layer[ghostKey]._leaflet_id} from root.`);
-                    activeMap.removeLayer(layer[ghostKey]);
+                layer[ghostKey].is_ghost = true;
+                layer[ghostKey].addTo(targetGroup);
+
+                if (activeMap.hasLayer(targetGroup)) {
+                    layer[ghostKey].addTo(activeMap);
                 }
+            } else {
+                console.log(`✨ Updating Ghost Opacity to ${finalOpacity.toFixed(2)}`);
+                layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
             }
-        });
+
+            // Force it to stay visible if the parent is on
+            if (activeMap.hasLayer(targetGroup) && !activeMap.hasLayer(layer[ghostKey])) {
+                layer[ghostKey].addTo(activeMap);
+            }
+        }
+    });
 
     console.groupEnd();
 };
