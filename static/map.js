@@ -652,66 +652,90 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateWalkVisuals = function(cleanId, targetTag, finalOpacity) {
-    console.group(`🎨 Visual Update: [${targetTag}] for House ${cleanId}`);
+window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
+    console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
-    const iframe = document.getElementById('iframe1');
-    const mapWin = iframe ? iframe.contentWindow : window;
-    const activeMap = mapWin.fmap;
-    const Leaflet = mapWin.L;
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
+    const cleanId = String(region_id).trim();
 
-    // --- 1. FIND THE BUCKET (Target Container) ---
-    let targetGroup = null;
-    for (const key in mapWin) {
-        if (key.startsWith("layer_control_")) {
-            // Support both standard and minified Leaflet property names
-            const layers = mapWin[key].overlays || mapWin[key]._layers;
-            for (const id in layers) {
-                if (layers[id].name && layers[id].name.includes(`[${targetTag}]`)) {
-                    targetGroup = layers[id].layer;
-                    break;
-                }
+    // --- 1. DATA & MATH (Keep your existing logic) ---
+    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
+    let regionData = fullData[cleanId] || { region_total_houses: 0 };
+
+    let completedWeight = 0;
+    let totalPossible = regionData.region_total_houses || 0;
+
+    // Denominator fallback
+    if (totalPossible === 0) {
+        activeMap.eachLayer(l => {
+            if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
+                totalPossible = parseInt(l.feature.properties.expected_houses || 0);
             }
-        }
-        if (targetGroup) break;
+        });
     }
 
-    if (!targetGroup) {
-        console.warn(`❌ Target Bucket [${targetTag}] not found.`);
-        console.groupEnd();
-        return;
-    }
-
-    // --- 2. FIND THE BLUEPRINT (Source Geometry) ---
-    let sourceGeometry = null;
-    activeMap.eachLayer(layer => {
-        if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
-            sourceGeometry = layer.feature.geometry;
+    Object.values(regionData).forEach(street => {
+        if (street?.street_weight && Object.values(street).some(u => u?.tags?.[targetTag] === 'y')) {
+            completedWeight += street.street_weight;
         }
     });
 
-    if (!sourceGeometry) {
-        console.warn(`⚠️ Source polygon for ${cleanId} not found.`);
+    const finalOpacity = totalPossible > 0 ? (0.8 * (completedWeight / totalPossible)) : 0;
+
+    // --- 2. FIND THE SOURCE BLUEPRINT ---
+    let blueprintGeometry = null;
+    activeMap.eachLayer(l => {
+        if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
+            blueprintGeometry = l.feature.geometry;
+        }
+    });
+
+    if (!blueprintGeometry) {
+        console.warn("⚠️ Source polygon not found for blueprint.");
         console.groupEnd();
         return;
     }
 
-    // --- 3. MANUFACTURE OR UPDATE ---
-    const ghostId = `ghost_${targetTag}_${cleanId}`;
+    // --- 3. FIND THE TARGET BUCKET (Iframe Search) ---
+    const findBucket = () => {
+        const iframe = document.getElementById('iframe1');
+        const mapWin = iframe ? iframe.contentWindow : window;
+        for (const key in mapWin) {
+            if (key.startsWith("layer_control_")) {
+                const layers = mapWin[key].overlays || mapWin[key]._layers;
+                for (const name in layers) {
+                    if (name.includes(`[${targetTag}]`)) return layers[name].layer || layers[name];
+                }
+            }
+        }
+        return null;
+    };
+    let targetGroup = findBucket();
+
+    if (!targetGroup) {
+        console.error("❌ Target Bucket not found.");
+        console.groupEnd();
+        return;
+    }
+
+    // --- 4. MANUFACTURING WITHIN THE BUCKET ---
+    // We identify the ghost by a unique ID string rather than a variable on the source layer
+    const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
     let existingGhost = null;
 
-    // Check the bucket's internal inventory for this specific house/tag combo
+    // Search the BUCKET'S inventory for the existing ghost
     targetGroup.eachLayer(l => {
-        if (l.ghost_id === ghostId) {
+        if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
         }
     });
 
     if (!existingGhost) {
-        console.log(`✨ Manufacturing new ghost inside ${targetTag} bucket.`);
+        console.log(`✨ Manufacturing new independent poly for ${ghostUniqueId}`);
 
-        // Create the ghost from the source blueprint
-        const poly = Leaflet.geoJSON(sourceGeometry, {
+        // Create a brand new independent polygon directly from the blueprint
+        const newPoly = Leaflet.geoJSON(blueprintGeometry, {
             pane: 'overlayPane',
             style: {
                 color: "transparent",
@@ -721,23 +745,23 @@ window.updateWalkVisuals = function(cleanId, targetTag, finalOpacity) {
             }
         });
 
-        // Identity Stamps
-        poly.is_ghost = true;
-        poly.ghost_id = ghostId;
+        // Tag it so we can find it in the bucket later
+        newPoly.is_ghost = true;
+        newPoly.ghost_id = ghostUniqueId;
 
-        // Parent it exclusively to the bucket
-        targetGroup.addLayer(poly);
+        // Add it directly to the target bucket
+        targetGroup.addLayer(newPoly);
 
-        // EXTRA SAFETY: Sever the "Hard Link" if the bucket is currently hidden
-        // This ensures a ghost created while a layer is OFF stays OFF.
+        // SYNC CHECK: If the Layer Control has the bucket OFF, the ghost
+        // must be manually removed from the root map to prevent "pinning"
         if (!activeMap.hasLayer(targetGroup)) {
-            activeMap.removeLayer(poly);
+            activeMap.removeLayer(newPoly);
         }
     } else {
-        // Update the existing ghost within the bucket
+        // Just update the one already sitting in the bucket
         existingGhost.setStyle({ fillOpacity: finalOpacity });
 
-        // Ensure manual sync if the toggle state changed since creation
+        // Ensure toggle state is respected
         if (!activeMap.hasLayer(targetGroup)) {
             activeMap.removeLayer(existingGhost);
         } else if (!activeMap.hasLayer(existingGhost)) {
