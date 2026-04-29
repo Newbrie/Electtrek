@@ -600,42 +600,39 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
     const Leaflet = window.L || parent.L || (window.top && window.top.L);
 
-    // --- 🕵️‍♂️ THE GROUP DNA DEBUGGER ---
-    console.group(`🔍 Investigating Groups for Tag: [${targetTag}]`);
+    // --- 🕵️‍♂️ SEARCH THE LAYER CONTROL ---
     let targetGroup = null;
-    let layerCount = 0;
 
-    activeMap.eachLayer(l => {
-        layerCount++;
-        // We look at the three most common places Folium/Leaflet stores names
-        const nameOption = l.options?.name;
-        const labelOption = l.options?.label;
-        const layerId = l._leaflet_id;
-
-        if (nameOption || labelOption) {
-            const actualName = nameOption || labelOption;
-            console.log(`📡 Layer found: "${actualName}" (ID: ${layerId})`);
-
-            // THE TEST: Does it actually contain our tag?
-            if (actualName.includes(`[${targetTag}]`)) {
-                targetGroup = l;
-                console.log(`✅ MATCH FOUND! Linked to group: "${actualName}"`);
+    // Most Leaflet maps store the control in _layers or _controlLayers
+    // We search the internal registry that Folium/Leaflet uses for the menu
+    if (activeMap._layers) {
+        Object.values(activeMap._layers).forEach(entry => {
+            // entry.name is the string you see in the top-right menu
+            if (entry.name && entry.name.includes(`[${targetTag}]`)) {
+                targetGroup = entry.layer; // This is the actual FeatureGroup object
+                console.log(`✅ [FOUND] Linked to Layer Control: "${entry.name}"`);
             }
-        }
-    });
+        });
+    }
+
+    // FALLBACK: If _layers search failed, try the old way just in case
+    if (!targetGroup) {
+        activeMap.eachLayer(l => {
+            if (l.options?.name?.includes(`[${targetTag}]`)) targetGroup = l;
+        });
+    }
 
     if (!targetGroup) {
-        console.error(`❌ FAILURE: Scanned ${layerCount} layers but none matched "[${targetTag}]"`);
-        console.log("Check if the group name in your Python script exactly matches the targetTag string.");
+        console.error(`❌ [FAILURE] Could not find any group named [${targetTag}] in Layer Control.`);
+        // Return or fallback to map root so it doesn't crash
     }
-    console.groupEnd();
 
-    // --- STOP HERE IF DATA IS MISSING ---
+    // --- (Rest of the Data/Math logic remains the same) ---
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
     if (!activeMap || !Leaflet || !bakedData) return;
 
-    // --- MATH ---
+    // ... Math Calculation (pct) ...
     let completedHouses = 0;
     let totalPossibleHouses = 0;
     activeMap.eachLayer(l => {
@@ -643,18 +640,14 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
             totalPossibleHouses = parseInt(l.feature.properties.expected_houses || 0);
         }
     });
-
     Object.values(bakedData).forEach(s => {
         if (s && typeof s === 'object' && s.street_weight) {
-            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
-                completedHouses += s.street_weight;
-            }
+            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) completedHouses += s.street_weight;
         }
     });
-
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // --- STEP 3: APPLY GHOST ---
+    // --- STEP 3: ATTACH GHOST TO GROUP ---
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
@@ -664,11 +657,12 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
                 });
 
-                // 🔑 CRITICAL: This is where we decide if it goes to the group or the root map
                 if (targetGroup) {
                     layer[ghostKey].addTo(targetGroup);
+                    console.log(`👻 Ghost added to Group: ${targetTag}`);
                 } else {
                     layer[ghostKey].addTo(activeMap);
+                    console.warn("👻 Ghost added to Map Root (Group not found)");
                 }
             }
             layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
