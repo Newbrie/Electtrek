@@ -670,20 +670,27 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
 
-    // --- 3. DICTIONARY SEARCH (Find Bucket) ---
-    let targetGroup = null;
-    for (const key in window) {
-        if (key.startsWith("layer_control_")) {
-            const layers = window[key].overlays || window[key]._layers;
-            for (const name in layers) {
-                if (name.includes(`[${targetTag}]`)) {
-                    targetGroup = layers[name].layer || layers[name];
-                    break;
+
+    // --- 3. DICTIONARY SEARCH (Targeting the Iframe) ---
+    const findBucket = () => {
+        // 1. Get the iframe window
+        const iframe = document.getElementById('iframe1'); // Ensure this ID matches your iframe
+        const mapWin = iframe ? iframe.contentWindow : window;
+
+        // 2. Search THAT window's variables
+        for (const key in mapWin) {
+            if (key.startsWith("layer_control_")) {
+                const layers = mapWin[key].overlays || mapWin[key]._layers;
+                for (const name in layers) {
+                    if (name.includes(`[${targetTag}]`)) {
+                        return layers[name].layer || layers[name];
+                    }
                 }
             }
         }
-        if (targetGroup) break;
-    }
+        return null;
+    };
+    let targetGroup = findBucket();
 
     if (!targetGroup) {
         console.error(`❌ Bucket [${targetTag}] not found in Layer Control.`);
