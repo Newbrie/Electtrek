@@ -100,6 +100,57 @@ const addMapLogo = (map) => {
     logoControl.addTo(map);
 };
 
+/**
+ * Saves the global data object to browser storage.
+ * @param {Object} data - The current BAKED_DATA object.
+ */
+window.saveBakedData = function(data) {
+    try {
+        // 1. Safety check: Don't save if data is empty or invalid
+        if (!data || typeof data !== 'object') return;
+
+        // 2. Convert the Object to a String (JSON)
+        const dataString = JSON.stringify(data);
+
+        // 3. Save to localStorage under a unique key
+        localStorage.setItem('CANVASS_BAKED_DATA', dataString);
+
+        // 4. Update the global variable to ensure all functions see the same data
+        window.BAKED_DATA = data;
+
+        console.log("💾 Progress saved to LocalStorage");
+    } catch (e) {
+        console.error("❌ Failed to save to LocalStorage:", e);
+
+        // Handle QuotaExceededError (if storage is full)
+        if (e.code === 22 || e.code === 1014) {
+            alert("Local storage is full. Progress might not be saved.");
+        }
+    }
+};
+
+/**
+ * Loads the data back from storage on page load.
+ */
+window.getBakedData = function() {
+    try {
+        // 1. Try to find existing data in storage
+        const saved = localStorage.getItem('CANVASS_BAKED_DATA');
+
+        if (saved) {
+            // 2. Parse the string back into a JS Object
+            window.BAKED_DATA = JSON.parse(saved);
+            return window.BAKED_DATA;
+        }
+    } catch (e) {
+        console.error("❌ Error loading saved data:", e);
+    }
+
+    // 3. Fallback: Return empty object if nothing found
+    window.BAKED_DATA = window.BAKED_DATA || {};
+    return window.BAKED_DATA;
+};
+
 
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
@@ -456,7 +507,9 @@ window.handleTagClick = function(span) {
     var isInactive = span.classList.contains('tag-inactive');
     var newValue = isInactive ? 'y' : 'n';
     var code = span.getAttribute('data-code');
-    currentData = getBakedData()
+
+    // FETCH: Get the live data object
+    var currentData = (typeof getBakedData === 'function') ? getBakedData() : (window.BAKED_DATA || {});
 
     // 2. Visual Toggle
     if (isInactive) {
@@ -474,81 +527,55 @@ window.handleTagClick = function(span) {
     var walk = row.getAttribute('data-walk');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
-
-    // --- THE NEW VITAL KEY: Capture the weight from the table ---
     var streetWeight = parseInt(row.cells[1].innerText) || 0;
 
-    // 4. Ensure Hierarchy & Store Street-Level Metadata
-    window.handleTagClick = function(span) {
-        // 1. Get the current state
-        var isInactive = span.classList.contains('tag-inactive');
-        var newValue = isInactive ? 'y' : 'n';
-        var code = span.getAttribute('data-code');
-        currentData = getBakedData()
+    // 4. Ensure Hierarchy & Preserve Total Houses
+    if (!currentData[walk]) {
+        // Try to find the walk total in the UI to bake it in permanently
+        var totalEl = document.querySelector('.walk-total-display');
+        currentData[walk] = {
+            region_total_houses: totalEl ? parseInt(totalEl.innerText) : 0
+        };
+    }
 
-        // 2. Visual Toggle
-        if (isInactive) {
-            span.classList.remove('tag-inactive');
-            span.classList.add('tag-active');
-            span.innerText = 'y';
-        } else {
-            span.classList.remove('tag-active');
-            span.classList.add('tag-inactive');
-            span.innerText = 'n';
+    if (!currentData[walk][street]) currentData[walk][street] = {};
+    currentData[walk][street].street_weight = streetWeight;
+
+    // 5. Update Storage based on Value
+    if (newValue === 'n') {
+        const streetObject = currentData[walk][street];
+        Object.keys(streetObject).forEach(key => {
+            if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
+                streetObject[key].tags[code] = 'n';
+            }
+        });
+        console.log(`🚫 Street ${street} wiped to 'n'`);
+    } else {
+        if (!currentData[walk][street][house]) {
+            currentData[walk][street][house] = { votes: "0", tags: {} };
         }
-
-        // 3. Data Extraction
-        var row = span.closest('.canvass-row') || span.closest('tr');
-        var walk = row.getAttribute('data-walk');
-        var street = row.getAttribute('data-street');
-        var house = row.querySelector('.unit-selector').value;
-
-        // --- THE NEW VITAL KEY: Capture the weight from the table ---
-        var streetWeight = parseInt(row.cells[1].innerText) || 0;
-
-        // 4. Ensure Hierarchy & Store Street-Level Metadata
-        if (!currentData[walk]) currentData[walk] = {};
-        if (!currentData[walk][street]) currentData[walk][street] = {};
-
-        // Store the weight at the street level so math works even when popup is closed
-        currentData[walk][street].street_weight = streetWeight;
-
-        // 5. Update Storage based on Value
-        if (newValue === 'n') {
-            // GLOBAL WIPE: If setting to 'n', remove 'y' from ALL houses on this street
-            const streetObject = currentData[walk][street];
-            Object.keys(streetObject).forEach(key => {
-                // Only target house objects, skip the 'street_weight' or 'ts' keys
-                if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
-                    streetObject[key].tags[code] = 'n';
-                }
-            });
-            console.log(`🚫 Street ${street} wiped to 'n'`);
-        } else {
-            // SPECIFIC SET: If setting to 'y', ensure current house exists and tag it
-            if (!currentData[walk][street][house]) {
-                currentData[walk][street][house] = { votes: "0", tags: {} };
-            }
-            if (!currentData[walk][street][house].tags) {
-                currentData[walk][street][house].tags = {};
-            }
-
-            currentData[walk][street][house].tags[code] = 'y';
-            console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
+        if (!currentData[walk][street][house].tags) {
+            currentData[walk][street][house].tags = {};
         }
+        currentData[walk][street][house].tags[code] = 'y';
+        console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
+    }
 
-        // 6. Global Metadata
-            currentData[walk][street].ts = Date.now();
+    // 6. Global Metadata & PERSISTENCE
+    currentData[walk][street].ts = Date.now();
 
-            // ⚡️ TRIGGER: Recalculate
-            // We pass both the 'walk' (region_id) and the 'code' (tag key like L1, M1)
-            if (window.updateWalkVisuals) {
-                window.updateWalkVisuals(walk, code);
-            } else if (parent.updateWalkVisuals) {
-                parent.updateWalkVisuals(walk, code);
-            }
-    };
+    // --- THE VITAL SAVE STEP ---
+    window.BAKED_DATA = currentData;
+    if (typeof saveBakedData === 'function') {
+        saveBakedData(currentData);
+    }
 
+    // ⚡️ TRIGGER: Recalculate
+    if (window.updateWalkVisuals) {
+        window.updateWalkVisuals(walk, code);
+    } else if (parent.updateWalkVisuals) {
+        parent.updateWalkVisuals(walk, code);
+    }
 };
 
 window.updateMarkerStatus = function(region_id) {
