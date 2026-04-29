@@ -632,52 +632,45 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const Leaflet = window.L || parent.L;
     const cleanId = String(region_id).trim();
 
-    // 1. GET DATA
-    // --- 1. GET DATA (With Safe Initialization) ---
-      const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
+    // --- 1. DATA INITIALIZATION ---
+    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
 
-      // If it doesn't exist, create a temporary local object so the script keeps running
-      let regionData = fullData[cleanId];
-      if (!regionData) {
-          console.warn(`⚠️ Initializing fresh data state for ${cleanId}`);
-          regionData = { region_total_houses: 0 };
-      }
+    // Initialize fresh state if region doesn't exist yet to prevent script from falling over
+    let regionData = fullData[cleanId];
+    if (!regionData) {
+        console.warn(`⚠️ Initializing fresh data state for ${cleanId}`);
+        regionData = { region_total_houses: 0 };
+    }
 
-      // --- 2. MATH (Self-Contained) ---
-      let completedWeight = 0;
-      let totalPossible = regionData.region_total_houses || 0;
+    // --- 2. MATH (Denominator & Numerator) ---
+    let completedWeight = 0;
+    let totalPossible = regionData.region_total_houses || 0;
 
-      // FALLBACK: If we still don't have a total from Baked Data,
-      // we MUST try to find it from the map one last time,
-      // otherwise the ghost stays at 0% forever.
-      if (totalPossible === 0) {
-          activeMap.eachLayer(l => {
-              if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
-                  totalPossible = parseInt(l.feature.properties.expected_houses || 0);
-              }
-          });
-      }
+    // Denominator Fallback: Query map if Baked Data total is missing
+    if (totalPossible === 0) {
+        activeMap.eachLayer(l => {
+            if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
+                totalPossible = parseInt(l.feature.properties.expected_houses || 0);
+            }
+        });
+    }
 
-      // Calculate completed weight
-      Object.values(regionData).forEach(street => {
-          if (street && typeof street === 'object' && street.street_weight) {
-              const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
-              if (isTagged) {
-                  completedWeight += street.street_weight;
-              }
-          }
-      });
+    // Numerator Calculation: Sum weights of tagged streets
+    Object.values(regionData).forEach(street => {
+        if (street && typeof street === 'object' && street.street_weight) {
+            const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
+            if (isTagged) {
+                completedWeight += street.street_weight;
+            }
+        }
+    });
 
-      const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
-      const finalOpacity = 0.8 * pct;
-
-      console.log(`📊 Result for ${cleanId}: ${completedWeight} / ${totalPossible} (${(pct * 100).toFixed(1)}%)`);
-
+    const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
     const finalOpacity = 0.8 * pct;
 
-    console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}%`);
+    console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
 
-    // 3. FIND BUCKET (Dictionary Search)
+    // --- 3. DICTIONARY SEARCH (Find Bucket) ---
     let targetGroup = null;
     for (const key in window) {
         if (key.startsWith("layer_control_")) {
@@ -698,15 +691,16 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         return;
     }
 
-    // 4. DRAWING
+    // --- 4. DRAWING & PARENTING ---
     activeMap.eachLayer(layer => {
+        // Target the base polygon only
         if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
                 console.log("🏗️ Creating new Ghost Layer...");
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    pane: 'overlayPane', // Ensure it's above tiles
+                    pane: 'overlayPane',
                     style: {
                         color: "transparent",
                         fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
@@ -715,18 +709,22 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
+                // Mark as ghost to prevent recursive selection
                 layer[ghostKey].is_ghost = true;
+
+                // Add to logical group (the bucket)
                 layer[ghostKey].addTo(targetGroup);
 
+                // Add to map only if the bucket is currently toggled ON
                 if (activeMap.hasLayer(targetGroup)) {
                     layer[ghostKey].addTo(activeMap);
                 }
             } else {
-                console.log(`✨ Updating Ghost Opacity to ${finalOpacity.toFixed(2)}`);
+                console.log(`✨ Updating existing Ghost to Opacity: ${finalOpacity.toFixed(2)}`);
                 layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
             }
 
-            // Force it to stay visible if the parent is on
+            // Sync Visibility: Ensure ghost stays on map root if parent group is visible
             if (activeMap.hasLayer(targetGroup) && !activeMap.hasLayer(layer[ghostKey])) {
                 layer[ghostKey].addTo(activeMap);
             }
