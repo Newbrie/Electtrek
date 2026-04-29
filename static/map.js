@@ -603,6 +603,20 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     let targetGroup = null;
     const searchTag = `[${targetTag}]`; // Matches Python's "Data Overlay: [L1]..."
 
+
+    // --- 🕵️‍♂️ REGISTRY DEBUGGER ---
+        console.group("🔎 Registry Investigation");
+        if (activeMap._layers) {
+            Object.entries(activeMap._layers).forEach(([id, entry]) => {
+                if (entry.name) {
+                    console.log(`ID: ${id} | Name in Registry: "${entry.name}"`);
+                }
+            });
+        } else {
+            console.error("❌ Registry (activeMap._layers) is totally empty!");
+        }
+        console.groupEnd();
+        
     if (activeMap._layers) {
         // We iterate the internal Leaflet Registry
         Object.values(activeMap._layers).forEach(entry => {
