@@ -692,44 +692,47 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     // --- 4. DRAWING & PARENTING ---
-    activeMap.eachLayer(layer => {
-        // Target the base polygon only
-        if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
-            const ghostKey = `_ghost_${targetTag}`;
+    // --- 4. DRAWING & PARENTING ---
+        activeMap.eachLayer(layer => {
+            if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
+                const ghostKey = `_ghost_${targetTag}`;
 
-            if (!layer[ghostKey]) {
-                console.log("🏗️ Creating new Ghost Layer...");
-                layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    pane: 'overlayPane',
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                        fillOpacity: finalOpacity,
-                        interactive: false
+                if (!layer[ghostKey]) {
+                    console.log(`🏗️ Creating Ghost for ${targetTag} and parenting to Bucket.`);
+
+                    layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
+                        pane: 'overlayPane',
+                        style: {
+                            color: "transparent",
+                            fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                            fillOpacity: finalOpacity,
+                            interactive: false
+                        }
+                    });
+
+                    layer[ghostKey].is_ghost = true;
+
+                    // 🔗 THE CONNECTION:
+                    // 1. Add to the logical group (the bucket) so the checkbox controls it
+                    targetGroup.addLayer(layer[ghostKey]);
+
+                    // 2. Add to map only if the checkbox is currently checked
+                    if (activeMap.hasLayer(targetGroup)) {
+                        layer[ghostKey].addTo(activeMap);
                     }
-                });
+                } else {
+                    // Update existing ghost
+                    layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
 
-                // Mark as ghost to prevent recursive selection
-                layer[ghostKey].is_ghost = true;
-
-                // Add to logical group (the bucket)
-                layer[ghostKey].addTo(targetGroup);
-
-                // Add to map only if the bucket is currently toggled ON
-                if (activeMap.hasLayer(targetGroup)) {
-                    layer[ghostKey].addTo(activeMap);
+                    // 🧹 Sync visibility: If group is hidden, hide ghost. If shown, show ghost.
+                    if (activeMap.hasLayer(targetGroup)) {
+                        if (!activeMap.hasLayer(layer[ghostKey])) layer[ghostKey].addTo(activeMap);
+                    } else {
+                        if (activeMap.hasLayer(layer[ghostKey])) activeMap.removeLayer(layer[ghostKey]);
+                    }
                 }
-            } else {
-                console.log(`✨ Updating existing Ghost to Opacity: ${finalOpacity.toFixed(2)}`);
-                layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
             }
-
-            // Sync Visibility: Ensure ghost stays on map root if parent group is visible
-            if (activeMap.hasLayer(targetGroup) && !activeMap.hasLayer(layer[ghostKey])) {
-                layer[ghostKey].addTo(activeMap);
-            }
-        }
-    });
+        });
 
     console.groupEnd();
 };
