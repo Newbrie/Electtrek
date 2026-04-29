@@ -771,28 +771,28 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
-                // Create independent geometry
-                const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
-                layer[ghostKey] = Leaflet.geoJSON({
-                    type: "Feature",
-                    geometry: geometry
-                }, {
+                // 1. Create the object in memory (NO map link yet)
+                const newGhost = Leaflet.geoJSON(JSON.parse(JSON.stringify(layer.feature)), {
                     pane: 'overlayPane',
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                        fillOpacity: finalOpacity,
-                        interactive: false
-                    }
+                    style: { /* your styles */ }
                 });
+                newGhost.is_ghost = true;
+                layer[ghostKey] = newGhost;
 
-                layer[ghostKey].is_ghost = true;
-
-                // ONLY add to the group. Leaflet handles the rest.
+                // 2. Add to Bucket
+                // If the bucket is OFF, the ghost stays invisible.
+                // If the bucket is ON, the ghost appears.
                 targetGroup.addLayer(layer[ghostKey]);
+
             } else {
-                // Update style only
+                // 3. Update existing ghost
                 layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
+
+                // SAFETY CHECK: If the checkbox is OFF, force remove the ghost
+                // just in case a "Hard Link" was created by a previous click.
+                if (!activeMap.hasLayer(targetGroup)) {
+                    activeMap.removeLayer(layer[ghostKey]);
+                }
             }
         }
     });
