@@ -608,6 +608,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         console.group("🔎 Registry Investigation");
         if (activeMap._layers) {
             Object.entries(activeMap._layers).forEach(([id, entry]) => {
+              console.log(`ID: ${id} | entry in Registry`);
                 if (entry.name) {
                     console.log(`ID: ${id} | Name in Registry: "${entry.name}"`);
                 }
@@ -616,7 +617,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
             console.error("❌ Registry (activeMap._layers) is totally empty!");
         }
         console.groupEnd();
-        
+
     if (activeMap._layers) {
         // We iterate the internal Leaflet Registry
         Object.values(activeMap._layers).forEach(entry => {
