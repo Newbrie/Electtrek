@@ -596,33 +596,37 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
-    const Leaflet = window.L || parent.L || (window.top && window.top.L);
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
+
+    // --- 1. FIND THE BUCKET VIA THE GLOBAL DICTIONARY ---
+    let targetGroup = null;
     const searchTag = `[${targetTag}]`;
 
-    let targetGroup = null;
+    // Scan window for the Folium-generated layer control object
+    for (const key in window) {
+        if (key.startsWith("layer_control_") && window[key]?.overlays) {
+            const overlays = window[key].overlays;
 
-    // --- 🎯 QUERY THE LAYER CONTROL ---
-    activeMap.eachControl(control => {
-        // Most Layer Controls (including grouped/accordion ones)
-        // store their data in an internal '_layers' array
-        if (control._layers && Array.isArray(control._layers)) {
-            control._layers.forEach(entry => {
-                // 'name' is the label in the Accordion UI
-                if (entry.name && entry.name.includes(searchTag)) {
-                    targetGroup = entry.layer;
-                    console.log(`✅ Found Bucket in Layer Control: "${entry.name}"`);
+            // Look for the key that contains our [L1] tag
+            // The key in 'overlays' is usually the 'display_name' from Python
+            for (const layerName in overlays) {
+                if (layerName.includes(searchTag)) {
+                    targetGroup = overlays[layerName];
+                    console.log(`🎯 Dictionary Match: Found "${layerName}" in ${key}`);
+                    break;
                 }
-            });
+            }
         }
-    });
+        if (targetGroup) break;
+    }
 
     if (!targetGroup) {
-        console.error(`❌ Could not find "${searchTag}" in the Layer Control Registry.`);
+        console.warn(`⚠️ Dictionary search failed for ${searchTag}.`);
         return;
     }
 
-    // --- PROCEED TO DATA & MATH ---
+    // --- 2. DATA & MATH (Same as before) ---
     const cleanId = String(region_id).trim();
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
@@ -645,17 +649,22 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // --- ATTACH GHOST TO THE CONTROL'S LAYER ---
+    // --- 3. APPLY TO BUCKET ---
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: { color: "transparent", fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"), fillOpacity: 0, interactive: false }
+                    style: {
+                        color: "transparent",
+                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                        fillOpacity: 0,
+                        interactive: false
+                    }
                 });
 
-                // 🔑 Add to the bucket we found in the Control
+                // Add specifically to the layer object found in the dictionary
                 layer[ghostKey].addTo(targetGroup);
             }
             layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
