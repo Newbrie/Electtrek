@@ -652,150 +652,98 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    console.group(`🔎 GHOST UPDATE: ${region_id} [${targetTag}]`);
+window.updateWalkVisuals = function(cleanId, targetTag, finalOpacity) {
+    console.group(`🎨 Visual Update: [${targetTag}] for House ${cleanId}`);
 
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
-    const cleanId = String(region_id).trim();
+    const iframe = document.getElementById('iframe1');
+    const mapWin = iframe ? iframe.contentWindow : window;
+    const activeMap = mapWin.fmap;
+    const Leaflet = mapWin.L;
 
-    // --- 1. DATA INITIALIZATION ---
-    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
-
-    // Initialize fresh state if region doesn't exist yet to prevent script from falling over
-    let regionData = fullData[cleanId];
-    if (!regionData) {
-        console.warn(`⚠️ Initializing fresh data state for ${cleanId}`);
-        regionData = { region_total_houses: 0 };
-    }
-
-    // --- 2. MATH (Denominator & Numerator) ---
-    let completedWeight = 0;
-    let totalPossible = regionData.region_total_houses || 0;
-
-    // Denominator Fallback: Query map if Baked Data total is missing
-    if (totalPossible === 0) {
-        activeMap.eachLayer(l => {
-            if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
-                totalPossible = parseInt(l.feature.properties.expected_houses || 0);
-            }
-        });
-    }
-
-    // Numerator Calculation: Sum weights of tagged streets
-    Object.values(regionData).forEach(street => {
-        if (street && typeof street === 'object' && street.street_weight) {
-            const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
-            if (isTagged) {
-                completedWeight += street.street_weight;
-            }
-        }
-    });
-
-    const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
-    const finalOpacity = 0.8 * pct;
-
-    console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
-
-
-    // --- 3. DICTIONARY SEARCH (Targeting the Iframe) ---
-    const findBucket = () => {
-        // 1. Get the iframe window
-        const iframe = document.getElementById('iframe1'); // Ensure this ID matches your iframe
-        const mapWin = iframe ? iframe.contentWindow : window;
-
-        // 2. Search THAT window's variables
-        for (const key in mapWin) {
-            if (key.startsWith("layer_control_")) {
-                const layers = mapWin[key].overlays || mapWin[key]._layers;
-                for (const name in layers) {
-                    if (name.includes(`[${targetTag}]`)) {
-                        return layers[name].layer || layers[name];
-                    }
+    // --- 1. FIND THE BUCKET (Target Container) ---
+    let targetGroup = null;
+    for (const key in mapWin) {
+        if (key.startsWith("layer_control_")) {
+            // Support both standard and minified Leaflet property names
+            const layers = mapWin[key].overlays || mapWin[key]._layers;
+            for (const id in layers) {
+                if (layers[id].name && layers[id].name.includes(`[${targetTag}]`)) {
+                    targetGroup = layers[id].layer;
+                    break;
                 }
             }
         }
-        return null;
-    };
-    let targetGroup = findBucket();
+        if (targetGroup) break;
+    }
 
     if (!targetGroup) {
-        console.error(`❌ Bucket [${targetTag}] not found in Layer Control.`);
+        console.warn(`❌ Target Bucket [${targetTag}] not found.`);
         console.groupEnd();
         return;
     }
-    (function interrogateYourBucket() {
-        const iframe = document.getElementById('iframe1');
-        const mapWin = iframe ? iframe.contentWindow : window;
-        let targetGroup = null;
-        let targetTag = 'L1'; // The one we want to test
 
-        // YOUR PROVEN SEARCH LOGIC
-        for (const key in mapWin) {
-            if (key.startsWith("layer_control_")) {
-                const layers = mapWin[key].overlays || mapWin[key]._layers;
-                for (const name in layers) {
-                    if (name.includes(`[${targetTag}]`)) {
-                        targetGroup = layers[name].layer || layers[name];
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!targetGroup) {
-            return console.error(`❌ findBucket logic failed to find [${targetTag}] this time.`);
-        }
-
-        console.log(`--- 🔍 ANALYSIS: ${targetTag} ---`);
-        console.log("1. Object Constructor:", targetGroup.constructor.name);
-        console.log("2. Is it currently on the map?:", mapWin.fmap.hasLayer(targetGroup));
-        console.log("3. Internal Children (_layers):", targetGroup._layers);
-        console.log("4. Python Metadata (mytag):", targetGroup.mytag || "Not found");
-
-        // TEST: If we add a dummy layer to it, does it show up?
-        console.log("5. Testing 'addLayer' functionality...");
-        try {
-            const testLayer = mapWin.L.circle([0, 0], {radius: 10, color: 'red'});
-            targetGroup.addLayer(testLayer);
-            console.log("✅ .addLayer() executed without crashing.");
-            console.log("6. Is testLayer on map now?:", mapWin.fmap.hasLayer(testLayer));
-        } catch (e) {
-            console.error("❌ .addLayer() failed:", e.message);
-        }
-    })();
-    // --- 4. DRAWING & STRICT PARENTING ---
-    // --- 4. THE CLEAN CONNECTION ---
+    // --- 2. FIND THE BLUEPRINT (Source Geometry) ---
+    let sourceGeometry = null;
     activeMap.eachLayer(layer => {
         if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
-            const ghostKey = `_ghost_${targetTag}`;
-
-            if (!layer[ghostKey]) {
-                // 1. Create the object in memory (NO map link yet)
-                const newGhost = Leaflet.geoJSON(JSON.parse(JSON.stringify(layer.feature)), {
-                    pane: 'overlayPane',
-                    style: { /* your styles */ }
-                });
-                newGhost.is_ghost = true;
-                layer[ghostKey] = newGhost;
-
-                // 2. Add to Bucket
-                // If the bucket is OFF, the ghost stays invisible.
-                // If the bucket is ON, the ghost appears.
-                targetGroup.addLayer(layer[ghostKey]);
-
-            } else {
-                // 3. Update existing ghost
-                layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
-
-                // SAFETY CHECK: If the checkbox is OFF, force remove the ghost
-                // just in case a "Hard Link" was created by a previous click.
-                if (!activeMap.hasLayer(targetGroup)) {
-                    activeMap.removeLayer(layer[ghostKey]);
-                }
-            }
+            sourceGeometry = layer.feature.geometry;
         }
     });
+
+    if (!sourceGeometry) {
+        console.warn(`⚠️ Source polygon for ${cleanId} not found.`);
+        console.groupEnd();
+        return;
+    }
+
+    // --- 3. MANUFACTURE OR UPDATE ---
+    const ghostId = `ghost_${targetTag}_${cleanId}`;
+    let existingGhost = null;
+
+    // Check the bucket's internal inventory for this specific house/tag combo
+    targetGroup.eachLayer(l => {
+        if (l.ghost_id === ghostId) {
+            existingGhost = l;
+        }
+    });
+
+    if (!existingGhost) {
+        console.log(`✨ Manufacturing new ghost inside ${targetTag} bucket.`);
+
+        // Create the ghost from the source blueprint
+        const poly = Leaflet.geoJSON(sourceGeometry, {
+            pane: 'overlayPane',
+            style: {
+                color: "transparent",
+                fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                fillOpacity: finalOpacity,
+                interactive: false
+            }
+        });
+
+        // Identity Stamps
+        poly.is_ghost = true;
+        poly.ghost_id = ghostId;
+
+        // Parent it exclusively to the bucket
+        targetGroup.addLayer(poly);
+
+        // EXTRA SAFETY: Sever the "Hard Link" if the bucket is currently hidden
+        // This ensures a ghost created while a layer is OFF stays OFF.
+        if (!activeMap.hasLayer(targetGroup)) {
+            activeMap.removeLayer(poly);
+        }
+    } else {
+        // Update the existing ghost within the bucket
+        existingGhost.setStyle({ fillOpacity: finalOpacity });
+
+        // Ensure manual sync if the toggle state changed since creation
+        if (!activeMap.hasLayer(targetGroup)) {
+            activeMap.removeLayer(existingGhost);
+        } else if (!activeMap.hasLayer(existingGhost)) {
+            existingGhost.addTo(activeMap);
+        }
+    }
 
     console.groupEnd();
 };
