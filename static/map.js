@@ -600,19 +600,16 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const Leaflet = window.L || parent.L;
     const searchTag = `[${targetTag}]`;
 
-    // --- 1. FIND THE BUCKET ---
+    // --- 1. FIND THE BUCKET (Dictionary Search) ---
     let targetGroup = null;
 
     for (const key in window) {
-        // Folium creates these global vars. We check for the name and the overlays.
         if (key.startsWith("layer_control_") && (window[key].overlays || window[key]._layers)) {
-            // Some versions use .overlays, others use ._layers
             const layers = window[key].overlays || window[key]._layers;
 
             for (const layerName in layers) {
                 if (layerName.includes(searchTag)) {
-                    // Extract the layer object. If it's a grouped control,
-                    // the value might be 'layers[layerName].layer' or just 'layers[layerName]'
+                    // Logic to extract the actual Layer object from the Control Registry
                     targetGroup = layers[layerName].layer || layers[layerName];
                     console.log(`🎯 Dictionary Match: Found "${layerName}" in ${key}`);
                     break;
@@ -623,7 +620,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     if (!targetGroup) {
-        // This is expected for tags not yet defined in Python (like your M1, M2 warnings)
+        // Tag not defined in Python yet (e.g. M1, M2)
         return;
     }
 
@@ -638,13 +635,11 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     let totalPossibleHouses = 0;
 
     activeMap.eachLayer(l => {
-        // Find the 'Base' ward layer to get the expected house count
         if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
             totalPossibleHouses = parseInt(l.feature.properties.expected_houses || 0);
         }
     });
 
-    // Sum weights of streets where the tag is 'y'
     Object.values(bakedData).forEach(s => {
         if (s && typeof s === 'object' && s.street_weight) {
             if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
@@ -660,6 +655,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
 
+            // A. Create the Ghost if it doesn't exist
             if (!layer[ghostKey]) {
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: {
@@ -670,14 +666,26 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
-                // Add to the container found in the Layer Control
+                // B. Logical Parentage: Add to the Python-created Group
+                // This ensures the Layer Control can toggle it.
                 layer[ghostKey].addTo(targetGroup);
+
+                // C. Visual Sync: If the group is currently visible, force the ghost to show
+                if (activeMap.hasLayer(targetGroup)) {
+                    layer[ghostKey].addTo(activeMap);
+                }
             }
 
-            // Apply the visual progress
+            // D. Update Style
             layer[ghostKey].setStyle({
                 fillOpacity: 0.8 * pct
             });
+
+            // E. Cleanup/Consistency Check
+            // Ensures the ghost never stays visible if its parent group is toggled off
+            if (!activeMap.hasLayer(targetGroup) && activeMap.hasLayer(layer[ghostKey])) {
+                activeMap.removeLayer(layer[ghostKey]);
+            }
         }
     });
 };
