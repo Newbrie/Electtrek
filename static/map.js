@@ -652,57 +652,133 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-// --- 4. DRAWING & INDEPENDENT PARENTING ---
-activeMap.eachLayer(layer => {
-    if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
-        const ghostKey = `_ghost_${targetTag}`;
+window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
+    console.group(`🔎 GHOST UPDATE: ${region_id} [${targetTag}]`);
 
-        // 1. If ghost doesn't exist, create it as a SOVEREIGN layer
-        if (!layer[ghostKey]) {
-            console.log(`🏗️ Creating Independent Ghost for ${targetTag}`);
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
+    const cleanId = String(region_id).trim();
 
-            // CLONE geometry to sever ties with the base layer's renderer
-            const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
+    // --- 1. DATA INITIALIZATION ---
+    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
 
-            layer[ghostKey] = Leaflet.geoJSON({
-                type: "Feature",
-                geometry: geometry,
-                properties: { is_ghost: true, tag: targetTag }
-            }, {
-                pane: 'overlayPane',
-                style: {
-                    color: "transparent",
-                    fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                    fillOpacity: finalOpacity,
-                    interactive: false
-                }
-            });
-
-            layer[ghostKey].is_ghost = true;
-
-            // 2. THE TIE: Add it to the Bucket once and for all
-            targetGroup.addLayer(layer[ghostKey]);
-        }
-
-        // 3. SAFE SYNC & STYLE
-        try {
-            // Update the opacity
-            layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
-
-            // Ensure visibility matches the [L1] Checkbox status
-            const shouldBeVisible = activeMap.hasLayer(targetGroup);
-            const isCurrentlyVisible = activeMap.hasLayer(layer[ghostKey]);
-
-            if (shouldBeVisible && !isCurrentlyVisible) {
-                layer[ghostKey].addTo(activeMap);
-            } else if (!shouldBeVisible && isCurrentlyVisible) {
-                activeMap.removeLayer(layer[ghostKey]);
-            }
-        } catch (e) {
-            console.warn("⏳ Renderer Sync: Ghost update deferred while map re-indexes.");
-        }
+    // Initialize fresh state if region doesn't exist yet to prevent script from falling over
+    let regionData = fullData[cleanId];
+    if (!regionData) {
+        console.warn(`⚠️ Initializing fresh data state for ${cleanId}`);
+        regionData = { region_total_houses: 0 };
     }
-});
+
+    // --- 2. MATH (Denominator & Numerator) ---
+    let completedWeight = 0;
+    let totalPossible = regionData.region_total_houses || 0;
+
+    // Denominator Fallback: Query map if Baked Data total is missing
+    if (totalPossible === 0) {
+        activeMap.eachLayer(l => {
+            if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
+                totalPossible = parseInt(l.feature.properties.expected_houses || 0);
+            }
+        });
+    }
+
+    // Numerator Calculation: Sum weights of tagged streets
+    Object.values(regionData).forEach(street => {
+        if (street && typeof street === 'object' && street.street_weight) {
+            const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
+            if (isTagged) {
+                completedWeight += street.street_weight;
+            }
+        }
+    });
+
+    const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
+    const finalOpacity = 0.8 * pct;
+
+    console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
+
+
+    // --- 3. DICTIONARY SEARCH (Targeting the Iframe) ---
+    const findBucket = () => {
+        // 1. Get the iframe window
+        const iframe = document.getElementById('iframe1'); // Ensure this ID matches your iframe
+        const mapWin = iframe ? iframe.contentWindow : window;
+
+        // 2. Search THAT window's variables
+        for (const key in mapWin) {
+            if (key.startsWith("layer_control_")) {
+                const layers = mapWin[key].overlays || mapWin[key]._layers;
+                for (const name in layers) {
+                    if (name.includes(`[${targetTag}]`)) {
+                        return layers[name].layer || layers[name];
+                    }
+                }
+            }
+        }
+        return null;
+    };
+    let targetGroup = findBucket();
+
+    if (!targetGroup) {
+        console.error(`❌ Bucket [${targetTag}] not found in Layer Control.`);
+        console.groupEnd();
+        return;
+    }
+
+    // --- 4. DRAWING & INDEPENDENT PARENTING ---
+  activeMap.eachLayer(layer => {
+      if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
+          const ghostKey = `_ghost_${targetTag}`;
+
+          // 1. If ghost doesn't exist, create it as a SOVEREIGN layer
+          if (!layer[ghostKey]) {
+              console.log(`🏗️ Creating Independent Ghost for ${targetTag}`);
+
+              // CLONE geometry to sever ties with the base layer's renderer
+              const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
+
+              layer[ghostKey] = Leaflet.geoJSON({
+                  type: "Feature",
+                  geometry: geometry,
+                  properties: { is_ghost: true, tag: targetTag }
+              }, {
+                  pane: 'overlayPane',
+                  style: {
+                      color: "transparent",
+                      fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                      fillOpacity: finalOpacity,
+                      interactive: false
+                  }
+              });
+
+              layer[ghostKey].is_ghost = true;
+
+              // 2. THE TIE: Add it to the Bucket once and for all
+              targetGroup.addLayer(layer[ghostKey]);
+          }
+
+          // 3. SAFE SYNC & STYLE
+          try {
+              // Update the opacity
+              layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
+
+              // Ensure visibility matches the [L1] Checkbox status
+              const shouldBeVisible = activeMap.hasLayer(targetGroup);
+              const isCurrentlyVisible = activeMap.hasLayer(layer[ghostKey]);
+
+              if (shouldBeVisible && !isCurrentlyVisible) {
+                  layer[ghostKey].addTo(activeMap);
+              } else if (!shouldBeVisible && isCurrentlyVisible) {
+                  activeMap.removeLayer(layer[ghostKey]);
+              }
+          } catch (e) {
+              console.warn("⏳ Renderer Sync: Ghost update deferred while map re-indexes.");
+          }
+      }
+  });
+
+    console.groupEnd();
+};
 
 window.incrementVoteCount = function(btn) {
     console.log("➕ incrementVoteCount clicked");
