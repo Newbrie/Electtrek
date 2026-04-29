@@ -715,10 +715,6 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
             }
         });
 
-    if (layersProcessed === 0) {
-        console.error(`❌ ERROR: Could not find base map layer for region ${cleanId}`);
-    }
-
     console.groupEnd();
 };
 
