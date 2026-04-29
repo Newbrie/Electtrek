@@ -598,21 +598,22 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
-
-    // --- 1. FIND THE BUCKET VIA THE GLOBAL DICTIONARY ---
-    let targetGroup = null;
     const searchTag = `[${targetTag}]`;
 
-    // Scan window for the Folium-generated layer control object
-    for (const key in window) {
-        if (key.startsWith("layer_control_") && window[key]?.overlays) {
-            const overlays = window[key].overlays;
+    // --- 1. FIND THE BUCKET ---
+    let targetGroup = null;
 
-            // Look for the key that contains our [L1] tag
-            // The key in 'overlays' is usually the 'display_name' from Python
-            for (const layerName in overlays) {
+    for (const key in window) {
+        // Folium creates these global vars. We check for the name and the overlays.
+        if (key.startsWith("layer_control_") && (window[key].overlays || window[key]._layers)) {
+            // Some versions use .overlays, others use ._layers
+            const layers = window[key].overlays || window[key]._layers;
+
+            for (const layerName in layers) {
                 if (layerName.includes(searchTag)) {
-                    targetGroup = overlays[layerName];
+                    // Extract the layer object. If it's a grouped control,
+                    // the value might be 'layers[layerName].layer' or just 'layers[layerName]'
+                    targetGroup = layers[layerName].layer || layers[layerName];
                     console.log(`🎯 Dictionary Match: Found "${layerName}" in ${key}`);
                     break;
                 }
@@ -622,34 +623,39 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     if (!targetGroup) {
-        console.warn(`⚠️ Dictionary search failed for ${searchTag}.`);
+        // This is expected for tags not yet defined in Python (like your M1, M2 warnings)
         return;
     }
 
-    // --- 2. DATA & MATH (Same as before) ---
+    // --- 2. DATA RETRIEVAL ---
     const cleanId = String(region_id).trim();
     const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
     let bakedData = fullData ? fullData[cleanId] : null;
     if (!bakedData) return;
 
+    // --- 3. MATH (TOTALS & PERCENTAGE) ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
     activeMap.eachLayer(l => {
+        // Find the 'Base' ward layer to get the expected house count
         if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
             totalPossibleHouses = parseInt(l.feature.properties.expected_houses || 0);
         }
     });
 
+    // Sum weights of streets where the tag is 'y'
     Object.values(bakedData).forEach(s => {
         if (s && typeof s === 'object' && s.street_weight) {
-            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) completedHouses += s.street_weight;
+            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
+                completedHouses += s.street_weight;
+            }
         }
     });
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
 
-    // --- 3. APPLY TO BUCKET ---
+    // --- 4. ATTACH/UPDATE GHOST ---
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
             const ghostKey = `_ghost_${targetTag}`;
@@ -664,10 +670,14 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
-                // Add specifically to the layer object found in the dictionary
+                // Add to the container found in the Layer Control
                 layer[ghostKey].addTo(targetGroup);
             }
-            layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
+
+            // Apply the visual progress
+            layer[ghostKey].setStyle({
+                fillOpacity: 0.8 * pct
+            });
         }
     });
 };
