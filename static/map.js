@@ -663,49 +663,57 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
     console.log(`📊 STATS: ${completedHouses}/${totalPossibleHouses} Houses. Progress: ${(pct * 100).toFixed(2)}%`);
 
-    // --- 4. ATTACH/UPDATE GHOST ---
-    let layersProcessed = 0;
-    activeMap.eachLayer(layer => {
-        if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
-            layersProcessed++;
-            const ghostKey = `_ghost_${targetTag}`;
+    // --- 4. ATTACH/UPDATE GHOST (Single-Instance Logic) ---
+        activeMap.eachLayer(layer => {
+            // Target ONLY the base polygon, ignore existing ghosts
+            if (layer.feature?.properties?.region_id === cleanId && !layer.feature.properties.is_ghost) {
 
-            if (!layer[ghostKey]) {
-                console.log(`👻 GHOST CREATION: Generating new GeoJSON for ${cleanId}`);
-                layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
-                    style: {
-                        color: "transparent",
-                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                        fillOpacity: 0,
-                        interactive: false
+                const ghostKey = `_ghost_${targetTag}`;
+
+                // 🛑 CASE A: THE GHOST ALREADY EXISTS
+                if (layer[ghostKey]) {
+                    console.log(`✨ [Update] Ghost ${layer[ghostKey]._leaflet_id} already exists for ${cleanId}. Updating opacity.`);
+                    layer[ghostKey].setStyle({ fillOpacity: 0.8 * pct });
+                }
+                // 🐣 CASE B: THE GHOST IS NEW
+                else {
+                    console.log(`👻 [Create] Creating the FIRST ghost for ${cleanId} | Tag: ${targetTag}`);
+
+                    const newGhost = Leaflet.geoJSON(layer.toGeoJSON(), {
+                        style: {
+                            color: "transparent",
+                            fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                            fillOpacity: 0.8 * pct,
+                            interactive: false
+                        }
+                    });
+
+                    // Tag it immediately so the loop doesn't get confused next time
+                    newGhost.eachLayer(sub => {
+                        if (sub.feature) sub.feature.properties.is_ghost = true;
+                    });
+                    newGhost.feature = { properties: { is_ghost: true } };
+
+                    // Store it on the base layer
+                    layer[ghostKey] = newGhost;
+
+                    // Add to the Bucket
+                    newGhost.addTo(targetGroup);
+
+                    // Add to Map only if Parent is visible
+                    if (activeMap.hasLayer(targetGroup)) {
+                        newGhost.addTo(activeMap);
                     }
-                });
+                }
 
-                // CRITICAL: Parent to the Bucket
-                layer[ghostKey].addTo(targetGroup);
-                console.log(`➡️ PARENTING: Ghost (ID: ${layer[ghostKey]._leaflet_id}) added to Group (ID: ${targetGroup._leaflet_id})`);
-
-                // CRITICAL: Visual rendering
-                if (activeMap.hasLayer(targetGroup)) {
-                    layer[ghostKey].addTo(activeMap);
-                    console.log("👁️ VISIBILITY: Parent is ON map. Ghost rendered.");
-                } else {
-                    console.log("🌑 VISIBILITY: Parent is OFF map. Ghost hidden in group.");
+                // 🧹 PERSISTENCE SYNC:
+                // If the ghost is on the map but the bucket is hidden, kill it.
+                if (activeMap.hasLayer(layer[ghostKey]) && !activeMap.hasLayer(targetGroup)) {
+                    console.warn(`🧹 [Cleanup] Removing orphaned ghost ${layer[ghostKey]._leaflet_id} from root.`);
+                    activeMap.removeLayer(layer[ghostKey]);
                 }
             }
-
-            // Apply visual opacity
-            const opacity = 0.8 * pct;
-            layer[ghostKey].setStyle({ fillOpacity: opacity });
-            console.log(`✨ STYLE: Opacity set to ${opacity.toFixed(2)}`);
-
-            // Safety Cleanup
-            if (!activeMap.hasLayer(targetGroup) && activeMap.hasLayer(layer[ghostKey])) {
-                console.log("🧹 CLEANUP: Removing orphaned visual. Group is currently unchecked.");
-                activeMap.removeLayer(layer[ghostKey]);
-            }
-        }
-    });
+        });
 
     if (layersProcessed === 0) {
         console.error(`❌ ERROR: Could not find base map layer for region ${cleanId}`);
