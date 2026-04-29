@@ -642,26 +642,33 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     // --- 3. MATH (TOTALS & PERCENTAGE) ---
+    // --- 3. MATH (TOTALS & PERCENTAGE) ---
     let completedHouses = 0;
     let totalPossibleHouses = 0;
 
     activeMap.eachLayer(l => {
-        if (l.feature?.properties?.region_id === cleanId && !l.feature.properties.is_ghost) {
-            totalPossibleHouses = parseInt(l.feature.properties.expected_houses || 0);
-        }
-    });
+        // We only want the polygon that HAS the expected_houses property
+        if (l.feature?.properties?.region_id === cleanId) {
+            const houses = parseInt(l.feature.properties.expected_houses || 0);
 
-    Object.values(bakedData).forEach(s => {
-        if (s && typeof s === 'object' && s.street_weight) {
-            const hasTag = Object.values(s).some(u => u && u.tags && u.tags[targetTag] === 'y');
-            if (hasTag) {
-                completedHouses += s.street_weight;
+            // Only accept the total if it's > 0 AND it's not a ghost
+            if (houses > 0 && !l.is_ghost && !l.feature.properties.is_ghost) {
+                totalPossibleHouses = houses;
             }
         }
     });
 
+    // Calculate completed houses from BAKED_DATA (this part is usually fine)
+    Object.values(bakedData).forEach(s => {
+        if (s?.street_weight && Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
+            completedHouses += s.street_weight;
+        }
+    });
+
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    console.log(`📊 STATS: ${completedHouses}/${totalPossibleHouses} Houses. Progress: ${(pct * 100).toFixed(2)}%`);
+
+    // DEBUG LOG: This will tell us if the isolation worked
+    console.log(`📊 isolation check: ${completedHouses}/${totalPossibleHouses} (${(pct*100).toFixed(1)}%)`);
 
     // --- 4. ATTACH/UPDATE GHOST (Single-Instance Logic) ---
         activeMap.eachLayer(layer => {
