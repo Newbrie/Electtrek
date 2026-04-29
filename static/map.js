@@ -725,57 +725,60 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         return;
     }
 
-    // --- 4. DRAWING & INDEPENDENT PARENTING ---
-  activeMap.eachLayer(layer => {
-      if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
-          const ghostKey = `_ghost_${targetTag}`;
+    // --- 4. DRAWING & STRICT PARENTING ---
+    activeMap.eachLayer(layer => {
+        if (layer.feature?.properties?.region_id === cleanId && !layer.is_ghost) {
+            const ghostKey = `_ghost_${targetTag}`;
 
-          // 1. If ghost doesn't exist, create it as a SOVEREIGN layer
-          if (!layer[ghostKey]) {
-              console.log(`🏗️ Creating Independent Ghost for ${targetTag}`);
+            // 1. Creation (Only runs once)
+            if (!layer[ghostKey]) {
+                console.log(`🏗️ Creating Ghost and locking to Bucket [${targetTag}]`);
 
-              // CLONE geometry to sever ties with the base layer's renderer
-              const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
+                // Clone geometry to ensure independence
+                const geometry = JSON.parse(JSON.stringify(layer.feature.geometry));
 
-              layer[ghostKey] = Leaflet.geoJSON({
-                  type: "Feature",
-                  geometry: geometry,
-                  properties: { is_ghost: true, tag: targetTag }
-              }, {
-                  pane: 'overlayPane',
-                  style: {
-                      color: "transparent",
-                      fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
-                      fillOpacity: finalOpacity,
-                      interactive: false
-                  }
-              });
+                layer[ghostKey] = Leaflet.geoJSON({
+                    type: "Feature",
+                    geometry: geometry,
+                    properties: { is_ghost: true }
+                }, {
+                    pane: 'overlayPane',
+                    style: {
+                        color: "transparent",
+                        fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
+                        fillOpacity: finalOpacity,
+                        interactive: false
+                    }
+                });
 
-              layer[ghostKey].is_ghost = true;
+                layer[ghostKey].is_ghost = true;
 
-              // 2. THE TIE: Add it to the Bucket once and for all
-              targetGroup.addLayer(layer[ghostKey]);
-          }
+                // 🔗 THE ONLY CONNECTION:
+                // Add the ghost to the group. DO NOT call .addTo(activeMap).
+                targetGroup.addLayer(layer[ghostKey]);
+            }
 
-          // 3. SAFE SYNC & STYLE
-          try {
-              // Update the opacity
-              layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
+            // 2. Update Style
+            try {
+                layer[ghostKey].setStyle({ fillOpacity: finalOpacity });
 
-              // Ensure visibility matches the [L1] Checkbox status
-              const shouldBeVisible = activeMap.hasLayer(targetGroup);
-              const isCurrentlyVisible = activeMap.hasLayer(layer[ghostKey]);
-
-              if (shouldBeVisible && !isCurrentlyVisible) {
-                  layer[ghostKey].addTo(activeMap);
-              } else if (!shouldBeVisible && isCurrentlyVisible) {
-                  activeMap.removeLayer(layer[ghostKey]);
-              }
-          } catch (e) {
-              console.warn("⏳ Renderer Sync: Ghost update deferred while map re-indexes.");
-          }
-      }
-  });
+                // 🔄 FORCED SYNC:
+                // If the user just toggled the checkbox, Leaflet might need a nudge
+                // to show layers that were added while the group was hidden.
+                if (activeMap.hasLayer(targetGroup)) {
+                    if (!activeMap.hasLayer(layer[ghostKey])) {
+                        layer[ghostKey].addTo(activeMap);
+                    }
+                } else {
+                    if (activeMap.hasLayer(layer[ghostKey])) {
+                        activeMap.removeLayer(layer[ghostKey]);
+                    }
+                }
+            } catch (e) {
+                console.warn("⏳ Sync postponed: Renderer is re-indexing.");
+            }
+        }
+    });
 
     console.groupEnd();
 };
