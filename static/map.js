@@ -697,45 +697,45 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}% | Opacity: ${finalOpacity.toFixed(2)}`);
 
-    (function interrogateTarget() {
-        const iframe = document.getElementById('iframe1');
-        const mapWin = iframe ? iframe.contentWindow : window;
+    (function safeInterrogate() {
+    const iframe = document.getElementById('iframe1');
+    const mapWin = iframe ? iframe.contentWindow : window;
 
-        // 1. Re-use your search logic to grab the actual object
-        let targetGroup = null;
-        for (let key in mapWin) {
-            if (key.startsWith('layer_control_')) {
-                const layers = mapWin[key]._layers || mapWin[key].overlays;
-                for (let id in layers) {
-                    if (layers[id].name.includes('[L1]')) {
-                        targetGroup = layers[id].layer;
-                        break;
-                    }
-                }
+    // 1. Find the Control Instance
+    let lcKey = Object.keys(mapWin).find(k => k.startsWith('layer_control_'));
+    let lc = mapWin[lcKey];
+
+    if (!lc || !lc._layers) {
+        return console.error("❌ Layer Control or _layers dictionary is missing.");
+    }
+
+    console.log("--- 📂 TARGET OBJECT INTERROGATION ---");
+
+    const layers = lc._layers;
+    for (let id in layers) {
+        // SAFETY: Skip if the entry or the name property is missing
+        if (!layers[id] || typeof layers[id].name !== 'string') continue;
+
+        if (layers[id].name.includes('[L1]')) {
+            const bucket = layers[id].layer;
+            console.group(`🎯 Found Bucket: ${layers[id].name}`);
+            console.log("Constructor:", bucket ? bucket.constructor.name : "NULL");
+            console.log("Leaflet ID:", id);
+
+            if (bucket) {
+                console.log("Properties:", Object.keys(bucket));
+                console.log("Internal Children (_layers):", bucket._layers);
+                // Check for your Python metadata
+                console.log("Python 'mytag':", bucket.mytag || "Not Found");
+
+                // Inspect the Prototype (Inheritance)
+                let proto = Object.getPrototypeOf(bucket);
+                console.log("Inherits From:", proto.constructor.name);
             }
+            console.groupEnd();
         }
-
-        if (!targetGroup) return console.error("❌ TargetGroup [L1] not found.");
-
-        console.log("--- 🏗️ TARGET GROUP DEEP-DIVE ---");
-        console.dir(targetGroup); // 👈 This lets you click through the object in the console
-
-        // 2. Check the "Internal Map" of the group
-        console.log("Internal _layers (children):", targetGroup._layers);
-
-        // 3. Check the "Event Listeners"
-        // Standard FeatureGroups listen for 'add' and 'remove' to toggle children
-        console.log("Has 'add' listeners?:", targetGroup.listens('add'));
-
-        // 4. Check the Prototype Chain
-        // We want to see if 'ExtendedFeatureGroup' actually inherits from 'FeatureGroup'
-        let proto = Object.getPrototypeOf(targetGroup);
-        console.log("Prototype Chain:");
-        while (proto) {
-            console.log(" -> ", proto.constructor.name);
-            proto = Object.getPrototypeOf(proto);
-        }
-    })();
+    }
+})();
 
     // --- 3. DICTIONARY SEARCH (Targeting the Iframe) ---
     const findBucket = () => {
