@@ -596,16 +596,17 @@ window.updateMarkerStatus = function(region_id) {
 // map.js
 
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
-    console.group(`🔍 Debug: UpdateWalkVisuals [Region: ${region_id} | Tag: ${targetTag}]`);
+    console.group(`🔎 GHOST DEBUG: [Region: ${region_id}] [Tag: ${targetTag}]`);
 
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
+    const activeMap = window.fmap || parent.fmap || (window.top && window.top.fmap);
+    const Leaflet = window.L || parent.L || (window.top && window.top.L);
     const searchTag = `[${targetTag}]`;
 
     // --- 1. FIND THE BUCKET (Dictionary Search) ---
     let targetGroup = null;
     let foundInKey = null;
 
+    console.time("Dictionary Search");
     for (const key in window) {
         if (key.startsWith("layer_control_") && (window[key].overlays || window[key]._layers)) {
             const layers = window[key].overlays || window[key]._layers;
@@ -613,29 +614,31 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                 if (layerName.includes(searchTag)) {
                     targetGroup = layers[layerName].layer || layers[layerName];
                     foundInKey = key;
-                    console.log(`🎯 Found Bucket: "${layerName}" inside ${key}`);
                     break;
                 }
             }
         }
         if (targetGroup) break;
     }
+    console.timeEnd("Dictionary Search");
 
     if (!targetGroup) {
-        console.warn(`⚠️ No Bucket found for ${searchTag}. (Expected if tag not in Python)`);
+        console.warn(`❌ FAILURE: No Bucket found for ${searchTag}. Ghost will have no parent.`);
         console.groupEnd();
         return;
+    } else {
+        console.log(`🎯 SUCCESS: Found Bucket in "${foundInKey}" (Leaflet ID: ${targetGroup._leaflet_id})`);
     }
 
     // --- 2. DATA RETRIEVAL ---
     const cleanId = String(region_id).trim();
-    const fullData = window.BAKED_DATA || parent.BAKED_DATA || (window.top && window.top.BAKED_DATA);
-    let bakedData = fullData ? fullData[cleanId] : null;
+    // Use your getBakeData() getter
+    const fullData = typeof getBakeData === 'function' ? getBakeData() : (window.BAKED_DATA || {});
+    let bakedData = fullData[cleanId];
 
     if (!bakedData) {
-        console.error(`❌ No BAKED_DATA found for region ID: ${cleanId}`);
-        console.groupEnd();
-        return;
+        console.warn(`⚠️ BAKED_DATA missing for ${cleanId}. Initializing empty state.`);
+        bakedData = {}; // Initialize so math doesn't crash
     }
 
     // --- 3. MATH (TOTALS & PERCENTAGE) ---
@@ -650,24 +653,25 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     Object.values(bakedData).forEach(s => {
         if (s && typeof s === 'object' && s.street_weight) {
-            if (Object.values(s).some(u => u?.tags?.[targetTag] === 'y')) {
+            const hasTag = Object.values(s).some(u => u && u.tags && u.tags[targetTag] === 'y');
+            if (hasTag) {
                 completedHouses += s.street_weight;
             }
         }
     });
 
     const pct = totalPossibleHouses > 0 ? (completedHouses / totalPossibleHouses) : 0;
-    console.log(`📊 Math: ${completedHouses} / ${totalPossibleHouses} houses (${(pct * 100).toFixed(1)}%)`);
+    console.log(`📊 STATS: ${completedHouses}/${totalPossibleHouses} Houses. Progress: ${(pct * 100).toFixed(2)}%`);
 
     // --- 4. ATTACH/UPDATE GHOST ---
-    let layerFound = false;
+    let layersProcessed = 0;
     activeMap.eachLayer(layer => {
         if (String(layer.feature?.properties?.region_id).trim() === cleanId && !layer.feature.properties.is_ghost) {
-            layerFound = true;
+            layersProcessed++;
             const ghostKey = `_ghost_${targetTag}`;
 
             if (!layer[ghostKey]) {
-                console.log(`👻 Creating new Ghost Layer for ${cleanId}`);
+                console.log(`👻 GHOST CREATION: Generating new GeoJSON for ${cleanId}`);
                 layer[ghostKey] = Leaflet.geoJSON(layer.toGeoJSON(), {
                     style: {
                         color: "transparent",
@@ -677,34 +681,34 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
                     }
                 });
 
-                // Parenting
+                // CRITICAL: Parent to the Bucket
                 layer[ghostKey].addTo(targetGroup);
-                console.log(`🔗 Ghost attached to Target Group (ID: ${targetGroup._leaflet_id})`);
+                console.log(`➡️ PARENTING: Ghost (ID: ${layer[ghostKey]._leaflet_id}) added to Group (ID: ${targetGroup._leaflet_id})`);
 
-                // Visual Sync
+                // CRITICAL: Visual rendering
                 if (activeMap.hasLayer(targetGroup)) {
                     layer[ghostKey].addTo(activeMap);
-                    console.log("👁️ Parent is visible; Ghost added to Map.");
+                    console.log("👁️ VISIBILITY: Parent is ON map. Ghost rendered.");
                 } else {
-                    console.log("🌑 Parent is hidden; Ghost kept in memory only.");
+                    console.log("🌑 VISIBILITY: Parent is OFF map. Ghost hidden in group.");
                 }
             }
 
-            // Update Style
-            const newOpacity = 0.8 * pct;
-            layer[ghostKey].setStyle({ fillOpacity: newOpacity });
-            console.log(`✨ Ghost Opacity updated to: ${newOpacity.toFixed(2)}`);
+            // Apply visual opacity
+            const opacity = 0.8 * pct;
+            layer[ghostKey].setStyle({ fillOpacity: opacity });
+            console.log(`✨ STYLE: Opacity set to ${opacity.toFixed(2)}`);
 
-            // Cleanup check
+            // Safety Cleanup
             if (!activeMap.hasLayer(targetGroup) && activeMap.hasLayer(layer[ghostKey])) {
-                console.log("🧹 Cleanup: Removing orphaned ghost because parent is toggled off.");
+                console.log("🧹 CLEANUP: Removing orphaned visual. Group is currently unchecked.");
                 activeMap.removeLayer(layer[ghostKey]);
             }
         }
     });
 
-    if (!layerFound) {
-        console.warn(`❓ No base layer found for region ${cleanId} to attach ghost to.`);
+    if (layersProcessed === 0) {
+        console.error(`❌ ERROR: Could not find base map layer for region ${cleanId}`);
     }
 
     console.groupEnd();
