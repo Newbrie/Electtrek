@@ -633,37 +633,46 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
 
     // 1. GET DATA
-    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
-    const regionData = fullData[cleanId];
+    // --- 1. GET DATA (With Safe Initialization) ---
+      const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
 
-    if (!regionData) {
-        console.error("❌ No data found for region in BAKED_DATA");
-        console.groupEnd();
-        return;
-    }
+      // If it doesn't exist, create a temporary local object so the script keeps running
+      let regionData = fullData[cleanId];
+      if (!regionData) {
+          console.warn(`⚠️ Initializing fresh data state for ${cleanId}`);
+          regionData = { region_total_houses: 0 };
+      }
 
-    // 2. MATH (Self-Contained)
-    let completedWeight = 0;
-    // Get the denominator we stored in handleTagClick
-    let totalPossible = regionData.region_total_houses || 0;
+      // --- 2. MATH (Self-Contained) ---
+      let completedWeight = 0;
+      let totalPossible = regionData.region_total_houses || 0;
 
-    // Safety fallback: if total is still 0, the ghost will be invisible.
-    // Let's log it clearly.
-    if (totalPossible === 0) {
-        console.warn("⚠️ total_houses is 0. Opacity will be 0. Check handleTagClick extraction!");
-    }
+      // FALLBACK: If we still don't have a total from Baked Data,
+      // we MUST try to find it from the map one last time,
+      // otherwise the ghost stays at 0% forever.
+      if (totalPossible === 0) {
+          activeMap.eachLayer(l => {
+              if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
+                  totalPossible = parseInt(l.feature.properties.expected_houses || 0);
+              }
+          });
+      }
 
-    Object.values(regionData).forEach(street => {
-        if (street && typeof street === 'object' && street.street_weight) {
-            // Check if any unit on this street has targetTag === 'y'
-            const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
-            if (isTagged) {
-                completedWeight += street.street_weight;
-            }
-        }
-    });
+      // Calculate completed weight
+      Object.values(regionData).forEach(street => {
+          if (street && typeof street === 'object' && street.street_weight) {
+              const isTagged = Object.values(street).some(unit => unit?.tags?.[targetTag] === 'y');
+              if (isTagged) {
+                  completedWeight += street.street_weight;
+              }
+          }
+      });
 
-    const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
+      const pct = totalPossible > 0 ? (completedWeight / totalPossible) : 0;
+      const finalOpacity = 0.8 * pct;
+
+      console.log(`📊 Result for ${cleanId}: ${completedWeight} / ${totalPossible} (${(pct * 100).toFixed(1)}%)`);
+
     const finalOpacity = 0.8 * pct;
 
     console.log(`📊 Math: ${completedWeight} / ${totalPossible} = ${(pct * 100).toFixed(1)}%`);
