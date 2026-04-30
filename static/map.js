@@ -711,14 +711,35 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         }
         return null;
     };
-    let targetGroup = findBucket();
+    window.layerRegistry = window.layerRegistry || {};
+    const groupName = `[${targetTag}]`;
+
+    let targetGroup = window.layerRegistry[groupName];
 
     if (!targetGroup) {
-        console.error("❌ Target Bucket not found.");
-        console.groupEnd();
+        targetGroup = findBucket();
+
+        if (targetGroup instanceof Leaflet.LayerGroup) {
+            window.layerRegistry[groupName] = targetGroup;
+            console.log("✅ Bucket cached:", groupName);
+        }
+    }
+
+    if (!(targetGroup instanceof Leaflet.LayerGroup)) {
+        console.error("❌ Bucket is not a real LayerGroup:", targetGroup);
         return;
     }
-    console.log("Discovered Bucket type:", targetGroup instanceof L.FeatureGroup);
+
+    window.layerRegistry = window.layerRegistry || {};
+
+    const groupName = `[${targetTag}]`;
+    window.layerRegistry[groupName] = targetGroup;
+
+    console.log("Bucket check:", {
+        isLayerGroup: targetGroup instanceof Leaflet.LayerGroup,
+        isFeatureGroup: targetGroup instanceof Leaflet.FeatureGroup
+    });
+
     // --- 4. MANUFACTURING WITHIN THE BUCKET ---
     // We identify the ghost by a unique ID string rather than a variable on the source layer
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
