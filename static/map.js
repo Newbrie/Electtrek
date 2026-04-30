@@ -706,20 +706,17 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const groupName = `[${targetTag}]`;
 
     const findBucket = () => {
-        const mapWin = (window.parent && window.parent.fmap) ? window.parent : window;
+        let found = null;
 
-        for (const key in mapWin) {
-            if (key.startsWith("layer_control_")) {
-                const layers = mapWin[key].overlays || mapWin[key]._layers;
-
-                for (const name in layers) {
-                    if (name.includes(`[${targetTag}]`)) {
-                        return layers[name].layer || layers[name];
-                    }
+        activeMap.eachLayer(layer => {
+            if (layer instanceof Leaflet.FeatureGroup || layer instanceof Leaflet.LayerGroup) {
+                if (layer.options?.name?.includes(`[${targetTag}]`)) {
+                    found = layer;
                 }
             }
-        }
-        return null;
+        });
+
+        return found;
     };
 
     let targetGroup = window.layerRegistry[groupName];

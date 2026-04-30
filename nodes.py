@@ -1447,10 +1447,16 @@ class TreeNode:
                 show=True  # Starts hidden so the map isn't messy
             )
 
+
             # Store the metadata on the Python object
             ghost_layer.mytag = tag_code
             ghost_layer.key = f"ghost_{tag_code.lower()}"
-
+            ghost_layer.options = {
+                "layer_type": "ghost",
+                "tag": tag_code,
+                "key": f"ghost_{tag_code.lower()}",
+                "group": display_name
+                }
             selected.append(ghost_layer)
 
         return list(reversed(selected)), totalleaf
