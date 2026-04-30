@@ -22,21 +22,19 @@ progress = {}
 
 
 branchcolours = [
-    "#D32F2F",  # 0 strong red
-    "#1976D2",  # 1 strong blue
-    "#388E3C",  # 2 strong green
-    "#7B1FA2",  # 3 deep purple
-    "#F57C00",  # 4 strong orange
-    "#C2185B",  # 5 magenta
-    "#00796B",  # 6 teal
-    "#512DA8",  # 7 indigo
-    "#455A64",  # 8 blue-grey
-    "#000000",  # 9 black
-    "#795548",  # 10 brown
-    "#0097A7",  # 11 cyan
-    "#AFB42B",  # 12 olive
+    "#0E6B79",  # 0 Deep Charcoal Cyan (Darkest)
+    "#118B9D",  # 1 Dark Teal-Cyan
+    "#14A2B7",  # 2 Muted Cerulean
+    "#17B9D1",  # 3 BASE COLOR (Your target)
+    "#1ED2ED",  # 4 High Saturation Electric
+    "#45C7D9",  # 5 Soft Sky Cyan
+    "#6ED5E2",  # 6 Pastel Turquoise
+    "#97E3EC",  # 7 Ice Cyan
+    "#C0F1F6",  # 8 Frosted Mint
+    "#00D7FF",  # 9 Vivid Neon Blue-Cyan
+    "#30E3FF",  # 10 Bright Glow Aqua
+    "#009DAE",  # 11 Deep Tropical Ocean
 ]
-
 
 def route():
     if has_request_context():

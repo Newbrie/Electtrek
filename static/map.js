@@ -718,7 +718,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
         console.groupEnd();
         return;
     }
-
+    console.log("Discovered Bucket type:", targetGroup instanceof L.FeatureGroup);
     // --- 4. MANUFACTURING WITHIN THE BUCKET ---
     // We identify the ghost by a unique ID string rather than a variable on the source layer
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
