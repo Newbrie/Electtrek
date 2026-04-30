@@ -655,8 +655,10 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
+    const mapWin = (window.parent && window.parent.fmap) ? window.parent : window;
+    const Leaflet = mapWin.L;
+    const activeMap = mapWin.fmap;
+
     const cleanId = String(region_id).trim();
 
     // --- 1. DATA & MATH ---
@@ -704,14 +706,14 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const groupName = `[${targetTag}]`;
 
     const findBucket = () => {
-        const iframe = document.getElementById('iframe1');
-        const mapWin = iframe ? iframe.contentWindow : window;
+        const mapWin = (window.parent && window.parent.fmap) ? window.parent : window;
 
         for (const key in mapWin) {
             if (key.startsWith("layer_control_")) {
                 const layers = mapWin[key].overlays || mapWin[key]._layers;
+
                 for (const name in layers) {
-                    if (name.includes(groupName)) {
+                    if (name.includes(`[${targetTag}]`)) {
                         return layers[name].layer || layers[name];
                     }
                 }
