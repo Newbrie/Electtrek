@@ -177,14 +177,14 @@ window.getBakedData = function() {
                           const region_id = firstRow.getAttribute('data-walk');
 
                           if (window.updateWalkVisuals) {
-                              // 1. Get all tag codes that actually exist in your data
-                              // Or use: Object.keys(window.TAG_TO_GROUP_MAPPING)
-                              const tagsToUpdate = ['L1', 'L2', 'L3', 'M1', 'M2', 'M3'];
+                            // 1. Pull keys dynamically from your global config
+                            const tagsToUpdate = Object.keys(window.task_tags || {});
 
-                              // 2. Refresh every ghost layer for this specific walk
-                              tagsToUpdate.forEach(tagCode => {
-                                  window.updateWalkVisuals(region_id, tagCode);
-                              });
+                            // 2. Refresh every ghost layer for this specific walk
+                            // The prefix guard inside the function will handle skipping M-tags automatically
+                            tagsToUpdate.forEach(tagCode => {
+                                window.updateWalkVisuals(region_id, tagCode);
+                            });
 
                               console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
                           }
