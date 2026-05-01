@@ -655,19 +655,18 @@ window.updateMarkerStatus = function(region_id) {
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
-    const mapWin = (window.parent && window.parent.fmap) ? window.parent : window;
-    const Leaflet = mapWin.L;
-    const activeMap = mapWin.fmap;
-
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
     const cleanId = String(region_id).trim();
 
-    // --- 1. DATA & MATH ---
+    // --- 1. DATA & MATH (Keep your existing logic) ---
     const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
     let regionData = fullData[cleanId] || { region_total_houses: 0 };
 
     let completedWeight = 0;
     let totalPossible = regionData.region_total_houses || 0;
 
+    // Denominator fallback
     if (totalPossible === 0) {
         activeMap.eachLayer(l => {
             if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
@@ -677,17 +676,14 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     }
 
     Object.values(regionData).forEach(street => {
-        if (street?.street_weight &&
-            Object.values(street).some(u => u?.tags?.[targetTag] === 'y')) {
+        if (street?.street_weight && Object.values(street).some(u => u?.tags?.[targetTag] === 'y')) {
             completedWeight += street.street_weight;
         }
     });
 
-    const finalOpacity = totalPossible > 0
-        ? (0.8 * (completedWeight / totalPossible))
-        : 0;
+    const finalOpacity = totalPossible > 0 ? (0.8 * (completedWeight / totalPossible)) : 0;
 
-    // --- 2. FIND BLUEPRINT ---
+    // --- 2. FIND THE SOURCE BLUEPRINT ---
     let blueprintGeometry = null;
     activeMap.eachLayer(l => {
         if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
@@ -696,56 +692,60 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     });
 
     if (!blueprintGeometry) {
-        console.warn("⚠️ Source polygon not found.");
+        console.warn("⚠️ Source polygon not found for blueprint.");
         console.groupEnd();
         return;
     }
 
-    // --- 3. GET BUCKET (WITH CACHE FIRST) ---
-    window.layerRegistry = window.layerRegistry || {};
-    const groupName = `[${targetTag}]`;
-
+    // --- 3. FIND THE TARGET BUCKET (Iframe Search) ---
     const findBucket = () => {
-        let found = null;
-
-        activeMap.eachLayer(layer => {
-            if (layer instanceof Leaflet.FeatureGroup || layer instanceof Leaflet.LayerGroup) {
-                if (layer.options?.name?.includes(`[${targetTag}]`)) {
-                    found = layer;
+        const iframe = document.getElementById('iframe1');
+        const mapWin = iframe ? iframe.contentWindow : window;
+        for (const key in mapWin) {
+            if (key.startsWith("layer_control_")) {
+                const layers = mapWin[key].overlays || mapWin[key]._layers;
+                for (const name in layers) {
+                    if (name.includes(`[${targetTag}]`)) return layers[name].layer || layers[name];
                 }
             }
-        });
-
-        return found;
+        }
+        return null;
     };
+    window.layerRegistry = window.layerRegistry || {};
+    const groupName = `[${targetTag}]`;
 
     let targetGroup = window.layerRegistry[groupName];
 
     if (!targetGroup) {
-        const found = findBucket();
+        targetGroup = findBucket();
 
-        if (found instanceof Leaflet.LayerGroup) {
-            targetGroup = found;
-            window.layerRegistry[groupName] = found;
+        if (targetGroup instanceof Leaflet.LayerGroup) {
+            window.layerRegistry[groupName] = targetGroup;
             console.log("✅ Bucket cached:", groupName);
         }
     }
 
     if (!(targetGroup instanceof Leaflet.LayerGroup)) {
-        console.error("❌ Invalid bucket:", targetGroup);
-        console.groupEnd();
+        console.error("❌ Bucket is not a real LayerGroup:", targetGroup);
         return;
     }
+
+    window.layerRegistry = window.layerRegistry || {};
+
+    const groupName = `[${targetTag}]`;
+    window.layerRegistry[groupName] = targetGroup;
 
     console.log("Bucket check:", {
         isLayerGroup: targetGroup instanceof Leaflet.LayerGroup,
         isFeatureGroup: targetGroup instanceof Leaflet.FeatureGroup
     });
 
-    // --- 4. CREATE / UPDATE GHOST ---
+    // --- 4. MANUFACTURING WITHIN THE BUCKET ---
+    // We identify the ghost by a unique ID string rather than a variable on the source layer
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
     let existingGhost = null;
 
+    // Search the BUCKET'S inventory for the existing ghost
     targetGroup.eachLayer(l => {
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
@@ -753,37 +753,42 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     });
 
     if (!existingGhost) {
-        console.log(`✨ Creating ghost ${ghostUniqueId}`);
+        console.log(`✨ Manufacturing new independent poly for ${ghostUniqueId}`);
 
+        // Create a brand new independent polygon directly from the blueprint
         const newPoly = Leaflet.geoJSON(blueprintGeometry, {
             pane: 'overlayPane',
             style: {
                 color: "transparent",
-                fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
+                fillColor: (targetTag.startsWith('L') ? "#333" : "#800080"),
                 fillOpacity: finalOpacity,
                 interactive: false
             }
         });
 
+        // Tag it so we can find it in the bucket later
         newPoly.is_ghost = true;
         newPoly.ghost_id = ghostUniqueId;
 
+        // Add it directly to the target bucket
         targetGroup.addLayer(newPoly);
 
-    } else {
-        existingGhost.setStyle({ fillOpacity: finalOpacity });
-    }
-
-    // --- 5. SAFETY: REHOME ANY STRAY GHOSTS ---
-    activeMap.eachLayer(layer => {
-        if (layer.is_ghost && layer.ghost_id === ghostUniqueId) {
-            if (!targetGroup.hasLayer(layer)) {
-                console.log("🧹 Rehoming ghost:", ghostUniqueId);
-                activeMap.removeLayer(layer);
-                targetGroup.addLayer(layer);
-            }
+        // SYNC CHECK: If the Layer Control has the bucket OFF, the ghost
+        // must be manually removed from the root map to prevent "pinning"
+        if (!activeMap.hasLayer(targetGroup)) {
+            activeMap.removeLayer(newPoly);
         }
-    });
+    } else {
+        // Just update the one already sitting in the bucket
+        existingGhost.setStyle({ fillOpacity: finalOpacity });
+
+        // Ensure toggle state is respected
+        if (!activeMap.hasLayer(targetGroup)) {
+            activeMap.removeLayer(existingGhost);
+        } else if (!activeMap.hasLayer(existingGhost)) {
+            existingGhost.addTo(activeMap);
+        }
+    }
 
     console.groupEnd();
 };
