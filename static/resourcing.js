@@ -4,6 +4,7 @@
 function createStandaloneHTML() {
     const doctype = "<!DOCTYPE html>\n";
     const clone = document.documentElement.cloneNode(true);
+    const currentData = getBakedData();
 
     // 1. Cleanup
     const calendar = clone.querySelector("#calendar-grid");

@@ -493,6 +493,73 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_nodemaps(rlevels, node, static, counters)
 
 
+    def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
+        """
+        Populates this layer with ghost polygons based on baked data.
+        Mirroring the logic of add_voronoi for high-fidelity data overlays.
+        """
+        import folium
+        polygons_added = 0
+
+        for node in nodes:
+            region_id = str(node.value)
+
+            # Guard: Only process if we have data for this region
+            if region_id not in baked_dict:
+                continue
+
+            region_info = baked_dict[region_id]
+            completed_weight = 0
+
+            # -------------------------------------------------
+            # 1. Calculate Tag Weight (The Logic Engine)
+            # -------------------------------------------------
+            for street_data in region_info.values():
+                if isinstance(street_data, dict):
+                    # Check 'y' status for this specific tag_code
+                    has_tag = any(u.get('tags', {}).get(tag_code) == 'y'
+                                 for u in street_data.values() if isinstance(u, dict))
+                    if has_tag:
+                        completed_weight += street_data.get('street_weight', 0)
+
+            total_possible = region_info.get('region_total_houses', 1)
+            opacity = (0.8 * (completed_weight / total_possible)) if total_possible > 0 else 0
+
+            # -------------------------------------------------
+            # 2. Build the Ghost Polygon
+            # -------------------------------------------------
+            if opacity > 0:
+                try:
+                    # Determine color from index (e.g., L1, L2)
+                    color_idx = int(tag_code[1:]) if tag_code[1:].isdigit() else 0
+                    fill_color = branchcolours[color_idx % 12]
+
+                    # Create the GeoJson Feature
+                    # Note: We use node.geometry which is already a Shapely object
+                    ghost_gj = folium.GeoJson(
+                        node.geometry,
+                        name=f"ghost_{tag_code}_{region_id}",
+                        style_function=lambda x, op=opacity, col=fill_color: {
+                            'fillColor': col,
+                            'color': 'transparent',
+                            'fillOpacity': op,
+                            'interactive': False  # Ghosts are non-interactive overlays
+                        }
+                    )
+
+                    # 🔑 CRITICAL: Inject the ghost_id for your JavaScript findBucket logic
+                    ghost_gj.ghost_id = f"ghost_{tag_code}_{region_id}"
+
+                    # Add to self (this ExtendedFeatureGroup)
+                    ghost_gj.add_to(self)
+                    polygons_added += 1
+
+                except Exception as e:
+                    print(f"⚠️ Ghost Error: Failed adding ghost for {tag_code} in {region_id} -> {e}")
+
+        print(f"DEBUG GHOSTS: Added {polygons_added} polygons to tag layer [{tag_code}]")
+        return polygons_added
+
     def create_layer(self, rlevels, nodelist, static=False):
         from flask import session
         from state import Treepolys, Fullpolys, branchcolours

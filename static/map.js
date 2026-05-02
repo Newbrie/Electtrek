@@ -652,6 +652,7 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
+
 window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 

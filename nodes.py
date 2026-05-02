@@ -1,4 +1,4 @@
-from config import workdirectories, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
+from config import workdirectories, DATA_FILE, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
 import os
 import state
 import layers
@@ -1336,12 +1336,13 @@ class TreeNode:
 
         return node
 
+
     def get_feature_layers(self, rlevels, path, static=False):
         from layers import make_feature_layers, ExtendedFeatureGroup
         from flask import session
         import folium
         from elections import CurrentElection # Ensure this is imported
-
+        from baked_data import baked_data
 
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1355,6 +1356,40 @@ class TreeNode:
         factory = make_feature_layers()
         selected = []
         used_keys = set()
+
+        # track used tags alongside used_keys
+        used_tags = set()
+
+        def get_safe_tag_layer(tag_code, tag_desc):
+            """
+            Returns a clean, empty ExtendedFeatureGroup for a specific tag.
+            Ensures unique naming and tracks usage to prevent UI collisions.
+            """
+            from layers import ExtendedFeatureGroup
+
+            # Check for duplicates (same logic as get_safe_layer)
+            display_name = f"Data Overlay: [{tag_code}] {tag_desc}"
+            if tag_code in used_tags:
+                display_name = f"{display_name} (Upper)"
+
+            used_tags.add(tag_code)
+
+            # Create the empty 'Bucket'
+            tag_layer = ExtendedFeatureGroup(
+                name=display_name,
+                overlay=True,
+                control=True,
+                show=True # Start visible so the Bucket exists in JS scope
+            )
+
+            # Attach metadata for JS bouncer to find this layer
+            tag_layer.options = tag_layer.options or {}
+            tag_layer.options.update({
+                "tag": tag_code,
+                "layer_type": "ghost"
+            })
+
+            return tag_layer
 
         def get_safe_layer(level_idx):
             key = elevels.get(level_idx)
@@ -1433,27 +1468,41 @@ class TreeNode:
         # -------------------------------------------------
         # 5️⃣ 👻 NEW: Add Ghost Tag Layers as ExtendedFeatureGroups
         # -------------------------------------------------
-        # Using your dictionary structure: {"L1": "Leaflet1", "L2": "SecondLeaflet", ...}
+
+
+        # --- 👻 HANDLE GHOST LAYERS ---
+# -------------------------------------------------
+        # 5️⃣ 👻 NEW: Add Ghost Tag Layers
+        # -------------------------------------------------
+        from baked_data import BakedDataManager  # Ensure this is imported
+
+        # 1. Initialize the manager with the correct path
+        # Note: Your class uses DATA_FILE as default, but we use the dynamic 'path'
+        baked_manager = BakedDataManager(os.path.join(path, 'baked_data.js'))
+
+        # 2. CALL THE LOAD METHOD to get the actual dictionary
+        baked_dict = baked_manager.load()
+
+        # -------------------------------------------------
+        # 5️⃣ 👻 GHOST OVERLAYS
+        # -------------------------------------------------
+        CE = CurrentElection.load(c_election)
+        task_tags, _, _ = CE.get_tags()
+
         for tag_code, tag_desc in task_tags.items():
+            # Get a safe, empty bucket
+            tag_layer = get_safe_tag_layer(tag_code, tag_desc)
 
-            # Format the name for the Layer Control & Accordion
-            # Output: "Data Overlay: [L1] Leaflet1"
-            display_name = f"Data Overlay: [{tag_code}] {tag_desc}"
-
-            ghost_layer = ExtendedFeatureGroup(
-                name=display_name,
-                overlay=True,
-                control=True,
-                show=True  # Starts hidden so the map isn't messy
+            # Populate it using its own internal method
+            # similar to how you would call node.add_voronoi(...)
+            tag_layer.add_ghosts(
+                tag_code=tag_code,
+                baked_dict=baked_dict,
+                nodes=childnodelist,
+                branchcolours=state.branchcolours
             )
 
-            # Store the metadata on the Python object
-            ghost_layer.mytag = tag_code
-            ghost_layer.key = f"ghost_{tag_code.lower()}"
-            ghost_layer.options = ghost_layer.options or {}
-            ghost_layer.options["tag"] = tag_code
-            ghost_layer.options["layer_type"] = "ghost"
-            selected.append(ghost_layer)
+            selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
 
@@ -2098,12 +2147,11 @@ class TreeNode:
 
             <script>
             document.addEventListener("DOMContentLoaded", function() {
-                // Use a MutationObserver to wait for the Leaflet Control to actually exist in the DOM
                 var observer = new MutationObserver(function(mutations, me) {
                     var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
                     if (controlContainer) {
                         setupAccordion(controlContainer);
-                        me.disconnect(); // Stop looking once found
+                        me.disconnect();
                         return;
                     }
                 });
@@ -2113,29 +2161,47 @@ class TreeNode:
                 function setupAccordion(container) {
                     var details = document.createElement('details');
                     details.className = 'ghost-accordion';
-
-                    var summary = document.createElement('summary');
-                    summary.innerHTML = '📊 Data Overlays';
+                    details.innerHTML = '<summary>📊 Data Overlays</summary>';
 
                     var contentDiv = document.createElement('div');
                     contentDiv.className = 'ghost-accordion-content';
-
-                    details.appendChild(summary);
                     details.appendChild(contentDiv);
 
                     var labels = container.querySelectorAll('label');
                     var foundAny = false;
 
-                    labels.forEach(function(label) {
-                        // Match the 'Data Overlay:' prefix set in Python
-                        if (label.innerText.includes('Data Overlay:')) {
-                            // Clean prefix for UI
-                            var span = label.querySelector('span');
-                            if (span) {
-                                span.innerHTML = span.innerHTML.replace('Data Overlay:', '').trim();
-                            }
-                            contentDiv.appendChild(label);
+                    labels.forEach(function(originalLabel) {
+                        if (originalLabel.innerText.includes('Data Overlay:')) {
                             foundAny = true;
+
+                            // 1. Hide the original row so it doesn't show twice
+                            originalLabel.style.display = 'none';
+
+                            // 2. Create a Proxy Label for the Accordion
+                            var proxyLabel = document.createElement('label');
+                            var cleanName = originalLabel.innerText.replace('Data Overlay:', '').trim();
+
+                            // Get the current state of the real checkbox
+                            var realInput = originalLabel.querySelector('input');
+                            var isChecked = realInput ? realInput.checked : false;
+
+                            proxyLabel.innerHTML = `
+                                <input type="checkbox" ${isChecked ? 'checked' : ''}>
+                                <span>${cleanName}</span>
+                            `;
+
+                            // 3. Link the Proxy to the Real Input
+                            var proxyInput = proxyLabel.querySelector('input');
+
+                            proxyInput.addEventListener('change', function() {
+                                if (realInput) {
+                                    // Physically click the hidden Leaflet input
+                                    // This triggers Leaflet's internal addLayer/removeLayer
+                                    realInput.click();
+                                }
+                            });
+
+                            contentDiv.appendChild(proxyLabel);
                         }
                     });
 
