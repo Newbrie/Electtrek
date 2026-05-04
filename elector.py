@@ -190,9 +190,10 @@ class ElectorManager:
 
                     filtered_df = filtered_df.copy()
                     filtered_df['Tags'] = filtered_df.apply(apply_baked_tags, axis=1)
+                    logger.debug(f"[RESULT] Rows with tags: {filtered_df['Tags'].notna().sum()}")
+                    logger.debug(f"[RESULT] Sample tags: {filtered_df['Tags'].dropna().head(5).tolist()}")
 
             print(f"[DEBUG] Full Path Match: {len(filtered_df)} rows for {raw_path}")
-            logger.debug(f"[TAG] Applied {active_tags} to {street} {house_num}")
             return filtered_df.copy()
 
 
