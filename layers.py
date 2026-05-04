@@ -349,16 +349,24 @@ def preprocess_streets(df, task_tags=None):
         # --- NEW: Extract Baked Tags ---
         # We check if 'y' exists for any record in this street group for each task code
         # This determines if the "Street Level" toggle should be green (y) or grey (n)
+    # --- FIXED: Checking within a single 'Tags' column ---
         street_tags = {}
         for code in sorted_task_codes:
-            if code in group.columns:
-                # If any house in the street is 'y', the street-level tag is often 'y'
-                # Alternatively, use .all() if you only want it 'y' when the whole street is done
-                is_done = "y" if (group[code] == "y").any() else "n"
+            if 'Tags' in group.columns:
+                # 1. Clean the Tags column to handle NaNs
+                # 2. Check if the code (e.g., 'L1') exists in the string
+                # We use a lambda to ensure we don't catch 'L10' when looking for 'L1'
+                def check_tag(tag_str, target):
+                    if pd.isna(tag_str): return False
+                    # Splitting by comma/space to be safe
+                    parts = [p.strip() for p in str(tag_str).replace(',', ' ').split()]
+                    return target in parts
+
+                is_done = "y" if group['Tags'].apply(lambda x: check_tag(x, code)).any() else "n"
                 street_tags[code] = is_done
             else:
                 street_tags[code] = "n"
-
+                
         nums = group["num"].dropna().astype(int).unique()
         nums.sort()
 
