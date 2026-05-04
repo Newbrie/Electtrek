@@ -342,31 +342,26 @@ def preprocess_streets(df, task_tags=None):
     street_data = {}
 
     # 5. PER-STREET PROCESSING
+    # ... inside the street loop of preprocess_streets ...
     for street, group in exploded.groupby("StreetName"):
-        units = sorted(group["unit"].unique())
-        actual_houses = len(units)
-
-        # --- NEW: Extract Baked Tags ---
-        # We check if 'y' exists for any record in this street group for each task code
-        # This determines if the "Street Level" toggle should be green (y) or grey (n)
-    # --- FIXED: Checking within a single 'Tags' column ---
         street_tags = {}
-        for code in sorted_task_codes:
-            if 'Tags' in group.columns:
-                # 1. Clean the Tags column to handle NaNs
-                # 2. Check if the code (e.g., 'L1') exists in the string
-                # We use a lambda to ensure we don't catch 'L10' when looking for 'L1'
-                def check_tag(tag_str, target):
-                    if pd.isna(tag_str): return False
-                    # Splitting by comma/space to be safe
-                    parts = [p.strip() for p in str(tag_str).replace(',', ' ').split()]
-                    return target in parts
 
-                is_done = "y" if group['Tags'].apply(lambda x: check_tag(x, code)).any() else "n"
-                street_tags[code] = is_done
-            else:
-                street_tags[code] = "n"
-                
+        # We look at the 'Tags' column which now contains strings like "L1, L2"
+        # because the ElectorManager injected them during the load.
+        for code in sorted_task_codes:
+            is_done = "n"
+            if 'Tags' in group.columns:
+                # Clean the column and check if our code is present in ANY row of this street
+                # .dropna() ensures we don't crash on empty rows
+                all_tags_in_street = group['Tags'].dropna().astype(str).str.upper()
+
+                # Check if the code (e.g., 'L1') exists as a word in the string
+                if any(code.upper() in val.replace(',', ' ').split() for val in all_tags_in_street):
+                    is_done = "y"
+            
+            street_tags[code] = is_done
+
+
         nums = group["num"].dropna().astype(int).unique()
         nums.sort()
 

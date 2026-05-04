@@ -133,6 +133,42 @@ class ElectorManager:
                             print(f"[DEBUG] Search died at Level {depth} ({node_type}: {target_val})")
                             return pd.DataFrame()
 
+                
+# --- FIXED: Inject Baked Tags by House Number ---
+                if not filtered_df.empty:
+                    from baked_data import baked_manager
+
+                    # 1. Get the baked data for this election
+                    # This returns the dict starting with "N272", "N256", etc.
+                    election_baked = baked_manager.get_election_data(election_name)
+
+                    if election_baked:
+                        def apply_baked_tags(row):
+                            # We need the Street and the House Number (AddressNumber)
+                            street = row.get('StreetName')
+                            # Ensure we match the key format in your JSON (usually string)
+                            house_num = str(row.get('AddressNumber', ''))
+
+                            # Navigate: Walk (election_baked) -> Street -> House
+                            street_info = election_baked.get(street, {})
+                            house_info = street_info.get(house_num, {})
+
+                            # Get the tags dict: {"L1": "y"}
+                            tags_dict = house_info.get('tags', {})
+
+                            # Convert {"L1": "y", "L2": "n"} into a string "L1" for the 'Tags' column
+                            active_tags = [code for code, status in tags_dict.items() if status == 'y']
+
+                            # Join with the existing Tags in the CSV if any
+                            existing_tags = str(row.get('Tags', '')).strip()
+                            new_tags = ", ".join(active_tags)
+
+                            if existing_tags and new_tags:
+                                return f"{existing_tags}, {new_tags}"
+                            return new_tags or existing_tags
+
+                        filtered_df['Tags'] = filtered_df.apply(apply_baked_tags, axis=1)
+
                 print(f"[DEBUG] Full Path Match: {len(filtered_df)} rows for {raw_path}")
                 return filtered_df.copy()
 
@@ -246,6 +282,7 @@ class ElectorManager:
 
 # Single instance
 electors = ElectorManager()
+
 
 # ✅ Now this works
 print(electors._elections.keys())
