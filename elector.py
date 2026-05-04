@@ -133,10 +133,10 @@ class ElectorManager:
                             print(f"[DEBUG] Search died at Level {depth} ({node_type}: {target_val})")
                             return pd.DataFrame()
 
-                
+
 # --- FIXED: Inject Baked Tags by House Number ---
                 if not filtered_df.empty:
-                    from baked_data import baked_manager
+                    from baked_data import baked_data
 
                     # 1. Get the baked data for this election
                     # This returns the dict starting with "N272", "N256", etc.
