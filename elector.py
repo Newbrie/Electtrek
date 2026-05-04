@@ -93,7 +93,7 @@ class ElectorManager:
 
     def elector_for_path(self, election_name, raw_path):
         from elections import CurrentElection
-        from baked_data import baked_manager
+        from baked_data import baked_data
 
         with _lock:
             # 1. Access the specific election data
@@ -128,7 +128,7 @@ class ElectorManager:
             if len(parts) >= 5:
                 # In your system, WalkName is at index 4 (the 5th step)
                 region_id = str(parts[4]).strip() # region_id in add_ghosts
-                all_baked = baked_manager.load()
+                all_baked = baked_data.load()
                 region_info = all_baked.get(region_id, {})
 
                 if region_info:
