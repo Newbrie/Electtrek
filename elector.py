@@ -140,7 +140,7 @@ class ElectorManager:
 
                     # 1. Get the baked data for this election
                     # This returns the dict starting with "N272", "N256", etc.
-                    election_baked = baked_manager.get_election_data(election_name)
+                    election_baked = baked_data.get_election_data(election_name)
 
                     if election_baked:
                         def apply_baked_tags(row):
