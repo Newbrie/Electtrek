@@ -322,16 +322,17 @@ def preprocess_streets(df, task_tags=None):
         if col in df.columns:
             df[col] = df[col].astype(str).replace(["nan", "None", ""], pd.NA)
 
-    # 2. UNIQUE IDENTIFIER (Prefix + Number)
+    # 2. UNIQUE IDENTIFIER
     def combine_unit(row):
         p = str(row["AddressPrefix"]).strip() if pd.notna(row["AddressPrefix"]) else ""
         n = str(row["AddressNumber"]).strip() if pd.notna(row["AddressNumber"]) else ""
-        if p and n: return f"{p} {n}"
+        if p and n:
+            return f"{p} {n}"
         return p or n or "Unknown"
 
     df["unit"] = df.apply(combine_unit, axis=1)
 
-    # 3. EXPLODE: Handle comma-separated units
+    # 3. EXPLODE (comma-separated units)
     exploded = df.assign(unit=df["unit"].str.split(",")).explode("unit")
     exploded["unit"] = exploded["unit"].str.strip()
     exploded = exploded[exploded["unit"].notna() & (exploded["unit"] != "Unknown")]
@@ -342,59 +343,72 @@ def preprocess_streets(df, task_tags=None):
     street_data = {}
 
     # 5. PER-STREET PROCESSING
-    # ... inside the street loop of preprocess_streets ...
     for street, group in exploded.groupby("StreetName"):
-        street_tags = {}
+        group = group.copy()
 
-        # We look at the 'Tags' column which now contains strings like "L1, L2"
-        # because the ElectorManager injected them during the load.
-        for code in sorted_task_codes:
-            is_done = "n"
-            if 'Tags' in group.columns:
-                # Clean the column and check if our code is present in ANY row of this street
-                # .dropna() ensures we don't crash on empty rows
-                all_tags_in_street = group['Tags'].dropna().astype(str).str.upper()
+        # --- Units + counts (single pass) ---
+        unit_counts = Counter(group["unit"])
+        units = sorted(unit_counts.keys())
+        actual_houses = len(units)
 
-                # Check if the code (e.g., 'L1') exists as a word in the string
-                if any(code.upper() in val.replace(',', ' ').split() for val in all_tags_in_street):
-                    is_done = "y"
-            
-            street_tags[code] = is_done
+        # --- FAST TAG PROCESSING (no lambdas) ---
+        if 'Tags' in group.columns:
+            tag_series = (
+                group['Tags']
+                .dropna()
+                .astype(str)
+                .str.upper()
+                .str.replace(',', ' ')
+                .str.split()
+                .explode()
+            )
+            tag_set = set(tag_series)
+        else:
+            tag_set = set()
 
+        street_tags = {
+            code: ("y" if code.upper() in tag_set else "n")
+            for code in sorted_task_codes
+        }
 
+        # --- NUMBER ANALYSIS ---
         nums = group["num"].dropna().astype(int).unique()
         nums.sort()
 
         if len(nums) > 0:
             min_num, max_num = int(nums.min()), int(nums.max())
+
+            # Detect even/odd pattern
             if len(nums) > 1 and all(n % 2 == nums[0] % 2 for n in nums):
                 estimated_houses = ((max_num - min_num) // 2) + 1
                 expected_numbers = set(range(min_num, max_num + 1, 2))
             else:
                 estimated_houses = (max_num - min_num) + 1
                 expected_numbers = set(range(min_num, max_num + 1))
+
             missing_numbers = sorted(expected_numbers - set(nums))
         else:
             min_num = max_num = None
             estimated_houses = actual_houses
             missing_numbers = []
 
+        # --- BUILD OUTPUT ---
         street_data[street] = {
             "houses": actual_houses,
             "estimated_houses": estimated_houses,
             "house_gaps": max(0, estimated_houses - actual_houses),
             "missing_numbers": missing_numbers,
             "unit_list": units,
-            "unit_counts": dict(Counter(group["unit"])),
+            "unit_counts": dict(unit_counts),
             "min_num": min_num,
             "max_num": max_num,
-            "tags": street_tags  # <--- INJECTED HERE
+            "tags": street_tags
         }
 
     total_houses_count = sum(data["houses"] for data in street_data.values())
+
     return street_data, total_houses_count
-
-
+    
 def build_nodemap_list_html(herenode):
     """
     Build HTML tooltip listing all children of a node.

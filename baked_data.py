@@ -5,6 +5,11 @@ import json
 class BakedDataManager:
     def __init__(self, filename=DATA_FILE):
         self.filename = filename
+        self._data = self.load()  # Load into memory immediately
+
+    def get_election_data(self, walk_id):
+        # Your JSON structure uses Walk ID as the top level (e.g., "N272")
+        return self._data.get(walk_id, {})
 
     def load(self):
         if os.path.exists(self.filename):

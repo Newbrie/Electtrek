@@ -92,85 +92,108 @@ class ElectorManager:
     # -------------------------------
 
     def elector_for_path(self, election_name, raw_path):
-            from elections import CurrentElection
-            with _lock:
-                # 1. Access the specific election data
-                df = self._elections.get(election_name)
-                if df is None or df.empty:
-                    return pd.DataFrame()
+        from elections import CurrentElection
+        from baked_data import baked_data
+        from state import normalname
+        with _lock:
+            df = self._elections.get(election_name)
+            if df is None or df.empty:
+                return pd.DataFrame()
 
-                # 2. Get the clean steps (e.g., ['UK', 'SPELTHORNE', 'ASHFORD'])
-                parts = state.stepify(raw_path)
-                if len(parts) < 2:
-                    return df.copy() # Return all if we are only at the root level
+            parts = state.stepify(raw_path)
+            if len(parts) < 2:
+                return df.copy()
 
-                CElection = CurrentElection.load(election_name)
-                levels_map = CElection.resolved_levels.get(election_name, {})
+            CElection = CurrentElection.load(election_name)
+            levels_map = CElection.resolved_levels.get(election_name, {})
 
-                # 3. Start "sieving" level by level
-                filtered_df = df.copy()
+            filtered_df = df.copy()
 
-                # --- REFACTOR: Skip depth 0 (Country/Root) ---
-                for depth, value in enumerate(parts):
-                    if depth == 0:
-                        continue
+            for depth, value in enumerate(parts):
+                if depth == 0:
+                    continue
 
-                    node_type = levels_map.get(depth)
-                    if not node_type:
-                        continue
+                node_type = levels_map.get(depth)
+                if not node_type:
+                    continue
 
-                    col = shapecolumn.get(node_type)
+                col = shapecolumn.get(node_type)
 
-                    if col and col in filtered_df.columns:
-                        target_val = str(value).strip().upper()
+                if col and col in filtered_df.columns:
+                    target_val = str(value).strip().upper()
 
-                        # Apply the filter for this specific level (e.g., Constituency, Ward)
-                        filtered_df = filtered_df[
-                            filtered_df[col].astype(str).str.strip().str.upper() == target_val
-                        ]
+                    filtered_df = filtered_df[
+                        filtered_df[col].astype(str).str.strip().str.upper() == target_val
+                    ]
 
-                        if filtered_df.empty:
-                            print(f"[DEBUG] Search died at Level {depth} ({node_type}: {target_val})")
-                            return pd.DataFrame()
+                    if filtered_df.empty:
+                        print(f"[DEBUG] Search died at Level {depth} ({node_type}: {target_val})")
+                        return pd.DataFrame()
+
+            # ✅ KEEP THIS INDENTED INSIDE METHOD
+            if not filtered_df.empty:
+
+                election_baked = baked_data.get_election_data(election_name)
+                logger.debug(f"[BAKED] Election: {election_name}")
+                logger.debug(f"[BAKED] Keys available: {list(election_baked.keys())[:5] if election_baked else 'None'}")
+
+                if election_baked:
+                    def resolve_area_key(row):
+                        pd_val = normalname(row.get('PD', ''))
+                        walk_val = normalname(row.get('WalkName', ''))
+
+                        if pd_val in election_baked:
+                            logger.debug(f"[MATCH] PD matched: {pd_val}")
+                            return pd_val
+
+                        if walk_val in election_baked:
+                            logger.debug(f"[MATCH] WALK matched: {walk_val}")
+                            return walk_val
+
+                        logger.debug(f"[MISS] No area match for PD={pd_val}, WALK={walk_val}")
+                        return None
+
+                    def apply_baked_tags(row):
+                        area_key = resolve_area_key(row)
+                        if not area_key:
+                            return row.get('Tags', '')
+
+                        street = normalname(row.get('StreetName', ''))
+                        house_num = str(row.get('AddressNumber', '')).strip()
+
+                        area_block = election_baked.get(area_key, {})
+                        if not area_block:
+                            logger.debug(f"[MISS] Area block empty for {area_key}")
+                            return row.get('Tags', '')
+
+                        street_block = area_block.get(street, {})
+                        if not street_block:
+                            logger.debug(f"[MISS] Street not found: {street} in {area_key}")
+                            return row.get('Tags', '')
+
+                        house_info = street_block.get(house_num, {})
+                        if not house_info:
+                            logger.debug(f"[MISS] House not found: {street} {house_num}")
+                            return row.get('Tags', '')
 
 
-# --- FIXED: Inject Baked Tags by House Number ---
-                if not filtered_df.empty:
-                    from baked_data import baked_data
+                        tags_dict = house_info.get('tags', {})
 
-                    # 1. Get the baked data for this election
-                    # This returns the dict starting with "N272", "N256", etc.
-                    election_baked = baked_data.get_election_data(election_name)
+                        active_tags = [k for k, v in tags_dict.items() if v == 'y']
+                        if not active_tags:
+                            return row.get('Tags', '')
 
-                    if election_baked:
-                        def apply_baked_tags(row):
-                            # We need the Street and the House Number (AddressNumber)
-                            street = row.get('StreetName')
-                            # Ensure we match the key format in your JSON (usually string)
-                            house_num = str(row.get('AddressNumber', ''))
+                        existing_tags = str(row.get('Tags', '')).strip()
+                        new_tags = ", ".join(active_tags)
 
-                            # Navigate: Walk (election_baked) -> Street -> House
-                            street_info = election_baked.get(street, {})
-                            house_info = street_info.get(house_num, {})
+                        return f"{existing_tags}, {new_tags}" if existing_tags else new_tags
 
-                            # Get the tags dict: {"L1": "y"}
-                            tags_dict = house_info.get('tags', {})
+                    filtered_df = filtered_df.copy()
+                    filtered_df['Tags'] = filtered_df.apply(apply_baked_tags, axis=1)
 
-                            # Convert {"L1": "y", "L2": "n"} into a string "L1" for the 'Tags' column
-                            active_tags = [code for code, status in tags_dict.items() if status == 'y']
-
-                            # Join with the existing Tags in the CSV if any
-                            existing_tags = str(row.get('Tags', '')).strip()
-                            new_tags = ", ".join(active_tags)
-
-                            if existing_tags and new_tags:
-                                return f"{existing_tags}, {new_tags}"
-                            return new_tags or existing_tags
-
-                        filtered_df['Tags'] = filtered_df.apply(apply_baked_tags, axis=1)
-
-                print(f"[DEBUG] Full Path Match: {len(filtered_df)} rows for {raw_path}")
-                return filtered_df.copy()
+            print(f"[DEBUG] Full Path Match: {len(filtered_df)} rows for {raw_path}")
+            logger.debug(f"[TAG] Applied {active_tags} to {street} {house_num}")
+            return filtered_df.copy()
 
 
     def delete_elector_for_path(self, election_name, raw_path):
