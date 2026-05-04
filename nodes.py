@@ -1027,7 +1027,7 @@ class TreeNode:
 
 
         CE_resources = CE.get('resources',{})
-        CE_task_tags, CE_outcome_tags, CE_all_tags = get_tags_json(CE['tags'])
+        CE_task_tags, CE_outcome_tags, CE_all_tags = get_tags_json(CE['Tags'])
         CE_areas = self.get_areas()
         CE_places = CE.get("places", {})
         print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
@@ -1343,6 +1343,7 @@ class TreeNode:
         import folium
         from elections import CurrentElection # Ensure this is imported
         from baked_data import baked_data
+        from elector import electors
 
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1460,6 +1461,22 @@ class TreeNode:
                 selected.append(parent_layer)
 
         # -------------------------------------------------
+        # 4️⃣ Always Add VI Layer
+        # -------------------------------------------------
+
+        # Create the VI layer
+        VI_layer = ExtendedFeatureGroup(
+            name="⭐ Pledges",
+            overlay=True,
+            control=True,
+            show=True
+        )
+
+        # node_electors is the dataframe for the current map area
+        VI_layer.add_vi_highlights(electors.elector_for_path(c_election,path))
+
+        selected.append(VI_layer)
+        # -------------------------------------------------
         # 4️⃣ Always Add Marker Layer
         # -------------------------------------------------
         marker_layer = factory["marker"]
@@ -1478,7 +1495,7 @@ class TreeNode:
 
         # 1. Initialize the manager with the correct path
         # Note: Your class uses DATA_FILE as default, but we use the dynamic 'path'
-        baked_manager = BakedDataManager(os.path.join(path, 'baked_data.js'))
+        baked_manager = BakedDataManager()
 
         # 2. CALL THE LOAD METHOD to get the actual dictionary
         baked_dict = baked_manager.load()

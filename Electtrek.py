@@ -624,9 +624,8 @@ def selprefix(election):
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
     Full background normalisation routine with staged progress reporting.
-    Incrementally assigns Areas, Walks, and Zones, while considering all existing electors.
     """
-    import logging, os, traceback, pandas as pd
+    import logging, os, traceback, re, pandas as pd
     from shapely.geometry import Point, Polygon
     from elector import electors
     from state import Treepolys, Fullpolys, Geo_index, progress, DQstats, update_progress, check_level4_gap, ensure_treepolys_with_index
@@ -642,11 +641,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
     try:
         Outcols = pd.read_excel(GENESYS_FILE).columns
-        mainframes, deltaframes, aviframes, DQstatslist = [], [], [], []
-        mainframe = pd.DataFrame(columns=Outcols)
-        dfx = pd.DataFrame(columns=Outcols)
-
-        DQstats = pd.DataFrame()
+        mainframes, deltaframes, aviframes, pledge_frames, DQstatslist = [], [], [], [], []
 
         # --- Stage 1: Sourcing ---
         update_progress(progress, "sourcing", 0.0, "Sourcing data...")
@@ -659,8 +654,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         lastfilepath = CElection['mapfiles'][-1]
         here = (CElection.get('cidLat', None), CElection.get('cidLong', None))
 
-        # reload layer areas for this election
-
         lastfilepath, Geo_index = ensure_treepolys_with_index(
             territory=territory_path,
             sourcepath=lastfilepath,
@@ -668,27 +661,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             resolved_levels=resolved_levels,
             parent_levels=parent_levels
         )
-        print(f"____Route/background- path: {lastfilepath},Loaded election: {current_election} CE data: {CElection}")
 
-        # Define your hierarchy in order
         levels = ["Country", "Nation", "County", "Constituency"]
-
-        # Get the parts of the path
         path_parts = stepify(territory_path)
+        geo_context = {levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(levels)}
 
-        # Dictionary to hold the results
-        geo_context = {}
-
-        for i in range(len(path_parts)):
-            if i < len(levels):
-                # Create a key like 'Nation' and assign the value from the path
-                geo_context[levels[i]] = path_parts[i]
-
-        # Usage:
-        # print(geo_context['Nation'])
-        # To this (using the names you defined in your levels list):
-        print(f"Loading... Nation {geo_context.get('Nation')} County {geo_context.get('County')} Constituency {geo_context.get('Constituency')}")
-        # Sort metadata items by order
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
         total_items = len(sorted_items)
 
@@ -697,31 +674,22 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             file_path = data.get('saved_path') or data.get('stored_path', '')
             if file_path and not os.path.isabs(file_path):
                 file_path = os.path.join(config.workdirectories['workdir'], file_path)
+
             if not os.path.exists(file_path):
-                print(f"⚠️ File does not exist: {file_path}")
                 continue
 
             purpose = data.get('purpose')
             fixlevel = int(data.get('fixlevel', 0)) if data.get('fixlevel') else 0
 
-
             if file_path.upper().endswith('.CSV'):
-                # Update line 694 in Electtrek.py to this:
-                dfx = pd.read_csv(
-                    file_path,
-                    sep=None,             # <--- Tells pandas to guess the separator
-                    engine='python',      # <--- Required for sep=None
-                    encoding='ISO-8859-1',
-                    keep_default_na=False,
-                    on_bad_lines='warn'   # <--- Instead of crashing, it will just warn you about line 64
-                )
+                dfx = pd.read_csv(file_path, sep=None, engine='python', encoding='ISO-8859-1', keep_default_na=False, on_bad_lines='warn')
             elif file_path.upper().endswith('.XLSX'):
                 dfx = pd.read_excel(file_path, engine='openpyxl', keep_default_na=False)
             else:
                 continue
 
-            print(f"⚠️ Reading File path: {file_path}")
-            update_progress(progress, "sourcing", (idx + 1) / total_items, f"Sourcing ({idx+1}/{total_items})")
+            # Clean columns (BOM/Whitespace)
+            dfx.columns = [c.encode('ascii', 'ignore').decode('ascii').strip() for c in dfx.columns]
 
             results = normz(progress, RunningVals, Lookups, data.get('election'), file_path, dfx, fixlevel, purpose)
             temp_df = pd.DataFrame(results[0])
@@ -730,63 +698,73 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             if purpose == 'main': mainframes.append(temp_df)
             elif purpose == 'delta': deltaframes.append(temp_df)
             elif purpose == 'avi': aviframes.append(temp_df)
+            elif purpose == 'pledge': pledge_frames.append(temp_df)
 
-        # --- Combine new frames ---
+        # --- Combine Electoral Roll ---
         all_new = mainframes + deltaframes
         if not all_new:
-            progress.update({"percent": 100, "status": "error", "message": "No valid files to process"})
+            progress.update({"percent": 100, "status": "error", "message": "No valid electoral files"})
             return
+
         new_df = pd.concat(all_new, ignore_index=True)
 
-        # 3. Raise ValueError if path is less than 4 (must include Constituency)
-        if len(path_parts) < 4:
-            error_msg = (
-                f"❌ Path depth error: found {len(path_parts)} levels. "
-                f"Path '{territory_path}' is too shallow. "
-                "Minimum requirement: Country/Nation/County/Constituency."
-            )
-            print(error_msg)
-            raise ValueError(error_msg)
+        # --- Stage 2.5: Normalise Names & Keys ---
+        # Normalise strings for HTML and matching
+        for col in ['Forename', 'Surname', 'Name']:
+            if col in new_df.columns:
+                new_df[col] = normalname(new_df[col])
 
-        # 4. Proceed with assignment if check passes
+        # --- Stage 3: Apply Pledge Data (Reform VI) ---
+        if pledge_frames:
+            print(f"📊 Applying Reform VI from {len(pledge_frames)} pledge files...")
+            all_pledges = pd.concat(pledge_frames, ignore_index=True)
+
+            # Normalise pledge ENOP to ensure it matches the normalised main ENOP
+            if 'ENOP' in all_pledges.columns:
+                # Merge: we only need the key and a flag
+                all_pledges['pledge_flag'] = 'R'
+
+                new_df = new_df.merge(
+                    all_pledges[['ENOP', 'pledge_flag']].drop_duplicates(subset='ENOP'),
+                    on='ENOP',
+                    how='left'
+                )
+
+                # Update VI field where pledge match found
+                if 'pledge_flag' in new_df.columns:
+                    new_df['VI'] = new_df['pledge_flag'].fillna(new_df.get('VI', ''))
+                    new_df.drop(columns=['pledge_flag'], inplace=True)
+                    count_r = (new_df['VI'] == 'R').sum()
+                    print(f"✅ {count_r} electors marked as 'R' via Pledge Import.")
+
+        # Contextualize Hierarchy
+        if len(path_parts) < 4:
+            raise ValueError(f"Path '{territory_path}' too shallow. Need 4 levels.")
+
         for i, value in enumerate(path_parts):
             if i < len(levels):
-                column_name = levels[i]
-                new_df[column_name] = value
-                print(f"✅ Contextualized column: {column_name} = {value}")
+                new_df[levels[i]] = value
 
-    # --- Stage 3: Load all existing electors for reference ---
+        # --- Stage 4: Merge with Existing & Deduplicate ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
 
-        # 1. Tag the new data so we can find it after merging
         new_df['is_new_import'] = True
         if not existing_all.empty:
             existing_all['is_new_import'] = False
 
-        # 2. Merge current import with existing data
-        # (We still need existing data to avoid ENOP duplicates)
         combined = pd.concat([existing_all, new_df], ignore_index=True)
-
-        # 3. Deduplicate (Keep the 'last' which is our new import)
         if 'ENOP' in combined.columns:
             combined = combined.drop_duplicates(subset='ENOP', keep='last')
 
-        # 4. Create a mask for ONLY the rows we just imported
-        # This ensures assign_areas and assign_walks only process the new batch
-        mask_new = (combined['is_new_import'] == True)
-
-        # --- Incremental Area Assignment ---
-        # Update assign_areas to respect the mask if your function supports it,
-        # or pass only the sliced dataframe:
-        new_only_df = combined[mask_new].copy()
+        # --- Stage 5: Assignment ---
+        new_only_df = combined[combined['is_new_import'] == True].copy()
         assigned_df = assign_areas(new_only_df, resolved_levels, progress=progress)
 
-        # --- Incremental Walk & Zone Assignment ---
-        teamsize = int(CElection.get('teamsize', 5)) if CElection else 5
+        teamsize = int(CElection.get('teamsize', 5))
         max_walk_size = CElection.get('walksize', 300)
 
         assigned_df = assign_walks_and_zones(
-            assigned_df, # Only passing the newly imported/assigned electors
+            assigned_df,
             teamsize,
             territory_path,
             resolved_levels,
@@ -796,23 +774,19 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress=progress
         )
 
-        # --- Final Save ---
-        # Save the processed new data back to the manager
+        # Save
         electors.add_or_update(current_election, assigned_df)
         electors.save()
-
-        # Save to CSV (This will now ONLY contain the last import)
         assigned_df.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
 
-        # --- Stage 6: Mark complete ---
         update_progress(progress, "assign_walks", 1.0, "All stages complete.")
         progress['status'] = 'complete'
 
     except Exception as e:
-        tb = traceback.format_exc()
-        print("❌ Exception in background_normalise:", e)
-        print(tb)
-        progress.update({"percent": 100, "status": "error", "message": f"Error: {str(e)}"})
+        print("❌ Exception:", e)
+        print(traceback.format_exc())
+        progress.update({"percent": 100, "status": "error", "message": str(e)})
+
 # --------------------------
 # Utility Functions
 # --------------------------
@@ -1349,8 +1323,8 @@ def kanban():
 
 
     # ✅ Step 1: Define tags of interest
-    input_tags = [t for t in CElection['tags'] if t.startswith('L')]
-    output_tags = [t for t in CElection['tags'] if t.startswith('M')]
+    input_tags = [t for t in CElection['Tags'] if t.startswith('L')]
+    output_tags = [t for t in CElection['Tags'] if t.startswith('M')]
     all_tags = input_tags + output_tags
 
     print("Known tags:", all_tags[:10])  # Sanity check
@@ -1419,7 +1393,7 @@ def kanban():
         grouped_walks=grouped.to_dict('records'),
         kanban_options=state.kanban_options,
         walk_tag_counts=walk_tag_counts,
-        tag_labels=CElection['tags']
+        tag_labels=CElection['Tags']
     )
 
 
@@ -1472,7 +1446,7 @@ def telling():
     current_node = CElection.get_last_node(create=False)
 
     areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
-    valid_tags = CElection['tags']
+    valid_tags = CElection['Tags']
     leaflet_tags = {}
     marked_tags = {}
     activity_tags = {}
@@ -1500,7 +1474,7 @@ def leafletting():
     current_node = CElection.get_last_node(create=False)
 
     areaelectors = electors.elector_for_path(current_election,current_node.mapfile())
-    valid_tags = CElection['tags']
+    valid_tags = CElection['Tags']
     leaflet_tags = {}
     marked_tags = {}
     activity_tags = {}
@@ -1850,10 +1824,10 @@ def add_tag():
         if not tag or not label:
             return jsonify({"success": False, "error": "Missing tag or label"}), 400
 
-        tag_exists = tag in CElection['tags']
+        tag_exists = tag in CElection['Tags']
 
         if not tag_exists:
-            CElection['tags'][tag] = label
+            CElection['Tags'][tag] = label
             CElection.save()
 
         return jsonify({
@@ -2457,7 +2431,7 @@ def validate_tags():
     current_node = CElection.get_last_node(create=False)
 
     # Ensure the valid tags list is a list of strings
-    tags_data = CElection['tags']
+    tags_data = CElection['Tags']
     print("____Standard Tag options for election",tags_data)
 
     valid_tags = set(tags_data)  # E.g. {'M1', 'M2', 'Leafletting1', 'L3'}
@@ -3465,7 +3439,7 @@ def displayareas():
         return jsonify([[], [], "No data"])
 
     # --- Handle selected tag from request or session
-    selected_tag = CElection['tags']
+    selected_tag = CElection['Tags']
 
 # Unpack layeritems
     df = layeritems[1].copy()
@@ -3727,7 +3701,7 @@ def calendar_partial(path):
     print(f"caldata for {current_node.value} of length {len(areas)} ")
 
     # share input and outcome tags
-    valid_tags = CElection['tags']
+    valid_tags = CElection['Tags']
     task_tags, outcome_tags, all_tags = CElection.get_tags()
 
     print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")

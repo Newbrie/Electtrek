@@ -229,20 +229,27 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
 
+    # --- 5. Build Rows ---
+        tags = data.get("tags", {})  # Get the pre-calculated tags from preprocess_streets
 
+        tag_cells = ""
+        for code in sorted_task_codes:
+            # Check if this specific code is 'y' for this street
+            is_active = tags.get(code) == 'y'
+            status_class = "tag-active" if is_active else "tag-inactive"
+            display_char = "y" if is_active else "n"
 
-        # Change from parent.updateWalkVisuals to checking both local and parent
-        tag_cells = "".join([
-            f'''<td style="text-align:center; padding:4px;">
-                    <span class="tag-toggle tag-inactive {'l1-trigger' if code == 'L1' else ''}"
+            tag_cells += f'''
+                <td style="text-align:center; padding:4px;">
+                    <span class="tag-toggle {status_class} {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
                           onclick="parent.handleTagClick(this);
                                    (window.updateWalkVisuals || parent.updateWalkVisuals || function(){{}})('{reg_id}', '{code}');">
-                        n
+                        {display_char}
                     </span>
                 </td>'''
-            for code in sorted_task_codes
-        ])
+
+
         # Unit dropdown
         unit_dropdown = f'''
         <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
@@ -302,90 +309,86 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
 
 
 
-def preprocess_streets(df):
+def preprocess_streets(df, task_tags=None):
     import pandas as pd
     from collections import Counter
 
     df = df.copy()
+    task_tags = task_tags or {}
+    sorted_task_codes = sorted(task_tags.keys())
 
-    # 1. CLEANING: Convert potential "nan" strings to true NA
+    # 1. CLEANING
     for col in ["AddressPrefix", "AddressNumber", "StreetName"]:
-        df[col] = df[col].astype(str).replace(["nan", "None", ""], pd.NA)
+        if col in df.columns:
+            df[col] = df[col].astype(str).replace(["nan", "None", ""], pd.NA)
 
-    # 2. UNIQUE IDENTIFIER: Combine Prefix and Number
-    # This prevents "The Oaks" (Prefix) and "10" (Number) from being treated as the same thing
-    # or losing one if both exist.
+    # 2. UNIQUE IDENTIFIER (Prefix + Number)
     def combine_unit(row):
         p = str(row["AddressPrefix"]).strip() if pd.notna(row["AddressPrefix"]) else ""
         n = str(row["AddressNumber"]).strip() if pd.notna(row["AddressNumber"]) else ""
-        if p and n:
-            return f"{p} {n}"
+        if p and n: return f"{p} {n}"
         return p or n or "Unknown"
 
     df["unit"] = df.apply(combine_unit, axis=1)
 
-    # 3. EXPLODE: Handle comma-separated units (e.g., "1, 2, 3")
-    exploded = (
-        df.assign(unit=df["unit"].str.split(","))
-        .explode("unit")
-    )
+    # 3. EXPLODE: Handle comma-separated units
+    exploded = df.assign(unit=df["unit"].str.split(",")).explode("unit")
     exploded["unit"] = exploded["unit"].str.strip()
-
-    # Filter out any lingering nulls after explode
     exploded = exploded[exploded["unit"].notna() & (exploded["unit"] != "Unknown")]
 
-    # 4. NUMERIC EXTRACTION: For gap analysis
+    # 4. NUMERIC EXTRACTION
     exploded["num"] = exploded["unit"].str.extract(r'(\d+)')[0].astype(float)
 
     street_data = {}
 
     # 5. PER-STREET PROCESSING
-    # We group by StreetName FIRST to ensure "1 High St" and "1 Main St" are unique
     for street, group in exploded.groupby("StreetName"):
-        # Get unique houses on THIS street
         units = sorted(group["unit"].unique())
         actual_houses = len(units)
 
-        # Get unique numeric values for math
+        # --- NEW: Extract Baked Tags ---
+        # We check if 'y' exists for any record in this street group for each task code
+        # This determines if the "Street Level" toggle should be green (y) or grey (n)
+        street_tags = {}
+        for code in sorted_task_codes:
+            if code in group.columns:
+                # If any house in the street is 'y', the street-level tag is often 'y'
+                # Alternatively, use .all() if you only want it 'y' when the whole street is done
+                is_done = "y" if (group[code] == "y").any() else "n"
+                street_tags[code] = is_done
+            else:
+                street_tags[code] = "n"
+
         nums = group["num"].dropna().astype(int).unique()
         nums.sort()
 
         if len(nums) > 0:
-            min_num = int(nums.min())
-            max_num = int(nums.max())
-
-            # Detect odd/even numbering logic
+            min_num, max_num = int(nums.min()), int(nums.max())
             if len(nums) > 1 and all(n % 2 == nums[0] % 2 for n in nums):
                 estimated_houses = ((max_num - min_num) // 2) + 1
                 expected_numbers = set(range(min_num, max_num + 1, 2))
             else:
                 estimated_houses = (max_num - min_num) + 1
                 expected_numbers = set(range(min_num, max_num + 1))
-
             missing_numbers = sorted(expected_numbers - set(nums))
         else:
             min_num = max_num = None
             estimated_houses = actual_houses
             missing_numbers = []
 
-        # Calculate gaps
-        house_gaps = max(0, estimated_houses - actual_houses)
-
         street_data[street] = {
             "houses": actual_houses,
             "estimated_houses": estimated_houses,
-            "house_gaps": house_gaps,
+            "house_gaps": max(0, estimated_houses - actual_houses),
             "missing_numbers": missing_numbers,
             "unit_list": units,
             "unit_counts": dict(Counter(group["unit"])),
             "min_num": min_num,
-            "max_num": max_num
+            "max_num": max_num,
+            "tags": street_tags  # <--- INJECTED HERE
         }
 
-    # 6. TOTAL COUNT: Sum the unique houses per street
-    # This ensures the tooltip number is exactly the sum of the street lists
     total_houses_count = sum(data["houses"] for data in street_data.values())
-
     return street_data, total_houses_count
 
 
@@ -1249,6 +1252,98 @@ class ExtendedFeatureGroup(FeatureGroup):
                        )
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
+
+    def add_vi_highlights(self, node_electors):
+        """
+        Creates individual markers for electors with VI='R'.
+        Handles granular name (Firstname, Initials, Surname)
+        and address (Prefix, Number, Street, Postcode) fields.
+        """
+        import pandas as pd
+        import folium
+        from folium.plugins import MarkerCluster
+
+        if node_electors is None or node_electors.empty or 'VI' not in node_electors.columns:
+            return
+
+        reform_electors = node_electors[node_electors['VI'] == 'R']
+        if reform_electors.empty:
+            return
+
+        cluster = MarkerCluster(name="Reform Pledges").add_to(self)
+        markers_added = 0
+
+        for _, elector in reform_electors.iterrows():
+            lat, lon = elector.get('Lat'), elector.get('Long')
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+
+            # --- Granular Name Construction ---
+            # 1. Extract and clean (removing underscores from normalisation)
+            fn = str(elector.get('Firstname', '')).replace('_', ' ').strip()
+            init = str(elector.get('Initials', '')).replace('_', ' ').strip()
+            sn = str(elector.get('Surname', '')).replace('_', ' ').strip()
+
+            # 2. Join parts that actually exist to avoid double spaces
+            name_parts = [p for p in [fn, init, sn] if p]
+            full_name = " ".join(name_parts).title()
+
+            # --- Granular Address Construction ---
+
+    # --- Granular Address Construction ---
+            # 1. Extract parts and handle NaN/None immediately
+            def get_val(key):
+                val = elector.get(key, "")
+                return "" if pd.isna(val) else str(val).strip()
+
+            pref = get_val('AddressPrefix')
+            num = get_val('AddressNumber')
+            street = get_val('StreetName')
+            pc = get_val('Postcode')
+
+            # 2. Build the main line (e.g., "Flat A, 10 High Street")
+            main_line_parts = []
+
+            if pref:
+                # If prefix exists, we usually want it followed by a comma and space
+                # e.g., "Flat 1, 10 High Street"
+                main_line_parts.append(f"{pref},")
+
+            if num:
+                main_line_parts.append(num)
+
+            if street:
+                main_line_parts.append(street)
+
+            # Join with spaces, then fix the specific case of "Prefix, 10"
+            # to ensure no space before the comma if logic is tight
+            main_address = " ".join(main_line_parts).replace(" ,", ",")
+
+            # 3. Final display string
+            display_address = f"{main_address}, {pc}" if pc else main_address
+            # --- HTML Construction ---
+            popup_html = f"""
+                <div style="font-family: Arial, sans-serif; min-width: 200px; font-size: 13px; line-height: 1.4;">
+                    <div style="background-color: #00B4D8; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 6px; text-align: center;">
+                        Reform Pledge
+                    </div>
+                    <div style="font-weight: bold; font-size: 14px; color: #111;">{full_name}</div>
+                    <div style="color: #444; margin-bottom: 6px;">{display_address}</div>
+                    <div style="border-top: 1px dotted #ccc; padding-top: 4px; font-size: 11px; color: #777;">
+                        <strong>Elector No:</strong> {elector.get('ENOP', 'N/A')}
+                    </div>
+                </div>
+            """
+
+            folium.Marker(
+                location=[lat, lon],
+                icon=folium.Icon(color='lightblue', icon='star', prefix='fa'),
+                popup=folium.Popup(popup_html, max_width=350),
+                tooltip=full_name
+            ).add_to(cluster)
+            markers_added += 1
+
+        print(f"DEBUG: Added {markers_added} Reform markers to cluster.")
 
     def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)

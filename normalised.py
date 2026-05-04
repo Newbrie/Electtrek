@@ -292,7 +292,7 @@ def normalise_eno_column(df):
 
     # Final cleanup (handling the suffix future warning)
     df['Suffix'] = pd.to_numeric(df['Suffix'], errors='coerce').fillna(0).astype(int)
-
+    print(f"Normalising ENO Column:{df.columns}")
     # Derive ENOT/ENOP using the same sanitized string logic we used for Names
     df['ENOT'] = None
     valid_enot_mask = df['PD'].notna() & df['ENO'].notna()
@@ -805,6 +805,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
     # Setup
     DQstats = pd.DataFrame(columns=['Election','File','Field','P0', 'P1', 'P2', 'P3'])
     electors100 = dfx.copy()
+
     print(f"ELECTORS100 COLUMNS1: {electors100.columns}")
 
     if 'Tags' not in electors100.columns:
@@ -862,7 +863,11 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
         "ELECTORNAME":"ElectorName",
         "NAME":"ElectorName",
         "STREETNAME":"StreetName",
-        "AREA":"Area"
+        "AREA":"Area",
+        "VI":"VI",
+        "VR":"VR",
+        "Tags":"Tags",
+        "Notes":"Notes"
     }
 
     Incolstuple = [
@@ -896,7 +901,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
 
     update_progress(progress, "address_norm", 0.0, "Starting address normalisation")
 
-    if purpose in ['delta', 'main']:
+    if purpose in ['delta', 'main', 'pledge']:
 
         print(f"ELECTORS100 COLUMNS3: {electors100.columns}")
 
