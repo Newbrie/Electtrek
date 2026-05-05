@@ -12,7 +12,6 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
-
 logger = logging.getLogger(__name__)
 
 _lock = threading.RLock()
@@ -30,240 +29,164 @@ shapecolumn = {
     "country": "Country"
 }
 
-
 class ElectorManager:
     def __init__(self):
         self._combined = pd.DataFrame()
-        self._elections = {}  # Elections will be part of the instance
+        self._elections = {}
         logger.debug("Initializing ElectorManager")
-        logger.debug(f"ELECTOR_FILE path: {os.path.abspath(ELECTOR_FILE)}")
 
         if os.path.exists(ELECTOR_FILE):
-            logger.debug("Elector file exists. Attempting to load.")
             try:
                 df = pd.read_csv(ELECTOR_FILE, sep='\t', encoding='utf-8')
-                logger.debug(f"Loaded file with {len(df)} rows and columns {list(df.columns)}")
 
                 if 'Election' in df.columns:
                     df['Election'] = df['Election'].astype(str).str.strip()
-                else:
-                    logger.warning("'Election' column not found in file!")
 
                 for ename, group in df.groupby('Election'):
-                    clean_name = ename.strip()
-                    logger.debug(f"Loading election '{clean_name}' with {len(group)} rows")
-                    self._elections[clean_name] = group.copy()  # keep Election column
+                    self._elections[ename.strip()] = group.copy()
 
+                # 1. Bake the progress tags into memory once
+                self._inject_baked_data()
+
+                # 2. Build the combined view
                 self.rebuild_combined()
-                logger.debug(f"Elections loaded into memory: {list(self._elections.keys())}")
+                logger.debug(f"Elections loaded and baked: {list(self._elections.keys())}")
 
             except Exception as e:
                 logger.exception(f"Could not load {ELECTOR_FILE}: {e}")
+
+    def _inject_baked_data(self):
+        """
+        Internal method to apply 'y' tags from baked_data to DataFrames.
+        Mirrors the 'ghost' logic for street_weight and dictionary checks.
+        """
+        from baked_data import baked_data
+        all_baked = baked_data.load()
+        if not all_baked:
+            return
+
+        for ename, df in self._elections.items():
+            def apply_tags(row):
+                # We use WalkName as the region/bucket ID
+                region_id = str(row.get('WalkName', '')).strip()
+                street_name = str(row.get('StreetName', '')).strip().upper()
+                house_num = str(row.get('AddressNumber', '')).strip()
+
+                region_info = all_baked.get(region_id, {})
+                street_data = region_info.get(street_name, {})
+
+                # Check if it's a house dict (skip metadata like street_weight)
+                if isinstance(street_data, dict):
+                    house_info = street_data.get(house_num, {})
+                    if isinstance(house_info, dict):
+                        tags_dict = house_info.get('tags', {})
+                        # Find all 'y' status tags (L1, L2, etc.)
+                        active_codes = [c for c, s in tags_dict.items() if s == 'y']
+
+                        existing = str(row.get('Tags', '')).strip()
+                        if existing.lower() in ['nan', 'none', '']: existing = ""
+
+                        new_tag_str = ", ".join(active_codes)
+                        if existing and new_tag_str:
+                            return f"{existing}, {new_tag_str}"
+                        return new_tag_str or existing
+
+                # Return original if no baked match
+                val = str(row.get('Tags', ''))
+                return val if val.lower() != 'nan' else ""
+
+            df['Tags'] = df.apply(apply_tags, axis=1)
+
+    def refresh_baked_data(self):
+        """Call this after a save to sync the in-memory electors with the disk."""
+        with _lock:
+            logger.debug("Refreshing baked data in memory...")
+            self._inject_baked_data()
+            self.rebuild_combined()
 
     def rebuild_combined(self):
         if not self._elections:
             self._combined = pd.DataFrame()
             return
-
         combined = pd.concat(self._elections.values(), ignore_index=True)
-
-        # Normalise once (key improvement)
         for col in ["PD", "WalkName", "Area", "StreetName"]:
             if col in combined.columns:
                 combined[col] = combined[col].astype(str).str.strip().str.upper()
-
         self._combined = combined
 
-    def get(self, election):
-        # Your existing get method for accessing election data
+    def elector_for_path(self, resolved_levels, raw_path):
         with _lock:
-            result = self._elections.get(election)
-            if result is None:
-                return pd.DataFrame()  # Return empty DataFrame if election is not found
-            return result.copy()
+            assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-    @property
-    def elections(self):
-        """Read-only property for combined elections dictionary."""
-        return self._elections
+            # The clean unpack you like
+            (c_election, elevels), = resolved_levels.items()
 
-    # -------------------------------
-    # Updated method ignoring election
-    # -------------------------------
 
-    def elector_for_path(self, election_name, raw_path):
-        from elections import CurrentElection
-        from baked_data import baked_data
-
-        with _lock:
-            # 1. Access the specific election data
-            df = self._elections.get(election_name)
+            df = self._elections.get(c_election)
             if df is None or df.empty:
+                logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            # 2. Get the clean steps
             parts = state.stepify(raw_path)
 
-            # 3. Load mapping for this election
-            CElection = CurrentElection.load(election_name)
-            levels_map = CElection.resolved_levels
+            logger.debug(f"🔍 START FILTER: Path={parts} | Election={c_election}")
 
             filtered_df = df.copy()
 
-            # 4. Filter DF level-by-level
             for depth, value in enumerate(parts):
-                if depth == 0: continue
-                node_type = levels_map.get(depth)
-                col = shapecolumn.get(node_type)
-
-                if col and col in filtered_df.columns:
-                    target_val = str(value).strip().upper()
-                    filtered_df = filtered_df[
-                        filtered_df[col].astype(str).str.strip().str.upper() == target_val
-                    ]
-                    if filtered_df.empty:
-                        return pd.DataFrame()
-
-            # --- BAKED DATA INJECTION (Mirrors add_ghosts logic) ---
-            if len(parts) >= 5:
-                # In your system, WalkName is at index 4 (the 5th step)
-                region_id = str(parts[4]).strip() # region_id in add_ghosts
-                all_baked = baked_data.load()
-                region_info = all_baked.get(region_id, {})
-
-                if region_info:
-                    def apply_baked_tags(row):
-                        street_name = str(row.get('StreetName', '')).strip().upper()
-                        house_num = str(row.get('AddressNumber', '')).strip()
-
-                        # Get street data (e.g., QUEENS_ROAD)
-                        street_data = region_info.get(street_name, {})
-
-                        # Mirror add_ghosts: only look at u if it is a dict (a house)
-                        # This skips 'street_weight' or other metadata
-                        if isinstance(street_data, dict):
-                            house_info = street_data.get(house_num, {})
-
-                            if isinstance(house_info, dict):
-                                tags_dict = house_info.get('tags', {})
-                                # Extract all keys where status is 'y' (e.g., L1, L2)
-                                active_codes = [
-                                    code for code, status in tags_dict.items()
-                                    if status == 'y'
-                                ]
-
-                                # Clean existing CSV tags
-                                existing = str(row.get('Tags', '')).strip()
-                                if existing.lower() in ['nan', 'none', '']:
-                                    existing = ""
-
-                                new_tag_str = ", ".join(active_codes)
-
-                                if existing and new_tag_str:
-                                    return f"{existing}, {new_tag_str}"
-                                return new_tag_str or existing
-
-                        return str(row.get('Tags', '')) if str(row.get('Tags', '')) != 'nan' else ""
-
-                    filtered_df['Tags'] = filtered_df.apply(apply_baked_tags, axis=1)
-
-            return filtered_df.copy()
-
-
-    def delete_elector_for_path(self, election_name, raw_path):
-        from elections import CurrentElection
-        """
-        Deletes electors by intersecting levels Step 1 (Constituency) and below.
-        """
-        with _lock:
-            # 1. Access the specific election data
-            df = self._elections.get(election_name)
-            if df is None or df.empty:
-                logger.warning(f"No data found for election '{election_name}'")
-                return 0
-
-            # 2. Get the clean steps
-            parts = state.stepify(raw_path)
-            if len(parts) < 2:
-                logger.warning(f"Path too shallow for targeted deletion: {raw_path}")
-                return 0
-
-            # 3. Load mapping
-            CElection = CurrentElection.load(election_name)
-            levels_map = CElection.resolved_levels.get(election_name, {})
-            original_len = len(df)
-
-            # 4. Build the "Intersection Mask"
-            # Start by selecting everything, then narrow it down
-            path_mask = pd.Series([True] * len(df), index=df.index)
-
-            for depth, value in enumerate(parts):
-                # --- REFACTOR: Skip Country Level ---
                 if depth == 0:
-                    continue
+                    continue # Usually root/nation
 
-                node_type = levels_map.get(depth)
-                if not node_type:
-                    continue
-
+                node_type = elevels[depth]
                 col = shapecolumn.get(node_type)
-                if col and col in df.columns:
-                    target_val = str(value).strip().upper()
+                target_val = str(value).strip().upper()
 
-                    # Boolean AND: narrowing the target area
-                    level_match = df[col].astype(str).str.strip().str.upper() == target_val
-                    path_mask = path_mask & level_match
+                if not col:
+                    logger.debug(f"   Step {depth}: No column mapping for type '{node_type}'. Skipping.")
+                    continue
 
-            # 5. Execute Deletion
-            # Check if we actually matched anything before re-assigning
-            if path_mask.any():
-                # Keep only what is NOT in the path_mask
-                self._elections[election_name] = df[~path_mask].copy()
-                deleted_count = original_len - len(self._elections[election_name])
-            else:
-                deleted_count = 0
+                if col not in filtered_df.columns:
+                    logger.warning(f"   Step {depth}: Column '{col}' missing from DataFrame! (Type: {node_type})")
+                    continue
 
-            if deleted_count > 0:
-                # 6. Housekeeping
-                self.rebuild_combined()
-                self.save()
-                logger.info(f"Deleted {deleted_count} electors from '{election_name}' for path: {raw_path}")
-            else:
-                logger.debug(f"No electors found to delete for path: {raw_path}")
+                # --- The Decision Path Debug ---
+                # Get unique values currently in the column to see what we are comparing against
+                available_values = filtered_df[col].unique()[:5] # Show first 5 unique samples
 
-            return deleted_count
+                logger.debug(
+                    f"   Step {depth} ({node_type}): Column='{col}' | Target='{target_val}'"
+                )
 
+                mask = filtered_df[col].astype(str).str.strip().str.upper() == target_val
+                new_filtered = filtered_df[mask]
+
+                if new_filtered.empty:
+                    # Logic failure alert: Show exactly why the match failed
+                    logger.error(
+                        f"   ❌ FILTER BREAK at Step {depth} ({node_type})!\n"
+                        f"      Column: '{col}'\n"
+                        f"      Target Value: '{target_val}'\n"
+                        f"      Sample Values in Column: {available_values}\n"
+                        f"      Rows before: {len(filtered_df)} | Rows after: 0"
+                    )
+                    return pd.DataFrame()
+
+                filtered_df = new_filtered
+                logger.debug(f"   ✅ Match! Remaining rows: {len(filtered_df)}")
+
+            logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
+            return filtered_df
 
     def add_or_update(self, election, df: pd.DataFrame):
-        """
-        Overwrites the current election data with the new provided DataFrame.
-        This prevents duplicate rows from accumulating.
-        """
         with _lock:
-            # ✅ SWAP: Direct assignment replaces the old data with the new data
             self._elections[election] = df.copy()
-
+            # 🔑 Inject tags immediately into the new election data
+            self._inject_baked_data()
             self.rebuild_combined()
             self.save()
-            logger.info(f"Election '{election}' updated. Current count: {len(df)}")
-
-
-    def deactivate_election(self, election_name):
-        """
-        Deactivates (deletes) all rows associated with the given election.
-        """
-        with _lock:
-            # Check if the election exists
-            if election_name in self._elections:
-                del self._elections[election_name]  # Remove the election from memory
-                logger.debug(f"Election '{election_name}' has been deactivated and removed.")
-                self.save()  # Save the changes (i.e., update the file)
-                self.rebuild_combined()
-            else:
-                logger.warning(f"Attempted to deactivate non-existent election '{election_name}'.")
+            logger.info(f"Election '{election}' updated and baked.")
 
     def save(self):
-        # Existing save method to write data to file
         with _lock:
             all_df = []
             for ename, df in self._elections.items():
@@ -274,12 +197,10 @@ class ElectorManager:
                 combined = pd.concat(all_df, ignore_index=True)
                 combined.to_csv(ELECTOR_FILE, sep='\t', encoding='utf-8', index=False)
 
-
-
+    def get(self, election):
+        with _lock:
+            result = self._elections.get(election)
+            return result.copy() if result is not None else pd.DataFrame()
 
 # Single instance
 electors = ElectorManager()
-
-# ✅ Now this works
-print(electors._elections.keys())
-print(len(electors.get("DORK1")))

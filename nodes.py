@@ -1473,7 +1473,7 @@ class TreeNode:
         )
 
         # node_electors is the dataframe for the current map area
-        VI_layer.add_vi_highlights(electors.elector_for_path(c_election,path))
+        VI_layer.add_vi_highlights(electors.elector_for_path(rlevels,path))
 
         selected.append(VI_layer)
         # -------------------------------------------------
@@ -1839,7 +1839,7 @@ class TreeNode:
         # ----------------------------------------
         # Load electors from ElectorManager
         # ----------------------------------------
-        areaelectors = electors.elector_for_path(c_election,self.mapfile())
+        areaelectors = electors.elector_for_path(resolved_levels,self.mapfile())
 
 
         if areaelectors.empty:

@@ -229,13 +229,19 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
 
-    # --- 5. Build Rows ---
-        tags = data.get("tags", {})  # Get the pre-calculated tags from preprocess_streets
+        # --- 5. Build Rows ---
+        # --- 5. Build Rows ---
+        tags = data.get("tags", {})
+
+        # 🔍 DEBUG LOG: Check if Python actually sees the baked 'y'
+        if tags:
+            print(f"DEBUG [HTML Gen]: Street: {street_name} | Tags Found: {tags}")
 
         tag_cells = ""
         for code in sorted_task_codes:
             # Check if this specific code is 'y' for this street
-            is_active = tags.get(code) == 'y'
+            # Logic check: ensures case-insensitive matching
+            is_active = str(tags.get(code, 'n')).lower() == 'y'
             status_class = "tag-active" if is_active else "tag-inactive"
             display_char = "y" if is_active else "n"
 
@@ -351,13 +357,14 @@ def preprocess_streets(df, task_tags=None):
         units = sorted(unit_counts.keys())
         actual_houses = len(units)
 
-        # --- FAST TAG PROCESSING (no lambdas) ---
+        # --- FAST TAG PROCESSING ---
         if 'Tags' in group.columns:
+            # We create a set of all unique tag codes found for this street
             tag_series = (
                 group['Tags']
                 .dropna()
                 .astype(str)
-                .str.upper()
+                .str.upper() # Ensure data is uppercase
                 .str.replace(',', ' ')
                 .str.split()
                 .explode()
@@ -367,7 +374,8 @@ def preprocess_streets(df, task_tags=None):
             tag_set = set()
 
         street_tags = {
-            code: ("y" if code.upper() in tag_set else "n")
+            # Ensure 'code' is uppercase to match the tag_set
+            code: ("y" if str(code).strip().upper() in tag_set else "n")
             for code in sorted_task_codes
         }
 
@@ -406,9 +414,9 @@ def preprocess_streets(df, task_tags=None):
         }
 
     total_houses_count = sum(data["houses"] for data in street_data.values())
-
+    print("END OF PREPROCESSING OF STREET DATA")
     return street_data, total_houses_count
-    
+
 def build_nodemap_list_html(herenode):
     """
     Build HTML tooltip listing all children of a node.
@@ -676,7 +684,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         child_elector_map = {}
 
         for child in children:
-            child_elector_map[child] = electors.elector_for_path(c_election,child.mapfile())
+            child_elector_map[child] = electors.elector_for_path(rlevels,child.mapfile())
             if child.latlongroid and len(child.latlongroid) == 2:
                 child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
             else:
@@ -757,7 +765,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         # Load electors
         # -------------------------------------------------
 
-        nodeelectors = electors.elector_for_path(c_election,node.mapfile())
+        nodeelectors = electors.elector_for_path(rlevels,node.mapfile())
 
         if nodeelectors is None or nodeelectors.empty:
             print("DEBUG ELECTORS: ⚠️ No electors for node")
@@ -896,7 +904,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
             # Preprocess street data
             # -------------------------
-
+            # Before calling preprocess_streets
+            print(f"DEBUG: Filtered DF size: {len(region_electors)}")
+            print(f"DEBUG: Unique tags found in this slice: {region_electors['Tags'].unique()}")
             street_stats, house_count = preprocess_streets(region_electors)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
             child.electorate = len(region_electors)
