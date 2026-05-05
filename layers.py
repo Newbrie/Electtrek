@@ -907,7 +907,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # Before calling preprocess_streets
             print(f"DEBUG: Filtered DF size: {len(region_electors)}")
             print(f"DEBUG: Unique tags found in this slice: {region_electors['Tags'].unique()}")
-            street_stats, house_count = preprocess_streets(region_electors)
+            street_stats, house_count = preprocess_streets(region_electors,task_tags)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
             child.electorate = len(region_electors)
             child.houses = house_count
