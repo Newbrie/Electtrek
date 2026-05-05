@@ -68,9 +68,47 @@ class ElectorManager:
         for ename, df in self._elections.items():
             def apply_tags(row):
                 # We use WalkName as the region/bucket ID
-                region_id = str(row.get('WalkName', '')).strip()
-                street_name = str(row.get('StreetName', '')).strip().upper()
-                house_num = str(row.get('AddressNumber', '')).strip()
+
+                street = normalname(row.get('StreetName', ''))
+
+                house_num = str(row.get('AddressNumber', '')).strip().upper()
+                house_name = normalname(row.get('AddressPrefix', ''))
+
+                area_block = election_baked.get(area_key, {})
+                street_block = area_block.get(street, {})
+
+                if not isinstance(street_block, dict):
+                    return row.get('Tags', '')
+
+                house_info = None
+
+                # ✅ 1. Try numeric match (most precise)
+                if house_num:
+                    house_info = street_block.get(house_num)
+
+                # ✅ 2. Try house name match (CRITICAL FIX)
+                if not house_info and house_name:
+                    house_info = street_block.get(house_name)
+
+                # ✅ 3. Optional fallback (covers weird data)
+                if not house_info:
+                    for k, v in street_block.items():
+                        if isinstance(v, dict) and 'tags' in v:
+                            # match loosely against either field
+                            if k == house_num or k == house_name:
+                                house_info = v
+                                break
+
+                # ❌ Still nothing → no tags
+                if not house_info:
+                    return row.get('Tags', '')
+
+                if not house_info:
+                    logger.debug(
+                        f"[MISS] No match | street={street} | "
+                        f"num='{house_num}' | name='{house_name}' | "
+                        f"available={list(street_block.keys())[:5]}"
+                    )
 
                 region_info = all_baked.get(region_id, {})
                 street_data = region_info.get(street_name, {})
