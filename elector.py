@@ -55,85 +55,91 @@ class ElectorManager:
             except Exception as e:
                 logger.exception(f"Could not load {ELECTOR_FILE}: {e}")
 
-    def _inject_baked_data(self):
+    def _inject_baked_data(self, specific_ename=None):
         """
         Internal method to apply 'y' tags from baked_data to DataFrames.
-        Mirrors the 'ghost' logic for street_weight and dictionary checks.
+        Targeted by specific_ename to avoid redundant full-dataset processing.
         """
         from baked_data import baked_data
         all_baked = baked_data.load()
         if not all_baked:
             return
 
-        for ename, df in self._elections.items():
+        # 1. Decide which elections to process
+        if specific_ename:
+            targets = [specific_ename] if specific_ename in self._elections else []
+        else:
+            targets = self._elections.keys()
+
+        for ename in targets:
+            df = self._elections[ename]
+
             def apply_tags(row):
-                # We use WalkName as the region/bucket ID
+                # --- IDENTIFIERS ---
+                # Match the 'walk_id' used in save()
+                area_key = str(row.get('WalkName', '')).strip().upper()
 
-                street = normalname(row.get('StreetName', ''))
+                # Normalize and force UPPER to match JSON keys
+                raw_street = row.get('StreetName', '')
+                street = state.normalname(raw_street).upper() if raw_street else ""
 
-                house_num = str(row.get('AddressNumber', '')).strip().upper()
-                house_name = normalname(row.get('AddressPrefix', ''))
-
-                area_block = election_baked.get(area_key, {})
+                # --- NAVIGATION ---
+                area_block = all_baked.get(area_key, {})
                 street_block = area_block.get(street, {})
 
+                # If street_block is not a dict (e.g., street_weight metadata), exit early
                 if not isinstance(street_block, dict):
-                    return row.get('Tags', '')
+                    val = str(row.get('Tags', ''))
+                    return val if val.lower() != 'nan' else ""
+
+                # House identifiers
+                house_num = str(row.get('AddressNumber', '')).strip().upper()
+                house_name = state.normalname(row.get('AddressPrefix', '')).upper()
 
                 house_info = None
 
-                # ✅ 1. Try numeric match (most precise)
+                # ✅ 1. Try numeric match
                 if house_num:
                     house_info = street_block.get(house_num)
 
-                # ✅ 2. Try house name match (CRITICAL FIX)
+                # ✅ 2. Try house name match
                 if not house_info and house_name:
                     house_info = street_block.get(house_name)
 
-                # ✅ 3. Optional fallback (covers weird data)
+                # ✅ 3. Fallback: Loose key search
                 if not house_info:
                     for k, v in street_block.items():
-                        if isinstance(v, dict) and 'tags' in v:
-                            # match loosely against either field
-                            if k == house_num or k == house_name:
-                                house_info = v
-                                break
+                        if k == house_num or k == house_name:
+                            house_info = v
+                            break
 
-                # ❌ Still nothing → no tags
-                if not house_info:
-                    return row.get('Tags', '')
+                # No data found for this specific house
+                if not house_info or not isinstance(house_info, dict):
+                    val = str(row.get('Tags', ''))
+                    return val if val.lower() != 'nan' else ""
 
-                if not house_info:
-                    logger.debug(
-                        f"[MISS] No match | street={street} | "
-                        f"num='{house_num}' | name='{house_name}' | "
-                        f"available={list(street_block.keys())[:5]}"
-                    )
+                # --- TAG EXTRACTION & MERGING ---
+                tags_dict = house_info.get('tags', {})
+                active_codes = [c for c, s in tags_dict.items() if str(s).lower() == 'y']
 
-                region_info = all_baked.get(region_id, {})
-                street_data = region_info.get(street_name, {})
+                # Clean existing tags (handle 'nan', 'none', and numeric types)
+                existing_raw = str(row.get('Tags', '')).strip()
+                if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
+                    existing_tags = []
+                else:
+                    # split and strip to remove whitespace around commas
+                    existing_tags = [t.strip() for t in existing_raw.split(',') if t.strip()]
 
-                # Check if it's a house dict (skip metadata like street_weight)
-                if isinstance(street_data, dict):
-                    house_info = street_data.get(house_num, {})
-                    if isinstance(house_info, dict):
-                        tags_dict = house_info.get('tags', {})
-                        # Find all 'y' status tags (L1, L2, etc.)
-                        active_codes = [c for c, s in tags_dict.items() if s == 'y']
+                if active_codes:
+                    # Use a set to prevent duplicate tags
+                    merged_set = set(active_codes) | set(existing_tags)
+                    return ", ".join(sorted(list(merged_set)))
 
-                        existing = str(row.get('Tags', '')).strip()
-                        if existing.lower() in ['nan', 'none', '']: existing = ""
+                # If no 'y' tags found, return existing tags (cleaned)
+                return ", ".join(existing_tags)
 
-                        new_tag_str = ", ".join(active_codes)
-                        if existing and new_tag_str:
-                            return f"{existing}, {new_tag_str}"
-                        return new_tag_str or existing
-
-                # Return original if no baked match
-                val = str(row.get('Tags', ''))
-                return val if val.lower() != 'nan' else ""
-
-            df['Tags'] = df.apply(apply_tags, axis=1)
+            # Apply changes back to the stored DataFrame
+            self._elections[ename]['Tags'] = df.apply(apply_tags, axis=1)
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""
@@ -219,7 +225,7 @@ class ElectorManager:
         with _lock:
             self._elections[election] = df.copy()
             # 🔑 Inject tags immediately into the new election data
-            self._inject_baked_data()
+            self._inject_baked_data(election)
             self.rebuild_combined()
             self.save()
             logger.info(f"Election '{election}' updated and baked.")
