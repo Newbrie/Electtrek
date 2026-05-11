@@ -766,12 +766,20 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         assigned_df = assign_areas(new_only_df, resolved_levels, progress=progress)
 
-        # FINAL VERIFICATION
-        if 'Division' in assigned_df.columns:
-            ashford_final = assigned_df[assigned_df['Division'].str.upper() == "ASHFORD"]
-            print(f"🏁 FINAL STATUS: {len(ashford_final)} electors successfully mapped to ASHFORD division.")
-        else:
-            print("🏁 FINAL STATUS: 'Division' column missing after assignment.")
+        teamsize = int(CElection.get('teamsize', 5))
+        max_walk_size = CElection.get('walksize', 300)
+
+        assigned_df = assign_walks_and_zones(
+            assigned_df,
+            teamsize,
+            territory_path,
+            resolved_levels,
+            selprefix(current_election),
+            max_walk_size=max_walk_size,
+            max_depth=10,
+            progress=progress
+        )
+
 
         # Save
         electors.add_or_update(current_election, assigned_df)
