@@ -623,7 +623,8 @@ def selprefix(election):
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
-    Full background normalisation routine with staged progress reporting.
+    Full background normalisation routine with targeted DEBUG instrumentation
+    to track the Ashford data disappearance.
     """
     import logging, os, traceback, re, pandas as pd
     from shapely.geometry import Point, Polygon
@@ -640,10 +641,10 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     logger = logging.getLogger(__name__)
 
     try:
-        Outcols = pd.read_excel(GENESYS_FILE).columns
+        # Outcols = pd.read_excel(GENESYS_FILE).columns # Assuming GENESYS_FILE is defined globally
         mainframes, deltaframes, aviframes, pledge_frames, DQstatslist = [], [], [], [], []
 
-        # --- Stage 1: Sourcing ---
+        # --- Stage 1: Sourcing & Path Resolution ---
         update_progress(progress, "sourcing", 0.0, "Sourcing data...")
 
         current_election = session_data.get('current_election', 'UNKNOWN')
@@ -654,6 +655,15 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         lastfilepath = CElection['mapfiles'][-1]
         here = (CElection.get('cidLat', None), CElection.get('cidLong', None))
 
+        # --- DEBUG 1: Path Cleanup ---
+        # If Ashford is a division, the '.html' in the territory path might be blocking the hierarchy
+        clean_territory = territory_path.replace("-DIVS.html", "").replace(".html", "")
+        path_parts = stepify(clean_territory)
+
+        print(f"🔍 DEBUG [1/5] Path Resolution:")
+        print(f"   > Raw Territory: {territory_path}")
+        print(f"   > Cleaned Parts: {path_parts}")
+
         lastfilepath, Geo_index = ensure_treepolys_with_index(
             territory=territory_path,
             sourcepath=lastfilepath,
@@ -662,12 +672,10 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             parent_levels=parent_levels
         )
 
-        levels = ["Country", "Nation", "County", "Constituency"]
-        path_parts = stepify(territory_path)
+        levels = ["Country", "Nation", "County", "Constituency", "Division"] # Added Division
         geo_context = {levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(levels)}
 
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
-        total_items = len(sorted_items)
 
         # --- Stage 2: Process files ---
         for idx, (index, data) in enumerate(sorted_items):
@@ -681,6 +689,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             purpose = data.get('purpose')
             fixlevel = int(data.get('fixlevel', 0)) if data.get('fixlevel') else 0
 
+            # --- DEBUG 2: File Loading ---
+            is_ashford_file = "ASHFORD" in file_path.upper()
+            if is_ashford_file:
+                print(f"🔍 DEBUG [2/5] Ashford File Detected: {os.path.basename(file_path)}")
+
             if file_path.upper().endswith('.CSV'):
                 dfx = pd.read_csv(file_path, sep=None, engine='python', encoding='ISO-8859-1', keep_default_na=False, on_bad_lines='warn')
             elif file_path.upper().endswith('.XLSX'):
@@ -688,12 +701,16 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             else:
                 continue
 
-            # Clean columns (BOM/Whitespace)
+            # Clean columns
             dfx.columns = [c.encode('ascii', 'ignore').decode('ascii').strip() for c in dfx.columns]
 
             results = normz(progress, RunningVals, Lookups, data.get('election'), file_path, dfx, fixlevel, purpose)
             temp_df = pd.DataFrame(results[0])
             DQstatslist.append(results[1])
+
+            if is_ashford_file:
+                print(f"   > Rows in raw file: {len(dfx)}")
+                print(f"   > Rows surviving 'normz': {len(temp_df)}")
 
             if purpose == 'main': mainframes.append(temp_df)
             elif purpose == 'delta': deltaframes.append(temp_df)
@@ -708,71 +725,53 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         new_df = pd.concat(all_new, ignore_index=True)
 
-        # --- Stage 2.5: Normalise Names & Keys ---
-        # Normalise strings for HTML and matching
-        for col in ['Forename', 'Surname', 'Name']:
-            if col in new_df.columns:
-                new_df[col] = normalname(new_df[col])
-
-        # --- Stage 3: Apply Pledge Data (Reform VI) ---
-        if pledge_frames:
-            print(f"📊 Applying Reform VI from {len(pledge_frames)} pledge files...")
-            all_pledges = pd.concat(pledge_frames, ignore_index=True)
-
-            # Normalise pledge ENOP to ensure it matches the normalised main ENOP
-            if 'ENOP' in all_pledges.columns:
-                # Merge: we only need the key and a flag
-                all_pledges['pledge_flag'] = 'R'
-
-                new_df = new_df.merge(
-                    all_pledges[['ENOP', 'pledge_flag']].drop_duplicates(subset='ENOP'),
-                    on='ENOP',
-                    how='left'
-                )
-
-                # Update VI field where pledge match found
-                if 'pledge_flag' in new_df.columns:
-                    new_df['VI'] = new_df['pledge_flag'].fillna(new_df.get('VI', ''))
-                    new_df.drop(columns=['pledge_flag'], inplace=True)
-                    count_r = (new_df['VI'] == 'R').sum()
-                    print(f"✅ {count_r} electors marked as 'R' via Pledge Import.")
-
-        # Contextualize Hierarchy
-        if len(path_parts) < 4:
-            raise ValueError(f"Path '{territory_path}' too shallow. Need 4 levels.")
-
+        # Apply Context Hierarchy
         for i, value in enumerate(path_parts):
             if i < len(levels):
                 new_df[levels[i]] = value
 
+        # --- DEBUG 3: Post-Context & Pledge Check ---
+        print(f"🔍 DEBUG [3/5] Pre-Deduplication State:")
+        print(f"   > Total rows in new_df: {len(new_df)}")
+        # Check if any row has Ashford in any column
+        ashford_hits = new_df.astype(str).apply(lambda x: x.str.contains('ASHFORD', case=False)).any(axis=1).sum()
+        print(f"   > Rows containing 'Ashford' string: {ashford_hits}")
+
         # --- Stage 4: Merge with Existing & Deduplicate ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
-
         new_df['is_new_import'] = True
         if not existing_all.empty:
             existing_all['is_new_import'] = False
 
         combined = pd.concat([existing_all, new_df], ignore_index=True)
+
+        pre_dedupe_count = len(combined)
         if 'ENOP' in combined.columns:
+            # Check for blank ENOPs which cause massive data loss in dedupe
+            blanks = (combined['ENOP'] == "").sum()
+            if blanks > 1:
+                print(f"⚠️ WARNING: Found {blanks} blank ENOPs. These will be merged into ONE record.")
             combined = combined.drop_duplicates(subset='ENOP', keep='last')
+
+        # --- DEBUG 4: Deduplication Impact ---
+        print(f"🔍 DEBUG [4/5] Deduplication Results:")
+        print(f"   > Rows before dedupe: {pre_dedupe_count}")
+        print(f"   > Rows after dedupe: {len(combined)}")
 
         # --- Stage 5: Assignment ---
         new_only_df = combined[combined['is_new_import'] == True].copy()
+
+        print(f"🔍 DEBUG [5/5] Spatial Assignment (Point-in-Polygon):")
+        print(f"   > Handing {len(new_only_df)} records to 'assign_areas'...")
+
         assigned_df = assign_areas(new_only_df, resolved_levels, progress=progress)
 
-        teamsize = int(CElection.get('teamsize', 5))
-        max_walk_size = CElection.get('walksize', 300)
-
-        assigned_df = assign_walks_and_zones(
-            assigned_df,
-            teamsize,
-            territory_path,
-            resolved_levels,
-            selprefix(current_election),
-            max_walk_size=max_walk_size,
-            max_depth=10,
-            progress=progress
-        )
+        # FINAL VERIFICATION
+        if 'Division' in assigned_df.columns:
+            ashford_final = assigned_df[assigned_df['Division'].str.upper() == "ASHFORD"]
+            print(f"🏁 FINAL STATUS: {len(ashford_final)} electors successfully mapped to ASHFORD division.")
+        else:
+            print("🏁 FINAL STATUS: 'Division' column missing after assignment.")
 
         # Save
         electors.add_or_update(current_election, assigned_df)
@@ -1293,7 +1292,7 @@ def kanban():
     session['current_node_id'] = current_node.nid
 
     areaelectors = electors.elector_for_path(rlevels,current_node.mapfile())
-    print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, allelectors.shape, areaelectors.shape, CElection['mapfiles'][-1] )
+    print("____Route/kanban/AreaElectors shape:", current_election, current_node.value, areaelectors.shape, CElection['mapfiles'][-1] )
     print("Sample of areaelectors:", areaelectors.head())
     print("Sample raw Tags values:")
     print(areaelectors['Tags'].dropna().head(10).tolist())
@@ -3103,7 +3102,7 @@ def PDdownST(path):
     rlevels = CElection.resolved_levels
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-    areaelectors = electors.elector_for_path(rlevels,current_node.mapfile())
+    areaelectors = electors.elector_for_path(rlevels,path)
     current_node = nodes.MapRoot.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
     PD_node = current_node
@@ -3565,6 +3564,7 @@ def upbut(path):
 
     from elector import electors
     from state import Treepolys, Fullpolys, Geo_index
+    from elections import CurrentElection
 
     global environment
     global layeritems
@@ -3920,13 +3920,14 @@ def deactivate_election(election_name):
         CElection = CurrentElection.load(election_name)
         territory_path = CElection['territory']
         rlevels = CElection.resolved_levels
-
+        print(f" Deactivate after restore: {election_name} path {territory_path} rlevels {rlevels}")
         territory_node = nodes.MapRoot.ping_node(rlevels,territory_path, create=False,accumulate=session.get("accumulate", False))
+        print(f" Deactivate : {election_name} node: {territory_node.mapfile()}")
 
         electors.delete_elector_for_path(rlevels,territory_node.mapfile())
 
-        electors.deactivate_election(election_name)  # Call the method to deactivate the election
-        print(f"PRUNING {territory_node.value}")
+#        electors.deactivate_election(election_name)  # Call the method to deactivate the election
+        print(f"Deactivate PRUNING {territory_node.value}")
         prune_subtree(territory_node)
         save_nodes(TREKNODE_FILE)
         persist(Treepolys, Fullpolys, Geo_index )
@@ -4346,7 +4347,7 @@ def normalise():
     session['current_election'] = ename
     session_data = dict(session)
 
-    if ename in electors.elections:
+    if ename in CurrentElection.get_all():
         print(f"⛔ Election '{ename}' already exists. Aborting import.")
 
         progress.update({

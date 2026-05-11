@@ -527,7 +527,23 @@ input:checked + .slider:before {
     padding: 0;
 }
 
+.filename-box {
+  width: 150px;
+  max-width: 150px;
 
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  text-overflow: ellipsis;
+
+  padding: 2px 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+
+  font-family: monospace;
+  cursor: default;
+}
 
 /* Ensure the Leaflet container inside also respects the height */
 #mapwin > .folium-map {

@@ -496,29 +496,28 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.id = None
         self.areashtml = {}
 
+
     def _render_single_node(self, rlevels, node, static, counters):
-        # Guard: Ensure we have exactly one election to unpack
-        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-        # The clean unpack
+        assert len(rlevels) == 1
         (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
 
-
-        intention_type = elevels[node.level+1]
+        intention_type = elevels.get(node.level + 1)
 
         if intention_type == "marker":
-            self.add_genmarkers( rlevels, node, static)
+            self.add_genmarkers(rlevels, node, static)
+
+        elif intention_type == "elector":
+            # Signature now matches add_voronoi
+            self.add_vi_highlights(rlevels, node, static)
 
         elif intention_type in ("street", "walkleg"):
             self.add_nodemarks(rlevels, node, static)
 
         elif intention_type in ("polling_district", "walk"):
-            self.add_voronoi(
-                rlevels, node, static
-            )
+            self.add_voronoi(rlevels, node, static)
         else:
             self.add_nodemaps(rlevels, node, static, counters)
+
 
 
     def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
@@ -916,10 +915,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             # --- NEW COLOR LOGIC ---
             # Get the Zone from the first elector in this region
             if not region_electors.empty:
-                # Assuming 'Zone' is a column in your region_electors dataframe
-                actual_zone = region_electors.iloc[0]['Zone']
-                # Use your zonecolour dictionary (ensure it's accessible in this scope)
-                region_color = zonecolour.get(actual_zone, 'black')
+                actual_zone = region_electors.iloc[0].get('Zone', 'MISSING')
+                print(f"DEBUG: Child {child.value} has Zone: {actual_zone}") # Check your console for this!
+                region_color = zonecolour.get(actual_zone, '#808080')
             else:
                 region_color = 'black'
             # -----------------------
@@ -1280,23 +1278,37 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def add_vi_highlights(self, node_electors):
+    def add_vi_highlights(self, rlevels, node, static=False):
         """
-        Creates individual markers for electors with VI='R'.
-        Handles granular name (Firstname, Initials, Surname)
-        and address (Prefix, Number, Street, Postcode) fields.
+        Retrieves elector data for the node's path and adds highlights to the layer.
         """
         import pandas as pd
         import folium
         from folium.plugins import MarkerCluster
+        from elector import electors # Local import to avoid circular dependencies
 
-        if node_electors is None or node_electors.empty or 'VI' not in node_electors.columns:
+        # 1. Fetch the path from the node
+        # Using mapfile() which usually contains the hierarchy path
+        path = node.mapfile()
+
+        # 2. Get the electors for this specific area
+        node_electors = electors.elector_for_path(rlevels, path)
+
+        # 3. Guard: Ensure we have data to work with
+        if node_electors is None or node_electors.empty:
             return
 
+        # Check for the VI column (Voting Intention)
+        if 'VI' not in node_electors.columns:
+            logger.warning(f"VI column missing for path: {path}")
+            return
+
+        # 4. Filter for Reform Pledges ('R')
         reform_electors = node_electors[node_electors['VI'] == 'R']
         if reform_electors.empty:
             return
 
+        # 5. Create Cluster and Process Markers
         cluster = MarkerCluster(name="Reform Pledges").add_to(self)
         markers_added = 0
 
@@ -1306,19 +1318,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                 continue
 
             # --- Granular Name Construction ---
-            # 1. Extract and clean (removing underscores from normalisation)
             fn = str(elector.get('Firstname', '')).replace('_', ' ').strip()
             init = str(elector.get('Initials', '')).replace('_', ' ').strip()
             sn = str(elector.get('Surname', '')).replace('_', ' ').strip()
 
-            # 2. Join parts that actually exist to avoid double spaces
             name_parts = [p for p in [fn, init, sn] if p]
             full_name = " ".join(name_parts).title()
 
             # --- Granular Address Construction ---
-
-    # --- Granular Address Construction ---
-            # 1. Extract parts and handle NaN/None immediately
             def get_val(key):
                 val = elector.get(key, "")
                 return "" if pd.isna(val) else str(val).strip()
@@ -1328,26 +1335,17 @@ class ExtendedFeatureGroup(FeatureGroup):
             street = get_val('StreetName')
             pc = get_val('Postcode')
 
-            # 2. Build the main line (e.g., "Flat A, 10 High Street")
             main_line_parts = []
-
             if pref:
-                # If prefix exists, we usually want it followed by a comma and space
-                # e.g., "Flat 1, 10 High Street"
                 main_line_parts.append(f"{pref},")
-
             if num:
                 main_line_parts.append(num)
-
             if street:
                 main_line_parts.append(street)
 
-            # Join with spaces, then fix the specific case of "Prefix, 10"
-            # to ensure no space before the comma if logic is tight
             main_address = " ".join(main_line_parts).replace(" ,", ",")
-
-            # 3. Final display string
             display_address = f"{main_address}, {pc}" if pc else main_address
+
             # --- HTML Construction ---
             popup_html = f"""
                 <div style="font-family: Arial, sans-serif; min-width: 200px; font-size: 13px; line-height: 1.4;">
@@ -1370,7 +1368,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             ).add_to(cluster)
             markers_added += 1
 
-        print(f"DEBUG: Added {markers_added} Reform markers to cluster.")
+        print(f"DEBUG: Added {markers_added} Reform markers to cluster for node: {node.value}")
 
     def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)
@@ -1858,6 +1856,7 @@ FEATURE_LAYER_SPECS = {
     "walk": dict(name="walk", mytag="walk", overlay=True, control=True, show=False),
     "walkleg": dict(name="walkleg", mytag="walkleg", overlay=True, control=True, show=False),
     "street": dict(name="street", mytag="street", overlay=True, control=True, show=False),
+    "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False),
     "result": dict(name="result", mytag="result", overlay=True, control=True, show=False),
     "target": dict(name="target", mytag="target", overlay=True, control=True, show=False),
     "data": dict(name="data", mytag="data", overlay=True, control=True, show=False),

@@ -1461,22 +1461,6 @@ class TreeNode:
                 selected.append(parent_layer)
 
         # -------------------------------------------------
-        # 4️⃣ Always Add VI Layer
-        # -------------------------------------------------
-
-        # Create the VI layer
-        VI_layer = ExtendedFeatureGroup(
-            name="⭐ Pledges",
-            overlay=True,
-            control=True,
-            show=True
-        )
-
-        # node_electors is the dataframe for the current map area
-        VI_layer.add_vi_highlights(electors.elector_for_path(rlevels,path))
-
-        selected.append(VI_layer)
-        # -------------------------------------------------
         # 4️⃣ Always Add Marker Layer
         # -------------------------------------------------
         marker_layer = factory["marker"]
@@ -1486,10 +1470,6 @@ class TreeNode:
         # 5️⃣ 👻 NEW: Add Ghost Tag Layers as ExtendedFeatureGroups
         # -------------------------------------------------
 
-
-        # --- 👻 HANDLE GHOST LAYERS ---
-# -------------------------------------------------
-        # 5️⃣ 👻 NEW: Add Ghost Tag Layers
         # -------------------------------------------------
         from baked_data import BakedDataManager  # Ensure this is imported
 
@@ -2865,7 +2845,7 @@ class TreeNode:
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
         # The clean unpack
-        (c_election, elevels), = rs.items()
+        (c_election, elevels), = rlevels.items()
 
         current_election = c_election
         print(f"___streetsheet: {current_election} and street data len {len(electorwalks)}")

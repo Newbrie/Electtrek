@@ -183,7 +183,7 @@ class ElectorManager:
 
                 node_type = elevels[depth]
                 col = shapecolumn.get(node_type)
-                target_val = str(value).strip().upper()
+                target_val = state.normalname(value)
 
                 if not col:
                     logger.debug(f"   Step {depth}: No column mapping for type '{node_type}'. Skipping.")
@@ -221,6 +221,74 @@ class ElectorManager:
             logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
             return filtered_df
 
+    def delete_elector_for_path(self, resolved_levels, raw_path):
+        from elections import CurrentElection
+        """
+        Deletes electors by intersecting levels Step 1 (Constituency) and below.
+        """
+        with _lock:
+            assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+
+            # The clean unpack you like
+            (c_election, elevels), = resolved_levels.items()
+
+            # 1. Access the specific election data
+            df = self._elections.get(c_election)
+            if df is None or df.empty:
+                logger.warning(f"No data found for election '{c_election}'")
+                return 0
+
+            # 2. Get the clean steps
+            parts = state.stepify(raw_path)
+            if len(parts) < 2:
+                logger.warning(f"Path too shallow for targeted deletion: {raw_path}")
+                return 0
+
+            # 3. Load mapping
+
+            original_len = len(df)
+
+            # 4. Build the "Intersection Mask"
+            # Start by selecting everything, then narrow it down
+            path_mask = pd.Series([True] * len(df), index=df.index)
+
+            for depth, value in enumerate(parts):
+                # --- REFACTOR: Skip Country Level ---
+                if depth == 0:
+                    continue
+
+                node_type = elevels.get(depth)
+                if not node_type:
+                    continue
+
+                col = shapecolumn.get(node_type)
+                if col and col in df.columns:
+                    target_val = state.normalname(value)
+
+                    # Boolean AND: narrowing the target area
+                    level_match = df[col].astype(str).str.strip().str.upper() == target_val
+                    path_mask = path_mask & level_match
+
+            # 5. Execute Deletion
+            # Check if we actually matched anything before re-assigning
+            if path_mask.any():
+                # Keep only what is NOT in the path_mask
+                self._elections[c_election] = df[~path_mask].copy()
+                deleted_count = original_len - len(self._elections[c_election])
+            else:
+                deleted_count = 0
+
+            if deleted_count > 0:
+                # 6. Housekeeping
+                self.rebuild_combined()
+                self.save()
+                logger.info(f"Deleted {deleted_count} electors from '{c_election}' for path: {raw_path}")
+            else:
+                logger.debug(f"No electors found to delete for path: {raw_path}")
+
+            return deleted_count
+
+
     def add_or_update(self, election, df: pd.DataFrame):
         with _lock:
             self._elections[election] = df.copy()
@@ -246,5 +314,10 @@ class ElectorManager:
             result = self._elections.get(election)
             return result.copy() if result is not None else pd.DataFrame()
 
+
+    @property
+    def elections(self):
+        """Read-only property for combined elections dictionary."""
+        return self._elections
 # Single instance
 electors = ElectorManager()

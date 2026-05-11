@@ -223,12 +223,21 @@
     stream_processing.files.forEach((file, idx) => {
       const tr = document.createElement('tr');
       tr.dataset.index = idx;
-      tr.innerHTML = `
-        <td><input type="number" class="order" value="${file.order}" style="width:50px;"></td>
-        <td>
-          <input type="text" class="filename" value="${file.file_path?.split('/').pop() || ''}" readonly style="width:150px;">
-          <input type="file" class="file-picker" style="display:none;">
-        </td>
+      // ... inside stream_processing.files.forEach((file, idx) => { ...
+    tr.innerHTML = `
+      <td><input type="number" class="order" value="${file.order}" style="width:50px;"></td>
+
+      <td>
+        <!-- The visible box for the user -->
+        <div class="filename-box" title="${file.file_path?.split('/').pop() || ''}">
+          ${file.file_path?.split('/').pop() || 'No file selected'}
+        </div>
+
+        <!-- ADD THIS: A hidden input with the class 'filename' for the script to find -->
+        <input type="hidden" class="filename" value="${file.file_path?.split('/').pop() || ''}">
+
+        <input type="file" class="file-picker" style="display:none;">
+      </td>
         <td>
           <select class="type">
             <option value="csv" ${file.type==='csv'?'selected':''}>csv</option>
@@ -267,8 +276,17 @@
           const result = await fetch('/upload_file', {method:'POST', body:formData}).then(r=>r.json());
           if (result.error) throw new Error(result.error);
 
-          tr.querySelector('.filename').value = f.name;
+          // FIX START: Update the visible UI box
+          const displayBox = tr.querySelector('.filename-box');
+          if (displayBox) displayBox.textContent = f.name;
+
+          // FIX START: Update the hidden input (the line that was crashing)
+          const hiddenInput = tr.querySelector('.filename');
+          if (hiddenInput) hiddenInput.value = f.name;
+
           stream_processing.files[idx].file_path = result.path;
+          // FIX END
+
         } catch(err) {
           alert("Upload failed: " + err.message);
         }

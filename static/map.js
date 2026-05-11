@@ -684,15 +684,37 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
 
     const finalOpacity = totalPossible > 0 ? (0.8 * (completedWeight / totalPossible)) : 0;
 
-    // --- 2. FIND THE SOURCE BLUEPRINT ---
+    // --- 2. FIND THE SOURCE BLUEPRINT (WITH DEBUG) ---
     let blueprintGeometry = null;
+    let foundButGhost = false;
+    const allSeenIds = [];
+
     activeMap.eachLayer(l => {
-        if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
-            blueprintGeometry = l.feature.geometry;
+        if (l.feature?.properties) {
+            const idOnMap = String(l.feature.properties.region_id || l.feature.properties.nid).trim();
+            allSeenIds.push(idOnMap);
+
+            if (idOnMap === cleanId) {
+                if (l.is_ghost) {
+                    foundButGhost = true;
+                } else {
+                    blueprintGeometry = l.feature.geometry;
+                }
+            }
         }
     });
 
     if (!blueprintGeometry) {
+        console.error(`❌ MAPPING FAIL for ID: "${cleanId}"`);
+        console.log(`- Found as Ghost? ${foundButGhost}`);
+        console.log(`- Available IDs on map:`, [...new Set(allSeenIds)]);
+
+        // Check if it's a simple case-sensitivity issue
+        const caseMatch = allSeenIds.find(id => id.toLowerCase() === cleanId.toLowerCase());
+        if (caseMatch) {
+            console.warn(`- 💡 Hint: Found case-insensitive match: "${caseMatch}". Check your Python capitalization.`);
+        }
+
         console.warn("⚠️ Source polygon not found for blueprint.");
         console.groupEnd();
         return;
