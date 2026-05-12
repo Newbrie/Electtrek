@@ -68,7 +68,13 @@ var showMore = function (msg,area, type) {
 
 // --- MOVE THESE TO MAP.JS ---
 
-window.BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
+window.BAKED_DATA = window.BAKED_DATA ||
+                    (parent && parent.BAKED_DATA) || {
+    walk: {},
+    pd: {},
+    ward: {},
+    elector: {}
+};
 
 /* --- Top of map.js --- */
 /* --- Top of map.js --- */
@@ -183,7 +189,7 @@ window.getBakedData = function() {
                             // 2. Refresh every ghost layer for this specific walk
                             // The prefix guard inside the function will handle skipping M-tags automatically
                             tagsToUpdate.forEach(tagCode => {
-                                window.updateWalkVisuals(region_id, tagCode);
+                                window.updateWalkVisuals(region_id, tagCode,'walk');
                             });
 
                               console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
@@ -206,11 +212,11 @@ window.getBakedData = function() {
                           // Check if we have multiple tags to initialize
                           if (tagCodes.length > 0) {
                               tagCodes.forEach(code => {
-                                  window.updateWalkVisuals(region_id, code);
+                                  window.updateWalkVisuals(region_id, code,'walk');
                               });
                           } else {
                               // Fallback to L1 if no registry found
-                              window.updateWalkVisuals(region_id, 'L1');
+                              window.updateWalkVisuals(region_id, 'L1','walk');
                           }
                       });
                   }
@@ -502,16 +508,18 @@ window.updateTagToggles = function(selector) {
     });
 };
 
-window.handleTagClick = function(span) {
-    // 1. Get the current state
+window.handleTagClick = function(span, uiScope = 'walk') {
+
+    // 1. Get state
     var isInactive = span.classList.contains('tag-inactive');
     var newValue = isInactive ? 'y' : 'n';
     var code = span.getAttribute('data-code');
 
-    // FETCH: Get the live data object
-    var currentData = (typeof getBakedData === 'function') ? getBakedData() : (window.BAKED_DATA || {});
+    var currentData = (typeof getBakedData === 'function')
+        ? getBakedData()
+        : (window.BAKED_DATA || {});
 
-    // 2. Visual Toggle
+    // 2. UI toggle
     if (isInactive) {
         span.classList.remove('tag-inactive');
         span.classList.add('tag-active');
@@ -522,59 +530,78 @@ window.handleTagClick = function(span) {
         span.innerText = 'n';
     }
 
-    // 3. Data Extraction
+    // 3. Extract context
     var row = span.closest('.canvass-row') || span.closest('tr');
+    if (!row) return;
+
     var walk = row.getAttribute('data-walk');
     var street = row.getAttribute('data-street');
-    var house = row.querySelector('.unit-selector').value;
-    var streetWeight = parseInt(row.cells[1].innerText) || 0;
+    var house = row.querySelector('.unit-selector')?.value;
+    var streetWeight = parseInt(row.cells?.[1]?.innerText) || 0;
 
-    // 4. Ensure Hierarchy & Preserve Total Houses
-    if (!currentData[walk]) {
-        // Try to find the walk total in the UI to bake it in permanently
-        var totalEl = document.querySelector('.walk-total-display');
-        currentData[walk] = {
-            region_total_houses: totalEl ? parseInt(totalEl.innerText) : 0
+    // 4. Ensure walk structure exists (UI-scoped namespace)
+    if (!currentData[uiScope]) currentData[uiScope] = {};
+    if (!currentData[uiScope][walk]) {
+        currentData[uiScope][walk] = {
+            region_total_houses: parseInt(
+                document.querySelector('.walk-total-display')?.innerText || 0
+            )
         };
     }
 
-    if (!currentData[walk][street]) currentData[walk][street] = {};
-    currentData[walk][street].street_weight = streetWeight;
+    if (!currentData[uiScope][walk][street]) {
+        currentData[uiScope][walk][street] = {};
+    }
 
-    // 5. Update Storage based on Value
+    currentData[uiScope][walk][street].street_weight = streetWeight;
+
+    // 5. Mutation logic
     if (newValue === 'n') {
-        const streetObject = currentData[walk][street];
+
+        const streetObject = currentData[uiScope][walk][street];
+
         Object.keys(streetObject).forEach(key => {
-            if (streetObject[key] && typeof streetObject[key] === 'object' && streetObject[key].tags) {
-                streetObject[key].tags[code] = 'n';
+            const entry = streetObject[key];
+            if (entry && typeof entry === 'object' && entry.tags) {
+                entry.tags[code] = 'n';
             }
         });
+
         console.log(`🚫 Street ${street} wiped to 'n'`);
+
     } else {
-        if (!currentData[walk][street][house]) {
-            currentData[walk][street][house] = { votes: "0", tags: {} };
+
+        if (!currentData[uiScope][walk][street][house]) {
+            currentData[uiScope][walk][street][house] = {
+                votes: "0",
+                tags: {}
+            };
         }
-        if (!currentData[walk][street][house].tags) {
-            currentData[walk][street][house].tags = {};
+
+        if (!currentData[uiScope][walk][street][house].tags) {
+            currentData[uiScope][walk][street][house].tags = {};
         }
-        currentData[walk][street][house].tags[code] = 'y';
+
+        currentData[uiScope][walk][street][house].tags[code] = 'y';
+
         console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
     }
 
-    // 6. Global Metadata & PERSISTENCE
-    currentData[walk][street].ts = Date.now();
+    // 6. Metadata
+    currentData[uiScope][walk][street].ts = Date.now();
 
-    // --- THE VITAL SAVE STEP ---
+    // 7. Persist
     window.BAKED_DATA = currentData;
+
     if (typeof saveBakedData === 'function') {
         saveBakedData(currentData);
     }
 
-    // ⚡️ TRIGGER: Recalculate
+    // 8. Trigger visuals (CORRECT propagation)
     if (window.updateWalkVisuals) {
-        window.updateWalkVisuals(walk, code);
+        window.updateWalkVisuals(walk, code, 'walk');
     } else if (parent.updateWalkVisuals) {
-        parent.updateWalkVisuals(walk, code);
+        parent.updateWalkVisuals(walk, code, 'walk');
     }
 };
 
@@ -652,8 +679,11 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-
-window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
+window.updateWalkVisuals = function(
+    region_id,
+    targetTag = 'L1',
+    uiScope = 'walk'
+    ) {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
     const activeMap = window.fmap || parent.fmap;
@@ -661,7 +691,13 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     const cleanId = String(region_id).trim();
 
     // --- 1. DATA & MATH (Keep your existing logic) ---
-    const fullData = typeof getBakedData === 'function' ? getBakedData() : (window.BAKED_DATA || {});
+    const allData =
+    typeof getBakedData === 'function'
+        ? getBakedData()
+        : (window.BAKED_DATA || {});
+
+    const fullData = allData[uiScope] || {};
+
     let regionData = fullData[cleanId] || { region_total_houses: 0 };
 
     let completedWeight = 0;
@@ -795,7 +831,7 @@ window.updateWalkVisuals = function(region_id, targetTag = 'L1') {
     console.groupEnd();
 };
 
-window.incrementVoteCount = function(btn) {
+window.incrementVoteCount = function(btn,uiScope = 'walk') {
     console.log("➕ incrementVoteCount clicked");
     var count = parseInt(btn.getAttribute('data-count')) || 0;
     var max = parseInt(btn.getAttribute('data-max')) || 1;
@@ -821,14 +857,15 @@ window.incrementVoteCount = function(btn) {
             var vi = viSelector ? viSelector.value : "";
 
             // 2. Ensure the 3-tier hierarchy exists in memory
-            if (!currentData[walk]) currentData[walk] = {};
-            if (!currentData[walk][street]) currentData[walk][street] = {};
+            if (!currentData[uiScope]) {currentData[uiScope] = {};}
+            if (!currentData[uiScope][walk]) currentData[uiScope][walk] = {};
+            if (!currentData[uiScope][walk][street]) currentData[uiScope][walk][street] = {};
 
             // 3. Update the specific house entry
             // We preserve existing tags if they exist by merging
-            var existingData = currentData[walk][street][house] || {};
+            var existingData = currentData[uiScope][walk][street][house] || {};
 
-            currentData[walk][street][house] = {
+            currentData[uiScope][walk][street][house] = {
                 ...existingData, // Keep tags and other metadata
                 vi: vi,
                 votes: count.toString(),

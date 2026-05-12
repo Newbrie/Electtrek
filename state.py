@@ -75,6 +75,33 @@ def stepify(path):
     print("____LEAFNODE:", path, parts)
     return parts
 
+def selprefix(election):
+    from elections import list_elections
+
+    election = election.upper()
+    elections_list = list_elections()  # already sorted
+
+    if election not in elections_list:
+        raise ValueError(f"Election '{election}' not found")
+
+    idx = elections_list.index(election)
+
+    if idx >= 26:
+        raise ValueError("Too many elections for single-letter prefix")
+
+    return chr(65 + idx)
+
+def make_upd(election, pd):
+    eprefix = selprefix(election).strip().upper()
+    pd = str(pd).strip().upper()
+
+    if not eprefix:
+        raise ValueError(f"Invalid election prefix for election={election}")
+
+    if not pd:
+        raise ValueError("Blank PD")
+
+    return f"{eprefix}-{pd}"
 
 def normalname(name):
     def clean(s):

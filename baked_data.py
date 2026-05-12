@@ -7,9 +7,12 @@ class BakedDataManager:
         self.filename = filename
         self._data = self.load()  # Load into memory immediately
 
-    def get_election_data(self, walk_id):
-        # Your JSON structure uses Walk ID as the top level (e.g., "N272")
-        return self._data.get(walk_id, {})
+    def get_scope_data(self, scope, region_id):
+        return (
+            self._data
+            .get(scope, {})
+            .get(region_id, {})
+        )
 
     def load(self):
         if os.path.exists(self.filename):
@@ -37,24 +40,33 @@ class BakedDataManager:
         return {}
 
     def save(self, incoming_data):
-        # 1. Merge logic (Note: use 'existing' to keep previous data!)
+
         existing = self.load()
 
-        for walk_id, streets in incoming_data.items():
-            if walk_id not in existing:
-                existing[walk_id] = {}
-            for street_id, houses in streets.items():
-                if street_id not in existing[walk_id]:
-                    existing[walk_id][street_id] = {}
-                for house_id, details in houses.items():
-                    existing[walk_id][street_id][house_id] = details
+        for scope, regions in incoming_data.items():
 
-        # 2. Write as a JS file
+            if scope not in existing:
+                existing[scope] = {}
+
+            for region_id, streets in regions.items():
+
+                if region_id not in existing[scope]:
+                    existing[scope][region_id] = {}
+
+                for street_id, houses in streets.items():
+
+                    if street_id not in existing[scope][region_id]:
+                        existing[scope][region_id][street_id] = {}
+
+                    for house_id, details in houses.items():
+
+                        existing[scope][region_id][street_id][house_id] = details
+
         with open(self.filename, 'w', encoding='utf-8') as f:
             f.write("window.BAKED_DATA = ")
-            # Save 'existing' (the merged result), not just 'incoming_data'
             json.dump(existing, f, indent=4)
             f.write(";")
+
 
 
 # Usage in routes

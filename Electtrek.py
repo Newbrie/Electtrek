@@ -604,21 +604,6 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 
     return all_passed
 
-def selprefix(election):
-    from elections import list_elections
-
-    election = election.upper()
-    elections_list = list_elections()  # already sorted
-
-    if election not in elections_list:
-        raise ValueError(f"Election '{election}' not found")
-
-    idx = elections_list.index(election)
-
-    if idx >= 26:
-        raise ValueError("Too many elections for single-letter prefix")
-
-    return chr(65 + idx)
 
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
@@ -774,7 +759,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             teamsize,
             territory_path,
             resolved_levels,
-            selprefix(current_election),
+            state.selprefix(current_election),
             max_walk_size=max_walk_size,
             max_depth=10,
             progress=progress

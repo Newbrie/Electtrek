@@ -29,6 +29,78 @@ shapecolumn = {
     "country": "Country"
 }
 
+def resolve_targets(df, walk, street, house):
+    """
+    Resolve a walk/street/house mutation specification
+    into matching elector rows.
+    """
+
+    street_norm = state.normalname(street).upper()
+    house_norm = str(house).strip().upper()
+
+    street_match = (
+        df['StreetName']
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        == street_norm
+    )
+
+    house_num_match = (
+        df['AddressNumber']
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        == house_norm
+    )
+
+    house_name_match = (
+        df['AddressPrefix']
+        .astype(str)
+        .apply(state.normalname)
+        .str.upper()
+        == house_norm
+    )
+
+    # Optional walk narrowing
+    walk_match = (
+        df['WalkName']
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        == str(walk).strip().upper()
+    )
+
+    return df[
+        walk_match &
+        street_match &
+        (house_num_match | house_name_match)
+    ].index
+
+def apply_mutation(df, indexes, tags):
+    for idx in indexes:
+
+        existing_raw = str(df.at[idx, 'Tags']).strip()
+
+        if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
+            existing = set()
+        else:
+            existing = {
+                t.strip()
+                for t in existing_raw.split(',')
+                if t.strip()
+            }
+
+        for code, stateval in tags.items():
+
+            if str(stateval).lower() == 'y':
+                existing.add(code)
+
+            elif code in existing:
+                existing.remove(code)
+
+        df.at[idx, 'Tags'] = ", ".join(sorted(existing))
+
 class ElectorManager:
     def __init__(self):
         self._combined = pd.DataFrame()
@@ -55,91 +127,60 @@ class ElectorManager:
             except Exception as e:
                 logger.exception(f"Could not load {ELECTOR_FILE}: {e}")
 
+
     def _inject_baked_data(self, specific_ename=None):
-        """
-        Internal method to apply 'y' tags from baked_data to DataFrames.
-        Targeted by specific_ename to avoid redundant full-dataset processing.
-        """
         from baked_data import baked_data
+
         all_baked = baked_data.load()
+
         if not all_baked:
             return
 
-        # 1. Decide which elections to process
-        if specific_ename:
-            targets = [specific_ename] if specific_ename in self._elections else []
-        else:
-            targets = self._elections.keys()
+        targets = (
+            [specific_ename]
+            if specific_ename and specific_ename in self._elections
+            else self._elections.keys()
+        )
 
         for ename in targets:
-            df = self._elections[ename]
 
-            def apply_tags(row):
-                # --- IDENTIFIERS ---
-                # Match the 'walk_id' used in save()
-                area_key = str(row.get('WalkName', '')).strip().upper()
+            df = self._elections[ename].copy()
 
-                # Normalize and force UPPER to match JSON keys
-                raw_street = row.get('StreetName', '')
-                street = state.normalname(raw_street).upper() if raw_street else ""
+            # Iterate mutation specs
+            for walk, streets in all_baked.items():
 
-                # --- NAVIGATION ---
-                area_block = all_baked.get(area_key, {})
-                street_block = area_block.get(street, {})
+                if not isinstance(streets, dict):
+                    continue
 
-                # If street_block is not a dict (e.g., street_weight metadata), exit early
-                if not isinstance(street_block, dict):
-                    val = str(row.get('Tags', ''))
-                    return val if val.lower() != 'nan' else ""
+                for street, houses in streets.items():
 
-                # House identifiers
-                house_num = str(row.get('AddressNumber', '')).strip().upper()
-                house_name = state.normalname(row.get('AddressPrefix', '')).upper()
+                    if not isinstance(houses, dict):
+                        continue
 
-                house_info = None
+                    for house, house_info in houses.items():
 
-                # ✅ 1. Try numeric match
-                if house_num:
-                    house_info = street_block.get(house_num)
+                        if house in ['street_weight', 'ts']:
+                            continue
 
-                # ✅ 2. Try house name match
-                if not house_info and house_name:
-                    house_info = street_block.get(house_name)
+                        if not isinstance(house_info, dict):
+                            continue
 
-                # ✅ 3. Fallback: Loose key search
-                if not house_info:
-                    for k, v in street_block.items():
-                        if k == house_num or k == house_name:
-                            house_info = v
-                            break
+                        tags = house_info.get('tags', {})
 
-                # No data found for this specific house
-                if not house_info or not isinstance(house_info, dict):
-                    val = str(row.get('Tags', ''))
-                    return val if val.lower() != 'nan' else ""
+                        if not tags:
+                            continue
 
-                # --- TAG EXTRACTION & MERGING ---
-                tags_dict = house_info.get('tags', {})
-                active_codes = [c for c, s in tags_dict.items() if str(s).lower() == 'y']
+                        indexes = resolve_targets(
+                            df,
+                            walk,
+                            street,
+                            house
+                        )
 
-                # Clean existing tags (handle 'nan', 'none', and numeric types)
-                existing_raw = str(row.get('Tags', '')).strip()
-                if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
-                    existing_tags = []
-                else:
-                    # split and strip to remove whitespace around commas
-                    existing_tags = [t.strip() for t in existing_raw.split(',') if t.strip()]
+                        apply_mutation(df, indexes, tags)
 
-                if active_codes:
-                    # Use a set to prevent duplicate tags
-                    merged_set = set(active_codes) | set(existing_tags)
-                    return ", ".join(sorted(list(merged_set)))
+            self._elections[ename] = df
 
-                # If no 'y' tags found, return existing tags (cleaned)
-                return ", ".join(existing_tags)
-
-            # Apply changes back to the stored DataFrame
-            self._elections[ename]['Tags'] = df.apply(apply_tags, axis=1)
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""
