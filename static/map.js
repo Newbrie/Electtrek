@@ -476,36 +476,24 @@ window.updateElectorTag = function(walk, street, unit, code, isActive) {
 };
 
 window.updateTagToggles = function(selector) {
-
     var row = selector.closest('.canvass-row') || selector.closest('tr');
-
-    var uiScope = row.getAttribute('data-scope') || "walk";  // ⚠️ add this attribute later
-    var region = row.getAttribute('data-region');
+    var walk = row.getAttribute('data-region'); // Grab the Walk ID from the HTML
     var street = row.getAttribute('data-street');
     var house = selector.value;
+    currentData = getBakedData()
 
-    var currentData = getBakedData() || {};
-
-    // -----------------------------
-    // SAFE NAVIGATION (NEW STRUCTURE)
-    // -----------------------------
-    var houseData =
-        currentData[uiScope] &&
-        currentData[uiScope][region] &&
-        currentData[uiScope][region][street] &&
-        currentData[uiScope][region][street].houses &&
-        currentData[uiScope][region][street].houses[house]
-        ? currentData[uiScope][region][street].houses[house]
-        : null;
+    // Navigate the 3-tier hierarchy: Walk -> Street -> House
+    var houseData = (currentData[walk] &&
+                     currentData[walk][street] &&
+                     currentData[walk][street][house])
+                     ? currentData[walk][street][house]
+                     : null;
 
     var tags = (houseData && houseData.tags) ? houseData.tags : {};
 
-    // -----------------------------
-    // UPDATE UI
-    // -----------------------------
     row.querySelectorAll('.tag-toggle').forEach(span => {
-
         var code = span.getAttribute('data-code');
+        // Since tags is an object, we check the specific code (e.g., tags['L1'])
         var val = tags[code] || 'n';
 
         if (val === 'y') {
@@ -522,18 +510,16 @@ window.updateTagToggles = function(selector) {
 
 window.handleTagClick = function(span, uiScope = 'walk') {
 
-    const isInactive = span.classList.contains('tag-inactive');
-    const newValue = isInactive ? 'y' : 'n';
-    const code = span.getAttribute('data-code');
+    // 1. Get state
+    var isInactive = span.classList.contains('tag-inactive');
+    var newValue = isInactive ? 'y' : 'n';
+    var code = span.getAttribute('data-code');
 
-    const currentData =
-        (typeof getBakedData === 'function')
-            ? getBakedData()
-            : (window.BAKED_DATA || {});
+    var currentData = (typeof getBakedData === 'function')
+        ? getBakedData()
+        : (window.BAKED_DATA || {});
 
-    // -----------------------------
-    // UI TOGGLE
-    // -----------------------------
+    // 2. UI toggle
     if (isInactive) {
         span.classList.remove('tag-inactive');
         span.classList.add('tag-active');
@@ -544,51 +530,39 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         span.innerText = 'n';
     }
 
-    // -----------------------------
-    // CONTEXT
-    // -----------------------------
-    const row = span.closest('.canvass-row') || span.closest('tr');
+    // 3. Extract context
+    var row = span.closest('.canvass-row') || span.closest('tr');
     if (!row) return;
 
-    const region = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
-    const house = row.querySelector('.unit-selector')?.value;
+    var walk = row.getAttribute('data-region');
+    var street = row.getAttribute('data-street');
+    var house = row.querySelector('.unit-selector')?.value;
+    var streetWeight = parseInt(row.cells?.[1]?.innerText) || 0;
 
-    if (!region || !street || !house) return;
-
-    // -----------------------------
-    // ENSURE STRUCTURE
-    // -----------------------------
+    // 4. Ensure walk structure exists (UI-scoped namespace)
     if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][region]) {
-        currentData[uiScope][region] = {
+    if (!currentData[uiScope][walk]) {
+        currentData[uiScope][walk] = {
             region_total_houses: parseInt(
                 document.querySelector('.walk-total-display')?.innerText || 0
             )
         };
     }
 
-    if (!currentData[uiScope][region][street]) {
-        currentData[uiScope][region][street] = {
-            street_weight: 0,
-            ts: Date.now(),
-            houses: {}
-        };
+    if (!currentData[uiScope][walk][street]) {
+        currentData[uiScope][walk][street] = {};
     }
 
-    const streetObj = currentData[uiScope][region][street];
+    currentData[uiScope][walk][street].street_weight = streetWeight;
 
-    if (!streetObj.houses) streetObj.houses = {};
-
-    // -----------------------------
-    // MUTATION LOGIC (FIXED)
-    // -----------------------------
-
+    // 5. Mutation logic
     if (newValue === 'n') {
 
-        // Only iterate houses (NOT entire street object)
-        Object.values(streetObj.houses).forEach(entry => {
-            if (entry && entry.tags) {
+        const streetObject = currentData[uiScope][walk][street];
+
+        Object.keys(streetObject).forEach(key => {
+            const entry = streetObject[key];
+            if (entry && typeof entry === 'object' && entry.tags) {
                 entry.tags[code] = 'n';
             }
         });
@@ -597,40 +571,33 @@ window.handleTagClick = function(span, uiScope = 'walk') {
 
     } else {
 
-        if (!streetObj.houses[house]) {
-            streetObj.houses[house] = {
+        if (!currentData[uiScope][walk][street][house]) {
+            currentData[uiScope][walk][street][house] = {
                 votes: "0",
-                tags: {},
-                vi: "",
-                ts: Date.now()
+                tags: {}
             };
         }
 
-        const houseObj = streetObj.houses[house];
+        if (!currentData[uiScope][walk][street][house].tags) {
+            currentData[uiScope][walk][street][house].tags = {};
+        }
 
-        if (!houseObj.tags) houseObj.tags = {};
-
-        houseObj.tags[code] = 'y';
+        currentData[uiScope][walk][street][house].tags[code] = 'y';
 
         console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
     }
 
-    // -----------------------------
-    // METADATA
-    // -----------------------------
-    streetObj.ts = Date.now();
+    // 6. Metadata
+    currentData[uiScope][walk][street].ts = Date.now();
 
+    // 7. Persist
     window.BAKED_DATA = currentData;
 
     if (typeof saveBakedData === 'function') {
         saveBakedData(currentData);
     }
 
-    // -----------------------------
-    // VISUAL UPDATE
-    // -----------------------------
-    const walk = region;
-
+    // 8. Trigger visuals (CORRECT propagation)
     if (window.plotL1Progress) {
         window.plotL1Progress(walk, code, 'walk');
     } else if (parent.plotL1Progress) {
@@ -978,84 +945,60 @@ window.plotL1Progress = function(
     console.groupEnd();
 };
 
-window.incrementVoteCount = function(btn, uiScope = 'walk') {
-
+window.incrementVoteCount = function(btn,uiScope = 'walk') {
     console.log("➕ incrementVoteCount clicked");
+    var count = parseInt(btn.getAttribute('data-count')) || 0;
+    var max = parseInt(btn.getAttribute('data-max')) || 1;
+    currentData = getBakedData()
 
-    let count = parseInt(btn.getAttribute('data-count')) || 0;
-    const max = parseInt(btn.getAttribute('data-max')) || 1;
-
-    const currentData = getBakedData() || {};
-
-    // Cycle count
-    count = (count + 1) > max ? 0 : count;
+    // Cycle count: 0 -> 1 -> 2 -> 0
+    count = (count + 1) > max ? 0 : count + 1;
 
     btn.setAttribute('data-count', count);
     btn.innerText = count + '/' + max;
 
-    const row = btn.closest('.canvass-row');
-    if (!row) return;
+    var row = btn.closest('.canvass-row');
 
-    const region = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
+    if (row) {
+        // 1. Grab all three identifiers
+        var walk = row.getAttribute('data-region');     // e.g., "N267"
+        var street = row.getAttribute('data-street'); // e.g., "FOXLEIGH_GRANGE"
+        var houseSelector = row.querySelector('.unit-selector');
+        var viSelector = row.querySelector('.vi-selector');
 
-    const houseSelector = row.querySelector('.unit-selector');
-    const viSelector = row.querySelector('.vi-selector');
+        if (houseSelector) {
+            var house = houseSelector.value;
+            var vi = viSelector ? viSelector.value : "";
 
-    if (!houseSelector) return;
+            // 2. Ensure the 3-tier hierarchy exists in memory
+            if (!currentData[uiScope]) {currentData[uiScope] = {};}
+            if (!currentData[uiScope][walk]) currentData[uiScope][walk] = {};
+            if (!currentData[uiScope][walk][street]) currentData[uiScope][walk][street] = {};
 
-    const house = houseSelector.value;
-    const vi = viSelector ? viSelector.value : "";
+            // 3. Update the specific house entry
+            // We preserve existing tags if they exist by merging
+            var existingData = currentData[uiScope][walk][street][house] || {};
 
-    // -----------------------------
-    // ENSURE STRUCTURE EXISTS
-    // -----------------------------
-    if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][region]) currentData[uiScope][region] = {};
-    if (!currentData[uiScope][region][street]) {
-        currentData[uiScope][region][street] = {
-            street_weight: 0,
-            ts: Date.now(),
-            houses: {}
-        };
-    }
-    if (!currentData[uiScope][region][street].houses[house]) {
-        currentData[uiScope][region][street].houses[house] = {
-            vi: "",
-            votes: "0",
-            tags: {},
-            ts: Date.now()
-        };
-    }
+            currentData[uiScope][walk][street][house] = {
+                ...existingData, // Keep tags and other metadata
+                vi: vi,
+                votes: count.toString(),
+                ts: Date.now()
+            };
 
-    // -----------------------------
-    // UPDATE HOUSE ONLY
-    // -----------------------------
-    const houseObj =
-        currentData[uiScope][region][street].houses[house];
+            console.log(`💾 Saved to memory: [${walk}] ${street} No. ${house} = ${count} votes`);
 
-    const existingTags = houseObj.tags || {};
+            // --- REFRESH UI ---
+            window.refreshDropdownColors(houseSelector);
+            window.updateRowAppearance(row, count, max);
 
-    currentData[uiScope][region][street].houses[house] = {
-        ...houseObj,
-        tags: existingTags,
-        vi: vi,
-        votes: String(count),
-        ts: Date.now()
-    };
-
-    console.log(
-        `💾 Saved [${uiScope}] ${region}/${street}/${house} = ${count} votes`
-    );
-
-    // -----------------------------
-    // UI REFRESH
-    // -----------------------------
-    window.refreshDropdownColors(houseSelector);
-    window.updateRowAppearance(row, count, max);
-
-    if (window.updateMarkerStatus) {
-        window.updateMarkerStatus(street);
+            // --- REFRESH MAP MARKER ---
+            // Important: We still pass 'street' to updateMarkerStatus if
+            // your map uses street names as the keys for markers.
+            if (window.updateMarkerStatus) {
+                window.updateMarkerStatus(street);
+            }
+        }
     }
 };
 
@@ -1066,7 +1009,7 @@ window.deployUpdate = function(uiScope = "walk") {
 
     document.querySelectorAll('.canvass-row').forEach(row => {
 
-        const region = row.getAttribute('data-region');
+        const region = row.getAttribute('data-region'); // rename later if needed
         const street = row.getAttribute('data-street');
         const house = row.querySelector('.unit-selector').value;
         const vi = row.querySelector('.vi-selector').value;
@@ -1075,25 +1018,12 @@ window.deployUpdate = function(uiScope = "walk") {
 
         if (!region || region === "None") return;
 
-        // ---------------------------
-        // INIT STRUCTURE
-        // ---------------------------
+        // 🧠 FIX: include uiScope
         if (!updatedData[uiScope]) updatedData[uiScope] = {};
         if (!updatedData[uiScope][region]) updatedData[uiScope][region] = {};
+        if (!updatedData[uiScope][region][street]) updatedData[uiScope][region][street] = {};
 
-        // ✔️ STREET LAYER IS NOW AN OBJECT WITH METADATA + houses
-        if (!updatedData[uiScope][region][street]) {
-            updatedData[uiScope][region][street] = {
-                street_weight: 0,
-                ts: Date.now(),
-                houses: {}
-            };
-        }
-
-        // ---------------------------
-        // HOUSE DATA ONLY
-        // ---------------------------
-        updatedData[uiScope][region][street].houses[house] = {
+        updatedData[uiScope][region][street][house] = {
             vi,
             votes,
             pd,
@@ -1101,27 +1031,16 @@ window.deployUpdate = function(uiScope = "walk") {
         };
     });
 
-    // ---------------------------
-    // SAFE MERGE
-    // ---------------------------
+    // merge safely
     for (let scope in updatedData) {
-
         if (!masterData[scope]) masterData[scope] = {};
 
         for (let region in updatedData[scope]) {
-
-            if (!masterData[scope][region]) {
-                masterData[scope][region] = {};
-            }
+            if (!masterData[scope][region]) masterData[scope][region] = {};
 
             for (let street in updatedData[scope][region]) {
-
-                const newStreet = updatedData[scope][region][street];
-
-                masterData[scope][region][street] = {
-                    ...(masterData[scope][region][street] || {}),
-                    ...newStreet
-                };
+                masterData[scope][region][street] =
+                    updatedData[scope][region][street];
             }
         }
     }
@@ -1666,58 +1585,37 @@ window.refreshDropdownColors = function(selectElement) {
 };
 
 window.updateVI = function(selectElement) {
+  currentData = getBakedData()
+    var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
 
-    const currentData = getBakedData() || {};
+    // 1. Grab all three identifiers (Walk, Street, House)
+    var walk = row.getAttribute('data-region');
+    var street = row.getAttribute('data-street');
+    var house = row.querySelector('.unit-selector').value;
 
-    const row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+    // 2. Ensure the 3-tier hierarchy exists
+    if (!currentData[walk]) currentData[walk] = {};
+    if (!currentData[walk][street]) currentData[walk][street] = {};
 
-    const uiScope = row.getAttribute('data-scope') || "walk";
-    const region = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
-    const house = row.querySelector('.unit-selector').value;
-
-    // -----------------------------
-    // ENSURE STRUCTURE EXISTS
-    // -----------------------------
-    if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][region]) currentData[uiScope][region] = {};
-    if (!currentData[uiScope][region][street]) {
-        currentData[uiScope][region][street] = {
-            street_weight: 0,
-            ts: Date.now(),
-            houses: {}
-        };
-    }
-    if (!currentData[uiScope][region][street].houses[house]) {
-        currentData[uiScope][region][street].houses[house] = {
-            votes: "0",
-            tags: {},
-            vi: "",
-            ts: Date.now()
-        };
+    // 3. Ensure house record exists without wiping out existing votes or tags
+    if (!currentData[walk][street][house]) {
+        currentData[walk][street][house] = { votes: "0", tags: {} };
     }
 
-    // -----------------------------
-    // UPDATE ONLY VI + TIMESTAMP
-    // -----------------------------
-    const houseObj =
-        currentData[uiScope][region][street].houses[house];
+    // 4. Update only the VI and timestamp
+    currentData[walk][street][house].vi = selectElement.value;
+    currentData[walk][street][house].ts = Date.now();
 
-    houseObj.vi = selectElement.value;
-    houseObj.ts = Date.now();
-
-    // -----------------------------
-    // UI + SIDE EFFECTS
-    // -----------------------------
+    // 5. Re-color the dropdown UI immediately
     window.refreshDropdownColors(selectElement);
 
+    // 6. Trigger the Map Marker/Polygon refresh
+    // (Still passing 'street' assuming your map uses street-level markers)
     if (window.updateMarkerStatus) {
         window.updateMarkerStatus(street);
     }
 
-    console.log(
-        `📝 Saved Intent [${uiScope}] ${region} / ${street} / ${house}: ${houseObj.vi}`
-    );
+    console.log(`📝 Saved Intent for [${walk}] ${street} ${house}: ${selectElement.value}`);
 };
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {

@@ -43,22 +43,21 @@ class BakedDataManager:
 
         existing = self.load()
 
-        print("SAVE DEBUG TYPE:", type(incoming_data), incoming_data)
         for scope, regions in incoming_data.items():
 
             if scope not in existing:
                 existing[scope] = {}
-            print("SAVE DEBUG TYPE:", type(regions), regions)
+
             for region_id, streets in regions.items():
 
                 if region_id not in existing[scope]:
                     existing[scope][region_id] = {}
-                print("SAVE DEBUG TYPE:", type(streets), streets)
+
                 for street_id, houses in streets.items():
 
                     if street_id not in existing[scope][region_id]:
                         existing[scope][region_id][street_id] = {}
-                    print("SAVE DEBUG TYPE:", type(houses), houses)
+
                     for house_id, details in houses.items():
 
                         existing[scope][region_id][street_id][house_id] = details
