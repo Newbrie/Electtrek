@@ -182,14 +182,14 @@ window.getBakedData = function() {
                       if (firstRow) {
                           const region_id = firstRow.getAttribute('data-walk');
 
-                          if (window.updateAreaVisuals) {
+                          if (window.plotL1Progress) {
                             // 1. Pull keys dynamically from your global config
                             const tagsToUpdate = Object.keys(window.task_tags || {});
 
                             // 2. Refresh every ghost layer for this specific walk
                             // The prefix guard inside the function will handle skipping M-tags automatically
                             tagsToUpdate.forEach(tagCode => {
-                                window.updateAreaVisuals(region_id, tagCode,'walk');
+                                window.plotL1Progress(region_id, tagCode,'walk');
                             });
 
                               console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
@@ -212,11 +212,11 @@ window.getBakedData = function() {
                           // Check if we have multiple tags to initialize
                           if (tagCodes.length > 0) {
                               tagCodes.forEach(code => {
-                                  window.updateAreaVisuals(region_id, code,'walk');
+                                  window.plotL1Progress(region_id, code,'walk');
                               });
                           } else {
                               // Fallback to L1 if no registry found
-                              window.updateAreaVisuals(region_id, 'L1','walk');
+                              window.plotL1Progress(region_id, 'L1','walk');
                           }
                       });
                   }
@@ -598,10 +598,10 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     }
 
     // 8. Trigger visuals (CORRECT propagation)
-    if (window.updateAreaVisuals) {
-        window.updateAreaVisuals(walk, code, 'walk');
-    } else if (parent.updateAreaVisuals) {
-        parent.updateAreaVisuals(walk, code, 'walk');
+    if (window.plotL1Progress) {
+        window.plotL1Progress(walk, code, 'walk');
+    } else if (parent.plotL1Progress) {
+        parent.plotL1Progress(walk, code, 'walk');
     }
 };
 
@@ -679,7 +679,7 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateAreaVisuals = function(
+window.plotL1Progress = function(
     region_id,
     targetTag = 'L1',
     uiScope = 'walk'

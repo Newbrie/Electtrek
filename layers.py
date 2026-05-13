@@ -250,7 +250,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
                     <span class="tag-toggle {status_class} {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
                           onclick="parent.handleTagClick(this);
-                                   (window.updateAreaVisuals || parent.updateAreaVisuals || function(){{}})('{reg_id}', '{code}');">
+                                   (window.plotL1Progress || parent.plotL1Progress || function(){{}})('{reg_id}', '{code}');">
                         {display_char}
                     </span>
                 </td>'''
