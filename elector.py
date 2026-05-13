@@ -147,13 +147,17 @@ class ElectorManager:
             df = self._elections[ename].copy()
 
             # Iterate mutation specs
-            for walk, streets in all_baked.items():
+        for uiScope, scoped_data in all_baked.items():
+
+            if not isinstance(scoped_data, dict):
+                continue
+
+            for walk, streets in scoped_data.items():
 
                 if not isinstance(streets, dict):
                     continue
 
                 for street, houses in streets.items():
-
                     if not isinstance(houses, dict):
                         continue
 
