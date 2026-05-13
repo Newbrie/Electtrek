@@ -479,7 +479,7 @@ window.updateTagToggles = function(selector) {
 
     var row = selector.closest('.canvass-row') || selector.closest('tr');
 
-    var uiScope = row.getAttribute('data-scope') || "walk";  // ⚠️ add this attribute later
+    var uiScope = row.getAttribute('data-scope') || "walk";
     var region = row.getAttribute('data-region');
     var street = row.getAttribute('data-street');
     var house = selector.value;
@@ -489,13 +489,11 @@ window.updateTagToggles = function(selector) {
     // -----------------------------
     // SAFE NAVIGATION (NEW STRUCTURE)
     // -----------------------------
-    var houseData =
-        currentData[uiScope] &&
-        currentData[uiScope][region] &&
-        currentData[uiScope][region][street] &&
-        currentData[uiScope][region][street].houses &&
-        currentData[uiScope][region][street].houses[house]
-        ? currentData[uiScope][region][street].houses[house]
+    var scopeData = currentData[uiScope];
+    var regionData = scopeData && scopeData[region];
+    var streetData = regionData && regionData.streets && regionData.streets[street];
+    var houseData = streetData && streetData.houses
+        ? streetData.houses[house]
         : null;
 
     var tags = (houseData && houseData.tags) ? houseData.tags : {};
@@ -557,7 +555,7 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     if (!region || !street || !house) return;
 
     // -----------------------------
-    // ENSURE STRUCTURE
+    // ENSURE STRUCTURE (NEW SCHEMA)
     // -----------------------------
     if (!currentData[uiScope]) currentData[uiScope] = {};
     if (!currentData[uiScope][region]) {
@@ -580,35 +578,30 @@ window.handleTagClick = function(span, uiScope = 'walk') {
 
     if (!streetObj.houses) streetObj.houses = {};
 
-    // -----------------------------
-    // MUTATION LOGIC (FIXED)
-    // -----------------------------
+    if (!streetObj.houses[house]) {
+        streetObj.houses[house] = {
+            votes: "0",
+            vi: "",
+            tags: {},
+            ts: Date.now()
+        };
+    }
 
+    const houseObj = streetObj.houses[house];
+    if (!houseObj.tags) houseObj.tags = {};
+
+    // -----------------------------
+    // MUTATION LOGIC
+    // -----------------------------
     if (newValue === 'n') {
 
-        // Only iterate houses (NOT entire street object)
-        Object.values(streetObj.houses).forEach(entry => {
-            if (entry && entry.tags) {
-                entry.tags[code] = 'n';
-            }
-        });
+        // IMPORTANT FIX:
+        // only affect THIS house, not entire street blob
+        houseObj.tags[code] = 'n';
 
-        console.log(`🚫 Street ${street} wiped to 'n'`);
+        console.log(`🚫 Tag ${code} removed for House ${house} on ${street}`);
 
     } else {
-
-        if (!streetObj.houses[house]) {
-            streetObj.houses[house] = {
-                votes: "0",
-                tags: {},
-                vi: "",
-                ts: Date.now()
-            };
-        }
-
-        const houseObj = streetObj.houses[house];
-
-        if (!houseObj.tags) houseObj.tags = {};
 
         houseObj.tags[code] = 'y';
 
@@ -740,7 +733,6 @@ window.plotL1Progress = function(
     // -------------------------------------------------
     // 1️⃣ LOAD DATA
     // -------------------------------------------------
-
     const allData =
         typeof getBakedData === 'function'
             ? getBakedData()
@@ -756,35 +748,36 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 2️⃣ CALCULATE COMPLETION
+    // 2️⃣ CALCULATE COMPLETION (FIXED)
     // -------------------------------------------------
 
     let completedWeight = 0;
     let totalPossible = regionData.region_total_houses || 0;
 
-    // Fallback denominator from map geometry
     if (totalPossible === 0) {
-      walkLayersDeep(activeMap, l => {
+        walkLayersDeep(activeMap, l => {
             if (
                 l.feature?.properties?.region_id === cleanId &&
                 !l.is_ghost
             ) {
-                totalPossible = parseInt(
-                    l.feature.properties.expected_houses || 0
-                );
+                totalPossible = parseInt(l.feature.properties.expected_houses || 0);
             }
         });
     }
 
+    // 🔥 FIX: MUST go through region -> street -> houses
     Object.values(regionData).forEach(street => {
 
-        if (
-            street?.street_weight &&
-            Object.values(street).some(
-                u => u?.tags?.[targetTag] === 'y'
-            )
-        ) {
-            completedWeight += street.street_weight;
+        if (!street || typeof street !== 'object') return;
+
+        const houses = street.houses || {};
+
+        const hasTaggedHouse = Object.values(houses).some(
+            h => h?.tags?.[targetTag] === 'y'
+        );
+
+        if (hasTaggedHouse) {
+            completedWeight += street.street_weight || 0;
         }
     });
 
@@ -794,7 +787,7 @@ window.plotL1Progress = function(
             : 0;
 
     // -------------------------------------------------
-    // 3️⃣ FIND TARGET BUCKET FIRST
+    // 3️⃣ FIND TARGET BUCKET
     // -------------------------------------------------
 
     const findBucket = () => {
@@ -831,39 +824,31 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 4️⃣ FIND EXISTING GHOST FIRST
+    // 4️⃣ FIND EXISTING GHOST
     // -------------------------------------------------
 
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
-
     let existingGhost = null;
 
     targetGroup.eachLayer(l => {
-
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
         }
     });
 
     // -------------------------------------------------
-    // 5️⃣ FAST PATH: UPDATE EXISTING GHOST
+    // 5️⃣ UPDATE GHOST
     // -------------------------------------------------
 
     if (existingGhost) {
-
-        console.log(`♻️ Updating existing ghost: ${ghostUniqueId}`);
 
         existingGhost.setStyle({
             fillOpacity: finalOpacity
         });
 
-        // Respect overlay toggle state
         if (!activeMap.hasLayer(targetGroup)) {
-
             activeMap.removeLayer(existingGhost);
-
         } else if (!activeMap.hasLayer(existingGhost)) {
-
             existingGhost.addTo(activeMap);
         }
 
@@ -872,7 +857,7 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 6️⃣ ONLY NOW SEARCH FOR BLUEPRINT
+    // 6️⃣ FIND BLUEPRINT
     // -------------------------------------------------
 
     let blueprintGeometry = null;
@@ -881,97 +866,56 @@ window.plotL1Progress = function(
 
     walkLayersDeep(activeMap, l => {
 
-        if (l.feature?.properties) {
+        if (!l.feature?.properties) return;
 
-            const idOnMap = String(
-                l.feature.properties.region_id ||
-                l.feature.properties.nid
-            ).trim();
+        const idOnMap = String(
+            l.feature.properties.region_id ||
+            l.feature.properties.nid
+        ).trim();
 
-            allSeenIds.push(idOnMap);
+        allSeenIds.push(idOnMap);
 
-            if (idOnMap === cleanId) {
+        if (idOnMap === cleanId) {
 
-                if (l.is_ghost) {
-
-                    foundButGhost = true;
-
-                } else {
-
-                    blueprintGeometry = l.feature.geometry;
-                }
+            if (l.is_ghost) {
+                foundButGhost = true;
+            } else {
+                blueprintGeometry = l.feature.geometry;
             }
         }
     });
-
-    // -------------------------------------------------
-    // 7️⃣ FAIL IF NO BLUEPRINT EXISTS
-    // -------------------------------------------------
 
     if (!blueprintGeometry) {
 
         console.error(`❌ MAPPING FAIL for ID: "${cleanId}"`);
 
         console.log(`- Found as Ghost? ${foundButGhost}`);
-
-        console.log(
-            `- Available IDs on map:`,
-            [...new Set(allSeenIds)]
-        );
-
-        const caseMatch = allSeenIds.find(
-            id => id.toLowerCase() === cleanId.toLowerCase()
-        );
-
-        if (caseMatch) {
-
-            console.warn(
-                `- 💡 Hint: Found case-insensitive match: "${caseMatch}".`
-            );
-        }
-
-        console.warn(
-            "⚠️ Source polygon not found for blueprint."
-        );
+        console.log(`- Available IDs:`, [...new Set(allSeenIds)]);
 
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 8️⃣ MANUFACTURE NEW GHOST
+    // 7️⃣ CREATE GHOST
     // -------------------------------------------------
 
-    console.log(
-        `✨ Manufacturing new independent poly for ${ghostUniqueId}`
-    );
-
-    const newPoly = Leaflet.geoJSON(
-        blueprintGeometry,
-        {
-            pane: 'overlayPane',
-
-            style: {
-                color: "transparent",
-                fillColor:
-                    targetTag.startsWith('L')
-                        ? "#333"
-                        : "#800080",
-
-                fillOpacity: finalOpacity,
-                interactive: false
-            }
+    const newPoly = Leaflet.geoJSON(blueprintGeometry, {
+        pane: 'overlayPane',
+        style: {
+            color: "transparent",
+            fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
+            fillOpacity: finalOpacity,
+            interactive: false
         }
-    );
+    });
 
     newPoly.is_ghost = true;
     newPoly.ghost_id = ghostUniqueId;
 
     targetGroup.addLayer(newPoly);
 
-    // Respect layer toggle state
     if (!activeMap.hasLayer(targetGroup)) {
-
         activeMap.removeLayer(newPoly);
     }
 
@@ -1008,10 +952,11 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     const vi = viSelector ? viSelector.value : "";
 
     // -----------------------------
-    // ENSURE STRUCTURE EXISTS
+    // ENSURE STRUCTURE EXISTS (SAFE)
     // -----------------------------
     if (!currentData[uiScope]) currentData[uiScope] = {};
     if (!currentData[uiScope][region]) currentData[uiScope][region] = {};
+
     if (!currentData[uiScope][region][street]) {
         currentData[uiScope][region][street] = {
             street_weight: 0,
@@ -1019,29 +964,21 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
             houses: {}
         };
     }
-    if (!currentData[uiScope][region][street].houses[house]) {
-        currentData[uiScope][region][street].houses[house] = {
-            vi: "",
-            votes: "0",
-            tags: {},
-            ts: Date.now()
-        };
-    }
+
+    const streetObj = currentData[uiScope][region][street];
+    if (!streetObj.houses) streetObj.houses = {};
 
     // -----------------------------
-    // UPDATE HOUSE ONLY
+    // UPDATE HOUSE (NO OVERWRITE LOSS)
     // -----------------------------
-    const houseObj =
-        currentData[uiScope][region][street].houses[house];
+    const existing = streetObj.houses[house] || {};
 
-    const existingTags = houseObj.tags || {};
-
-    currentData[uiScope][region][street].houses[house] = {
-        ...houseObj,
-        tags: existingTags,
-        vi: vi,
+    streetObj.houses[house] = {
+        ...existing,
+        vi,
         votes: String(count),
-        ts: Date.now()
+        ts: Date.now(),
+        tags: existing.tags || {}
     };
 
     console.log(
@@ -1076,16 +1013,22 @@ window.deployUpdate = function(uiScope = "walk") {
         if (!region || region === "None") return;
 
         // ---------------------------
-        // INIT STRUCTURE
+        // INIT SCOPES
         // ---------------------------
         if (!updatedData[uiScope]) updatedData[uiScope] = {};
-        if (!updatedData[uiScope][region]) updatedData[uiScope][region] = {};
+        if (!updatedData[uiScope][region]) {
+            updatedData[uiScope][region] = {
+                meta: {},
+                streets: {}
+            };
+        }
 
-        // ✔️ STREET LAYER IS NOW AN OBJECT WITH METADATA + houses
-        if (!updatedData[uiScope][region][street]) {
-            updatedData[uiScope][region][street] = {
-                street_weight: 0,
-                ts: Date.now(),
+        if (!updatedData[uiScope][region].streets[street]) {
+            updatedData[uiScope][region].streets[street] = {
+                meta: {
+                    street_weight: 0,
+                    ts: Date.now()
+                },
                 houses: {}
             };
         }
@@ -1093,7 +1036,7 @@ window.deployUpdate = function(uiScope = "walk") {
         // ---------------------------
         // HOUSE DATA ONLY
         // ---------------------------
-        updatedData[uiScope][region][street].houses[house] = {
+        updatedData[uiScope][region].streets[street].houses[house] = {
             vi,
             votes,
             pd,
@@ -1102,7 +1045,7 @@ window.deployUpdate = function(uiScope = "walk") {
     });
 
     // ---------------------------
-    // SAFE MERGE
+    // SAFE MERGE (STRUCTURE AWARE)
     // ---------------------------
     for (let scope in updatedData) {
 
@@ -1111,16 +1054,41 @@ window.deployUpdate = function(uiScope = "walk") {
         for (let region in updatedData[scope]) {
 
             if (!masterData[scope][region]) {
-                masterData[scope][region] = {};
+                masterData[scope][region] = {
+                    meta: {},
+                    streets: {}
+                };
             }
 
-            for (let street in updatedData[scope][region]) {
+            const newRegion = updatedData[scope][region];
 
-                const newStreet = updatedData[scope][region][street];
+            // merge region meta
+            masterData[scope][region].meta = {
+                ...(masterData[scope][region].meta || {}),
+                ...(newRegion.meta || {})
+            };
 
-                masterData[scope][region][street] = {
-                    ...(masterData[scope][region][street] || {}),
-                    ...newStreet
+            for (let street in newRegion.streets) {
+
+                if (!masterData[scope][region].streets[street]) {
+                    masterData[scope][region].streets[street] = {
+                        meta: {},
+                        houses: {}
+                    };
+                }
+
+                const newStreet = newRegion.streets[street];
+
+                // merge street meta
+                masterData[scope][region].streets[street].meta = {
+                    ...(masterData[scope][region].streets[street].meta || {}),
+                    ...(newStreet.meta || {})
+                };
+
+                // merge houses (SAFE — no mixing with metadata anymore)
+                masterData[scope][region].streets[street].houses = {
+                    ...(masterData[scope][region].streets[street].houses || {}),
+                    ...(newStreet.houses || {})
                 };
             }
         }
