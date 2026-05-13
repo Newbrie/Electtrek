@@ -440,61 +440,93 @@ window.updateRowAppearance = function(row, count, max) {
     });
 };
 
-window.updateElectorTag = function(walk, street, unit, code, isActive) {
-    // 1. Get the data source (check parent if local is empty)
-    const currentData = getBakedData()
+window.updateElectorTag = function(walk, street, unit, code, isActive, uiScope = 'walk') {
 
+    const currentData = getBakedData() || {};
     if (!currentData) return;
 
-    // 2. Ensure the Walk > Street > Unit path exists
-    if (!currentData[walk]) currentData[walk] = {};
-    if (!currentData[walk][street]) currentData[walk][street] = {};
-    if (!currentData[walk][street][unit]) {
-        currentData[walk][street][unit] = {
-            vi: "U",
-            votes: "0",
-            tags: "",
+    // -----------------------------
+    // ENSURE STRUCTURE
+    // -----------------------------
+    if (!currentData[uiScope]) currentData[uiScope] = {};
+    if (!currentData[uiScope][walk]) currentData[uiScope][walk] = {};
+    if (!currentData[uiScope][walk][street]) {
+        currentData[uiScope][walk][street] = {
+            street_weight: 0,
             ts: Date.now()
         };
     }
 
-    // 3. Process the tags
-    let currentTags = currentData[walk][street][unit].tags || "";
-    let tagList = currentTags.split(',').filter(t => t.trim() !== "");
+    const streetObj = currentData[uiScope][walk][street];
 
-    if (isActive) {
-        if (!tagList.includes(code)) tagList.push(code);
-    } else {
-        tagList = tagList.filter(t => t !== code);
+    if (!streetObj[unit]) {
+        streetObj[unit] = {
+            vi: "",
+            votes: "0",
+            tags: {},
+            ts: Date.now()
+        };
     }
 
-    // 4. Save back and log
-    currentData[walk][street][unit].tags = tagList.join(',');
-    currentData[walk][street][unit].ts = Date.now(); // Update timestamp
+    const house = streetObj[unit];
 
-    console.log(`✅ Updated ${walk} > ${street} [${unit}] tags: ${currentData[walk][street][unit].tags}`);
+    if (!house.tags) house.tags = {};
+
+    // -----------------------------
+    // TAG MUTATION (OBJECT-BASED)
+    // -----------------------------
+    if (isActive) {
+        house.tags[code] = "y";
+    } else {
+        house.tags[code] = "n";
+    }
+
+    house.ts = Date.now();
+    streetObj.ts = Date.now();
+
+    // -----------------------------
+    // PERSIST
+    // -----------------------------
+    window.BAKED_DATA = currentData;
+
+    if (typeof saveBakedData === 'function') {
+        saveBakedData(currentData);
+    }
+
+    console.log(`✅ Updated ${walk}/${street}/${unit} tag ${code} = ${house.tags[code]}`);
 };
 
-window.updateTagToggles = function(selector) {
-    var row = selector.closest('.canvass-row') || selector.closest('tr');
-    var walk = row.getAttribute('data-region'); // Grab the Walk ID from the HTML
-    var street = row.getAttribute('data-street');
-    var house = selector.value;
-    currentData = getBakedData()
+window.updateTagToggles = function(selector, uiScope = 'walk') {
 
-    // Navigate the 3-tier hierarchy: Walk -> Street -> House
-    var houseData = (currentData[walk] &&
-                     currentData[walk][street] &&
-                     currentData[walk][street][house])
-                     ? currentData[walk][street][house]
-                     : null;
+    const row = selector.closest('.canvass-row') || selector.closest('tr');
+    if (!row) return;
 
-    var tags = (houseData && houseData.tags) ? houseData.tags : {};
+    const region = row.getAttribute('data-region');
+    const street = row.getAttribute('data-street');
+    const house = selector.value;
 
+    const currentData = getBakedData() || {};
+
+    // -----------------------------
+    // SAFE NAVIGATION (HOUSE-LEVEL ONLY)
+    // -----------------------------
+    const houseData =
+        currentData[uiScope] &&
+        currentData[uiScope][region] &&
+        currentData[uiScope][region][street] &&
+        currentData[uiScope][region][street][house]
+            ? currentData[uiScope][region][street][house]
+            : null;
+
+    const tags = (houseData && houseData.tags) ? houseData.tags : {};
+
+    // -----------------------------
+    // UPDATE UI
+    // -----------------------------
     row.querySelectorAll('.tag-toggle').forEach(span => {
-        var code = span.getAttribute('data-code');
-        // Since tags is an object, we check the specific code (e.g., tags['L1'])
-        var val = tags[code] || 'n';
+
+        const code = span.getAttribute('data-code');
+        const val = tags[code] || 'n';
 
         if (val === 'y') {
             span.classList.remove('tag-inactive');
@@ -510,16 +542,18 @@ window.updateTagToggles = function(selector) {
 
 window.handleTagClick = function(span, uiScope = 'walk') {
 
-    // 1. Get state
-    var isInactive = span.classList.contains('tag-inactive');
-    var newValue = isInactive ? 'y' : 'n';
-    var code = span.getAttribute('data-code');
+    const isInactive = span.classList.contains('tag-inactive');
+    const newValue = isInactive ? 'y' : 'n';
+    const code = span.getAttribute('data-code');
 
-    var currentData = (typeof getBakedData === 'function')
-        ? getBakedData()
-        : (window.BAKED_DATA || {});
+    const currentData =
+        (typeof getBakedData === 'function')
+            ? getBakedData()
+            : (window.BAKED_DATA || {});
 
-    // 2. UI toggle
+    // -----------------------------
+    // UI TOGGLE
+    // -----------------------------
     if (isInactive) {
         span.classList.remove('tag-inactive');
         span.classList.add('tag-active');
@@ -530,143 +564,160 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         span.innerText = 'n';
     }
 
-    // 3. Extract context
-    var row = span.closest('.canvass-row') || span.closest('tr');
+    // -----------------------------
+    // CONTEXT
+    // -----------------------------
+    const row = span.closest('.canvass-row') || span.closest('tr');
     if (!row) return;
 
-    var walk = row.getAttribute('data-region');
-    var street = row.getAttribute('data-street');
-    var house = row.querySelector('.unit-selector')?.value;
-    var streetWeight = parseInt(row.cells?.[1]?.innerText) || 0;
+    const region = row.getAttribute('data-region');
+    const street = row.getAttribute('data-street');
+    const house = row.querySelector('.unit-selector')?.value;
 
-    // 4. Ensure walk structure exists (UI-scoped namespace)
+    if (!region || !street || !house) return;
+
+    // -----------------------------
+    // ENSURE STRUCTURE (HOUSE-FIRST MODEL)
+    // -----------------------------
     if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][walk]) {
-        currentData[uiScope][walk] = {
-            region_total_houses: parseInt(
-                document.querySelector('.walk-total-display')?.innerText || 0
-            )
+    if (!currentData[uiScope][region]) currentData[uiScope][region] = {};
+    if (!currentData[uiScope][region][street]) {
+        currentData[uiScope][region][street] = {
+            street_weight: 0,
+            ts: Date.now()
         };
     }
 
-    if (!currentData[uiScope][walk][street]) {
-        currentData[uiScope][walk][street] = {};
+    const streetObj = currentData[uiScope][region][street];
+
+    if (!streetObj[house]) {
+        streetObj[house] = {
+            vi: "",
+            votes: "0",
+            tags: {},
+            ts: Date.now()
+        };
     }
 
-    currentData[uiScope][walk][street].street_weight = streetWeight;
+    const houseObj = streetObj[house];
 
-    // 5. Mutation logic
-    if (newValue === 'n') {
+    if (!houseObj.tags) houseObj.tags = {};
 
-        const streetObject = currentData[uiScope][walk][street];
+    // -----------------------------
+    // MUTATION LOGIC (HOUSE-LEVEL ONLY)
+    // -----------------------------
 
-        Object.keys(streetObject).forEach(key => {
-            const entry = streetObject[key];
-            if (entry && typeof entry === 'object' && entry.tags) {
-                entry.tags[code] = 'n';
-            }
-        });
-
-        console.log(`🚫 Street ${street} wiped to 'n'`);
-
+    if (newValue === 'y') {
+        houseObj.tags[code] = 'y';
     } else {
-
-        if (!currentData[uiScope][walk][street][house]) {
-            currentData[uiScope][walk][street][house] = {
-                votes: "0",
-                tags: {}
-            };
-        }
-
-        if (!currentData[uiScope][walk][street][house].tags) {
-            currentData[uiScope][walk][street][house].tags = {};
-        }
-
-        currentData[uiScope][walk][street][house].tags[code] = 'y';
-
-        console.log(`✅ Tag ${code} set for House ${house} on ${street}`);
+        houseObj.tags[code] = 'n';
     }
 
-    // 6. Metadata
-    currentData[uiScope][walk][street].ts = Date.now();
+    houseObj.ts = Date.now();
+    streetObj.ts = Date.now();
 
-    // 7. Persist
+    // -----------------------------
+    // PERSIST
+    // -----------------------------
     window.BAKED_DATA = currentData;
 
     if (typeof saveBakedData === 'function') {
         saveBakedData(currentData);
     }
 
-    // 8. Trigger visuals (CORRECT propagation)
+    // -----------------------------
+    // VISUAL UPDATE
+    // -----------------------------
     if (window.plotL1Progress) {
-        window.plotL1Progress(walk, code, 'walk');
+        window.plotL1Progress(region, code, uiScope);
     } else if (parent.plotL1Progress) {
-        parent.plotL1Progress(walk, code, 'walk');
+        parent.plotL1Progress(region, code, uiScope);
     }
 };
 
-window.updateMarkerStatus = function(region_id) {
+window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
+
     if (!region_id) return;
 
-    // Use the helper to find the data regardless of scope
-    const currentData = getBakedData();
-    const regionData = currentData[region_id] || {};
+    const currentData = getBakedData() || {};
+    const scopeData = currentData[uiScope] || {};
+    const regionData = scopeData[region_id];
 
+    if (!regionData) return;
+
+    // -----------------------------
+    // 1. COUNT COMPLETED UNITS
+    // (ONLY HOUSE LEVEL DATA)
+    // -----------------------------
     let completedUnits = 0;
-    Object.values(regionData).forEach(unit => {
-        if (parseInt(unit.votes) > 0) completedUnits++;
-    });
 
-    let expectedHouses = 0;
+    Object.values(regionData).forEach(street => {
 
-    // Check both local and parent scope for the map instance
+        if (!street || typeof street !== 'object') return;
 
-    // Standardize: Look for fmap locally, then on parent, then on top
-        const activeMap = window.fmap || parent.fmap || (document.getElementById('iframe1') && document.getElementById('iframe1').contentWindow.fmap);
+        Object.values(street).forEach(house => {
 
-        if (!activeMap) {
-            console.warn("fmap not found. Is iframe1 loaded yet?");
-            return;
-        }
+            // skip metadata nodes
+            if (!house || typeof house !== 'object') return;
+            if (!house.tags) return;
 
-        // Now use activeMap instead of fmap or activeMap    var activeMap = window.fmap || parent.fmap;
-
-    if (activeMap) {
-        // A. Find the polygon using activeMap, NOT 'map'
-        activeMap.eachLayer(function(layer) {
-            if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
-                expectedHouses = layer.feature.properties.expected_houses || 0;
+            if (parseInt(house.votes || "0") > 0) {
+                completedUnits++;
             }
         });
-    } else {
-        console.error("The 'map' variable is still undefined!");
+    });
+
+    // -----------------------------
+    // 2. GET EXPECTED HOUSE COUNT (FROM MAP)
+    // -----------------------------
+    let expectedHouses = 0;
+
+    const activeMap =
+        window.fmap ||
+        parent.fmap ||
+        (document.getElementById('iframe1')?.contentWindow?.fmap);
+
+    if (!activeMap) {
+        console.warn("fmap not found. Is iframe1 loaded yet?");
         return;
     }
 
+    activeMap.eachLayer(layer => {
+        const props = layer.feature?.properties;
+        if (props?.region_id === region_id) {
+            expectedHouses = props.expected_houses || 0;
+        }
+    });
 
-    // C. Determine Color logic
-    // Green: All houses have at least 1 vote
-    // Yellow: Some houses have votes
-    // Null/Original: No activity
+    // -----------------------------
+    // 3. COLOR LOGIC
+    // -----------------------------
+    const healthColor =
+        (expectedHouses > 0 && completedUnits >= expectedHouses)
+            ? "#28a745"
+            : (completedUnits > 0 ? "#ffcc00" : null);
 
-    const healthColor = (completedUnits >= expectedHouses && expectedHouses > 0) ? "#28a745" :
-                        (completedUnits > 0 ? "#ffcc00" : null);
-
-    // Update Label
+    // -----------------------------
+    // 4. UPDATE LABEL
+    // -----------------------------
     const labelSpan = document.getElementById(`label-${region_id}`);
+
     if (labelSpan) {
         if (healthColor) {
             labelSpan.style.background = healthColor;
             labelSpan.style.color = "white";
-        } else {
-            // Restore original zone color if no votes (requires storing original fcol)
-            // For now, let's just keep it visible
         }
     }
 
-    // B. Update the Polygon using activeMap
-    activeMap.eachLayer(function(layer) {
-        if (layer.feature && layer.feature.properties && layer.feature.properties.region_id === region_id) {
+    // -----------------------------
+    // 5. UPDATE POLYGON STYLE
+    // -----------------------------
+    activeMap.eachLayer(layer => {
+
+        const props = layer.feature?.properties;
+
+        if (props?.region_id === region_id) {
+
             if (healthColor) {
                 layer.setStyle({
                     fillColor: healthColor,
@@ -945,111 +996,125 @@ window.plotL1Progress = function(
     console.groupEnd();
 };
 
-window.incrementVoteCount = function(btn,uiScope = 'walk') {
-    console.log("➕ incrementVoteCount clicked");
-    var count = parseInt(btn.getAttribute('data-count')) || 0;
-    var max = parseInt(btn.getAttribute('data-max')) || 1;
-    currentData = getBakedData()
+window.incrementVoteCount = function(btn, uiScope = 'walk') {
 
-    // Cycle count: 0 -> 1 -> 2 -> 0
-    count = (count + 1) > max ? 0 : count + 1;
+    console.log("➕ incrementVoteCount clicked");
+
+    const count =
+        ((parseInt(btn.getAttribute('data-count')) || 0) + 1) %
+        ((parseInt(btn.getAttribute('data-max')) || 1) + 1);
+
+    const max = parseInt(btn.getAttribute('data-max')) || 1;
 
     btn.setAttribute('data-count', count);
-    btn.innerText = count + '/' + max;
+    btn.innerText = `${count}/${max}`;
 
-    var row = btn.closest('.canvass-row');
+    const currentData = getBakedData() || {};
 
-    if (row) {
-        // 1. Grab all three identifiers
-        var walk = row.getAttribute('data-region');     // e.g., "N267"
-        var street = row.getAttribute('data-street'); // e.g., "FOXLEIGH_GRANGE"
-        var houseSelector = row.querySelector('.unit-selector');
-        var viSelector = row.querySelector('.vi-selector');
+    const row = btn.closest('.canvass-row');
+    if (!row) return;
 
-        if (houseSelector) {
-            var house = houseSelector.value;
-            var vi = viSelector ? viSelector.value : "";
+    const walk = row.getAttribute('data-region');
+    const street = row.getAttribute('data-street');
 
-            // 2. Ensure the 3-tier hierarchy exists in memory
-            if (!currentData[uiScope]) {currentData[uiScope] = {};}
-            if (!currentData[uiScope][walk]) currentData[uiScope][walk] = {};
-            if (!currentData[uiScope][walk][street]) currentData[uiScope][walk][street] = {};
+    const house = row.querySelector('.unit-selector')?.value;
+    const vi = row.querySelector('.vi-selector')?.value || "";
 
-            // 3. Update the specific house entry
-            // We preserve existing tags if they exist by merging
-            var existingData = currentData[uiScope][walk][street][house] || {};
+    if (!walk || !street || !house) return;
 
-            currentData[uiScope][walk][street][house] = {
-                ...existingData, // Keep tags and other metadata
-                vi: vi,
-                votes: count.toString(),
-                ts: Date.now()
-            };
+    // -------------------------
+    // ENSURE STRUCTURE
+    // -------------------------
+    currentData[uiScope] ??= {};
+    currentData[uiScope][walk] ??= {};
+    currentData[uiScope][walk][street] ??= {};
+    currentData[uiScope][walk][street][house] ??= {
+        vi: "",
+        votes: "0",
+        tags: {},
+        ts: Date.now()
+    };
 
-            console.log(`💾 Saved to memory: [${walk}] ${street} No. ${house} = ${count} votes`);
+    const houseObj = currentData[uiScope][walk][street][house];
 
-            // --- REFRESH UI ---
-            window.refreshDropdownColors(houseSelector);
-            window.updateRowAppearance(row, count, max);
+    // preserve tags no matter what
+    houseObj.tags ??= {};
 
-            // --- REFRESH MAP MARKER ---
-            // Important: We still pass 'street' to updateMarkerStatus if
-            // your map uses street names as the keys for markers.
-            if (window.updateMarkerStatus) {
-                window.updateMarkerStatus(street);
-            }
-        }
-    }
+    // -------------------------
+    // UPDATE HOUSE FACTS
+    // -------------------------
+    houseObj.vi = vi;
+    houseObj.votes = String(count);
+    houseObj.ts = Date.now();
+
+    console.log(
+        `💾 Saved: [${uiScope}] ${walk}/${street}/${house} = ${count} votes`
+    );
+
+    // -------------------------
+    // UI updates
+    // -------------------------
+    window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
+    window.updateRowAppearance?.(row, count, max);
+
+    // -------------------------
+    // MAP UPDATE (street-level aggregation trigger)
+    // -------------------------
+    window.updateMarkerStatus?.(walk);
 };
 
-window.deployUpdate = function(uiScope = "walk") {
+window.handleTagClick = function(span, uiScope = 'walk') {
 
-    const updatedData = {};
-    const masterData = getBakedData() || {};
+    const isInactive = span.classList.contains('tag-inactive');
+    const code = span.getAttribute('data-code');
+    const newValue = isInactive ? 'y' : 'n';
 
-    document.querySelectorAll('.canvass-row').forEach(row => {
+    const currentData = getBakedData() || {};
 
-        const region = row.getAttribute('data-region'); // rename later if needed
-        const street = row.getAttribute('data-street');
-        const house = row.querySelector('.unit-selector').value;
-        const vi = row.querySelector('.vi-selector').value;
-        const votes = row.querySelector('.vote-btn').getAttribute('data-count');
-        const pd = row.getAttribute('data-district');
+    const row = span.closest('.canvass-row') || span.closest('tr');
+    if (!row) return;
 
-        if (!region || region === "None") return;
+    const walk = row.getAttribute('data-region');
+    const street = row.getAttribute('data-street');
+    const house = row.querySelector('.unit-selector')?.value;
 
-        // 🧠 FIX: include uiScope
-        if (!updatedData[uiScope]) updatedData[uiScope] = {};
-        if (!updatedData[uiScope][region]) updatedData[uiScope][region] = {};
-        if (!updatedData[uiScope][region][street]) updatedData[uiScope][region][street] = {};
+    if (!walk || !street || !house) return;
 
-        updatedData[uiScope][region][street][house] = {
-            vi,
-            votes,
-            pd,
-            ts: Date.now()
-        };
-    });
+    // -------------------------
+    // ENSURE STRUCTURE
+    // -------------------------
+    currentData[uiScope] ??= {};
+    currentData[uiScope][walk] ??= {};
+    currentData[uiScope][walk][street] ??= {};
+    currentData[uiScope][walk][street][house] ??= {
+        vi: "",
+        votes: "0",
+        tags: {},
+        ts: Date.now()
+    };
 
-    // merge safely
-    for (let scope in updatedData) {
-        if (!masterData[scope]) masterData[scope] = {};
+    const houseObj = currentData[uiScope][walk][street][house];
+    houseObj.tags ??= {};
 
-        for (let region in updatedData[scope]) {
-            if (!masterData[scope][region]) masterData[scope][region] = {};
+    // -------------------------
+    // TOGGLE TAG
+    // -------------------------
+    houseObj.tags[code] = newValue;
 
-            for (let street in updatedData[scope][region]) {
-                masterData[scope][region][street] =
-                    updatedData[scope][region][street];
-            }
-        }
-    }
+    houseObj.ts = Date.now();
 
-    fetch('/upload_data', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(masterData)
-    });
+    // -------------------------
+    // UI UPDATE
+    // -------------------------
+    span.classList.toggle('tag-active', newValue === 'y');
+    span.classList.toggle('tag-inactive', newValue === 'n');
+    span.innerText = newValue;
+
+    window.BAKED_DATA = currentData;
+
+    saveBakedData?.(currentData);
+
+    window.plotL1Progress?.(walk, code, uiScope);
 };
 
 async function getVIData(path) {
