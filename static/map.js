@@ -1002,65 +1002,54 @@ window.incrementVoteCount = function(btn,uiScope = 'walk') {
     }
 };
 
-window.deployUpdate = function() {
+window.deployUpdate = function(uiScope = "walk") {
 
-//    if (!confirm("⚠️ Save and Deploy to Server?")) return;
-
-    // Start with a clean local object for this specific "scrape"
-    // This prevents the old flat structure from 'polluting' the new save
     const updatedData = {};
-
-    // If parent has data, we merge into it to keep other walks safe
-    const masterData = getBakedData();
+    const masterData = getBakedData() || {};
 
     document.querySelectorAll('.canvass-row').forEach(row => {
-        const walk = row.getAttribute('data-walk');
+
+        const region = row.getAttribute('data-walk'); // rename later if needed
         const street = row.getAttribute('data-street');
         const house = row.querySelector('.unit-selector').value;
         const vi = row.querySelector('.vi-selector').value;
         const votes = row.querySelector('.vote-btn').getAttribute('data-count');
         const pd = row.getAttribute('data-district');
 
-        // CRITICAL CHECK:
-        if (!walk || walk === "None" || walk === "") {
-            console.error(`MISSING WALK for ${street}. Check Python injection.`);
-            return;
-        }
+        if (!region || region === "None") return;
 
-        // Initialize levels in our temporary object
-        if (!updatedData[walk]) updatedData[walk] = {};
-        if (!updatedData[walk][street]) updatedData[walk][street] = {};
+        // 🧠 FIX: include uiScope
+        if (!updatedData[uiScope]) updatedData[uiScope] = {};
+        if (!updatedData[uiScope][region]) updatedData[uiScope][region] = {};
+        if (!updatedData[uiScope][region][street]) updatedData[uiScope][region][street] = {};
 
-        updatedData[walk][street][house] = {
-            vi: vi,
-            votes: votes,
-            pd: pd,
+        updatedData[uiScope][region][street][house] = {
+            vi,
+            votes,
+            pd,
             ts: Date.now()
         };
     });
 
-    // Deep merge the updatedData into masterData
-    for (let w in updatedData) {
-        if (!masterData[w]) masterData[w] = {};
-        for (let s in updatedData[w]) {
-            masterData[w][s] = updatedData[w][s];
+    // merge safely
+    for (let scope in updatedData) {
+        if (!masterData[scope]) masterData[scope] = {};
+
+        for (let region in updatedData[scope]) {
+            if (!masterData[scope][region]) masterData[scope][region] = {};
+
+            for (let street in updatedData[scope][region]) {
+                masterData[scope][region][street] =
+                    updatedData[scope][region][street];
+            }
         }
     }
 
-    console.log("FINAL OBJECT TO BE SENT:");
-    console.dir(masterData);
-
     fetch('/upload_data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(masterData)
-    })
-    .then(res => res.json())
-    .then(result => {
-//        alert("✅ Success! Check baked_data.json now.");
-        if (parent) parent.BAKED_DATA = masterData;
-    })
-    .catch(err => alert("❌ Save failed."));
+    });
 };
 
 async function getVIData(path) {
