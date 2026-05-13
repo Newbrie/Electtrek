@@ -679,6 +679,19 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
+window.walkLayersDeep = function(layer, callback) {
+
+    // Visit current layer
+    callback(layer);
+
+    // Recurse into groups
+    if (typeof layer.eachLayer === 'function') {
+        layer.eachLayer(child => {
+            window.walkLayersDeep(child, callback);
+        });
+    }
+};
+
 window.plotL1Progress = function(
     region_id,
     targetTag = 'L1',
@@ -718,7 +731,7 @@ window.plotL1Progress = function(
 
     // Fallback denominator from map geometry
     if (totalPossible === 0) {
-        activeMap.eachLayer(l => {
+      walkLayersDeep(activeMap, l => {
             if (
                 l.feature?.properties?.region_id === cleanId &&
                 !l.is_ghost
@@ -833,7 +846,7 @@ window.plotL1Progress = function(
     let foundButGhost = false;
     const allSeenIds = [];
 
-    activeMap.eachLayer(l => {
+    walkLayersDeep(activeMap, l => {
 
         if (l.feature?.properties) {
 
