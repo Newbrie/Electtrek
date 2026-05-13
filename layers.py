@@ -249,8 +249,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 <td style="text-align:center; padding:4px;">
                     <span class="tag-toggle {status_class} {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
-                          onclick="parent.handleTagClick(this);
-                                   (window.plotL1Progress || parent.plotL1Progress || function(){})('{reg_id}', '{code}', '{uiScope}');">
+                          onclick="parent.handleTagClick(this, '{uiScope}');
+                                   (window.plotL1Progress || parent.plotL1Progress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
                     </span>
                 </td>'''

@@ -45,28 +45,29 @@ class BakedDataManager:
 
         for scope, regions in incoming_data.items():
 
-            if scope not in existing:
-                existing[scope] = {}
+            if not isinstance(regions, dict):
+                continue
+
+            existing.setdefault(scope, {})
 
             for region_id, streets in regions.items():
 
-                if region_id not in existing[scope]:
-                    existing[scope][region_id] = {}
+                if not isinstance(streets, dict):
+                    continue
 
-                for street_id, houses in streets.items():
+                existing[scope].setdefault(region_id, {})
 
-                    if street_id not in existing[scope][region_id]:
-                        existing[scope][region_id][street_id] = {}
+                for street_id, street_obj in streets.items():
 
-                    for house_id, details in houses.items():
+                    if not isinstance(street_obj, dict):
+                        continue
 
-                        existing[scope][region_id][street_id][house_id] = details
+                    existing[scope][region_id][street_id] = street_obj
 
         with open(self.filename, 'w', encoding='utf-8') as f:
             f.write("window.BAKED_DATA = ")
             json.dump(existing, f, indent=4)
             f.write(";")
-
 
 
 # Usage in routes
