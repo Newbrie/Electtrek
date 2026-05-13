@@ -152,15 +152,16 @@ class ElectorManager:
             if not isinstance(scoped_data, dict):
                 continue
 
+            print("DEBUG TYPE:", type(scoped_data), scoped_data)
             for walk, streets in scoped_data.items():
 
                 if not isinstance(streets, dict):
                     continue
-
+                print("DEBUG TYPE:", type(streets), streets)
                 for street, houses in streets.items():
                     if not isinstance(houses, dict):
                         continue
-
+                    print("DEBUG TYPE:", type(houses), houses)
                     for house, house_info in houses.items():
 
                         if house in ['street_weight', 'ts']:
