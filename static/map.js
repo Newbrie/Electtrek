@@ -182,14 +182,14 @@ window.getBakedData = function() {
                       if (firstRow) {
                           const region_id = firstRow.getAttribute('data-walk');
 
-                          if (window.updateWalkVisuals) {
+                          if (window.updateAreaVisuals) {
                             // 1. Pull keys dynamically from your global config
                             const tagsToUpdate = Object.keys(window.task_tags || {});
 
                             // 2. Refresh every ghost layer for this specific walk
                             // The prefix guard inside the function will handle skipping M-tags automatically
                             tagsToUpdate.forEach(tagCode => {
-                                window.updateWalkVisuals(region_id, tagCode,'walk');
+                                window.updateAreaVisuals(region_id, tagCode,'walk');
                             });
 
                               console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
@@ -212,11 +212,11 @@ window.getBakedData = function() {
                           // Check if we have multiple tags to initialize
                           if (tagCodes.length > 0) {
                               tagCodes.forEach(code => {
-                                  window.updateWalkVisuals(region_id, code,'walk');
+                                  window.updateAreaVisuals(region_id, code,'walk');
                               });
                           } else {
                               // Fallback to L1 if no registry found
-                              window.updateWalkVisuals(region_id, 'L1','walk');
+                              window.updateAreaVisuals(region_id, 'L1','walk');
                           }
                       });
                   }
@@ -598,10 +598,10 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     }
 
     // 8. Trigger visuals (CORRECT propagation)
-    if (window.updateWalkVisuals) {
-        window.updateWalkVisuals(walk, code, 'walk');
-    } else if (parent.updateWalkVisuals) {
-        parent.updateWalkVisuals(walk, code, 'walk');
+    if (window.updateAreaVisuals) {
+        window.updateAreaVisuals(walk, code, 'walk');
+    } else if (parent.updateAreaVisuals) {
+        parent.updateAreaVisuals(walk, code, 'walk');
     }
 };
 
@@ -679,31 +679,38 @@ window.updateMarkerStatus = function(region_id) {
 
 // map.js
 
-window.updateWalkVisuals = function(
+window.updateAreaVisuals = function(
     region_id,
     targetTag = 'L1',
     uiScope = 'walk'
-    ) {
+) {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const cleanId = String(region_id).trim();
 
-    // --- 1. DATA & MATH (Keep your existing logic) ---
-    const allData =
-    typeof getBakedData === 'function'
+    // --- 1. DATA & MATH ---
+    const allData = typeof getBakedData === 'function'
         ? getBakedData()
         : (window.BAKED_DATA || {});
 
-    const fullData = allData[uiScope] || {};
+    // Ensure the uiScope exists
+    if (!allData[uiScope]) allData[uiScope] = {};
 
-    let regionData = fullData[cleanId] || { region_total_houses: 0 };
+    // Use uiScope to isolate the correct context
+    const fullData = allData[uiScope];
+
+    let regionData = fullData[cleanId];
+    if (!regionData) {
+        console.warn(`⚠️ No data found for ${uiScope}:${cleanId}. Will still render ghost with 0 opacity.`);
+        regionData = { region_total_houses: 0 };
+    }
 
     let completedWeight = 0;
     let totalPossible = regionData.region_total_houses || 0;
 
-    // Denominator fallback
+    // Denominator fallback from map properties
     if (totalPossible === 0) {
         activeMap.eachLayer(l => {
             if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
@@ -720,7 +727,7 @@ window.updateWalkVisuals = function(
 
     const finalOpacity = totalPossible > 0 ? (0.8 * (completedWeight / totalPossible)) : 0;
 
-    // --- 2. FIND THE SOURCE BLUEPRINT (WITH DEBUG) ---
+    // --- 2. FIND BLUEPRINT ---
     let blueprintGeometry = null;
     let foundButGhost = false;
     const allSeenIds = [];
@@ -741,22 +748,10 @@ window.updateWalkVisuals = function(
     });
 
     if (!blueprintGeometry) {
-        console.error(`❌ MAPPING FAIL for ID: "${cleanId}"`);
-        console.log(`- Found as Ghost? ${foundButGhost}`);
-        console.log(`- Available IDs on map:`, [...new Set(allSeenIds)]);
-
-        // Check if it's a simple case-sensitivity issue
-        const caseMatch = allSeenIds.find(id => id.toLowerCase() === cleanId.toLowerCase());
-        if (caseMatch) {
-            console.warn(`- 💡 Hint: Found case-insensitive match: "${caseMatch}". Check your Python capitalization.`);
-        }
-
-        console.warn("⚠️ Source polygon not found for blueprint.");
-        console.groupEnd();
-        return;
+        console.warn(`⚠️ Blueprint geometry missing for ${cleanId}, continuing to create ghost with zero opacity.`);
     }
 
-    // --- 3. FIND THE TARGET BUCKET (Iframe Search) ---
+    // --- 3. FIND OR CREATE TARGET BUCKET ---
     const findBucket = () => {
         const iframe = document.getElementById('iframe1');
         const mapWin = iframe ? iframe.contentWindow : window;
@@ -771,19 +766,16 @@ window.updateWalkVisuals = function(
         return null;
     };
     let targetGroup = findBucket();
-
     if (!targetGroup) {
         console.error("❌ Target Bucket not found.");
         console.groupEnd();
         return;
     }
 
-    // --- 4. MANUFACTURING WITHIN THE BUCKET ---
-    // We identify the ghost by a unique ID string rather than a variable on the source layer
-    const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
+    // --- 4. CREATE OR UPDATE GHOST ---
+    const ghostUniqueId = `ghost_${uiScope}_${targetTag}_${cleanId}`;
     let existingGhost = null;
 
-    // Search the BUCKET'S inventory for the existing ghost
     targetGroup.eachLayer(l => {
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
@@ -791,10 +783,8 @@ window.updateWalkVisuals = function(
     });
 
     if (!existingGhost) {
-        console.log(`✨ Manufacturing new independent poly for ${ghostUniqueId}`);
-
-        // Create a brand new independent polygon directly from the blueprint
-        const newPoly = Leaflet.geoJSON(blueprintGeometry, {
+        console.log(`✨ Creating new ghost for ${ghostUniqueId}`);
+        const newPoly = Leaflet.geoJSON(blueprintGeometry || {}, {
             pane: 'overlayPane',
             style: {
                 color: "transparent",
@@ -804,23 +794,15 @@ window.updateWalkVisuals = function(
             }
         });
 
-        // Tag it so we can find it in the bucket later
         newPoly.is_ghost = true;
         newPoly.ghost_id = ghostUniqueId;
-
-        // Add it directly to the target bucket
         targetGroup.addLayer(newPoly);
 
-        // SYNC CHECK: If the Layer Control has the bucket OFF, the ghost
-        // must be manually removed from the root map to prevent "pinning"
         if (!activeMap.hasLayer(targetGroup)) {
             activeMap.removeLayer(newPoly);
         }
     } else {
-        // Just update the one already sitting in the bucket
         existingGhost.setStyle({ fillOpacity: finalOpacity });
-
-        // Ensure toggle state is respected
         if (!activeMap.hasLayer(targetGroup)) {
             activeMap.removeLayer(existingGhost);
         } else if (!activeMap.hasLayer(existingGhost)) {
@@ -830,6 +812,7 @@ window.updateWalkVisuals = function(
 
     console.groupEnd();
 };
+
 
 window.incrementVoteCount = function(btn,uiScope = 'walk') {
     console.log("➕ incrementVoteCount clicked");

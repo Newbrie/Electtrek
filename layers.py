@@ -250,7 +250,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
                     <span class="tag-toggle {status_class} {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
                           onclick="parent.handleTagClick(this);
-                                   (window.updateWalkVisuals || parent.updateWalkVisuals || function(){{}})('{reg_id}', '{code}');">
+                                   (window.updateAreaVisuals || parent.updateAreaVisuals || function(){{}})('{reg_id}', '{code}');">
                         {display_char}
                     </span>
                 </td>'''
@@ -1869,7 +1869,7 @@ FEATURE_LAYER_SPECS = {
 def make_feature_layers():
     """
     Returns a fresh dict of ExtendedFeatureGroup instances for a single map.
-    Each layer has Python-only metadata: .key and .mytag.
+    Each layer has Python-only metadata: .key, .mytag, and .layer_type.
     """
     layers = {}
 
@@ -1884,6 +1884,9 @@ def make_feature_layers():
         # Python-side metadata only, safe to reuse in counters, logging, etc.
         layer.key = key
         layer.mytag = spec["mytag"]
+
+        # --- NEW: define the context / uiScope ---
+        layer.layer_type = spec.get("type", "walk")  # walk / pd / ward
 
         layers[key] = layer
 
