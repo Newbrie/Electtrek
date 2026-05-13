@@ -151,7 +151,7 @@ def create_boundary_geom(elector_df, buffer_meters=50):
     return hull_wgs84
 
 
-def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
+def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk"):
     from state import VID
 
     # 1. Prepare dynamic tag headers
@@ -185,7 +185,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
     # 3. THE UI: Control Panel
     html = persistence_js + '''
     <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-        <button onclick="parent.deployUpdate()" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+        <button onclick="parent.deployUpdate('{uiScope}')" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
             💾 Save & Deploy New File
         </button>
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
@@ -250,7 +250,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
                     <span class="tag-toggle {status_class} {'l1-trigger' if code == 'L1' else ''}"
                           data-code="{code}"
                           onclick="parent.handleTagClick(this);
-                                   (window.plotL1Progress || parent.plotL1Progress || function(){{}})('{reg_id}', '{code}');">
+                                   (window.plotL1Progress || parent.plotL1Progress || function(){})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
                     </span>
                 </td>'''
@@ -290,7 +290,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags):
 
         html += f'''
         <tr class="{row_class} canvass-row"
-            data-walk="{reg_id}"
+            data-scope="{uiScope}"
+            data-region="{reg_id}"
             data-street="{street_name}"
             data-district="{pd_code}">
             <td style="padding:8px;">

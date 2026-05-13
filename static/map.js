@@ -180,7 +180,7 @@ window.getBakedData = function() {
                       const firstRow = container.querySelector('.canvass-row');
 
                       if (firstRow) {
-                          const region_id = firstRow.getAttribute('data-walk');
+                          const region_id = firstRow.getAttribute('data-region');
 
                           if (window.plotL1Progress) {
                             // 1. Pull keys dynamically from your global config
@@ -477,7 +477,7 @@ window.updateElectorTag = function(walk, street, unit, code, isActive) {
 
 window.updateTagToggles = function(selector) {
     var row = selector.closest('.canvass-row') || selector.closest('tr');
-    var walk = row.getAttribute('data-walk'); // Grab the Walk ID from the HTML
+    var walk = row.getAttribute('data-region'); // Grab the Walk ID from the HTML
     var street = row.getAttribute('data-street');
     var house = selector.value;
     currentData = getBakedData()
@@ -534,7 +534,7 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     var row = span.closest('.canvass-row') || span.closest('tr');
     if (!row) return;
 
-    var walk = row.getAttribute('data-walk');
+    var walk = row.getAttribute('data-region');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector')?.value;
     var streetWeight = parseInt(row.cells?.[1]?.innerText) || 0;
@@ -961,7 +961,7 @@ window.incrementVoteCount = function(btn,uiScope = 'walk') {
 
     if (row) {
         // 1. Grab all three identifiers
-        var walk = row.getAttribute('data-walk');     // e.g., "N267"
+        var walk = row.getAttribute('data-region');     // e.g., "N267"
         var street = row.getAttribute('data-street'); // e.g., "FOXLEIGH_GRANGE"
         var houseSelector = row.querySelector('.unit-selector');
         var viSelector = row.querySelector('.vi-selector');
@@ -1009,7 +1009,7 @@ window.deployUpdate = function(uiScope = "walk") {
 
     document.querySelectorAll('.canvass-row').forEach(row => {
 
-        const region = row.getAttribute('data-walk'); // rename later if needed
+        const region = row.getAttribute('data-region'); // rename later if needed
         const street = row.getAttribute('data-street');
         const house = row.querySelector('.unit-selector').value;
         const vi = row.querySelector('.vi-selector').value;
@@ -1476,7 +1476,7 @@ window.loadHouseData = function(selectElement) {
     if (!row) return;
 
     // 1. Extract IDs from the row attributes
-    const walk = row.getAttribute('data-walk');
+    const walk = row.getAttribute('data-region');
     const street = row.getAttribute('data-street');
     const house = selectElement.value;
 
@@ -1531,7 +1531,7 @@ window.refreshDropdownColors = function(selectElement) {
     // --- LOGIC A: UNIT SELECTOR (Vote Counts) ---
     if (isUnitSelector) {
         // 1. Get both Walk and Street to find the correct data shelf
-        var walk = row.getAttribute('data-walk');
+        var walk = row.getAttribute('data-region');
         var street = row.getAttribute('data-street');
 
         Array.from(selectElement.options).forEach(opt => {
@@ -1589,7 +1589,7 @@ window.updateVI = function(selectElement) {
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
 
     // 1. Grab all three identifiers (Walk, Street, House)
-    var walk = row.getAttribute('data-walk');
+    var walk = row.getAttribute('data-region');
     var street = row.getAttribute('data-street');
     var house = row.querySelector('.unit-selector').value;
 
