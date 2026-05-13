@@ -683,34 +683,32 @@ window.updateAreaVisuals = function(
     region_id,
     targetTag = 'L1',
     uiScope = 'walk'
-) {
+    ) {
     console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
 
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const cleanId = String(region_id).trim();
 
-    // --- 1. DATA & MATH ---
-    const allData = typeof getBakedData === 'function'
+    // --- 1. DATA & MATH (Keep your existing logic) ---
+    const allData =
+    typeof getBakedData === 'function'
         ? getBakedData()
         : (window.BAKED_DATA || {});
 
-    // Ensure the uiScope exists
-    if (!allData[uiScope]) allData[uiScope] = {};
-
-    // Use uiScope to isolate the correct context
-    const fullData = allData[uiScope];
+    const fullData = allData[uiScope] || {};
 
     let regionData = fullData[cleanId];
-    if (!regionData) {
-        console.warn(`⚠️ No data found for ${uiScope}:${cleanId}. Will still render ghost with 0 opacity.`);
-        regionData = { region_total_houses: 0 };
-    }
 
+    if (!regionData) {
+        console.warn(`⚠️ No data found for ${uiScope}:${cleanId}`);
+        console.groupEnd();
+        return;
+    }
     let completedWeight = 0;
     let totalPossible = regionData.region_total_houses || 0;
 
-    // Denominator fallback from map properties
+    // Denominator fallback
     if (totalPossible === 0) {
         activeMap.eachLayer(l => {
             if (l.feature?.properties?.region_id === cleanId && !l.is_ghost) {
@@ -727,7 +725,7 @@ window.updateAreaVisuals = function(
 
     const finalOpacity = totalPossible > 0 ? (0.8 * (completedWeight / totalPossible)) : 0;
 
-    // --- 2. FIND BLUEPRINT ---
+    // --- 2. FIND THE SOURCE BLUEPRINT (WITH DEBUG) ---
     let blueprintGeometry = null;
     let foundButGhost = false;
     const allSeenIds = [];
@@ -748,10 +746,22 @@ window.updateAreaVisuals = function(
     });
 
     if (!blueprintGeometry) {
-        console.warn(`⚠️ Blueprint geometry missing for ${cleanId}, continuing to create ghost with zero opacity.`);
+        console.error(`❌ MAPPING FAIL for ID: "${cleanId}"`);
+        console.log(`- Found as Ghost? ${foundButGhost}`);
+        console.log(`- Available IDs on map:`, [...new Set(allSeenIds)]);
+
+        // Check if it's a simple case-sensitivity issue
+        const caseMatch = allSeenIds.find(id => id.toLowerCase() === cleanId.toLowerCase());
+        if (caseMatch) {
+            console.warn(`- 💡 Hint: Found case-insensitive match: "${caseMatch}". Check your Python capitalization.`);
+        }
+
+        console.warn("⚠️ Source polygon not found for blueprint.");
+        console.groupEnd();
+        return;
     }
 
-    // --- 3. FIND OR CREATE TARGET BUCKET ---
+    // --- 3. FIND THE TARGET BUCKET (Iframe Search) ---
     const findBucket = () => {
         const iframe = document.getElementById('iframe1');
         const mapWin = iframe ? iframe.contentWindow : window;
@@ -766,16 +776,19 @@ window.updateAreaVisuals = function(
         return null;
     };
     let targetGroup = findBucket();
+
     if (!targetGroup) {
         console.error("❌ Target Bucket not found.");
         console.groupEnd();
         return;
     }
 
-    // --- 4. CREATE OR UPDATE GHOST ---
-    const ghostUniqueId = `ghost_${uiScope}_${targetTag}_${cleanId}`;
+    // --- 4. MANUFACTURING WITHIN THE BUCKET ---
+    // We identify the ghost by a unique ID string rather than a variable on the source layer
+    const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
     let existingGhost = null;
 
+    // Search the BUCKET'S inventory for the existing ghost
     targetGroup.eachLayer(l => {
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
@@ -783,8 +796,10 @@ window.updateAreaVisuals = function(
     });
 
     if (!existingGhost) {
-        console.log(`✨ Creating new ghost for ${ghostUniqueId}`);
-        const newPoly = Leaflet.geoJSON(blueprintGeometry || {}, {
+        console.log(`✨ Manufacturing new independent poly for ${ghostUniqueId}`);
+
+        // Create a brand new independent polygon directly from the blueprint
+        const newPoly = Leaflet.geoJSON(blueprintGeometry, {
             pane: 'overlayPane',
             style: {
                 color: "transparent",
@@ -794,15 +809,23 @@ window.updateAreaVisuals = function(
             }
         });
 
+        // Tag it so we can find it in the bucket later
         newPoly.is_ghost = true;
         newPoly.ghost_id = ghostUniqueId;
+
+        // Add it directly to the target bucket
         targetGroup.addLayer(newPoly);
 
+        // SYNC CHECK: If the Layer Control has the bucket OFF, the ghost
+        // must be manually removed from the root map to prevent "pinning"
         if (!activeMap.hasLayer(targetGroup)) {
             activeMap.removeLayer(newPoly);
         }
     } else {
+        // Just update the one already sitting in the bucket
         existingGhost.setStyle({ fillOpacity: finalOpacity });
+
+        // Ensure toggle state is respected
         if (!activeMap.hasLayer(targetGroup)) {
             activeMap.removeLayer(existingGhost);
         } else if (!activeMap.hasLayer(existingGhost)) {
@@ -812,7 +835,6 @@ window.updateAreaVisuals = function(
 
     console.groupEnd();
 };
-
 
 window.incrementVoteCount = function(btn,uiScope = 'walk') {
     console.log("➕ incrementVoteCount clicked");
