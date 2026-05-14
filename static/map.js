@@ -1018,59 +1018,6 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     window.updateMarkerStatus?.(region);
 };
 
-window.handleTagClick = function(span, uiScope = 'walk') {
-
-    const isInactive = span.classList.contains('tag-inactive');
-    const code = span.getAttribute('data-code');
-    const newValue = isInactive ? 'y' : 'n';
-
-    const currentData = getBakedData() || {};
-
-    const row = span.closest('.canvass-row') || span.closest('tr');
-    if (!row) return;
-
-    const walk = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
-    const house = row.querySelector('.unit-selector')?.value;
-
-    if (!walk || !street || !house) return;
-
-    // -------------------------
-    // ENSURE STRUCTURE
-    // -------------------------
-    currentData[uiScope] ??= {};
-    currentData[uiScope][walk] ??= {};
-    currentData[uiScope][walk][street] ??= {};
-    currentData[uiScope][walk][street][house] ??= {
-        vi: "",
-        votes: "0",
-        tags: {},
-        ts: Date.now()
-    };
-
-    const houseObj = currentData[uiScope][walk][street][house];
-    houseObj.tags ??= {};
-
-    // -------------------------
-    // TOGGLE TAG
-    // -------------------------
-    houseObj.tags[code] = newValue;
-
-    houseObj.ts = Date.now();
-
-    // -------------------------
-    // UI UPDATE
-    // -------------------------
-    span.classList.toggle('tag-active', newValue === 'y');
-    span.classList.toggle('tag-inactive', newValue === 'n');
-    span.innerText = newValue;
-
-    window.BAKED_DATA = currentData;
-
-    saveBakedData?.(currentData);
-
-    window.plotL1Progress?.(walk, code, uiScope);
-};
 
 async function getVIData(path) {
 
