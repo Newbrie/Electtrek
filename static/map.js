@@ -68,26 +68,16 @@ var showMore = function (msg,area, type) {
 
 // --- MOVE THESE TO MAP.JS ---
 
-window.BAKED_DATA = window.BAKED_DATA ||
-                    (parent && parent.BAKED_DATA) || {
-    walk: {},
-    pd: {},
-    ward: {},
-    elector: {}
-};
+window.BAKED_DATA =
+    window.BAKED_DATA ||
+    (parent && parent.BAKED_DATA) ||
+    [];
 
 /* --- Top of map.js --- */
 /* --- Top of map.js --- */
 // 1. Map Handle
 var fmap;
 
-// This acts as your "Fast Lookup" dictionary
-window.mapLayerIndex = {};
-
-// 2. Data Handle: Use local data if it exists, otherwise reach out to the parent
-var getBakedData = function() {
-    return window.BAKED_DATA || (parent && parent.BAKED_DATA) || {};
-};
 
 // --- Add this to your JS file ---
 const addMapLogo = (map) => {
@@ -110,52 +100,55 @@ const addMapLogo = (map) => {
  * Saves the global data object to browser storage.
  * @param {Object} data - The current BAKED_DATA object.
  */
-window.saveBakedData = function(data) {
-    try {
-        // 1. Safety check: Don't save if data is empty or invalid
-        if (!data || typeof data !== 'object') return;
+ window.saveBakedData = function(data) {
+     try {
 
-        // 2. Convert the Object to a String (JSON)
-        const dataString = JSON.stringify(data);
+         if (!Array.isArray(data)) {
+             console.warn("BAKED_DATA is not an array. Fixing...");
+             data = [];
+         }
 
-        // 3. Save to localStorage under a unique key
-        localStorage.setItem('CANVASS_BAKED_DATA', dataString);
+         const dataString = JSON.stringify(data);
 
-        // 4. Update the global variable to ensure all functions see the same data
-        window.BAKED_DATA = data;
+         localStorage.setItem('CANVASS_BAKED_DATA', dataString);
 
-        console.log("💾 Progress saved to LocalStorage");
-    } catch (e) {
-        console.error("❌ Failed to save to LocalStorage:", e);
+         window.BAKED_DATA = data;
 
-        // Handle QuotaExceededError (if storage is full)
-        if (e.code === 22 || e.code === 1014) {
-            alert("Local storage is full. Progress might not be saved.");
-        }
-    }
-};
+         console.log("💾 Event log saved to LocalStorage");
+
+     } catch (e) {
+         console.error("❌ Failed to save:", e);
+
+         if (e.code === 22 || e.code === 1014) {
+             alert("Local storage full.");
+         }
+     }
+ };
 
 /**
  * Loads the data back from storage on page load.
  */
-window.getBakedData = function() {
-    try {
-        // 1. Try to find existing data in storage
-        const saved = localStorage.getItem('CANVASS_BAKED_DATA');
+ window.getBakedData = function() {
+     try {
 
-        if (saved) {
-            // 2. Parse the string back into a JS Object
-            window.BAKED_DATA = JSON.parse(saved);
-            return window.BAKED_DATA;
-        }
-    } catch (e) {
-        console.error("❌ Error loading saved data:", e);
-    }
+         const saved = localStorage.getItem('CANVASS_BAKED_DATA');
 
-    // 3. Fallback: Return empty object if nothing found
-    window.BAKED_DATA = window.BAKED_DATA || {};
-    return window.BAKED_DATA;
-};
+         if (saved) {
+             const parsed = JSON.parse(saved);
+
+             // enforce array model
+             window.BAKED_DATA = Array.isArray(parsed) ? parsed : [];
+
+             return window.BAKED_DATA;
+         }
+
+     } catch (e) {
+         console.error("❌ Error loading:", e);
+     }
+
+     window.BAKED_DATA = window.BAKED_DATA || [];
+     return window.BAKED_DATA;
+ };
 
 
 // This self-invoking function starts looking for the map immediately
@@ -440,103 +433,93 @@ window.updateRowAppearance = function(row, count, max) {
     });
 };
 
-window.updateElectorTag = function(walk, street, unit, code, isActive, uiScope = 'walk') {
+window.updateElectorTag = function(
+    walk,
+    street,
+    unit,
+    code,
+    isActive,
+    uiScope = 'walk'
+) {
 
-    const currentData = getBakedData() || {};
-    if (!currentData) return;
+    // -------------------------------------------------
+    // 1️⃣ EVENT LOG (SOURCE OF TRUTH)
+    // -------------------------------------------------
+    window.BAKED_DATA ||= [];
 
-    // -----------------------------
-    // ENSURE STRUCTURE
-    // -----------------------------
-    if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][walk]) currentData[uiScope][walk] = {};
-    if (!currentData[uiScope][walk][street]) {
-        currentData[uiScope][walk][street] = {
-            street_weight: 0,
-            ts: Date.now()
-        };
-    }
+    window.BAKED_DATA.push({
+        ts: Date.now(),
+        type: "tag",
+        uiScope,
+        region: walk,
+        street,
+        house: unit,
+        code,
+        value: isActive ? "y" : "n"
+    });
 
-    const streetObj = currentData[uiScope][walk][street];
+    // -------------------------------------------------
+    // 2️⃣ OPTIONAL PERSIST
+    // -------------------------------------------------
+    saveBakedData?.(window.BAKED_DATA);
 
-    if (!streetObj[unit]) {
-        streetObj[unit] = {
-            vi: "",
-            votes: "0",
-            tags: {},
-            ts: Date.now()
-        };
-    }
-
-    const house = streetObj[unit];
-
-    if (!house.tags) house.tags = {};
-
-    // -----------------------------
-    // TAG MUTATION (OBJECT-BASED)
-    // -----------------------------
-    if (isActive) {
-        house.tags[code] = "y";
-    } else {
-        house.tags[code] = "n";
-    }
-
-    house.ts = Date.now();
-    streetObj.ts = Date.now();
-
-    // -----------------------------
-    // PERSIST
-    // -----------------------------
-    window.BAKED_DATA = currentData;
-
-    if (typeof saveBakedData === 'function') {
-        saveBakedData(currentData);
-    }
-
-    console.log(`✅ Updated ${walk}/${street}/${unit} tag ${code} = ${house.tags[code]}`);
+    // -------------------------------------------------
+    // 3️⃣ LOG
+    // -------------------------------------------------
+    console.log(
+        `✅ Event: ${walk}/${street}/${unit} tag ${code} = ${isActive ? "y" : "n"}`
+    );
 };
+
+function deriveState(events) {
+
+    const state = {};
+
+    for (const e of events) {
+
+        state[e.uiScope] ??= {};
+        state[e.uiScope][e.region] ??= {};
+        state[e.uiScope][e.region][e.street] ??= {};
+        state[e.uiScope][e.region][e.street][e.house] ??= { tags: {} };
+
+        state[e.uiScope][e.region][e.street][e.house].tags[e.code] = e.value;
+    }
+
+    return state;
+}
 
 window.updateTagToggles = function(selector, uiScope = 'walk') {
 
     const row = selector.closest('.canvass-row') || selector.closest('tr');
     if (!row) return;
 
-    const region = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
+    const region = row.dataset.region;
+    const street = row.dataset.street;
     const house = selector.value;
 
-    const currentData = getBakedData() || {};
+    // -----------------------------
+    // EVENT SOURCE (NOT STATE)
+    // -----------------------------
+    const events = window.BAKED_DATA || [];
+
+    const state = deriveState(events);
+
+    const houseState =
+        state?.[uiScope]?.[region]?.[street]?.[house];
+
+    const tags = houseState?.tags || {};
 
     // -----------------------------
-    // SAFE NAVIGATION (HOUSE-LEVEL ONLY)
-    // -----------------------------
-    const houseData =
-        currentData[uiScope] &&
-        currentData[uiScope][region] &&
-        currentData[uiScope][region][street] &&
-        currentData[uiScope][region][street][house]
-            ? currentData[uiScope][region][street][house]
-            : null;
-
-    const tags = (houseData && houseData.tags) ? houseData.tags : {};
-
-    // -----------------------------
-    // UPDATE UI
+    // UPDATE UI FROM DERIVED STATE
     // -----------------------------
     row.querySelectorAll('.tag-toggle').forEach(span => {
 
-        const code = span.getAttribute('data-code');
+        const code = span.dataset.code;
         const val = tags[code] || 'n';
 
-        if (val === 'y') {
-            span.classList.remove('tag-inactive');
-            span.classList.add('tag-active');
-            span.innerText = 'y';
-        } else {
-            span.classList.remove('tag-active');
-            span.classList.add('tag-inactive');
-            span.innerText = 'n';
-        }
+        span.classList.toggle('tag-active', val === 'y');
+        span.classList.toggle('tag-inactive', val !== 'y');
+        span.innerText = val;
     });
 };
 
@@ -546,142 +529,99 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     const newValue = isInactive ? 'y' : 'n';
     const code = span.getAttribute('data-code');
 
-    const currentData =
-        (typeof getBakedData === 'function')
-            ? getBakedData()
-            : (window.BAKED_DATA || {});
-
-    // -----------------------------
-    // UI TOGGLE
-    // -----------------------------
-    if (isInactive) {
-        span.classList.remove('tag-inactive');
-        span.classList.add('tag-active');
-        span.innerText = 'y';
-    } else {
-        span.classList.remove('tag-active');
-        span.classList.add('tag-inactive');
-        span.innerText = 'n';
-    }
-
-    // -----------------------------
-    // CONTEXT
-    // -----------------------------
     const row = span.closest('.canvass-row') || span.closest('tr');
     if (!row) return;
 
-    const region = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
+    const region = row.dataset.region;
+    const street = row.dataset.street;
     const house = row.querySelector('.unit-selector')?.value;
 
     if (!region || !street || !house) return;
 
     // -----------------------------
-    // ENSURE STRUCTURE (HOUSE-FIRST MODEL)
+    // UI = SOURCE OF TRUTH
     // -----------------------------
-    if (!currentData[uiScope]) currentData[uiScope] = {};
-    if (!currentData[uiScope][region]) currentData[uiScope][region] = {};
-    if (!currentData[uiScope][region][street]) {
-        currentData[uiScope][region][street] = {
-            street_weight: 0,
-            ts: Date.now()
-        };
-    }
-
-    const streetObj = currentData[uiScope][region][street];
-
-    if (!streetObj[house]) {
-        streetObj[house] = {
-            vi: "",
-            votes: "0",
-            tags: {},
-            ts: Date.now()
-        };
-    }
-
-    const houseObj = streetObj[house];
-
-    if (!houseObj.tags) houseObj.tags = {};
+    span.classList.toggle('tag-active', newValue === 'y');
+    span.classList.toggle('tag-inactive', newValue === 'n');
+    span.innerText = newValue;
 
     // -----------------------------
-    // MUTATION LOGIC (HOUSE-LEVEL ONLY)
+    // EVENT LOG (BAKED_DATA)
     // -----------------------------
+    window.BAKED_DATA ||= [];
 
-    if (newValue === 'y') {
-        houseObj.tags[code] = 'y';
-    } else {
-        houseObj.tags[code] = 'n';
-    }
-
-    houseObj.ts = Date.now();
-    streetObj.ts = Date.now();
-
-    // -----------------------------
-    // PERSIST
-    // -----------------------------
-    window.BAKED_DATA = currentData;
-
-    if (typeof saveBakedData === 'function') {
-        saveBakedData(currentData);
-    }
+    window.BAKED_DATA.push({
+        ts: Date.now(),
+        uiScope,
+        region,
+        street,
+        house,
+        code,
+        value: newValue
+    });
 
     // -----------------------------
-    // VISUAL UPDATE
+    // SAVE EVENT STREAM
     // -----------------------------
+    saveBakedData?.(window.BAKED_DATA);
 
-    if (window.plotL1Progress) {
-        window.plotL1Progress(region, code, uiScope);
-    } else if (parent.plotL1Progress) {
-        parent.plotL1Progress(region, code, uiScope);
-    }
+    // -----------------------------
+    // VISUAL UPDATE (derived)
+    // -----------------------------
+    plotL1Progress?.(region, code, uiScope);
 };
 
 window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
 
     if (!region_id) return;
 
-    const currentData = getBakedData() || {};
-    const scopeData = currentData[uiScope] || {};
-    const regionData = scopeData[region_id];
+    // -------------------------------------------------
+    // 1️⃣ DERIVE STATE FROM EVENTS
+    // -------------------------------------------------
+    const events = window.BAKED_DATA || [];
 
-    if (!regionData) return;
+    const state = {};
 
-    // -----------------------------
-    // 1. COUNT COMPLETED UNITS
-    // (ONLY HOUSE LEVEL DATA)
-    // -----------------------------
+    for (const e of events) {
+
+        if (e.uiScope !== uiScope) continue;
+        if (e.region !== region_id) continue;
+
+        state[e.street] ??= {};
+        state[e.street][e.house] ??= {
+            votes: 0
+        };
+
+        if (typeof e.votes === 'number') {
+            state[e.street][e.house].votes = e.votes;
+        }
+    }
+
+    // -------------------------------------------------
+    // 2️⃣ COUNT COMPLETED UNITS
+    // -------------------------------------------------
     let completedUnits = 0;
 
-    Object.values(regionData).forEach(street => {
-
-        if (!street || typeof street !== 'object') return;
-
+    Object.values(state).forEach(street => {
         Object.values(street).forEach(house => {
 
-            // skip metadata nodes
-            if (!house || typeof house !== 'object') return;
-            if (!house.tags) return;
-
-            if (parseInt(house.votes || "0") > 0) {
+            if ((house.votes || 0) > 0) {
                 completedUnits++;
             }
         });
     });
 
-    // -----------------------------
-    // 2. GET EXPECTED HOUSE COUNT (FROM MAP)
-    // -----------------------------
+    // -------------------------------------------------
+    // 3️⃣ GET EXPECTED HOUSE COUNT (FROM MAP)
+    // -------------------------------------------------
     let expectedHouses = 0;
 
     const activeMap =
         window.fmap ||
         parent.fmap ||
-        (document.getElementById('iframe1')?.contentWindow?.fmap);
+        document.getElementById('iframe1')?.contentWindow?.fmap;
 
-    if (!activeMap) {
-        console.warn("fmap not found. Is iframe1 loaded yet?");
-        return;
-    }
+    if (!activeMap) return;
 
     activeMap.eachLayer(layer => {
         const props = layer.feature?.properties;
@@ -690,46 +630,58 @@ window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
         }
     });
 
-    // -----------------------------
-    // 3. COLOR LOGIC
-    // -----------------------------
+    // -------------------------------------------------
+    // 4️⃣ COLOR LOGIC
+    // -------------------------------------------------
     const healthColor =
         (expectedHouses > 0 && completedUnits >= expectedHouses)
             ? "#28a745"
             : (completedUnits > 0 ? "#ffcc00" : null);
 
-    // -----------------------------
-    // 4. UPDATE LABEL
-    // -----------------------------
+    // -------------------------------------------------
+    // 5️⃣ UPDATE LABEL
+    // -------------------------------------------------
     const labelSpan = document.getElementById(`label-${region_id}`);
 
-    if (labelSpan) {
-        if (healthColor) {
-            labelSpan.style.background = healthColor;
-            labelSpan.style.color = "white";
-        }
+    if (labelSpan && healthColor) {
+        labelSpan.style.background = healthColor;
+        labelSpan.style.color = "white";
     }
 
-    // -----------------------------
-    // 5. UPDATE POLYGON STYLE
-    // -----------------------------
+    // -------------------------------------------------
+    // 6️⃣ UPDATE POLYGONS
+    // -------------------------------------------------
     activeMap.eachLayer(layer => {
 
         const props = layer.feature?.properties;
 
-        if (props?.region_id === region_id) {
+        if (props?.region_id === region_id && healthColor) {
 
-            if (healthColor) {
-                layer.setStyle({
-                    fillColor: healthColor,
-                    fillOpacity: 0.8
-                });
-            }
+            layer.setStyle({
+                fillColor: healthColor,
+                fillOpacity: 0.8
+            });
         }
     });
 };
-
 // map.js
+
+function deriveState(events) {
+
+    const state = {};
+
+    for (const e of events) {
+
+        state[e.uiScope] ??= {};
+        state[e.uiScope][e.region] ??= {};
+        state[e.uiScope][e.region][e.street] ??= {};
+        state[e.uiScope][e.region][e.street][e.house] ??= { tags: {} };
+
+        state[e.uiScope][e.region][e.street][e.house].tags[e.code] = e.value;
+    }
+
+    return state;
+}
 
 window.walkLayersDeep = function(layer, callback) {
     if (!layer) return;
@@ -765,33 +717,82 @@ window.plotL1Progress = function(
     const cleanId = String(region_id).trim();
 
     // -------------------------------------------------
-    // 1️⃣ LOAD DATA
+    // 0️⃣ DERIVE STATE FROM EVENT LOG
     // -------------------------------------------------
 
-    const allData =
-        typeof getBakedData === 'function'
-            ? getBakedData()
-            : (window.BAKED_DATA || {});
+    const events = window.BAKED_DATA || [];
 
-    const fullData = allData[uiScope] || {};
-    const regionData = fullData[cleanId];
+    const deriveState = (events) => {
+
+        const state = {};
+
+        for (const e of events) {
+
+            state[e.uiScope] ??= {};
+            state[e.uiScope][e.region] ??= {};
+            state[e.uiScope][e.region][e.street] ??= {};
+            state[e.uiScope][e.region][e.street][e.house] ??= {
+                street_weight: 0,
+                tags: {}
+            };
+
+            const house = state[e.uiScope][e.region][e.street][e.house];
+
+            if (e.code) {
+                house.tags[e.code] = e.value;
+            }
+        }
+
+        return state;
+    };
+
+    const state = deriveState(events);
+
+    const regionData = state?.[uiScope]?.[cleanId];
 
     if (!regionData) {
-        console.warn(`⚠️ No data found for ${uiScope}:${cleanId}`);
+        console.warn(`⚠️ No derived state for ${uiScope}:${cleanId}`);
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 2️⃣ CALCULATE COMPLETION
+    // 1️⃣ CALCULATE COMPLETION (FROM DERIVED STATE)
     // -------------------------------------------------
 
     let completedWeight = 0;
-    let totalPossible = regionData.region_total_houses || 0;
+    let totalPossible = 0;
 
-    // Fallback denominator from map geometry
+    Object.entries(regionData).forEach(([streetName, streetObj]) => {
+
+        const streetWeight = streetObj.street_weight || 0;
+
+        let hasY = false;
+
+        Object.entries(streetObj).forEach(([houseId, houseObj]) => {
+
+            if (houseId === 'street_weight' || houseId === 'ts') return;
+
+            if (houseObj?.tags?.[targetTag] === 'y') {
+                hasY = true;
+            }
+        });
+
+        if (hasY) {
+            completedWeight += streetWeight;
+        }
+
+        totalPossible += streetWeight;
+    });
+
+    // -------------------------------------------------
+    // 2️⃣ FALLBACK TOTAL (MAP GEOMETRY)
+    // -------------------------------------------------
+
     if (totalPossible === 0) {
-      walkLayersDeep(activeMap, l => {
+
+        walkLayersDeep(activeMap, l => {
+
             if (
                 l.feature?.properties?.region_id === cleanId &&
                 !l.is_ghost
@@ -803,25 +804,21 @@ window.plotL1Progress = function(
         });
     }
 
-    Object.values(regionData).forEach(street => {
-
-        if (
-            street?.street_weight &&
-            Object.values(street).some(
-                u => u?.tags?.[targetTag] === 'y'
-            )
-        ) {
-            completedWeight += street.street_weight;
-        }
-    });
-
     const finalOpacity =
         totalPossible > 0
             ? (0.8 * (completedWeight / totalPossible))
             : 0;
 
+    console.log("DEBUG OPACITY", {
+        cleanId,
+        targetTag,
+        completedWeight,
+        totalPossible,
+        finalOpacity
+    });
+
     // -------------------------------------------------
-    // 3️⃣ FIND TARGET BUCKET FIRST
+    // 3️⃣ FIND TARGET BUCKET
     // -------------------------------------------------
 
     const findBucket = () => {
@@ -858,39 +855,32 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 4️⃣ FIND EXISTING GHOST FIRST
+    // 4️⃣ FIND EXISTING GHOST
     // -------------------------------------------------
-    console.log("DEBUG OPACITY", { cleanId, targetTag, completedWeight, totalPossible, finalOpacity });
+
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
 
     let existingGhost = null;
 
     targetGroup.eachLayer(l => {
-
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
         }
     });
 
     // -------------------------------------------------
-    // 5️⃣ FAST PATH: UPDATE EXISTING GHOST
+    // 5️⃣ UPDATE OR CREATE GHOST
     // -------------------------------------------------
 
     if (existingGhost) {
 
         console.log(`♻️ Updating existing ghost: ${ghostUniqueId}`);
 
-        existingGhost.setStyle({
-            fillOpacity: finalOpacity
-        });
+        existingGhost.setStyle({ fillOpacity: finalOpacity });
 
-        // Respect overlay toggle state
         if (!activeMap.hasLayer(targetGroup)) {
-
             activeMap.removeLayer(existingGhost);
-
         } else if (!activeMap.hasLayer(existingGhost)) {
-
             existingGhost.addTo(activeMap);
         }
 
@@ -899,7 +889,7 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 6️⃣ ONLY NOW SEARCH FOR BLUEPRINT
+    // 6️⃣ FIND BLUEPRINT
     // -------------------------------------------------
 
     let blueprintGeometry = null;
@@ -919,20 +909,13 @@ window.plotL1Progress = function(
             if (idOnMap === cleanId) {
 
                 if (l.is_ghost) {
-
                     foundButGhost = true;
-
                 } else {
-
                     blueprintGeometry = l.feature.geometry;
                 }
             }
         }
     });
-
-    // -------------------------------------------------
-    // 7️⃣ FAIL IF NO BLUEPRINT EXISTS
-    // -------------------------------------------------
 
     if (!blueprintGeometry) {
 
@@ -940,64 +923,34 @@ window.plotL1Progress = function(
 
         console.log(`- Found as Ghost? ${foundButGhost}`);
 
-        console.log(
-            `- Available IDs on map:`,
-            [...new Set(allSeenIds)]
-        );
-
-        const caseMatch = allSeenIds.find(
-            id => id.toLowerCase() === cleanId.toLowerCase()
-        );
-
-        if (caseMatch) {
-
-            console.warn(
-                `- 💡 Hint: Found case-insensitive match: "${caseMatch}".`
-            );
-        }
-
-        console.warn(
-            "⚠️ Source polygon not found for blueprint."
-        );
+        console.log(`- Available IDs on map:`, [...new Set(allSeenIds)]);
 
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 8️⃣ MANUFACTURE NEW GHOST
+    // 7️⃣ CREATE GHOST
     // -------------------------------------------------
 
-    console.log(
-        `✨ Manufacturing new independent poly for ${ghostUniqueId}`
-    );
+    console.log(`✨ Creating ghost ${ghostUniqueId}`);
 
-    const newPoly = Leaflet.geoJSON(
-        blueprintGeometry,
-        {
-            pane: 'overlayPane',
-
-            style: {
-                color: "transparent",
-                fillColor:
-                    targetTag.startsWith('L')
-                        ? "#333"
-                        : "#800080",
-
-                fillOpacity: finalOpacity,
-                interactive: false
-            }
+    const newPoly = Leaflet.geoJSON(blueprintGeometry, {
+        pane: 'overlayPane',
+        style: {
+            color: "transparent",
+            fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
+            fillOpacity: finalOpacity,
+            interactive: false
         }
-    );
+    });
 
     newPoly.is_ghost = true;
     newPoly.ghost_id = ghostUniqueId;
 
     targetGroup.addLayer(newPoly);
 
-    // Respect layer toggle state
     if (!activeMap.hasLayer(targetGroup)) {
-
         activeMap.removeLayer(newPoly);
     }
 
@@ -1008,67 +961,61 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
 
     console.log("➕ incrementVoteCount clicked");
 
+    // -------------------------------------------------
+    // 1️⃣ UI STATE (local only)
+    // -------------------------------------------------
     const count =
-        ((parseInt(btn.getAttribute('data-count')) || 0) + 1) %
-        ((parseInt(btn.getAttribute('data-max')) || 1) + 1);
+        ((parseInt(btn.dataset.count) || 0) + 1) %
+        ((parseInt(btn.dataset.max) || 1) + 1);
 
-    const max = parseInt(btn.getAttribute('data-max')) || 1;
+    const max = parseInt(btn.dataset.max) || 1;
 
-    btn.setAttribute('data-count', count);
+    btn.dataset.count = count;
     btn.innerText = `${count}/${max}`;
 
-    const currentData = getBakedData() || {};
-
+    // -------------------------------------------------
+    // 2️⃣ CONTEXT
+    // -------------------------------------------------
     const row = btn.closest('.canvass-row');
     if (!row) return;
 
-    const walk = row.getAttribute('data-region');
-    const street = row.getAttribute('data-street');
-
+    const region = row.dataset.region;
+    const street = row.dataset.street;
     const house = row.querySelector('.unit-selector')?.value;
     const vi = row.querySelector('.vi-selector')?.value || "";
 
-    if (!walk || !street || !house) return;
+    if (!region || !street || !house) return;
 
-    // -------------------------
-    // ENSURE STRUCTURE
-    // -------------------------
-    currentData[uiScope] ??= {};
-    currentData[uiScope][walk] ??= {};
-    currentData[uiScope][walk][street] ??= {};
-    currentData[uiScope][walk][street][house] ??= {
-        vi: "",
-        votes: "0",
-        tags: {},
-        ts: Date.now()
-    };
+    // -------------------------------------------------
+    // 3️⃣ EVENT LOG (SOURCE OF TRUTH)
+    // -------------------------------------------------
+    window.BAKED_DATA ||= [];
 
-    const houseObj = currentData[uiScope][walk][street][house];
-
-    // preserve tags no matter what
-    houseObj.tags ??= {};
-
-    // -------------------------
-    // UPDATE HOUSE FACTS
-    // -------------------------
-    houseObj.vi = vi;
-    houseObj.votes = String(count);
-    houseObj.ts = Date.now();
+    window.BAKED_DATA.push({
+        ts: Date.now(),
+        type: "vote",
+        uiScope,
+        region,
+        street,
+        house,
+        vi,
+        votes: count
+    });
 
     console.log(
-        `💾 Saved: [${uiScope}] ${walk}/${street}/${house} = ${count} votes`
+        `💾 Event logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes`
     );
 
-    // -------------------------
-    // UI updates
-    // -------------------------
+    // -------------------------------------------------
+    // 4️⃣ UI SIDE EFFECTS ONLY
+    // -------------------------------------------------
     window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
     window.updateRowAppearance?.(row, count, max);
 
-    // -------------------------
-    // MAP UPDATE (street-level aggregation trigger)
-    // -------------------------
-    window.updateMarkerStatus?.(walk);
+    // -------------------------------------------------
+    // 5️⃣ MAP UPDATE TRIGGER (derived later)
+    // -------------------------------------------------
+    window.updateMarkerStatus?.(region);
 };
 
 window.handleTagClick = function(span, uiScope = 'walk') {
