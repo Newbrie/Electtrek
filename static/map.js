@@ -711,96 +711,75 @@ window.plotL1Progress = function(
 
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
-    const cleanId = String(region_id).trim();
+
+    const cleanId = String(region_id)
+        .trim()
+        .toUpperCase();
 
     // -------------------------------------------------
-    // 0️⃣ DERIVE STATE FROM EVENT LOG
+    // 1️⃣ DERIVE STATE DIRECTLY FROM DOM
     // -------------------------------------------------
 
-    const events = window.BAKED_DATA || [];
+    const rows = document.querySelectorAll(
+        `.canvass-row[data-region="${cleanId}"]`
+    );
 
-    const deriveState = (events) => {
+    if (!rows.length) {
 
-        const state = {};
+        console.warn(
+            `⚠️ No UI rows found for ${uiScope}:${cleanId}`
+        );
 
-        for (const e of events) {
-
-            state[e.uiScope] ??= {};
-            state[e.uiScope][e.region] ??= {};
-            state[e.uiScope][e.region][e.street] ??= {};
-            state[e.uiScope][e.region][e.street][e.house] ??= {
-                street_weight: 0,
-                tags: {}
-            };
-
-            const house = state[e.uiScope][e.region][e.street][e.house];
-
-            if (e.code) {
-                house.tags[e.code] = e.value;
-            }
-        }
-
-        return state;
-    };
-
-    const state = deriveState(events);
-
-    const regionData = state?.[uiScope]?.[cleanId];
-
-    if (!regionData) {
-        console.warn(`⚠️ No derived state for ${uiScope}:${cleanId}`);
         console.groupEnd();
         return;
     }
 
-    // -------------------------------------------------
-    // 1️⃣ CALCULATE COMPLETION (FROM DERIVED STATE)
-    // -------------------------------------------------
-
     let completedWeight = 0;
     let totalPossible = 0;
 
-    Object.entries(regionData).forEach(([streetName, streetObj]) => {
+    const countedStreets = new Set();
 
-        const streetWeight = streetObj.street_weight || 0;
+    rows.forEach(row => {
 
-        let hasY = false;
+        const street =
+            row.getAttribute('data-street');
 
-        Object.entries(streetObj).forEach(([houseId, houseObj]) => {
+        if (!street) return;
 
-            if (houseId === 'street_weight' || houseId === 'ts') return;
+        // prevent duplicate counting
+        if (countedStreets.has(street)) return;
 
-            if (houseObj?.tags?.[targetTag] === 'y') {
-                hasY = true;
+        countedStreets.add(street);
+
+        const streetWeight =
+            parseFloat(
+                row.getAttribute('data-street-weight')
+            ) || 0;
+
+        totalPossible += streetWeight;
+
+        const streetRows = document.querySelectorAll(
+            `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
+        );
+
+        let hasActiveTag = false;
+
+        streetRows.forEach(streetRow => {
+
+            const activeTag =
+                streetRow.querySelector(
+                    `.tag-toggle[data-code="${targetTag}"].tag-active`
+                );
+
+            if (activeTag) {
+                hasActiveTag = true;
             }
         });
 
-        if (hasY) {
+        if (hasActiveTag) {
             completedWeight += streetWeight;
         }
-
-        totalPossible += streetWeight;
     });
-
-    // -------------------------------------------------
-    // 2️⃣ FALLBACK TOTAL (MAP GEOMETRY)
-    // -------------------------------------------------
-
-    if (totalPossible === 0) {
-
-      walkLayersDeep(activeMap, l => {
-
-          if (l.feature?.properties) {
-
-              console.log("LAYER PROPS", l.feature.properties);
-
-              const idOnMap =
-                  l.feature.properties.region_id;
-
-              console.log("FOUND ID:", idOnMap);
-          }
-      });
-    }
 
     const finalOpacity =
         totalPossible > 0
@@ -816,27 +795,35 @@ window.plotL1Progress = function(
     });
 
     // -------------------------------------------------
-    // 3️⃣ FIND TARGET BUCKET
+    // 2️⃣ FIND TARGET BUCKET
     // -------------------------------------------------
 
     const findBucket = () => {
 
-        const iframe = document.getElementById('iframe1');
-        const mapWin = iframe ? iframe.contentWindow : window;
+        const iframe =
+            document.getElementById('iframe1');
+
+        const mapWin =
+            iframe ? iframe.contentWindow : window;
 
         for (const key in mapWin) {
 
-            if (key.startsWith("layer_control_")) {
+            if (!key.startsWith("layer_control_")) {
+                continue;
+            }
 
-                const layers =
-                    mapWin[key].overlays ||
-                    mapWin[key]._layers;
+            const layers =
+                mapWin[key].overlays ||
+                mapWin[key]._layers;
 
-                for (const name in layers) {
+            for (const name in layers) {
 
-                    if (name.includes(`[${targetTag}]`)) {
-                        return layers[name].layer || layers[name];
-                    }
+                if (name.includes(`[${targetTag}]`)) {
+
+                    return (
+                        layers[name].layer ||
+                        layers[name]
+                    );
                 }
             }
         }
@@ -847,38 +834,49 @@ window.plotL1Progress = function(
     const targetGroup = findBucket();
 
     if (!targetGroup) {
+
         console.error("❌ Target Bucket not found.");
+
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 4️⃣ FIND EXISTING GHOST
+    // 3️⃣ FIND EXISTING GHOST
     // -------------------------------------------------
 
-    const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
+    const ghostUniqueId =
+        `ghost_${targetTag}_${cleanId}`;
 
     let existingGhost = null;
 
     targetGroup.eachLayer(l => {
+
         if (l.ghost_id === ghostUniqueId) {
             existingGhost = l;
         }
     });
 
     // -------------------------------------------------
-    // 5️⃣ UPDATE OR CREATE GHOST
+    // 4️⃣ UPDATE EXISTING GHOST
     // -------------------------------------------------
 
     if (existingGhost) {
 
-        console.log(`♻️ Updating existing ghost: ${ghostUniqueId}`);
+        console.log(
+            `♻️ Updating existing ghost: ${ghostUniqueId}`
+        );
 
-        existingGhost.setStyle({ fillOpacity: finalOpacity });
+        existingGhost.setStyle({
+            fillOpacity: finalOpacity
+        });
 
         if (!activeMap.hasLayer(targetGroup)) {
+
             activeMap.removeLayer(existingGhost);
+
         } else if (!activeMap.hasLayer(existingGhost)) {
+
             existingGhost.addTo(activeMap);
         }
 
@@ -886,14 +884,11 @@ window.plotL1Progress = function(
         return;
     }
 
-
     // -------------------------------------------------
-    // 6️⃣ FIND BLUEPRINT
+    // 5️⃣ FIND BLUEPRINT GEOMETRY
     // -------------------------------------------------
 
     let blueprintGeometry = null;
-    let foundButGhost = false;
-    const allSeenIds = [];
 
     walkLayersDeep(activeMap, l => {
 
@@ -901,64 +896,67 @@ window.plotL1Progress = function(
 
         if (!props) return;
 
-        // Try all possible ID fields
         const rawId =
             props.region_id ??
             props.nid ??
             props.id;
 
-        // Skip layers with no usable ID
         if (rawId == null) return;
 
         const idOnMap = String(rawId)
             .trim()
             .toUpperCase();
 
-        allSeenIds.push(idOnMap);
+        if (
+            idOnMap === cleanId &&
+            !l.is_ghost &&
+            l.feature?.geometry
+        ) {
 
-        if (idOnMap === cleanId.toUpperCase()) {
+            blueprintGeometry =
+                l.feature.geometry;
 
-            if (l.is_ghost) {
-
-                foundButGhost = true;
-
-            } else if (l.feature?.geometry) {
-
-                blueprintGeometry = l.feature.geometry;
-
-                // short-circuit traversal once found
-                return true;
-            }
+            return true;
         }
     });
 
     if (!blueprintGeometry) {
 
-        console.error(`❌ MAPPING FAIL for ID: "${cleanId}"`);
-
-        console.log(`- Found as Ghost? ${foundButGhost}`);
-
-        console.log(`- Available IDs on map:`, [...new Set(allSeenIds)]);
+        console.error(
+            `❌ MAPPING FAIL for ID: "${cleanId}"`
+        );
 
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 7️⃣ CREATE GHOST
+    // 6️⃣ CREATE NEW GHOST
     // -------------------------------------------------
 
-    console.log(`✨ Creating ghost ${ghostUniqueId}`);
+    console.log(
+        `✨ Creating ghost ${ghostUniqueId}`
+    );
 
-    const newPoly = Leaflet.geoJSON(blueprintGeometry, {
-        pane: 'overlayPane',
-        style: {
-            color: "transparent",
-            fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
-            fillOpacity: finalOpacity,
-            interactive: false
+    const newPoly = Leaflet.geoJSON(
+        blueprintGeometry,
+        {
+            pane: 'overlayPane',
+
+            style: {
+                color: "transparent",
+
+                fillColor:
+                    targetTag.startsWith('L')
+                        ? "#333"
+                        : "#800080",
+
+                fillOpacity: finalOpacity,
+
+                interactive: false
+            }
         }
-    });
+    );
 
     newPoly.is_ghost = true;
     newPoly.ghost_id = ghostUniqueId;
