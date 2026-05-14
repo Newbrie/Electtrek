@@ -160,6 +160,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     # 2. THE INJECTION: JavaScript & CSS (No changes needed here)
 
+    # Ensure uiScope is a valid string/object before this
     ui_scope_js = json.dumps(uiScope)
 
     persistence_js = f'''
@@ -167,38 +168,51 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
             .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
             .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
+            .control-panel {{ display: flex; gap: 10px; padding: 10px; background: #222; border-top: 1px solid #444; }}
         </style>
 
         <script>
             (function() {{
-                const uiScope = {ui_scope_js};
+                // Use a constant to avoid accidental reassignment
+                const SCOPE_DATA = {ui_scope_js};
 
-                setTimeout(function() {{
+                // Wait for DOM and parent functions to be available
+                window.addEventListener('DOMContentLoaded', function() {{
+                    setTimeout(function() {{
+                        // Safely grab parent references
+                        const p = window.parent;
+                        if (!p) return;
 
-                    var loader = parent.loadHouseData;
-                    var colorizer = parent.refreshDropdownColors;
-                    var tagger = parent.updateTagToggles;
+                        const loader = p.loadHouseData;
+                        const colorizer = p.refreshDropdownColors;
+                        const tagger = p.updateTagToggles;
 
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                        if (loader) loader(sel);
-                        if (colorizer) colorizer(sel);
-                        if (tagger) tagger(sel, uiScope);
-                    }});
-
-                }}, 150);
+                        document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                            try {{
+                                if (typeof loader === 'function') loader(sel);
+                                if (typeof colorizer === 'function') colorizer(sel);
+                                // Corrected the parameter passing here
+                                if (typeof tagger === 'function') tagger(sel, SCOPE_DATA);
+                            }} catch (e) {{
+                                console.error("Error initializing unit selector:", e);
+                            }}
+                        }});
+                    }}, 200); // Increased slightly for slower iframe links
+                }});
             }})();
-        </script>
+        <\/script>
     '''
 
     # 3. THE UI: Control Panel
-    html = persistence_js + f'''
+    # Note: Removed the "..." from your div and cleaned up the f-string
+    html = f'''
+        {persistence_js}
         <script>
             window.UI_SCOPE = {ui_scope_js};
         </script>
 
-        <div class="control-panel" ...>
-
-            <button onclick="parent.deployUpdate(window.UI_SCOPE)"
+        <div class="control-panel">
+            <button onclick="if(window.parent.deployUpdate) window.parent.deployUpdate(window.UI_SCOPE)"
                 style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
                 💾 Save & Deploy New File
             </button>
@@ -206,7 +220,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             <span style="color:#00aaff; font-size:8pt; align-self:center;">
                 Data is stored inside the HTML file itself & synced to backend.
             </span>
-
         </div>
     '''
     # 4. THE UI: Table Header
