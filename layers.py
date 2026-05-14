@@ -183,22 +183,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         '''
 
     # 3. THE UI: Control Panel
-    html = persistence_js + f'''
-    <script>
-        window.UI_SCOPE = "{uiScope}";
-    </script>
-
+    html = persistence_js + '''
     <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-
-        <button onclick="parent.deployUpdate(window.UI_SCOPE)"
-            style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+        <button onclick="parent.deployUpdate('{uiScope}')" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
             💾 Save & Deploy New File
         </button>
-
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
             Data is stored inside the HTML file itself & synced to backend.
         </span>
-
     </div>
     '''
 
