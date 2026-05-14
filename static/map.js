@@ -788,17 +788,18 @@ window.plotL1Progress = function(
 
     if (totalPossible === 0) {
 
-        walkLayersDeep(activeMap, l => {
+      walkLayersDeep(activeMap, l => {
 
-            if (
-                l.feature?.properties?.region_id === cleanId &&
-                !l.is_ghost
-            ) {
-                totalPossible = parseInt(
-                    l.feature.properties.expected_houses || 0
-                );
-            }
-        });
+          if (l.feature?.properties) {
+
+              console.log("LAYER PROPS", l.feature.properties);
+
+              const idOnMap =
+                  l.feature.properties.region_id;
+
+              console.log("FOUND ID:", idOnMap);
+          }
+      });
     }
 
     const finalOpacity =
@@ -885,6 +886,7 @@ window.plotL1Progress = function(
         return;
     }
 
+
     // -------------------------------------------------
     // 6️⃣ FIND BLUEPRINT
     // -------------------------------------------------
@@ -895,21 +897,37 @@ window.plotL1Progress = function(
 
     walkLayersDeep(activeMap, l => {
 
-        if (l.feature?.properties) {
+        const props = l.feature?.properties;
 
-            const idOnMap = String(
-                l.feature.properties.region_id
-            ).trim();
+        if (!props) return;
 
-            allSeenIds.push(idOnMap);
+        // Try all possible ID fields
+        const rawId =
+            props.region_id ??
+            props.nid ??
+            props.id;
 
-            if (idOnMap === cleanId) {
+        // Skip layers with no usable ID
+        if (rawId == null) return;
 
-                if (l.is_ghost) {
-                    foundButGhost = true;
-                } else {
-                    blueprintGeometry = l.feature.geometry;
-                }
+        const idOnMap = String(rawId)
+            .trim()
+            .toUpperCase();
+
+        allSeenIds.push(idOnMap);
+
+        if (idOnMap === cleanId.toUpperCase()) {
+
+            if (l.is_ghost) {
+
+                foundButGhost = true;
+
+            } else if (l.feature?.geometry) {
+
+                blueprintGeometry = l.feature.geometry;
+
+                // short-circuit traversal once found
+                return true;
             }
         }
     });
