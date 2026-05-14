@@ -159,54 +159,56 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
     # 2. THE INJECTION: JavaScript & CSS (No changes needed here)
-    persistence_js = r'''
+
+    ui_scope_js = json.dumps(uiScope)
+
+    persistence_js = f'''
         <style>
-            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
-            .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
-            .tag-inactive { background: #444; color: #999; border-color: #333; }
+            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
+            .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
+            .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
         </style>
+
         <script>
-        (function() {
-            setTimeout(function() {
+            (function() {{
+                const uiScope = {ui_scope_js};
 
-                var loader = parent.loadHouseData;
-                var colorizer = parent.refreshDropdownColors;
-                var tagger = parent.updateTagToggles;
+                setTimeout(function() {{
 
-                document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                    var loader = parent.loadHouseData;
+                    var colorizer = parent.refreshDropdownColors;
+                    var tagger = parent.updateTagToggles;
 
-                    if (loader) loader(sel);
-                    if (colorizer) colorizer(sel);
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                        if (loader) loader(sel);
+                        if (colorizer) colorizer(sel);
+                        if (tagger) tagger(sel, uiScope);
+                    }});
 
-                    // ✅ PASS SCOPED CONTEXT
-                    if (tagger) tagger(sel, window.UI_SCOPE);
-                });
-
-            }, 150);
-        })();
+                }}, 150);
+            }})();
         </script>
-        '''
+    '''
 
     # 3. THE UI: Control Panel
     html = persistence_js + f'''
-    <script>
-        window.UI_SCOPE = "{uiScope}";
-    </script>
+        <script>
+            window.UI_SCOPE = {ui_scope_js};
+        </script>
 
-    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
+        <div class="control-panel" ...>
 
-        <button onclick="parent.deployUpdate(window.UI_SCOPE)"
-            style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
-            💾 Save & Deploy New File
-        </button>
+            <button onclick="parent.deployUpdate(window.UI_SCOPE)"
+                style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+                💾 Save & Deploy New File
+            </button>
 
-        <span style="color:#00aaff; font-size:8pt; align-self:center;">
-            Data is stored inside the HTML file itself & synced to backend.
-        </span>
+            <span style="color:#00aaff; font-size:8pt; align-self:center;">
+                Data is stored inside the HTML file itself & synced to backend.
+            </span>
 
-    </div>
+        </div>
     '''
-
     # 4. THE UI: Table Header
     html += f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
