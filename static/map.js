@@ -731,16 +731,24 @@ window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
 // map.js
 
 window.walkLayersDeep = function(layer, callback) {
+    if (!layer) return;
 
-    // Visit current layer
-    callback(layer);
+    // Execute callback.
+    // If the callback returns 'true', we stop recursing (Short-circuit)
+    const stop = callback(layer);
+    if (stop === true) return true;
 
-    // Recurse into groups
     if (typeof layer.eachLayer === 'function') {
+        let found = false;
         layer.eachLayer(child => {
-            window.walkLayersDeep(child, callback);
+            if (found) return; // Skip remaining siblings
+            if (window.walkLayersDeep(child, callback)) {
+                found = true;
+            }
         });
+        return found;
     }
+    return false;
 };
 
 window.plotL1Progress = function(
