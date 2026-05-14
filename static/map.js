@@ -720,9 +720,21 @@ window.plotL1Progress = function(
     // 1️⃣ DERIVE STATE DIRECTLY FROM DOM
     // -------------------------------------------------
 
-    const rows = document.querySelectorAll(
+    const doc =
+    document.getElementById('iframe1')?.contentWindow?.document
+    || document;
+
+    console.log(
+        "REGION DOM SAMPLE:",
+        [...doc.querySelectorAll('.canvass-row')]
+            .slice(0, 10)
+            .map(r => r.getAttribute('data-region'))
+    );
+
+    const rows = doc.querySelectorAll(
         `.canvass-row[data-region="${cleanId}"]`
     );
+
 
     if (!rows.length) {
 
@@ -745,11 +757,11 @@ window.plotL1Progress = function(
             row.getAttribute('data-street');
 
         if (!street) return;
+        const streetKey = `${cleanId}:${street}`;
 
         // prevent duplicate counting
-        if (countedStreets.has(street)) return;
-
-        countedStreets.add(street);
+        if (countedStreets.has(streetKey)) return;
+        countedStreets.add(streetKey);
 
         const streetWeight =
             parseFloat(
@@ -758,7 +770,7 @@ window.plotL1Progress = function(
 
         totalPossible += streetWeight;
 
-        const streetRows = document.querySelectorAll(
+        const streetRows = doc.querySelectorAll(
             `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
         );
 
