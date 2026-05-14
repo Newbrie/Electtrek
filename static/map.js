@@ -102,26 +102,23 @@ const addMapLogo = (map) => {
  */
  window.saveBakedData = function(data) {
      try {
-
-         if (!Array.isArray(data)) {
-             console.warn("BAKED_DATA is not an array. Fixing...");
-             data = [];
-         }
-
+         if (!Array.isArray(data)) data = [];
          const dataString = JSON.stringify(data);
 
+         // 1. Keep the local backup (The Sticky Note)
          localStorage.setItem('CANVASS_BAKED_DATA', dataString);
-
          window.BAKED_DATA = data;
+         console.log("💾 Saved to Browser Storage");
 
-         console.log("💾 Event log saved to LocalStorage");
+         // 2. THE POSTMAN: Send to Python (The File Creator)
+         // We only do this if we want a live-sync,
+         // otherwise, use the 'Save & Deploy' button logic.
+         if (typeof window.parent.deployUpdate === 'function') {
+              window.parent.deployUpdate('walk');
+         }
 
      } catch (e) {
          console.error("❌ Failed to save:", e);
-
-         if (e.code === 22 || e.code === 1014) {
-             alert("Local storage full.");
-         }
      }
  };
 
@@ -1096,6 +1093,29 @@ async function getVIData(path) {
     .catch(error => {
         alert("Error: " + error);
         console.error("Error:", error);
+    });
+};
+
+
+window.deployUpdate = function(uiScope = "walk") {
+    const eventLog = window.BAKED_DATA || [];
+
+    if (eventLog.length === 0) return;
+
+    fetch('/upload_data', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            scope: uiScope,
+            events: eventLog
+        })
+    }).then(res => {
+        if (res.ok) {
+            // SUCCESS: Clear the events so we don't re-upload them next time
+            window.BAKED_DATA = [];
+            localStorage.removeItem('CANVASS_BAKED_DATA');
+            console.log("🚀 Sync Complete. Event log cleared.");
+        }
     });
 };
 
