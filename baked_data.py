@@ -39,35 +39,103 @@ class BakedDataManager:
                 return {}
         return {}
 
-    def save(self, incoming_data):
+    import json
+    import os
 
-        existing = self.load()
+    def save(self, incoming_payload):
+        filepath = "baked_data.json"
 
-        for scope, regions in incoming_data.items():
+        # 1. Load existing file so we don't lose old data
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                try:
+                    master_data = json.load(f)
+                except json.JSONDecodeError:
+                    master_data = {}
+        else:
+            master_data = {}
 
-            if not isinstance(regions, dict):
+        # 2. Extract events and scope from the payload
+        # Expected JS payload: { "scope": "walk", "events": [...] }
+        events = incoming_payload.get('events', [])
+        ui_scope = incoming_payload.get('scope', 'walk')
+
+        if ui_scope not in master_data:
+            master_data[ui_scope] = {}
+
+        # 3. Process each event (The "Re-hydration" Step)
+        # 3. Process each event (event replay engine)
+
+        for ev in events:
+
+            reg = ev.get('region')
+            st = ev.get('street')
+            hs = ev.get('house')
+
+            if not all([reg, st, hs]):
                 continue
 
-            existing.setdefault(scope, {})
+            # -----------------------------
+            # ENSURE STRUCTURE
+            # -----------------------------
+            if reg not in master_data[ui_scope]:
+                master_data[ui_scope][reg] = {}
 
-            for region_id, streets in regions.items():
+            if st not in master_data[ui_scope][reg]:
+                master_data[ui_scope][reg][st] = {}
 
-                if not isinstance(streets, dict):
-                    continue
+            if hs not in master_data[ui_scope][reg][st]:
+                master_data[ui_scope][reg][st][hs] = {
+                    "vi": "",
+                    "votes": "0",
+                    "tags": {},
+                    "ts": None
+                }
 
-                existing[scope].setdefault(region_id, {})
+            house = master_data[ui_scope][reg][st][hs]
 
-                for street_id, street_obj in streets.items():
+            house.setdefault("tags", {})
 
-                    if not isinstance(street_obj, dict):
-                        continue
+            # -----------------------------
+            # EVENT TYPE ROUTING
+            # -----------------------------
+            ev_type = ev.get("type")
 
-                    existing[scope][region_id][street_id] = street_obj
+            # -----------------------------
+            # TAG EVENTS
+            # -----------------------------
+            if ev_type in ["tag", "elector_tag"]:
 
-        with open(self.filename, 'w', encoding='utf-8') as f:
-            f.write("window.BAKED_DATA = ")
-            json.dump(existing, f, indent=4)
-            f.write(";")
+                code = ev.get("code")
+                value = ev.get("value", "n")
+
+                if code:
+                    house["tags"][code] = value
+
+            # -----------------------------
+            # VI EVENTS
+            # -----------------------------
+            elif ev_type == "vi":
+
+                house["vi"] = ev.get("value", "")
+
+            # -----------------------------
+            # VOTE EVENTS
+            # -----------------------------
+            elif ev_type == "votes":
+
+                house["votes"] = str(ev.get("value", "0"))
+
+            # -----------------------------
+            # TIMESTAMP
+            # -----------------------------
+            house["ts"] = ev.get("ts")
+
+        # 4. Write the merged result back to disk
+        with open(filepath, 'w') as f:
+            json.dump(master_data, f, indent=4)
+
+        print(f"✅ Successfully merged {len(events)} events into {filepath}")
 
 
 # Usage in routes
