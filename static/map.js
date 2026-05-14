@@ -628,6 +628,7 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     // -----------------------------
     // VISUAL UPDATE
     // -----------------------------
+
     if (window.plotL1Progress) {
         window.plotL1Progress(region, code, uiScope);
     } else if (parent.plotL1Progress) {
@@ -859,7 +860,7 @@ window.plotL1Progress = function(
     // -------------------------------------------------
     // 4️⃣ FIND EXISTING GHOST FIRST
     // -------------------------------------------------
-
+    console.log("DEBUG OPACITY", { region, targetTag, completedWeight, totalPossible, finalOpacity });
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
 
     let existingGhost = null;
@@ -910,8 +911,7 @@ window.plotL1Progress = function(
         if (l.feature?.properties) {
 
             const idOnMap = String(
-                l.feature.properties.region_id ||
-                l.feature.properties.nid
+                l.feature.properties.region_id
             ).trim();
 
             allSeenIds.push(idOnMap);

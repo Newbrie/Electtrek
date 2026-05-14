@@ -158,18 +158,10 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-    # Define your scope variable
-    # uiScope = "walk" or uiScope = "division"
-
-    # Convert to JSON string to handle quotes/special characters safely in JS
-    ui_scope_json = json.dumps(uiScope)
-
-    # 2. THE INJECTION: JavaScript & CSS
-    # Using f-string: double {{ }} for CSS/JS, single { } for Python variables
-
 
     # Ensure ui_scope_json is strictly formatted
     ui_scope_json = json.dumps(uiScope)
+    print(f" BuildStreetList_html UIScope: {ui_scope_json}")
 
     persistence_js = f'''
     <style>
@@ -202,6 +194,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
             // Initialize unit selectors
             document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                console.log('Deploying scope:', scope);
                 if (typeof loader === 'function') loader(sel);
                 if (typeof colorizer === 'function') colorizer(sel);
                 if (typeof tagger === 'function') tagger(sel, scope);
@@ -229,7 +222,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     <\/script>
     '''
     # 4. THE UI: Table Header
-    html += f'''
+    html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
                 <thead>
