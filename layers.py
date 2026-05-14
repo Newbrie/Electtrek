@@ -158,38 +158,51 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-    # 2. THE INJECTION: JavaScript & CSS (No changes needed here)
-    persistence_js = r'''
+    # Define your scope variable
+    # uiScope = "walk" or uiScope = "division"
+
+    # Convert to JSON string to handle quotes/special characters safely in JS
+    ui_scope_json = json.dumps(uiScope)
+
+    # 2. THE INJECTION: JavaScript & CSS
+    # Using f-string: double {{ }} for CSS/JS, single { } for Python variables
+    persistence_js = f'''
         <style>
-            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
-            .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
-            .tag-inactive { background: #444; color: #999; border-color: #333; }
+            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
+            .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
+            .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
         </style>
         <script>
-            (function() {
-                setTimeout(function() {
-                    var loader = parent.loadHouseData;
-                    var colorizer = parent.refreshDropdownColors;
-                    var tagger = parent.updateTagToggles;
+            (function() {{
+                setTimeout(function() {{
+                    var p = window.parent;
+                    var loader = p.loadHouseData;
+                    var colorizer = p.refreshDropdownColors;
+                    var tagger = p.updateTagToggles;
 
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
-                        if (loader) loader(sel);
-                        if (colorizer) colorizer(sel);
-                        if (tagger) tagger(sel);
-                    });
-                }, 150);
-            })();
+                    // Pass the python variable into JS context
+                    var scope = {ui_scope_json};
+
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                        if (typeof loader === 'function') loader(sel);
+                        if (typeof colorizer === 'function') colorizer(sel);
+                        // Pass scope to the tagger call
+                        if (typeof tagger === 'function') tagger(sel, scope);
+                    }});
+                }}, 200);
+            }})();
         <\/script>
         '''
 
     # 3. THE UI: Control Panel
-    html = persistence_js + '''
+    # Parameterizing the onclick call as well
+    html = persistence_js + f'''
     <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-        <button onclick="parent.deployUpdate('{uiScope}')" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+        <button onclick="parent.deployUpdate({ui_scope_json})" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
             💾 Save & Deploy New File
         </button>
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
-            Data is stored inside the HTML file itself & synced to backend.
+            Scope: {uiScope} | Data stored in HTML & synced to backend.
         </span>
     </div>
     '''
