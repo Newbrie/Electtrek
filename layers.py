@@ -167,7 +167,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     # 2. THE INJECTION: JavaScript & CSS
     # Using f-string: double {{ }} for CSS/JS, single { } for Python variables
 
-    # Ensure ui_scope_json is a strictly formatted JSON string
+
+    # Ensure ui_scope_json is strictly formatted
     ui_scope_json = json.dumps(uiScope)
 
     persistence_js = f'''
@@ -175,41 +176,58 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
         .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
         .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
+        .control-panel {{ background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif; }}
+        .deploy-btn {{ background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; }}
+        .deploy-btn:disabled {{ background:#555; cursor: not-allowed; }}
     </style>
-    <script>
-        (function() {{
-            setTimeout(function() {{
-                var p = window.parent || window;
-                var loader = p.loadHouseData;
-                var colorizer = p.refreshDropdownColors;
-                var tagger = p.updateTagToggles;
 
-                // Rendered from Python: {ui_scope_json}
-                var scope = {ui_scope_json};
-
-                document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                    if (typeof loader === 'function') loader(sel);
-                    if (typeof colorizer === 'function') colorizer(sel);
-                    if (typeof tagger === 'function') tagger(sel, scope);
-                }});
-            }}, 250);
-        }})();
-    <\/script>
-    '''
-
-    # We use single quotes ' around the onclick to allow double quotes in the JSON
-    html = persistence_js + f'''
-    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
-        <button onclick='(window.parent.deployUpdate || window.deployUpdate)({ui_scope_json})'
-                style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
-            💾 Save & Deploy New File
-        </button>
+    <div class="control-panel">
+        <button id="deploy-btn" class="deploy-btn" disabled>💾 Save & Deploy New File</button>
         <span style="color:#00aaff; font-size:8pt; align-self:center;">
             Scope: <strong style="color:white;">{uiScope}</strong> | Data synced to backend.
         </span>
     </div>
-    '''
 
+    <script>
+    (function() {{
+        // Parse the Python-rendered JSON
+        var scope = {ui_scope_json};
+
+        // Wait a bit to allow page to load
+        setTimeout(function() {{
+            var parentWindow = window.parent || window;
+            var loader = parentWindow.loadHouseData;
+            var colorizer = parentWindow.refreshDropdownColors;
+            var tagger = parentWindow.updateTagToggles;
+
+            // Initialize unit selectors
+            document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                if (typeof loader === 'function') loader(sel);
+                if (typeof colorizer === 'function') colorizer(sel);
+                if (typeof tagger === 'function') tagger(sel, scope);
+            }});
+
+            // Button logic
+            var deployBtn = document.getElementById('deploy-btn');
+
+            function enableDeploy() {{
+                var fn = parentWindow.deployUpdate || window.deployUpdate;
+                if (typeof fn === 'function') {{
+                    deployBtn.disabled = false;
+                    deployBtn.addEventListener('click', function() {{
+                        fn(scope);
+                    }});
+                    clearInterval(interval);
+                }}
+            }}
+
+            // Poll until deployUpdate exists
+            var interval = setInterval(enableDeploy, 100);
+
+        }}, 250);
+    }})();
+    <\/script>
+    '''
     # 4. THE UI: Table Header
     html += f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
