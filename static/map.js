@@ -860,7 +860,7 @@ window.plotL1Progress = function(
     // -------------------------------------------------
     // 4️⃣ FIND EXISTING GHOST FIRST
     // -------------------------------------------------
-    console.log("DEBUG OPACITY", { region, targetTag, completedWeight, totalPossible, finalOpacity });
+    console.log("DEBUG OPACITY", { cleanId, targetTag, completedWeight, totalPossible, finalOpacity });
     const ghostUniqueId = `ghost_${targetTag}_${cleanId}`;
 
     let existingGhost = null;
