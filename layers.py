@@ -159,69 +159,49 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
     # 2. THE INJECTION: JavaScript & CSS (No changes needed here)
-
-    # Ensure uiScope is a valid string/object before this
-    ui_scope_js = json.dumps(uiScope)
-
-    persistence_js = f'''
+    persistence_js = r'''
         <style>
-            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
-            .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
-            .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
-            .control-panel {{ display: flex; gap: 10px; padding: 10px; background: #222; border-top: 1px solid #444; }}
+            .tag-toggle { cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }
+            .tag-active { background: #28a745; color: white; border-color: #1e7e34; }
+            .tag-inactive { background: #444; color: #999; border-color: #333; }
         </style>
-
         <script>
-            (function() {{
-                // Use a constant to avoid accidental reassignment
-                const SCOPE_DATA = {ui_scope_js};
+            (function() {
+                setTimeout(function() {
+                    var loader = parent.loadHouseData;
+                    var colorizer = parent.refreshDropdownColors;
+                    var tagger = parent.updateTagToggles;
 
-                // Wait for DOM and parent functions to be available
-                window.addEventListener('DOMContentLoaded', function() {{
-                    setTimeout(function() {{
-                        // Safely grab parent references
-                        const p = window.parent;
-                        if (!p) return;
-
-                        const loader = p.loadHouseData;
-                        const colorizer = p.refreshDropdownColors;
-                        const tagger = p.updateTagToggles;
-
-                        document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                            try {{
-                                if (typeof loader === 'function') loader(sel);
-                                if (typeof colorizer === 'function') colorizer(sel);
-                                // Corrected the parameter passing here
-                                if (typeof tagger === 'function') tagger(sel, SCOPE_DATA);
-                            }} catch (e) {{
-                                console.error("Error initializing unit selector:", e);
-                            }}
-                        }});
-                    }}, 200); // Increased slightly for slower iframe links
-                }});
-            }})();
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {
+                        if (loader) loader(sel);
+                        if (colorizer) colorizer(sel);
+                        if (tagger) tagger(sel);
+                    });
+                }, 150);
+            })();
         <\/script>
-    '''
+        '''
 
     # 3. THE UI: Control Panel
-    # Note: Removed the "..." from your div and cleaned up the f-string
-    html = f'''
-        {persistence_js}
-        <script>
-            window.UI_SCOPE = {ui_scope_js};
-        </script>
+    html = persistence_js + f'''
+    <script>
+        window.UI_SCOPE = "{uiScope}";
+    </script>
 
-        <div class="control-panel">
-            <button onclick="if(window.parent.deployUpdate) window.parent.deployUpdate(window.UI_SCOPE)"
-                style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
-                💾 Save & Deploy New File
-            </button>
+    <div class="control-panel" style="background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif;">
 
-            <span style="color:#00aaff; font-size:8pt; align-self:center;">
-                Data is stored inside the HTML file itself & synced to backend.
-            </span>
-        </div>
+        <button onclick="parent.deployUpdate(window.UI_SCOPE)"
+            style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">
+            💾 Save & Deploy New File
+        </button>
+
+        <span style="color:#00aaff; font-size:8pt; align-self:center;">
+            Data is stored inside the HTML file itself & synced to backend.
+        </span>
+
+    </div>
     '''
+
     # 4. THE UI: Table Header
     html += f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
