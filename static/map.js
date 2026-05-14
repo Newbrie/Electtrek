@@ -762,7 +762,11 @@ window.plotL1Progress = function(
         // prevent duplicate counting
         if (countedStreets.has(streetKey)) return;
         countedStreets.add(streetKey);
-
+        console.log(
+            "ROW WEIGHT CHECK",
+            row.outerHTML,
+            row.getAttribute('data-street-weight')
+        );
         const streetWeight =
             parseFloat(
                 row.getAttribute('data-street-weight')
