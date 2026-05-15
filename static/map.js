@@ -707,7 +707,9 @@ window.plotL1Progress = function(
     uiScope = 'walk'
 ) {
 
-    console.group(`🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`);
+    console.group(
+        `🏗️ BUCKET-FIRST UPDATE: ${region_id} [${targetTag}]`
+    );
 
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
@@ -717,24 +719,19 @@ window.plotL1Progress = function(
         .toUpperCase();
 
     // -------------------------------------------------
-    // 1️⃣ DERIVE STATE DIRECTLY FROM DOM
+    // 1️⃣ USE DOM AS SOURCE OF TRUTH
     // -------------------------------------------------
 
     const doc =
-    document.getElementById('iframe1')?.contentWindow?.document
-    || document;
+        document.getElementById('iframe1')
+            ?.contentWindow
+            ?.document
+        || document;
 
-    console.log(
-        "REGION DOM SAMPLE:",
-        [...doc.querySelectorAll('.canvass-row')]
-            .slice(0, 10)
-            .map(r => r.getAttribute('data-region'))
-    );
-
+    // all rows for this region
     const rows = doc.querySelectorAll(
         `.canvass-row[data-region="${cleanId}"]`
     );
-
 
     if (!rows.length) {
 
@@ -746,9 +743,14 @@ window.plotL1Progress = function(
         return;
     }
 
+    // -------------------------------------------------
+    // 2️⃣ CALCULATE COMPLETION
+    // -------------------------------------------------
+
     let completedWeight = 0;
     let totalPossible = 0;
 
+    // avoid duplicate street counting
     const countedStreets = new Set();
 
     rows.forEach(row => {
@@ -757,45 +759,54 @@ window.plotL1Progress = function(
             row.getAttribute('data-street');
 
         if (!street) return;
-        const streetKey = `${cleanId}:${street}`;
 
-        // prevent duplicate counting
-        if (countedStreets.has(streetKey)) return;
+        const streetKey =
+            `${cleanId}:${street}`;
+
+        // already processed this street
+        if (countedStreets.has(streetKey)) {
+            return;
+        }
+
         countedStreets.add(streetKey);
-        console.log(
-            "ROW WEIGHT CHECK",
-            row.outerHTML,
-            row.getAttribute('data-street-weight')
-        );
-        const streetWeight =
-            parseFloat(
-                row.getAttribute('data-street-weight')
-            ) || 0;
 
-        totalPossible += streetWeight;
+        // -----------------------------------------
+        // ALL ROWS FOR THIS STREET
+        // -----------------------------------------
 
         const streetRows = doc.querySelectorAll(
             `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
         );
 
-        let hasActiveTag = false;
+        // dynamic street weight
+        const streetWeight = streetRows.length;
 
-        streetRows.forEach(streetRow => {
+        totalPossible += streetWeight;
 
-            const activeTag =
-                streetRow.querySelector(
+        // -----------------------------------------
+        // DETECT ACTIVE TAG
+        // -----------------------------------------
+
+        const hasActiveTag =
+            [...streetRows].some(streetRow => {
+
+                return streetRow.querySelector(
                     `.tag-toggle[data-code="${targetTag}"].tag-active`
                 );
+            });
 
-            if (activeTag) {
-                hasActiveTag = true;
-            }
-        });
+        // -----------------------------------------
+        // ADD STREET CONTRIBUTION
+        // -----------------------------------------
 
         if (hasActiveTag) {
             completedWeight += streetWeight;
         }
     });
+
+    // -------------------------------------------------
+    // 3️⃣ FINAL OPACITY
+    // -------------------------------------------------
 
     const finalOpacity =
         totalPossible > 0
@@ -811,7 +822,7 @@ window.plotL1Progress = function(
     });
 
     // -------------------------------------------------
-    // 2️⃣ FIND TARGET BUCKET
+    // 4️⃣ FIND TARGET BUCKET
     // -------------------------------------------------
 
     const findBucket = () => {
@@ -851,14 +862,16 @@ window.plotL1Progress = function(
 
     if (!targetGroup) {
 
-        console.error("❌ Target Bucket not found.");
+        console.error(
+            "❌ Target Bucket not found."
+        );
 
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 3️⃣ FIND EXISTING GHOST
+    // 5️⃣ FIND EXISTING GHOST
     // -------------------------------------------------
 
     const ghostUniqueId =
@@ -874,7 +887,7 @@ window.plotL1Progress = function(
     });
 
     // -------------------------------------------------
-    // 4️⃣ UPDATE EXISTING GHOST
+    // 6️⃣ UPDATE EXISTING GHOST
     // -------------------------------------------------
 
     if (existingGhost) {
@@ -887,6 +900,7 @@ window.plotL1Progress = function(
             fillOpacity: finalOpacity
         });
 
+        // respect overlay visibility
         if (!activeMap.hasLayer(targetGroup)) {
 
             activeMap.removeLayer(existingGhost);
@@ -901,7 +915,7 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 5️⃣ FIND BLUEPRINT GEOMETRY
+    // 7️⃣ FIND BLUEPRINT GEOMETRY
     // -------------------------------------------------
 
     let blueprintGeometry = null;
@@ -947,7 +961,7 @@ window.plotL1Progress = function(
     }
 
     // -------------------------------------------------
-    // 6️⃣ CREATE NEW GHOST
+    // 8️⃣ CREATE NEW GHOST
     // -------------------------------------------------
 
     console.log(
@@ -979,12 +993,14 @@ window.plotL1Progress = function(
 
     targetGroup.addLayer(newPoly);
 
+    // respect overlay visibility
     if (!activeMap.hasLayer(targetGroup)) {
         activeMap.removeLayer(newPoly);
     }
 
     console.groupEnd();
 };
+
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
 
