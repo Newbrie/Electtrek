@@ -430,43 +430,6 @@ window.updateRowAppearance = function(row, count, max) {
     });
 };
 
-window.updateElectorTag = function(
-    walk,
-    street,
-    unit,
-    code,
-    isActive,
-    uiScope = 'walk'
-) {
-
-    // -------------------------------------------------
-    // 1️⃣ EVENT LOG (SOURCE OF TRUTH)
-    // -------------------------------------------------
-    window.BAKED_DATA ||= [];
-
-    window.BAKED_DATA.push({
-        ts: Date.now(),
-        type: "tag",
-        uiScope,
-        region: walk,
-        street,
-        house: unit,
-        code,
-        value: isActive ? "y" : "n"
-    });
-
-    // -------------------------------------------------
-    // 2️⃣ OPTIONAL PERSIST
-    // -------------------------------------------------
-    saveBakedData?.(window.BAKED_DATA);
-
-    // -------------------------------------------------
-    // 3️⃣ LOG
-    // -------------------------------------------------
-    console.log(
-        `✅ Event: ${walk}/${street}/${unit} tag ${code} = ${isActive ? "y" : "n"}`
-    );
-};
 
 function deriveState(events) {
 
@@ -548,6 +511,7 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     window.BAKED_DATA ||= [];
 
     window.BAKED_DATA.push({
+        type: 'tag',
         ts: Date.now(),
         uiScope,
         region,
