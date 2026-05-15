@@ -701,389 +701,216 @@ window.walkLayersDeep = function(layer, callback) {
     return false;
 };
 
-window.plotL1Progress = function(
+window.plotL1Progress = function (
     region_id,
     targetTag = 'L1',
     uiScope = 'walk'
 ) {
 
-    console.group(
-        `🏗️ DOM-DRIVEN PROGRESS: ${region_id} [${targetTag}]`
-    );
+    console.group(`🏗️ DOM STREET HOUSE MODEL: ${region_id} [${targetTag}]`);
 
-    // -------------------------------------------------
-    // 0️⃣ CORE HANDLES
-    // -------------------------------------------------
+    const activeMap = window.fmap || parent.fmap;
+    const Leaflet = window.L || parent.L;
 
-    const activeMap =
-        window.fmap ||
-        parent.fmap;
-
-    const Leaflet =
-        window.L ||
-        parent.L;
-
-    if (!activeMap || !Leaflet) {
-
-        console.error(
-            "❌ Map handles unavailable"
-        );
-
-        console.groupEnd();
-        return;
-    }
-
-    const cleanId = String(region_id)
-        .trim()
-        .toUpperCase();
-
-    const iframe =
-        document.getElementById('iframe1');
+    const cleanId = String(region_id).trim().toUpperCase();
 
     const doc =
-        iframe?.contentWindow?.document ||
-        document;
+        document.getElementById('iframe1')?.contentWindow?.document
+        || document;
 
-    // -------------------------------------------------
-    // 1️⃣ FIND ALL ROWS FOR REGION
-    // -------------------------------------------------
-
-    const rows = [
-        ...doc.querySelectorAll('.canvass-row')
-    ].filter(row => {
-
-        const rowRegion = String(
-            row.getAttribute('data-region') || ''
-        )
-        .trim()
-        .toUpperCase();
-
-        return rowRegion === cleanId;
-    });
-
-    console.log(
-        `📋 Rows found for ${cleanId}:`,
-        rows.length
+    const rows = doc.querySelectorAll(
+        `.canvass-row[data-region="${cleanId}"]`
     );
 
     if (!rows.length) {
-
-        console.warn(
-            `⚠️ No UI rows found for ${uiScope}:${cleanId}`
-        );
-
+        console.warn(`⚠️ No rows for ${cleanId}`);
         console.groupEnd();
         return;
     }
 
-    // -------------------------------------------------
-    // 2️⃣ BUILD STREET INDEX
-    // -------------------------------------------------
+    let totalHouses = 0;
+    let completedHouses = 0;
 
-    const streets = {};
+    const countedStreets = new Set();
+
+    // -------------------------------------------------
+    // 1️⃣ STREET LOOP
+    // -------------------------------------------------
 
     rows.forEach(row => {
 
-        const street = String(
-            row.getAttribute('data-street') || ''
-        ).trim();
-
+        const street = row.getAttribute('data-street');
         if (!street) return;
 
-        streets[street] ??= [];
+        if (countedStreets.has(street)) return;
+        countedStreets.add(street);
 
-        streets[street].push(row);
+        const streetRows = doc.querySelectorAll(
+            `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
+        );
+
+        // -------------------------------------------------
+        // STREET WEIGHT = NUMBER OF OPTIONS (HOUSE COUNT)
+        // -------------------------------------------------
+
+        const firstRow = streetRows[0];
+        const sel = firstRow?.querySelector('.unit-selector');
+
+        const streetWeight =
+            sel ? sel.options.length : streetRows.length;
+
+        totalHouses += streetWeight;
+
+        // -------------------------------------------------
+        // STREET COMPLETION RULE (MATCH PYTHON LOGIC)
+        // -------------------------------------------------
+        // If ANY row in street has tag active => full street counts
+        // -------------------------------------------------
+
+        let streetIsActive = false;
+
+        streetRows.forEach(r => {
+
+            const active = r.querySelector(
+                `.tag-toggle[data-code="${targetTag}"].tag-active`
+            );
+
+            if (active) {
+                streetIsActive = true;
+            }
+        });
+
+        if (streetIsActive) {
+            completedHouses += streetWeight;
+        }
     });
 
-    console.log(
-        "🛣️ Streets indexed:",
-        Object.keys(streets)
-    );
-
     // -------------------------------------------------
-    // 3️⃣ CALCULATE COMPLETION
-    // -------------------------------------------------
-
-    let completedWeight = 0;
-    let totalPossible = 0;
-
-    Object.entries(streets).forEach(
-        ([street, streetRows]) => {
-
-            // -----------------------------------------
-            // STREET WEIGHT
-            // = NUMBER OF HOUSES
-            // -----------------------------------------
-
-            const streetWeight =
-                streetRows.length;
-
-            totalPossible += streetWeight;
-
-            // -----------------------------------------
-            // STREET TAG STATE
-            // -----------------------------------------
-
-            const hasActiveTag =
-                streetRows.some(row => {
-
-                    return row.querySelector(
-                        `.tag-toggle[data-code="${targetTag}"].tag-active`
-                    );
-                });
-
-            console.log({
-                street,
-                streetWeight,
-                hasActiveTag
-            });
-
-            if (hasActiveTag) {
-                completedWeight += streetWeight;
-            }
-        }
-    );
-
-    // -------------------------------------------------
-    // 4️⃣ FINAL OPACITY
+    // 2️⃣ FINAL OPACITY
     // -------------------------------------------------
 
     const finalOpacity =
-        totalPossible > 0
-            ? (
-                0.8 *
-                (
-                    completedWeight /
-                    totalPossible
-                )
-            )
+        totalHouses > 0
+            ? 0.8 * (completedHouses / totalHouses)
             : 0;
 
-    console.log(
-        "📊 FINAL OPACITY STATE",
-        {
-            cleanId,
-            completedWeight,
-            totalPossible,
-            finalOpacity
-        }
-    );
+    console.log("DEBUG OPACITY (HOUSE-BASED)", {
+        cleanId,
+        totalHouses,
+        completedHouses,
+        finalOpacity
+    });
 
     // -------------------------------------------------
-    // 5️⃣ FIND TARGET BUCKET
+    // 3️⃣ FIND LAYER
     // -------------------------------------------------
 
     const findBucket = () => {
 
+        const iframe =
+            document.getElementById('iframe1');
+
         const mapWin =
-            iframe?.contentWindow ||
-            window;
+            iframe ? iframe.contentWindow : window;
 
         for (const key in mapWin) {
 
-            if (
-                !key.startsWith(
-                    'layer_control_'
-                )
-            ) {
-                continue;
-            }
-
-            const controller =
-                mapWin[key];
+            if (!key.startsWith("layer_control_")) continue;
 
             const layers =
-                controller.overlays ||
-                controller._layers;
-
-            if (!layers) continue;
+                mapWin[key].overlays ||
+                mapWin[key]._layers;
 
             for (const name in layers) {
-
-                if (
-                    name.includes(
-                        `[${targetTag}]`
-                    )
-                ) {
-
-                    return (
-                        layers[name].layer ||
-                        layers[name]
-                    );
+                if (name.includes(`[${targetTag}]`)) {
+                    return layers[name].layer || layers[name];
                 }
             }
         }
-
         return null;
     };
 
     const targetGroup = findBucket();
 
     if (!targetGroup) {
-
-        console.error(
-            `❌ Bucket not found for ${targetTag}`
-        );
-
+        console.error("❌ Bucket not found");
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 6️⃣ FIND EXISTING GHOST
+    // 4️⃣ APPLY / UPDATE GHOST
     // -------------------------------------------------
 
-    const ghostId =
-        `ghost_${targetTag}_${cleanId}`;
+    const ghostId = `ghost_${targetTag}_${cleanId}`;
+    let ghost = null;
 
-    let existingGhost = null;
+    targetGroup.eachLayer(l => {
+        if (l.ghost_id === ghostId) ghost = l;
+    });
 
-    targetGroup.eachLayer(layer => {
+    const apply = (layer) => {
+        layer.setStyle({ fillOpacity: finalOpacity });
+    };
 
-        if (layer.ghost_id === ghostId) {
-            existingGhost = layer;
+    if (ghost) {
+        apply(ghost);
+        console.log(`♻️ Updated ${ghostId}`);
+        console.groupEnd();
+        return;
+    }
+
+    // -------------------------------------------------
+    // 5️⃣ GEOMETRY LOOKUP
+    // -------------------------------------------------
+
+    let geometry = null;
+
+    walkLayersDeep(activeMap, l => {
+
+        const p = l.feature?.properties;
+        if (!p) return;
+
+        const id = String(p.region_id ?? p.nid ?? p.id ?? '')
+            .trim()
+            .toUpperCase();
+
+        if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
+            geometry = l.feature.geometry;
+            return true;
         }
     });
 
-    // -------------------------------------------------
-    // 7️⃣ UPDATE EXISTING GHOST
-    // -------------------------------------------------
-
-    if (existingGhost) {
-
-        console.log(
-            `♻️ Updating ghost ${ghostId}`
-        );
-
-        existingGhost.setStyle({
-            fillOpacity: finalOpacity
-        });
-
-        // Respect overlay visibility
-
-        if (
-            !activeMap.hasLayer(targetGroup)
-        ) {
-
-            activeMap.removeLayer(
-                existingGhost
-            );
-
-        } else if (
-            !activeMap.hasLayer(
-                existingGhost
-            )
-        ) {
-
-            existingGhost.addTo(
-                activeMap
-            );
-        }
-
+    if (!geometry) {
+        console.error("❌ Missing geometry");
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 8️⃣ FIND BLUEPRINT GEOMETRY
+    // 6️⃣ CREATE GHOST
     // -------------------------------------------------
 
-    let blueprintGeometry = null;
-
-    walkLayersDeep(
-        activeMap,
-        layer => {
-
-            const props =
-                layer.feature?.properties;
-
-            if (!props) return;
-
-            const rawId =
-                props.region_id ??
-                props.nid ??
-                props.id;
-
-            if (rawId == null) return;
-
-            const layerId =
-                String(rawId)
-                    .trim()
-                    .toUpperCase();
-
-            if (
-                layerId === cleanId &&
-                !layer.is_ghost &&
-                layer.feature?.geometry
-            ) {
-
-                blueprintGeometry =
-                    layer.feature.geometry;
-
-                return true;
-            }
+    const poly = Leaflet.geoJSON(geometry, {
+        pane: 'overlayPane',
+        style: {
+            color: "transparent",
+            fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
+            fillOpacity: finalOpacity,
+            interactive: false
         }
-    );
+    });
 
-    if (!blueprintGeometry) {
+    poly.is_ghost = true;
+    poly.ghost_id = ghostId;
 
-        console.error(
-            `❌ Blueprint geometry not found for ${cleanId}`
-        );
+    targetGroup.addLayer(poly);
 
-        console.groupEnd();
-        return;
+    if (!activeMap.hasLayer(targetGroup)) {
+        activeMap.removeLayer(poly);
     }
 
-    // -------------------------------------------------
-    // 9️⃣ CREATE NEW GHOST
-    // -------------------------------------------------
-
-    console.log(
-        `✨ Creating ghost ${ghostId}`
-    );
-
-    const newGhost =
-        Leaflet.geoJSON(
-            blueprintGeometry,
-            {
-                pane: 'overlayPane',
-
-                style: {
-                    color: 'transparent',
-
-                    fillColor:
-                        targetTag.startsWith('L')
-                            ? '#333'
-                            : '#800080',
-
-                    fillOpacity:
-                        finalOpacity,
-
-                    interactive: false
-                }
-            }
-        );
-
-    newGhost.is_ghost = true;
-    newGhost.ghost_id = ghostId;
-
-    targetGroup.addLayer(newGhost);
-
-    // Respect overlay visibility
-
-    if (
-        !activeMap.hasLayer(targetGroup)
-    ) {
-
-        activeMap.removeLayer(
-            newGhost
-        );
-    }
-
-    console.log(
-        `✅ Ghost created with opacity ${finalOpacity}`
-    );
+    console.log(`✨ Created ${ghostId}`);
 
     console.groupEnd();
 };
