@@ -172,14 +172,14 @@ const addMapLogo = (map) => {
                       if (firstRow) {
                           const region_id = firstRow.getAttribute('data-region');
 
-                          if (window.plotL1Progress) {
+                          if (window.plotTaskProgress) {
                             // 1. Pull keys dynamically from your global config
                             const tagsToUpdate = Object.keys(window.task_tags || {});
 
                             // 2. Refresh every ghost layer for this specific walk
                             // The prefix guard inside the function will handle skipping M-tags automatically
                             tagsToUpdate.forEach(tagCode => {
-                                window.plotL1Progress(region_id, tagCode,'walk');
+                                window.plotTaskProgress(region_id, tagCode,'walk');
                             });
 
                               console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
@@ -202,11 +202,11 @@ const addMapLogo = (map) => {
                           // Check if we have multiple tags to initialize
                           if (tagCodes.length > 0) {
                               tagCodes.forEach(code => {
-                                  window.plotL1Progress(region_id, code,'walk');
+                                  window.plotTaskProgress(region_id, code,'walk');
                               });
                           } else {
                               // Fallback to L1 if no registry found
-                              window.plotL1Progress(region_id, 'L1','walk');
+                              window.plotTaskProgress(region_id, 'L1','walk');
                           }
                       });
                   }
@@ -565,7 +565,7 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     // -----------------------------
     // VISUAL UPDATE (derived)
     // -----------------------------
-    plotL1Progress?.(region, code, uiScope);
+    plotTaskProgress?.(region, code, uiScope);
 };
 
 window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
@@ -701,7 +701,7 @@ window.walkLayersDeep = function(layer, callback) {
     return false;
 };
 
-window.plotL1Progress = function (
+window.plotTaskProgress = function (
     region_id,
     targetTag = 'L1',
     uiScope = 'walk'
