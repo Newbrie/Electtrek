@@ -104,6 +104,7 @@ const addMapLogo = (map) => {
      try {
          if (!Array.isArray(data)) data = [];
          const dataString = JSON.stringify(data);
+         const uiScope = 'walk';
 
          // 1. Keep the local backup (The Sticky Note)
          localStorage.setItem('CANVASS_BAKED_DATA', dataString);
@@ -113,9 +114,37 @@ const addMapLogo = (map) => {
          // 2. THE POSTMAN: Send to Python (The File Creator)
          // We only do this if we want a live-sync,
          // otherwise, use the 'Save & Deploy' button logic.
-         if (typeof window.parent.deployUpdate === 'function') {
-              window.parent.deployUpdate('walk');
-         }
+         const eventLog = window.BAKED_DATA || [];
+
+         const unsynced = eventLog.filter(e => !e.synced);
+
+         if (unsynced.length === 0) return;
+
+         fetch('/upload_data', {
+             method: 'POST',
+             headers: {'Content-Type': 'application/json'},
+             body: JSON.stringify({
+                 events: unsynced
+             })
+         }).then(res => {
+
+             if (res.ok) {
+
+                 // mark only uploaded events as synced
+                 unsynced.forEach(e => {
+                     e.synced = true;
+                 });
+
+                 // persist locally (important!)
+                 localStorage.setItem(
+                     'CANVASS_BAKED_DATA',
+                     JSON.stringify(window.BAKED_DATA)
+                 );
+
+                 console.log("🚀 Sync Complete. Events marked as synced.");
+             }
+         });
+
 
      } catch (e) {
          console.error("❌ Failed to save:", e);
@@ -1023,41 +1052,6 @@ async function getVIData(path) {
     });
 };
 
-
-window.deployUpdate = function(uiScope = "walk") {
-
-    const eventLog = window.BAKED_DATA || [];
-
-    const unsynced = eventLog.filter(e => !e.synced);
-
-    if (unsynced.length === 0) return;
-
-    fetch('/upload_data', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            scope: uiScope,
-            events: unsynced
-        })
-    }).then(res => {
-
-        if (res.ok) {
-
-            // mark only uploaded events as synced
-            unsynced.forEach(e => {
-                e.synced = true;
-            });
-
-            // persist locally (important!)
-            localStorage.setItem(
-                'CANVASS_BAKED_DATA',
-                JSON.stringify(window.BAKED_DATA)
-            );
-
-            console.log("🚀 Sync Complete. Events marked as synced.");
-        }
-    });
-};
 
 function displayMap (url) {
 		window.location.href = url;

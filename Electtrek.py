@@ -3753,29 +3753,49 @@ from baked_data import baked_data  # Import the instance you created
 @login_required
 def upload_data():
     try:
-        # 1. Parse the JSON sent from the 'Deploy' button
         new_data = request.get_json()
 
         if new_data is None:
-            return jsonify({"status": "error", "message": "No JSON data received"}), 400
+            return jsonify({
+                "status": "error",
+                "message": "No JSON data received"
+            }), 400
 
         print("Route/upload_data : Received", new_data)
 
-        # 2. Use your manager to persist it to the file
-        baked_data.save(new_data)
+        # -----------------------------
+        # NORMALISE INPUT SHAPE
+        # -----------------------------
+        scope = new_data.get('scope', 'walk')
+        events = new_data.get('events', [])
 
-        # 3. Return success to the browser
+        if not isinstance(events, list):
+            return jsonify({
+                "status": "error",
+                "message": "Events must be a list"
+            }), 400
+
+        # -----------------------------
+        # APPEND ONLY (event store semantics)
+        # -----------------------------
+        baked_data.save({
+            "scope": scope,
+            "events": events
+        })
+
         return jsonify({
             "status": "success",
-            "message": "BAKED_DATA successfully deployed to server"
+            "message": "Events appended successfully"
         }), 200
 
     except Exception as e:
-        # Log the error on the server console for debugging
         print(f"🚨 Deployment Error: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
-
+        
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():

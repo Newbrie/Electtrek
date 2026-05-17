@@ -200,23 +200,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 if (typeof tagger === 'function') tagger(sel, scope);
             }});
 
-            // Button logic
-            var deployBtn = document.getElementById('deploy-btn');
-
-            function enableDeploy() {{
-                var fn = parentWindow.deployUpdate || window.deployUpdate;
-                if (typeof fn === 'function') {{
-                    deployBtn.disabled = false;
-                    deployBtn.addEventListener('click', function() {{
-                        fn(scope);
-                    }});
-                    clearInterval(interval);
-                }}
-            }}
-
-            // Poll until deployUpdate exists
-            var interval = setInterval(enableDeploy, 100);
-
         }}, 250);
     }})();
     <\/script>

@@ -43,7 +43,7 @@ class BakedDataManager:
     import os
 
     def save(self, incoming_payload):
-        def add_tag(df, indexes, code, enabled=True):
+        def add_task_tag(df, indexes, code, enabled=True):
             if len(indexes) == 0:
                 return
 
@@ -141,7 +141,7 @@ class BakedDataManager:
             # -----------------------------
             if ev_type in ["tag", "elector_tag"]:
 
-                add_tag(
+                add_task_tag(
                     df,
                     indexes,
                     ev.get('code'),
