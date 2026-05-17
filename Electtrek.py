@@ -3766,7 +3766,7 @@ def upload_data():
         # -----------------------------
         # NORMALISE INPUT SHAPE
         # -----------------------------
-        scope = new_data.get('scope', 'walk')
+
         events = new_data.get('events', [])
 
         if not isinstance(events, list):
@@ -3779,7 +3779,6 @@ def upload_data():
         # APPEND ONLY (event store semantics)
         # -----------------------------
         baked_data.save({
-            "scope": scope,
             "events": events
         })
 
@@ -3795,7 +3794,7 @@ def upload_data():
             "message": str(e)
         }), 500
 
-        
+
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():

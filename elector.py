@@ -28,6 +28,8 @@ shapecolumn = {
     "nation": "Nation",
     "country": "Country"
 }
+
+
 def resolve_targets(df, uiScope, region_value, street, house):
 
     scope_col = shapecolumn.get(uiScope)
@@ -127,62 +129,136 @@ class ElectorManager:
 
 
     def _inject_baked_data(self, specific_ename=None):
-        from baked_data import baked_data
 
-        all_baked = baked_data.load()
+    from baked_data import baked_data
 
-        if not all_baked:
+    all_events = baked_data.load()
+
+    if not all_events:
+        return
+
+    targets = (
+        [specific_ename]
+        if specific_ename and specific_ename in self._elections
+        else self._elections.keys()
+    )
+
+    # --------------------------------
+    # Helper: household tag mutation
+    # --------------------------------
+    def add_task_tag(df, indexes, code, enabled=True):
+
+        if len(indexes) == 0 or not code:
             return
 
-        targets = (
-            [specific_ename]
-            if specific_ename and specific_ename in self._elections
-            else self._elections.keys()
-        )
+        # Canonical household elector
+        idx = indexes[0]
 
-        for ename in targets:
+        existing_raw = str(df.at[idx, 'Tags']).strip()
 
-            df = self._elections[ename].copy()
+        if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
+            existing = set()
+        else:
+            existing = {
+                t.strip()
+                for t in existing_raw.split(',')
+                if t.strip()
+            }
 
-            # Iterate mutation specs
-        for uiScope, scoped_data in all_baked.items():
+        if enabled:
+            existing.add(code)
+        else:
+            existing.discard(code)
 
-            if not isinstance(scoped_data, dict):
+        df.at[idx, 'Tags'] = ", ".join(sorted(existing))
+
+    # --------------------------------
+    # Helper: household VI assignment
+    # --------------------------------
+    def add_household_vi(df, indexes, vi=None, votes=None):
+
+        if len(indexes) == 0:
+            return
+
+        try:
+            vote_count = int(votes or 0)
+        except:
+            vote_count = 0
+
+        # Only apply to first N electors
+        target_indexes = indexes[:vote_count]
+
+        for idx in indexes:
+
+            if idx in target_indexes:
+                if vi is not None:
+                    df.at[idx, 'VI'] = vi
+            else:
+                # Clear VI for remaining household electors
+                df.at[idx, 'VI'] = ''
+
+        # Store household vote count on canonical elector
+        df.at[indexes[0], 'Votes'] = str(vote_count)
+
+    # --------------------------------
+    # Replay events into each election
+    # --------------------------------
+    for ename in targets:
+
+        df = self._elections[ename].copy()
+
+        for ev in all_events:
+
+            if not isinstance(ev, dict):
                 continue
 
-            print("DEBUG TYPE:", type(scoped_data), scoped_data)
-            for walk, streets in scoped_data.items():
+            uiScope = ev.get('uiScope', 'walk')
+            region = ev.get('region')
+            street = ev.get('street')
+            house = ev.get('house')
 
-                if not isinstance(streets, dict):
-                    continue
-                print("DEBUG TYPE:", type(streets), streets)
-                for street, houses in streets.items():
-                    if not isinstance(houses, dict):
-                        continue
-                    print("DEBUG TYPE:", type(houses), houses)
-                    for house, house_info in houses.items():
+            if not all([region, street, house]):
+                continue
 
-                        if house in ['street_weight', 'ts']:
-                            continue
+            indexes = resolve_targets(
+                df,
+                uiScope,
+                region,
+                street,
+                house
+            )
 
-                        if not isinstance(house_info, dict):
-                            continue
+            if len(indexes) == 0:
+                continue
 
-                        tags = house_info.get('tags', {})
+            ev_type = ev.get('type')
 
-                        if not tags:
-                            continue
+            # -----------------------------
+            # TAG EVENTS
+            # -----------------------------
+            if ev_type in ['tag', 'elector_tag']:
 
-                        indexes = resolve_targets(
-                            df,
-                            walk,
-                            street,
-                            house
-                        )
+                add_task_tag(
+                    df,
+                    indexes,
+                    ev.get('code'),
+                    ev.get('value') == 'y'
+                )
 
-                        apply_mutation(df, indexes, tags)
+            # -----------------------------
+            # VI EVENTS
+            # -----------------------------
+            elif ev_type == 'vi':
 
-            self._elections[ename] = df
+                add_household_vi(
+                    df,
+                    indexes,
+                    ev.get('value'),
+                    ev.get('votes')
+                )
+
+        # Replace projected election
+        self._elections[ename] = df
 
 
     def refresh_baked_data(self):
