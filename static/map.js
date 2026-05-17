@@ -144,7 +144,7 @@ const addMapLogo = (map) => {
                  console.log("🚀 Sync Complete. Events marked as synced.");
              }
 
-
+          });
      } catch (e) {
          console.error("❌ Failed to save:", e);
      }
