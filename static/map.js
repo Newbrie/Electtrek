@@ -143,7 +143,6 @@ const addMapLogo = (map) => {
 
                  console.log("🚀 Sync Complete. Events marked as synced.");
              }
-         });
 
 
      } catch (e) {
@@ -951,7 +950,7 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         house,
         code,
         vi,
-        votes: count
+        votes: count,
         synced: false   // 👈 ADD THIS
     });
 
@@ -1051,6 +1050,7 @@ async function getVIData(path) {
         console.error("Error:", error);
     });
 };
+
 
 
 function displayMap (url) {
