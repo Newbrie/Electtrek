@@ -28,28 +28,35 @@ shapecolumn = {
     "nation": "Nation",
     "country": "Country"
 }
+def resolve_targets(df, uiScope, region_value, street, house):
 
-def resolve_targets(df, walk, street, house):
-    """
-    Resolve a walk/street/house mutation specification
-    into matching elector rows.
-    """
+    scope_col = shapecolumn.get(uiScope)
 
-    street_norm = state.normalname(street).upper()
-    house_norm = str(house).strip().upper()
+    if not scope_col:
+        return df.iloc[0:0].index
+
+    region_match = (
+        df[scope_col]
+        .astype(str)
+        .apply(state.normalname)
+        .str.upper()
+        == state.normalname(region_value).upper()
+    )
 
     street_match = (
         df['StreetName']
         .astype(str)
-        .str.strip()
+        .apply(state.normalname)
         .str.upper()
-        == street_norm
+        == state.normalname(street).upper()
     )
+
+    house_norm = state.normalname(str(house)).upper()
 
     house_num_match = (
         df['AddressNumber']
         .astype(str)
-        .str.strip()
+        .apply(state.normalname)
         .str.upper()
         == house_norm
     )
@@ -62,17 +69,8 @@ def resolve_targets(df, walk, street, house):
         == house_norm
     )
 
-    # Optional walk narrowing
-    walk_match = (
-        df['WalkName']
-        .astype(str)
-        .str.strip()
-        .str.upper()
-        == str(walk).strip().upper()
-    )
-
     return df[
-        walk_match &
+        region_match &
         street_match &
         (house_num_match | house_name_match)
     ].index
@@ -334,6 +332,34 @@ class ElectorManager:
 
             return deleted_count
 
+    def add_household_vi(df, indexes, vi, votes):
+
+        if len(indexes) == 0:
+            return
+
+        # Normalize vote count
+        try:
+            vote_count = int(votes or 0)
+        except (TypeError, ValueError):
+            vote_count = 0
+
+        # Clamp to available electors
+        vote_count = max(0, min(vote_count, len(indexes)))
+
+        # ---------------------------------
+        # Clear all existing household VI
+        # ---------------------------------
+        for idx in indexes:
+
+            df.at[idx, 'VI'] = ''
+            df.at[idx, 'Votes'] = str(vote_count)
+
+        # ---------------------------------
+        # Apply VI to first N electors
+        # ---------------------------------
+        for idx in indexes[:vote_count]:
+
+            df.at[idx, 'VI'] = vi
 
     def add_or_update(self, election, df: pd.DataFrame):
         with _lock:

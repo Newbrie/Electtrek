@@ -518,7 +518,8 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         street,
         house,
         code,
-        value: newValue
+        value: newValue,
+        synced: false   // 👈 ADD THIS
     });
 
     // -----------------------------
@@ -912,16 +913,17 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     // 3️⃣ EVENT LOG (SOURCE OF TRUTH)
     // -------------------------------------------------
     window.BAKED_DATA ||= [];
-
     window.BAKED_DATA.push({
+        type: 'vi',
         ts: Date.now(),
-        type: "vote",
         uiScope,
         region,
         street,
         house,
+        code,
         vi,
         votes: count
+        synced: false   // 👈 ADD THIS
     });
 
     console.log(
@@ -1023,23 +1025,36 @@ async function getVIData(path) {
 
 
 window.deployUpdate = function(uiScope = "walk") {
+
     const eventLog = window.BAKED_DATA || [];
 
-    if (eventLog.length === 0) return;
+    const unsynced = eventLog.filter(e => !e.synced);
+
+    if (unsynced.length === 0) return;
 
     fetch('/upload_data', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             scope: uiScope,
-            events: eventLog
+            events: unsynced
         })
     }).then(res => {
+
         if (res.ok) {
-            // SUCCESS: Clear the events so we don't re-upload them next time
-            window.BAKED_DATA = [];
-            localStorage.removeItem('CANVASS_BAKED_DATA');
-            console.log("🚀 Sync Complete. Event log cleared.");
+
+            // mark only uploaded events as synced
+            unsynced.forEach(e => {
+                e.synced = true;
+            });
+
+            // persist locally (important!)
+            localStorage.setItem(
+                'CANVASS_BAKED_DATA',
+                JSON.stringify(window.BAKED_DATA)
+            );
+
+            console.log("🚀 Sync Complete. Events marked as synced.");
         }
     });
 };

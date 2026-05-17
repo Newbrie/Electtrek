@@ -43,6 +43,41 @@ class BakedDataManager:
     import os
 
     def save(self, incoming_payload):
+        def add_tag(df, indexes, code, enabled=True):
+            if len(indexes) == 0:
+                return
+
+            # Canonical household elector
+            idx = indexes[0]
+
+            existing_raw = str(df.at[idx, 'Tags']).strip()
+
+            if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
+                existing = set()
+            else:
+                existing = {
+                    t.strip()
+                    for t in existing_raw.split(',')
+                    if t.strip()
+                }
+
+            if enabled:
+                existing.add(code)
+            else:
+                existing.discard(code)
+
+            df.at[idx, 'Tags'] = ", ".join(sorted(existing))
+
+        def add_household_vi(df, indexes, vi=None, votes=None):
+
+            for idx in indexes:
+
+                if vi is not None:
+                    df.at[idx, 'VI'] = vi
+
+                if votes is not None:
+                    df.at[idx, 'Votes'] = str(votes)
+
         filepath = "baked_data.json"
 
         # 1. Load existing file so we don't lose old data
@@ -106,30 +141,23 @@ class BakedDataManager:
             # -----------------------------
             if ev_type in ["tag", "elector_tag"]:
 
-                code = ev.get("code")
-                value = ev.get("value", "n")
-
-                if code:
-                    house["tags"][code] = value
-
+                add_tag(
+                    df,
+                    indexes,
+                    ev.get('code'),
+                    ev.get('value') == 'y'
+                )
             # -----------------------------
             # VI EVENTS
             # -----------------------------
-            elif ev_type == "vi":
+            elif ev_type == 'vi':
 
-                house["vi"] = ev.get("value", "")
-
-            # -----------------------------
-            # VOTE EVENTS
-            # -----------------------------
-            elif ev_type == "votes":
-
-                house["votes"] = str(ev.get("value", "0"))
-
-            # -----------------------------
-            # TIMESTAMP
-            # -----------------------------
-            house["ts"] = ev.get("ts")
+                add_household_vi(
+                    df,
+                    indexes,
+                    ev.get('value', ''),
+                    ev.get('votes', 0)
+                )
 
         # 4. Write the merged result back to disk
         with open(filepath, 'w') as f:
