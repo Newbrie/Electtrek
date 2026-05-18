@@ -499,7 +499,6 @@ function deriveState(events) {
 }
 
 window.updateTagToggles = function(selector, uiScope = 'walk') {
-
     const row = selector.closest('.canvass-row') || selector.closest('tr');
     if (!row) return;
 
@@ -507,29 +506,55 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     const street = row.dataset.street;
     const house = selector.value;
 
-    // -----------------------------
-    // EVENT SOURCE (NOT STATE)
-    // -----------------------------
+    // 1. EXTRACT BASELINE TRUTH FROM THE ELECTOR ROW DATA
+    // Assuming your row or selector exposes the elector's baseline tag field.
+    // Adjust 'row.dataset.tags' or 'selector.dataset.baselineTags' depending on your HTML!
+    const baselineTagsString = row.dataset.tags || '';
+
+    // Parse the baseline (e.g., "L1,L2" becomes a Set or an array of active codes)
+    const baselineActiveCodes = baselineTagsString.split(',')
+        .map(t => t.trim().toUpperCase())
+        .filter(Boolean);
+
+    // Initialize our tracking truth map with the baseline defaults ('y')
+    const finalComputedTags = {};
+    baselineActiveCodes.forEach(code => {
+        finalComputedTags[code] = 'y';
+    });
+
+    // 2. UPFRONT FILTERING: Extract only event logs relevant to this specific house
     const events = window.BAKED_DATA || [];
+    const relevantEvents = events.filter(e =>
+        e.type === 'tag' &&
+        e.uiScope === uiScope &&
+        e.region === region &&
+        e.street === street &&
+        e.house === house
+    );
 
-    const state = deriveState(events);
+    // 3. LAYER LOG OVERRIDES: Chronologically apply log updates over the baseline
+    relevantEvents.forEach(e => {
+        if (e.code) {
+            finalComputedTags[e.code.toUpperCase()] = e.value; // Can overwrite baseline 'y' with 'n', or add new ones
+        }
+    });
 
-    const houseState =
-        state?.[uiScope]?.[region]?.[street]?.[house];
-
-    const tags = houseState?.tags || {};
-
-    // -----------------------------
-    // UPDATE UI FROM DERIVED STATE
-    // -----------------------------
+    // 4. PRECISION UI TARGETING
     row.querySelectorAll('.tag-toggle').forEach(span => {
+        const code = span.dataset.code ? span.dataset.code.toUpperCase() : '';
+        if (!code) return;
 
-        const code = span.dataset.code;
-        const val = tags[code] || 'n';
+        // If it's not in the baseline AND not in the logs, it defaults to 'n'
+        // But we guard it to prevent generating unlogged ghost layers for the map!
+        const hasHistory = finalComputedTags.hasOwnProperty(code);
+        const val = hasHistory ? finalComputedTags[code] : 'n';
 
-        span.classList.toggle('tag-active', val === 'y');
-        span.classList.toggle('tag-inactive', val !== 'y');
-        span.innerText = val;
+        // PERFORMANCE GUARD: Only touch the DOM if a visual state change is mandatory
+        if (span.innerText !== val) {
+            span.classList.toggle('tag-active', val === 'y');
+            span.classList.toggle('tag-inactive', val !== 'y');
+            span.innerText = val;
+        }
     });
 };
 
