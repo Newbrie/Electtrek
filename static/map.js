@@ -974,6 +974,8 @@ window.plotTaskProgress = function (
         if (!p) return;
 
         const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
+        // 💡 QUICK CHECK: Print every comparison to the console
+        console.log(`🤖 Comparing -> Map Layer ID: "${id}" | Searching For: "${cleanId}"`);
         if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
             geometry = l.feature.geometry;
             return true;
