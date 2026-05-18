@@ -547,6 +547,79 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
+window.replayLocalBakedDataForPopup = function(popupDocument) {
+    const doc = popupDocument || document;
+
+    // 1. Dynamically read the environment from the first row in the popup
+    const firstRow = doc.querySelector('.canvass-row');
+    if (!firstRow) {
+        console.warn("⚠️ [REPLAY] Aborting. No '.canvass-row' elements found in target popup DOM.");
+        return;
+    }
+
+    const currentRegion = String(firstRow.dataset.region || '').trim().toUpperCase();
+    const currentScope = firstRow.dataset.scope || 'walk';
+
+    if (!currentRegion) {
+        console.warn("⚠️ [REPLAY] Aborting. Could not auto-detect data-region from popup elements.");
+        return;
+    }
+
+    // 2. Fetch the transaction logs from the global storage engine
+    const parentWindow = window.parent || window;
+    if (typeof parentWindow.getBakedData !== 'function') {
+        console.warn("⚠️ [REPLAY] Aborting. parentWindow.getBakedData function is not available.");
+        return;
+    }
+
+    const localLogs = parentWindow.getBakedData() || [];
+    console.log(`🔄 [POPUP REPLAY] Scanning local transaction ledger for Region: ${currentRegion} [Scope: ${currentScope}]`);
+
+    // 3. Scan ledger to paint overrides onto the HTML view
+    localLogs.forEach(ev => {
+        if (!ev) return;
+
+        // Guard: Verify event belongs to this scope and region
+        if (ev.uiScope !== currentScope) return;
+        if (String(ev.region).trim().toUpperCase() !== currentRegion) return;
+
+        // Locate targeted street row in this specific popup document
+        const targetRow = doc.querySelector(`.canvass-row[data-street="${ev.street}"]`);
+        if (!targetRow) return;
+
+        // -------------------------------------------------
+        // CASE A: Replay Tag Overrides ('y' or 'n')
+        // -------------------------------------------------
+        if (ev.type === 'tag') {
+            const btn = targetRow.querySelector(`.tag-toggle[data-code="${ev.code}"]`);
+            if (btn) {
+                const isActive = (ev.value === 'y');
+                btn.classList.toggle('tag-active', isActive);
+                btn.classList.toggle('tag-inactive', !isActive);
+                btn.innerText = ev.value;
+                console.log(`   ⚡ [REPLAY TAG] Applied: ${ev.street} | Code: ${ev.code} -> ${ev.value}`);
+            }
+        }
+
+        // -------------------------------------------------
+        // CASE B: Replay Voting Intentions (VI)
+        // -------------------------------------------------
+        else if (ev.type === 'vi') {
+            const viSel = targetRow.querySelector('.vi-selector');
+            if (viSel) {
+                viSel.value = ev.value || '';
+            }
+            const voteBtn = targetRow.querySelector('.vote-btn');
+            if (voteBtn && ev.votes !== undefined) {
+                const maxVotes = voteBtn.getAttribute('data-max') || 1;
+                voteBtn.setAttribute('data-count', ev.votes);
+                voteBtn.innerText = `${ev.votes}/${maxVotes}`;
+                console.log(`   ⚡ [REPLAY VI] Applied: ${ev.street} -> ${ev.votes} Votes`);
+            }
+        }
+    });
+};
+
 window.handleTagClick = function(span, uiScope = 'walk') {
     const isInactive = span.classList.contains('tag-inactive');
     const newValue = isInactive ? 'y' : 'n';

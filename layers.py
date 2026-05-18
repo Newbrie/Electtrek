@@ -152,17 +152,20 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 
 
 def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk"):
+    import json
     from state import VID
 
     # 1. Prepare dynamic tag headers
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-
     # Ensure ui_scope_json is strictly formatted
     ui_scope_json = json.dumps(uiScope)
     print(f" BuildStreetList_html UIScope: {ui_scope_json}")
 
+    # ------------------------------------------------------------------
+    # 2. DELEGATED FRONTEND LIFECYCLE INITIALIZER
+    # ------------------------------------------------------------------
     persistence_js = f'''
     <style>
         .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
@@ -182,28 +185,38 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     <script>
     (function() {{
-        // Parse the Python-rendered JSON
         var scope = {ui_scope_json};
 
-        // Wait a bit to allow page to load
         setTimeout(function() {{
             var parentWindow = window.parent || window;
             var loader = parentWindow.loadHouseData;
             var colorizer = parentWindow.refreshDropdownColors;
             var tagger = parentWindow.updateTagToggles;
+            var replayer = parentWindow.replayLocalBakedDataForPopup; // <-- Handshake with map.js module
 
-            // Initialize unit selectors
+            // 1. Initialize structural layout baselines
             document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                console.log('Deploying scope:', scope);
                 if (typeof loader === 'function') loader(sel);
                 if (typeof colorizer === 'function') colorizer(sel);
                 if (typeof tagger === 'function') tagger(sel, scope);
             }});
 
+            // 2. Call external map.js replayer module, passing this frame's document
+            if (typeof replayer === 'function') {{
+                try {{
+                    replayer(document);
+                }} catch (err) {{
+                    console.error("❌ Error executing map.js replay ledger module:", err);
+                }}
+            }} else {{
+                console.warn("⚠️ parentWindow.replayLocalBakedDataForPopup is unavailable or missing in map.js scope.");
+            }}
+
         }}, 250);
-    }})();
+    }}})();
     <\/script>
     '''
+
     # 4. THE UI: Table Header
     html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
@@ -224,10 +237,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     '''
 
     # 5. Build Rows
-
     for i, (street_name, data) in enumerate(street_stats.items()):
-        # --- NEW: Get the Polling District (PD) for this street ---
-        # We look up the first occurrence of this street in the dataframe to get its PD
         try:
             pd_code = streets_df[streets_df['StreetName'] == street_name]['PD'].iloc[0]
         except (KeyError, IndexError):
@@ -239,18 +249,13 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
 
-        # --- 5. Build Rows ---
-        # --- 5. Build Rows ---
         tags = data.get("tags", {})
 
-        # 🔍 DEBUG LOG: Check if Python actually sees the baked 'y'
         if tags:
             print(f"DEBUG [HTML Gen]: Street: {street_name} | Tags Found: {tags}")
 
         tag_cells = ""
         for code in sorted_task_codes:
-            # Check if this specific code is 'y' for this street
-            # Logic check: ensures case-insensitive matching
             is_active = str(tags.get(code, 'n')).lower() == 'y'
             status_class = "tag-active" if is_active else "tag-inactive"
             display_char = "y" if is_active else "n"
@@ -264,7 +269,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                         {display_char}
                     </span>
                 </td>'''
-
 
         # Unit dropdown
         unit_dropdown = f'''
@@ -296,8 +300,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
-        # --- MODIFIED: Added data-district to the tr tag ---
-
         html += f'''
         <tr class="{row_class} canvass-row"
             data-scope="{uiScope}"
@@ -320,10 +322,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     html += "</tbody></table></div>"
     return html
-#---------------------
-# Helper for node electors
-# ------------------------
-
 
 
 def preprocess_streets(df, task_tags=None):
