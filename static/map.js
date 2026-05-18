@@ -968,25 +968,28 @@ window.plotTaskProgress = function (
     // -------------------------------------------------
     // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
     // -------------------------------------------------
-    let geometry = null;
-    walkLayersDeep(activeMap, l => {
-        const p = l.feature?.properties;
-        if (!p) return;
+    // -------------------------------------------------
+        // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
+        // -------------------------------------------------
+        let geometry = null;
+        walkLayersDeep(activeMap, l => {
+            const p = l.feature?.properties;
+            if (!p) return;
 
-        const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
-        // 💡 QUICK CHECK: Print every comparison to the console
-        console.log(`🤖 Comparing -> Map Layer ID: "${id}" | Searching For: "${cleanId}"`);
-        if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
-            geometry = l.feature.geometry;
-            return true;
+            const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
+            if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
+                geometry = l.feature.geometry;
+                return true;
+            }
+        });
+
+        // 💡 FIXED: Demoted from an execution-stopping Error to a silent/logged warning
+        if (!geometry) {
+            console.log(`ℹ️ Region ID: ${cleanId} not found so belongs to a different ward layer context. Skipping layout plot.`);
+            console.groupEnd();
+            return; // Exit safely, letting the map load the current ward's valid data
         }
-    });
 
-    if (!geometry) {
-        console.error(`❌ Geometry lookup failed for Region ID: ${cleanId}`);
-        console.groupEnd();
-        return;
-    }
 
     // -------------------------------------------------
     // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
