@@ -781,17 +781,36 @@ function deriveState(events) {
 }
 
 window.walkLayersDeep = function(layer, callback) {
-    if (!layer) return;
+    if (!layer) return false;
 
-    // Execute callback.
-    // If the callback returns 'true', we stop recursing (Short-circuit)
+    // 1. EARLY ESCAPE: Skip internal structural layers or layers belonging to other regions
+    // If the layer has an options block, check if it matches the domain intent.
+    if (layer.options) {
+        // Skip pane layout containers, pane overlays, tile layers, and controls
+        if (layer.options.pane && layer.options.pane !== 'overlayPane') {
+            return false;
+        }
+
+        // OPTIONAL SPEED BOOST: If you have a target region you are searching for,
+        // and this layer explicitly identifies as a DIFFERENT region, abort immediately.
+        // e.g., if (layer.options.id && layer.options.id !== currentSearchTarget) return false;
+    }
+
+    // 2. Execute callback on current node
     const stop = callback(layer);
     if (stop === true) return true;
 
+    // 3. Precision Recursion
     if (typeof layer.eachLayer === 'function') {
+        // Fast tracking: Skip empty FeatureGroups or MarkerClusters entirely
+        if (typeof layer.getLayers === 'function' && layer.getLayers().length === 0) {
+            return false;
+        }
+
         let found = false;
         layer.eachLayer(child => {
-            if (found) return; // Skip remaining siblings
+            if (found) return; // Short-circuit siblings immediately
+
             if (window.walkLayersDeep(child, callback)) {
                 found = true;
             }
@@ -968,28 +987,25 @@ window.plotTaskProgress = function (
     // -------------------------------------------------
     // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
     // -------------------------------------------------
-    // -------------------------------------------------
-        // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
-        // -------------------------------------------------
-        let geometry = null;
-        walkLayersDeep(activeMap, l => {
-            const p = l.feature?.properties;
-            if (!p) return;
+    let geometry = null;
+    walkLayersDeep(activeMap, l => {
+        const p = l.feature?.properties;
+        if (!p) return;
 
-            const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
-            if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
-                geometry = l.feature.geometry;
-                return true;
-            }
-        });
-
-        // 💡 FIXED: Demoted from an execution-stopping Error to a silent/logged warning
-        if (!geometry) {
-            console.log(`ℹ️ Region ID: ${cleanId} not found so belongs to a different ward layer context. Skipping layout plot.`);
-            console.groupEnd();
-            return; // Exit safely, letting the map load the current ward's valid data
+        const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
+        // 💡 QUICK CHECK: Print every comparison to the console
+        console.log(`🤖 Comparing -> Map Layer ID: "${id}" | Searching For: "${cleanId}"`);
+        if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
+            geometry = l.feature.geometry;
+            return true;
         }
+    });
 
+    if (!geometry) {
+        console.error(`❌ Geometry lookup failed for Region ID: ${cleanId}`);
+        console.groupEnd();
+        return;
+    }
 
     // -------------------------------------------------
     // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
