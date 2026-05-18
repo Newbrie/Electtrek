@@ -132,83 +132,85 @@ class ElectorManager:
         from baked_data import baked_data
 
         all_events = baked_data.load()
-
         if not all_events:
+            print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
             return
 
         targets = (
             [specific_ename]
             if specific_ename and specific_ename in self._elections
-            else self._elections.keys()
+            else list(self._elections.keys())
         )
 
-        # --------------------------------
-        # Helper: household tag mutation
-        # --------------------------------
-        def add_task_tag(df, indexes, code, enabled=True):
+        print(f"🚀 [INJECT] Initializing event logs replay against targets: {targets}")
 
+        # ------------------------------------------------------------------
+        # Helper: Household tag mutation
+        # ------------------------------------------------------------------
+        def add_task_tag(df, indexes, code, enabled=True):
             if len(indexes) == 0 or not code:
                 return
 
-            # Canonical household elector
+            # Canonical household selector (First elector found in group)
             idx = indexes[0]
-
             existing_raw = str(df.at[idx, 'Tags']).strip()
 
             if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
                 existing = set()
             else:
-                existing = {
-                    t.strip()
-                    for t in existing_raw.split(',')
-                    if t.strip()
-                }
+                existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
 
             if enabled:
                 existing.add(code)
+                action = "ADDED"
             else:
                 existing.discard(code)
+                action = "REMOVED"
 
-            df.at[idx, 'Tags'] = ", ".join(sorted(existing))
+            new_tags = ", ".join(sorted(existing))
+            df.at[idx, 'Tags'] = new_tags
 
-        # --------------------------------
-        # Helper: household VI assignment
-        # --------------------------------
+            print(f"   └─ 🏷️  [TAG {action}] Row Index {idx} | Code: '{code}' | Outcome: [{new_tags}]")
+
+        # ------------------------------------------------------------------
+        # Helper: Household VI assignment
+        # ------------------------------------------------------------------
         def add_household_vi(df, indexes, vi=None, votes=None):
-
             if len(indexes) == 0:
                 return
 
             try:
                 vote_count = int(votes or 0)
-            except:
+            except (ValueError, TypeError):
                 vote_count = 0
 
-            # Only apply to first N electors
+            # Apply positive intentions to the first N electors
             target_indexes = indexes[:vote_count]
 
             for idx in indexes:
-
                 if idx in target_indexes:
                     if vi is not None:
                         df.at[idx, 'VI'] = vi
                 else:
-                    # Clear VI for remaining household electors
+                    # Clear VI tracking for remaining household electors
                     df.at[idx, 'VI'] = ''
 
-            # Store household vote count on canonical elector
-            df.at[indexes[0], 'Votes'] = str(vote_count)
+            # Store explicit historical total counts on canonical elector
+            canonical_idx = indexes[0]
+            df.at[canonical_idx, 'Votes'] = str(vote_count)
 
-        # --------------------------------
-        # Replay events into each election
-        # --------------------------------
+            print(f"   └─ 🗳️  [VI APPLY] Canonical Row {canonical_idx} | Votes Assigned: {vote_count} | VI: '{vi}'")
+
+        # ------------------------------------------------------------------
+        # Replay events into each election data container
+        # ------------------------------------------------------------------
         for ename in targets:
-
+            print(f"\n📂 [ELECTION METRIC PROCESSING]: Replaying events onto '{ename}'...")
             df = self._elections[ename].copy()
 
-            for ev in all_events:
-
+            for idx, ev in enumerate(all_events):
                 if not isinstance(ev, dict):
+                    print(f"   ❌ [EVENT {idx}] Invalid schema entry: Type is {type(ev)}")
                     continue
 
                 uiScope = ev.get('uiScope', 'walk')
@@ -217,47 +219,33 @@ class ElectorManager:
                 house = ev.get('house')
 
                 if not all([region, street, house]):
+                    print(f"   ⚠️ [EVENT {idx}] Dropped due to incomplete tracking tokens: R='{region}', S='{street}', H='{house}'")
                     continue
 
-                indexes = resolve_targets(
-                    df,
-                    uiScope,
-                    region,
-                    street,
-                    house
-                )
-                print(
-                    "🔎 MATCH CHECK:",
-                    {
-                        "scope": uiScope,
-                        "region": region,
-                        "street": street,
-                        "house": house,
-                        "matches": len(indexes)
-                    }
-                )
+                # Query runtime target collection matches
+                indexes = resolve_targets(df, uiScope, region, street, house)
+
+                ev_type = ev.get('type')
+                print(f"   📍 [EVENT {idx}][{ev_type.upper()}] Match Query -> Scope: {uiScope} | {region} | {street} | House: {house} -> Matches Found: {len(indexes)}")
+
                 if len(indexes) == 0:
                     continue
 
-                ev_type = ev.get('type')
-
                 # -----------------------------
-                # TAG EVENTS
+                # CASE A: TAG OPERATIONS
                 # -----------------------------
                 if ev_type in ['tag', 'elector_tag']:
-
                     add_task_tag(
                         df,
                         indexes,
                         ev.get('code'),
-                        ev.get('value') == 'y'
+                        enabled=(ev.get('value') == 'y')
                     )
 
                 # -----------------------------
-                # VI EVENTS
+                # CASE B: VI EVALUATIONS
                 # -----------------------------
                 elif ev_type == 'vi':
-
                     add_household_vi(
                         df,
                         indexes,
@@ -265,9 +253,12 @@ class ElectorManager:
                         ev.get('votes')
                     )
 
-            # Replace projected election
-            self._elections[ename] = df
+                else:
+                    print(f"   ❓ [EVENT {idx}] Unhandled transaction event type discovered: '{ev_type}'")
 
+            # Re-assign mutated back to state tracking ledger dict
+            self._elections[ename] = df
+            print(f"💾 [SUCCESS] Replay completed for target: '{ename}'\n")
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""

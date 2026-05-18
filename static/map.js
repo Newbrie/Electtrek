@@ -176,12 +176,30 @@ const addMapLogo = (map) => {
  };
 
  window.__pendingRender = () => {
-    const currentData = getBakedData();
+     const currentData = getBakedData();
 
-    Object.keys(currentData).forEach(region_id => {
-        window.plotTaskProgress(region_id, 'L1', 'walk');
-    });
-};
+     if (!Array.isArray(currentData)) {
+         console.warn("⚠️ [__pendingRender] currentData is not an array. Aborting batch render.");
+         return;
+     }
+
+     // 1. Gather only unique, valid region string identifiers from the event stream
+     const uniqueRegionIds = new Set();
+
+     currentData.forEach(ev => {
+         if (ev && ev.region) {
+             uniqueRegionIds.add(String(ev.region).trim().toUpperCase());
+         }
+     });
+
+     console.log(`🔄 [PENDING RENDER] Executing batch update for unique regions:`, Array.from(uniqueRegionIds));
+
+     // 2. Safely loop through the actual string literals instead of array indexes
+     uniqueRegionIds.forEach(region_id => {
+         if (!region_id || region_id === "UNDEFINED") return;
+         window.plotTaskProgress(region_id, 'L1', 'walk');
+     });
+ };
 
 
 // This self-invoking function starts looking for the map immediately
