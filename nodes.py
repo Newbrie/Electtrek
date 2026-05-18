@@ -661,6 +661,7 @@ class TreeNode:
         self.origin = origin
         self.election = origin
         self.type = node_type
+        self.childtype = None
 
         # Tree relations
         self.parent = None
@@ -742,6 +743,16 @@ class TreeNode:
             "tagno": self.tagno,
             "bbox": self.bbox,
         }
+
+    @property
+    def allowed_child_types(self) -> list[str]:
+        childtype = self.childtype or ""
+
+        return [
+            t.strip()
+            for t in childtype.split("/")
+            if t.strip()
+        ]
 
 
     def path_options(self, elevels, *, include_self=True):

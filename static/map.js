@@ -175,74 +175,71 @@ const addMapLogo = (map) => {
      return window.BAKED_DATA;
  };
 
+ window.__pendingRender = () => {
+    const currentData = getBakedData();
+
+    Object.keys(currentData).forEach(region_id => {
+        window.plotTaskProgress(region_id, 'L1', 'walk');
+    });
+};
+
 
 // This self-invoking function starts looking for the map immediately
 (function startMapCatcher() {
   /* --- Inside your startMapCatcher in map.js --- */
+
   const findMap = () => {
       // 1. Check current window
       for (const key in window) {
           // Use 'window.L' to ensure it exists here
           if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
-              fmap = window[key];
-              window.fmap = fmap;
-              // ... inside your findMap function ...
 
-              if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
-                  fmap = window[key];
-                  window.fmap = fmap;
+            fmap = window[key];
+            window.fmap = fmap;
 
-                  // --- ADD THE POPUP LISTENER HERE ---
-                  fmap.on('popupopen', function(e) {
-                      const container = e.popup._contentNode;
-                      const firstRow = container.querySelector('.canvass-row');
+            fmap.on('popupopen', function(e) {
+                const container = e.popup._contentNode;
+                const firstRow = container.querySelector('.canvass-row');
 
-                      if (firstRow) {
-                          const region_id = firstRow.getAttribute('data-region');
+                if (firstRow && window.plotTaskProgress) {
+                    const region_id = firstRow.getAttribute('data-region');
 
-                          if (window.plotTaskProgress) {
-                            // 1. Pull keys dynamically from your global config
-                            const tagsToUpdate = Object.keys(window.task_tags || {});
+                    const tagsToUpdate = Object.keys(window.task_tags || {});
+                    tagsToUpdate.forEach(tagCode => {
+                        window.plotTaskProgress(region_id, tagCode, 'walk');
+                    });
+                }
+            });
 
-                            // 2. Refresh every ghost layer for this specific walk
-                            // The prefix guard inside the function will handle skipping M-tags automatically
-                            tagsToUpdate.forEach(tagCode => {
-                                window.plotTaskProgress(region_id, tagCode,'walk');
-                            });
+            fmap.invalidateSize();
 
-                              console.log(`✨ Popup Sync: All ghost layers refreshed for Walk ${region_id}`);
-                          }
-                      }
-                  });
-                  // Inside your findMap() success block:
-                  fmap.invalidateSize();
-                  const currentData = getBakedData()
-                  const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
-                  const tagCodes = Object.keys(tagRegistry);
+            const currentData = getBakedData();
+            const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
+            const tagCodes = Object.keys(tagRegistry);
 
-                  if (currentData) {
-                      console.log("🎯 Map found! Initializing all region visuals for all tags...");
-                      addMapLogo(fmap);
+            if (currentData) {
+                addMapLogo(fmap);
 
-                      // Iterate through every Walk/Region in your data
-                      Object.keys(currentData).forEach(region_id => {
+                Object.keys(currentData).forEach(region_id => {
+                    if (tagCodes.length > 0) {
+                        tagCodes.forEach(code => {
+                            window.plotTaskProgress(region_id, code, 'walk');
+                        });
+                    } else {
+                        window.plotTaskProgress(region_id, 'L1', 'walk');
+                    }
+                });
+            }
 
-                          // Check if we have multiple tags to initialize
-                          if (tagCodes.length > 0) {
-                              tagCodes.forEach(code => {
-                                  window.plotTaskProgress(region_id, code,'walk');
-                              });
-                          } else {
-                              // Fallback to L1 if no registry found
-                              window.plotTaskProgress(region_id, 'L1','walk');
-                          }
-                      });
-                  }
-                  return true;
-              }
+            window.MAP_READY = true;
 
-              return true;
-          }
+            if (window.__pendingRender) {
+                window.__pendingRender();
+                window.__pendingRender = null;
+            }
+
+            return true;
+        }
       }
 
       // 2. Target iframe1 specifically
@@ -699,121 +696,131 @@ window.plotTaskProgress = function (
     targetTag = 'L1',
     uiScope = 'walk'
 ) {
-
-    console.group(`🏗️ DOM STREET HOUSE MODEL: ${region_id} [${targetTag}]`);
+    console.group(`🏗️ FLAT-EVENT PROGRESS MODEL: ${region_id} [${targetTag}]`);
 
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
-
     const cleanId = String(region_id).trim().toUpperCase();
 
-    const doc =
-        document.getElementById('iframe1')?.contentWindow?.document
-        || document;
-
-    const rows = doc.querySelectorAll(
-        `.canvass-row[data-region="${cleanId}"]`
-    );
-
-    if (!rows.length) {
-        console.warn(`⚠️ No rows for ${cleanId}`);
-        console.groupEnd();
-        return;
-    }
+    // Try to find open popup elements in the DOM
+    const doc = document.getElementById('iframe1')?.contentWindow?.document || document;
+    const rows = doc.querySelectorAll(`.canvass-row[data-region="${cleanId}"]`);
 
     let totalHouses = 0;
     let completedHouses = 0;
 
-    const countedStreets = new Set();
+    // -----------------------------------------------------------------
+    // CONDITION A: Popup is OPEN (Scrape live DOM elements)
+    // -----------------------------------------------------------------
+    if (rows.length > 0) {
+        console.log("📊 Popup is open. Calculating opacity from live DOM elements...");
+        const countedStreets = new Set();
 
-    // -------------------------------------------------
-    // 1️⃣ STREET LOOP
-    // -------------------------------------------------
+        rows.forEach(row => {
+            const street = row.getAttribute('data-street');
+            if (!street || countedStreets.has(street)) return;
+            countedStreets.add(street);
 
-    rows.forEach(row => {
-
-        const street = row.getAttribute('data-street');
-        if (!street) return;
-
-        if (countedStreets.has(street)) return;
-        countedStreets.add(street);
-
-        const streetRows = doc.querySelectorAll(
-            `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
-        );
-
-        // -------------------------------------------------
-        // STREET WEIGHT = NUMBER OF OPTIONS (HOUSE COUNT)
-        // -------------------------------------------------
-
-        const firstRow = streetRows[0];
-        const sel = firstRow?.querySelector('.unit-selector');
-
-        const streetWeight =
-            sel ? sel.options.length : streetRows.length;
-
-        totalHouses += streetWeight;
-
-        // -------------------------------------------------
-        // STREET COMPLETION RULE (MATCH PYTHON LOGIC)
-        // -------------------------------------------------
-        // If ANY row in street has tag active => full street counts
-        // -------------------------------------------------
-
-        let streetIsActive = false;
-
-        streetRows.forEach(r => {
-
-            const active = r.querySelector(
-                `.tag-toggle[data-code="${targetTag}"].tag-active`
+            const streetRows = doc.querySelectorAll(
+                `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
             );
 
-            if (active) {
-                streetIsActive = true;
+            const firstRow = streetRows[0];
+            const sel = firstRow?.querySelector('.unit-selector');
+            const streetWeight = sel ? sel.options.length : streetRows.length;
+
+            totalHouses += streetWeight;
+
+            let streetIsActive = false;
+            streetRows.forEach(r => {
+                if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
+                    streetIsActive = true;
+                }
+            });
+
+            if (streetIsActive) {
+                completedHouses += streetWeight;
             }
         });
+    }
+    // CONDITION B: Popup is CLOSED (Parse flat transaction event stream log)
+    // -----------------------------------------------------------------
+    else {
+        console.log("💾 Popup is closed. Re-aggregating opacity from ALL events in BAKED_DATA...");
 
-        if (streetIsActive) {
-            completedHouses += streetWeight;
+        // 1. Grab raw event log array (reads ALL events regardless of sync status)
+        const eventLog = window.BAKED_DATA || [];
+
+        // Maps to track running state compiled out of chronological actions
+        const streetHouseRegistry = {};
+
+        // 2. Scan the ledger for matches belonging to this map region & scope
+        eventLog.forEach(ev => {
+            // Read ALL events matching the scope and region (ignoring ev.synced status)
+            if (ev.type !== 'tag' || ev.uiScope !== uiScope) return;
+            if (String(ev.region).trim().toUpperCase() !== cleanId) return;
+
+            const streetKey = ev.street;
+            const houseKey = ev.house;
+
+            // Register house existence under its parent street matrix
+            if (!streetHouseRegistry[streetKey]) {
+                streetHouseRegistry[streetKey] = new Set();
+            }
+            streetHouseRegistry[streetKey].add(houseKey);
+        });
+
+        // 3. Post-process historical overrides to resolve exact 'y' counts across the timeline
+        for (const street in streetHouseRegistry) {
+            let streetTrulyActive = false;
+
+            // Loop through known houses on this street to determine true unified terminal state
+            streetHouseRegistry[street].forEach(house => {
+                const chronologicalTimeline = eventLog.filter(e =>
+                    e.type === 'tag' && e.uiScope === uiScope &&
+                    String(e.region).trim().toUpperCase() === cleanId &&
+                    e.street === street && e.house === house && e.code === targetTag
+                );
+
+                if (chronologicalTimeline.length > 0) {
+                    // Grab the absolute latest event for this specific house
+                    const finalEventForHouse = chronologicalTimeline[chronologicalTimeline.length - 1];
+                    if (finalEventForHouse.value === 'y') {
+                        streetTrulyActive = true;
+                    }
+                }
+            });
+
+            // Calculate total street weights matching DOM rules
+            const streetWeight = streetHouseRegistry[street].size;
+            totalHouses += streetWeight;
+
+            if (streetTrulyActive) {
+                completedHouses += streetWeight;
+            }
         }
-    });
+    }
 
     // -------------------------------------------------
-    // 2️⃣ FINAL OPACITY
+    // 2️⃣ FINAL OPACITY FORMULA FLUSH
     // -------------------------------------------------
+    const finalOpacity = totalHouses > 0 ? 0.8 * (completedHouses / totalHouses) : 0;
 
-    const finalOpacity =
-        totalHouses > 0
-            ? 0.8 * (completedHouses / totalHouses)
-            : 0;
-
-    console.log("DEBUG OPACITY (HOUSE-BASED)", {
-        cleanId,
+    console.log("📐 OPACITY ANALYSIS METRICS:", {
+        region: cleanId,
         totalHouses,
         completedHouses,
-        finalOpacity
+        calculatedOpacity: finalOpacity
     });
 
     // -------------------------------------------------
-    // 3️⃣ FIND LAYER
+    // 3️⃣ LAYER TARGET GROUP DISCOVERY
     // -------------------------------------------------
-
     const findBucket = () => {
-
-        const iframe =
-            document.getElementById('iframe1');
-
-        const mapWin =
-            iframe ? iframe.contentWindow : window;
-
+        const mapWin = document.getElementById('iframe1')?.contentWindow || window;
         for (const key in mapWin) {
-
             if (!key.startsWith("layer_control_")) continue;
-
-            const layers =
-                mapWin[key].overlays ||
-                mapWin[key]._layers;
-
+            const layers = mapWin[key].overlays || mapWin[key]._layers;
             for (const name in layers) {
                 if (name.includes(`[${targetTag}]`)) {
                     return layers[name].layer || layers[name];
@@ -824,17 +831,15 @@ window.plotTaskProgress = function (
     };
 
     const targetGroup = findBucket();
-
     if (!targetGroup) {
-        console.error("❌ Bucket not found");
+        console.warn("❌ Target Layer Control Overlay bucket missing.");
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 4️⃣ APPLY / UPDATE GHOST
+    // 4️⃣ APPLY OPACITY / UPDATE EXISTING GHOST
     // -------------------------------------------------
-
     const ghostId = `ghost_${targetTag}_${cleanId}`;
     let ghost = null;
 
@@ -842,32 +847,22 @@ window.plotTaskProgress = function (
         if (l.ghost_id === ghostId) ghost = l;
     });
 
-    const apply = (layer) => {
-        layer.setStyle({ fillOpacity: finalOpacity });
-    };
-
     if (ghost) {
-        apply(ghost);
-        console.log(`♻️ Updated ${ghostId}`);
+        ghost.setStyle({ fillOpacity: finalOpacity });
+        console.log(`♻️ Refreshed opacity style for ghost: ${ghostId}`);
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 5️⃣ GEOMETRY LOOKUP
+    // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
     // -------------------------------------------------
-
     let geometry = null;
-
     walkLayersDeep(activeMap, l => {
-
         const p = l.feature?.properties;
         if (!p) return;
 
-        const id = String(p.region_id ?? p.nid ?? p.id ?? '')
-            .trim()
-            .toUpperCase();
-
+        const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
         if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
             geometry = l.feature.geometry;
             return true;
@@ -875,15 +870,14 @@ window.plotTaskProgress = function (
     });
 
     if (!geometry) {
-        console.error("❌ Missing geometry");
+        console.error(`❌ Geometry lookup failed for Region ID: ${cleanId}`);
         console.groupEnd();
         return;
     }
 
     // -------------------------------------------------
-    // 6️⃣ CREATE GHOST
+    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
     // -------------------------------------------------
-
     const poly = Leaflet.geoJSON(geometry, {
         pane: 'overlayPane',
         style: {
@@ -903,8 +897,7 @@ window.plotTaskProgress = function (
         activeMap.removeLayer(poly);
     }
 
-    console.log(`✨ Created ${ghostId}`);
-
+    console.log(`✨ Ghost created from data array parsing: ${ghostId}`);
     console.groupEnd();
 };
 

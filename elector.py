@@ -129,136 +129,144 @@ class ElectorManager:
 
 
     def _inject_baked_data(self, specific_ename=None):
+        from baked_data import baked_data
 
-    from baked_data import baked_data
+        all_events = baked_data.load()
 
-    all_events = baked_data.load()
-
-    if not all_events:
-        return
-
-    targets = (
-        [specific_ename]
-        if specific_ename and specific_ename in self._elections
-        else self._elections.keys()
-    )
-
-    # --------------------------------
-    # Helper: household tag mutation
-    # --------------------------------
-    def add_task_tag(df, indexes, code, enabled=True):
-
-        if len(indexes) == 0 or not code:
+        if not all_events:
             return
 
-        # Canonical household elector
-        idx = indexes[0]
+        targets = (
+            [specific_ename]
+            if specific_ename and specific_ename in self._elections
+            else self._elections.keys()
+        )
 
-        existing_raw = str(df.at[idx, 'Tags']).strip()
+        # --------------------------------
+        # Helper: household tag mutation
+        # --------------------------------
+        def add_task_tag(df, indexes, code, enabled=True):
 
-        if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
-            existing = set()
-        else:
-            existing = {
-                t.strip()
-                for t in existing_raw.split(',')
-                if t.strip()
-            }
+            if len(indexes) == 0 or not code:
+                return
 
-        if enabled:
-            existing.add(code)
-        else:
-            existing.discard(code)
+            # Canonical household elector
+            idx = indexes[0]
 
-        df.at[idx, 'Tags'] = ", ".join(sorted(existing))
+            existing_raw = str(df.at[idx, 'Tags']).strip()
 
-    # --------------------------------
-    # Helper: household VI assignment
-    # --------------------------------
-    def add_household_vi(df, indexes, vi=None, votes=None):
-
-        if len(indexes) == 0:
-            return
-
-        try:
-            vote_count = int(votes or 0)
-        except:
-            vote_count = 0
-
-        # Only apply to first N electors
-        target_indexes = indexes[:vote_count]
-
-        for idx in indexes:
-
-            if idx in target_indexes:
-                if vi is not None:
-                    df.at[idx, 'VI'] = vi
+            if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
+                existing = set()
             else:
-                # Clear VI for remaining household electors
-                df.at[idx, 'VI'] = ''
+                existing = {
+                    t.strip()
+                    for t in existing_raw.split(',')
+                    if t.strip()
+                }
 
-        # Store household vote count on canonical elector
-        df.at[indexes[0], 'Votes'] = str(vote_count)
+            if enabled:
+                existing.add(code)
+            else:
+                existing.discard(code)
 
-    # --------------------------------
-    # Replay events into each election
-    # --------------------------------
-    for ename in targets:
+            df.at[idx, 'Tags'] = ", ".join(sorted(existing))
 
-        df = self._elections[ename].copy()
-
-        for ev in all_events:
-
-            if not isinstance(ev, dict):
-                continue
-
-            uiScope = ev.get('uiScope', 'walk')
-            region = ev.get('region')
-            street = ev.get('street')
-            house = ev.get('house')
-
-            if not all([region, street, house]):
-                continue
-
-            indexes = resolve_targets(
-                df,
-                uiScope,
-                region,
-                street,
-                house
-            )
+        # --------------------------------
+        # Helper: household VI assignment
+        # --------------------------------
+        def add_household_vi(df, indexes, vi=None, votes=None):
 
             if len(indexes) == 0:
-                continue
+                return
 
-            ev_type = ev.get('type')
+            try:
+                vote_count = int(votes or 0)
+            except:
+                vote_count = 0
 
-            # -----------------------------
-            # TAG EVENTS
-            # -----------------------------
-            if ev_type in ['tag', 'elector_tag']:
+            # Only apply to first N electors
+            target_indexes = indexes[:vote_count]
 
-                add_task_tag(
+            for idx in indexes:
+
+                if idx in target_indexes:
+                    if vi is not None:
+                        df.at[idx, 'VI'] = vi
+                else:
+                    # Clear VI for remaining household electors
+                    df.at[idx, 'VI'] = ''
+
+            # Store household vote count on canonical elector
+            df.at[indexes[0], 'Votes'] = str(vote_count)
+
+        # --------------------------------
+        # Replay events into each election
+        # --------------------------------
+        for ename in targets:
+
+            df = self._elections[ename].copy()
+
+            for ev in all_events:
+
+                if not isinstance(ev, dict):
+                    continue
+
+                uiScope = ev.get('uiScope', 'walk')
+                region = ev.get('region')
+                street = ev.get('street')
+                house = ev.get('house')
+
+                if not all([region, street, house]):
+                    continue
+
+                indexes = resolve_targets(
                     df,
-                    indexes,
-                    ev.get('code'),
-                    ev.get('value') == 'y'
+                    uiScope,
+                    region,
+                    street,
+                    house
                 )
-
-            # -----------------------------
-            # VI EVENTS
-            # -----------------------------
-            elif ev_type == 'vi':
-
-                add_household_vi(
-                    df,
-                    indexes,
-                    ev.get('value'),
-                    ev.get('votes')
+                print(
+                    "🔎 MATCH CHECK:",
+                    {
+                        "scope": uiScope,
+                        "region": region,
+                        "street": street,
+                        "house": house,
+                        "matches": len(indexes)
+                    }
                 )
+                if len(indexes) == 0:
+                    continue
 
-        # Replace projected election
-        self._elections[ename] = df
+                ev_type = ev.get('type')
+
+                # -----------------------------
+                # TAG EVENTS
+                # -----------------------------
+                if ev_type in ['tag', 'elector_tag']:
+
+                    add_task_tag(
+                        df,
+                        indexes,
+                        ev.get('code'),
+                        ev.get('value') == 'y'
+                    )
+
+                # -----------------------------
+                # VI EVENTS
+                # -----------------------------
+                elif ev_type == 'vi':
+
+                    add_household_vi(
+                        df,
+                        indexes,
+                        ev.get('value'),
+                        ev.get('votes')
+                    )
+
+            # Replace projected election
+            self._elections[ename] = df
 
 
     def refresh_baked_data(self):
