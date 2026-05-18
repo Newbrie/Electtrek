@@ -235,19 +235,34 @@ const addMapLogo = (map) => {
             const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
             const tagCodes = Object.keys(tagRegistry);
 
-            if (currentData) {
-                addMapLogo(fmap);
+            if (currentData?.length) {
 
-                Object.keys(currentData).forEach(region_id => {
-                    if (tagCodes.length > 0) {
-                        tagCodes.forEach(code => {
-                            window.plotTaskProgress(region_id, code, 'walk');
-                        });
-                    } else {
-                        window.plotTaskProgress(region_id, 'L1', 'walk');
-                    }
-                });
-            }
+              console.log(
+                  "🎯 Map found! Initializing all region visuals for all tags..."
+              );
+
+              addMapLogo(fmap);
+
+              const uniqueRegions = [
+                  ...new Set(
+                      currentData.map(e => e.region).filter(Boolean)
+                  )
+              ];
+
+              uniqueRegions.forEach(region_id => {
+
+                  if (tagCodes.length > 0) {
+
+                      tagCodes.forEach(code => {
+                          window.plotTaskProgress(region_id, code, 'walk');
+                      });
+
+                  } else {
+
+                      window.plotTaskProgress(region_id, 'L1', 'walk');
+                  }
+              });
+          }
 
             window.MAP_READY = true;
 
