@@ -201,129 +201,135 @@ const addMapLogo = (map) => {
      });
  };
 
+ window.MAP_READY = false;
+ window.__HYDRATED = false;
+ function hydrateMapOnce() {
+    if (window.__HYDRATED) return;
+    window.__HYDRATED = true;
 
-// This self-invoking function starts looking for the map immediately
+    const currentData = getBakedData();
+    if (!Array.isArray(currentData) || currentData.length === 0) return;
+
+    const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
+    const tagCodes = Object.keys(tagRegistry);
+
+    console.log("🎯 Hydrating map once (idempotent)");
+
+    addMapLogo(window.fmap);
+
+    const uniqueRegions = [
+        ...new Set(
+            currentData
+                .map(e => e.region)
+                .filter(Boolean)
+        )
+    ];
+
+    for (const region_id of uniqueRegions) {
+        const codes = tagCodes.length ? tagCodes : ['L1'];
+
+        for (const code of codes) {
+            window.plotTaskProgress(region_id, code, 'walk');
+        }
+    }
+}
+
 (function startMapCatcher() {
-  /* --- Inside your startMapCatcher in map.js --- */
 
-  const findMap = () => {
-      // 1. Check current window
-      for (const key in window) {
-          // Use 'window.L' to ensure it exists here
-          if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
+    const findMap = () => {
 
-            fmap = window[key];
-            window.fmap = fmap;
+        for (const key in window) {
+            if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
 
-            fmap.on('popupopen', function(e) {
-                const container = e.popup._contentNode;
-                const firstRow = container.querySelector('.canvass-row');
+                window.fmap = window[key];
 
-                if (firstRow && window.plotTaskProgress) {
+                const fmap = window.fmap;
+
+                // -------------------------
+                // POPUP REFRESH (SAFE)
+                // -------------------------
+                fmap.on('popupopen', function(e) {
+                    const container = e.popup._contentNode;
+                    const firstRow = container.querySelector('.canvass-row');
+
+                    if (!firstRow || !window.plotTaskProgress) return;
+
                     const region_id = firstRow.getAttribute('data-region');
 
                     const tagsToUpdate = Object.keys(window.task_tags || {});
-                    tagsToUpdate.forEach(tagCode => {
+                    for (const tagCode of tagsToUpdate) {
                         window.plotTaskProgress(region_id, tagCode, 'walk');
-                    });
+                    }
+                });
+
+                fmap.invalidateSize();
+
+                // -------------------------
+                // SINGLE HYDRATION PASS
+                // -------------------------
+                window.MAP_READY = true;
+
+                hydrateMapOnce();
+
+                if (window.__pendingRender) {
+                    window.__pendingRender();
+                    window.__pendingRender = null;
                 }
-            });
 
-            fmap.invalidateSize();
-
-            const currentData = getBakedData();
-            const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
-            const tagCodes = Object.keys(tagRegistry);
-
-            if (currentData?.length) {
-
-              console.log(
-                  "🎯 Map found! Initializing all region visuals for all tags..."
-              );
-
-              addMapLogo(fmap);
-
-              const uniqueRegions = [
-                  ...new Set(
-                      currentData.map(e => e.region).filter(Boolean)
-                  )
-              ];
-
-              uniqueRegions.forEach(region_id => {
-
-                  if (tagCodes.length > 0) {
-
-                      tagCodes.forEach(code => {
-                          window.plotTaskProgress(region_id, code, 'walk');
-                      });
-
-                  } else {
-
-                      window.plotTaskProgress(region_id, 'L1', 'walk');
-                  }
-              });
-          }
-
-            window.MAP_READY = true;
-
-            if (window.__pendingRender) {
-                window.__pendingRender();
-                window.__pendingRender = null;
+                return true;
             }
-
-            return true;
         }
-      }
 
-      // 2. Target iframe1 specifically
-      const frame = document.getElementById('iframe1');
-      if (frame && frame.contentWindow) {
-          const frameWin = frame.contentWindow;
-          // Look for the map using the IFRAME'S version of Leaflet (frameWin.L)
-          for (const key in frameWin) {
-              if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
-                  fmap = frameWin[key];
-                  window.fmap = fmap;
-                  // ... repeat the same for the iframe success block ...
-                  if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
-                      fmap = frameWin[key];
-                      window.fmap = fmap;
+        // iframe fallback
+        const frame = document.getElementById('iframe1');
 
-                      // --- AND HERE ---
-                      fmap.on('popupopen', function(e) {
-                          // ... same logic as above ...
-                      });
+        if (frame?.contentWindow) {
+            const frameWin = frame.contentWindow;
 
-                      console.log("🎯 map.js: Found Folium map inside iframe1:", key);
-                      return true;
-                  }
-                  console.log("🎯 map.js: Found Folium map inside iframe1:", key);
-                  return true;
-              }
-          }
-      }
-      return false;
-  };
+            for (const key in frameWin) {
+                if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
 
-    // If not found, check every 100ms
+                    window.fmap = frameWin[key];
+
+                    const fmap = window.fmap;
+
+                    fmap.on('popupopen', function(e) {
+                        const container = e.popup._contentNode;
+                        const firstRow = container.querySelector('.canvass-row');
+
+                        if (!firstRow || !window.plotTaskProgress) return;
+
+                        const region_id = firstRow.getAttribute('data-region');
+
+                        for (const tagCode of Object.keys(window.task_tags || {})) {
+                            window.plotTaskProgress(region_id, tagCode, 'walk');
+                        }
+                    });
+
+                    fmap.invalidateSize();
+
+                    window.MAP_READY = true;
+
+                    hydrateMapOnce();
+
+                    console.log("🎯 Map found in iframe:", key);
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    };
+
     if (!findMap()) {
         const interval = setInterval(() => {
             if (findMap()) clearInterval(interval);
         }, 100);
 
-        // Safety: Stop looking after 10 seconds if no map is found
         setTimeout(() => clearInterval(interval), 10000);
     }
-    /* Add this to the end of your startMapCatcher function */
-if (window.parent && window.parent !== window) {
-    // If I am the iframe, I'll tell my parent I have a map
-    for (const key in window) {
-        if (key.startsWith('map_') && window[key] instanceof L.Map) {
-            window.parent.fmap = window[key];
-            console.log("📢 Iframe pushed map to Parent");
-        }
-    }
-}
+
 })();
 
 
