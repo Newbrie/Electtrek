@@ -67,7 +67,7 @@ var showMore = function (msg,area, type) {
       toggle between hiding and showing the dropdown content */
 
 // --- MOVE THESE TO MAP.JS ---
-window.__MAP_LOGO_ADDED
+
 window.BAKED_DATA =
     window.BAKED_DATA ||
     (parent && parent.BAKED_DATA) ||
@@ -79,6 +79,22 @@ window.BAKED_DATA =
 var fmap;
 
 
+// --- Add this to your JS file ---
+const addMapLogo = (map) => {
+    const logoControl = L.control({ position: 'bottomleft' });
+
+    logoControl.onAdd = function() {
+        // Create the outer container defined in your CSS
+        const div = L.DomUtil.create('div', 'leaflet-logo-container');
+
+        // Create the inner icon div that uses the mask
+        const icon = L.DomUtil.create('div', 'leaflet-logo-icon', div);
+
+        return div;
+    };
+
+    logoControl.addTo(map);
+};
 
 /**
  * Saves the global data object to browser storage.
@@ -187,6 +203,7 @@ var fmap;
 
  window.MAP_READY = false;
  window.__HYDRATED = false;
+ window.__MAP_LOGO_ADDED = false;
  function hydrateMapOnce() {
     if (window.__HYDRATED) return;
     window.__HYDRATED = true;
@@ -199,6 +216,10 @@ var fmap;
 
     console.log("🎯 Hydrating map once (idempotent)");
 
+    if (!window.__MAP_LOGO_ADDED) {
+        addMapLogo(fmap);
+        window.__MAP_LOGO_ADDED = true;
+    }
 
     const uniqueRegions = [
         ...new Set(
@@ -227,10 +248,7 @@ var fmap;
                 window.fmap = window[key];
 
                 const fmap = window.fmap;
-                if (!window.__MAP_LOGO_ADDED) {
-                    addMapLogo(fmap);
-                    window.__MAP_LOGO_ADDED = true;
-                }
+
                 // -------------------------
                 // POPUP REFRESH (SAFE)
                 // -------------------------
@@ -278,10 +296,7 @@ var fmap;
                     window.fmap = frameWin[key];
 
                     const fmap = window.fmap;
-                    if (!window.__MAP_LOGO_ADDED) {
-                        addMapLogo(fmap);
-                        window.__MAP_LOGO_ADDED = true;
-                    }
+
                     fmap.on('popupopen', function(e) {
                         const container = e.popup._contentNode;
                         const firstRow = container.querySelector('.canvass-row');
@@ -338,10 +353,6 @@ window.handleCalendarClick = function() {
 async function searchMap() {
     const queryInput = document.getElementById("searchInput").value.trim();
     const fmap = window.fmap;
-    if (!window.__MAP_LOGO_ADDED) {
-        addMapLogo(fmap);
-        window.__MAP_LOGO_ADDED = true;
-    }
     if (!queryInput || !fmap) {
         console.warn("⚠️ Search cancelled: Missing query or map instance.");
         return;
