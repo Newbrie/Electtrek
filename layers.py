@@ -167,54 +167,54 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     # 2. DELEGATED FRONTEND LIFECYCLE INITIALIZER
     # ------------------------------------------------------------------
     persistence_js = f'''
-    <style>
-        .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
-        .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
-        .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
-        .control-panel {{ background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif; }}
-        .deploy-btn {{ background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; }}
-        .deploy-btn:disabled {{ background:#555; cursor: not-allowed; }}
-    </style>
+        <style>
+            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
+            .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
+            .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
+            .control-panel {{ background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif; }}
+            .deploy-btn {{ background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; }}
+            .deploy-btn:disabled {{ background:#555; cursor: not-allowed; }}
+        </style>
 
-    <div class="control-panel">
-        <button id="deploy-btn" class="deploy-btn" disabled>💾 Save & Deploy New File</button>
-        <span style="color:#00aaff; font-size:8pt; align-self:center;">
-            Scope: <strong style="color:white;">{uiScope}</strong> | Data synced to backend.
-        </span>
-    </div>
+        <div class="control-panel">
+            <button id="deploy-btn" class="deploy-btn" disabled>💾 Save & Deploy New File</button>
+            <span style="color:#00aaff; font-size:8pt; align-self:center;">
+                Scope: <strong style="color:white;">{uiScope}</strong> | Data synced to backend.
+            </span>
+        </div>
 
-    <script>
-    (function() {{
-        var scope = {ui_scope_json};
+        <script>
+        (function() {{
+            var scope = {ui_scope_json};
 
-        setTimeout(function() {{
-            var parentWindow = window.parent || window;
-            var loader = parentWindow.loadHouseData;
-            var colorizer = parentWindow.refreshDropdownColors;
-            var tagger = parentWindow.updateTagToggles;
-            var replayer = parentWindow.replayLocalBakedDataForPopup; // <-- Handshake with map.js module
+            setTimeout(function() {{
+                var parentWindow = window.parent || window;
+                var loader = parentWindow.loadHouseData;
+                var colorizer = parentWindow.refreshDropdownColors;
+                var tagger = parentWindow.updateTagToggles;
+                var replayer = parentWindow.replayLocalBakedDataForPopup; // <-- Handshake with map.js module
 
-            // 1. Initialize structural layout baselines
-            document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                if (typeof loader === 'function') loader(sel);
-                if (typeof colorizer === 'function') colorizer(sel);
-                if (typeof tagger === 'function') tagger(sel, scope);
-            }});
+                # 1. Initialize structural layout baselines
+                document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                    if (typeof loader === 'function') loader(sel);
+                    if (typeof colorizer === 'function') colorizer(sel);
+                    if (typeof tagger === 'function') tagger(sel, scope);
+                }});
 
-            // 2. Call external map.js replayer module, passing this frame's document
-            if (typeof replayer === 'function') {{
-                try {{
-                    replayer(document);
-                }} catch (err) {{
-                    console.error("❌ Error executing map.js replay ledger module:", err);
+                # 2. Call external map.js replayer module, passing this frame's document
+                if (typeof replayer === 'function') {{
+                    try {{
+                        replayer(document);
+                    }} catch (err) {{
+                        console.error("❌ Error executing map.js replay ledger module:", err);
+                    }}
+                }} else {{
+                    console.warn("⚠️ parentWindow.replayLocalBakedDataForPopup is unavailable or missing in map.js scope.");
                 }}
-            }} else {{
-                console.warn("⚠️ parentWindow.replayLocalBakedDataForPopup is unavailable or missing in map.js scope.");
-            }}
 
-        }}, 250);
-    }}})();
-    <\/script>
+            }}, 250);
+        }})();
+        <\/script>
     '''
 
     # 4. THE UI: Table Header

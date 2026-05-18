@@ -79,22 +79,6 @@ window.BAKED_DATA =
 var fmap;
 
 
-// --- Add this to your JS file ---
-const addMapLogo = (map) => {
-    const logoControl = L.control({ position: 'bottomleft' });
-
-    logoControl.onAdd = function() {
-        // Create the outer container defined in your CSS
-        const div = L.DomUtil.create('div', 'leaflet-logo-container');
-
-        // Create the inner icon div that uses the mask
-        const icon = L.DomUtil.create('div', 'leaflet-logo-icon', div);
-
-        return div;
-    };
-
-    logoControl.addTo(map);
-};
 
 /**
  * Saves the global data object to browser storage.
