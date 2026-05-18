@@ -2657,7 +2657,9 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(street_row_css))
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
-        FolMap.get_root().html.add_child(folium.Element(logo_styles))
+
+        FolMap.get_root().html.add_child(folium.Element(logo_css_injection))
+
         # Add layer control accordion to your Folium map
         FolMap.get_root().header.add_child(folium.Element(accordion_css))
         FolMap.get_root().header.add_child(folium.Element(accordion_html))
