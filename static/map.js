@@ -79,22 +79,6 @@ window.BAKED_DATA =
 var fmap;
 
 
-// --- Add this to your JS file ---
-const addMapLogo = (map) => {
-    const logoControl = L.control({ position: 'bottomleft' });
-
-    logoControl.onAdd = function() {
-        // Create the outer container defined in your CSS
-        const div = L.DomUtil.create('div', 'leaflet-logo-container');
-
-        // Create the inner icon div that uses the mask
-        const icon = L.DomUtil.create('div', 'leaflet-logo-icon', div);
-
-        return div;
-    };
-
-    logoControl.addTo(map);
-};
 
 /**
  * Saves the global data object to browser storage.
@@ -203,7 +187,7 @@ const addMapLogo = (map) => {
 
  window.MAP_READY = false;
  window.__HYDRATED = false;
- window.__MAP_LOGO_ADDED = false;
+
  function hydrateMapOnce() {
     if (window.__HYDRATED) return;
     window.__HYDRATED = true;
@@ -216,10 +200,6 @@ const addMapLogo = (map) => {
 
     console.log("🎯 Hydrating map once (idempotent)");
 
-    if (!window.__MAP_LOGO_ADDED) {
-        addMapLogo(fmap);
-        window.__MAP_LOGO_ADDED = true;
-    }
 
     const uniqueRegions = [
         ...new Set(
@@ -353,6 +333,8 @@ window.handleCalendarClick = function() {
 async function searchMap() {
     const queryInput = document.getElementById("searchInput").value.trim();
     const fmap = window.fmap;
+
+
     if (!queryInput || !fmap) {
         console.warn("⚠️ Search cancelled: Missing query or map instance.");
         return;
