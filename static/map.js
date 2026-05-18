@@ -509,7 +509,6 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
 };
 
 window.handleTagClick = function(span, uiScope = 'walk') {
-
     const isInactive = span.classList.contains('tag-inactive');
     const newValue = isInactive ? 'y' : 'n';
     const code = span.getAttribute('data-code');
@@ -519,22 +518,40 @@ window.handleTagClick = function(span, uiScope = 'walk') {
 
     const region = row.dataset.region;
     const street = row.dataset.street;
-    const house = row.querySelector('.unit-selector')?.value;
 
+    // Get the popup container/document context
+    const doc = row.ownerDocument;
+    const sel = row.querySelector('.unit-selector');
+
+    // 1. Calculate specific Street Weight
+    const streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
+    const streetWeight = sel ? sel.options.length : streetRows.length;
+
+    // 2. Calculate global Region Weight (Total houses in the entire popup)
+    let regionWeight = 0;
+    const countedStreetsInRegion = new Set();
+    const allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${region}"]`);
+
+    allRowsInRegion.forEach(r => {
+        const sKey = r.getAttribute('data-street');
+        if (!sKey || countedStreetsInRegion.has(sKey)) return;
+        countedStreetsInRegion.add(sKey);
+
+        const sSel = r.querySelector('.unit-selector');
+        const sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
+        regionWeight += sSel ? sSel.options.length : sRows.length;
+    });
+
+    const house = sel?.value;
     if (!region || !street || !house) return;
 
-    // -----------------------------
-    // UI = SOURCE OF TRUTH
-    // -----------------------------
+    // UI Updates
     span.classList.toggle('tag-active', newValue === 'y');
     span.classList.toggle('tag-inactive', newValue === 'n');
     span.innerText = newValue;
 
-    // -----------------------------
-    // EVENT LOG (BAKED_DATA)
-    // -----------------------------
+    // Save Event Stream
     window.BAKED_DATA ||= [];
-
     window.BAKED_DATA.push({
         type: 'tag',
         ts: Date.now(),
@@ -544,17 +561,12 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         house,
         code,
         value: newValue,
-        synced: false   // 👈 ADD THIS
+        streetWeight: streetWeight,   // Weight of this street
+        regionWeight: regionWeight,   // 👈 Total weight of the whole polygon region
+        synced: false
     });
 
-    // -----------------------------
-    // SAVE EVENT STREAM
-    // -----------------------------
     saveBakedData?.(window.BAKED_DATA);
-
-    // -----------------------------
-    // VISUAL UPDATE (derived)
-    // -----------------------------
     plotTaskProgress?.(region, code, uiScope);
 };
 
@@ -743,60 +755,61 @@ window.plotTaskProgress = function (
             }
         });
     }
-    // CONDITION B: Popup is CLOSED (Parse flat transaction event stream log)
+    // -----------------------------------------------------------------
+    // CONDITION B: Popup is CLOSED (Parse logs with total region ceilings)
     // -----------------------------------------------------------------
     else {
-        console.log("💾 Popup is closed. Re-aggregating opacity from ALL events in BAKED_DATA...");
+        console.log("💾 Popup is closed. Calculating opacity via baked region weights...");
 
-        // 1. Grab raw event log array (reads ALL events regardless of sync status)
         const eventLog = window.BAKED_DATA || [];
 
-        // Maps to track running state compiled out of chronological actions
-        const streetHouseRegistry = {};
+        let bakedRegionCeiling = 0;
+        const streetWeightRegistry = {};
+        const streetActiveHouses = {};
 
-        // 2. Scan the ledger for matches belonging to this map region & scope
+        // Chronological ledger scan
         eventLog.forEach(ev => {
-            // Read ALL events matching the scope and region (ignoring ev.synced status)
             if (ev.type !== 'tag' || ev.uiScope !== uiScope) return;
             if (String(ev.region).trim().toUpperCase() !== cleanId) return;
 
-            const streetKey = ev.street;
-            const houseKey = ev.house;
+            const street = ev.street;
+            const house = ev.house;
 
-            // Register house existence under its parent street matrix
-            if (!streetHouseRegistry[streetKey]) {
-                streetHouseRegistry[streetKey] = new Set();
+            // Continually grab the latest weights seen in the timeline
+            if (ev.streetWeight) streetWeightRegistry[street] = ev.streetWeight;
+            if (ev.regionWeight) bakedRegionCeiling = ev.regionWeight; // 👈 Absolute denominator ceiling
+
+            if (!streetActiveHouses[street]) {
+                streetActiveHouses[street] = new Set();
             }
-            streetHouseRegistry[streetKey].add(houseKey);
+
+            if (ev.code === targetTag) {
+                if (ev.value === 'y') {
+                    streetActiveHouses[street].add(house);
+                } else if (ev.value === 'n') {
+                    streetActiveHouses[street].delete(house);
+                }
+            }
         });
 
-        // 3. Post-process historical overrides to resolve exact 'y' counts across the timeline
-        for (const street in streetHouseRegistry) {
-            let streetTrulyActive = false;
-
-            // Loop through known houses on this street to determine true unified terminal state
-            streetHouseRegistry[street].forEach(house => {
-                const chronologicalTimeline = eventLog.filter(e =>
-                    e.type === 'tag' && e.uiScope === uiScope &&
-                    String(e.region).trim().toUpperCase() === cleanId &&
-                    e.street === street && e.house === house && e.code === targetTag
-                );
-
-                if (chronologicalTimeline.length > 0) {
-                    // Grab the absolute latest event for this specific house
-                    const finalEventForHouse = chronologicalTimeline[chronologicalTimeline.length - 1];
-                    if (finalEventForHouse.value === 'y') {
-                        streetTrulyActive = true;
-                    }
-                }
-            });
-
-            // Calculate total street weights matching DOM rules
-            const streetWeight = streetHouseRegistry[street].size;
-            totalHouses += streetWeight;
-
-            if (streetTrulyActive) {
+        // Calculate how much weight has been completed
+        for (const street in streetActiveHouses) {
+            const streetIsActive = streetActiveHouses[street].size > 0;
+            if (streetIsActive) {
+                // Add this street's weight to our completed pool
+                const streetWeight = streetWeightRegistry[street] || 1;
                 completedHouses += streetWeight;
+            }
+        }
+
+        // Set the global denominator to the baked total region weight we found
+        totalHouses = bakedRegionCeiling;
+
+        // Fallback: If we have active houses but somehow missed a region ceiling,
+        // fall back to the sum of active streets so opacity isn't zero.
+        if (totalHouses === 0 && completedHouses > 0) {
+            for (const street in streetWeightRegistry) {
+                totalHouses += streetWeightRegistry[street];
             }
         }
     }
