@@ -67,7 +67,7 @@ var showMore = function (msg,area, type) {
       toggle between hiding and showing the dropdown content */
 
 // --- MOVE THESE TO MAP.JS ---
-
+window.__MAP_LOGO_ADDED
 window.BAKED_DATA =
     window.BAKED_DATA ||
     (parent && parent.BAKED_DATA) ||
@@ -199,7 +199,6 @@ var fmap;
 
     console.log("🎯 Hydrating map once (idempotent)");
 
-    addMapLogo(window.fmap);
 
     const uniqueRegions = [
         ...new Set(
@@ -228,7 +227,10 @@ var fmap;
                 window.fmap = window[key];
 
                 const fmap = window.fmap;
-
+                if (!window.__MAP_LOGO_ADDED) {
+                    addMapLogo(fmap);
+                    window.__MAP_LOGO_ADDED = true;
+                }
                 // -------------------------
                 // POPUP REFRESH (SAFE)
                 // -------------------------
@@ -276,7 +278,10 @@ var fmap;
                     window.fmap = frameWin[key];
 
                     const fmap = window.fmap;
-
+                    if (!window.__MAP_LOGO_ADDED) {
+                        addMapLogo(fmap);
+                        window.__MAP_LOGO_ADDED = true;
+                    }
                     fmap.on('popupopen', function(e) {
                         const container = e.popup._contentNode;
                         const firstRow = container.querySelector('.canvass-row');
@@ -333,6 +338,10 @@ window.handleCalendarClick = function() {
 async function searchMap() {
     const queryInput = document.getElementById("searchInput").value.trim();
     const fmap = window.fmap;
+    if (!window.__MAP_LOGO_ADDED) {
+        addMapLogo(fmap);
+        window.__MAP_LOGO_ADDED = true;
+    }
     if (!queryInput || !fmap) {
         console.warn("⚠️ Search cancelled: Missing query or map instance.");
         return;
