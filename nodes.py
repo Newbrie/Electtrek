@@ -2367,6 +2367,29 @@ class TreeNode:
             </style>
         """
 
+        # Add this to your Python map generation string
+
+        logo_css_injection = f"""
+        <style>
+            .leaflet-bottom.leaflet-left::after {{
+                content: "";
+                display: block;
+                width: 60px;
+                height: 60px;
+                margin-left: 10px;
+                margin-bottom: 10px;
+                background-color: #00aaff;
+
+                /* 💡 Dynamic logo file path injected here */
+                -webkit-mask: url('{LOGO_FILE}') no-repeat center;
+                mask: url('{LOGO_FILE}') no-repeat center;
+                -webkit-mask-size: contain;
+                mask-size: contain;
+
+                pointer-events: auto;
+            }}
+        </style>
+        """
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
