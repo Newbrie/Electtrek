@@ -144,121 +144,101 @@ class ElectorManager:
 
         print(f"🚀 [INJECT] Initializing event logs replay against targets: {targets}")
 
-        # ------------------------------------------------------------------
-        # Helper: Household tag mutation
-        # ------------------------------------------------------------------
-        def add_task_tag(df, indexes, code, enabled=True):
-            if len(indexes) == 0 or not code:
-                return
-
-            # Canonical household selector (First elector found in group)
-            idx = indexes[0]
-            existing_raw = str(df.at[idx, 'Tags']).strip()
-
-            if existing_raw.lower() in ['nan', 'none', '', '0', '0.0']:
-                existing = set()
-            else:
-                existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
-
-            if enabled:
-                existing.add(code)
-                action = "ADDED"
-            else:
-                existing.discard(code)
-                action = "REMOVED"
-
-            new_tags = ", ".join(sorted(existing))
-            df.at[idx, 'Tags'] = new_tags
-
-            print(f"   └─ 🏷️  [TAG {action}] Row Index {idx} | Code: '{code}' | Outcome: [{new_tags}]")
-
-        # ------------------------------------------------------------------
-        # Helper: Household VI assignment
-        # ------------------------------------------------------------------
-        def add_household_vi(df, indexes, vi=None, votes=None):
-            if len(indexes) == 0:
-                return
-
-            try:
-                vote_count = int(votes or 0)
-            except (ValueError, TypeError):
-                vote_count = 0
-
-            # Apply positive intentions to the first N electors
-            target_indexes = indexes[:vote_count]
-
-            for idx in indexes:
-                if idx in target_indexes:
-                    if vi is not None:
-                        df.at[idx, 'VI'] = vi
-                else:
-                    # Clear VI tracking for remaining household electors
-                    df.at[idx, 'VI'] = ''
-
-            # Store explicit historical total counts on canonical elector
-            canonical_idx = indexes[0]
-            df.at[canonical_idx, 'Votes'] = str(vote_count)
-
-            print(f"   └─ 🗳️  [VI APPLY] Canonical Row {canonical_idx} | Votes Assigned: {vote_count} | VI: '{vi}'")
-
-        # ------------------------------------------------------------------
-        # Replay events into each election data container
-        # ------------------------------------------------------------------
         for ename in targets:
-            print(f"\n📂 [ELECTION METRIC PROCESSING]: Replaying events onto '{ename}'...")
+            print(f"📂 [ELECTION METRIC PROCESSING]: Replaying events onto '{ename}'...")
             df = self._elections[ename].copy()
 
-            for idx, ev in enumerate(all_events):
+            # ------------------------------------------------------------------
+            # STEP 1: Build a Lightning-Fast Coordinate Lookup Index
+            # ------------------------------------------------------------------
+            # Maps (uiScope, region, street, house) -> List of positional integer row indices
+            # This replaces the slow `resolve_targets` runtime scan completely.
+            lookup = {}
+
+            # We zip the columns together; this lets us map everything in a single linear pass
+            zipped_rows = zip(df.index, df['uiScope'], df['Region'], df['Street'], df['House'])
+            for idx, scope, reg, st, hs in zipped_rows:
+                key = (str(scope), str(reg), str(st), str(hs))
+                if key not in lookup:
+                    lookup[key] = []
+                lookup[key].append(idx)
+
+            # ------------------------------------------------------------------
+            # STEP 2: Pull the targets out into local dictionaries for fast mutations
+            # ------------------------------------------------------------------
+            tags_dict = df['Tags'].astype(str).replace(['nan', 'None', '0', '0.0'], '').to_dict()
+            vi_dict = df['VI'].astype(str).to_dict()
+            votes_dict = df['Votes'].astype(str).to_dict()
+
+            # ------------------------------------------------------------------
+            # STEP 3: Replay all events instantly inside pure memory dictionary
+            # ------------------------------------------------------------------
+            for ev in all_events:
                 if not isinstance(ev, dict):
-                    print(f"   ❌ [EVENT {idx}] Invalid schema entry: Type is {type(ev)}")
                     continue
 
-                uiScope = ev.get('uiScope', 'walk')
-                region = ev.get('region')
-                street = ev.get('street')
-                house = ev.get('house')
+                uiScope = str(ev.get('uiScope', 'walk'))
+                region = str(ev.get('region'))
+                street = str(ev.get('street'))
+                house = str(ev.get('house'))
 
-                if not all([region, street, house]):
-                    print(f"   ⚠️ [EVENT {idx}] Dropped due to incomplete tracking tokens: R='{region}', S='{street}', H='{house}'")
+                # Fetch matching indices via hash lookup - O(1) time complexity!
+                event_key = (uiScope, region, street, house)
+                indexes = lookup.get(event_key)
+
+                if not indexes:
                     continue
-
-                # Query runtime target collection matches
-                indexes = resolve_targets(df, uiScope, region, street, house)
 
                 ev_type = ev.get('type')
-                print(f"   📍 [EVENT {idx}][{ev_type.upper()}] Match Query -> Scope: {uiScope} | {region} | {street} | House: {house} -> Matches Found: {len(indexes)}")
 
-                if len(indexes) == 0:
-                    continue
-
-                # -----------------------------
-                # CASE A: TAG OPERATIONS
-                # -----------------------------
+                # --- CASE A: TAG OPERATIONS ---
                 if ev_type in ['tag', 'elector_tag']:
-                    add_task_tag(
-                        df,
-                        indexes,
-                        ev.get('code'),
-                        enabled=(ev.get('value') == 'y')
-                    )
+                    code = ev.get('code')
+                    if not code:
+                        continue
 
-                # -----------------------------
-                # CASE B: VI EVALUATIONS
-                # -----------------------------
+                    canonical_idx = indexes[0]
+                    existing_raw = tags_dict.get(canonical_idx, '')
+
+                    # Parse existing tags
+                    existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
+
+                    if ev.get('value') == 'y':
+                        existing.add(code)
+                    else:
+                        existing.discard(code)
+
+                    tags_dict[canonical_idx] = ", ".join(sorted(existing))
+
+                # --- CASE B: VI EVALUATIONS ---
                 elif ev_type == 'vi':
-                    add_household_vi(
-                        df,
-                        indexes,
-                        ev.get('value'),
-                        ev.get('votes')
-                    )
+                    try:
+                        vote_count = int(ev.get('votes') or 0)
+                    except (ValueError, TypeError):
+                        vote_count = 0
 
-                else:
-                    print(f"   ❓ [EVENT {idx}] Unhandled transaction event type discovered: '{ev_type}'")
+                    vi_val = ev.get('value') or ''
+                    target_indexes = indexes[:vote_count]
 
-            # Re-assign mutated back to state tracking ledger dict
+                    for idx in indexes:
+                        if idx in target_indexes:
+                            vi_dict[idx] = vi_val
+                        else:
+                            vi_dict[idx] = ''
+
+                    # Update canonical record votes tracking
+                    votes_dict[indexes[0]] = str(vote_count)
+
+            # ------------------------------------------------------------------
+            # STEP 4: Write-Back Updated State Buffers to DataFrame in One Shot
+            # ------------------------------------------------------------------
+            df['Tags'] = df.index.map(tags_dict)
+            df['VI'] = df.index.map(vi_dict)
+            df['Votes'] = df.index.map(votes_dict)
+
+            # Save back tracking ledger changes
             self._elections[ename] = df
-            print(f"💾 [SUCCESS] Replay completed for target: '{ename}'\n")
+            print(f"💾 [SUCCESS] Replay completed for target: '{ename}'")
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""
