@@ -1152,10 +1152,6 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         console.warn("⚠️ Sync Failure: Could not locate a tag element with data-code=\"VI\" inside this row template:", row);
     }
 
-    // -------------------------------------------------
-    // 5️⃣ MAP UPDATE TRIGGER
-    // -------------------------------------------------
-    window.updateMarkerStatus?.(region);
 };
 
 async function getVIData(path) {
