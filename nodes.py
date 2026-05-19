@@ -2033,702 +2033,710 @@ class TreeNode:
 
 
 
-def create_area_map(self, resolved_levels, static=False):
-        global SERVER_PASSWORD
+    def create_area_map(self, resolved_levels, static=False):
+            global SERVER_PASSWORD
 
-        from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
-        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
-        from layers import make_counters, FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+            from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
+            from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
+            from layers import make_counters, FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
-        import hashlib
-        import re
-        from pathlib import Path
-        # Guard: Ensure we have exactly one election to unpack
-        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+            import hashlib
+            import re
+            from pathlib import Path
+            # Guard: Ensure we have exactly one election to unpack
+            assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-        # The clean unpack
-        (c_election, elevels), = resolved_levels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
+            # The clean unpack
+            (c_election, elevels), = resolved_levels.items()
+            print(f"DEBUG: Unpacked election: {c_election}")
 
-        # ... imports ...
+            # ... imports ...
 
-        accumulate = session.get("accumulate", False)
+            accumulate = session.get("accumulate", False)
 
-        # 1. DETERMINE CONTEXT (Who is the "Owner" of this map?)
-        # If accumulating, we act as if we are the parent
+            # 1. DETERMINE CONTEXT (Who is the "Owner" of this map?)
+            # If accumulating, we act as if we are the parent
 
-        # 2. SET UP FILE PATHS
-        # Use render_node for the filename so child updates overwrite the parent map
-        mapfile_name = self.file(elevels)
-        target = self.locfilepath(mapfile_name)
+            # 2. SET UP FILE PATHS
+            # Use render_node for the filename so child updates overwrite the parent map
+            mapfile_name = self.file(elevels)
+            target = self.locfilepath(mapfile_name)
 
-        # 3. SET UP VISUALS (Title and Bounding Box)
-        title = self.value
-        # Use the parent's centroid and bbox so the map doesn't "zoom in" to just one child
-        map_center = self.latlongroid
-        map_zoom = LEVEL_ZOOM_MAP.get(self.type, 13)
-        map_bbox = self.bbox
+            # 3. SET UP VISUALS (Title and Bounding Box)
+            title = self.value
+            # Use the parent's centroid and bbox so the map doesn't "zoom in" to just one child
+            map_center = self.latlongroid
+            map_zoom = LEVEL_ZOOM_MAP.get(self.type, 13)
+            map_bbox = self.bbox
 
-        # --- Create the map using the render_node's location ---
-        FolMap = folium.Map(
-            location=map_center,
-            zoom_start=map_zoom,
-            width='100%',
-            height='800px'
-        )
-        print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile())
+            # --- Create the map using the render_node's location ---
+            FolMap = folium.Map(
+                location=map_center,
+                zoom_start=map_zoom,
+                width='100%',
+                height='800px'
+            )
+            print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile())
 
-        counters = make_counters()
+            counters = make_counters()
 
-            # 2️⃣ Create fresh FeatureGroups for THIS map
+                # 2️⃣ Create fresh FeatureGroups for THIS map
 
-        # 3️⃣ Select which layers to render for this map
-        flayers, totalleaf = self.get_feature_layers(
-            rlevels=resolved_levels,
-            path=mapfile_name,
-            static=static
-        )
+            # 3️⃣ Select which layers to render for this map
+            flayers, totalleaf = self.get_feature_layers(
+                rlevels=resolved_levels,
+                path=mapfile_name,
+                static=static
+            )
 
-        # 1. Define the CSS for the accordion
-        accordion_css = """
-        <style>
-            .ghost-accordion {
-                background: #f8f9fa;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                margin-top: 10px;
-            }
-            .ghost-accordion summary {
-                padding: 5px 10px;
-                cursor: pointer;
-                font-weight: bold;
-                outline: none;
-            }
-            .ghost-accordion-content {
-                padding: 5px 10px;
-                border-top: 1px solid #ddd;
-            }
-        </style>
-        """
-
-    # Define the Accordion Injection
-# You can place this right before you return from your map generation method
-        accordion_html = """
+            # 1. Define the CSS for the accordion
+            accordion_css = """
             <style>
                 .ghost-accordion {
-                    background-color: #ffffff;
-                    border: 1px solid #ccc;
+                    background: #f8f9fa;
+                    border: 1px solid #ddd;
                     border-radius: 4px;
-                    margin-top: 8px;
-                    font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+                    margin-top: 10px;
                 }
                 .ghost-accordion summary {
-                    padding: 6px 10px;
+                    padding: 5px 10px;
                     cursor: pointer;
-                    font-weight: 600;
-                    font-size: 12px;
-                    color: #333;
+                    font-weight: bold;
                     outline: none;
-                    list-style: none;
-                }
-                .ghost-accordion summary::-webkit-details-marker {
-                    display: none;
                 }
                 .ghost-accordion-content {
-                    padding: 5px 0 10px 0;
-                    max-height: 200px;
-                    overflow-y: auto;
-                    border-top: 1px solid #eee;
-                }
-                /* Make the inner labels look like standard Leaflet rows */
-                .ghost-accordion-content label {
-                    display: block;
-                    margin: 0;
-                    padding: 3px 10px;
-                    font-size: 11px;
-                    cursor: pointer;
-                }
-                .ghost-accordion-content label:hover {
-                    background-color: #f4f4f4;
+                    padding: 5px 10px;
+                    border-top: 1px solid #ddd;
                 }
             </style>
+            """
 
-            <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                var observer = new MutationObserver(function(mutations, me) {
-                    var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
-                    if (controlContainer) {
-                        setupAccordion(controlContainer);
-                        me.disconnect();
-                        return;
+        # Define the Accordion Injection
+    # You can place this right before you return from your map generation method
+            accordion_html = """
+                <style>
+                    .ghost-accordion {
+                        background-color: #ffffff;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        margin-top: 8px;
+                        font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
                     }
-                });
+                    .ghost-accordion summary {
+                        padding: 6px 10px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        font-size: 12px;
+                        color: #333;
+                        outline: none;
+                        list-style: none;
+                    }
+                    .ghost-accordion summary::-webkit-details-marker {
+                        display: none;
+                    }
+                    .ghost-accordion-content {
+                        padding: 5px 0 10px 0;
+                        max-height: 200px;
+                        overflow-y: auto;
+                        border-top: 1px solid #eee;
+                    }
+                    /* Make the inner labels look like standard Leaflet rows */
+                    .ghost-accordion-content label {
+                        display: block;
+                        margin: 0;
+                        padding: 3px 10px;
+                        font-size: 11px;
+                        cursor: pointer;
+                    }
+                    .ghost-accordion-content label:hover {
+                        background-color: #f4f4f4;
+                    }
+                </style>
 
-                observer.observe(document.body, { childList: true, subtree: true });
-
-                function setupAccordion(container) {
-                    var details = document.createElement('details');
-                    details.className = 'ghost-accordion';
-                    details.innerHTML = '<summary>📊 Data Overlays</summary>';
-
-                    var contentDiv = document.createElement('div');
-                    contentDiv.className = 'ghost-accordion-content';
-                    details.appendChild(contentDiv);
-
-                    var labels = container.querySelectorAll('label');
-                    var foundAny = false;
-
-                    labels.forEach(function(originalLabel) {
-                        if (originalLabel.innerText.includes('Data Overlay:')) {
-                            foundAny = true;
-
-                            // 1. Hide the original row so it doesn't show twice
-                            originalLabel.style.display = 'none';
-
-                            // 2. Create a Proxy Label for the Accordion
-                            var proxyLabel = document.createElement('label');
-                            var cleanName = originalLabel.innerText.replace('Data Overlay:', '').trim();
-
-                            // Get the current state of the real checkbox
-                            var realInput = originalLabel.querySelector('input');
-                            var isChecked = realInput ? realInput.checked : false;
-
-                            proxyLabel.innerHTML = `
-                                <input type="checkbox" ${isChecked ? 'checked' : ''}>
-                                <span>${cleanName}</span>
-                            `;
-
-                            // 3. Link the Proxy to the Real Input
-                            var proxyInput = proxyLabel.querySelector('input');
-
-                            proxyInput.addEventListener('change', function() {
-                                if (realInput) {
-                                    // Physically click the hidden Leaflet input
-                                    // This triggers Leaflet's internal addLayer/removeLayer
-                                    realInput.click();
-                                }
-                            });
-
-                            contentDiv.appendChild(proxyLabel);
+                <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    var observer = new MutationObserver(function(mutations, me) {
+                        var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
+                        if (controlContainer) {
+                            setupAccordion(controlContainer);
+                            me.disconnect();
+                            return;
                         }
                     });
 
-                    if (foundAny) {
-                        container.appendChild(details);
-                    }
-                }
-            });
-            </script>
-            """
+                    observer.observe(document.body, { childList: true, subtree: true });
 
+                    function setupAccordion(container) {
+                        var details = document.createElement('details');
+                        details.className = 'ghost-accordion';
+                        details.innerHTML = '<summary>📊 Data Overlays</summary>';
 
-        street_row_css = """
-            <style>
-            .street-row-odd {
-                border-bottom: 1px solid #00509e;
-                background-color: #d3d3d3;  /* light gray for odd rows */
-                color: #003366;
-                transition: background 0.3s, color 0.3s;
-            }
+                        var contentDiv = document.createElement('div');
+                        contentDiv.className = 'ghost-accordion-content';
+                        details.appendChild(contentDiv);
 
-            .street-row-even {
-                border-bottom: 1px solid #00509e;
-                background-color: #e6f2ff;  /* light blue for even rows */
-                color: #003366;
-                transition: background 0.3s, color 0.3s;
-            }
+                        var labels = container.querySelectorAll('label');
+                        var foundAny = false;
 
-            .street-row-odd:hover,
-            .street-row-even:hover {
-                background-color: #004080;  /* dark blue on hover */
-                color: #ffffff;             /* white text on hover */
-            }
-            </style>
-            """
-        voronoi_labelandtag_css = """
-            <style>
-            .voronoi-label{
-              font-size:10pt;
-              font-weight:500;
-              text-align:center;
-              -webkit-text-stroke:2px white;
-              paint-order:stroke fill;
-            }
-            .voronoi-tag{
-              padding:2px 4px;
-              border-radius:5px;
-              border:2px solid black;
-            }
-            </style>
-            """
+                        labels.forEach(function(originalLabel) {
+                            if (originalLabel.innerText.includes('Data Overlay:')) {
+                                foundAny = true;
 
+                                // 1. Hide the original row so it doesn't show twice
+                                originalLabel.style.display = 'none';
 
-        move_close_button_css = """
-            <style>
+                                // 2. Create a Proxy Label for the Accordion
+                                var proxyLabel = document.createElement('label');
+                                var cleanName = originalLabel.innerText.replace('Data Overlay:', '').trim();
 
-            /* Make popup close button large and visible */
-            .leaflet-popup-close-button {
-                right: auto !important;
-                left: 8px !important;
-                top: 8px !important;
+                                // Get the current state of the real checkbox
+                                var realInput = originalLabel.querySelector('input');
+                                var isChecked = realInput ? realInput.checked : false;
 
-                width: 28px !important;
-                height: 28px !important;
+                                proxyLabel.innerHTML = `
+                                    <input type="checkbox" ${isChecked ? 'checked' : ''}>
+                                    <span>${cleanName}</span>
+                                `;
 
-                line-height: 26px !important;
-                text-align: center;
+                                // 3. Link the Proxy to the Real Input
+                                var proxyInput = proxyLabel.querySelector('input');
 
-                font-size: 20px !important;
-                font-weight: bold;
+                                proxyInput.addEventListener('change', function() {
+                                    if (realInput) {
+                                        // Physically click the hidden Leaflet input
+                                        // This triggers Leaflet's internal addLayer/removeLayer
+                                        realInput.click();
+                                    }
+                                });
 
-                color: white !important;
-                background: #d9534f !important;
-
-                border-radius: 50% !important;
-                border: 2px solid white !important;
-
-                box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-
-                cursor: pointer;
-            }
-
-            /* Hover effect */
-            .leaflet-popup-close-button:hover {
-                background: #c9302c !important;
-                transform: scale(1.1);
-            }
-
-            </style>
-            """
-
-
-        limit_popup_height_css = """
-            <style>
-            .leaflet-popup-content {
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            </style>
-            """
-
-        # --- Title for the map
-
-        if accumulate and self.parent is not None:
-            title = self.parent.value
-        else:
-            title = self.value
-
-        title_html = f'''
-        <h2 style="
-            z-index: 1100;
-            color: black;
-            position: absolute;
-            top: 10px;
-            left: 50px;
-            font-variant: small-caps;
-            font-size: 12px;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        ">{title} MAP</h2>
-        '''
-        import base64
-    # 1. Convert PNG to Base64 (Keep as is)
-        with open(LOGO_FILE, "rb") as f:
-            b64_str = base64.b64encode(f.read()).decode('utf-8')
-
-        # 2. Updated Styles (Remove 'position: fixed' and 'bottom/left')
-        # We let Leaflet handle the positioning now.
-        logo_styles = f"""
-            <style>
-                .leaflet-logo-container {{
-                    height: 60px;
-                    width: 160px;
-                    background-color: transparent;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    pointer-events: none;
-                    margin-bottom: 10px !important; /* Spacing from map edge */
-                    margin-left: 10px !important;
-                }}
-
-                .leaflet-logo-icon {{
-                    width: 100%;
-                    height: 100%;
-                    background-color: #17B9D1; /* Your brand color */
-                    -webkit-mask-image: url("data:image/png;base64,{b64_str}");
-                    mask-image: url("data:image/png;base64,{b64_str}");
-                    -webkit-mask-size: contain;
-                    mask-size: contain;
-                    -webkit-mask-repeat: no-repeat;
-                    mask-repeat: no-repeat;
-                    -webkit-mask-position: center;
-                    mask-position: center;
-                }}
-            </style>
-        """
-
-        # Add this to your Python map generation string
-
-        logo_css_injection = f"""
-        <style>
-            .leaflet-bottom.leaflet-left::after {{
-                content: "";
-                display: block;
-                width: 60px;
-                height: 60px;
-                margin-left: 10px;
-                margin-bottom: 10px;
-                background-color: #00aaff;
-
-                /* 💡 Dynamic logo file path injected here */
-                -webkit-mask: url('{LOGO_FILE}') no-repeat center;
-                mask: url('{LOGO_FILE}') no-repeat center;
-                -webkit-mask-size: contain;
-                mask-size: contain;
-
-                pointer-events: auto;
-            }}
-        </style>
-        """
-
-        # --- Search bar with map detection and one single searchMap() function
-        search_bar_html = """
-            <style>
-                #customSearchBox {
-                    position: absolute; top: 10px; left: 50px; z-index: 1000;
-                    background: white; padding: 8px 10px; border: 1px solid #ccc;
-                    display: flex; flex-direction: column; gap: 5px;
-                    font-family: sans-serif;
-                }
-                #customSearchBox input, #customSearchBox button { padding: 4px; font-size: 14px; }
-            </style>
-
-            <div id="customSearchBox">
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="searchInput" placeholder="Search..." />
-                    <button onclick="searchMap()">Search</button>
-                    <button id="backToCalendarBtn" onclick="handleCalendarClick()">📅 Calendar</button>
-                </div>
-            </div>
-            """
-
-        # Inject custom CSS
-        css = """
-        <style>
-        .leaflet-control-layers {
-            margin-right: 300px !important; /* move left by increasing the right margin */
-            /* or use left:50px; right:auto; for absolute positioning */
-        }
-        </style>
-        """
-#        FolMap.get_root().html.add_child(Element(css))
-# no need for this if map left of nav buttons
-        folium.TileLayer(
-            tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
-            name='OPNVKarte (Public Transport)',
-            attr='Map data © OpenStreetMap contributors, OPNVKarte by memomaps.de',
-            overlay=False,
-            control=True
-        ).add_to(FolMap)
-
-        # Add all layers
-        for layer in flayers:
-            layer.add_to(FolMap)
-            print(f"create map layer name: {layer.name} size:{len(layer._children)}")
-
-
-
-        # --- Inject custom HTML and JS into map
-
-
-
-
-        fmap_tags_js = r"""
-                <script>
-                (function() {
-
-                    console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
-
-                    window.fmap = null;
-                    window.MarkerLayer = null;
-
-                    let pollAttempts = 0;
-                    const MAX_ATTEMPTS = 100; // 10 seconds timeout
-
-                    // ---------------------------------------------------------
-                    // 1️⃣ Stage 1: Detect the Folium map object
-                    // ---------------------------------------------------------
-                    function detectFoliumMap() {
-                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
-                            setTimeout(detectFoliumMap, 100);
-                            return;
-                        }
-
-                        for (const key in window) {
-                            if (!window.hasOwnProperty(key)) continue;
-                            const val = window[key];
-
-                            if (key.startsWith("map_") && val instanceof L.Map) {
-                                window.fmap = val;
-                                startLayerPolling();
-                                return;
+                                contentDiv.appendChild(proxyLabel);
                             }
-                        }
-                        setTimeout(detectFoliumMap, 100);
-                    }
+                        });
 
-                    // ---------------------------------------------------------
-                    // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
-                    // ---------------------------------------------------------
-                    function findTargetLayer() {
-                        pollAttempts++;
-
-                        if (pollAttempts > MAX_ATTEMPTS) {
-                            console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
-                            clearInterval(poll_interval_id);
-                            return;
-                        }
-
-                        // --- Search for the Layer Control's internal dictionary ---
-                        for (const key in window) {
-                            if (!window.hasOwnProperty(key)) continue;
-                            const val = window[key];
-
-                            // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
-                            if (key.startsWith("layer_control_") && val && val.overlays) {
-
-                                // Check if the target layer ("marker") is inside the overlays
-                                if (val.overlays.marker) {
-                                    window.MarkerLayer = val.overlays.marker;
-
-                                    console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
-                                    console.log(`Marker Layer stored in window.MarkerLayer.`);
-
-                                    clearInterval(poll_interval_id);
-                                    return;
-                                }
-                            }
+                        if (foundAny) {
+                            container.appendChild(details);
                         }
                     }
-
-                    let poll_interval_id;
-                    function startLayerPolling() {
-                        poll_interval_id = setInterval(findTargetLayer, 100);
-                    }
-
-                    document.addEventListener("DOMContentLoaded", detectFoliumMap);
-
-                })();
+                });
                 </script>
                 """
 
 
-
-        # Inject canvas icon JS
-        canvas_icon_js = """
-        <script>
-        window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
-            const size = 40;
-            const radius = 18;
-
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d");
-
-            ctx.beginPath();
-            ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "#000";
-            ctx.stroke();
-
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 16px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(prefix, size/2, size/2);
-
-            console.log("📍 canvas icon:");
-
-            return L.icon({
-                iconUrl: canvas.toDataURL(),
-                iconSize: [size, size],
-                iconAnchor: [size/2, size],
-                popupAnchor: [0, -size/2]
-            });
-        };
-        </script>
-        """
-
-
-
-        # Inject JS to replace default popup with canvas marker
-        custom_click_js = r"""
-            <script>
-            async function handleMapClick(e) {
-
-                if (!window.fmap) return;
-
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
-
-                console.log("📍 Map click for add-place:", lat, lng);
-
-                let result = null;
-
-                try {
-                    result = await window.reverseGeocode(lat, lng);
-                } catch (err) {
-                    console.error("Reverse geocode failed:", err);
+            street_row_css = """
+                <style>
+                .street-row-odd {
+                    border-bottom: 1px solid #00509e;
+                    background-color: #d3d3d3;  /* light gray for odd rows */
+                    color: #003366;
+                    transition: background 0.3s, color 0.3s;
                 }
 
-                // 🔑 Send to your existing modal system
-                window.parent.postMessage({
-                    type: "mapLocationSelected",
-                    lat,
-                    lng,
-                    house_number: result?.house_number || "",
-                    road: result?.road || "",
-                    suburb: result?.suburb || "",
-                    city: result?.city || "",
-                    postcode: result?.postcode || ""
-                }, "*");
-            }
-            </script>
+                .street-row-even {
+                    border-bottom: 1px solid #00509e;
+                    background-color: #e6f2ff;  /* light blue for even rows */
+                    color: #003366;
+                    transition: background 0.3s, color 0.3s;
+                }
+
+                .street-row-odd:hover,
+                .street-row-even:hover {
+                    background-color: #004080;  /* dark blue on hover */
+                    color: #ffffff;             /* white text on hover */
+                }
+                </style>
+                """
+            voronoi_labelandtag_css = """
+                <style>
+                .voronoi-label{
+                  font-size:10pt;
+                  font-weight:500;
+                  text-align:center;
+                  -webkit-text-stroke:2px white;
+                  paint-order:stroke fill;
+                }
+                .voronoi-tag{
+                  padding:2px 4px;
+                  border-radius:5px;
+                  border:2px solid black;
+                }
+                </style>
+                """
+
+
+            move_close_button_css = """
+                <style>
+
+                /* Make popup close button large and visible */
+                .leaflet-popup-close-button {
+                    right: auto !important;
+                    left: 8px !important;
+                    top: 8px !important;
+
+                    width: 28px !important;
+                    height: 28px !important;
+
+                    line-height: 26px !important;
+                    text-align: center;
+
+                    font-size: 20px !important;
+                    font-weight: bold;
+
+                    color: white !important;
+                    background: #d9534f !important;
+
+                    border-radius: 50% !important;
+                    border: 2px solid white !important;
+
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+
+                    cursor: pointer;
+                }
+
+                /* Hover effect */
+                .leaflet-popup-close-button:hover {
+                    background: #c9302c !important;
+                    transform: scale(1.1);
+                }
+
+                </style>
+                """
+
+
+            limit_popup_height_css = """
+                <style>
+                .leaflet-popup-content {
+                    max-height: 300px;
+                    overflow-y: auto;
+                }
+                </style>
+                """
+
+            # --- Title for the map
+
+            if accumulate and self.parent is not None:
+                title = self.parent.value
+            else:
+                title = self.value
+
+            title_html = f'''
+            <h2 style="
+                z-index: 1100;
+                color: black;
+                position: absolute;
+                top: 10px;
+                left: 50px;
+                font-variant: small-caps;
+                font-size: 12px;
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            ">{title} MAP</h2>
+            '''
+            import base64
+        # 1. Convert PNG to Base64 (Keep as is)
+            with open(LOGO_FILE, "rb") as f:
+                b64_str = base64.b64encode(f.read()).decode('utf-8')
+
+            # 2. Updated Styles (Remove 'position: fixed' and 'bottom/left')
+            # We let Leaflet handle the positioning now.
+            logo_styles = f"""
+                <style>
+                    .leaflet-logo-container {{
+                        height: 60px;
+                        width: 160px;
+                        background-color: transparent;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        pointer-events: none;
+                        margin-bottom: 10px !important; /* Spacing from map edge */
+                        margin-left: 10px !important;
+                    }}
+
+                    .leaflet-logo-icon {{
+                        width: 100%;
+                        height: 100%;
+                        background-color: #17B9D1; /* Your brand color */
+                        -webkit-mask-image: url("data:image/png;base64,{b64_str}");
+                        mask-image: url("data:image/png;base64,{b64_str}");
+                        -webkit-mask-size: contain;
+                        mask-size: contain;
+                        -webkit-mask-repeat: no-repeat;
+                        mask-repeat: no-repeat;
+                        -webkit-mask-position: center;
+                        mask-position: center;
+                    }}
+                </style>
             """
 
+            # Add this to your Python map generation string
 
-        reverse_geocode_js = """
-            <script>
-            // Simple reverse geocoder using Nominatim
-            window.reverseGeocode = async function(lat, lng) {
-                const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+            logo_css_injection = f"""
+            <style>
+                .leaflet-bottom.leaflet-left::after {{
+                    content: "";
+                    display: block;
+                    width: 60px;
+                    height: 60px;
+                    margin-left: 10px;
+                    margin-bottom: 10px;
+                    background-color: #00aaff;
 
-                const res = await fetch(url, {
-                    headers: {
-                        "Accept": "application/json"
+                    /* 💡 Dynamic logo file path injected here */
+                    -webkit-mask: url('{LOGO_FILE}') no-repeat center;
+                    mask: url('{LOGO_FILE}') no-repeat center;
+                    -webkit-mask-size: contain;
+                    mask-size: contain;
+
+                    pointer-events: auto;
+                }}
+            </style>
+            """
+
+            # --- Search bar with map detection and one single searchMap() function
+            search_bar_html = """
+                <style>
+                    #customSearchBox {
+                        position: absolute; top: 10px; left: 50px; z-index: 1000;
+                        background: white; padding: 8px 10px; border: 1px solid #ccc;
+                        display: flex; flex-direction: column; gap: 5px;
+                        font-family: sans-serif;
                     }
+                    #customSearchBox input, #customSearchBox button { padding: 4px; font-size: 14px; }
+                </style>
+
+                <div id="customSearchBox">
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="searchInput" placeholder="Search..." />
+                        <button onclick="searchMap()">Search</button>
+                        <button id="backToCalendarBtn" onclick="handleCalendarClick()">📅 Calendar</button>
+                    </div>
+                </div>
+                """
+
+            # Inject custom CSS
+            css = """
+            <style>
+            .leaflet-control-layers {
+                margin-right: 300px !important; /* move left by increasing the right margin */
+                /* or use left:50px; right:auto; for absolute positioning */
+            }
+            </style>
+            """
+    #        FolMap.get_root().html.add_child(Element(css))
+    # no need for this if map left of nav buttons
+            folium.TileLayer(
+                tiles='https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
+                name='OPNVKarte (Public Transport)',
+                attr='Map data © OpenStreetMap contributors, OPNVKarte by memomaps.de',
+                overlay=False,
+                control=True
+            ).add_to(FolMap)
+
+            # Add all layers
+            for layer in flayers:
+                layer.add_to(FolMap)
+                print(f"create map layer name: {layer.name} size:{len(layer._children)}")
+
+
+
+            # --- Inject custom HTML and JS into map
+
+
+
+
+            fmap_tags_js = r"""
+                    <script>
+                    (function() {
+
+                        console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
+
+                        window.fmap = null;
+                        window.MarkerLayer = null;
+
+                        let pollAttempts = 0;
+                        const MAX_ATTEMPTS = 100; // 10 seconds timeout
+
+                        // ---------------------------------------------------------
+                        // 1️⃣ Stage 1: Detect the Folium map object
+                        // ---------------------------------------------------------
+                        function detectFoliumMap() {
+                            if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                                setTimeout(detectFoliumMap, 100);
+                                return;
+                            }
+
+                            for (const key in window) {
+                                if (!window.hasOwnProperty(key)) continue;
+                                const val = window[key];
+
+                                if (key.startsWith("map_") && val instanceof L.Map) {
+                                    window.fmap = val;
+                                    startLayerPolling();
+                                    return;
+                                }
+                            }
+                            setTimeout(detectFoliumMap, 100);
+                        }
+
+                        // ---------------------------------------------------------
+                        // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
+                        // ---------------------------------------------------------
+                        function findTargetLayer() {
+                            pollAttempts++;
+
+                            if (pollAttempts > MAX_ATTEMPTS) {
+                                console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                                clearInterval(poll_interval_id);
+                                return;
+                            }
+
+                            // --- Search for the Layer Control's internal dictionary ---
+                            for (const key in window) {
+                                if (!window.hasOwnProperty(key)) continue;
+                                const val = window[key];
+
+                                // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
+                                if (key.startsWith("layer_control_") && val && val.overlays) {
+
+                                    // Check if the target layer ("marker") is inside the overlays
+                                    if (val.overlays.marker) {
+                                        window.MarkerLayer = val.overlays.marker;
+
+                                        console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
+                                        console.log(`Marker Layer stored in window.MarkerLayer.`);
+
+                                        clearInterval(poll_interval_id);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
+                        let poll_interval_id;
+                        function startLayerPolling() {
+                            poll_interval_id = setInterval(findTargetLayer, 100);
+                        }
+
+                        document.addEventListener("DOMContentLoaded", detectFoliumMap);
+
+                    })();
+                    </script>
+                    """
+
+
+
+            # Inject canvas icon JS
+            canvas_icon_js = """
+            <script>
+            window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
+                const size = 40;
+                const radius = 18;
+
+                const canvas = document.createElement("canvas");
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext("2d");
+
+                ctx.beginPath();
+                ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "#000";
+                ctx.stroke();
+
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 16px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(prefix, size/2, size/2);
+
+                console.log("📍 canvas icon:");
+
+                return L.icon({
+                    iconUrl: canvas.toDataURL(),
+                    iconSize: [size, size],
+                    iconAnchor: [size/2, size],
+                    popupAnchor: [0, -size/2]
                 });
-
-                if (!res.ok) throw new Error("Reverse geocoding failed");
-
-                const data = await res.json();
-                console.log("📍 Reverse geocode result:", data);
-
-                return {
-                    address: data.display_name || "Unknown address",
-                    house_number: data.address?.house_number || "",
-                    road: data.address?.road || "",
-                    suburb: data.address?.suburb || "",
-                    city: data.address?.city || data.address?.town || data.address?.village || "",
-                    postcode: data.address?.postcode || ""
-                };
-
             };
             </script>
             """
 
-        transparency = """
-        <style>
-        .leaflet-div-icon {
-            background: transparent !important;
-            border: none !important;
-        }
-        </style>
-        """
 
-        # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
-        # This ties into your existing map detection lifecycle to prevent race conditions.
-        fast_index_js = """
-        <script>
-        (function() {
-            window.regionLayerCache = {};
 
-            function buildCompiledLayerIndex() {
-                if (!window.fmap) {
-                    // Re-poll in sync with map instantiation
-                    setTimeout(buildCompiledLayerIndex, 50);
-                    return;
-                }
+            # Inject JS to replace default popup with canvas marker
+            custom_click_js = r"""
+                <script>
+                async function handleMapClick(e) {
 
-                let indexedCount = 0;
-                window.fmap.eachLayer(function(layer) {
-                    if (layer && layer.options && layer.options.id) {
-                        window.regionLayerCache[layer.options.id] = layer;
-                        indexedCount++;
+                    if (!window.fmap) return;
+
+                    const lat = e.latlng.lat;
+                    const lng = e.latlng.lng;
+
+                    console.log("📍 Map click for add-place:", lat, lng);
+
+                    let result = null;
+
+                    try {
+                        result = await window.reverseGeocode(lat, lng);
+                    } catch (err) {
+                        console.error("Reverse geocode failed:", err);
                     }
-                });
-                console.log("⚡ Fast Index Module Ready. Direct memory vectors indexed:", indexedCount);
+
+                    // 🔑 Send to your existing modal system
+                    window.parent.postMessage({
+                        type: "mapLocationSelected",
+                        lat,
+                        lng,
+                        house_number: result?.house_number || "",
+                        road: result?.road || "",
+                        suburb: result?.suburb || "",
+                        city: result?.city || "",
+                        postcode: result?.postcode || ""
+                    }, "*");
+                }
+                </script>
+                """
+
+
+            reverse_geocode_js = """
+                <script>
+                // Simple reverse geocoder using Nominatim
+                window.reverseGeocode = async function(lat, lng) {
+                    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+
+                    const res = await fetch(url, {
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    });
+
+                    if (!res.ok) throw new Error("Reverse geocoding failed");
+
+                    const data = await res.json();
+                    console.log("📍 Reverse geocode result:", data);
+
+                    return {
+                        address: data.display_name || "Unknown address",
+                        house_number: data.address?.house_number || "",
+                        road: data.address?.road || "",
+                        suburb: data.address?.suburb || "",
+                        city: data.address?.city || data.address?.town || data.address?.village || "",
+                        postcode: data.address?.postcode || ""
+                    };
+
+                };
+                </script>
+                """
+
+            transparency = """
+            <style>
+            .leaflet-div-icon {
+                background: transparent !important;
+                border: none !important;
             }
+            </style>
+            """
 
-            document.addEventListener("DOMContentLoaded", buildCompiledLayerIndex);
-        })();
-        </script>
-        """
+            # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
+            # This ties into your existing map detection lifecycle to prevent race conditions.
+    # 💡 CORRECTED INJECTION: Property-Aligned Vector Compiler Index
+            fast_index_js = """
+                <script>
+                (function() {
+                    window.regionLayerCache = {};
 
-        for k, v in FolMap._children.items():
-            print(type(v), getattr(v, "name", None))
+                    function buildCompiledLayerIndex() {
+                        if (!window.fmap) {
+                            // Re-poll if map isn't instantiated yet
+                            setTimeout(buildCompiledLayerIndex, 50);
+                            return;
+                        }
 
-        # Ensure there's only one LayerControl
-        FolMap.add_child(folium.LayerControl(collapsed=True))
+                        let indexedCount = 0;
+                        window.fmap.eachLayer(function(layer) {
+                            if (!layer || layer.is_ghost) return;
 
-        FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
-        FolMap.get_root().html.add_child(folium.Element(search_bar_html))
-        FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
-        FolMap.get_root().html.add_child(Element(custom_click_js))
-        FolMap.get_root().html.add_child(Element(canvas_icon_js))
-        FolMap.get_root().html.add_child(folium.Element(title_html))
-        FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
-        FolMap.get_root().html.add_child(folium.Element(voronoi_labelandtag_css))
-        FolMap.get_root().html.add_child(folium.Element(street_row_css))
-        FolMap.get_root().html.add_child(folium.Element(transparency))
-        FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
+                            // 🎯 Exactly mirroring your working property fallback chain
+                            const p = layer.feature?.properties;
+                            const rawId = p?.region_id || p?.name || p?.id;
 
-        FolMap.get_root().html.add_child(folium.Element(logo_css_injection))
+                            if (rawId && layer.feature?.geometry) {
+                                const cleanId = String(rawId).trim().toUpperCase();
+                                window.regionLayerCache[cleanId] = layer;
+                                indexedCount++;
+                            }
+                        });
+                        console.log("⚡ Fast Index Module Ready. Geometries indexed:", indexedCount);
+                    }
 
-        # 💡 Injected new static dictionary building capability cleanly into page generation blocks
-        FolMap.get_root().html.add_child(folium.Element(fast_index_js))
+                    document.addEventListener("DOMContentLoaded", buildCompiledLayerIndex);
+                })();
+                </script>
+                """
 
-        # Add layer control accordion to your Folium map
-        FolMap.get_root().header.add_child(folium.Element(accordion_css))
-        FolMap.get_root().header.add_child(folium.Element(accordion_html))
+            for k, v in FolMap._children.items():
+                print(type(v), getattr(v, "name", None))
 
-        # Add the LatLngPopup plugin
-        FolMap.add_child(folium.LatLngPopup())
+            # Ensure there's only one LayerControl
+            FolMap.add_child(folium.LayerControl(collapsed=True))
 
-        # Add custom CSS/JS
-        FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
-        FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
-        FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
+            FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
+            FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+            FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
+            FolMap.get_root().html.add_child(Element(custom_click_js))
+            FolMap.get_root().html.add_child(Element(canvas_icon_js))
+            FolMap.get_root().html.add_child(folium.Element(title_html))
+            FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
+            FolMap.get_root().html.add_child(folium.Element(voronoi_labelandtag_css))
+            FolMap.get_root().html.add_child(folium.Element(street_row_css))
+            FolMap.get_root().html.add_child(folium.Element(transparency))
+            FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
+
+            FolMap.get_root().html.add_child(folium.Element(logo_css_injection))
+
+            # 💡 Injected new static dictionary building capability cleanly into page generation blocks
+            FolMap.get_root().html.add_child(folium.Element(fast_index_js))
+
+            # Add layer control accordion to your Folium map
+            FolMap.get_root().header.add_child(folium.Element(accordion_css))
+            FolMap.get_root().header.add_child(folium.Element(accordion_html))
+
+            # Add the LatLngPopup plugin
+            FolMap.add_child(folium.LatLngPopup())
+
+            # Add custom CSS/JS
+            FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
+            FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
+            FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
 
 
-        # Fit map to bounding box
-        # 4. APPLY BOUNDS (Consolidated)
-        if map_bbox:
-            try:
-                # Destructure and validate coordinates in one go
-                (lat1, lon1), (lat2, lon2) = map_bbox
+            # Fit map to bounding box
+            # 4. APPLY BOUNDS (Consolidated)
+            if map_bbox:
+                try:
+                    # Destructure and validate coordinates in one go
+                    (lat1, lon1), (lat2, lon2) = map_bbox
 
-                if [lat1, lon1] == [lat2, lon2]:
-                    # It's a single point, not a box
+                    if [lat1, lon1] == [lat2, lon2]:
+                        # It's a single point, not a box
+                        FolMap.location = map_center
+                        FolMap.zoom_start = map_zoom
+                    else:
+                        # Valid box
+                        FolMap.fit_bounds([[lat1, lon1], [lat2, lon2]], padding=(10, 10))
+
+                except (TypeError, ValueError, IndexError):
+                    print(f"⚠️ BBox format invalid: {map_bbox}. Falling back to centroid.")
                     FolMap.location = map_center
-                    FolMap.zoom_start = map_zoom
-                else:
-                    # Valid box
-                    FolMap.fit_bounds([[lat1, lon1], [lat2, lon2]], padding=(10, 10))
-
-            except (TypeError, ValueError, IndexError):
-                print(f"⚠️ BBox format invalid: {map_bbox}. Falling back to centroid.")
-                FolMap.location = map_center
-        else:
-            print("ℹ️ No BBox provided; using default center/zoom.")
-        # 5. SAVE TO THE PARENT'S PATH
-        FolMap.save(target)
-        save_nodes(TREKNODE_FILE)
-        print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
-        return FolMap, totalleaf
+            else:
+                print("ℹ️ No BBox provided; using default center/zoom.")
+            # 5. SAVE TO THE PARENT'S PATH
+            FolMap.save(target)
+            save_nodes(TREKNODE_FILE)
+            print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
+            return FolMap, totalleaf
 
 
 
