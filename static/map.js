@@ -1129,10 +1129,6 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         }
     }
 
-    // -------------------------------------------------
-    // 5️⃣ MAP UPDATE TRIGGER (derived later)
-    // -------------------------------------------------
-    window.updateMarkerStatus?.(region);
 };
 
 
@@ -1599,8 +1595,6 @@ window.loadHouseData = function(selectElement) {
     // Refresh dropdown styling
     window.refreshDropdownColors(selectElement);
 
-    // Update the specific Walk (Region) on the map
-    window.updateMarkerStatus(walk);
 };
 
 
