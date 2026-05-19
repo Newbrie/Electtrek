@@ -31,7 +31,13 @@ bindEvent( window, 'message', function (e) {
   var ul = document.getElementById("logwin");
   var li = document.createElement("li");
   li.appendChild(document.createTextNode(e.data));
-  ul.appendChild(li);
+  if (ul) {
+    ul.appendChild(li);
+    console.log("✅ Successfully appended location row to UI.");
+} else {
+    // 💡 This prevents the 'Cannot read properties of null' crash on static sites!
+    console.warn("ℹ️ UI container element was not found on this page layout. Location update skipped.");
+}
   console.log("_____FlashPostedmessage: ",e.data);
 });
 
