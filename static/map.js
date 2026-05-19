@@ -1060,7 +1060,6 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         region,
         street,
         house,
-        code,
         vi,
         votes: count,
         synced: false   // 👈 ADD THIS
