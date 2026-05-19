@@ -805,45 +805,7 @@ function deriveState(events) {
     return state;
 }
 
-window.walkLayersDeep = function(layer, callback) {
-    if (!layer) return false;
 
-    // 1. EARLY ESCAPE: Skip internal structural layers or layers belonging to other regions
-    // If the layer has an options block, check if it matches the domain intent.
-    if (layer.options) {
-        // Skip pane layout containers, pane overlays, tile layers, and controls
-        if (layer.options.pane && layer.options.pane !== 'overlayPane') {
-            return false;
-        }
-
-        // OPTIONAL SPEED BOOST: If you have a target region you are searching for,
-        // and this layer explicitly identifies as a DIFFERENT region, abort immediately.
-        // e.g., if (layer.options.id && layer.options.id !== currentSearchTarget) return false;
-    }
-
-    // 2. Execute callback on current node
-    const stop = callback(layer);
-    if (stop === true) return true;
-
-    // 3. Precision Recursion
-    if (typeof layer.eachLayer === 'function') {
-        // Fast tracking: Skip empty FeatureGroups or MarkerClusters entirely
-        if (typeof layer.getLayers === 'function' && layer.getLayers().length === 0) {
-            return false;
-        }
-
-        let found = false;
-        layer.eachLayer(child => {
-            if (found) return; // Short-circuit siblings immediately
-
-            if (window.walkLayersDeep(child, callback)) {
-                found = true;
-            }
-        });
-        return found;
-    }
-    return false;
-};
 
 window.plotTaskProgress = function (
     region_id,
@@ -917,9 +879,8 @@ window.plotTaskProgress = function (
             const street = ev.street;
             const house = ev.house;
 
-            // Continually grab the latest weights seen in the timeline
             if (ev.streetWeight) streetWeightRegistry[street] = ev.streetWeight;
-            if (ev.regionWeight) bakedRegionCeiling = ev.regionWeight; // 👈 Absolute denominator ceiling
+            if (ev.regionWeight) bakedRegionCeiling = ev.regionWeight;
 
             if (!streetActiveHouses[street]) {
                 streetActiveHouses[street] = new Set();
@@ -934,21 +895,16 @@ window.plotTaskProgress = function (
             }
         });
 
-        // Calculate how much weight has been completed
         for (const street in streetActiveHouses) {
             const streetIsActive = streetActiveHouses[street].size > 0;
             if (streetIsActive) {
-                // Add this street's weight to our completed pool
                 const streetWeight = streetWeightRegistry[street] || 1;
                 completedHouses += streetWeight;
             }
         }
 
-        // Set the global denominator to the baked total region weight we found
         totalHouses = bakedRegionCeiling;
 
-        // Fallback: If we have active houses but somehow missed a region ceiling,
-        // fall back to the sum of active streets so opacity isn't zero.
         if (totalHouses === 0 && completedHouses > 0) {
             for (const street in streetWeightRegistry) {
                 totalHouses += streetWeightRegistry[street];
@@ -1010,24 +966,21 @@ window.plotTaskProgress = function (
     }
 
     // -------------------------------------------------
-    // 5️⃣ GEOMETRY STRUCTURAL LOOKUP
+    // 5️⃣ GEOMETRY STRUCTURAL LOOKUP (🏎️ Fast Index Upgrade)
     // -------------------------------------------------
-    let geometry = null;
-    walkLayersDeep(activeMap, l => {
-        const p = l.feature?.properties;
-        if (!p) return;
+    const mapWin = document.getElementById('iframe1')?.contentWindow || window;
+    const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
 
-        const id = String(p.region_id ?? p.nid ?? p.id ?? '').trim().toUpperCase();
-        // 💡 QUICK CHECK: Print every comparison to the console
-        console.log(`🤖 Comparing -> Map Layer ID: "${id}" | Searching For: "${cleanId}"`);
-        if (id === cleanId && !l.is_ghost && l.feature?.geometry) {
-            geometry = l.feature.geometry;
-            return true;
-        }
-    });
+    // Direct pointer lookup across the global window boundary
+    const targetVectorLayer = cache[cleanId];
+    let geometry = null;
+
+    if (targetVectorLayer && !targetVectorLayer.is_ghost && targetVectorLayer.feature?.geometry) {
+        geometry = targetVectorLayer.feature.geometry;
+    }
 
     if (!geometry) {
-        console.error(`❌ Geometry lookup failed for Region ID: ${cleanId}`);
+        console.error(`❌ Fast Geometry lookup failed for Region ID: ${cleanId}`);
         console.groupEnd();
         return;
     }
@@ -1054,7 +1007,7 @@ window.plotTaskProgress = function (
         activeMap.removeLayer(poly);
     }
 
-    console.log(`✨ Ghost created from data array parsing: ${ghostId}`);
+    console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
     console.groupEnd();
 };
 

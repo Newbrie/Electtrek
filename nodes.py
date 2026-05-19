@@ -2033,12 +2033,12 @@ class TreeNode:
 
 
 
-    def create_area_map(self, resolved_levels, static=False):
+def create_area_map(self, resolved_levels, static=False):
         global SERVER_PASSWORD
 
-        from folium import IFrame
+        from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
         from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
-        from layers import make_counters,FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+        from layers import make_counters, FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
         import hashlib
         import re
@@ -2639,6 +2639,34 @@ class TreeNode:
         </style>
         """
 
+        # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
+        # This ties into your existing map detection lifecycle to prevent race conditions.
+        fast_index_js = """
+        <script>
+        (function() {
+            window.regionLayerCache = {};
+
+            function buildCompiledLayerIndex() {
+                if (!window.fmap) {
+                    // Re-poll in sync with map instantiation
+                    setTimeout(buildCompiledLayerIndex, 50);
+                    return;
+                }
+
+                let indexedCount = 0;
+                window.fmap.eachLayer(function(layer) {
+                    if (layer && layer.options && layer.options.id) {
+                        window.regionLayerCache[layer.options.id] = layer;
+                        indexedCount++;
+                    }
+                });
+                console.log("⚡ Fast Index Module Ready. Direct memory vectors indexed:", indexedCount);
+            }
+
+            document.addEventListener("DOMContentLoaded", buildCompiledLayerIndex);
+        })();
+        </script>
+        """
 
         for k, v in FolMap._children.items():
             print(type(v), getattr(v, "name", None))
@@ -2659,6 +2687,9 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
 
         FolMap.get_root().html.add_child(folium.Element(logo_css_injection))
+
+        # 💡 Injected new static dictionary building capability cleanly into page generation blocks
+        FolMap.get_root().html.add_child(folium.Element(fast_index_js))
 
         # Add layer control accordion to your Folium map
         FolMap.get_root().header.add_child(folium.Element(accordion_css))
@@ -2698,6 +2729,8 @@ class TreeNode:
         save_nodes(TREKNODE_FILE)
         print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
         return FolMap, totalleaf
+
+
 
     def set_bounding_box(self,block):
       longmin = block.Long.min()
