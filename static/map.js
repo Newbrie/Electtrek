@@ -812,7 +812,6 @@ function deriveState(events) {
 }
 
 
-
 window.plotTaskProgress = function (
     region_id,
     targetTag = 'L1',
@@ -903,23 +902,25 @@ window.plotTaskProgress = function (
                 streetActiveHouses[street] = new Set();
             }
 
-            // Route execution paths depending on Target Tag specification types
-            if (isViTarget && ev.type === 'vi') {
-                // 🗳️ If votes recorded are greater than 0, treat household as reached
-                const voteValue = parseInt(ev.votes || '0');
-                if (voteValue > 0) {
-                    streetActiveHouses[street].add(house);
-                } else {
-                    streetActiveHouses[street].delete(house);
-                }
-            } else if (!isViTarget && ev.type === 'tag') {
-                // 🏷️ Legacy execution rule blocks for operational task tags
+            // 🛠️ ALIGNED LEDGER PARSING LOGIC:
+            // Since your app now logs explicitly explicit 'tag' structures for VI updates,
+            // we consolidate checking here to look purely at target validation flags.
+            if (ev.type === 'tag') {
                 if (ev.code === targetTag) {
                     if (ev.value === 'y') {
                         streetActiveHouses[street].add(house);
                     } else if (ev.value === 'n') {
                         streetActiveHouses[street].delete(house);
                     }
+                }
+            }
+            // Fallback safety net: if historical records only have type 'vi' logs with vote properties
+            else if (isViTarget && ev.type === 'vi' && ev.votes !== undefined) {
+                const voteValue = parseInt(ev.votes || '0');
+                if (voteValue > 0) {
+                    streetActiveHouses[street].add(house);
+                } else {
+                    streetActiveHouses[street].delete(house);
                 }
             }
         });
@@ -1020,7 +1021,7 @@ window.plotTaskProgress = function (
         pane: 'overlayPane',
         style: {
             color: "transparent",
-            fillColor: targetTag.startsWith('L') ? "#333" : "#800080", // 💡 Purple for VI, Charcoal Gray for Leaflets
+            fillColor: targetTag === 'VI' ? "#800080" : "#333", // Simplified color matching rule
             fillOpacity: finalOpacity,
             interactive: false
         }
@@ -1038,6 +1039,7 @@ window.plotTaskProgress = function (
     console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
     console.groupEnd();
 };
+
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
 
@@ -1072,23 +1074,40 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     // 3️⃣ EVENT LOG (SOURCE OF TRUTH)
     // -------------------------------------------------
     window.BAKED_DATA ||= [];
+    const timestamp = Date.now();
+
+    // Log the voting action event
     window.BAKED_DATA.push({
         type: 'vi',
-        ts: Date.now(),
+        ts: timestamp,
         uiScope,
         region,
         street,
         house,
         vi,
         votes: count,
-        synced: false   // 👈 ADD THIS
+        synced: false
+    });
+
+    // 🗳️ AUTO-TOGGLE EVENT: Log a structural tag status change
+    // This ensures your ledger arrays correctly pick up the 'y' value if the popup closes.
+    window.BAKED_DATA.push({
+        type: 'tag',
+        code: 'VI',
+        value: count > 0 ? 'y' : 'n', // Toggles to 'y' if they have votes, 'n' if it resets back to 0
+        ts: timestamp + 1,            // Slightly ahead to preserve chronological ledger parsing order
+        uiScope,
+        region,
+        street,
+        house,
+        synced: false
     });
 
     saveBakedData?.(window.BAKED_DATA);
     plotTaskProgress?.(region, "VI", uiScope);
 
     console.log(
-        `💾 Event logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes`
+        `💾 Events logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes & VI tag updated`
     );
 
     // -------------------------------------------------
@@ -1096,6 +1115,19 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     // -------------------------------------------------
     window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
     window.updateRowAppearance?.(row, count, max);
+
+    // 🗳️ DOM AUTO-TOGGLE: Locate and update the UI tag element visually
+    const viTagBtn = row.querySelector('.tag-toggle[data-code="VI"]');
+    if (viTagBtn) {
+        if (count > 0) {
+            viTagBtn.classList.add('tag-active');
+            // If your toggle framework uses datasets to track state:
+            viTagBtn.dataset.value = 'y';
+        } else {
+            viTagBtn.classList.remove('tag-active');
+            viTagBtn.dataset.value = 'n';
+        }
+    }
 
     // -------------------------------------------------
     // 5️⃣ MAP UPDATE TRIGGER (derived later)

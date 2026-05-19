@@ -594,6 +594,8 @@ class CurrentElection(dict):
         for tag, description in self.get("tags", {}).items():
             if tag.startswith("L"):
                 task_tags[tag] = description
+            elif tag.startswith("V"):
+                task_tags[tag] = description
             elif tag.startswith("M"):
                 outcome_tags[tag] = description
             all_tags[tag] = description
