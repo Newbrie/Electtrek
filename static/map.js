@@ -823,6 +823,7 @@ window.plotTaskProgress = function (
     const activeMap = window.fmap || parent.fmap;
     const Leaflet = window.L || parent.L;
     const cleanId = String(region_id).trim().toUpperCase();
+    const isViTarget = targetTag === 'VI';
 
     // Try to find open popup elements in the DOM
     const doc = document.getElementById('iframe1')?.contentWindow?.document || document;
@@ -855,8 +856,18 @@ window.plotTaskProgress = function (
 
             let streetIsActive = false;
             streetRows.forEach(r => {
-                if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
-                    streetIsActive = true;
+                if (isViTarget) {
+                    // 🗳️ VI Live Check: Is there a vote recorded on the button text or value asset attribute?
+                    const voteBtn = r.querySelector('.vote-count-btn');
+                    const voteCount = parseInt(voteBtn?.dataset.count || '0');
+                    if (voteCount > 0) {
+                        streetIsActive = true;
+                    }
+                } else {
+                    // 🏷️ Standard task tag active check
+                    if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
+                        streetIsActive = true;
+                    }
                 }
             });
 
@@ -866,7 +877,7 @@ window.plotTaskProgress = function (
         });
     }
     // -----------------------------------------------------------------
-    // CONDITION B: Popup is CLOSED (Parse logs with total region ceilings)
+    // CONDITION B: Popup is CLOSED (Parse flat ledger arrays)
     // -----------------------------------------------------------------
     else {
         console.log("💾 Popup is closed. Calculating opacity via baked region weights...");
@@ -879,7 +890,7 @@ window.plotTaskProgress = function (
 
         // Chronological ledger scan
         eventLog.forEach(ev => {
-            if (ev.type !== 'tag' || ev.uiScope !== uiScope) return;
+            if (ev.uiScope !== uiScope) return;
             if (String(ev.region).trim().toUpperCase() !== cleanId) return;
 
             const street = ev.street;
@@ -892,11 +903,23 @@ window.plotTaskProgress = function (
                 streetActiveHouses[street] = new Set();
             }
 
-            if (ev.code === targetTag) {
-                if (ev.value === 'y') {
+            // Route execution paths depending on Target Tag specification types
+            if (isViTarget && ev.type === 'vi') {
+                // 🗳️ If votes recorded are greater than 0, treat household as reached
+                const voteValue = parseInt(ev.votes || '0');
+                if (voteValue > 0) {
                     streetActiveHouses[street].add(house);
-                } else if (ev.value === 'n') {
+                } else {
                     streetActiveHouses[street].delete(house);
+                }
+            } else if (!isViTarget && ev.type === 'tag') {
+                // 🏷️ Legacy execution rule blocks for operational task tags
+                if (ev.code === targetTag) {
+                    if (ev.value === 'y') {
+                        streetActiveHouses[street].add(house);
+                    } else if (ev.value === 'n') {
+                        streetActiveHouses[street].delete(house);
+                    }
                 }
             }
         });
@@ -949,7 +972,7 @@ window.plotTaskProgress = function (
 
     const targetGroup = findBucket();
     if (!targetGroup) {
-        console.warn("❌ Target Layer Control Overlay bucket missing.");
+        console.warn(`❌ Target Layer Control Overlay bucket missing for [${targetTag}].`);
         console.groupEnd();
         return;
     }
@@ -974,50 +997,46 @@ window.plotTaskProgress = function (
     // -------------------------------------------------
     // 5️⃣ GEOMETRY STRUCTURAL LOOKUP (🏎️ Fast Index Upgrade)
     // -------------------------------------------------
+    const mapWin = document.getElementById('iframe1')?.contentWindow || window;
+    const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
 
-      const mapWin = document.getElementById('iframe1')?.contentWindow || window;
-      const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
+    const targetVectorLayer = cache[cleanId];
+    let geometry = null;
 
-      // Direct pointer lookup running at O(1) efficiency
-      const targetVectorLayer = cache[cleanId];
-      let geometry = null;
+    if (targetVectorLayer && targetVectorLayer.feature?.geometry) {
+        geometry = targetVectorLayer.feature.geometry;
+    }
 
-      if (targetVectorLayer && targetVectorLayer.feature?.geometry) {
-          geometry = targetVectorLayer.feature.geometry;
-      }
+    if (!geometry) {
+        console.log(`ℹ️ Skipping: Region ID ${cleanId} is outside current map view.`);
+        console.groupEnd();
+        return;
+    }
 
-      if (!geometry) {
-          // 💡 Graceful ignore: This region belongs to global ledger data outside this map's view
-          console.log(`ℹ️ Skipping: Region ID ${cleanId} is outside current map view.`);
-          console.groupEnd();
-          return;
-      }
+    // -------------------------------------------------
+    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
+    // -------------------------------------------------
+    const poly = Leaflet.geoJSON(geometry, {
+        pane: 'overlayPane',
+        style: {
+            color: "transparent",
+            fillColor: targetTag.startsWith('L') ? "#333" : "#800080", // 💡 Purple for VI, Charcoal Gray for Leaflets
+            fillOpacity: finalOpacity,
+            interactive: false
+        }
+    });
 
-      // -------------------------------------------------
-      // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
-      // -------------------------------------------------
-      const poly = Leaflet.geoJSON(geometry, {
-          pane: 'overlayPane',
-          style: {
-              color: "transparent",
-              fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
-              fillOpacity: finalOpacity,
-              interactive: false
-          }
-      });
+    poly.is_ghost = true;
+    poly.ghost_id = ghostId;
 
-      poly.is_ghost = true;
-      poly.ghost_id = ghostId;
+    targetGroup.addLayer(poly);
 
-      targetGroup.addLayer(poly);
+    if (!activeMap.hasLayer(targetGroup)) {
+        activeMap.removeLayer(poly);
+    }
 
-      if (!activeMap.hasLayer(targetGroup)) {
-          activeMap.removeLayer(poly);
-      }
-
-      console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
-      console.groupEnd();
-
+    console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
+    console.groupEnd();
 };
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
@@ -1064,6 +1083,9 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         votes: count,
         synced: false   // 👈 ADD THIS
     });
+
+    saveBakedData?.(window.BAKED_DATA);
+    plotTaskProgress?.(region, "VI", uiScope);
 
     console.log(
         `💾 Event logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes`
