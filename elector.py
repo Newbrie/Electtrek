@@ -129,116 +129,136 @@ class ElectorManager:
 
 
     def _inject_baked_data(self, specific_ename=None):
-        from baked_data import baked_data
+            from baked_data import baked_data
 
-        all_events = baked_data.load()
-        if not all_events:
-            print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
-            return
+            all_events = baked_data.load()
+            if not all_events:
+                print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
+                return
 
-        targets = (
-            [specific_ename]
-            if specific_ename and specific_ename in self._elections
-            else list(self._elections.keys())
-        )
+            targets = (
+                [specific_ename]
+                if specific_ename and specific_ename in self._elections
+                else list(self._elections.keys())
+            )
 
-        print(f"🚀 [INJECT] Initializing event logs replay against targets: {targets}")
+            print(f"🚀 [INJECT] Initializing event logs replay against targets: {targets}")
 
-        for ename in targets:
-            print(f"📂 [ELECTION METRIC PROCESSING]: Replaying events onto '{ename}'...")
-            df = self._elections[ename].copy()
+            for ename in targets:
+                print(f"📂 [ELECTION METRIC PROCESSING]: Replaying events onto '{ename}'...")
+                df = self._elections[ename].copy()
 
-            # ------------------------------------------------------------------
-            # STEP 1: Build a Lightning-Fast Coordinate Lookup Index
-            # ------------------------------------------------------------------
-            # Maps (uiScope, region, street, house) -> List of positional integer row indices
-            # This replaces the slow `resolve_targets` runtime scan completely.
-            lookup = {}
+                # ------------------------------------------------------------------
+                # STEP 1: Build Context-Aware Coordinate Lookup Indices
+                # ------------------------------------------------------------------
+                # We build separate indices depending on how the data was compiled.
+                # This safely handles variations in underlying dataset schema layout styles.
+                walk_lookup = {}
+                pd_lookup = {}
 
-            # We zip the columns together; this lets us map everything in a single linear pass
-            zipped_rows = zip(df.index, df['uiScope'], df['Region'], df['Street'], df['House'])
-            for idx, scope, reg, st, hs in zipped_rows:
-                key = (str(scope), str(reg), str(st), str(hs))
-                if key not in lookup:
-                    lookup[key] = []
-                lookup[key].append(idx)
+                # Populate Walk Lookup: (WalkName, StreetName, AddressPrefix/Number)
+                if 'WalkName' in df.columns:
+                    zipped_walk = zip(df.index, df['WalkName'], df['StreetName'], df.get('AddressPrefix', df.get('AddressNumber', df.index)))
+                    for idx, wk, st, hs in zipped_walk:
+                        key = (str(wk), str(st), str(hs))
+                        if key not in walk_lookup:
+                            walk_lookup[key] = []
+                        walk_lookup[key].append(idx)
 
-            # ------------------------------------------------------------------
-            # STEP 2: Pull the targets out into local dictionaries for fast mutations
-            # ------------------------------------------------------------------
-            tags_dict = df['Tags'].astype(str).replace(['nan', 'None', '0', '0.0'], '').to_dict()
-            vi_dict = df['VI'].astype(str).to_dict()
-            votes_dict = df['Votes'].astype(str).to_dict()
+                # Populate Polling District Lookup: (PD, StreetName, AddressPrefix/Number)
+                if 'PD' in df.columns:
+                    zipped_pd = zip(df.index, df['PD'], df['StreetName'], df.get('AddressPrefix', df.get('AddressNumber', df.index)))
+                    for idx, pd_code, st, hs in zipped_pd:
+                        key = (str(pd_code), str(st), str(hs))
+                        if key not in pd_lookup:
+                            pd_lookup[key] = []
+                        pd_lookup[key].append(idx)
 
-            # ------------------------------------------------------------------
-            # STEP 3: Replay all events instantly inside pure memory dictionary
-            # ------------------------------------------------------------------
-            for ev in all_events:
-                if not isinstance(ev, dict):
-                    continue
+                # ------------------------------------------------------------------
+                # STEP 2: Pull the targets out into local dictionaries for fast mutations
+                # ------------------------------------------------------------------
+                tags_dict = df['Tags'].astype(str).replace(['nan', 'None', '0', '0.0'], '').to_dict()
+                vi_dict = df['VI'].astype(str).to_dict()
+                votes_dict = df['Votes'].astype(str).to_dict()
 
-                uiScope = str(ev.get('uiScope', 'walk'))
-                region = str(ev.get('region'))
-                street = str(ev.get('street'))
-                house = str(ev.get('house'))
-
-                # Fetch matching indices via hash lookup - O(1) time complexity!
-                event_key = (uiScope, region, street, house)
-                indexes = lookup.get(event_key)
-
-                if not indexes:
-                    continue
-
-                ev_type = ev.get('type')
-
-                # --- CASE A: TAG OPERATIONS ---
-                if ev_type in ['tag', 'elector_tag']:
-                    code = ev.get('code')
-                    if not code:
+                # ------------------------------------------------------------------
+                # STEP 3: Replay all events instantly inside pure memory dictionary
+                # ------------------------------------------------------------------
+                for ev in all_events:
+                    if not isinstance(ev, dict):
                         continue
 
-                    canonical_idx = indexes[0]
-                    existing_raw = tags_dict.get(canonical_idx, '')
+                    # Read mapping context directly out of user logging event tracking node
+                    ui_scope = str(ev.get('uiScope', 'walk')).lower()
+                    region = str(ev.get('region'))
+                    street = str(ev.get('street'))
+                    house = str(ev.get('house'))
 
-                    # Parse existing tags
-                    existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
+                    event_key = (region, street, house)
 
-                    if ev.get('value') == 'y':
-                        existing.add(code)
+                    # Route to the appropriate index map engine layout branch dynamically
+                    if ui_scope == 'walk':
+                        indexes = walk_lookup.get(event_key)
+                    elif ui_scope == 'polling_district':
+                        indexes = pd_lookup.get(event_key)
                     else:
-                        existing.discard(code)
+                        # Fallback or generic matching structure check strategy
+                        indexes = walk_lookup.get(event_key) or pd_lookup.get(event_key)
 
-                    tags_dict[canonical_idx] = ", ".join(sorted(existing))
+                    if not indexes:
+                        continue
 
-                # --- CASE B: VI EVALUATIONS ---
-                elif ev_type == 'vi':
-                    try:
-                        vote_count = int(ev.get('votes') or 0)
-                    except (ValueError, TypeError):
-                        vote_count = 0
+                    ev_type = ev.get('type')
 
-                    vi_val = ev.get('value') or ''
-                    target_indexes = indexes[:vote_count]
+                    # --- CASE A: TAG OPERATIONS ---
+                    if ev_type in ['tag', 'elector_tag']:
+                        code = ev.get('code')
+                        if not code:
+                            continue
 
-                    for idx in indexes:
-                        if idx in target_indexes:
-                            vi_dict[idx] = vi_val
+                        canonical_idx = indexes[0]
+                        existing_raw = tags_dict.get(canonical_idx, '')
+
+                        # Parse existing tags
+                        existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
+
+                        if ev.get('value') == 'y':
+                            existing.add(code)
                         else:
-                            vi_dict[idx] = ''
+                            existing.discard(code)
 
-                    # Update canonical record votes tracking
-                    votes_dict[indexes[0]] = str(vote_count)
+                        tags_dict[canonical_idx] = ", ".join(sorted(existing))
 
-            # ------------------------------------------------------------------
-            # STEP 4: Write-Back Updated State Buffers to DataFrame in One Shot
-            # ------------------------------------------------------------------
-            df['Tags'] = df.index.map(tags_dict)
-            df['VI'] = df.index.map(vi_dict)
-            df['Votes'] = df.index.map(votes_dict)
+                    # --- CASE B: VI EVALUATIONS ---
+                    elif ev_type == 'vi':
+                        try:
+                            vote_count = int(ev.get('votes') or 0)
+                        except (ValueError, TypeError):
+                            vote_count = 0
 
-            # Save back tracking ledger changes
-            self._elections[ename] = df
-            print(f"💾 [SUCCESS] Replay completed for target: '{ename}'")
+                        vi_val = ev.get('value') or ''
+                        target_indexes = indexes[:vote_count]
+
+                        for idx in indexes:
+                            if idx in target_indexes:
+                                vi_dict[idx] = vi_val
+                            else:
+                                vi_dict[idx] = ''
+
+                        # Update canonical record votes tracking
+                        votes_dict[indexes[0]] = str(vote_count)
+
+                # ------------------------------------------------------------------
+                # STEP 4: Write-Back Updated State Buffers to DataFrame in One Shot
+                # ------------------------------------------------------------------
+                df['Tags'] = df.index.map(tags_dict)
+                df['VI'] = df.index.map(vi_dict)
+                df['Votes'] = df.index.map(votes_dict)
+
+                # Save back tracking ledger changes
+                self._elections[ename] = df
+                print(f"💾 [SUCCESS] Replay completed for target: '{ename}'")
+
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""
