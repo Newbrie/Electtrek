@@ -1116,21 +1116,47 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
     window.updateRowAppearance?.(row, count, max);
 
-    // 🗳️ DOM AUTO-TOGGLE: Locate and update the UI tag element visually
-    const viTagBtn = row.querySelector('.tag-toggle[data-code="VI"]');
+    // 🗳️ ROBUST DOM AUTO-TOGGLE
+    // Hunt for uppercase, lowercase, or a generic data-code target button
+    const viTagBtn = row.querySelector('.tag-toggle[data-code="VI"]') ||
+                     row.querySelector('.tag-toggle[data-code="vi"]') ||
+                     row.querySelector('[data-code="VI"]') ||
+                     row.querySelector('[data-code="vi"]');
+
     if (viTagBtn) {
-        if (count > 0) {
+        console.log("🎯 Target VI tag button found. Syncing visual state...");
+
+        const shouldBeActive = count > 0;
+
+        // Pattern A: Class-based toggling
+        if (shouldBeActive) {
             viTagBtn.classList.add('tag-active');
-            // If your toggle framework uses datasets to track state:
-            viTagBtn.dataset.value = 'y';
+            viTagBtn.setAttribute('data-value', 'y');
         } else {
             viTagBtn.classList.remove('tag-active');
-            viTagBtn.dataset.value = 'n';
+            viTagBtn.setAttribute('data-value', 'n');
         }
+
+        // Pattern B: Input/Checkbox-based toggling fallback
+        if (viTagBtn.type === 'checkbox' || viTagBtn.type === 'radio') {
+            viTagBtn.checked = shouldBeActive;
+        }
+
+        // Pattern C: If your tag buttons rely on custom UI frameworks that listen
+        // for simulated user interaction click events, force a dispatch:
+        // if (shouldBeActive !== viTagBtn.classList.contains('tag-active')) {
+        //     viTagBtn.click();
+        // }
+
+    } else {
+        console.warn("⚠️ Sync Failure: Could not locate a tag element with data-code=\"VI\" inside this row template:", row);
     }
 
+    // -------------------------------------------------
+    // 5️⃣ MAP UPDATE TRIGGER
+    // -------------------------------------------------
+    window.updateMarkerStatus?.(region);
 };
-
 
 async function getVIData(path) {
 
