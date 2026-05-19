@@ -955,6 +955,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------
             # Polygon (with tooltip and nid)
             # -------------------------
+    # -------------------------------------------------
+            # Polygon (With Tooltip, Properties, and Direct Popup!)
+            # -------------------------------------------------
             try:
                 print(f"DEBUG POLYGON: Adding polygon for {child.value}")
 
@@ -967,11 +970,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                     'level': child.level             # Helpful for filtering in JS
                 }
 
-                # If this specific call was for a ghost layer, we flag it here
                 if getattr(self, 'is_ghost', False):
                     feature_properties['style_type'] = 'grey_ghost'
-                    # You can also pre-calculate the ghost opacity here if you want
-                    # feature_properties['ghost_opacity'] = ...
 
                 geojson_feature = {
                     "type": "Feature",
@@ -985,6 +985,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                     tooltip=folium.Tooltip(tooltip_html, sticky=True)
                 )
 
+                # 🎯 THE FIX: Attach the street list popup directly to the Polygon Layer shape!
+                popup = folium.Popup(street_html, max_width=900, show=False)
+                gj.add_child(popup)
+
                 # Add to the ExtendedFeatureGroup (self)
                 gj.add_to(self)
                 polygons_added += 1
@@ -993,25 +997,24 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
 
 
-            # -------------------------
-            # Marker (with popup only)
-            # -------------------------
+            # -------------------------------------------------
+            # Non-Interactive Label Marker (Visual Label Only)
+            # -------------------------------------------------
             try:
                 centre = actual_shape_poly.point_on_surface()
                 tag = child.value
-                fcol = region_color
 
-                mapfile = url_for("transfer", path=f"{child.dir}/{child.file(elevels)}")
+                print(f"DEBUG MARKER: Adding visual label overlay for {tag}")
 
-                print(f"DEBUG MARKER: Adding label marker for {tag}")
-
+                # ✂️ CLEANED UP: No popup attached here, interactive=False passes clicks down to the poly style
                 marker = folium.Marker(
                     location=[centre.y, centre.x],
+                    interactive=False,
                     icon=folium.DivIcon(
                         class_name="",
                         html=f"""
-                            <div class="voronoi-label">
-                            <span id="label-{tag}" class="voronoi-tag" style="background:{region_color}">
+                            <div class="voronoi-label" style="pointer-events: none;">
+                            <span id="label-{tag}" class="voronoi-tag" style="background:{region_color}; pointer-events: none;">
                             {tag}
                             </span>
                             </div>
@@ -1019,16 +1022,12 @@ class ExtendedFeatureGroup(FeatureGroup):
                     )
                 )
 
-                # Attach popup to marker (keeps your styled HTML)
-                popup = folium.Popup(street_html, max_width=900, show=False)
-                marker.add_child(popup)
                 marker.add_to(self)
-
-                print(f"DEBUG SUCCESS: Added marker for {tag} with popup")
+                print(f"DEBUG SUCCESS: Added clean visual label for {tag}")
 
             except Exception as e:
                 print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
-
+                
         node.electorate = total_electorate
         node.houses = total_houses
         # -------------------------------------------------
