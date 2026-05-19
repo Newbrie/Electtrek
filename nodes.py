@@ -2438,90 +2438,89 @@ class TreeNode:
 
 
 
-            # --- Inject custom HTML and JS into map
-
-
-
+            # --- Inject map finding , click handling and layer control adding functionality
 
             fmap_tags_js = r"""
-                    <script>
-                    (function() {
+                <script>
+                (function() {
 
-                        console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search)");
+                    console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search & Click Binding)");
 
-                        window.fmap = null;
-                        window.MarkerLayer = null;
+                    window.fmap = null;
+                    window.MarkerLayer = null;
 
-                        let pollAttempts = 0;
-                        const MAX_ATTEMPTS = 100; // 10 seconds timeout
+                    let pollAttempts = 0;
+                    const MAX_ATTEMPTS = 100; // 10 seconds timeout
 
-                        // ---------------------------------------------------------
-                        // 1️⃣ Stage 1: Detect the Folium map object
-                        // ---------------------------------------------------------
-                        function detectFoliumMap() {
-                            if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
-                                setTimeout(detectFoliumMap, 100);
+                    // ---------------------------------------------------------
+                    // 1️⃣ Stage 1: Detect the Folium map object
+                    // ---------------------------------------------------------
+                    function detectFoliumMap() {
+                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                            setTimeout(detectFoliumMap, 100);
+                            return;
+                        }
+
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            if (key.startsWith("map_") && val instanceof L.Map) {
+                                window.fmap = val;
+
+                                // 🎯 RIGHT HERE: Bind your custom reverse-geocoding click workflow
+                                // the exact millisecond the map is discovered in memory.
+                                if (typeof window.handleMapClick === 'function') {
+                                    console.log("⚓ Binding handleMapClick directly via detection hook.");
+                                    window.fmap.on('click', window.handleMapClick);
+                                } else {
+                                    console.warn("⚠️ handleMapClick function not found in scope during map binding.");
+                                }
+
+                                startLayerPolling();
                                 return;
                             }
+                        }
+                        setTimeout(detectFoliumMap, 100);
+                    }
 
-                            for (const key in window) {
-                                if (!window.hasOwnProperty(key)) continue;
-                                const val = window[key];
+                    // ---------------------------------------------------------
+                    // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
+                    // ---------------------------------------------------------
+                    function findTargetLayer() {
+                        pollAttempts++;
 
-                                if (key.startsWith("map_") && val instanceof L.Map) {
-                                    window.fmap = val;
-                                    startLayerPolling();
+                        if (pollAttempts > MAX_ATTEMPTS) {
+                            console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                            clearInterval(poll_interval_id);
+                            return;
+                        }
+
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            if (key.startsWith("layer_control_") && val && val.overlays) {
+                                if (val.overlays.marker) {
+                                    window.MarkerLayer = val.overlays.marker;
+                                    console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
+                                    clearInterval(poll_interval_id);
                                     return;
                                 }
                             }
-                            setTimeout(detectFoliumMap, 100);
                         }
+                    }
 
-                        // ---------------------------------------------------------
-                        // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
-                        // ---------------------------------------------------------
-                        function findTargetLayer() {
-                            pollAttempts++;
+                    let poll_interval_id;
+                    function startLayerPolling() {
+                        poll_interval_id = setInterval(findTargetLayer, 100);
+                    }
 
-                            if (pollAttempts > MAX_ATTEMPTS) {
-                                console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
-                                clearInterval(poll_interval_id);
-                                return;
-                            }
+                    document.addEventListener("DOMContentLoaded", detectFoliumMap);
 
-                            // --- Search for the Layer Control's internal dictionary ---
-                            for (const key in window) {
-                                if (!window.hasOwnProperty(key)) continue;
-                                const val = window[key];
-
-                                // Check if variable name starts with 'layer_control_' AND has an 'overlays' property
-                                if (key.startsWith("layer_control_") && val && val.overlays) {
-
-                                    // Check if the target layer ("marker") is inside the overlays
-                                    if (val.overlays.marker) {
-                                        window.MarkerLayer = val.overlays.marker;
-
-                                        console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
-                                        console.log(`Marker Layer stored in window.MarkerLayer.`);
-
-                                        clearInterval(poll_interval_id);
-                                        return;
-                                    }
-                                }
-                            }
-                        }
-
-                        let poll_interval_id;
-                        function startLayerPolling() {
-                            poll_interval_id = setInterval(findTargetLayer, 100);
-                        }
-
-                        document.addEventListener("DOMContentLoaded", detectFoliumMap);
-
-                    })();
-                    </script>
-                    """
-
+                })();
+                </script>
+                """
 
 
             # Inject canvas icon JS
@@ -2704,7 +2703,7 @@ class TreeNode:
             FolMap.get_root().header.add_child(folium.Element(accordion_html))
 
             # Add the LatLngPopup plugin
-            FolMap.add_child(folium.LatLngPopup())
+#            FolMap.add_child(folium.LatLngPopup())
 
             # Add custom CSS/JS
             FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
