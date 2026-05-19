@@ -968,47 +968,50 @@ window.plotTaskProgress = function (
     // -------------------------------------------------
     // 5️⃣ GEOMETRY STRUCTURAL LOOKUP (🏎️ Fast Index Upgrade)
     // -------------------------------------------------
-    const mapWin = document.getElementById('iframe1')?.contentWindow || window;
-    const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
 
-    // Direct pointer lookup across the global window boundary
-    const targetVectorLayer = cache[cleanId];
-    let geometry = null;
+      const mapWin = document.getElementById('iframe1')?.contentWindow || window;
+      const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
 
-    if (targetVectorLayer && !targetVectorLayer.is_ghost && targetVectorLayer.feature?.geometry) {
-        geometry = targetVectorLayer.feature.geometry;
-    }
+      // Direct pointer lookup running at O(1) efficiency
+      const targetVectorLayer = cache[cleanId];
+      let geometry = null;
 
-    if (!geometry) {
-        console.error(`❌ Fast Geometry lookup failed for Region ID: ${cleanId}`);
-        console.groupEnd();
-        return;
-    }
+      if (targetVectorLayer && targetVectorLayer.feature?.geometry) {
+          geometry = targetVectorLayer.feature.geometry;
+      }
 
-    // -------------------------------------------------
-    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
-    // -------------------------------------------------
-    const poly = Leaflet.geoJSON(geometry, {
-        pane: 'overlayPane',
-        style: {
-            color: "transparent",
-            fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
-            fillOpacity: finalOpacity,
-            interactive: false
-        }
-    });
+      if (!geometry) {
+          // 💡 Graceful ignore: This region belongs to global ledger data outside this map's view
+          console.log(`ℹ️ Skipping: Region ID ${cleanId} is outside current map view.`);
+          console.groupEnd();
+          return;
+      }
 
-    poly.is_ghost = true;
-    poly.ghost_id = ghostId;
+      // -------------------------------------------------
+      // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
+      // -------------------------------------------------
+      const poly = Leaflet.geoJSON(geometry, {
+          pane: 'overlayPane',
+          style: {
+              color: "transparent",
+              fillColor: targetTag.startsWith('L') ? "#333" : "#800080",
+              fillOpacity: finalOpacity,
+              interactive: false
+          }
+      });
 
-    targetGroup.addLayer(poly);
+      poly.is_ghost = true;
+      poly.ghost_id = ghostId;
 
-    if (!activeMap.hasLayer(targetGroup)) {
-        activeMap.removeLayer(poly);
-    }
+      targetGroup.addLayer(poly);
 
-    console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
-    console.groupEnd();
+      if (!activeMap.hasLayer(targetGroup)) {
+          activeMap.removeLayer(poly);
+      }
+
+      console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
+      console.groupEnd();
+
 };
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
