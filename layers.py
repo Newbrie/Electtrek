@@ -993,7 +993,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                                 border-radius: 4px;
                                 padding: 6px;
                                 border: 1px solid #ccc;
-                            """ )
+                            """
                 )
 
                 # 🎯 THE FIX: Attach the street list popup directly to the Polygon Layer shape!
