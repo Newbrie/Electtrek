@@ -982,7 +982,18 @@ class ExtendedFeatureGroup(FeatureGroup):
                 gj = folium.GeoJson(
                     geojson_feature,
                     style_function=lambda x, s=style: s,
-                    tooltip=folium.Tooltip(tooltip_html, sticky=True)
+                    tooltip=folium.Tooltip(tooltip_html,
+                            sticky=False,             # 1️⃣ Stop tracking cursor movements
+                            direction="bottom",       # 2️⃣ Force tooltip to anchor BELOW the target entry point
+                            offset=[0, 15],           # 3️⃣ Shift it down 15 pixels [X-axis, Y-axis] so it clears the cursor point cleanly
+                            style="""
+                                background-color: white;
+                                color: #333;
+                                font-family: sans-serif;
+                                border-radius: 4px;
+                                padding: 6px;
+                                border: 1px solid #ccc;
+                            """ )
                 )
 
                 # 🎯 THE FIX: Attach the street list popup directly to the Polygon Layer shape!
@@ -1027,7 +1038,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             except Exception as e:
                 print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
-                
+
         node.electorate = total_electorate
         node.houses = total_houses
         # -------------------------------------------------
