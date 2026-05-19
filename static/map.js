@@ -1046,7 +1046,7 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     console.log("➕ incrementVoteCount clicked");
 
     // -------------------------------------------------
-    // 1️⃣ UI STATE (local only)
+    // 1️⃣ UI STATE (Local only)
     // -------------------------------------------------
     const count =
         ((parseInt(btn.dataset.count) || 0) + 1) %
@@ -1056,6 +1056,9 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
 
     btn.dataset.count = count;
     btn.innerText = `${count}/${max}`;
+
+    // ⚡ THE AUTO-CALCULATION (Single source of truth for the VI tag value)
+    const computedViValue = count > 0 ? 'y' : 'n';
 
     // -------------------------------------------------
     // 2️⃣ CONTEXT
@@ -1089,11 +1092,11 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
         synced: false
     });
 
-    // 🗳️ AUTO-TOGGLE EVENT: Log a structural tag status change
+    // 🗳️ AUTO-TOGGLE EVENT: Directly uses the auto-calculated value
     window.BAKED_DATA.push({
         type: 'tag',
         code: 'VI',
-        value: count > 0 ? 'y' : 'n',
+        value: computedViValue,
         ts: timestamp + 1,
         uiScope,
         region,
@@ -1106,7 +1109,7 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     plotTaskProgress?.(region, "VI", uiScope);
 
     console.log(
-        `💾 Events logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes & VI tag updated`
+        `💾 Events logged: [${uiScope}] ${region}/${street}/${house} = ${count} votes & VI tag updated to '${computedViValue}'`
     );
 
     // -------------------------------------------------
@@ -1115,32 +1118,30 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
     window.updateRowAppearance?.(row, count, max);
 
-    // 🗳️ SIMPLIFIED DOM AUTO-TOGGLE (Scoped strictly to this row, case-insensitive)
+    // 🗳️ DOM AUTO-TOGGLE: Cleanly bound to our single calculated truth
     const viTagBtn = row.querySelector('[data-code="VI" i]');
 
     if (viTagBtn) {
         console.log("🎯 Target VI tag button found in row. Syncing visual state...");
 
-        const shouldBeActive = count > 0;
+        // Set the dynamic attribute
+        viTagBtn.setAttribute('data-value', computedViValue);
 
-        // Pattern A: Class & Data attribute toggling
-        if (shouldBeActive) {
+        // Sync helper classes or form types seamlessly based on the string value
+        if (computedViValue === 'y') {
             viTagBtn.classList.add('tag-active');
-            viTagBtn.setAttribute('data-value', 'y');
         } else {
             viTagBtn.classList.remove('tag-active');
-            viTagBtn.setAttribute('data-value', 'n');
         }
 
-        // Pattern B: Input/Checkbox fallback stability
+        // Input fallback stability
         if (viTagBtn.type === 'checkbox' || viTagBtn.type === 'radio') {
-            viTagBtn.checked = shouldBeActive;
+            viTagBtn.checked = (computedViValue === 'y');
         }
 
     } else {
         console.warn(`⚠️ Sync Failure: No [data-code="VI"] found in row for house ${house}`);
     }
-
 };
 
 async function getVIData(path) {

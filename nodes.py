@@ -2169,7 +2169,7 @@ class TreeNode:
                     function setupAccordion(container) {
                         var details = document.createElement('details');
                         details.className = 'ghost-accordion';
-                        details.innerHTML = '<summary>📊 Data Overlays</summary>';
+                        details.innerHTML = '<summary>📊 Task Progress</summary>';
 
                         var contentDiv = document.createElement('div');
                         contentDiv.className = 'ghost-accordion-content';
