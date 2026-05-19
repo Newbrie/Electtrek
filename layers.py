@@ -1010,37 +1010,6 @@ class ExtendedFeatureGroup(FeatureGroup):
             except Exception as e:
                 print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
 
-            # -------------------------------------------------
-            # Non-Interactive Label Marker (Visual Label Only)
-            # -------------------------------------------------
-            try:
-                centre = actual_shape_poly.point_on_surface()
-                tag = child.value
-
-                print(f"DEBUG MARKER: Adding visual label overlay for {tag}")
-
-                # ✂️ CLEANED UP: No popup attached here, interactive=False passes clicks down to the poly style
-                marker = folium.Marker(
-                    location=[centre.y, centre.x],
-                    interactive=False,
-                    icon=folium.DivIcon(
-                        class_name="",
-                        html=f"""
-                            <div class="voronoi-label" style="pointer-events: none;">
-                            <span id="label-{tag}" class="voronoi-tag" style="background:{region_color}; pointer-events: none;">
-                            {tag}
-                            </span>
-                            </div>
-                            """
-                    )
-                )
-
-                marker.add_to(self)
-                print(f"DEBUG SUCCESS: Added clean visual label for {tag}")
-
-            except Exception as e:
-                print(f"DEBUG ERROR: Failed adding marker for {child.value} -> {e}")
-
         node.electorate = total_electorate
         node.houses = total_houses
         # -------------------------------------------------
