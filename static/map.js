@@ -1090,12 +1090,11 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     });
 
     // 🗳️ AUTO-TOGGLE EVENT: Log a structural tag status change
-    // This ensures your ledger arrays correctly pick up the 'y' value if the popup closes.
     window.BAKED_DATA.push({
         type: 'tag',
         code: 'VI',
-        value: count > 0 ? 'y' : 'n', // Toggles to 'y' if they have votes, 'n' if it resets back to 0
-        ts: timestamp + 1,            // Slightly ahead to preserve chronological ledger parsing order
+        value: count > 0 ? 'y' : 'n',
+        ts: timestamp + 1,
         uiScope,
         region,
         street,
@@ -1116,19 +1115,15 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
     window.refreshDropdownColors?.(row.querySelector('.unit-selector'));
     window.updateRowAppearance?.(row, count, max);
 
-    // 🗳️ ROBUST DOM AUTO-TOGGLE
-    // Hunt for uppercase, lowercase, or a generic data-code target button
-    const viTagBtn = row.querySelector('.tag-toggle[data-code="VI"]') ||
-                     row.querySelector('.tag-toggle[data-code="vi"]') ||
-                     row.querySelector('[data-code="VI"]') ||
-                     row.querySelector('[data-code="vi"]');
+    // 🗳️ SIMPLIFIED DOM AUTO-TOGGLE (Scoped strictly to this row, case-insensitive)
+    const viTagBtn = row.querySelector('[data-code="VI" i]');
 
     if (viTagBtn) {
-        console.log("🎯 Target VI tag button found. Syncing visual state...");
+        console.log("🎯 Target VI tag button found in row. Syncing visual state...");
 
         const shouldBeActive = count > 0;
 
-        // Pattern A: Class-based toggling
+        // Pattern A: Class & Data attribute toggling
         if (shouldBeActive) {
             viTagBtn.classList.add('tag-active');
             viTagBtn.setAttribute('data-value', 'y');
@@ -1137,19 +1132,13 @@ window.incrementVoteCount = function(btn, uiScope = 'walk') {
             viTagBtn.setAttribute('data-value', 'n');
         }
 
-        // Pattern B: Input/Checkbox-based toggling fallback
+        // Pattern B: Input/Checkbox fallback stability
         if (viTagBtn.type === 'checkbox' || viTagBtn.type === 'radio') {
             viTagBtn.checked = shouldBeActive;
         }
 
-        // Pattern C: If your tag buttons rely on custom UI frameworks that listen
-        // for simulated user interaction click events, force a dispatch:
-        // if (shouldBeActive !== viTagBtn.classList.contains('tag-active')) {
-        //     viTagBtn.click();
-        // }
-
     } else {
-        console.warn("⚠️ Sync Failure: Could not locate a tag element with data-code=\"VI\" inside this row template:", row);
+        console.warn(`⚠️ Sync Failure: No [data-code="VI"] found in row for house ${house}`);
     }
 
 };
