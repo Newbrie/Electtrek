@@ -164,7 +164,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     print(f" BuildStreetList_html UIScope: {ui_scope_json}")
 
     # ------------------------------------------------------------------
-    # 2. DELEGATED FRONTEND LIFECYCLE INITIALIZER
+    # 2. DELEGATED FRONTEND LIFECYCLE INITIALIZER (With local updates)
     # ------------------------------------------------------------------
     persistence_js = f'''
         <style>
@@ -184,6 +184,41 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </div>
 
         <script>
+        // 🌟 SHARED LOCAL HANDLER FOR DYNAMIC PY-BAKED COUNTS
+        function refreshRowVoteBadge(rowElement) {{
+            if (!rowElement) return;
+            var unitSel = rowElement.querySelector('.unit-selector');
+            var viSel = rowElement.querySelector('.vi-selector');
+            var btn = rowElement.querySelector('.vote-btn');
+            if (!unitSel || !viSel || !btn) return;
+
+            var currentUnit = unitSel.value;
+            var currentVi = viSel.value ? viSel.value.toUpperCase() : "";
+
+            // Re-read max capacity directly from the selected option template metadata
+            var selectedOpt = unitSel.options[unitSel.selectedIndex];
+            var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
+
+            // Extract the embedded Python nested structure safely from data-attribute string
+            var activeVotesDb = {{}};
+            try {{
+                activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{{}}');
+            }} catch(e) {{
+                console.error("Failed to parse row data-active-votes-db", e);
+            }}
+
+            // Pull specific key count, fallback cleanly to 0
+            var count = 0;
+            if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {{
+                count = activeVotesDb[currentUnit][currentVi];
+            }}
+
+            // Write updates seamlessly into frontend DOM node properties
+            btn.setAttribute('data-count', count);
+            btn.setAttribute('data-max', maxVotes);
+            btn.innerText = count + '/' + maxVotes;
+        }}
+
         (function() {{
             var scope = {ui_scope_json};
 
@@ -192,16 +227,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 var loader = parentWindow.loadHouseData;
                 var colorizer = parentWindow.refreshDropdownColors;
                 var tagger = parentWindow.updateTagToggles;
-                var replayer = parentWindow.replayLocalBakedDataForPopup; // <-- Handshake with map.js module
+                var replayer = parentWindow.replayLocalBakedDataForPopup;
 
-                # 1. Initialize structural layout baselines
                 document.querySelectorAll('.unit-selector').forEach(function(sel) {{
                     if (typeof loader === 'function') loader(sel);
                     if (typeof colorizer === 'function') colorizer(sel);
                     if (typeof tagger === 'function') tagger(sel, scope);
                 }});
 
-                # 2. Call external map.js replayer module, passing this frame's document
                 if (typeof replayer === 'function') {{
                     try {{
                         replayer(document);
@@ -273,33 +306,46 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                     </span>
                 </td>'''
 
-        # Unit dropdown
+        # Unit dropdown (Trigger local re-evaluation on-change)
         unit_dropdown = f'''
-        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this);"
+        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); refreshRowVoteBadge(this.closest('.canvass-row'));"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
         '''
 
-        # VI select
+        # VI select (Trigger local re-evaluation on-change)
         vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
         vi_select = f'''
         <select class="vi-selector"
                 style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
-                onchange="parent.updateVI(this)">
+                onchange="parent.updateVI(this); refreshRowVoteBadge(this.closest('.canvass-row'));">
             {vi_options}
         </select>
         '''
 
-        # Vote button
+        # Unit dropdown & Vote button initialization
+        unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
+
+        # Determine default choice token from state tracking profile maps
+        default_vi_code = str(next(iter(VID.keys()))).upper() if VID else ""
+
+        # Pull matching pre-calculated count profile safely out of the nested dictionary structure
+        initial_votes = unit_active_votes.get(first_unit, {}).get(default_vi_code, 0) if first_unit else 0
+
         vote_button = f'''
-        <button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="0" data-max="{max_votes}"
+        <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
+                data-count="{initial_votes}"
+                data-max="{max_votes}"
                 style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
-            0/{max_votes}
+            {initial_votes}/{max_votes}
         </button>
         '''
+
+        # Safely convert full multi-dimensional Python maps to sanitized JSON string attributes
+        json_active_votes_db = json.dumps(unit_active_votes).replace('"', '&quot;')
 
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
@@ -308,7 +354,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             data-scope="{uiScope}"
             data-region="{reg_id}"
             data-street="{street_name}"
-            data-district="{pd_code}">
+            data-district="{pd_code}"
+            data-active-votes-db="{json_active_votes_db}">
             <td style="padding:8px;">
                 <b data-name="{street_name}">{street_name}</b>
                 <small style="color:#888;">({pd_code})</small>
@@ -325,7 +372,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     html += "</tbody></table></div>"
     return html
-
 
 def preprocess_streets(df, task_tags=None):
     import pandas as pd
@@ -369,33 +415,54 @@ def preprocess_streets(df, task_tags=None):
         units = sorted(unit_counts.keys())
         actual_houses = len(units)
 
+        # --- HOUSEHOLD ACTIVE VI VOTES COUNT ---
+# --- 🌟 UPDATED: HOUSEHOLD ACTIVE VOTES BY SPECIFIC VI CODE ---
+        unit_active_votes = {}
+        for unit, unit_group in group.groupby("unit"):
+            # Initialize a dictionary for this specific house number
+            unit_active_votes[unit] = {}
+
+            if 'VI' in unit_group.columns:
+                # Clean up the VI series to remove empty strings or nan entries
+                cleaned_vi = unit_group['VI'].astype(str).str.strip().str.upper()
+                cleaned_vi = cleaned_vi.replace(['NAN', 'NONE', ''], pd.NA).dropna()
+
+                # Count occurrences of every specific intention code found at this address
+                vi_counts = cleaned_vi.value_counts().to_dict()
+
+                # Save the counts (e.g., {"R": 2, "D": 1}) converted safely to plain integers
+                unit_active_votes[unit] = {str(vi): int(count) for vi, count in vi_counts.items()}
+
+            else:
+                unit_active_votes[unit] = 0
+
         # --- FAST TAG PROCESSING ---
         if 'Tags' in group.columns:
-            # We create a set of all unique tag codes found for this street
             tag_series = (
                 group['Tags']
                 .dropna()
                 .astype(str)
-                .str.upper() # Ensure data is uppercase
+                .str.upper()
                 .str.replace(',', ' ')
                 .str.split()
                 .explode()
+                .str.strip()
             )
             tag_set = set(tag_series)
         else:
             tag_set = set()
 
         street_tags = {
-            # Ensure 'code' is uppercase to match the tag_set
             code: ("y" if str(code).strip().upper() in tag_set else "n")
-            for code in sorted_task_codes
+            for code in sorted_task_codes if str(code).strip()
         }
 
-        # --- NUMBER ANALYSIS ---
-        nums = group["num"].dropna().astype(int).unique()
-        nums.sort()
+        # --- NUMBER ANALYSIS (Safe parsing alternative) ---
+        valid_nums = group["num"].dropna()
+        if not valid_nums.empty:
+            nums = valid_nums.astype(int).unique() # Clean conversion safety
+            nums.sort()
 
-        if len(nums) > 0:
             min_num, max_num = int(nums.min()), int(nums.max())
 
             # Detect even/odd pattern
@@ -420,6 +487,7 @@ def preprocess_streets(df, task_tags=None):
             "missing_numbers": missing_numbers,
             "unit_list": units,
             "unit_counts": dict(unit_counts),
+            "unit_active_votes": unit_active_votes,
             "min_num": min_num,
             "max_num": max_num,
             "tags": street_tags
