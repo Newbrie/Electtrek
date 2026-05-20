@@ -1827,37 +1827,59 @@ window.refreshDropdownColors = function(selectElement) {
 };
 
 window.updateVI = function(selectElement) {
-  currentData = getBakedData()
+    var parentWindow = window.parent || window;
     var row = selectElement.closest('.canvass-row') || selectElement.closest('tr');
+    if (!row) return;
 
-    // 1. Grab all three identifiers (Walk, Street, House)
-    var walk = row.getAttribute('data-region');
-    var street = row.getAttribute('data-street');
-    var house = row.querySelector('.unit-selector').value;
+    var unitSel = row.querySelector('.unit-selector');
+    var voteBtn = row.querySelector('.vote-btn');
+    if (!unitSel || !voteBtn) return;
 
-    // 2. Ensure the 3-tier hierarchy exists
-    if (!currentData[walk]) currentData[walk] = {};
-    if (!currentData[walk][street]) currentData[walk][street] = {};
+    // 1. Gather all required identifiers from the active layout state
+    var regionId = row.getAttribute('data-region');
+    var streetName = row.getAttribute('data-street');
+    var uiScope = row.getAttribute('data-scope') || 'walk';
+    var selectedHouse = unitSel.value;
 
-    // 3. Ensure house record exists without wiping out existing votes or tags
-    if (!currentData[walk][street][house]) {
-        currentData[walk][street][house] = { votes: "0", tags: {} };
+    // Grab the current vote count so our appended ledger item retains accurate totals
+    var currentVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
+
+    // 2. 🌟 NEW FLAT LOG GENERATION LAYER
+    // Ensure our global parent window ledger structure is initialized
+    if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
+
+    // Push a new flat change entry right onto the chronological log stack
+    parentWindow.BAKED_DATA.push({
+        type: 'vi',
+        uiScope: uiScope,
+        region: regionId,
+        street: streetName,
+        house: selectedHouse,
+        vi: selectElement.value,   // The freshly selected VI code
+        votes: currentVotes,       // Retain the current vote count string/integer
+        timestamp: Date.now(),
+        synced: false
+    });
+
+    // 3. Keep local storage backup mirror synced
+    if (typeof parentWindow.saveBakedData === 'function') {
+        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
     }
 
-    // 4. Update only the VI and timestamp
-    currentData[walk][street][house].vi = selectElement.value;
-    currentData[walk][street][house].ts = Date.now();
+    // 4. Update the immediate UI colors & triggering downstream map render ticks
+    if (typeof window.refreshDropdownColors === 'function') {
+        window.refreshDropdownColors(selectElement);
+    }
 
-    // 5. Re-color the dropdown UI immediately
-    window.refreshDropdownColors(selectElement);
-
-    // 6. Trigger the Map Marker/Polygon refresh
-    // (Still passing 'street' assuming your map uses street-level markers)
     if (window.updateMarkerStatus) {
-        window.updateMarkerStatus(street);
+        window.updateMarkerStatus(streetName);
     }
 
-    console.log(`📝 Saved Intent for [${walk}] ${street} ${house}: ${selectElement.value}`);
+    // Toggle save/deploy button state to remind them there are un-synced entries
+    var deployBtn = document.getElementById('deploy-btn');
+    if (deployBtn) deployBtn.disabled = false;
+
+    console.log(`📝 Appended VI Intent Log for [${regionId}] ${streetName} ${selectedHouse}: ${selectElement.value}`);
 };
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {
