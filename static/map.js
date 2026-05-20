@@ -1055,30 +1055,37 @@ window.refreshRowVoteBadge = function(rowElement){
     var selectedOpt = unitSel.options[unitSel.selectedIndex];
     var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
 
-    // 2. Identify the unique keys to look up our row uniquely in your global system
+    // 2. Identify the matching context fields out of the HTML row parameters
     var streetName = rowElement.getAttribute('data-street');
     var scope = rowElement.getAttribute('data-scope') || 'walk';
+    var regionId = rowElement.getAttribute('data-region');
 
     var count = 0;
-    var foundInFreshData = false;
+    var foundInFreshLogs = false;
 
-    // 3. CHECK THE FRESH SESSION DATA FIRST 🌟
-    // (Adjust 'window.baked_data' if your map.js uses a slightly different global name)
-    if (window.baked_data && window.baked_data[scope] && window.baked_data[scope][streetName]) {
-        var freshStreetData = window.baked_data[scope][streetName];
+    // 3. SCAN EVENT LOG FROM NEWEST TO OLDEST 🌟
+    if (window.BAKED_DATA && Array.isArray(window.BAKED_DATA)) {
+        for (var i = window.BAKED_DATA.length - 1; i >= 0; i--) {
+            var log = window.BAKED_DATA[i];
 
-        // Check if there's a fresh live structure tracking counts for this unit + VI combination
-        if (freshStreetData.unit_active_votes &&
-            freshStreetData.unit_active_votes[currentUnit] &&
-            freshStreetData.unit_active_votes[currentUnit][currentVi] !== undefined) {
+            // Check if this log entry matches the row parameters and selection criteria
+            if (log.type === 'vi' &&
+                String(log.uiScope) === String(scope) &&
+                String(log.region) === String(regionId) &&
+                String(log.street) === String(streetName) &&
+                String(log.house) === String(currentUnit) &&
+                String(log.vi).toUpperCase() === String(currentVi)) {
 
-            count = freshStreetData.unit_active_votes[currentUnit][currentVi];
-            foundInFreshData = true;
+                // Snag the latest logged votes count modification state
+                count = parseInt(log.votes) || 0;
+                foundInFreshLogs = true;
+                break; // Found the absolute latest state, stop iterating
+            }
         }
     }
 
-    // 4. FALLBACK: If there's no fresh session data yet, read the original HTML data attribute
-    if (!foundInFreshData) {
+    // 4. FALLBACK: If the user hasn't clicked/modified anything yet, use Python's pre-baked database
+    if (!foundInFreshLogs) {
         var activeVotesDb = {};
         try {
             activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{}');
