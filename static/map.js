@@ -1051,25 +1051,47 @@ window.refreshRowVoteBadge = function(rowElement){
     var currentUnit = unitSel.value;
     var currentVi = viSel.value ? viSel.value.toUpperCase() : "";
 
-    // Re-read max capacity directly from the selected option template metadata
+    // 1. Re-read max capacity directly from the selected option template metadata
     var selectedOpt = unitSel.options[unitSel.selectedIndex];
     var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
 
-    // Extract the embedded Python nested structure safely from data-attribute string
-    var activeVotesDb = {};
-    try {
-        activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{}');
-    } catch(e) {
-        console.error("Failed to parse row data-active-votes-db", e);
-    }
+    // 2. Identify the unique keys to look up our row uniquely in your global system
+    var streetName = rowElement.getAttribute('data-street');
+    var scope = rowElement.getAttribute('data-scope') || 'walk';
 
-    // Pull specific key count, fallback cleanly to 0
     var count = 0;
-    if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {
-        count = activeVotesDb[currentUnit][currentVi];
+    var foundInFreshData = false;
+
+    // 3. CHECK THE FRESH SESSION DATA FIRST 🌟
+    // (Adjust 'window.baked_data' if your map.js uses a slightly different global name)
+    if (window.baked_data && window.baked_data[scope] && window.baked_data[scope][streetName]) {
+        var freshStreetData = window.baked_data[scope][streetName];
+
+        // Check if there's a fresh live structure tracking counts for this unit + VI combination
+        if (freshStreetData.unit_active_votes &&
+            freshStreetData.unit_active_votes[currentUnit] &&
+            freshStreetData.unit_active_votes[currentUnit][currentVi] !== undefined) {
+
+            count = freshStreetData.unit_active_votes[currentUnit][currentVi];
+            foundInFreshData = true;
+        }
     }
 
-    // Write updates seamlessly into frontend DOM node properties
+    // 4. FALLBACK: If there's no fresh session data yet, read the original HTML data attribute
+    if (!foundInFreshData) {
+        var activeVotesDb = {};
+        try {
+            activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{}');
+        } catch(e) {
+            console.error("Failed to parse row data-active-votes-db", e);
+        }
+
+        if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {
+            count = activeVotesDb[currentUnit][currentVi];
+        }
+    }
+
+    // 5. Write updates seamlessly into frontend DOM node properties
     btn.setAttribute('data-count', count);
     btn.setAttribute('data-max', maxVotes);
     btn.innerText = count + '/' + maxVotes;
