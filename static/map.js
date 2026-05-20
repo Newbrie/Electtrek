@@ -687,6 +687,7 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
 };
 
 function closePopupContainerModal() {
+  console.log(`🔄 [POPUP CLOSE] uploading Baked data to server`);
     window.syncBackend().then(success => {
         if (success) {
             hideModalDOMElement(); // Sync cleared, close down safely

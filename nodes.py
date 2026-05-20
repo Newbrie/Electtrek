@@ -2638,6 +2638,91 @@ class TreeNode:
             </style>
             """
 
+            popupclosure_injection_js = """
+            <script>
+            (function() {
+                // ------------------------------------------------------------------
+                // CENTRALIZED MODAL CLOSING & SYNC INTERCEPT ENGINE
+                // ------------------------------------------------------------------
+                window.closePopupContainerModal = function() {
+                    // Look up to make sure we hit the window holding the un-synced BAKED_DATA array
+                    var targetWindow = window.parent || window;
+
+                    if (typeof targetWindow.syncBackend === 'function') {
+                        console.log("🔄 Close requested. Invoking batch sync engine...");
+                        targetWindow.syncBackend().then(function(success) {
+                            if (success) {
+                                hideModalDOMElement();
+                            } else {
+                                if (confirm("⚠️ Warning: Changes could not sync to the server. Close anyway?")) {
+                                    hideModalDOMElement();
+                                }
+                            }
+                        });
+                    } else {
+                        console.warn("⚠️ syncBackend function is missing. Closing modal immediately.");
+                        hideModalDOMElement();
+                    }
+                };
+
+                /**
+                 * Internal layout utility to hide or remove the active modal frame element.
+                 * Adjust 'modal-overlay' or 'popup-container' IDs to match your layout!
+                 */
+                function hideModalDOMElement() {
+                    var overlay = document.getElementById('modal-overlay') || parent.document.getElementById('modal-overlay');
+                    var popup = document.getElementById('popup-container') || parent.document.getElementById('popup-container');
+
+                    if (overlay) overlay.style.display = 'none';
+                    if (popup) popup.style.display = 'none';
+                    console.log("🛑 Modal interface window torn down successfully.");
+                }
+
+                // ------------------------------------------------------------------
+                // SYSTEM EVENT LISTENERS (Registered once at startup)
+                // ------------------------------------------------------------------
+                document.addEventListener('DOMContentLoaded', function() {
+                    // 1. Intercept Semi-Transparent Backdrop Clicks
+                    var modalOverlay = document.getElementById('modal-overlay');
+                    if (modalOverlay) {
+                        modalOverlay.addEventListener('click', function(event) {
+                            // Ensure they clicked the blank overlay backdrop space, not the table contents inside it
+                            if (event.target === modalOverlay) {
+                                window.closePopupContainerModal();
+                            }
+                        });
+                    }
+
+                    // 2. Intercept Escape (Esc) Keypress Actions globally
+                    document.addEventListener('keydown', function(event) {
+                        if (event.key === 'Escape' || event.keyCode === 27) {
+                            var popup = document.getElementById('popup-container');
+                            // Only intercept if the popup drawer is actively visible right now
+                            if (popup && popup.style.display !== 'none') {
+                                event.preventDefault();
+                                window.closePopupContainerModal();
+                            }
+                        }
+                    });
+                });
+
+                // 3. Tab Close / Browser Refresh Intercept Safeguard (The Ultimate Catch-All)
+                window.addEventListener('beforeunload', function(event) {
+                    var targetWindow = window.parent || window;
+                    var eventLog = targetWindow.BAKED_DATA || [];
+
+                    // Scan the cache loop to find out if there are un-saved metrics remaining
+                    var hasUnsyncedChanges = eventLog.some(function(e) { return !e.synced; });
+
+                    if (hasUnsyncedChanges) {
+                        event.preventDefault();
+                        event.returnValue = 'You have un-deployed canvas entries. Are you sure you want to exit?';
+                        return event.returnValue;
+                    }
+                });
+            })();
+            </script>
+            """
             # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
             # This ties into your existing map detection lifecycle to prevent race conditions.
     # 💡 CORRECTED INJECTION: Property-Aligned Vector Compiler Index
@@ -2697,7 +2782,8 @@ class TreeNode:
 
             # 💡 Injected new static dictionary building capability cleanly into page generation blocks
             FolMap.get_root().html.add_child(folium.Element(fast_index_js))
-
+            # Add popupclosure call to your Folium map
+            FolMap.get_root().html.add_child(folium.Element(popupclosure_injection_js))
             # Add layer control accordion to your Folium map
             FolMap.get_root().header.add_child(folium.Element(accordion_css))
             FolMap.get_root().header.add_child(folium.Element(accordion_html))
