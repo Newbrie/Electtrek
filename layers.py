@@ -193,7 +193,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 var colorizer = parentWindow.refreshDropdownColors;
                 var tagger = parentWindow.updateTagToggles;
                 var replayer = parentWindow.replayLocalBakedDataForPopup;
-                var badgeRefresher = parentWindow.refreshRowVoteBadge; // ⭐ Snag the new map.js reference
+                var badgeRefresher = parentWindow.refreshRowVoteBadge;
 
                 // Loop through rows to initialize the UI states
                 document.querySelectorAll('.unit-selector').forEach(function(sel) {{
@@ -286,26 +286,40 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        # VI select (Trigger local re-evaluation on-change)
-        vi_options = "".join(f'<option value="{key}">{value}</option>' for key, value in VID.items())
-        vi_select = f'''
-        <select class="vi-selector"
-                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
-                onchange="parent.updateVI(this); refreshRowVoteBadge(this.closest('.canvass-row'));">
-            {vi_options}
-        </select>
-        '''
-
-        # Unit dropdown & Vote button initialization
+        # Unit dropdown & Vote button calculation markers
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
 
-        # Determine default choice token from state tracking profile maps
-        default_vi_code = str(next(iter(VID.keys()))).upper() if VID else ""
+        # 🌟 DETERMINE HIGHEST VOTE VI VALUE FOR STARTUP SELECTION 🌟
+        first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
 
-        # Pull matching pre-calculated count profile safely out of the nested dictionary structure
-        initial_votes = unit_active_votes.get(first_unit, {}).get(default_vi_code, 0) if first_unit else 0
+        if first_unit_votes:
+            # Pick the key that tracks the maximum value number inside our voter dictionary
+            highest_vi_code = max(first_unit_votes, key=first_unit_votes.get)
+            # Ensure it matches standard uppercase profiles
+            default_vi_code = str(highest_vi_code).upper()
+        else:
+            # Fallback to the first available choice token from system state configurations
+            default_vi_code = str(next(iter(VID.keys()))).upper() if VID else ""
+
+        # Build VI options, setting the 'selected' parameter on our highest matching value target
+        vi_options = ""
+        for key, value in VID.items():
+            is_selected = "selected" if str(key).upper() == default_vi_code else ""
+            vi_options += f'<option value="{key}" {is_selected}>{value}</option>'
+
+        # VI select element (🌟 Added parent. to refreshRowVoteBadge to match target scope!)
+        vi_select = f'''
+        <select class="vi-selector"
+                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
+                onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));">
+            {vi_options}
+        </select>
+        '''
+
+        # Pull matching calculated count profile cleanly out of the nested dictionary structure
+        initial_votes = first_unit_votes.get(default_vi_code, 0)
 
         vote_button = f'''
         <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
