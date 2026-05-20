@@ -1040,6 +1040,41 @@ window.plotTaskProgress = function (
     console.groupEnd();
 };
 
+// 🌟 SHARED LOCAL HANDLER FOR DYNAMIC PY-BAKED COUNTS
+window.refreshRowVoteBadge = function(rowElement){
+    if (!rowElement) return;
+    var unitSel = rowElement.querySelector('.unit-selector');
+    var viSel = rowElement.querySelector('.vi-selector');
+    var btn = rowElement.querySelector('.vote-btn');
+    if (!unitSel || !viSel || !btn) return;
+
+    var currentUnit = unitSel.value;
+    var currentVi = viSel.value ? viSel.value.toUpperCase() : "";
+
+    // Re-read max capacity directly from the selected option template metadata
+    var selectedOpt = unitSel.options[unitSel.selectedIndex];
+    var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
+
+    // Extract the embedded Python nested structure safely from data-attribute string
+    var activeVotesDb = {};
+    try {
+        activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{}');
+    } catch(e) {
+        console.error("Failed to parse row data-active-votes-db", e);
+    }
+
+    // Pull specific key count, fallback cleanly to 0
+    var count = 0;
+    if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {
+        count = activeVotesDb[currentUnit][currentVi];
+    }
+
+    // Write updates seamlessly into frontend DOM node properties
+    btn.setAttribute('data-count', count);
+    btn.setAttribute('data-max', maxVotes);
+    btn.innerText = count + '/' + maxVotes;
+}
+
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
 

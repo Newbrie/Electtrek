@@ -184,41 +184,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </div>
 
         <script>
-        // 🌟 SHARED LOCAL HANDLER FOR DYNAMIC PY-BAKED COUNTS
-        function refreshRowVoteBadge(rowElement) {{
-            if (!rowElement) return;
-            var unitSel = rowElement.querySelector('.unit-selector');
-            var viSel = rowElement.querySelector('.vi-selector');
-            var btn = rowElement.querySelector('.vote-btn');
-            if (!unitSel || !viSel || !btn) return;
-
-            var currentUnit = unitSel.value;
-            var currentVi = viSel.value ? viSel.value.toUpperCase() : "";
-
-            // Re-read max capacity directly from the selected option template metadata
-            var selectedOpt = unitSel.options[unitSel.selectedIndex];
-            var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
-
-            // Extract the embedded Python nested structure safely from data-attribute string
-            var activeVotesDb = {{}};
-            try {{
-                activeVotesDb = JSON.parse(rowElement.getAttribute('data-active-votes-db') || '{{}}');
-            }} catch(e) {{
-                console.error("Failed to parse row data-active-votes-db", e);
-            }}
-
-            // Pull specific key count, fallback cleanly to 0
-            var count = 0;
-            if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {{
-                count = activeVotesDb[currentUnit][currentVi];
-            }}
-
-            // Write updates seamlessly into frontend DOM node properties
-            btn.setAttribute('data-count', count);
-            btn.setAttribute('data-max', maxVotes);
-            btn.innerText = count + '/' + maxVotes;
-        }}
-
         (function() {{
             var scope = {ui_scope_json};
 
@@ -228,11 +193,18 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 var colorizer = parentWindow.refreshDropdownColors;
                 var tagger = parentWindow.updateTagToggles;
                 var replayer = parentWindow.replayLocalBakedDataForPopup;
+                var badgeRefresher = parentWindow.refreshRowVoteBadge; // ⭐ Snag the new map.js reference
 
+                // Loop through rows to initialize the UI states
                 document.querySelectorAll('.unit-selector').forEach(function(sel) {{
                     if (typeof loader === 'function') loader(sel);
                     if (typeof colorizer === 'function') colorizer(sel);
                     if (typeof tagger === 'function') tagger(sel, scope);
+
+                    // ⭐ Initialize the vote badges for each row on startup!
+                    if (typeof badgeRefresher === 'function') {{
+                        badgeRefresher(sel.closest('.canvass-row'));
+                    }}
                 }});
 
                 if (typeof replayer === 'function') {{
@@ -308,7 +280,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
         # Unit dropdown (Trigger local re-evaluation on-change)
         unit_dropdown = f'''
-        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); refreshRowVoteBadge(this.closest('.canvass-row'));"
+        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
