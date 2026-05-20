@@ -230,6 +230,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
+        unit_active_votes = data.get("unit_active_votes", {})
+        unit_default_vi = data.get("unit_default_vi", {})
         hos = data.get("houses", 0)
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
@@ -255,22 +257,16 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
 
-        # 🌟 COMPUTE HIGHEST SELECTION IN PYTHON (Strict Case-Insensitive Matching) 🌟
-        first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
+        # 🌟 READ PRE-CALCULATED WINNING CODE FOR THIS FIRST UNIT 🌟
+        default_vi_code = unit_default_vi.get(first_unit, "")
 
-        default_vi_code = ""
-        if first_unit_votes:
-            # Find the key string pointing to the highest numerical value
-            highest_key = max(first_unit_votes, key=lambda k: int(first_unit_votes[k] or 0))
-            default_vi_code = str(highest_key).upper()
-        else:
-            default_vi_code = str(next(iter(VID.keys()))).upper() if VID else ""
+        # Fallback to first available system key if house has zero votes recorded
+        if not default_vi_code and VID:
+            default_vi_code = str(next(iter(VID.keys()))).upper()
 
-        # Build clean markup options highlighting the computed default selection item
         vi_options = ""
         for key, value in VID.items():
             is_selected = "selected" if str(key).upper() == default_vi_code else ""
@@ -283,7 +279,8 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        # Read correct starting vote number using case-insensitive dictionary map lookup
+        # Grab correct initial count using safe dict matching
+        first_unit_votes = unit_active_votes.get(first_unit, {})
         initial_votes = 0
         for k, v in first_unit_votes.items():
             if str(k).upper() == default_vi_code:
@@ -359,25 +356,29 @@ def preprocess_streets(df, task_tags=None):
         actual_houses = len(units)
 
         # --- HOUSEHOLD ACTIVE VI VOTES COUNT ---
-# --- 🌟 UPDATED: HOUSEHOLD ACTIVE VOTES BY SPECIFIC VI CODE ---
         unit_active_votes = {}
         for unit, unit_group in group.groupby("unit"):
-            # Initialize a dictionary for this specific house number
             unit_active_votes[unit] = {}
 
             if 'VI' in unit_group.columns:
-                # Clean up the VI series to remove empty strings or nan entries
                 cleaned_vi = unit_group['VI'].astype(str).str.strip().str.upper()
                 cleaned_vi = cleaned_vi.replace(['NAN', 'NONE', ''], pd.NA).dropna()
 
-                # Count occurrences of every specific intention code found at this address
                 vi_counts = cleaned_vi.value_counts().to_dict()
-
-                # Save the counts (e.g., {"R": 2, "D": 1}) converted safely to plain integers
                 unit_active_votes[unit] = {str(vi): int(count) for vi, count in vi_counts.items()}
-
             else:
-                unit_active_votes[unit] = 0
+                unit_active_votes[unit] = {}
+
+        # 🌟 NEW: PRE-CALCULATE HIGHEST-VOTED VI PER UNIT 🌟
+        unit_default_vi = {}
+        for unit in units:
+            votes_dict = unit_active_votes.get(unit, {})
+            if votes_dict:
+                # Find the VI code with the highest count string entry
+                winning_vi = max(votes_dict, key=lambda k: int(votes_dict[k] or 0))
+                unit_default_vi[unit] = str(winning_vi).upper()
+            else:
+                unit_default_vi[unit] = "" # Leave blank if no data history exists
 
         # --- FAST TAG PROCESSING ---
         if 'Tags' in group.columns:
@@ -403,12 +404,11 @@ def preprocess_streets(df, task_tags=None):
         # --- NUMBER ANALYSIS (Safe parsing alternative) ---
         valid_nums = group["num"].dropna()
         if not valid_nums.empty:
-            nums = valid_nums.astype(int).unique() # Clean conversion safety
+            nums = valid_nums.astype(int).unique()
             nums.sort()
 
             min_num, max_num = int(nums.min()), int(nums.max())
 
-            # Detect even/odd pattern
             if len(nums) > 1 and all(n % 2 == nums[0] % 2 for n in nums):
                 estimated_houses = ((max_num - min_num) // 2) + 1
                 expected_numbers = set(range(min_num, max_num + 1, 2))
@@ -431,6 +431,7 @@ def preprocess_streets(df, task_tags=None):
             "unit_list": units,
             "unit_counts": dict(unit_counts),
             "unit_active_votes": unit_active_votes,
+            "unit_default_vi": unit_default_vi,  # Added key
             "min_num": min_num,
             "max_num": max_num,
             "tags": street_tags
