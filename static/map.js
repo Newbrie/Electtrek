@@ -92,53 +92,70 @@ var fmap;
  */
  window.saveBakedData = function(data) {
      try {
+         var parentWindow = window.parent || window;
          if (!Array.isArray(data)) data = [];
+
          const dataString = JSON.stringify(data);
-         const uiScope = 'walk';
 
-         // 1. Keep the local backup (The Sticky Note)
+         // 💾 THE STICKY NOTE: Keep a resilient local emergency backup
          localStorage.setItem('CANVASS_BAKED_DATA', dataString);
-         window.BAKED_DATA = data;
-         console.log("💾 Saved to Browser Storage");
+         parentWindow.BAKED_DATA = data;
 
-         // 2. THE POSTMAN: Send to Python (The File Creator)
-         // We only do this if we want a live-sync,
-         // otherwise, use the 'Save & Deploy' button logic.
-         const eventLog = window.BAKED_DATA || [];
-
-         const unsynced = eventLog.filter(e => !e.synced);
-
-         if (unsynced.length === 0) return;
-
-         fetch('/upload_data', {
-             method: 'POST',
-             headers: {'Content-Type': 'application/json'},
-             body: JSON.stringify({
-                 events: unsynced
-             })
-         }).then(res => {
-
-             if (res.ok) {
-
-                 // mark only uploaded events as synced
-                 unsynced.forEach(e => {
-                     e.synced = true;
-                 });
-
-                 // persist locally (important!)
-                 localStorage.setItem(
-                     'CANVASS_BAKED_DATA',
-                     JSON.stringify(window.BAKED_DATA)
-                 );
-
-                 console.log("🚀 Sync Complete. Events marked as synced.");
-             }
-
-          });
+         console.log("💾 Emergency local backup committed to Browser Storage.");
      } catch (e) {
-         console.error("❌ Failed to save:", e);
+         console.error("❌ Failed to commit local storage backup:", e);
      }
- };
+};
+
+/**
+ * Gathers un-synced entries out of local memory storage and drops them to the
+ * backend server framework endpoint in a single batch query chain.
+ *
+ * @returns {Promise<boolean>} Resolves true if sync is clean or succeeds, false on network errors.
+ */
+window.syncBackend = function() {
+    var parentWindow = window.parent || window;
+    const eventLog = parentWindow.BAKED_DATA || [];
+
+    // Filter down exclusively to operations missing a true synchronization check mark
+    const unsynced = eventLog.filter(e => !e.synced);
+
+    if (unsynced.length === 0) {
+        console.log("ℹ️ No un-synced local changes found.");
+        return Promise.resolve(true);
+    }
+
+    console.log(`🚀 Batch uploading ${unsynced.length} un-synced changes to server...`);
+
+    // Match your original route string endpoint: '/upload_data'
+    return fetch('/upload_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: unsynced })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Network collection upload synchronization failed");
+
+        // Mark only successfully uploaded elements as synced in our live global array
+        unsynced.forEach(e => {
+            e.synced = true;
+        });
+
+        // Re-stringify the updated log array and persist to local storage backup cache
+        localStorage.setItem('CANVASS_BAKED_DATA', JSON.stringify(parentWindow.BAKED_DATA));
+        console.log("🚀 Sync complete! Remote server updated and local cache synchronized.");
+
+        // Clear warning indicators or toggle save button elements if present
+        var deployBtn = document.getElementById('deploy-btn');
+        if (deployBtn) deployBtn.disabled = true;
+
+        return true;
+    })
+    .catch(err => {
+        console.error("❌ Failed to push batch payload modifications to database container:", err);
+        return false;
+    });
+};
 
 /**
  * Loads the data back from storage on page load.
@@ -520,7 +537,7 @@ window.incrementVoteCount = function(btn) {
     btn.setAttribute('data-count', count);
     btn.innerText = count + '/' + max;
 
-    // 🌟 FIXED CONTEXT: Attach exclusively to parent master storage container
+    // Attach exclusively to parent master storage container
     var parentWindow = window.parent || window;
     if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
 
@@ -535,9 +552,75 @@ window.incrementVoteCount = function(btn) {
         timestamp: Date.now()
     });
 
-    // Handle structural local saves if your framework relies on a storage hook
-    if (typeof parentWindow.saveBakedData === 'function') {
-        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
+    // Toggle save button state to remind them there are un-deployed adjustments
+    var deployBtn = document.getElementById('deploy-btn');
+    if (deployBtn) deployBtn.disabled = false;
+};
+
+window.handleTagClick = function(span, uiScope = 'walk') {
+    const isInactive = span.classList.contains('tag-inactive');
+    const newValue = isInactive ? 'y' : 'n';
+    const code = span.getAttribute('data-code');
+
+    const row = span.closest('.canvass-row') || span.closest('tr');
+    if (!row) return;
+
+    const region = row.dataset.region;
+    const street = row.dataset.street;
+
+    // Get the popup container/document context
+    const doc = row.ownerDocument;
+    const sel = row.querySelector('.unit-selector');
+
+    // 1. Calculate specific Street Weight
+    const streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
+    const streetWeight = sel ? sel.options.length : streetRows.length;
+
+    // 2. Calculate global Region Weight (Total houses in the entire popup)
+    let regionWeight = 0;
+    const countedStreetsInRegion = new Set();
+    const allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${region}"]`);
+
+    allRowsInRegion.forEach(r => {
+        const sKey = r.getAttribute('data-street');
+        if (!sKey || countedStreetsInRegion.has(sKey)) return;
+        countedStreetsInRegion.add(sKey);
+
+        const sSel = r.querySelector('.unit-selector');
+        const sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
+        regionWeight += sSel ? sSel.options.length : sRows.length;
+    });
+
+    const house = sel?.value;
+    if (!region || !street || !house) return;
+
+    // UI Updates
+    span.classList.toggle('tag-active', newValue === 'y');
+    span.classList.toggle('tag-inactive', newValue === 'n');
+    span.innerText = newValue;
+
+    // Write logs straight up to global parent window memory space
+    var parentWindow = window.parent || window;
+    parentWindow.BAKED_DATA ||= [];
+    parentWindow.BAKED_DATA.push({
+        type: 'tag',
+        ts: Date.now(),
+        uiScope,
+        region,
+        street,
+        house,
+        code,
+        value: newValue,
+        streetWeight: streetWeight,
+        regionWeight: regionWeight,
+        synced: false
+    });
+
+    // Keep map progression charting if necessary
+    if (typeof parentWindow.plotTaskProgress === 'function') {
+        parentWindow.plotTaskProgress(region, code, uiScope);
+    } else if (typeof plotTaskProgress === 'function') {
+        plotTaskProgress(region, code, uiScope);
     }
 
     // Toggle save button state to remind them there are un-deployed adjustments
@@ -603,75 +686,17 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
-window.handleTagClick = function(span, uiScope = 'walk') {
-    const isInactive = span.classList.contains('tag-inactive');
-    const newValue = isInactive ? 'y' : 'n';
-    const code = span.getAttribute('data-code');
-
-    const row = span.closest('.canvass-row') || span.closest('tr');
-    if (!row) return;
-
-    const region = row.dataset.region;
-    const street = row.dataset.street;
-
-    // Get the popup container/document context
-    const doc = row.ownerDocument;
-    const sel = row.querySelector('.unit-selector');
-
-    // 1. Calculate specific Street Weight
-    const streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
-    const streetWeight = sel ? sel.options.length : streetRows.length;
-
-    // 2. Calculate global Region Weight (Total houses in the entire popup)
-    let regionWeight = 0;
-    const countedStreetsInRegion = new Set();
-    const allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${region}"]`);
-
-    allRowsInRegion.forEach(r => {
-        const sKey = r.getAttribute('data-street');
-        if (!sKey || countedStreetsInRegion.has(sKey)) return;
-        countedStreetsInRegion.add(sKey);
-
-        const sSel = r.querySelector('.unit-selector');
-        const sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
-        regionWeight += sSel ? sSel.options.length : sRows.length;
+function closePopupContainerModal() {
+    window.syncBackend().then(success => {
+        if (success) {
+            hideModalDOMElement(); // Sync cleared, close down safely
+        } else {
+            if (confirm("Warning: Changes could not sync to server. Close anyway?")) {
+                hideModalDOMElement();
+            }
+        }
     });
-
-    const house = sel?.value;
-    if (!region || !street || !house) return;
-
-    // UI Updates
-    span.classList.toggle('tag-active', newValue === 'y');
-    span.classList.toggle('tag-inactive', newValue === 'n');
-    span.innerText = newValue;
-
-    // 🌟 FIXED CONTEXT STORAGE: Write logs straight up to global parent window memory space
-    var parentWindow = window.parent || window;
-    parentWindow.BAKED_DATA ||= [];
-    parentWindow.BAKED_DATA.push({
-        type: 'tag',
-        ts: Date.now(),
-        uiScope,
-        region,
-        street,
-        house,
-        code,
-        value: newValue,
-        streetWeight: streetWeight,
-        regionWeight: regionWeight,
-        synced: false
-    });
-
-    if (typeof parentWindow.saveBakedData === 'function') {
-        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
-    }
-
-    if (typeof parentWindow.plotTaskProgress === 'function') {
-        parentWindow.plotTaskProgress(region, code, uiScope);
-    } else if (typeof plotTaskProgress === 'function') {
-        plotTaskProgress(region, code, uiScope);
-    }
-};
+}
 
 window.replayLocalBakedDataForPopup = function(popupDocument) {
     const doc = popupDocument || document;
