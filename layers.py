@@ -155,10 +155,16 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     import json
     from state import VID
 
+    # 1. Prepare dynamic tag headers
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
+
+    # Ensure ui_scope_json is strictly formatted
     ui_scope_json = json.dumps(uiScope)
 
+    # ------------------------------------------------------------------
+    # 2. COMPACT BOOTSTRAP TRIGGER (Invokes map.js architecture)
+    # ------------------------------------------------------------------
     persistence_js = f'''
         <style>
             .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
@@ -179,31 +185,31 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         <script>
         (function() {{
             var scope = {ui_scope_json};
+
             setTimeout(function() {{
                 var parentWindow = window.parent || window;
-                var loader = parentWindow.loadHouseData;
-                var colorizer = parentWindow.refreshDropdownColors;
-                var tagger = parentWindow.updateTagToggles;
-                var replayer = parentWindow.replayLocalBakedDataForPopup;
-                var badgeRefresher = parentWindow.refreshRowVoteBadge;
 
-                document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                    if (typeof loader === 'function') loader(sel);
-                    if (typeof colorizer === 'function') colorizer(sel);
-                    if (typeof tagger === 'function') tagger(sel, scope);
-                    if (typeof badgeRefresher === 'function') {{
-                        badgeRefresher(sel.closest('.canvass-row'));
-                    }}
-                }});
-
-                if (typeof replayer === 'function') {{
-                    try {{ replayer(document); }} catch (err) {{ console.error(err); }}
+                // Run centralized row initialization engine
+                if (typeof parentWindow.initializeStreetRowState === 'function') {{
+                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
+                        parentWindow.initializeStreetRowState(sel, scope);
+                    }});
                 }}
-            }}, 250);
+
+                // Run map.js pop-up trace ledger replay loops
+                if (typeof parentWindow.replayLocalBakedDataForPopup === 'function') {{
+                    try {{
+                        parentWindow.replayLocalBakedDataForPopup(document);
+                    }} catch (err) {{
+                        console.error("❌ Error running local replay engine modules:", err);
+                    }}
+                }}
+            }}, 220);
         }})();
         <\/script>
     '''
 
+    # 3. THE UI: Table Header
     html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
@@ -222,6 +228,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 <tbody>
     '''
 
+    # 4. Build Rows
     for i, (street_name, data) in enumerate(street_stats.items()):
         try:
             pd_code = streets_df[streets_df['StreetName'] == street_name]['PD'].iloc[0]
@@ -230,11 +237,10 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
-        unit_active_votes = data.get("unit_active_votes", {})
-        unit_default_vi = data.get("unit_default_vi", {})
         hos = data.get("houses", 0)
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
+
         tags = data.get("tags", {})
 
         tag_cells = ""
@@ -242,14 +248,21 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             is_active = str(tags.get(code, 'n')).lower() == 'y'
             status_class = "tag-active" if is_active else "tag-inactive"
             display_char = "y" if is_active else "n"
+
             tag_cells += f'''
                 <td style="text-align:center; padding:4px;">
-                    <span class="tag-toggle {status_class}" data-code="{code}" data-value="{display_char}" role="button" tabindex="0"
-                          onclick="parent.handleTagClick(this, '{uiScope}'); (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
+                    <span class="tag-toggle {status_class}"
+                          data-code="{code}"
+                          data-value="{display_char}"
+                          role="button"
+                          tabindex="0"
+                          onclick="parent.handleTagClick(this, '{uiScope}');
+                                   (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
                     </span>
                 </td>'''
 
+        # Unit dropdown
         unit_dropdown = f'''
         <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
@@ -257,13 +270,18 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
+        # Server Fallback Configuration
+        unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
 
-        # 🌟 READ PRE-CALCULATED WINNING CODE FOR THIS FIRST UNIT 🌟
-        default_vi_code = unit_default_vi.get(first_unit, "")
+        default_vi_code = ""
+        first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
 
-        # Fallback to first available system key if house has zero votes recorded
+        if first_unit_votes:
+            default_vi_code = max(first_unit_votes, key=lambda k: int(first_unit_votes[k] or 0))
+            default_vi_code = str(default_vi_code).upper()
+
         if not default_vi_code and VID:
             default_vi_code = str(next(iter(VID.keys()))).upper()
 
@@ -273,22 +291,19 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             vi_options += f'<option value="{key}" {is_selected}>{value}</option>'
 
         vi_select = f'''
-        <select class="vi-selector" style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
+        <select class="vi-selector"
+                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
                 onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));">
             {vi_options}
         </select>
         '''
 
-        # Grab correct initial count using safe dict matching
-        first_unit_votes = unit_active_votes.get(first_unit, {})
-        initial_votes = 0
-        for k, v in first_unit_votes.items():
-            if str(k).upper() == default_vi_code:
-                initial_votes = int(v or 0)
-                break
+        initial_votes = first_unit_votes.get(default_vi_code, 0) if first_unit else 0
 
         vote_button = f'''
-        <button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-max="{max_votes}"
+        <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
+                data-count="{initial_votes}"
+                data-max="{max_votes}"
                 style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
             {initial_votes}/{max_votes}
         </button>
@@ -298,8 +313,16 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
-        <tr class="{row_class} canvass-row" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-active-votes-db="{json_active_votes_db}">
-            <td style="padding:8px;"><b>{street_name}</b> <small style="color:#888;">({pd_code})</small></td>
+        <tr class="{row_class} canvass-row"
+            data-scope="{uiScope}"
+            data-region="{reg_id}"
+            data-street="{street_name}"
+            data-district="{pd_code}"
+            data-active-votes-db="{json_active_votes_db}">
+            <td style="padding:8px;">
+                <b data-name="{street_name}">{street_name}</b>
+                <small style="color:#888;">({pd_code})</small>
+            </td>
             <td style="padding:8px; font-size:7pt; text-align:center;"><i>{hos}</i></td>
             <td style="padding:8px; font-size:7pt; text-align:center;">{num_display}</td>
             <td style="padding:8px; width:60px;">{unit_dropdown}</td>
@@ -356,29 +379,25 @@ def preprocess_streets(df, task_tags=None):
         actual_houses = len(units)
 
         # --- HOUSEHOLD ACTIVE VI VOTES COUNT ---
+# --- 🌟 UPDATED: HOUSEHOLD ACTIVE VOTES BY SPECIFIC VI CODE ---
         unit_active_votes = {}
         for unit, unit_group in group.groupby("unit"):
+            # Initialize a dictionary for this specific house number
             unit_active_votes[unit] = {}
 
             if 'VI' in unit_group.columns:
+                # Clean up the VI series to remove empty strings or nan entries
                 cleaned_vi = unit_group['VI'].astype(str).str.strip().str.upper()
                 cleaned_vi = cleaned_vi.replace(['NAN', 'NONE', ''], pd.NA).dropna()
 
+                # Count occurrences of every specific intention code found at this address
                 vi_counts = cleaned_vi.value_counts().to_dict()
-                unit_active_votes[unit] = {str(vi): int(count) for vi, count in vi_counts.items()}
-            else:
-                unit_active_votes[unit] = {}
 
-        # 🌟 NEW: PRE-CALCULATE HIGHEST-VOTED VI PER UNIT 🌟
-        unit_default_vi = {}
-        for unit in units:
-            votes_dict = unit_active_votes.get(unit, {})
-            if votes_dict:
-                # Find the VI code with the highest count string entry
-                winning_vi = max(votes_dict, key=lambda k: int(votes_dict[k] or 0))
-                unit_default_vi[unit] = str(winning_vi).upper()
+                # Save the counts (e.g., {"R": 2, "D": 1}) converted safely to plain integers
+                unit_active_votes[unit] = {str(vi): int(count) for vi, count in vi_counts.items()}
+
             else:
-                unit_default_vi[unit] = "" # Leave blank if no data history exists
+                unit_active_votes[unit] = 0
 
         # --- FAST TAG PROCESSING ---
         if 'Tags' in group.columns:
@@ -404,11 +423,12 @@ def preprocess_streets(df, task_tags=None):
         # --- NUMBER ANALYSIS (Safe parsing alternative) ---
         valid_nums = group["num"].dropna()
         if not valid_nums.empty:
-            nums = valid_nums.astype(int).unique()
+            nums = valid_nums.astype(int).unique() # Clean conversion safety
             nums.sort()
 
             min_num, max_num = int(nums.min()), int(nums.max())
 
+            # Detect even/odd pattern
             if len(nums) > 1 and all(n % 2 == nums[0] % 2 for n in nums):
                 estimated_houses = ((max_num - min_num) // 2) + 1
                 expected_numbers = set(range(min_num, max_num + 1, 2))
@@ -431,7 +451,6 @@ def preprocess_streets(df, task_tags=None):
             "unit_list": units,
             "unit_counts": dict(unit_counts),
             "unit_active_votes": unit_active_votes,
-            "unit_default_vi": unit_default_vi,  # Added key
             "min_num": min_num,
             "max_num": max_num,
             "tags": street_tags

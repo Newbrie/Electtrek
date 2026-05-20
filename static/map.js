@@ -1040,6 +1040,62 @@ window.plotTaskProgress = function (
     console.groupEnd();
 };
 
+/**
+ * Synchronizes a freshly rendered street list row with un-synced BAKED_DATA overrides
+ * and runs standard startup layout calculations.
+ *
+ * @param {HTMLSelectElement} sel - The element (.unit-selector) inside the row
+ * @param {string} scope - The active canvas scope ('walk', 'drive', etc.)
+ */
+window.initializeStreetRowState = function(sel, scope) {
+    var parentWindow = window.parent || window;
+    var row = sel.closest('.canvass-row');
+    if (!row) return;
+
+    // 1. Intercept state with un-synced BAKED_DATA local memory updates
+    if (parentWindow.BAKED_DATA && Array.isArray(parentWindow.BAKED_DATA)) {
+        var currentUnit = sel.value;
+        var streetName = row.getAttribute('data-street');
+        var regionId = row.getAttribute('data-region');
+
+        // Scan backward through history to pick up the absolute newest action
+        for (var i = parentWindow.BAKED_DATA.length - 1; i >= 0; i--) {
+            var log = parentWindow.BAKED_DATA[i];
+            if (log.type === 'vi' &&
+                String(log.uiScope) === String(scope) &&
+                String(log.region) === String(regionId) &&
+                String(log.street) === String(streetName) &&
+                String(log.house) === String(currentUnit)) {
+
+                // Align selector dropdown
+                var viSel = row.querySelector('.vi-selector');
+                if (viSel) {
+                    viSel.value = log.vi;
+                }
+
+                // Align live button metrics
+                var voteBtn = row.querySelector('.vote-btn');
+                if (voteBtn) {
+                    var maxVal = voteBtn.getAttribute('data-max') || 1;
+                    voteBtn.setAttribute('data-count', log.votes);
+                    voteBtn.innerText = log.votes + '/' + maxVal;
+                }
+                break;
+            }
+        }
+    }
+
+    // 2. Fallback execution of standard structural style handlers
+    if (typeof parentWindow.loadHouseData === 'function') parentWindow.loadHouseData(sel);
+    if (typeof parentWindow.refreshDropdownColors === 'function') parentWindow.refreshDropdownColors(sel);
+    if (typeof parentWindow.updateTagToggles === 'function') parentWindow.updateTagToggles(sel, scope);
+
+    // 3. Render the target indicators
+    if (typeof parentWindow.refreshRowVoteBadge === 'function') {
+        parentWindow.refreshRowVoteBadge(row);
+    }
+};
+
 // 🌟 SHARED LOCAL HANDLER FOR DYNAMIC PY-BAKED COUNTS
 window.refreshRowVoteBadge = function(rowElement){
     if (!rowElement) return;
