@@ -1164,6 +1164,59 @@ window.refreshRowVoteBadge = function(rowElement){
     btn.innerText = count + '/' + maxVotes;
 };
 
+/**
+ * Automatically recalculates and updates the strongest VI and vote counts
+ * when a user changes the house unit dropdown selection.
+ *
+ * @param {HTMLSelectElement} unitSel - The active .unit-selector element
+ */
+window.handleUnitChangeVIUpdate = function(unitSel) {
+    var row = unitSel.closest('.canvass-row');
+    if (!row) return;
+
+    var selectedUnit = unitSel.value;
+    var viSel = row.querySelector('.vi-selector');
+    var voteBtn = row.querySelector('.vote-btn');
+    if (!viSel || !voteBtn) return;
+
+    // 1. Grab the raw house stats dump out of the row attribute
+    var rawDb = row.getAttribute('data-active-votes-db');
+    var activeVotesDb = {};
+    try {
+        if (rawDb) activeVotesDb = JSON.parse(rawDb);
+    } catch (e) {
+        console.error("❌ Failed to parse data-active-votes-db attribute:", e);
+    }
+
+    var chosenViCode = "";
+    var currentVotes = 0;
+    var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
+
+    // 2. Scan the parsed dataset map for the newly selected house unit
+    var houseVotes = activeVotesDb[selectedUnit] || {};
+    var codes = Object.keys(houseVotes);
+
+    if (codes.length > 0) {
+        // Find the voting code targeting the highest metric tally integer
+        chosenViCode = codes.reduce(function(a, b) {
+            return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
+        });
+        chosenViCode = String(chosenViCode).toUpperCase();
+        currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
+    }
+
+    // 3. Fallback to first configuration option in the dropdown list if house data was empty
+    if (!chosenViCode && viSel.options.length > 0) {
+        chosenViCode = String(viSel.options[0].value).toUpperCase();
+        currentVotes = 0;
+    }
+
+    // 4. Update the UI DOM attributes directly
+    viSel.value = chosenViCode;
+    voteBtn.setAttribute('data-count', currentVotes);
+    voteBtn.setAttribute('data-max', maxVotes);
+    voteBtn.innerText = currentVotes + '/' + maxVotes;
+};
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
 

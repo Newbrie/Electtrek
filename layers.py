@@ -262,9 +262,10 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                     </span>
                 </td>'''
 
-        # Unit dropdown
+# Unit dropdown (Now executing handleUnitChangeVIUpdate on-change first thing)
         unit_dropdown = f'''
-        <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
+        <select class="unit-selector"
+                onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
             {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
         </select>
