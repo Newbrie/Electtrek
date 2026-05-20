@@ -155,17 +155,10 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     import json
     from state import VID
 
-    # 1. Prepare dynamic tag headers
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
-
-    # Ensure ui_scope_json is strictly formatted
     ui_scope_json = json.dumps(uiScope)
-    print(f" BuildStreetList_html UIScope: {ui_scope_json}")
 
-    # ------------------------------------------------------------------
-    # 2. DELEGATED FRONTEND LIFECYCLE INITIALIZER (With local updates)
-    # ------------------------------------------------------------------
     persistence_js = f'''
         <style>
             .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
@@ -186,7 +179,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         <script>
         (function() {{
             var scope = {ui_scope_json};
-
             setTimeout(function() {{
                 var parentWindow = window.parent || window;
                 var loader = parentWindow.loadHouseData;
@@ -195,34 +187,23 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 var replayer = parentWindow.replayLocalBakedDataForPopup;
                 var badgeRefresher = parentWindow.refreshRowVoteBadge;
 
-                // Loop through rows to initialize the UI states
                 document.querySelectorAll('.unit-selector').forEach(function(sel) {{
                     if (typeof loader === 'function') loader(sel);
                     if (typeof colorizer === 'function') colorizer(sel);
                     if (typeof tagger === 'function') tagger(sel, scope);
-
-                    // ⭐ Initialize the vote badges for each row on startup!
                     if (typeof badgeRefresher === 'function') {{
                         badgeRefresher(sel.closest('.canvass-row'));
                     }}
                 }});
 
                 if (typeof replayer === 'function') {{
-                    try {{
-                        replayer(document);
-                    }} catch (err) {{
-                        console.error("❌ Error executing map.js replay ledger module:", err);
-                    }}
-                }} else {{
-                    console.warn("⚠️ parentWindow.replayLocalBakedDataForPopup is unavailable or missing in map.js scope.");
+                    try {{ replayer(document); }} catch (err) {{ console.error(err); }}
                 }}
-
             }}, 250);
         }})();
         <\/script>
     '''
 
-    # 4. THE UI: Table Header
     html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
@@ -241,7 +222,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 <tbody>
     '''
 
-    # 5. Build Rows
     for i, (street_name, data) in enumerate(street_stats.items()):
         try:
             pd_code = streets_df[streets_df['StreetName'] == street_name]['PD'].iloc[0]
@@ -253,32 +233,21 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         hos = data.get("houses", 0)
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
-
         tags = data.get("tags", {})
-
-        if tags:
-            print(f"DEBUG [HTML Gen]: Street: {street_name} | Tags Found: {tags}")
 
         tag_cells = ""
         for code in sorted_task_codes:
             is_active = str(tags.get(code, 'n')).lower() == 'y'
             status_class = "tag-active" if is_active else "tag-inactive"
             display_char = "y" if is_active else "n"
-
             tag_cells += f'''
                 <td style="text-align:center; padding:4px;">
-                    <span class="tag-toggle {status_class}"
-                          data-code="{code}"
-                          data-value="{display_char}"
-                          role="button"
-                          tabindex="0"
-                          onclick="parent.handleTagClick(this, '{uiScope}');
-                                   (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
+                    <span class="tag-toggle {status_class}" data-code="{code}" data-value="{display_char}" role="button" tabindex="0"
+                          onclick="parent.handleTagClick(this, '{uiScope}'); (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
                     </span>
                 </td>'''
 
-        # Unit dropdown (Trigger local re-evaluation on-change)
         unit_dropdown = f'''
         <select class="unit-selector" onchange="parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
                 style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
@@ -286,66 +255,54 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        # Unit dropdown & Vote button calculation markers
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
 
-        # 🌟 DETERMINE HIGHEST VOTE VI VALUE FOR STARTUP SELECTION 🌟
+        # 🌟 COMPUTE HIGHEST SELECTION IN PYTHON (Strict Case-Insensitive Matching) 🌟
         first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
 
+        default_vi_code = ""
         if first_unit_votes:
-            # Pick the key that tracks the maximum value number inside our voter dictionary
-            highest_vi_code = max(first_unit_votes, key=first_unit_votes.get)
-            # Ensure it matches standard uppercase profiles
-            default_vi_code = str(highest_vi_code).upper()
+            # Find the key string pointing to the highest numerical value
+            highest_key = max(first_unit_votes, key=lambda k: int(first_unit_votes[k] or 0))
+            default_vi_code = str(highest_key).upper()
         else:
-            # Fallback to the first available choice token from system state configurations
             default_vi_code = str(next(iter(VID.keys()))).upper() if VID else ""
 
-        # Build VI options, setting the 'selected' parameter on our highest matching value target
+        # Build clean markup options highlighting the computed default selection item
         vi_options = ""
         for key, value in VID.items():
             is_selected = "selected" if str(key).upper() == default_vi_code else ""
             vi_options += f'<option value="{key}" {is_selected}>{value}</option>'
 
-        # VI select element (🌟 Added parent. to refreshRowVoteBadge to match target scope!)
         vi_select = f'''
-        <select class="vi-selector"
-                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
+        <select class="vi-selector" style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
                 onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));">
             {vi_options}
         </select>
         '''
 
-        # Pull matching calculated count profile cleanly out of the nested dictionary structure
-        initial_votes = first_unit_votes.get(default_vi_code, 0)
+        # Read correct starting vote number using case-insensitive dictionary map lookup
+        initial_votes = 0
+        for k, v in first_unit_votes.items():
+            if str(k).upper() == default_vi_code:
+                initial_votes = int(v or 0)
+                break
 
         vote_button = f'''
-        <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
-                data-count="{initial_votes}"
-                data-max="{max_votes}"
+        <button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-max="{max_votes}"
                 style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
             {initial_votes}/{max_votes}
         </button>
         '''
 
-        # Safely convert full multi-dimensional Python maps to sanitized JSON string attributes
         json_active_votes_db = json.dumps(unit_active_votes).replace('"', '&quot;')
-
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
-        <tr class="{row_class} canvass-row"
-            data-scope="{uiScope}"
-            data-region="{reg_id}"
-            data-street="{street_name}"
-            data-district="{pd_code}"
-            data-active-votes-db="{json_active_votes_db}">
-            <td style="padding:8px;">
-                <b data-name="{street_name}">{street_name}</b>
-                <small style="color:#888;">({pd_code})</small>
-            </td>
+        <tr class="{row_class} canvass-row" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-active-votes-db="{json_active_votes_db}">
+            <td style="padding:8px;"><b>{street_name}</b> <small style="color:#888;">({pd_code})</small></td>
             <td style="padding:8px; font-size:7pt; text-align:center;"><i>{hos}</i></td>
             <td style="padding:8px; font-size:7pt; text-align:center;">{num_display}</td>
             <td style="padding:8px; width:60px;">{unit_dropdown}</td>

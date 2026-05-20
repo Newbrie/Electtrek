@@ -1063,12 +1063,11 @@ window.refreshRowVoteBadge = function(rowElement){
     var count = 0;
     var foundInFreshLogs = false;
 
-    // 3. SCAN EVENT LOG FROM NEWEST TO OLDEST 🌟
+    // 3. SCAN EVENT LOG FROM NEWEST TO OLDEST FOR OVERRIDES
     if (window.BAKED_DATA && Array.isArray(window.BAKED_DATA)) {
         for (var i = window.BAKED_DATA.length - 1; i >= 0; i--) {
             var log = window.BAKED_DATA[i];
 
-            // Check if this log entry matches the row parameters and selection criteria
             if (log.type === 'vi' &&
                 String(log.uiScope) === String(scope) &&
                 String(log.region) === String(regionId) &&
@@ -1076,15 +1075,14 @@ window.refreshRowVoteBadge = function(rowElement){
                 String(log.house) === String(currentUnit) &&
                 String(log.vi).toUpperCase() === String(currentVi)) {
 
-                // Snag the latest logged votes count modification state
                 count = parseInt(log.votes) || 0;
                 foundInFreshLogs = true;
-                break; // Found the absolute latest state, stop iterating
+                break;
             }
         }
     }
 
-    // 4. FALLBACK: If the user hasn't clicked/modified anything yet, use Python's pre-baked database
+    // 4. FALLBACK: Use Python's pre-baked database state if no user log edits exist
     if (!foundInFreshLogs) {
         var activeVotesDb = {};
         try {
@@ -1093,16 +1091,22 @@ window.refreshRowVoteBadge = function(rowElement){
             console.error("Failed to parse row data-active-votes-db", e);
         }
 
-        if (activeVotesDb[currentUnit] && activeVotesDb[currentUnit][currentVi]) {
-            count = activeVotesDb[currentUnit][currentVi];
+        // Case-insensitive key checks against the pre-baked dictionary layout
+        if (activeVotesDb[currentUnit]) {
+            for (var key in activeVotesDb[currentUnit]) {
+                if (key.toUpperCase() === currentVi) {
+                    count = activeVotesDb[currentUnit][key];
+                    break;
+                }
+            }
         }
     }
 
-    // 5. Write updates seamlessly into frontend DOM node properties
+    // 5. Update UI elements
     btn.setAttribute('data-count', count);
     btn.setAttribute('data-max', maxVotes);
     btn.innerText = count + '/' + maxVotes;
-}
+};
 
 
 window.incrementVoteCount = function(btn, uiScope = 'walk') {
