@@ -230,19 +230,26 @@ class ElectorManager:
                         tags_dict[canonical_idx] = ", ".join(sorted(existing))
 
                     # --- CASE B: VI EVALUATIONS ---
+                    # --- CASE B: VI EVALUATIONS ---
                     elif ev_type == 'vi':
                         try:
+                            # Find out how many rows are associated with this house vote count
                             vote_count = int(ev.get('votes') or 0)
                         except (ValueError, TypeError):
                             vote_count = 0
 
-                        vi_val = ev.get('value') or ''
+                        # Fall back to checking the explicit 'vi' tag or generic tag string value
+                        vi_val = ev.get('vi') or ev.get('value') or ''
+
+                        # Target the rows based on the incoming vote count amount
                         target_indexes = indexes[:vote_count]
 
+                        # 🟢 FIX: Update the VI field directly for all matched voters
                         for idx in indexes:
                             if idx in target_indexes:
                                 vi_dict[idx] = vi_val
                             else:
+                                # Clean up remaining rows if the count rolled back down
                                 vi_dict[idx] = ''
 
                         # Update canonical record votes tracking
