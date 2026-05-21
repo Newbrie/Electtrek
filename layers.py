@@ -302,20 +302,21 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             {vi_options}
         </select>
         '''
+# ... (Inside your build_street_list_html row loop, right before vote_button layout generation) ...
 
-        # 🌟 VOTE VALUE RESOLUTION LAYER (ABSENCE AWARE)
+        # 🌟 REVISED VOTE VALUE RESOLUTION LAYER (0 FALLBACK AWARE)
         # Check if a true database integer value exists for this specific initial VI code
         db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
 
-        if db_vote_value is not None and db_vote_value != "":
+        if db_vote_value is not None and str(db_vote_value).strip() != "":
             initial_votes = int(db_vote_value)
             initial_count_attr = str(initial_votes) # Normal database registration
             visual_button_text = f"{initial_votes}/{max_votes}"
         else:
             # 🌟 Formally ABSENT payload registration! No baseline exists on server
-            initial_votes = 1      # UI fallback fallback display value
+            initial_votes = 0       # 🌟 REVISED: UI default fallback display value is now 0
             initial_count_attr = "" # EMPTY STRING signals to your javascript Layer B that it is absent!
-            visual_button_text = f"1/{max_votes}"
+            visual_button_text = f"0/{max_votes}"
 
         vote_button = f'''
         <button class="vote-btn" onclick="parent.incrementVoteCount(this)"

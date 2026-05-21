@@ -687,7 +687,7 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
-window.closePopupContainerModal() function {
+window.closePopupContainerModal = function() {
   console.log(`🔄 [POPUP CLOSE] uploading Baked data to server`);
     window.syncBackend().then(success => {
         if (success) {
@@ -1843,7 +1843,7 @@ window.updateVI = function(selectElement) {
     var selectedHouse = unitSel.value;
 
     // 2. 🔍 DETERMINISTIC VOTE COUNT CALCULATION
-    var finalVotes = 1; // Base fallback
+    var finalVotes = null; // Start unassigned to catch true absence
 
     // Layer A: Check if parent window memory ledger has an unsynced, newer interaction
     var eventLog = parentWindow.BAKED_DATA || [];
@@ -1862,18 +1862,29 @@ window.updateVI = function(selectElement) {
 
     if (recentLogEntry && recentLogEntry.votes !== undefined) {
         // High priority: use the value they modified live in this session
-        finalVotes = parseInt(recentLogEntry.votes) || 1;
+        finalVotes = parseInt(recentLogEntry.votes);
+        if (isNaN(finalVotes)) finalVotes = 0;
         console.log(`💡 Found unsynced live memory value for ${selectedHouse}: ${finalVotes}`);
     } else {
-        // Layer B: Fall back to the server's embedded initial default string attribute
-        // Ensure your server template outputs 'data-initial-count' on the row or button!
+        // Layer B: Fall back to check the server's embedded initial default string attribute
         var rawDefault = row.getAttribute('data-initial-count') || voteBtn.getAttribute('data-initial-count');
-        if (rawDefault !== null && rawDefault !== undefined && rawDefault !== '') {
-            finalVotes = parseInt(rawDefault) || 1;
+
+        // Strict check: if it's missing, null, or an empty string (""), treat it as ABSENT
+        if (rawDefault !== null && rawDefault !== undefined && rawDefault.trim() !== "") {
+            finalVotes = parseInt(rawDefault);
+            if (isNaN(finalVotes)) finalVotes = 0;
             console.log(`💡 Falling back to server database default string: ${finalVotes}`);
         } else {
-            console.log(`💡 No memory or server attribute available. Defaulting fallback to 1`);
+            finalVotes = null; // Formally flags that no selection history exists on the server
+            console.log(`💡 Server default is ABSENT or empty string. Proceeding to final fallback.`);
         }
+    }
+
+    // Layer C: Final Fallback Resolution
+    // 🌟 REVISED: If both layers yielded no data, use 0 as your visual/interaction baseline
+    if (finalVotes === null) {
+        finalVotes = 0;
+        console.log(`💡 No memory or server attribute available. Defaulting fallback to 0`);
     }
 
     // 3. Update UI states to visually display this synchronized calculation
