@@ -15,6 +15,8 @@ if (pack && pack.length > 0) {
 
 
 
+
+
 var iframeEl = document.getElementsByName('iframe1');
 
 function bindEvent( element, eventName, eventHandler) {
@@ -25,20 +27,39 @@ function bindEvent( element, eventName, eventHandler) {
  };
 };
 
-bindEvent( window, 'message', function (e) {
-  pessages.pop();
-  pessages.push(e.data);
-  var ul = document.getElementById("logwin");
-  var li = document.createElement("li");
-  li.appendChild(document.createTextNode(e.data));
-  if (ul) {
-    ul.appendChild(li);
-    console.log("✅ Successfully appended location row to UI.");
-} else {
-    // 💡 This prevents the 'Cannot read properties of null' crash on static sites!
-    console.warn("ℹ️ UI container element was not found on this page layout. Location update skipped.");
-}
-  console.log("_____FlashPostedmessage: ",e.data);
+// 🌟 UNIFIED INTERCOM GATEWAY (Handles all incoming iframe messages in one place)
+window.addEventListener('message', function (e) {
+    // ---------------------------------------------------------
+    // 1. RUN REGULAR LOGGING & UI RE-STRIPING (Your original bindEvent logic)
+    // ---------------------------------------------------------
+    if (typeof pessages !== 'undefined') {
+        pessages.pop();
+        pessages.push(e.data);
+    }
+
+    var ul = document.getElementById("logwin");
+    if (ul) {
+        var li = document.createElement("li");
+        li.appendChild(document.createTextNode(e.data));
+        ul.appendChild(li);
+        console.log("✅ Successfully appended location row to UI.");
+    } else {
+        console.warn("ℹ️ UI container element was not found on this page layout. Location update skipped.");
+    }
+    console.log("_____FlashPostedmessage: ", e.data);
+
+    // ---------------------------------------------------------
+    // 2. INTERCEPT SPECIFIC ACTION COMMANDS (Your new synchronization logic)
+    // ---------------------------------------------------------
+    if (e.data === 'TRIGGER_PARENT_SYNC_CLOSE') {
+        console.log("📥 [PARENT RECEIVER] Caught closure request from iframe. Directing to sync routing engine...");
+
+        if (typeof window.handleModalCloseSequence === 'function') {
+            window.handleModalCloseSequence();
+        } else {
+            console.error("💥 Critical: window.handleModalCloseSequence is not defined on the parent window map scope.");
+        }
+    }
 });
 
 
