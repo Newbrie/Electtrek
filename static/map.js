@@ -687,7 +687,7 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
-function closePopupContainerModal() {
+window.closePopupContainerModal() function {
   console.log(`🔄 [POPUP CLOSE] uploading Baked data to server`);
     window.syncBackend().then(success => {
         if (success) {
