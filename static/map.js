@@ -1841,32 +1841,66 @@ window.updateVI = function(selectElement) {
     var uiScope = row.getAttribute('data-scope') || 'walk';
     var selectedHouse = unitSel.value;
 
-    // Grab the current vote count so our appended ledger item retains accurate totals
-    var currentVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
+    // 2. 🔍 DETERMINISTIC VOTE COUNT CALCULATION
+    var finalVotes = 1; // Base fallback
 
-    // 2. 🌟 NEW FLAT LOG GENERATION LAYER
-    // Ensure our global parent window ledger structure is initialized
+    // Layer A: Check if parent window memory ledger has an unsynced, newer interaction
+    var eventLog = parentWindow.BAKED_DATA || [];
+    var recentLogEntry = null;
+
+    // Loop backwards to grab the absolute newest entry matching this specific house unit
+    for (var i = eventLog.length - 1; i >= 0; i--) {
+        var entry = eventLog[i];
+        if (entry.region === regionId &&
+            entry.street === streetName &&
+            entry.house === selectedHouse) {
+            recentLogEntry = entry;
+            break;
+        }
+    }
+
+    if (recentLogEntry && recentLogEntry.votes !== undefined) {
+        // High priority: use the value they modified live in this session
+        finalVotes = parseInt(recentLogEntry.votes) || 1;
+        console.log(`💡 Found unsynced live memory value for ${selectedHouse}: ${finalVotes}`);
+    } else {
+        // Layer B: Fall back to the server's embedded initial default string attribute
+        // Ensure your server template outputs 'data-initial-count' on the row or button!
+        var rawDefault = row.getAttribute('data-initial-count') || voteBtn.getAttribute('data-initial-count');
+        if (rawDefault !== null && rawDefault !== undefined && rawDefault !== '') {
+            finalVotes = parseInt(rawDefault) || 1;
+            console.log(`💡 Falling back to server database default string: ${finalVotes}`);
+        } else {
+            console.log(`💡 No memory or server attribute available. Defaulting fallback to 1`);
+        }
+    }
+
+    // 3. Update UI states to visually display this synchronized calculation
+    var maxVotes = parseInt(voteBtn.getAttribute('data-max')) || 1;
+    voteBtn.setAttribute('data-count', finalVotes);
+    voteBtn.innerText = finalVotes + '/' + maxVotes;
+
+    // 4. FLAT LOG GENERATION LAYER
     if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
 
-    // Push a new flat change entry right onto the chronological log stack
+    // Append our dropdown modification state with the calculated vote number
     parentWindow.BAKED_DATA.push({
         type: 'vi',
         uiScope: uiScope,
         region: regionId,
         street: streetName,
         house: selectedHouse,
-        vi: selectElement.value,   // The freshly selected VI code
-        votes: currentVotes,       // Retain the current vote count string/integer
+        vi: selectElement.value,
+        votes: finalVotes,       // Logged using our layered verification logic
         timestamp: Date.now(),
         synced: false
     });
 
-    // 3. Keep local storage backup mirror synced
+    // 5. Run standard file synchronization & downstream layout redraw cycles
     if (typeof parentWindow.saveBakedData === 'function') {
         parentWindow.saveBakedData(parentWindow.BAKED_DATA);
     }
 
-    // 4. Update the immediate UI colors & triggering downstream map render ticks
     if (typeof window.refreshDropdownColors === 'function') {
         window.refreshDropdownColors(selectElement);
     }
@@ -1875,11 +1909,8 @@ window.updateVI = function(selectElement) {
         window.updateMarkerStatus(streetName);
     }
 
-    // Toggle save/deploy button state to remind them there are un-synced entries
     var deployBtn = document.getElementById('deploy-btn');
     if (deployBtn) deployBtn.disabled = false;
-
-    console.log(`📝 Appended VI Intent Log for [${regionId}] ${streetName} ${selectedHouse}: ${selectElement.value}`);
 };
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {

@@ -262,7 +262,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                     </span>
                 </td>'''
 
-# Unit dropdown (Now executing handleUnitChangeVIUpdate on-change first thing)
+        # Unit dropdown
         unit_dropdown = f'''
         <select class="unit-selector"
                 onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
@@ -271,7 +271,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        # Server Fallback Configuration
+        # Server Fallback Configuration Matrix
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
@@ -279,9 +279,13 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         default_vi_code = ""
         first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
 
-        if first_unit_votes:
-            default_vi_code = max(first_unit_votes, key=lambda k: int(first_unit_votes[k] or 0))
-            default_vi_code = str(default_vi_code).upper()
+        # Determine best match selection key tracking
+        if first_unit_votes and isinstance(first_unit_votes, dict):
+            # Safe extraction avoiding integer conversion exceptions if values are None
+            valid_votes = {k: int(v) for k, v in first_unit_votes.items() if v is not None}
+            if valid_votes:
+                default_vi_code = max(valid_votes, key=valid_votes.get)
+                default_vi_code = str(default_vi_code).upper()
 
         if not default_vi_code and VID:
             default_vi_code = str(next(iter(VID.keys()))).upper()
@@ -299,14 +303,27 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        initial_votes = first_unit_votes.get(default_vi_code, 0) if first_unit else 0
+        # 🌟 VOTE VALUE RESOLUTION LAYER (ABSENCE AWARE)
+        # Check if a true database integer value exists for this specific initial VI code
+        db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
+
+        if db_vote_value is not None and db_vote_value != "":
+            initial_votes = int(db_vote_value)
+            initial_count_attr = str(initial_votes) # Normal database registration
+            visual_button_text = f"{initial_votes}/{max_votes}"
+        else:
+            # 🌟 Formally ABSENT payload registration! No baseline exists on server
+            initial_votes = 1      # UI fallback fallback display value
+            initial_count_attr = "" # EMPTY STRING signals to your javascript Layer B that it is absent!
+            visual_button_text = f"1/{max_votes}"
 
         vote_button = f'''
         <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
                 data-count="{initial_votes}"
+                data-initial-count="{initial_count_attr}"
                 data-max="{max_votes}"
                 style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
-            {initial_votes}/{max_votes}
+            {visual_button_text}
         </button>
         '''
 
@@ -319,6 +336,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             data-region="{reg_id}"
             data-street="{street_name}"
             data-district="{pd_code}"
+            data-initial-count="{initial_count_attr}"
             data-active-votes-db="{json_active_votes_db}">
             <td style="padding:8px;">
                 <b data-name="{street_name}">{street_name}</b>
