@@ -2639,90 +2639,85 @@ class TreeNode:
             """
 
             popupclosure_injection_js = """
-            <script>
-            (function() {
+                <script>
                 // ------------------------------------------------------------------
-                // CENTRALIZED MODAL CLOSING & SYNC INTERCEPT ENGINE
-                // ------------------------------------------------------------------
-                window.closePopupContainerModal = function() {
-                    // Look up to make sure we hit the window holding the un-synced BAKED_DATA array
-                    var targetWindow = window.parent || window;
-
-                    if (typeof targetWindow.syncBackend === 'function') {
-                        console.log("🔄 Close requested. Invoking batch sync engine...");
-                        targetWindow.syncBackend().then(function(success) {
-                            if (success) {
-                                hideModalDOMElement();
-                            } else {
-                                if (confirm("⚠️ Warning: Changes could not sync to the server. Close anyway?")) {
-                                    hideModalDOMElement();
-                                }
-                            }
-                        });
-                    } else {
-                        console.warn("⚠️ syncBackend function is missing. Closing modal immediately.");
-                        hideModalDOMElement();
-                    }
-                };
-
-                /**
-                 * Internal layout utility to hide or remove the active modal frame element.
-                 * Adjust 'modal-overlay' or 'popup-container' IDs to match your layout!
-                 */
-                function hideModalDOMElement() {
-                    var overlay = document.getElementById('modal-overlay') || parent.document.getElementById('modal-overlay');
-                    var popup = document.getElementById('popup-container') || parent.document.getElementById('popup-container');
-
-                    if (overlay) overlay.style.display = 'none';
-                    if (popup) popup.style.display = 'none';
-                    console.log("🛑 Modal interface window torn down successfully.");
-                }
-
-                // ------------------------------------------------------------------
-                // SYSTEM EVENT LISTENERS (Registered once at startup)
+                // SYSTEM EVENT LISTENERS (Registered once at startup on Parent Map Page)
                 // ------------------------------------------------------------------
                 document.addEventListener('DOMContentLoaded', function() {
-                    // 1. Intercept Semi-Transparent Backdrop Clicks
+
+                    // 1. 🌟 THE CORE COORDINATOR: Runs the sync and handles the visual teardown
+                    window.handleModalCloseSequence = function() {
+                        if (typeof window.syncBackend === 'function') {
+                            console.log("🔄 [PARENT CLOSE SEQUENCE] Running syncBackend()...");
+
+                            window.syncBackend().then(success => {
+                                if (success) {
+                                    console.log("📣 [PARENT] Sync verified successful. Closing modal view.");
+                                    executeVisualTeardown();
+                                } else {
+                                    if (confirm("Warning: Changes could not sync to server. Close anyway?")) {
+                                        executeVisualTeardown();
+                                    }
+                                }
+                            }).catch(err => {
+                                console.error("💥 Sync promise failed:", err);
+                                if (confirm("Sync error occurred. Force close?")) {
+                                    executeVisualTeardown();
+                                }
+                            });
+                        } else {
+                            // Fallback if syncBackend isn't found for some reason
+                            executeVisualTeardown();
+                        }
+                    };
+
+                    // Helper to safely execute whichever visual teardown function you use
+                    function executeVisualTeardown() {
+                        if (typeof hideModalDOMElement === 'function') {
+                            hideModalDOMElement();
+                        } else if (typeof window.hideModalDOMElement === 'function') {
+                            window.hideModalDOMElement();
+                        } else if (typeof window.closePopupContainerModal === 'function') {
+                            // Check for older naming schemes if applicable
+                            window.closePopupContainerModal();
+                        }
+                    }
+
+                    // 2. LISTEN FOR INTERCOM MESSAGES: If the iframe button calls for a close
+                    window.addEventListener('message', function(event) {
+                        if (event.data === 'TRIGGER_PARENT_SYNC_CLOSE') {
+                            console.log("📥 [PARENT RECEIVER] Caught closure request string from iframe via postMessage.");
+                            window.handleModalCloseSequence();
+                        }
+                    });
+
+                    // 3. BACKDROP INTERCEPT: Clicking the semi-transparent overlay surface
                     var modalOverlay = document.getElementById('modal-overlay');
                     if (modalOverlay) {
                         modalOverlay.addEventListener('click', function(event) {
-                            // Ensure they clicked the blank overlay backdrop space, not the table contents inside it
                             if (event.target === modalOverlay) {
-                                window.closePopupContainerModal();
+                                console.log("📣 [PARENT BACKDROP] Overlay clicked.");
+                                window.handleModalCloseSequence();
                             }
                         });
                     }
 
-                    // 2. Intercept Escape (Esc) Keypress Actions globally
+                    // 4. KEYDOWN INTERCEPT: Hitting Escape anywhere on the map document
                     document.addEventListener('keydown', function(event) {
                         if (event.key === 'Escape' || event.keyCode === 27) {
-                            var popup = document.getElementById('popup-container');
-                            // Only intercept if the popup drawer is actively visible right now
-                            if (popup && popup.style.display !== 'none') {
+                            var activeLeafletPopup = document.querySelector('.leaflet-popup');
+                            var overlay = document.getElementById('modal-overlay');
+
+                            if ((activeLeafletPopup && activeLeafletPopup.style.display !== 'none') || (overlay && overlay.style.display !== 'none')) {
+                                console.log("📣 [PARENT KEYDOWN] Escape key tracked.");
                                 event.preventDefault();
-                                window.closePopupContainerModal();
+                                window.handleModalCloseSequence();
                             }
                         }
                     });
                 });
-
-                // 3. Tab Close / Browser Refresh Intercept Safeguard (The Ultimate Catch-All)
-                window.addEventListener('beforeunload', function(event) {
-                    var targetWindow = window.parent || window;
-                    var eventLog = targetWindow.BAKED_DATA || [];
-
-                    // Scan the cache loop to find out if there are un-saved metrics remaining
-                    var hasUnsyncedChanges = eventLog.some(function(e) { return !e.synced; });
-
-                    if (hasUnsyncedChanges) {
-                        event.preventDefault();
-                        event.returnValue = 'You have un-deployed canvas entries. Are you sure you want to exit?';
-                        return event.returnValue;
-                    }
-                });
-            })();
-            </script>
-            """
+                </script>
+                """
             # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
             # This ties into your existing map detection lifecycle to prevent race conditions.
     # 💡 CORRECTED INJECTION: Property-Aligned Vector Compiler Index
