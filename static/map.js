@@ -549,7 +549,8 @@ window.incrementVoteCount = function(btn) {
         house: unitSel.value,
         vi: viSel.value,
         votes: count,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        synced: false
     });
 
     // Toggle save button state to remind them there are un-deployed adjustments
