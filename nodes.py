@@ -2630,14 +2630,13 @@ class TreeNode:
                 """
 
             transparency = """
-            <style>
-            .leaflet-div-icon {
-                background: transparent !important;
-                border: none !important;
-            }
-            </style>
-            """
-
+                <style>
+                .leaflet-div-icon {
+                    background: transparent !important;
+                    border: none !important;
+                }
+                </style>
+                """
             popupclosure_injection_js = """
                 <script>
                 // ------------------------------------------------------------------
