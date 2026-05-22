@@ -129,7 +129,30 @@ class ElectorManager:
 
 
     def _inject_baked_data(self, specific_ename=None):
-        from baked_data import baked_data
+        import sys
+        import importlib
+
+
+        # 🪐 FIX: Unload the module cache if it exists, forcing Python to look at the disk
+        if 'baked_data' in sys.modules:
+            del sys.modules['baked_data']
+
+        try:
+            # Re-import cleanly from scratch
+            from baked_data import baked_data
+            all_events = baked_data.load()
+        except (ImportError, ModuleNotFoundError):
+            print("⚠️ [INJECT] baked_data file does not exist on disk. Skipping injection.")
+            return
+        except AttributeError:
+            print("⚠️ [INJECT] baked_data loaded but is missing the expected load() function.")
+            return
+
+        if not all_events:
+            print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
+            return
+
+        print(f"📦 [DEBUG] Total events loaded from baked_data: {len(all_events)}")
 
         all_events = baked_data.load()
         if not all_events:
