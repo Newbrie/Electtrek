@@ -2642,6 +2642,7 @@ class TreeNode:
             (function() {
                 // ------------------------------------------------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
                 // IFRAME CLIENT SCRIPTS (Injected into Folium Map Document)
                 // ------------------------------------------------------------------
                 document.addEventListener('DOMContentLoaded', function() {
@@ -2698,14 +2699,61 @@ class TreeNode:
                 document.addEventListener('DOMContentLoaded', function() {
                     // 1. Intercept Semi-Transparent Backdrop Clicks
 >>>>>>> parent of 59faed77 (closepopup)
+=======
+                // CENTRALIZED MODAL CLOSING & SYNC INTERCEPT ENGINE
+                // ------------------------------------------------------------------
+                window.closePopupContainerModal = function() {
+                    // Look up to make sure we hit the window holding the un-synced BAKED_DATA array
+                    var targetWindow = window.parent || window;
+
+                    if (typeof targetWindow.syncBackend === 'function') {
+                        console.log("🔄 Close requested. Invoking batch sync engine...");
+                        targetWindow.syncBackend().then(function(success) {
+                            if (success) {
+                                hideModalDOMElement();
+                            } else {
+                                if (confirm("⚠️ Warning: Changes could not sync to the server. Close anyway?")) {
+                                    hideModalDOMElement();
+                                }
+                            }
+                        });
+                    } else {
+                        console.warn("⚠️ syncBackend function is missing. Closing modal immediately.");
+                        hideModalDOMElement();
+                    }
+                };
+
+                /**
+                 * Internal layout utility to hide or remove the active modal frame element.
+                 * Adjust 'modal-overlay' or 'popup-container' IDs to match your layout!
+                 */
+                function hideModalDOMElement() {
+                    var overlay = document.getElementById('modal-overlay') || parent.document.getElementById('modal-overlay');
+                    var popup = document.getElementById('popup-container') || parent.document.getElementById('popup-container');
+
+                    if (overlay) overlay.style.display = 'none';
+                    if (popup) popup.style.display = 'none';
+                    console.log("🛑 Modal interface window torn down successfully.");
+                }
+
+                // ------------------------------------------------------------------
+                // SYSTEM EVENT LISTENERS (Registered once at startup)
+                // ------------------------------------------------------------------
+                document.addEventListener('DOMContentLoaded', function() {
+                    // 1. Intercept Semi-Transparent Backdrop Clicks
+>>>>>>> parent of 59faed77 (closepopup)
                     var modalOverlay = document.getElementById('modal-overlay');
                     if (modalOverlay) {
                         modalOverlay.addEventListener('click', function(event) {
                             // Ensure they clicked the blank overlay backdrop space, not the table contents inside it
                             if (event.target === modalOverlay) {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                 console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
                                 signalParentToClose();
+=======
+                                window.closePopupContainerModal();
+>>>>>>> parent of 59faed77 (closepopup)
 =======
                                 window.closePopupContainerModal();
 >>>>>>> parent of 59faed77 (closepopup)
@@ -2713,6 +2761,7 @@ class TreeNode:
                         });
                     }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
                     // 2. KEYDOWN INTERCEPT: Hitting Escape while keyboard focus is inside the map iframe
                     document.addEventListener('keydown', function(event) {
@@ -2726,6 +2775,16 @@ class TreeNode:
                                 event.preventDefault();
                                 event.stopPropagation(); // Stop Leaflet from consuming the event silently
                                 signalParentToClose();
+=======
+                    // 2. Intercept Escape (Esc) Keypress Actions globally
+                    document.addEventListener('keydown', function(event) {
+                        if (event.key === 'Escape' || event.keyCode === 27) {
+                            var popup = document.getElementById('popup-container');
+                            // Only intercept if the popup drawer is actively visible right now
+                            if (popup && popup.style.display !== 'none') {
+                                event.preventDefault();
+                                window.closePopupContainerModal();
+>>>>>>> parent of 59faed77 (closepopup)
 =======
                     // 2. Intercept Escape (Esc) Keypress Actions globally
                     document.addEventListener('keydown', function(event) {
