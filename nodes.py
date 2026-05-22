@@ -2641,77 +2641,41 @@ class TreeNode:
             popupclosure_injection_js = """
                 <script>
                 // ------------------------------------------------------------------
-                // SYSTEM EVENT LISTENERS (Registered once at startup on Parent Map Page)
+                // IFRAME CLIENT SCRIPTS (Injected into Folium Map Document)
                 // ------------------------------------------------------------------
                 document.addEventListener('DOMContentLoaded', function() {
 
-                    // 1. 🌟 THE CORE COORDINATOR: Runs the sync and handles the visual teardown
-                    window.handleModalCloseSequence = function() {
-                        if (typeof window.syncBackend === 'function') {
-                            console.log("🔄 [PARENT CLOSE SEQUENCE] Running syncBackend()...");
+                    // Helper function to safely signal the parent page over the iframe wall
+                    function signalParentToClose() {
+                        console.log("📤 [IFRAME MAP] Dispatching close request upward to parent window...");
 
-                            window.syncBackend().then(success => {
-                                if (success) {
-                                    console.log("📣 [PARENT] Sync verified successful. Closing modal view.");
-                                    executeVisualTeardown();
-                                } else {
-                                    if (confirm("Warning: Changes could not sync to server. Close anyway?")) {
-                                        executeVisualTeardown();
-                                    }
-                                }
-                            }).catch(err => {
-                                console.error("💥 Sync promise failed:", err);
-                                if (confirm("Sync error occurred. Force close?")) {
-                                    executeVisualTeardown();
-                                }
-                            });
-                        } else {
-                            // Fallback if syncBackend isn't found for some reason
-                            executeVisualTeardown();
-                        }
-                    };
-
-                    // Helper to safely execute whichever visual teardown function you use
-                    function executeVisualTeardown() {
-                        if (typeof hideModalDOMElement === 'function') {
-                            hideModalDOMElement();
-                        } else if (typeof window.hideModalDOMElement === 'function') {
-                            window.hideModalDOMElement();
-                        } else if (typeof window.closePopupContainerModal === 'function') {
-                            // Check for older naming schemes if applicable
-                            window.closePopupContainerModal();
-                        }
+                        // Target window.parent and use '*' (or your specific domain for tighter security)
+                        window.parent.postMessage('TRIGGER_PARENT_SYNC_CLOSE', '*');
                     }
 
-                    // 2. LISTEN FOR INTERCOM MESSAGES: If the iframe button calls for a close
-                    window.addEventListener('message', function(event) {
-                        if (event.data === 'TRIGGER_PARENT_SYNC_CLOSE') {
-                            console.log("📥 [PARENT RECEIVER] Caught closure request string from iframe via postMessage.");
-                            window.handleModalCloseSequence();
-                        }
-                    });
-
-                    // 3. BACKDROP INTERCEPT: Clicking the semi-transparent overlay surface
+                    // 1. BACKDROP INTERCEPT: Clicking a semi-transparent overlay inside the map area
                     var modalOverlay = document.getElementById('modal-overlay');
                     if (modalOverlay) {
                         modalOverlay.addEventListener('click', function(event) {
                             if (event.target === modalOverlay) {
-                                console.log("📣 [PARENT BACKDROP] Overlay clicked.");
-                                window.handleModalCloseSequence();
+                                console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
+                                signalParentToClose();
                             }
                         });
                     }
 
-                    // 4. KEYDOWN INTERCEPT: Hitting Escape anywhere on the map document
+                    // 2. KEYDOWN INTERCEPT: Hitting Escape while keyboard focus is inside the map iframe
                     document.addEventListener('keydown', function(event) {
                         if (event.key === 'Escape' || event.keyCode === 27) {
                             var activeLeafletPopup = document.querySelector('.leaflet-popup');
                             var overlay = document.getElementById('modal-overlay');
 
+                            // If an open popup or backdrop is active in our iframe scope, intercept it
                             if ((activeLeafletPopup && activeLeafletPopup.style.display !== 'none') || (overlay && overlay.style.display !== 'none')) {
-                                console.log("📣 [PARENT KEYDOWN] Escape key tracked.");
+                                console.log("📣 [IFRAME KEYDOWN] Escape key pressed inside map.");
                                 event.preventDefault();
-                                window.handleModalCloseSequence();
+                                event.stopPropagation(); // Stop Leaflet from consuming the event silently
+                                signalParentToClose();
                             }
                         }
                     });
