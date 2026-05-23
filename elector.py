@@ -132,15 +132,16 @@ class ElectorManager:
         import sys
         import importlib
 
-
-        # 🪐 FIX: Unload the module cache if it exists, forcing Python to look at the disk
+        # 🪐 STEP 1: Purge the module cache so Python is forced to read the fresh file from disk
         if 'baked_data' in sys.modules:
             del sys.modules['baked_data']
 
         try:
-            # Re-import cleanly from scratch
-            from baked_data import baked_data
-            all_events = baked_data.load()
+            # Force absolute clear import sequence
+            import baked_data
+            importlib.reload(baked_data)
+
+            all_events = baked_data.baked_data.load()
         except (ImportError, ModuleNotFoundError):
             print("⚠️ [INJECT] baked_data file does not exist on disk. Skipping injection.")
             return
@@ -152,15 +153,9 @@ class ElectorManager:
             print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
             return
 
-        print(f"📦 [DEBUG] Total events loaded from baked_data: {len(all_events)}")
+        print(f"📦 [DEBUG] Total fresh events loaded from baked_data: {len(all_events)}")
 
-        all_events = baked_data.load()
-        if not all_events:
-            print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
-            return
-
-        print(f"📦 [DEBUG] Total events loaded from baked_data: {len(all_events)}")
-
+        # Isolate election targets
         targets = (
             [specific_ename]
             if specific_ename and specific_ename in self._elections
@@ -175,7 +170,7 @@ class ElectorManager:
             print(f"📊 [DEBUG] DataFrame shape for '{ename}': {df.shape}")
 
             # ------------------------------------------------------------------
-            # STEP 1: Build Context-Aware Coordinate Lookup Indices
+            # STEP 2: Build Context-Aware Coordinate Lookup Indices
             # ------------------------------------------------------------------
             walk_lookup = {}
             pd_lookup = {}
@@ -205,19 +200,18 @@ class ElectorManager:
                 print("⚠️ [DEBUG WARNING] 'PD' column missing from DataFrame!")
 
             # ------------------------------------------------------------------
-            # STEP 2: Pull the targets out into local dictionaries for fast mutations
+            # STEP 3: Setup Local Mutation Dict Buffers
             # ------------------------------------------------------------------
             tags_dict = df['Tags'].astype(str).replace(['nan', 'None', '0', '0.0'], '').to_dict() if 'Tags' in df.columns else {}
             vi_dict = df['VI'].astype(str).replace(['nan', 'None'], '').to_dict() if 'VI' in df.columns else {}
 
-            # 🟢 FIX: votes_dict is completely removed from here
-            # ------------------------------------------------------------------
-            # STEP 3: Replay all events instantly inside pure memory dictionary
-            # ------------------------------------------------------------------
             processed_count = 0
             matched_count = 0
             unmatched_samples = 0
 
+            # ------------------------------------------------------------------
+            # STEP 4: Run Ledger Replay Engine Loop
+            # ------------------------------------------------------------------
             for ev in all_events:
                 if not isinstance(ev, dict):
                     print(f"❌ [DEBUG] Event skipped - expected dict, got: {type(ev)}")
@@ -225,15 +219,10 @@ class ElectorManager:
 
                 processed_count += 1
 
-                # Read mapping context directly out of user logging event tracking node
                 ui_scope = str(ev.get('uiScope', 'walk')).lower()
-                region = str(ev.get('region'))
-                street = str(ev.get('street'))
-                house = str(ev.get('house'))
+                event_key = (str(ev.get('region')), str(ev.get('street')), str(ev.get('house')))
 
-                event_key = (region, street, house)
-
-                # Route to the appropriate index map engine layout branch dynamically
+                # Route dynamically based on log scope mapping layout
                 if ui_scope == 'walk':
                     indexes = walk_lookup.get(event_key)
                 elif ui_scope == 'polling_district':
@@ -242,7 +231,6 @@ class ElectorManager:
                     indexes = walk_lookup.get(event_key) or pd_lookup.get(event_key)
 
                 if not indexes:
-                    # Limit unmatched logs sample size to avoid console flooding
                     if unmatched_samples < 5:
                         print(f"🕵️‍♂️ [DEBUG UNMATCHED] No DataFrame row index found for Event Key: {event_key} (uiScope: {ui_scope})")
                         unmatched_samples += 1
@@ -262,8 +250,6 @@ class ElectorManager:
 
                     canonical_idx = indexes[0]
                     existing_raw = tags_dict.get(canonical_idx, '')
-
-                    # Parse existing tags
                     existing = {t.strip() for t in existing_raw.split(',') if t.strip()}
 
                     if ev.get('value') == 'y':
@@ -273,43 +259,32 @@ class ElectorManager:
 
                     tags_dict[canonical_idx] = ", ".join(sorted(existing))
 
-            # --- CASE B: VI EVALUATIONS ---
+                # --- CASE B: VOTING INTENTION (VI) EVALUATIONS ---
                 elif ev_type == 'vi':
                     try:
-                        # The event tells us how many electors at this location voted this way
                         vote_count = int(ev.get('votes') or 0)
                     except (ValueError, TypeError):
                         vote_count = 0
 
                     vi_val = ev.get('vi') or ev.get('value') or ''
-
-                    # Slice down the list of row indexes matching this household
-                    # to match the exact number of incoming votes
                     target_indexes = indexes[:vote_count]
 
-                    # Apply the political intention to the targeted elector rows
                     for idx in indexes:
                         if idx in target_indexes:
                             vi_dict[idx] = vi_val
                         else:
-                            # Clear the value if the row falls outside the active count slice
                             vi_dict[idx] = ''
-
-                    # 🟢 FIX: Removed the votes_dict mapping assignment line entirely from here
 
             print(f"📈 [DEBUG SUMMARY] Processed {processed_count} dict events. Successfully matched keys to rows {matched_count} times.")
 
             # ------------------------------------------------------------------
-            # STEP 4: Write-Back Updated State Buffers to DataFrame in One Shot
+            # STEP 5: Flush Mutation State Maps to DataFrame Storage Array
             # ------------------------------------------------------------------
             df['Tags'] = df.index.map(tags_dict)
             df['VI'] = df.index.map(vi_dict)
 
-            # 🟢 FIX: Removed df['Votes'] write-back completely
-
-            # Save back tracking ledger changes
             self._elections[ename] = df
-            print(f"💾 [SUCCESS] Replay completed for target: '{ename}'")
+            print(f"💾 [SUCCESS] Replay completed for target ledger collection: '{ename}'")
 
     def refresh_baked_data(self):
         """Call this after a save to sync the in-memory electors with the disk."""
