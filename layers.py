@@ -1504,70 +1504,87 @@ class ExtendedFeatureGroup(FeatureGroup):
                 if len(limbX) > 0:
                     print("______Add_Nodes Treepolys type:",type)
     #
+                    # Setup clean, consistent styling defaults
+                    font_style = "style='font-size: 12pt; color: gray'"
+
+                    # Resolve target paths and values cleanly up front
+                    c_path = f"{c.dir}/{c.file(elevels)}"
+                    here_path = f"{herenode.dir}/{herenode.file(elevels)}"
+
+                    c_val = c.value
+                    here_val = herenode.value
+
+                    # ------------------------------------------------------------------
+                    # LEVEL 0: Top Level Hierarchy
+                    # ------------------------------------------------------------------
                     if herenode.level == 0:
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,type)
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,herenode.type)
-                        downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,type,12)
-    #                    res = "<p  width=50 id='results' style='font-size: {0}pt;color: gray'> </p>".format(12)
-                        uptag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                        limbX['UPDOWN'] = uptag+"<br>"+c.value+"<br>"  + downtag
-    #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
-    #                        self.children.append(c)
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{type}')"
+                        up_js = f"moveUp('/upbut/{c_path}', '{c_val}', '{herenode.type}')"
+
+                        uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
+                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{type}</button>"
+
+                        limbX['UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
+                        mapfile = f"/transfer/{c.mapfile()}"
+
+                    # ------------------------------------------------------------------
+                    # LEVEL 1: Regional / County Level
+                    # ------------------------------------------------------------------
                     elif herenode.level == 1:
-                        wardreportmess = "moveDown(&#39;/wardreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,type)
-                        divreportmess = "moveDown(&#39;/divreport/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,type)
-                        downmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,type)
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,herenode.type)
-                        wardreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(wardreportmess,"WARD Report",12)
-                        divreporttag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(divreportmess,"DIV Report",12)
-                        downconstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downmessage,"CONSTITUENCIES",12)
-                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
-                        limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ wardreporttag + divreporttag+"<br>"+ downconstag
-    #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
-    #                        self.children.append(c)
+                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{type}')"
+                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{type}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{type}')"
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
+
+                        ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
+                        div_tag = f"<button type='button' id='btn_div_l1' onclick=\"{div_js}\" {font_style}>DIV Report</button>"
+                        down_tag = f"<button type='button' id='btn_down_l1' onclick=\"{down_js}\" {font_style}>CONSTITUENCIES</button>"
+                        up_tag = f"<button type='button' id='btn_up_l1' onclick=\"{up_js}\" {font_style}>UP</button>"
+
+                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag}{div_tag}<br>{down_tag}"
+                        mapfile = f"/transfer/{c.mapfile()}"
+
+                    # ------------------------------------------------------------------
+                    # LEVEL 2: Constituency Level
+                    # ------------------------------------------------------------------
                     elif herenode.level == 2:
-                        downwardmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,"ward")
-                        downdivmessage = "moveDown(&#39;/downbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(c.dir+"/"+c.file(elevels), c.value,"division")
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,herenode.type)
-                        downwardstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downwardmessage,"WARDS",12)
-                        downdivstag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(downdivmessage,"DIVS",12)
-                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+                        ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'ward')"
+                        div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'division')"
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
 
-                        limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+ downwardstag + " " + downdivstag
-    #                    c.tagno = len(self._children)+1
-                        mapfile = "/transfer/"+c.mapfile()
-    #                        self.children.append(c)
+                        ward_tag = f"<button type='button' id='btn_ward_l2' onclick=\"{ward_down_js}\" {font_style}>WARDS</button>"
+                        div_tag = f"<button type='button' id='btn_div_l2' onclick=\"{div_down_js}\" {font_style}>DIVS</button>"
+                        up_tag = f"<button type='button' id='btn_up_l2' onclick=\"{up_js}\" {font_style}>UP</button>"
+
+                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag} {div_tag}"
+                        mapfile = f"/transfer/{c.mapfile()}"
+
+                    # ------------------------------------------------------------------
+                    # LEVEL 3: Ward / Division Leaf Node Layout
+                    # ------------------------------------------------------------------
                     elif herenode.level == 3:
-                        upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,herenode.type)
-    #                upload = "<input id='importfile' type='file' name='importfile' placeholder='{1}' style='font-size: {0}pt;color: gray'></input>".format(12, session.get('importfile'))
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
+                        up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
 
-                        Sheetbtn = """
-                            <button type='button' class='guil-button' onclick='moveDown("/downbut/{0}", "{1}", "NOTUSED");' class='btn btn-norm'>
+                        # 🪐 THE FIX: Passing scope strings as clean parameters, keeping the URL string intact!
+                        sheet_btn = f"""
+                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downbut/{c_path}', '{c_val}', 'polling_district');">
                                 Sheets
                             </button>
-                        """.format(c.dir+"/"+c.file(elevels)+" polling_district", c.value)
+                        """
 
-
-                        Appbtn = """
-                            <button type='button' class='guil-button' onclick='moveDown("/downMWbut/{0}", "{1}", "walk");' class='btn btn-norm'>
+                        app_btn = f"""
+                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downMWbut/{c_path}', '{c_val}', 'walk');">
                                 App
                             </button>
-                        """.format(c.dir+"/"+c.file(elevels)+" walk", c.value)
-
-
-                        uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size:{2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+                        """
 
                         if not static:
-                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"+ uptag1 +"<br>"+Sheetbtn+" "+Appbtn
+                            limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}"
                         else:
-                            limbX['UPDOWN'] = "<br>"+c.value+"<br>"
-    #                    c.tagno = len(self._children)+1
-                        pathref = c.mapfile()
-                        mapfile = '/transfer/'+pathref
-    #                        self.children.append(c)
+                            limbX['UPDOWN'] = f"<br>{c_val}<br>"
 
+                        mapfile = f"/transfer/{c.mapfile()}"
 
                     party = "("+c.party+")"
 
