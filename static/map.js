@@ -211,9 +211,8 @@ window.syncBackend = function() {
          return;
      }
 
-     // 1. Gather only unique, valid region string identifiers from the event stream
+     // 1. Gather unique region identifiers
      const uniqueRegionIds = new Set();
-
      currentData.forEach(ev => {
          if (ev && ev.region) {
              uniqueRegionIds.add(String(ev.region).trim().toUpperCase());
@@ -222,10 +221,16 @@ window.syncBackend = function() {
 
      console.log(`🔄 [PENDING RENDER] Executing batch update for unique regions:`, Array.from(uniqueRegionIds));
 
-     // 2. Safely loop through the actual string literals instead of array indexes
+     // 2. Extract valid election layers (which explicitly includes 'VI' already)
+     const activeLayers = Object.keys(window.task_tags || {});
+
+     // 3. Batch process matches
      uniqueRegionIds.forEach(region_id => {
          if (!region_id || region_id === "UNDEFINED") return;
-         window.plotTaskProgress(region_id, 'L1', 'walk');
+
+         activeLayers.forEach(layerTag => {
+             window.plotTaskProgress(region_id, layerTag, 'walk');
+         });
      });
  };
 
