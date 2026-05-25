@@ -244,7 +244,7 @@ window.syncBackend = function() {
     const currentData = getBakedData();
     if (!Array.isArray(currentData) || currentData.length === 0) return;
 
-    const tagRegistry = window.TAG_TO_GROUP_MAPPING || {};
+    const tagRegistry = window.task_tags || {};
     const tagCodes = Object.keys(tagRegistry);
 
     console.log("🎯 Hydrating map once (idempotent)");
