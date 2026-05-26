@@ -235,33 +235,40 @@ window.syncBackend = function() {
  };
 
  window.MAP_READY = false;
- window.__HYDRATED = false;
+window.__HYDRATED = false;
 
- function hydrateMapOnce() {
+function hydrateMapOnce() {
+    // Prevent duplicate execution runs entirely
     if (window.__HYDRATED) return;
     window.__HYDRATED = true;
 
     const currentData = getBakedData();
-    if (!Array.isArray(currentData) || currentData.length === 0) return;
+    if (!Array.isArray(currentData) || currentData.length === 0) {
+        console.warn("⚠️ [Hydration] No baked data available to paint map layers.");
+        return;
+    }
 
+    // Single source of truth lookup
     const tagRegistry = window.task_tags || {};
     const tagCodes = Object.keys(tagRegistry);
+    const codesToProcess = tagCodes.length ? tagCodes : ['L1'];
 
-    console.log("🎯 Hydrating map once (idempotent)");
-
-
+    // 1. Extract clean, standardized unique string identifiers
     const uniqueRegions = [
         ...new Set(
             currentData
-                .map(e => e.region)
+                .map(e => e && e.region ? String(e.region).trim().toUpperCase() : null)
                 .filter(Boolean)
         )
     ];
 
-    for (const region_id of uniqueRegions) {
-        const codes = tagCodes.length ? tagCodes : ['L1'];
+    console.log(`🎯 [HYDRATION] Painting ${uniqueRegions.length} regions across ${codesToProcess.length} active tags (${codesToProcess.join(', ')})...`);
 
-        for (const code of codes) {
+    // 2. Perform ONE definitive structural drawing loop
+    for (const region_id of uniqueRegions) {
+        if (!region_id || region_id === "UNDEFINED") continue;
+
+        for (const code of codesToProcess) {
             window.plotTaskProgress(region_id, code, 'walk');
         }
     }
@@ -297,15 +304,16 @@ window.syncBackend = function() {
 
                 fmap.invalidateSize();
 
-                // -------------------------
+                // -------------------------------------------------------------
                 // SINGLE HYDRATION PASS
-                // -------------------------
+                // -------------------------------------------------------------
                 window.MAP_READY = true;
 
+                // This does the definitive drawing loop exactly once
                 hydrateMapOnce();
 
+                // Safely clear the tracking reference without double-invoking the loops
                 if (window.__pendingRender) {
-                    window.__pendingRender();
                     window.__pendingRender = null;
                 }
 
