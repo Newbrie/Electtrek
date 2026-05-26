@@ -57,7 +57,7 @@
     // 🧱 Safe variable injection
       {% set _options = options or {} %}
       {% set _constants = constants or {} %}
-      window.tags = {{ _constants.get('task_tags', []) | tojson }};
+      window.tags = {{ _options.get('task_tags', []) | tojson }};
       const { task_tags, outcome_tags } = deriveTags(window.tags)
       window.task_tags = task_tags;
       window.outcome_tags = outcome_tags;
