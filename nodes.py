@@ -1434,10 +1434,10 @@ class TreeNode:
                     totalleaf = grandchild_layer.create_layer(rlevels, grandchildnodelist, static=False)
                     grandchild_layer.show = True
                     selected.append(grandchild_layer)
-        # -------------------------------------------------
+
+# -------------------------------------------------
         # 1️⃣ Handle the Child Layer (Level + 1)
         # -------------------------------------------------
-
         if self.level < 6:
             child_layer = get_safe_layer(self.level + 1)
             if child_layer:
@@ -1446,13 +1446,14 @@ class TreeNode:
                     childnode_ids = session.get("accumulated_nodes", [])
                     childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
                 else:
-                    childnodelist = [self]
+                    # 👇 FIX HERE: Use self.children to grab the 75 walk nodes!
+                    childnodelist = self.children
 
                 if childnodelist:
+                    # Now this properly processes the 75 sub-polygons
                     totalleaf = child_layer.create_layer(rlevels, childnodelist, static=False)
                     child_layer.show = True
                     selected.append(child_layer)
-
         # -------------------------------------------------
         # 2️⃣ Handle the Sibling Layer (Current Level)
         # -------------------------------------------------
