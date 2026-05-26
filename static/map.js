@@ -235,44 +235,43 @@ window.syncBackend = function() {
  };
 
  window.MAP_READY = false;
-window.__HYDRATED = false;
+ window.__HYDRATED = false;
 
-function hydrateMapOnce() {
-    // Prevent duplicate execution runs entirely
-    if (window.__HYDRATED) return;
-    window.__HYDRATED = true;
+ function hydrateMapOnce() {
+     // 🛡️ BREAKOUT 1: If it's already done, stop.
+     if (window.__HYDRATED) return;
 
-    const currentData = getBakedData();
-    if (!Array.isArray(currentData) || currentData.length === 0) {
-        console.warn("⚠️ [Hydration] No baked data available to paint map layers.");
-        return;
-    }
+     // 🛡️ BREAKOUT 2: Check if our dynamic async task tags have arrived from the backend yet!
+     // If window.task_tags only has 'VI' or is empty, the server payload hasn't landed. Hold off.
+     const tagRegistry = window.task_tags || {};
+     const tagCodes = Object.keys(tagRegistry);
 
-    // Single source of truth lookup
-    const tagRegistry = window.task_tags || {};
-    const tagCodes = Object.keys(tagRegistry);
-    const codesToProcess = tagCodes.length ? tagCodes : ['L1'];
+     if (tagCodes.length <= 1) {
+         console.log("⏳ [Hydration] Postponing map paint. Waiting for async task_tags from backend...");
+         return;
+     }
 
-    // 1. Extract clean, standardized unique string identifiers
-    const uniqueRegions = [
-        ...new Set(
-            currentData
-                .map(e => e && e.region ? String(e.region).trim().toUpperCase() : null)
-                .filter(Boolean)
-        )
-    ];
+     const currentData = getBakedData();
+     if (!Array.isArray(currentData) || currentData.length === 0) return;
 
-    console.log(`🎯 [HYDRATION] Painting ${uniqueRegions.length} regions across ${codesToProcess.length} active tags (${codesToProcess.join(', ')})...`);
+     window.__HYDRATED = true;
+     console.log(`🎯 [HYDRATION RUNNING] Painting layers for active tags: [${tagCodes.join(', ')}]`);
 
-    // 2. Perform ONE definitive structural drawing loop
-    for (const region_id of uniqueRegions) {
-        if (!region_id || region_id === "UNDEFINED") continue;
+     const uniqueRegions = [
+         ...new Set(
+             currentData
+                 .map(e => e && e.region ? String(e.region).trim().toUpperCase() : null)
+                 .filter(Boolean)
+         )
+     ];
 
-        for (const code of codesToProcess) {
-            window.plotTaskProgress(region_id, code, 'walk');
-        }
-    }
-}
+     for (const region_id of uniqueRegions) {
+         if (!region_id || region_id === "UNDEFINED") continue;
+         for (const code of tagCodes) {
+             window.plotTaskProgress(region_id, code, 'walk');
+         }
+     }
+ }
 
 (function startMapCatcher() {
 
