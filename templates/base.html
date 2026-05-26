@@ -34,31 +34,47 @@
 </head>
 <body>
 <script>
-    <!-- PAGE CONTENT GOES HERE -->
-    function deriveTags(tags = {}) {
-        const task_tags = {};
-        const outcome_tags = {};
+// -----------------------------------------------------------------
+// 1️⃣ RE-ARCHITECTED TAG DERIVATION PROCESSOR
+// -----------------------------------------------------------------
+function deriveTags(tags = {}) {
+    // Ground truth default layers
+    const task_tags = {
+        "VI": "Voter Intention"
+    };
 
-        Object.entries(tags).forEach(([tag, description]) => {
-            if (tag.startsWith("L")) {
-                task_tags[tag] = description;
-            } else if (tag.startsWith("V")) {
-                task_tags[tag] = description;
-            } else if (tag.startsWith("M")) {
-                outcome_tags[tag] = description;
-            }
-        });
+    const outcome_tags = {
+        "M1": "Member",
+        "M2": "Pledge",
+        "M3": "HouseBoard",
+        "M4": "Postal Voter",
+        "M5": "Marked"
+    };
 
-        console.log("___Dash Task Tags:", task_tags, "Outcome Tags:", outcome_tags);
+    // Dynamically append incoming tags based on prefix groups
+    Object.entries(tags).forEach(([tag, description]) => {
+        const cleanTag = String(tag).trim();
 
-        return { task_tags, outcome_tags };
-    }
+        if (cleanTag.startsWith("L") || cleanTag.startsWith("V")) {
+            task_tags[cleanTag] = description;
+        } else if (cleanTag.startsWith("M")) {
+            outcome_tags[cleanTag] = description;
+        }
+    });
 
+    // Commit cleanly to the window global space for map visibility
+    window.task_tags = task_tags;
+    window.outcome_tags = outcome_tags;
+
+    console.log("🚀 ___Dash Task Tags synchronized:", window.task_tags, "Outcome Tags:", window.outcome_tags);
+
+    return { task_tags, outcome_tags };
+}
     // 🧱 Safe variable injection
       {% set _options = options or {} %}
       {% set _constants = constants or {} %}
-      window.tags = {{ _options.get('task_tags', []) | tojson }};
-      const { task_tags, outcome_tags } = deriveTags(window.tags)
+      window.task_tags = {{ _options.get('task_tags', []) | tojson }};
+      const { task_tags, outcome_tags } = deriveTags(window.task_tags)
       window.task_tags = task_tags;
       window.outcome_tags = outcome_tags;
       window.resources = {{ _options.get('resources', []) | tojson }};
