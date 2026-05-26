@@ -583,46 +583,46 @@ class CurrentElection(dict):
     # ---------- tag helpers ----------
 
 
-def get_tags(self):
-    """
-    Split tags into task_tags and outcome_tags, pre-seeded with mandatory election codes.
-    """
-    # 1. Pre-seed with your mandatory baseline task layers
-    task_tags = {
-        "VI": "Voter Intention"
-    }
+    def get_tags(self):
+        """
+        Split tags into task_tags and outcome_tags, pre-seeded with mandatory election codes.
+        """
+        # 1. Pre-seed with your mandatory baseline task layers
+        task_tags = {
+            "VI": "Voter Intention"
+        }
 
-    # 2. Pre-seed with your baseline canvas outcome milestones
-    outcome_tags = {
-        "M1": "Member",
-        "M2": "Pledge",
-        "M3": "HouseBoard",
-        "M4": "Postal Voter",
-        "M5": "Marked"
-    }
+        # 2. Pre-seed with your baseline canvas outcome milestones
+        outcome_tags = {
+            "M1": "Member",
+            "M2": "Pledge",
+            "M3": "HouseBoard",
+            "M4": "Postal Voter",
+            "M5": "Marked"
+        }
 
-    all_tags = {}
+        all_tags = {}
 
-    # 3. Pull dynamic incoming records from your model store
-    raw_tags = self.get("tags") or {}
+        # 3. Pull dynamic incoming records from your model store
+        raw_tags = self.get("tags") or {}
 
-    for tag, description in raw_tags.items():
-        clean_tag = str(tag).strip()
+        for tag, description in raw_tags.items():
+            clean_tag = str(tag).strip()
 
-        # Route depending on campaign prefix matches
-        if clean_tag.startswith("L") or clean_tag.startswith("V"):
-            task_tags[clean_tag] = description
-        elif clean_tag.startswith("M"):
-            outcome_tags[clean_tag] = description
+            # Route depending on campaign prefix matches
+            if clean_tag.startswith("L") or clean_tag.startswith("V"):
+                task_tags[clean_tag] = description
+            elif clean_tag.startswith("M"):
+                outcome_tags[clean_tag] = description
 
-        all_tags[clean_tag] = description
+            all_tags[clean_tag] = description
 
-    # Ensure baseline seeds are accurately tracked inside your master all_tags lookup ledger too
-    all_tags.update({**task_tags, **outcome_tags})
+        # Ensure baseline seeds are accurately tracked inside your master all_tags lookup ledger too
+        all_tags.update({**task_tags, **outcome_tags})
 
-    print(f"___Under route {route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
+        print(f"___Under route {route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
 
-    return task_tags, outcome_tags, all_tags
+        return task_tags, outcome_tags, all_tags
 
 
 
