@@ -1123,31 +1123,29 @@ window.plotTaskProgress = function (
         return;
     }
 
-    // -------------------------------------------------
-    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
-    // -------------------------------------------------
-    const poly = Leaflet.geoJSON(geometry, {
-        pane: 'overlayPane',
-        style: {
-            color: "transparent",
-            fillColor: targetTag === 'VI' ? "#800080" : "#333", // Simplified color matching rule
-            fillOpacity: finalOpacity,
-            interactive: false
-        }
-    });
+    // -----------------------------------------------------------------
+        // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
+        // -----------------------------------------------------------------
+        const poly = Leaflet.geoJSON(geometry, {
+            pane: 'overlayPane',
+            style: {
+                color: "transparent",
+                fillColor: targetTag === 'VI' ? "#800080" : "#333",
+                fillOpacity: finalOpacity,
+                interactive: false
+            }
+        });
 
-    poly.is_ghost = true;
-    poly.ghost_id = ghostId;
+        poly.is_ghost = true;
+        poly.ghost_id = ghostId;
 
-    targetGroup.addLayer(poly);
+        // 🪐 THE FIX: Safely commit the polygon strictly to the group.
+        // Let Leaflet naturally manage visibility based on the parent group's checkbox!
+        targetGroup.addLayer(poly);
 
-    if (!activeMap.hasLayer(targetGroup)) {
-        activeMap.removeLayer(poly);
-    }
-
-    console.log(`✨ Ghost created via fast lookup index map: ${ghostId}`);
-    console.groupEnd();
-};
+        console.log(`✨ Ghost successfully registered to group: ${ghostId}`);
+        console.groupEnd();
+    };
 
 /**
  * Synchronizes a freshly rendered street list row with un-synced BAKED_DATA overrides
