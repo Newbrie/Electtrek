@@ -26,6 +26,6 @@ RESOURCE_FILE = Path(workdirectories['workdir']) /'static'/ 'resources' / 'Resou
 BASEX_FILE = Path(workdirectories['workdir']) /'static'/ 'elections' / 'Elections-DEMO.json'
 POSTCODE_FILE = Path(workdirectories['bounddir']) /'NSPL_FEB_2026_UK.csv'
 LOGO_FILE = Path(workdirectories['appdir']) / 'static' / 'images' / 'logo.png'
-DATA_FILE = Path(workdirectories['workdir']) / 'static' / 'registers' / 'baked_data.js'
+DATA_FILE = Path(workdirectories['workdir']) / 'static' / 'baked_data.js'
 DEVURLS = { "prod" : "https://electtrek.com",
             "dev" : "http://127.0.0.1:5000" }

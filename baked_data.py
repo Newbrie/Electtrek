@@ -5,15 +5,33 @@ import json
 class BakedDataManager:
     def __init__(self, filename=DATA_FILE):
         self.filename = filename
-        self._data = self.load()  # Load into memory immediately on boot
+
+        # 🪐 FIX 1: If the file is physically missing from disk, create an empty one immediately!
+        if not os.path.exists(self.filename):
+            print(f"📁 Data file missing. Initializing empty array at: {self.filename}")
+
+            # Ensure folder paths exist first
+            directory = os.path.dirname(os.path.abspath(self.filename))
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
+
+            # Write out a clean, empty initialization wrapper
+            with open(self.filename, 'w', encoding='utf-8') as f:
+                f.write("window.BAKED_DATA = [];")
+
+        self._data = self.load()  # Load clean list into memory
 
     def get_scope_data(self, scope, region_id):
-        # This reads out of memory. If memory isn't updated by save(), this stays stale!
-        return (
-            self._data
-            .get(scope, {})
-            .get(region_id, {})
-        )
+        # 🪐 FIX 2: Since self._data is a LIST, we filter it matching your dictionary lookups
+        # Assuming your event objects look like: {"scope": "...", "region_id": "...", ...}
+        results = []
+        for event in self._data:
+            if isinstance(event, dict):
+                if event.get("scope") == scope and event.get("region_id") == region_id:
+                    results.append(event)
+
+        # Return matched data list or an empty fallback dict structure
+        return results if results else {}
 
     def load(self):
         if not os.path.exists(self.filename):
@@ -44,25 +62,20 @@ class BakedDataManager:
     def save(self, incoming_payload):
         filepath = self.filename
 
-        # 1. Load current physical disk state
         existing = self.load()
         if not isinstance(existing, list):
             existing = []
 
-        # 2. Extract and append incoming canvassing data
         events = incoming_payload.get("events", [])
         if not isinstance(events, list):
             events = []
 
         existing.extend(events)
 
-        # ------------------------------------------------------------------
-        # 🪐 THE FIX: Synchronize both the disk file and the memory buffer!
-        # ------------------------------------------------------------------
-        # Step A: Update the backend's active working memory state tracker
+        # Synchronize back to working list memory
         self._data = existing
 
-        # Step B: Bake the JS file structure asset for the frontend browser UI
+        # Bake the JS file for the browser asset engine
         js_output = (
             "window.BAKED_DATA = "
             + json.dumps(existing, indent=4)
@@ -73,7 +86,6 @@ class BakedDataManager:
             f.write(js_output)
 
         print(f"✅ Saved to disk & sync'd memory: Appended {len(events)} events (Total: {len(existing)})")
-
 
 # Global instantiation utilized by routes and layout hooks
 baked_data = BakedDataManager()
