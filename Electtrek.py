@@ -65,7 +65,7 @@ from state import Treepolys, Fullpolys,Geo_index,update_progress, normalname, ro
 import nodes
 from nodes import get_layer_table, get_root,restore_from_persist, persist,parent_level_for, save_nodes, move_item
 import layers
-from elections import CurrentElection,get_available_elections, get_elections, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context, normalname
+from elections import get_available_elections, get_elections, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 from elector import electors
 
 
@@ -1777,7 +1777,6 @@ def handle_exception(e):
 @app.route('/get-backend-url', methods=['GET'])
 @login_required
 def get_backend_url():
-    from elections import CurrentElection
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -1994,7 +1993,6 @@ def election_report():
 def set_election():
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
     from state import Treepolys, Fullpolys, Geo_index, ensure_treepolys_with_index
-    from elections import CurrentElection
     from flask import session
 
     try:
@@ -2136,7 +2134,6 @@ def update_current_election():
 @app.route('/get-constants', methods=["GET"])
 @login_required
 def get_constants():
-    global CElection
     print("____Route/get_constants" )
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
@@ -2259,7 +2256,6 @@ def delete_election():
 @login_required
 def add_election():
 
-    global CElection
     restore_from_persist(Treepolys, Fullpolys, Geo_index)
 
     # no have Current Election data loaded
@@ -4037,10 +4033,7 @@ def firstpage():
     global environment
     global layeritems
     global streamrag
-    global CElection
     global TABLE_TYPES
-
-    global constants
 
     import csv
     import json
