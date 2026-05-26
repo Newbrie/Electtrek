@@ -2,24 +2,52 @@ from config import DATA_FILE
 import os
 import json
 
+
 class BakedDataManager:
     def __init__(self, filename=DATA_FILE):
         self.filename = filename
 
-        # 🪐 FIX 1: If the file is physically missing from disk, create an empty one immediately!
-        if not os.path.exists(self.filename):
-            print(f"📁 Data file missing. Initializing empty array at: {self.filename}")
+        # 🔍 AGGRESSIVE DEBUG STATEMENTS:
+        print("\n🔎 [BAKED DATA DEBUG] Booting up Manager...")
+        print(f"   -> Raw configured filename: '{self.filename}'")
 
-            # Ensure folder paths exist first
-            directory = os.path.dirname(os.path.abspath(self.filename))
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
+        try:
+            absolute_path = os.path.abspath(self.filename)
+            print(f"   -> Absolute system path mapped to: '{absolute_path}'")
 
-            # Write out a clean, empty initialization wrapper
-            with open(self.filename, 'w', encoding='utf-8') as f:
-                f.write("window.BAKED_DATA = [];")
+            file_exists = os.path.exists(absolute_path)
+            print(f"   -> Does file physically exist right now? {file_exists}")
 
-        self._data = self.load()  # Load clean list into memory
+            if not file_exists:
+                print("   💥 File is MISSING! Attempting to create it now...")
+
+                # Check directory structure
+                directory = os.path.dirname(absolute_path)
+                print(f"   -> Target directory: '{directory}'")
+
+                if directory and not os.path.exists(directory):
+                    print(f"   📁 Folder structure missing. Creating directory path: '{directory}'")
+                    os.makedirs(directory, exist_ok=True)
+
+                # Force physical write
+                with open(absolute_path, 'w', encoding='utf-8') as f:
+                    f.write("window.BAKED_DATA = [];")
+
+                # Re-verify immediately after write
+                if os.path.exists(absolute_path):
+                    print(f"   🎉 SUCCESS! File verified on disk at: '{absolute_path}'")
+                else:
+                    print("   ❌ FAIL: Write completed but file is still missing from disk check!")
+            else:
+                print("   ℹ️ Skipping creation: File already exists at this location.")
+
+        except Exception as e:
+            print(f"   🚨 CRITICAL INITIALIZATION ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+        print("[BAKED DATA DEBUG] Initialization pass complete.\n")
+        self._data = self.load()
 
     def get_scope_data(self, scope, region_id):
         # 🪐 FIX 2: Since self._data is a LIST, we filter it matching your dictionary lookups
