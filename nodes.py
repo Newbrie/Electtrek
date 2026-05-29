@@ -1347,7 +1347,6 @@ class TreeNode:
 
         return node
 
-
     def get_feature_layers(self, rlevels, path, static=False):
         from layers import make_feature_layers, ExtendedFeatureGroup
         from flask import session
@@ -1487,6 +1486,7 @@ class TreeNode:
             selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
+
 
     def sumupVI(self,viValue):
         origin = self
