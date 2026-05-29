@@ -1410,18 +1410,25 @@ class TreeNode:
         else:
             childnodelist = [self]
 
-        # -------------------------------------------------
+# -------------------------------------------------
         # 1️⃣ Grandchild Layer (Level + 2)
         # -------------------------------------------------
         totalleaf = 0
-        if self.level < 6:
+        if self.level < 5:  # Under level 5, level + 2 safely exists
             grandchild_layer = get_safe_layer(self.level + 2)
             if grandchild_layer and childnodelist:
                 grandchildnodelist = [grandchild for child in childnodelist for grandchild in child.children]
+
                 if grandchildnodelist:
-                    totalleaf = grandchild_layer.create_layer(rlevels, grandchildnodelist, static=False)
-                    grandchild_layer.show = True
-                    selected.append(grandchild_layer)
+                    # Capture how many items were successfully written
+                    leaf_count = grandchild_layer.create_layer(rlevels, grandchildnodelist, static=False)
+                    totalleaf += leaf_count
+
+                    # 🛡️ FIX: Only add to the map if elements were actually created!
+                    # Check both the returned count and Leaflet's internal child dictionary
+                    if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
+                        grandchild_layer.show = True
+                        selected.append(grandchild_layer)
 
         # -------------------------------------------------
         # 2️⃣ Child Layer (Level + 1)
@@ -1429,10 +1436,13 @@ class TreeNode:
         if self.level < 6:
             child_layer = get_safe_layer(self.level + 1)
             if child_layer and childnodelist:
-                totalleaf = child_layer.create_layer(rlevels, childnodelist, static=False)
-                child_layer.show = True
-                selected.append(child_layer)
+                leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
+                totalleaf += leaf_count
 
+                # 🛡️ FIX: Same safety guard here. If a child layer is empty, don't break the UI.
+                if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
+                    child_layer.show = True
+                    selected.append(child_layer)
         # -------------------------------------------------
         # 3️⃣ Sibling Layer (Current Level)
         # -------------------------------------------------
