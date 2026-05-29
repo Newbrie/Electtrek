@@ -1352,7 +1352,7 @@ class TreeNode:
         from layers import make_feature_layers, ExtendedFeatureGroup
         from flask import session
         import folium
-        from elections import CurrentElection # Ensure this is imported
+        from elections import CurrentElection
         from baked_data import baked_data
         from elector import electors
 
@@ -1360,16 +1360,13 @@ class TreeNode:
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
 
-        # --- 🟢 NEW: Get tags for Ghost Layers ---
+        # Get tags for Ghost Layers
         CE = CurrentElection.load(c_election)
         task_tags, outcome_tags, all_tags = CE.get_tags()
-        # -----------------------------------------
 
         factory = make_feature_layers()
         selected = []
         used_keys = set()
-
-        # track used tags alongside used_keys
         used_tags = set()
 
         def get_safe_tag_layer(tag_code, tag_desc):
@@ -1379,22 +1376,19 @@ class TreeNode:
             """
             from layers import ExtendedFeatureGroup
 
-            # Check for duplicates (same logic as get_safe_layer)
             display_name = f"Data Overlay: [{tag_code}] {tag_desc}"
             if tag_code in used_tags:
                 display_name = f"{display_name} (Upper)"
 
             used_tags.add(tag_code)
 
-            # Create the empty 'Bucket'
             tag_layer = ExtendedFeatureGroup(
                 name=display_name,
                 overlay=True,
                 control=True,
-                show=True # Start visible so the Bucket exists in JS scope
+                show=True
             )
 
-            # Attach metadata for JS bouncer to find this layer
             tag_layer.options = tag_layer.options or {}
             tag_layer.options.update({
                 "tag": tag_code,
@@ -1414,20 +1408,22 @@ class TreeNode:
             return factory[key]
 
         # -------------------------------------------------
-        # 1️⃣ Handle the grandChild Layer (Level + 1)
+        # 📂 BASELINE DATA: Establish True Children Nodes Upfront
         # -------------------------------------------------
+        if session.get("accumulate", False):
+            childnode_ids = session.get("accumulated_nodes", [])
+            childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
+        else:
+            childnodelist = self.children
 
+        # -------------------------------------------------
+        # 1️⃣ Handle the Grandchild Layer (Level + 2)
+        # -------------------------------------------------
         totalleaf = 0
-        if self.level < 6:
+        if self.level < 5:  # Grandchild (level + 2) must remain under max level boundaries
             grandchild_layer = get_safe_layer(self.level + 2)
-            if grandchild_layer:
-                # Determine childnodelist
-                if session.get("accumulate", False):
-                    childnode_ids = session.get("accumulated_nodes", [])
-                    childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
-                else:
-                    childnodelist = [self]
-                # Determine grandchildnodelist
+            if grandchild_layer and childnodelist:
+                # Safely extract all sub-children from our confirmed childnodelist
                 grandchildnodelist = [grandchild for child in childnodelist for grandchild in child.children]
 
                 if grandchildnodelist:
@@ -1435,27 +1431,19 @@ class TreeNode:
                     grandchild_layer.show = True
                     selected.append(grandchild_layer)
 
-# -------------------------------------------------
-        # 1️⃣ Handle the Child Layer (Level + 1)
+        # -------------------------------------------------
+        # 2️⃣ Handle the Child Layer (Level + 1)
         # -------------------------------------------------
         if self.level < 6:
             child_layer = get_safe_layer(self.level + 1)
-            if child_layer:
-                # Determine childnodelist
-                if session.get("accumulate", False):
-                    childnode_ids = session.get("accumulated_nodes", [])
-                    childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
-                else:
-                    # 👇 FIX HERE: Use self.children to grab the 75 walk nodes!
-                    childnodelist = self.children
+            if child_layer and childnodelist:
+                # This now maps all 75 sub-polygons correctly
+                totalleaf = child_layer.create_layer(rlevels, childnodelist, static=False)
+                child_layer.show = True
+                selected.append(child_layer)
 
-                if childnodelist:
-                    # Now this properly processes the 75 sub-polygons
-                    totalleaf = child_layer.create_layer(rlevels, childnodelist, static=False)
-                    child_layer.show = True
-                    selected.append(child_layer)
         # -------------------------------------------------
-        # 2️⃣ Handle the Sibling Layer (Current Level)
+        # 3️⃣ Handle the Sibling Layer (Current Level)
         # -------------------------------------------------
         if self.level > 0:
             sibling_layer = get_safe_layer(self.level)
@@ -1464,7 +1452,7 @@ class TreeNode:
                 selected.append(sibling_layer)
 
         # -------------------------------------------------
-        # 3️⃣ Handle the Parent Layer (Level - 1)
+        # 4️⃣ Handle the Parent Layer (Level - 1)
         # -------------------------------------------------
         if self.level > 1:
             parent_layer = get_safe_layer(self.level - 1)
@@ -1473,50 +1461,32 @@ class TreeNode:
                 selected.append(parent_layer)
 
         # -------------------------------------------------
-        # 4️⃣ Always Add Marker Layer
+        # 5️⃣ Always Add Marker Layer
         # -------------------------------------------------
         marker_layer = factory["marker"]
         selected.append(marker_layer)
 
         # -------------------------------------------------
-        # 5️⃣ 👻 NEW: Add Ghost Tag Layers as ExtendedFeatureGroups
+        # 6️⃣ 👻 GHOST OVERLAYS (Task Progress Tracking)
         # -------------------------------------------------
-
-        # -------------------------------------------------
-        from baked_data import BakedDataManager  # Ensure this is imported
-
-        # 1. Initialize the manager with the correct path
-        # Note: Your class uses DATA_FILE as default, but we use the dynamic 'path'
+        from baked_data import BakedDataManager
         baked_manager = BakedDataManager()
-
-        # 2. CALL THE LOAD METHOD to get the actual dictionary
         baked_dict = baked_manager.load()
 
-        # -------------------------------------------------
-        # 5️⃣ 👻 GHOST OVERLAYS
-        # -------------------------------------------------
-        CE = CurrentElection.load(c_election)
-        task_tags, _, _ = CE.get_tags()
-
         for tag_code, tag_desc in task_tags.items():
-            # Get a safe, empty bucket
             tag_layer = get_safe_tag_layer(tag_code, tag_desc)
 
-            # Populate it using its own internal method
-            # similar to how you would call node.add_voronoi(...)
-            tag_layer.add_ghosts(
-                tag_code=tag_code,
-                baked_dict=baked_dict,
-                nodes=childnodelist,
-                branchcolours=state.branchcolours
-            )
+            if childnodelist:
+                tag_layer.add_ghosts(
+                    tag_code=tag_code,
+                    baked_dict=baked_dict,
+                    nodes=childnodelist,
+                    branchcolours=state.branchcolours
+                )
 
             selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
-
-
-
 
     def sumupVI(self,viValue):
         origin = self
