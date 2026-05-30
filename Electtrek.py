@@ -903,16 +903,39 @@ def fetch_table(rlevels,table_name, current_node):
         return column_headers, rows.to_dict(orient="records"), title
 
     elif table_name.endswith("_xref"):
-        lev = current_node.level + 1
-        tabtype = next(iter(rlevels.values()))[lev]
-        nodelist = current_node.childrenoftype(tabtype)
-        print(f"___table:{current_node.value}-{len(nodelist)}")
-        column_headers, rows, title = get_layer_table(
-            nodelist,
-            str(tabtype) + "s",
-            rlevels
-        )
-        return column_headers, rows.to_dict(orient="records"), title
+            # The lowest data tier where raw electors and houses live
+            TARGET_DATA_LEVEL = 5
+
+            # Determine what type of node lives at the targeted leaf level
+            r_dict = next(iter(rlevels.values()))
+            tabtype = r_dict.get(TARGET_DATA_LEVEL, r_dict[current_node.level + 1])
+
+            # Recursive helper to drill down and gather all leaf nodes under this branch
+            def gather_leaf_nodes(node, target_level):
+                if node.level == target_level:
+                    return [node]
+
+                leaf_accumulator = []
+                if hasattr(node, 'children') and node.children:
+                    for child in node.children:
+                        leaf_accumulator.extend(gather_leaf_nodes(child, target_level))
+                return leaf_accumulator
+
+            # If we are above the data tier, recursively fetch all matching leaf children
+            if current_node.level < TARGET_DATA_LEVEL:
+                nodelist = gather_leaf_nodes(current_node, TARGET_DATA_LEVEL)
+            else:
+                # Fallback if we are already at or below the data level
+                nodelist = current_node.childrenoftype(tabtype)
+
+            print(f"___table:{current_node.value} (Level {current_node.level}) -> Gathered {len(nodelist)} Level {TARGET_DATA_LEVEL} leaf nodes")
+
+            column_headers, rows, title = get_layer_table(
+                nodelist,
+                str(tabtype) + "s",
+                rlevels
+            )
+            return column_headers, rows.to_dict(orient="records"), title
 
     elif table_name in table_map:
         df = table_map[table_name]()

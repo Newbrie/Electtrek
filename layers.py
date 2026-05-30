@@ -155,7 +155,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     import json
     from state import VID
 
-    # 1. Prepare dynamic tag headers
+    # 1. Prepare dynamic tag headers (Styled with matching color syntax)
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
@@ -163,24 +163,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     ui_scope_json = json.dumps(uiScope)
 
     # ------------------------------------------------------------------
-    # 2. COMPACT BOOTSTRAP TRIGGER (Invokes map.js architecture)
+    # 2. COMPACT BOOTSTRAP TRIGGER (Control Panel Block Removed)
     # ------------------------------------------------------------------
     persistence_js = f'''
         <style>
             .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
             .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
             .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
-            .control-panel {{ background:#001f3f; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; gap:10px; font-family:sans-serif; }}
-            .deploy-btn {{ background:#28a745; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; }}
-            .deploy-btn:disabled {{ background:#555; cursor: not-allowed; }}
         </style>
-
-        <div class="control-panel">
-            <button id="deploy-btn" class="deploy-btn" disabled>💾 Save & Deploy New File</button>
-            <span style="color:#00aaff; font-size:8pt; align-self:center;">
-                Scope: <strong style="color:white;">{uiScope}</strong> | Data synced to backend.
-            </span>
-        </div>
 
         <script>
         (function() {{
@@ -209,20 +199,20 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         <\/script>
     '''
 
-    # 3. THE UI: Table Header
+    # 3. THE UI: Table Layout (Unified header color attributes)
     html = persistence_js + f'''
         <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
             <table style="border-collapse: collapse; width: 100%;">
                 <thead>
                     <tr style="background-color:#001f3f;">
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Street Name</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Total</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Range</th>
-                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff;">Unit</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Street Name</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Total</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Range</th>
+                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff; color:#00aaff;">Unit</th>
                         {tag_headers_html}
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">VI</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff;">Votes</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#ffcc00;">Gaps</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">VI</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Votes</th>
+                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Gaps</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -271,7 +261,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         </select>
         '''
 
-        # Server Fallback Configuration Matrix
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
@@ -279,9 +268,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         default_vi_code = ""
         first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
 
-        # Determine best match selection key tracking
         if first_unit_votes and isinstance(first_unit_votes, dict):
-            # Safe extraction avoiding integer conversion exceptions if values are None
             valid_votes = {k: int(v) for k, v in first_unit_votes.items() if v is not None}
             if valid_votes:
                 default_vi_code = max(valid_votes, key=valid_votes.get)
@@ -302,20 +289,16 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             {vi_options}
         </select>
         '''
-# ... (Inside your build_street_list_html row loop, right before vote_button layout generation) ...
 
-        # 🌟 REVISED VOTE VALUE RESOLUTION LAYER (0 FALLBACK AWARE)
-        # Check if a true database integer value exists for this specific initial VI code
         db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
 
         if db_vote_value is not None and str(db_vote_value).strip() != "":
             initial_votes = int(db_vote_value)
-            initial_count_attr = str(initial_votes) # Normal database registration
+            initial_count_attr = str(initial_votes)
             visual_button_text = f"{initial_votes}/{max_votes}"
         else:
-            # 🌟 Formally ABSENT payload registration! No baseline exists on server
-            initial_votes = 0       # 🌟 REVISED: UI default fallback display value is now 0
-            initial_count_attr = "" # EMPTY STRING signals to your javascript Layer B that it is absent!
+            initial_votes = 0
+            initial_count_attr = ""
             visual_button_text = f"0/{max_votes}"
 
         vote_button = f'''
@@ -349,13 +332,13 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             {tag_cells}
             <td style="padding:8px;">{vi_select}</td>
             <td style="padding:8px;">{vote_button}</td>
-            <td style="padding:8px; color:#ffcc00; text-align:center;">{house_gaps_display}</td>
+            <td style="padding:8px; text-align:center;">{house_gaps_display}</td>
         </tr>
         '''
 
     html += "</tbody></table></div>"
     return html
-
+    
 def preprocess_streets(df, task_tags=None):
     import pandas as pd
     from collections import Counter
