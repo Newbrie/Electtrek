@@ -3771,47 +3771,37 @@ from baked_data import baked_data  # Import the instance you created
 @app.route('/upload_data', methods=['POST'])
 @login_required
 def upload_data():
-    try:
-        new_data = request.get_json()
+    import json
+    import os
+    from flask import Flask, request, jsonify
+    data = request.get_json()
+    incoming_events = data.get('events', [])
 
-        if new_data is None:
-            return jsonify({
-                "status": "error",
-                "message": "No JSON data received"
-            }), 400
+    file_path = 'baked_data.json' # Update to your actual file path
 
-        print("Route/upload_data : Received", new_data)
+    # 1. Load existing records if the file exists
+    existing_data = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                # Remove any javascript variable assignment wrap if saved raw
+                existing_data = json.load(f)
+        except Exception:
+            existing_data = []
 
-        # -----------------------------
-        # NORMALISE INPUT SHAPE
-        # -----------------------------
+    # 2. Update status of incoming batch items to true
+    for event in incoming_events:
+        event['synced'] = True
 
-        events = new_data.get('events', [])
+        # Avoid duplicating items if they share a unique identifier like timestamp
+        # Otherwise, simply append them to the tracking list
+        existing_data.append(event)
 
-        if not isinstance(events, list):
-            return jsonify({
-                "status": "error",
-                "message": "Events must be a list"
-            }), 400
+    # 3. Write back the combined array to file
+    with open(file_path, 'w') as f:
+        json.dump(existing_data, f, indent=4)
 
-        # -----------------------------
-        # APPEND ONLY (event store semantics)
-        # -----------------------------
-        baked_data.save({
-            "events": events
-        })
-
-        return jsonify({
-            "status": "success",
-            "message": "Events appended successfully"
-        }), 200
-
-    except Exception as e:
-        print(f"🚨 Deployment Error: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+    return jsonify({"status": "success"}), 200
 
 
 @app.route('/upload_file', methods=['POST'])
