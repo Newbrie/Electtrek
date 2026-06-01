@@ -301,6 +301,21 @@ window.syncBackend = function() {
                     }
                 });
 
+                // Inside your main map initialization file (map.js) where your 'map' object lives:
+                fmap.on('popupclose', function(e) {
+                    console.log("🔄 [LEAFLET POPUP CLOSE] User closed street list view. Syncing to backend...");
+
+                    if (typeof window.syncBackend === 'function') {
+                        window.syncBackend().then(success => {
+                            if (success) {
+                                console.log("✅ Auto-sync successful on popup close.");
+                            } else {
+                                console.warn("⚠️ Auto-sync failed on popup close.");
+                            }
+                        });
+                    }
+                });
+
                 fmap.invalidateSize();
 
                 // -------------------------------------------------------------
@@ -720,18 +735,6 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
-window.closePopupContainerModal = function() {
-  console.log(`🔄 [POPUP CLOSE] uploading Baked data to server`);
-    window.syncBackend().then(success => {
-        if (success) {
-            hideModalDOMElement(); // Sync cleared, close down safely
-        } else {
-            if (confirm("Warning: Changes could not sync to server. Close anyway?")) {
-                hideModalDOMElement();
-            }
-        }
-    });
-}
 
 window.replayLocalBakedDataForPopup = function(popupDocument) {
     const doc = popupDocument || document;
