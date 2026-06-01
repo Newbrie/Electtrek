@@ -3766,43 +3766,57 @@ def showmore(path):
     return current_node.parent.render_face(current_election,CElection,True)
 
 
-from baked_data import baked_data  # Import the instance you created
-
 @app.route('/upload_data', methods=['POST'])
 @login_required
 def upload_data():
-    import json
-    import os
-    from flask import Flask, request, jsonify
+    from baked_data import baked_data  # Import your local instance
+
     data = request.get_json()
     incoming_events = data.get('events', [])
+    file_path = 'baked_data.json'
 
-    file_path = 'baked_data.json' # Update to your actual file path
-
-    # 1. Load existing records if the file exists
     existing_data = []
+
+    # 1. Load and parse the wrapped JavaScript file
     if os.path.exists(file_path):
         try:
-            with open(file_path, 'r') as f:
-                # Remove any javascript variable assignment wrap if saved raw
-                existing_data = json.load(f)
-        except Exception:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+
+                # Strip out "window.BAKED_DATA =" and the trailing semicolon if present
+                # This isolates just the raw JSON string: [ ... ]
+                json_string = re.sub(r'^window\.BAKED_DATA\s*=\s*', '', content)
+                if json_string.endswith(';'):
+                    json_string = json_string[:-1]
+
+                existing_data = json.loads(json_string.strip())
+        except Exception as e:
+            print(f"⚠️ Warning: Could not parse existing data file. Starting fresh. Error: {e}")
             existing_data = []
 
-    # 2. Update status of incoming batch items to true
+    # 2. Update status of incoming batch items to true and append
     for event in incoming_events:
         event['synced'] = True
 
-        # Avoid duplicating items if they share a unique identifier like timestamp
-        # Otherwise, simply append them to the tracking list
-        existing_data.append(event)
+        # De-duplication check: Avoid adding an event if its exact timestamp already exists
+        if not any(item.get('timestamp') == event.get('timestamp') for item in existing_data):
+            existing_data.append(event)
+        else:
+            # Optional: Update the existing record if it matched on timestamp
+            for item in existing_data:
+                if item.get('timestamp') == event.get('timestamp'):
+                    item.update(event)
 
-    # 3. Write back the combined array to file
-    with open(file_path, 'w') as f:
-        json.dump(existing_data, f, indent=4)
+    # 3. Wrap it back up in the JavaScript assignment layout and save
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            raw_json = json.dumps(existing_data, indent=4)
+            # Prepend the window variable string so the browser can read it directly next boot
+            f.write(f"window.BAKED_DATA = {raw_json};")
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Failed to write file: {str(e)}"}), 500
 
     return jsonify({"status": "success"}), 200
-
 
 @app.route('/upload_file', methods=['POST'])
 @login_required
