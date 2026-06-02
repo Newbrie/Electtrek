@@ -597,7 +597,7 @@ window.incrementVoteCount = function(btn) {
         house: unitSel.value,
         vi: viSel.value,
         votes: count,
-        timestamp: Date.now(),
+        ts: Date.now(),
         synced: false
     });
 
@@ -1939,7 +1939,7 @@ window.updateVI = function(selectElement) {
         house: selectedHouse,
         vi: selectElement.value,
         votes: finalVotes,       // Logged using our layered verification logic
-        timestamp: Date.now(),
+        ts: Date.now(),
         synced: false
     });
 

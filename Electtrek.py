@@ -3831,10 +3831,10 @@ def upload_data():
         event['synced'] = True
 
         # Pull key timestamps for explicit tracking logs
-        incoming_ts = event.get('timestamp')
+        incoming_ts = event.get('ts')
 
         # De-duplication check: Look up via timestamp safely
-        existing_match = next((item for item in existing_data if item.get('timestamp') == incoming_ts), None)
+        existing_match = next((item for item in existing_data if item.get('ts') == incoming_ts), None)
 
         if existing_match:
             print(f"   🔄 [DEBUG] MATCH FOUND for timestamp '{incoming_ts}'. Overwriting entry in place.")
@@ -3861,7 +3861,7 @@ def upload_data():
 
     print("="*60 + "\n")
     return jsonify({"status": "success"}), 200
-    
+
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():
