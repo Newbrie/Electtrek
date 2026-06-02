@@ -3770,17 +3770,29 @@ def showmore(path):
 def upload_data():
     from baked_data import baked_data  # Import your local instance
 
+    print("\n" + "="*60)
+    print("📥 [DEBUG] /upload_data route triggered!")
+    print("="*60)
+
     data = request.get_json()
     incoming_events = data.get('events', [])
     file_path = DATA_FILE
+
+    print(f"🔍 [DEBUG] Path to file being read: {os.path.abspath(file_path)}")
+    print(f"📦 [DEBUG] Total incoming events received from frontend: {len(incoming_events)}")
+    if incoming_events:
+        print(f"   📋 [DEBUG] First incoming sample: {incoming_events[0]}")
 
     raw_parsed_data = []
 
     # 1. Load and parse the wrapped JavaScript file safely
     if os.path.exists(file_path):
+        print(f"📁 [DEBUG] Target file exists. Attempting to parse...")
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
+                print(f"   📄 [DEBUG] File character length: {len(content)}")
+                print(f"   📄 [DEBUG] First 50 chars of file: '{content[:50]}'")
 
                 # Strip out "window.BAKED_DATA =" and trailing characters to isolate the JSON
                 json_string = re.sub(r'^window\.BAKED_DATA\s*=\s*', '', content)
@@ -3788,46 +3800,68 @@ def upload_data():
                     json_string = json_string[:-1]
 
                 decoded = json.loads(json_string.strip())
+                print(f"   ✅ [DEBUG] json.loads() successful. Type decoded: {type(decoded)}")
 
                 # Make sure the decoded target is actually a list
                 if isinstance(decoded, list):
                     raw_parsed_data = decoded
                 elif isinstance(decoded, dict):
-                    # If it accidentally parsed as a single dictionary wrapped up
                     raw_parsed_data = [decoded]
+
+                print(f"   📊 [DEBUG] Total historical records loaded from file: {len(raw_parsed_data)}")
         except Exception as e:
             print(f"⚠️ Warning: Could not parse existing data file. Starting fresh. Error: {e}")
             raw_parsed_data = []
+    else:
+        print(f"❌ [DEBUG] Target file DOES NOT exist yet at path. Starting completely fresh.")
 
     # Filter out anything that isn't a dictionary to protect against the AttributeError
     existing_data = [item for item in raw_parsed_data if isinstance(item, dict)]
+    print(f"🛡️ [DEBUG] Total valid historical dict items after filter: {len(existing_data)}")
 
     # 2. Update status of incoming batch items to true and append safely
-    for event in incoming_events:
+    updates_count = 0
+    appends_count = 0
+
+    for idx, event in enumerate(incoming_events):
         if not isinstance(event, dict):
+            print(f"   ⚠️ [DEBUG] Skipped item index {idx} because it was not a dictionary.")
             continue  # Protect against malformed incoming events
 
         event['synced'] = True
 
+        # Pull key timestamps for explicit tracking logs
+        incoming_ts = event.get('timestamp')
+
         # De-duplication check: Look up via timestamp safely
-        existing_match = next((item for item in existing_data if item.get('timestamp') == event.get('timestamp')), None)
+        existing_match = next((item for item in existing_data if item.get('timestamp') == incoming_ts), None)
 
         if existing_match:
+            print(f"   🔄 [DEBUG] MATCH FOUND for timestamp '{incoming_ts}'. Overwriting entry in place.")
             existing_match.update(event) # Update the record in place
+            updates_count += 1
         else:
+            print(f"   ➕ [DEBUG] NO MATCH found for timestamp '{incoming_ts}'. Appending to array.")
             existing_data.append(event)  # Add new unique record
+            appends_count += 1
+
+    print(f"🏁 [DEBUG] Loop complete. Merged array now has: {len(existing_data)} total elements.")
+    print(f"   📊 [DEBUG] Detail: {updates_count} updated in-place, {appends_count} appended cleanly.")
 
     # 3. Wrap it back up in the JavaScript assignment layout and save
     try:
+        print(f"💾 [DEBUG] Writing combined list back to disk...")
         with open(file_path, 'w', encoding='utf-8') as f:
             raw_json = json.dumps(existing_data, indent=4)
             f.write(f"window.BAKED_DATA = {raw_json};")
+        print(f"🚀 [DEBUG] Write successful!")
     except Exception as e:
+        print(f"❌ [DEBUG] Critical Write Error: {e}")
         return jsonify({"status": "error", "message": f"Failed to write file: {str(e)}"}), 500
 
+    print("="*60 + "\n")
     return jsonify({"status": "success"}), 200
     
-
 @app.route('/upload_file', methods=['POST'])
 @login_required
 def upload_file():
