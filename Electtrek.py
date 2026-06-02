@@ -3765,7 +3765,6 @@ def showmore(path):
 
     return current_node.parent.render_face(current_election,CElection,True)
 
-
 @app.route('/upload_data', methods=['POST'])
 @login_required
 def upload_data():
@@ -3773,50 +3772,61 @@ def upload_data():
 
     data = request.get_json()
     incoming_events = data.get('events', [])
-    file_path = 'baked_data.json'
+    file_path = DATA_FILE
 
-    existing_data = []
+    raw_parsed_data = []
 
-    # 1. Load and parse the wrapped JavaScript file
+    # 1. Load and parse the wrapped JavaScript file safely
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
 
-                # Strip out "window.BAKED_DATA =" and the trailing semicolon if present
-                # This isolates just the raw JSON string: [ ... ]
+                # Strip out "window.BAKED_DATA =" and trailing characters to isolate the JSON
                 json_string = re.sub(r'^window\.BAKED_DATA\s*=\s*', '', content)
                 if json_string.endswith(';'):
                     json_string = json_string[:-1]
 
-                existing_data = json.loads(json_string.strip())
+                decoded = json.loads(json_string.strip())
+
+                # Make sure the decoded target is actually a list
+                if isinstance(decoded, list):
+                    raw_parsed_data = decoded
+                elif isinstance(decoded, dict):
+                    # If it accidentally parsed as a single dictionary wrapped up
+                    raw_parsed_data = [decoded]
         except Exception as e:
             print(f"⚠️ Warning: Could not parse existing data file. Starting fresh. Error: {e}")
-            existing_data = []
+            raw_parsed_data = []
 
-    # 2. Update status of incoming batch items to true and append
+    # Filter out anything that isn't a dictionary to protect against the AttributeError
+    existing_data = [item for item in raw_parsed_data if isinstance(item, dict)]
+
+    # 2. Update status of incoming batch items to true and append safely
     for event in incoming_events:
+        if not isinstance(event, dict):
+            continue  # Protect against malformed incoming events
+
         event['synced'] = True
 
-        # De-duplication check: Avoid adding an event if its exact timestamp already exists
-        if not any(item.get('timestamp') == event.get('timestamp') for item in existing_data):
-            existing_data.append(event)
+        # De-duplication check: Look up via timestamp safely
+        existing_match = next((item for item in existing_data if item.get('timestamp') == event.get('timestamp')), None)
+
+        if existing_match:
+            existing_match.update(event) # Update the record in place
         else:
-            # Optional: Update the existing record if it matched on timestamp
-            for item in existing_data:
-                if item.get('timestamp') == event.get('timestamp'):
-                    item.update(event)
+            existing_data.append(event)  # Add new unique record
 
     # 3. Wrap it back up in the JavaScript assignment layout and save
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             raw_json = json.dumps(existing_data, indent=4)
-            # Prepend the window variable string so the browser can read it directly next boot
             f.write(f"window.BAKED_DATA = {raw_json};")
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to write file: {str(e)}"}), 500
 
     return jsonify({"status": "success"}), 200
+    
 
 @app.route('/upload_file', methods=['POST'])
 @login_required
