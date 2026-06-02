@@ -1363,7 +1363,8 @@ async function getVIData(path) {
               vrResponse: vrValue,
               viResponse: viValue,
               notesResponse: notesValue,
-              tagsResponse: tagsValue
+              tagsResponse: tagsValue,
+              synced: false
           });
       }
   });
