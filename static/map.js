@@ -1005,44 +1005,53 @@ window.plotTaskProgress = function (
     // -----------------------------------------------------------------
     if (rows.length > 0) {
         console.log("📊 Popup is open. Calculating opacity from live DOM elements...");
-        const countedStreets = new Set();
 
-        rows.forEach(row => {
-            const street = row.getAttribute('data-street');
-            if (!street || countedStreets.has(street)) return;
-            countedStreets.add(street);
+        if (isViTarget) {
+            // 🗳️ VI Live Extraction Strategy: Calculate directly via individual units
+            rows.forEach(r => {
+                totalHouses++; // Every row represents a unique unit capacity target
 
-            const streetRows = doc.querySelectorAll(
-                `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
-            );
+                // Check both potential selector classes interchangeably
+                const voteBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
 
-            const firstRow = streetRows[0];
-            const sel = firstRow?.querySelector('.unit-selector');
-            const streetWeight = sel ? sel.options.length : streetRows.length;
+                // Fall back gracefully to check .getAttribute() if dataset property is un-hydrated
+                const voteCount = parseInt(voteBtn?.getAttribute('data-count') || voteBtn?.dataset?.count || '0');
 
-            totalHouses += streetWeight;
+                if (voteCount > 0) {
+                    completedHouses++;
+                }
+            });
+        } else {
+            // 🏷️ Standard Task Tag Extraction Strategy (Original Binary Street Logic)
+            const countedStreets = new Set();
 
-            let streetIsActive = false;
-            streetRows.forEach(r => {
-                if (isViTarget) {
-                    // 🗳️ VI Live Check: Is there a vote recorded on the button text or value asset attribute?
-                    const voteBtn = r.querySelector('.vote-count-btn');
-                    const voteCount = parseInt(voteBtn?.dataset.count || '0');
-                    if (voteCount > 0) {
-                        streetIsActive = true;
-                    }
-                } else {
-                    // 🏷️ Standard task tag active check
+            rows.forEach(row => {
+                const street = row.getAttribute('data-street');
+                if (!street || countedStreets.has(street)) return;
+                countedStreets.add(street);
+
+                const streetRows = doc.querySelectorAll(
+                    `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
+                );
+
+                const firstRow = streetRows[0];
+                const sel = firstRow?.querySelector('.unit-selector');
+                const streetWeight = sel ? sel.options.length : streetRows.length;
+
+                totalHouses += streetWeight;
+
+                let streetIsActive = false;
+                streetRows.forEach(r => {
                     if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
                         streetIsActive = true;
                     }
+                });
+
+                if (streetIsActive) {
+                    completedHouses += streetWeight;
                 }
             });
-
-            if (streetIsActive) {
-                completedHouses += streetWeight;
-            }
-        });
+        }
     }
     // -----------------------------------------------------------------
     // CONDITION B: Popup is CLOSED (Parse flat ledger arrays)
@@ -1071,9 +1080,6 @@ window.plotTaskProgress = function (
                 streetActiveHouses[street] = new Set();
             }
 
-            // 🛠️ ALIGNED LEDGER PARSING LOGIC:
-            // Since your app now logs explicitly explicit 'tag' structures for VI updates,
-            // we consolidate checking here to look purely at target validation flags.
             if (ev.type === 'tag') {
                 if (ev.code === targetTag) {
                     if (ev.value === 'y') {
@@ -1083,7 +1089,6 @@ window.plotTaskProgress = function (
                     }
                 }
             }
-            // Fallback safety net: if historical records only have type 'vi' logs with vote properties
             else if (isViTarget && ev.type === 'vi' && ev.votes !== undefined) {
                 const voteValue = parseInt(ev.votes || '0');
                 if (voteValue > 0) {
@@ -1184,28 +1189,26 @@ window.plotTaskProgress = function (
     }
 
     // -----------------------------------------------------------------
-        // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
-        // -----------------------------------------------------------------
-        const poly = Leaflet.geoJSON(geometry, {
-            pane: 'overlayPane',
-            style: {
-                color: "transparent",
-                fillColor: targetTag === 'VI' ? "#800080" : "#333",
-                fillOpacity: finalOpacity,
-                interactive: false
-            }
-        });
+    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
+    // -----------------------------------------------------------------
+    const poly = Leaflet.geoJSON(geometry, {
+        pane: 'overlayPane',
+        style: {
+            color: "transparent",
+            fillColor: targetTag === 'VI' ? "#800080" : "#333",
+            fillOpacity: finalOpacity,
+            interactive: false
+        }
+    });
 
-        poly.is_ghost = true;
-        poly.ghost_id = ghostId;
+    poly.is_ghost = true;
+    poly.ghost_id = ghostId;
 
-        // 🪐 THE FIX: Safely commit the polygon strictly to the group.
-        // Let Leaflet naturally manage visibility based on the parent group's checkbox!
-        targetGroup.addLayer(poly);
+    targetGroup.addLayer(poly);
 
-        console.log(`✨ Ghost successfully registered to group: ${ghostId}`);
-        console.groupEnd();
-    };
+    console.log(`✨ Ghost successfully registered to group: ${ghostId}`);
+    console.groupEnd();
+};
 
 /**
  * Synchronizes a freshly rendered street list row with un-synced BAKED_DATA overrides
