@@ -588,9 +588,7 @@ class CurrentElection(dict):
         Split tags into task_tags and outcome_tags, pre-seeded with mandatory election codes.
         """
         # 1. Pre-seed with your mandatory baseline task layers
-        task_tags = {
-            "VI": "Voter Intention"
-        }
+        task_tags = {}
 
         # 2. Pre-seed with your baseline canvas outcome milestones
         outcome_tags = {
