@@ -2019,13 +2019,15 @@ window.updateVI = function(selectElement) {
     console.log(`📈 VI Weights -> Distinct Active Houses: ${streetWeight}, Absolute Total Capacity: ${regionWeight}`);
 
     // 4. FLAT LOG GENERATION LAYER
+    var currentSelectionValue = selectElement.value ? selectElement.value.trim() : '';
+
     parentWindow.BAKED_DATA.push({
         type: 'vi',
         uiScope: uiScope,
         region: regionId,
         street: streetName,
         house: selectedHouse,
-        vi: selectElement.value,
+        vi: currentSelectionValue,
         votes: finalVotes,
         streetWeight: streetWeight,
         regionWeight: regionWeight,
@@ -2033,54 +2035,58 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
-    // --- 🎨 NEW: DYNAMIC VI COLOR & MATCHING DROPDOWN DOT ENGINE ---
+    // --- 🎨 RESTORED & FIXED PERSISTENT DROPDOWN DOT ENGINE ---
     var viColors = {
-        'LAB': '#DC241F', 'L': '#DC241F', // Labour Red
-        'CON': '#0087DC', 'C': '#0087DC', // Conservative Blue
-        'LD': '#FAA61A',  'S': '#FAA61A', // Lib Dem Orange
-        'GRN': '#6AB023', 'G': '#6AB023', // Green Party
-        'REF': '#00BFFF', 'R': '#00BFFF', // Reform Light Blue
-        'IND': '#DCDCDC'                  // Independent Grey
+        'LAB': '#DC241F', 'L': '#DC241F',
+        'CON': '#0087DC', 'C': '#0087DC',
+        'LD': '#FAA61A',  'S': '#FAA61A',
+        'GRN': '#6AB023', 'G': '#6AB023',
+        'REF': '#00BFFF', 'R': '#00BFFF',
+        'IND': '#DCDCDC'
     };
 
-    // Parallel dictionary linking party shortcodes directly to text-safe color markers
     var viDots = {
         'LAB': '🔴', 'L': '🔴',
         'CON': '🔵', 'C': '🔵',
         'LD': '🟡',  'S': '🟡',
         'GRN': '🟢', 'G': '🟢',
-        'REF': '🔵', 'R': '🔵', // Standard emoji set lacks cyan, using blue
+        'REF': '🔵', 'R': '🔵',
         'IND': '⚪'
     };
 
-    // Re-verify the absolute latest house code mappings inside this tracking loop
+    // ✨ TRACKING FIX: Loop through the ledger to map out the newest status
+    // for EVERY house on this street, independent of the active vote count state.
     var houseViMap = {};
     parentWindow.BAKED_DATA.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
-            if (parseInt(ev.votes) > 0 && ev.vi) {
-                houseViMap[ev.house] = ev.vi.toUpperCase();
+            var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
+
+            // If the logged status is a valid party selection, cache it!
+            if (rawVi !== '' && rawVi !== 'UNCANVASSED' && rawVi !== 'U') {
+                houseViMap[ev.house] = rawVi;
             } else {
+                // Remove the dot only if it is explicitly blanked or fully reset
                 delete houseViMap[ev.house];
             }
         }
     });
 
-    // A. Clean and update the text names & colors inside the dropdown select element
+    // A. Clean and update the text names & colors inside the unit dropdown select element
     Array.from(unitSel.options).forEach(function(option) {
         // Safe regex to clear away any previously appended unicode dots/indicator spaces
         var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u✔️\s]+$/, '').trim();
 
         var assignedVi = houseViMap[option.value];
         if (assignedVi && viColors[assignedVi]) {
-            // Restore Text-Safe Color Matched Indicator Dot next to the name
+            // Re-apply the matched persistent color indicator dot next to the house identifier
             var dotIcon = viDots[assignedVi] || '⚪';
             option.text = cleanName + "  " + dotIcon;
 
-            // Text color modification for supporting layout platforms
+            // Text color modification for supporting browser picker dropdowns
             option.style.color = viColors[assignedVi];
             option.style.fontWeight = 'bold';
         } else {
-            // Revert back to plain default style state if unallocated/zeroed
+            // Clean it up if the ledger indicates it has zero data or is wiped down
             option.text = cleanName;
             option.style.color = '';
             option.style.fontWeight = '';
@@ -2088,14 +2094,15 @@ window.updateVI = function(selectElement) {
     });
 
     // B. Color the active layout row font dynamically using the selected party value
-    var currentSelection = selectElement.value ? selectElement.value.toUpperCase() : '';
+    var currentSelection = currentSelectionValue.toUpperCase();
     var activeColor = viColors[currentSelection];
 
-    if (finalVotes > 0 && activeColor) {
+    // Only style the row font color if it has active votes and is set to a specific party
+    if (finalVotes > 0 && activeColor && currentSelection !== 'UNCANVASSED' && currentSelection !== 'U') {
         row.style.color = activeColor;
-        row.style.fontWeight = '500'; // Extra crisp visual weight definition
+        row.style.fontWeight = '500';
     } else {
-        // Revert back to the standard layout theme colors if unassigned/cleared
+        // Clear back to your native layout defaults when set to uncanvassed
         row.style.color = '';
         row.style.fontWeight = '';
     }
