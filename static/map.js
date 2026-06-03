@@ -2033,14 +2033,24 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
-    // --- 🎨 NEW: DYNAMIC VI COLOR ENGINE (FONT INSTEAD OF OUTLINE) ---
+    // --- 🎨 NEW: DYNAMIC VI COLOR & MATCHING DROPDOWN DOT ENGINE ---
     var viColors = {
         'LAB': '#DC241F', 'L': '#DC241F', // Labour Red
         'CON': '#0087DC', 'C': '#0087DC', // Conservative Blue
         'LD': '#FAA61A',  'S': '#FAA61A', // Lib Dem Orange
         'GRN': '#6AB023', 'G': '#6AB023', // Green Party
-        'REF': '#00BFFF', 'R': '#00BFFF', // Reform/Other
-        'IND': '#DCDCDC'                  // Independent/Grey
+        'REF': '#00BFFF', 'R': '#00BFFF', // Reform Light Blue
+        'IND': '#DCDCDC'                  // Independent Grey
+    };
+
+    // Parallel dictionary linking party shortcodes directly to text-safe color markers
+    var viDots = {
+        'LAB': '🔴', 'L': '🔴',
+        'CON': '🔵', 'C': '🔵',
+        'LD': '🟡',  'S': '🟡',
+        'GRN': '🟢', 'G': '🟢',
+        'REF': '🔵', 'R': '🔵', // Standard emoji set lacks cyan, using blue
+        'IND': '⚪'
     };
 
     // Re-verify the absolute latest house code mappings inside this tracking loop
@@ -2055,17 +2065,23 @@ window.updateVI = function(selectElement) {
         }
     });
 
-    // A. Map styles directly over individual dropdown option text nodes
+    // A. Clean and update the text names & colors inside the dropdown select element
     Array.from(unitSel.options).forEach(function(option) {
-        // Strip previous indicator emojis out cleanly
-        var cleanName = option.text.replace(/[\u🔴\u✔️\s]+$/, '').trim();
-        option.text = cleanName;
+        // Safe regex to clear away any previously appended unicode dots/indicator spaces
+        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u✔️\s]+$/, '').trim();
 
         var assignedVi = houseViMap[option.value];
         if (assignedVi && viColors[assignedVi]) {
+            // Restore Text-Safe Color Matched Indicator Dot next to the name
+            var dotIcon = viDots[assignedVi] || '⚪';
+            option.text = cleanName + "  " + dotIcon;
+
+            // Text color modification for supporting layout platforms
             option.style.color = viColors[assignedVi];
             option.style.fontWeight = 'bold';
         } else {
+            // Revert back to plain default style state if unallocated/zeroed
+            option.text = cleanName;
             option.style.color = '';
             option.style.fontWeight = '';
         }
@@ -2077,7 +2093,7 @@ window.updateVI = function(selectElement) {
 
     if (finalVotes > 0 && activeColor) {
         row.style.color = activeColor;
-        row.style.fontWeight = '500'; // Make text slightly crisper when active
+        row.style.fontWeight = '500'; // Extra crisp visual weight definition
     } else {
         // Revert back to the standard layout theme colors if unassigned/cleared
         row.style.color = '';
