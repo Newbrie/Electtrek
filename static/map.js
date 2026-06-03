@@ -1938,13 +1938,11 @@ window.updateVI = function(selectElement) {
     var selectedHouse = unitSel.value;
 
     // 2. 🔍 DETERMINISTIC VOTE COUNT CALCULATION
-    var finalVotes = null; // Start unassigned to catch true absence
+    var finalVotes = null;
 
-    // Layer A: Check if parent window memory ledger has an unsynced, newer interaction
     var eventLog = parentWindow.BAKED_DATA || [];
     var recentLogEntry = null;
 
-    // Loop backwards to grab the absolute newest entry matching this specific house unit
     for (var i = eventLog.length - 1; i >= 0; i--) {
         var entry = eventLog[i];
         if (entry.region === regionId &&
@@ -1956,29 +1954,20 @@ window.updateVI = function(selectElement) {
     }
 
     if (recentLogEntry && recentLogEntry.votes !== undefined) {
-        // High priority: use the value they modified live in this session
         finalVotes = parseInt(recentLogEntry.votes);
         if (isNaN(finalVotes)) finalVotes = 0;
-        console.log(`💡 Found unsynced live memory value for ${selectedHouse}: ${finalVotes}`);
     } else {
-        // Layer B: Fall back to check the server's embedded initial default string attribute
         var rawDefault = row.getAttribute('data-initial-count') || voteBtn.getAttribute('data-initial-count');
-
-        // Strict check: if it's missing, null, or an empty string (""), treat it as ABSENT
         if (rawDefault !== null && rawDefault !== undefined && rawDefault.trim() !== "") {
             finalVotes = parseInt(rawDefault);
             if (isNaN(finalVotes)) finalVotes = 0;
-            console.log(`💡 Falling back to server database default string: ${finalVotes}`);
         } else {
-            finalVotes = null; // Formally flags that no selection history exists on the server
-            console.log(`💡 Server default is ABSENT or empty string. Proceeding to final fallback.`);
+            finalVotes = null;
         }
     }
 
-    // Layer C: Final Fallback Resolution
     if (finalVotes === null) {
         finalVotes = 0;
-        console.log(`💡 No memory or server attribute available. Defaulting fallback to 0`);
     }
 
     // 3. Update UI states to visually display this synchronized calculation
@@ -1986,28 +1975,34 @@ window.updateVI = function(selectElement) {
     voteBtn.setAttribute('data-count', finalVotes);
     voteBtn.innerText = finalVotes + '/' + maxVotes;
 
-    // --- 📊 ADJUSTED WEIGHT CALCULATION ENGINE ---
+    // --- 📊 LEDGER-BASED DYNAMIC WEIGHT ENGINE ---
     var doc = row.ownerDocument;
     var streetWeight = 0;
     var regionWeight = 0;
 
-    // A. Street Weight: Accumulate units on this specific street that have a non-zero vote count
-    var streetRows = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${streetName}"]`);
-    streetRows.forEach(function(r) {
-        var rBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
-        var rCount = parseInt(rBtn?.getAttribute('data-count') || rBtn?.dataset.count || '0');
+    var activeHousesOnStreet = new Set();
 
-        // Use the look-ahead value for the active line item being committed
-        if (r === row) {
-            rCount = finalVotes;
-        }
-
-        if (rCount > 0) {
-            streetWeight++;
+    eventLog.forEach(function(ev) {
+        if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
+            var vCount = parseInt(ev.votes) || 0;
+            if (vCount > 0) {
+                activeHousesOnStreet.add(ev.house);
+            } else {
+                activeHousesOnStreet.delete(ev.house);
+            }
         }
     });
 
-    // B. Region Weight: Pure count of ALL functional units sitting in the region boundary map space
+    if (finalVotes !== null) {
+        if (finalVotes > 0) {
+            activeHousesOnStreet.add(selectedHouse);
+        } else {
+            activeHousesOnStreet.delete(selectedHouse);
+        }
+    }
+
+    streetWeight = activeHousesOnStreet.size;
+
     var countedStreetsInRegion = new Set();
     var allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"]`);
 
@@ -2018,18 +2013,12 @@ window.updateVI = function(selectElement) {
 
         var sSel = r.querySelector('.unit-selector');
         var sRows = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${sKey}"]`);
-
-        // Sum up the complete unit capacity across the layout array blocks
         regionWeight += sSel ? sSel.options.length : sRows.length;
     });
 
-    console.log(`📈 VI Weights -> Active Street Units: ${streetWeight}, Absolute Region Capacity: ${regionWeight}`);
-    // -----------------------------------------------------------------------------
+    console.log(`📈 VI Weights -> Distinct Active Houses: ${streetWeight}, Absolute Total Capacity: ${regionWeight}`);
 
     // 4. FLAT LOG GENERATION LAYER
-    if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
-
-    // Append our dropdown modification state with the calculated vote number
     parentWindow.BAKED_DATA.push({
         type: 'vi',
         uiScope: uiScope,
@@ -2044,12 +2033,37 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
+    // --- 🔴 NEW INLINE DROPDOWN INDICATOR ENGINE ---
+    // Re-evaluate the historical ledger including the entry we just appended
+    var liveVotedHouses = new Set();
+    parentWindow.BAKED_DATA.forEach(function(ev) {
+        if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
+            if (parseInt(ev.votes) > 0) {
+                liveVotedHouses.add(ev.house);
+            } else {
+                liveVotedHouses.delete(ev.house);
+            }
+        }
+    });
+
+    // Map over the current dropdown options and append/strip indicator badges
+    Array.from(unitSel.options).forEach(function(option) {
+        // Strip out any existing red markers or unicode ticks to prevent duplicates
+        var cleanName = option.text.replace(/[\u🔴\u✔️\s]+$/, '').trim();
+
+        if (liveVotedHouses.has(option.value)) {
+            option.text = cleanName + "  🔴"; // Appends red indicator badge
+        } else {
+            option.text = cleanName;          // Cleans it back to just the house name/number
+        }
+    });
+    // -----------------------------------------------
+
     // 5. Run standard file synchronization & downstream layout redraw cycles
     if (typeof parentWindow.saveBakedData === 'function') {
         parentWindow.saveBakedData(parentWindow.BAKED_DATA);
     }
 
-    // Trigger map progress charting computation loop for Voter Intentions
     if (typeof parentWindow.plotTaskProgress === 'function') {
         parentWindow.plotTaskProgress(regionId, 'VI', uiScope);
     } else if (typeof plotTaskProgress === 'function') {
