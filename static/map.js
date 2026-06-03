@@ -1916,7 +1916,6 @@ window.updateVI = function(selectElement) {
     }
 
     // Layer C: Final Fallback Resolution
-    // 🌟 REVISED: If both layers yielded no data, use 0 as your visual/interaction baseline
     if (finalVotes === null) {
         finalVotes = 0;
         console.log(`💡 No memory or server attribute available. Defaulting fallback to 0`);
@@ -1926,6 +1925,46 @@ window.updateVI = function(selectElement) {
     var maxVotes = parseInt(voteBtn.getAttribute('data-max')) || 1;
     voteBtn.setAttribute('data-count', finalVotes);
     voteBtn.innerText = finalVotes + '/' + maxVotes;
+
+    // --- 📊 ADJUSTED WEIGHT CALCULATION ENGINE ---
+    var doc = row.ownerDocument;
+    var streetWeight = 0;
+    var regionWeight = 0;
+
+    // A. Street Weight: Accumulate units on this specific street that have a non-zero vote count
+    var streetRows = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${streetName}"]`);
+    streetRows.forEach(function(r) {
+        var rBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
+        var rCount = parseInt(rBtn?.getAttribute('data-count') || rBtn?.dataset.count || '0');
+
+        // Use the look-ahead value for the active line item being committed
+        if (r === row) {
+            rCount = finalVotes;
+        }
+
+        if (rCount > 0) {
+            streetWeight++;
+        }
+    });
+
+    // B. Region Weight: Pure count of ALL functional units sitting in the region boundary map space
+    var countedStreetsInRegion = new Set();
+    var allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"]`);
+
+    allRowsInRegion.forEach(function(r) {
+        var sKey = r.getAttribute('data-street');
+        if (!sKey || countedStreetsInRegion.has(sKey)) return;
+        countedStreetsInRegion.add(sKey);
+
+        var sSel = r.querySelector('.unit-selector');
+        var sRows = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${sKey}"]`);
+
+        // Sum up the complete unit capacity across the layout array blocks
+        regionWeight += sSel ? sSel.options.length : sRows.length;
+    });
+
+    console.log(`📈 VI Weights -> Active Street Units: ${streetWeight}, Absolute Region Capacity: ${regionWeight}`);
+    // -----------------------------------------------------------------------------
 
     // 4. FLAT LOG GENERATION LAYER
     if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
@@ -1938,7 +1977,9 @@ window.updateVI = function(selectElement) {
         street: streetName,
         house: selectedHouse,
         vi: selectElement.value,
-        votes: finalVotes,       // Logged using our layered verification logic
+        votes: finalVotes,
+        streetWeight: streetWeight,
+        regionWeight: regionWeight,
         ts: Date.now(),
         synced: false
     });
@@ -1946,6 +1987,13 @@ window.updateVI = function(selectElement) {
     // 5. Run standard file synchronization & downstream layout redraw cycles
     if (typeof parentWindow.saveBakedData === 'function') {
         parentWindow.saveBakedData(parentWindow.BAKED_DATA);
+    }
+
+    // Trigger map progress charting computation loop for Voter Intentions
+    if (typeof parentWindow.plotTaskProgress === 'function') {
+        parentWindow.plotTaskProgress(regionId, 'VI', uiScope);
+    } else if (typeof plotTaskProgress === 'function') {
+        plotTaskProgress(regionId, 'VI', uiScope);
     }
 
     if (typeof window.refreshDropdownColors === 'function') {
