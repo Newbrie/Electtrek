@@ -2033,31 +2033,57 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
-    // --- 🔴 NEW INLINE DROPDOWN INDICATOR ENGINE ---
-    // Re-evaluate the historical ledger including the entry we just appended
-    var liveVotedHouses = new Set();
+    // --- 🎨 NEW: DYNAMIC VI COLOR ENGINE (FONT INSTEAD OF OUTLINE) ---
+    var viColors = {
+        'LAB': '#DC241F', 'L': '#DC241F', // Labour Red
+        'CON': '#0087DC', 'C': '#0087DC', // Conservative Blue
+        'LD': '#FAA61A',  'S': '#FAA61A', // Lib Dem Orange
+        'GRN': '#6AB023', 'G': '#6AB023', // Green Party
+        'REF': '#00BFFF', 'R': '#00BFFF', // Reform/Other
+        'IND': '#DCDCDC'                  // Independent/Grey
+    };
+
+    // Re-verify the absolute latest house code mappings inside this tracking loop
+    var houseViMap = {};
     parentWindow.BAKED_DATA.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
-            if (parseInt(ev.votes) > 0) {
-                liveVotedHouses.add(ev.house);
+            if (parseInt(ev.votes) > 0 && ev.vi) {
+                houseViMap[ev.house] = ev.vi.toUpperCase();
             } else {
-                liveVotedHouses.delete(ev.house);
+                delete houseViMap[ev.house];
             }
         }
     });
 
-    // Map over the current dropdown options and append/strip indicator badges
+    // A. Map styles directly over individual dropdown option text nodes
     Array.from(unitSel.options).forEach(function(option) {
-        // Strip out any existing red markers or unicode ticks to prevent duplicates
+        // Strip previous indicator emojis out cleanly
         var cleanName = option.text.replace(/[\u🔴\u✔️\s]+$/, '').trim();
+        option.text = cleanName;
 
-        if (liveVotedHouses.has(option.value)) {
-            option.text = cleanName + "  🔴"; // Appends red indicator badge
+        var assignedVi = houseViMap[option.value];
+        if (assignedVi && viColors[assignedVi]) {
+            option.style.color = viColors[assignedVi];
+            option.style.fontWeight = 'bold';
         } else {
-            option.text = cleanName;          // Cleans it back to just the house name/number
+            option.style.color = '';
+            option.style.fontWeight = '';
         }
     });
-    // -----------------------------------------------
+
+    // B. Color the active layout row font dynamically using the selected party value
+    var currentSelection = selectElement.value ? selectElement.value.toUpperCase() : '';
+    var activeColor = viColors[currentSelection];
+
+    if (finalVotes > 0 && activeColor) {
+        row.style.color = activeColor;
+        row.style.fontWeight = '500'; // Make text slightly crisper when active
+    } else {
+        // Revert back to the standard layout theme colors if unassigned/cleared
+        row.style.color = '';
+        row.style.fontWeight = '';
+    }
+    // --------------------------------------------------------------
 
     // 5. Run standard file synchronization & downstream layout redraw cycles
     if (typeof parentWindow.saveBakedData === 'function') {
