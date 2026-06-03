@@ -1473,8 +1473,10 @@ class TreeNode:
         #    baked_manager = BakedDataManager(data_file=path)
         baked_manager = BakedDataManager()
         baked_dict = baked_manager.load()
+        active_tags = dict(task_tags)
+        active_tags["VI"] = "Voter Intention"
 
-        for tag_code, tag_desc in task_tags.items():
+        for tag_code, tag_desc in active_tags.items():
             tag_layer = get_safe_tag_layer(tag_code, tag_desc)
             tag_layer.add_ghosts(
                 tag_code=tag_code,
