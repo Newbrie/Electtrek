@@ -585,21 +585,78 @@ window.incrementVoteCount = function(btn) {
     btn.setAttribute('data-count', count);
     btn.innerText = count + '/' + max;
 
+    // --- FIX: Extract structural context variables so they exist in scope ---
+    var doc = row.ownerDocument;
+    var region = row.getAttribute('data-region');
+    var street = row.getAttribute('data-street');
+    var house = unitSel.value;
+    var uiScope = row.getAttribute('data-scope');
+
+    if (!region || !street || !house) return;
+
+    // --- FIX: Use your VI non-zero vote sum algorithm for streetWeight ---
+    var streetWeight = 0;
+    var streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
+
+    streetRows.forEach(function(r) {
+        var rBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
+        var rCount = parseInt(rBtn?.getAttribute('data-count') || rBtn?.dataset.count || '0');
+
+        // Use the look-ahead value we just cycled for the row being actively clicked
+        if (r === row) {
+            rCount = count;
+        }
+
+        if (rCount > 0) {
+            streetWeight++;
+        }
+    });
+
+    // 2. Calculate global Region Weight (Absolute total house capacities in the entire region)
+    var regionWeight = 0;
+    var countedStreetsInRegion = new Set();
+    var allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${region}"]`);
+
+    allRowsInRegion.forEach(function(r) {
+        var sKey = r.getAttribute('data-street');
+        if (!sKey || countedStreetsInRegion.has(sKey)) return;
+        countedStreetsInRegion.add(sKey);
+
+        var sSel = r.querySelector('.unit-selector');
+        var sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
+        regionWeight += sSel ? sSel.options.length : sRows.length;
+    });
+
     // Attach exclusively to parent master storage container
     var parentWindow = window.parent || window;
     if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
 
     parentWindow.BAKED_DATA.push({
         type: 'vi',
-        uiScope: row.getAttribute('data-scope'),
-        region: row.getAttribute('data-region'),
-        street: row.getAttribute('data-street'),
-        house: unitSel.value,
+        uiScope: uiScope,
+        region: region,
+        street: street,
+        house: house,
         vi: viSel.value,
         votes: count,
+        streetWeight: streetWeight,
+        regionWeight: regionWeight,
         ts: Date.now(),
         synced: false
     });
+
+    // --- ADDED: Auto-Save & Map Retrigger Loops ---
+    if (typeof parentWindow.saveBakedData === 'function') {
+        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
+    }
+    if (typeof parentWindow.plotTaskProgress === 'function') {
+        parentWindow.plotTaskProgress(region, 'VI', uiScope);
+    } else if (typeof plotTaskProgress === 'function') {
+        plotTaskProgress(region, 'VI', uiScope);
+    }
+    if (window.updateMarkerStatus) {
+        window.updateMarkerStatus(street);
+    }
 
     // Toggle save button state to remind them there are un-deployed adjustments
     var deployBtn = document.getElementById('deploy-btn');
