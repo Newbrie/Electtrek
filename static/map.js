@@ -1474,12 +1474,11 @@ window.applyRowColorStyles = function(row) {
                 var houseKey = String(ev.house || ev.unit || '').trim();
 
                 if (houseKey && !processedHouses.has(houseKey)) {
-                    processedHouses.add(houseKey); // Lock this house key out from older history
+                    processedHouses.add(houseKey);
 
                     var rawVi = ev.vi ? String(ev.vi).toUpperCase().trim() : '';
                     console.log(`   🕒 Live Session History Match found at index [${i}] -> House: "${houseKey}" chosen VI: "${rawVi}"`);
 
-                    // Explicitly process Uncanvassed states to clear previous entries
                     if (rawVi === '' || rawVi === 'UNCANVASSED' || rawVi === 'U') {
                         houseViMap[houseKey] = 'U';
                     } else {
@@ -1491,22 +1490,22 @@ window.applyRowColorStyles = function(row) {
     }
 
     // =========================================================================
-    // 2. STATIC DATABASE CONSOLIDATION (Only fill gaps where no live session data exists)
+    // 2. STATIC DATABASE CONSOLIDATION & RUNTIME INJECTION
     // =========================================================================
     var rawDb = row.getAttribute('data-active-votes-db');
+    var parsedDbObject = {};
     console.log(`💾 Raw data-active-votes-db attribute contents: – "${rawDb}"`);
 
     if (rawDb) {
         try {
-            var activeVotesDb = JSON.parse(rawDb);
-            Object.keys(activeVotesDb).forEach(function(hKey) {
-                // Ignore the empty database schema fallback if edited this session
+            parsedDbObject = JSON.parse(rawDb);
+            Object.keys(parsedDbObject).forEach(function(hKey) {
                 if (processedHouses.has(hKey)) {
                     console.log(`   🛡️ Database fallback blocked for House "${hKey}" -> Live session cache has priority.`);
                     return;
                 }
 
-                var houseVotes = activeVotesDb[hKey] || {};
+                var houseVotes = parsedDbObject[hKey] || {};
                 var codes = Object.keys(houseVotes);
                 if (codes.length > 0) {
                     var highestCode = codes.reduce(function(a, b) {
@@ -1523,6 +1522,22 @@ window.applyRowColorStyles = function(row) {
         }
     }
 
+    // Write session updates directly back into the underlying dataset structure
+    Object.keys(houseViMap).forEach(function(hKey) {
+        var currentViValue = houseViMap[hKey];
+        if (currentViValue && currentViValue !== 'U') {
+            if (!parsedDbObject[hKey]) parsedDbObject[hKey] = {};
+            parsedDbObject[hKey] = {}; // Reset previous votes object structure cleanly
+            parsedDbObject[hKey][currentViValue] = 1;
+        } else if (currentViValue === 'U' && parsedDbObject[hKey]) {
+            parsedDbObject[hKey] = {};
+        }
+    });
+
+    // Commit changes back to the row element's markup
+    var updatedDbString = JSON.stringify(parsedDbObject);
+    row.setAttribute('data-active-votes-db', updatedDbString);
+    console.log(`⚙️ [INJECTION] Injected updated HTML template attribute string: – "${updatedDbString}"`);
     console.log(`🗺️ Final generated house-to-VI mapping table: – "${JSON.stringify(houseViMap)}"`);
 
     // =========================================================================
@@ -1531,6 +1546,10 @@ window.applyRowColorStyles = function(row) {
     console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
     Array.from(unitSel.options).forEach(function(option, index) {
         var cleanName = option.value || option.text;
+
+        // Strip any existing emoji dots before clean parsing loop validation runs
+        cleanName = cleanName.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|\s\s🟢|\s\s🔴|\s\s🔵|\s\s🟡|\s\s🟣|\s\s🟤|\s\s⚪|\s\s⚫/g, '').trim();
+
         var assignedVi = houseViMap[option.value];
         var hasMatch = !!(assignedVi && assignedVi !== 'U' && vcoPalette[assignedVi]);
 
@@ -1564,7 +1583,6 @@ window.applyRowColorStyles = function(row) {
         row.style.fontWeight = '';
     }
 
-    // Force a dynamic visual layout repaint
     try {
         var renderEvent = new Event('render');
         unitSel.dispatchEvent(renderEvent);
