@@ -1421,36 +1421,29 @@ window.refreshRowVoteBadge = function(rowElement){
 // 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)
 // =========================================================================
 window.applyRowColorStyles = function(row) {
-    console.log("=== 🔍 DIAGNOSTIC START ===");
     var parentWindow = window.parent || window;
     var unitSel = row.querySelector('.unit-selector');
     var viSel = row.querySelector('.vi-selector');
     var voteBtn = row.querySelector('.vote-btn');
 
     if (!unitSel || !viSel || !voteBtn) {
-        console.log("❌ Style Application Aborted: Missing structural row DOM elements.");
         return;
     }
 
     // =========================================================================
-    // NEW: SELF-BINDING CHANGE EVENT LISTENER
-    // This catches manual user selections and forces a clean style update
+    // SELF-BINDING CHANGE EVENT LISTENER
     // =========================================================================
     if (!unitSel.hasAttribute('data-styles-bound')) {
         unitSel.setAttribute('data-styles-bound', 'true');
         unitSel.addEventListener('change', function() {
-            console.log("🎯 Dropdown value changed by user! Forcing style re-application...");
-            // A tiny 10ms delay lets Leaflet's native event cycle clear out first
             setTimeout(function() {
                 window.applyRowColorStyles(row);
             }, 10);
         });
-        console.log("🔗 Bound permanent change listener to .unit-selector");
     }
 
     var regionId = row.getAttribute('data-region');
     var streetName = row.getAttribute('data-street');
-    console.log(`📍 Context Location -> Region: ${regionId}, Street: ${streetName}`);
 
     var vcoPalette = {
         "S": "#DC241F", "C": "#0087DC", "LD": "#FAA61A", "G": "#6AB023",
@@ -1468,11 +1461,9 @@ window.applyRowColorStyles = function(row) {
     var processedHouses = new Set();
 
     // =========================================================================
-    // 1. REVERSE LOG CHRONOLOGY EVALUATION (Aggressive Normalization)
+    // 1. REVERSE LOG CHRONOLOGY EVALUATION
     // =========================================================================
     var eventLog = parentWindow.BAKED_DATA || [];
-    console.log(`📦 Live Session BAKED_DATA entries count: ${eventLog.length}`);
-
     var targetRegionToken = String(regionId || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     var targetStreetToken = String(streetName || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 
@@ -1493,7 +1484,6 @@ window.applyRowColorStyles = function(row) {
                     processedHouses.add(houseKey);
 
                     var rawVi = ev.vi ? String(ev.vi).toUpperCase().trim() : '';
-                    console.log(`   🕒 Live Session History Match found at index [${i}] -> House: "${houseKey}" chosen VI: "${rawVi}"`);
 
                     if (rawVi === '' || rawVi === 'UNCANVASSED' || rawVi === 'U') {
                         houseViMap[houseKey] = 'U';
@@ -1510,14 +1500,12 @@ window.applyRowColorStyles = function(row) {
     // =========================================================================
     var rawDb = row.getAttribute('data-active-votes-db');
     var parsedDbObject = {};
-    console.log(`💾 Raw data-active-votes-db attribute contents: – "${rawDb}"`);
 
     if (rawDb) {
         try {
             parsedDbObject = JSON.parse(rawDb);
             Object.keys(parsedDbObject).forEach(function(hKey) {
                 if (processedHouses.has(hKey)) {
-                    console.log(`   🛡️ Database fallback blocked for House "${hKey}" -> Live session cache has priority.`);
                     return;
                 }
 
@@ -1533,12 +1521,9 @@ window.applyRowColorStyles = function(row) {
                     }
                 }
             });
-        } catch (e) {
-            console.log("❌ Error parsing data-active-votes-db JSON:", e.message);
-        }
+        } catch (e) {}
     }
 
-    // Write session updates directly back into the underlying dataset structure
     Object.keys(houseViMap).forEach(function(hKey) {
         var currentViValue = houseViMap[hKey];
         if (currentViValue && currentViValue !== 'U') {
@@ -1550,26 +1535,17 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // Commit changes back to the row element's markup
-    var updatedDbString = JSON.stringify(parsedDbObject);
-    row.setAttribute('data-active-votes-db', updatedDbString);
-    console.log(`⚙️ [INJECTION] Injected updated HTML template attribute string: – "${updatedDbString}"`);
-    console.log(`🗺️ Final generated house-to-VI mapping table: – "${JSON.stringify(houseViMap)}"`);
+    row.setAttribute('data-active-votes-db', JSON.stringify(parsedDbObject));
 
     // =========================================================================
     // 3. RENDER STYLES NATIVELY TO DROPDOWN OPTIONS
     // =========================================================================
-    console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
-    Array.from(unitSel.options).forEach(function(option, index) {
+    Array.from(unitSel.options).forEach(function(option) {
         var cleanName = option.value || option.text;
-
-        // Strip any existing emoji dots before verification
         cleanName = cleanName.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|\s\s🟢|\s\s🔴|\s\s🔵|\s\s🟡|\s\s🟣|\s\s🟤|\s\s⚪|\s\s⚫/g, '').trim();
 
         var assignedVi = houseViMap[option.value];
         var hasMatch = !!(assignedVi && assignedVi !== 'U' && vcoPalette[assignedVi]);
-
-        console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${hasMatch}`);
 
         if (hasMatch) {
             option.text = cleanName + "  " + viDots[assignedVi];
@@ -1585,16 +1561,17 @@ window.applyRowColorStyles = function(row) {
     });
 
     // =========================================================================
-    // 4. CONTAINER ROW RENDERING UPDATES
+    // 4. CONTAINER ROW BACKGROUND RENDERING UPDATES
     // =========================================================================
-    var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
-    var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
-    var activeColor = vcoPalette[currentSelection];
+    var activeHouseNumber = unitSel.value;
+    var activeHouseVi = houseViMap[activeHouseNumber];
 
-    if (finalVotes > 0 && activeColor && currentSelection !== 'UNCANVASSED' && currentSelection !== 'U') {
-        row.style.color = activeColor;
+    if (activeHouseVi && activeHouseVi !== 'U' && vcoPalette[activeHouseVi]) {
+        row.style.backgroundColor = vcoPalette[activeHouseVi];
+        row.style.color = "#ffffff";
         row.style.fontWeight = '500';
     } else {
+        row.style.backgroundColor = '';
         row.style.color = '';
         row.style.fontWeight = '';
     }
@@ -1603,8 +1580,6 @@ window.applyRowColorStyles = function(row) {
         var renderEvent = new Event('render');
         unitSel.dispatchEvent(renderEvent);
     } catch(e) {}
-
-    console.log("=== 🔍 DIAGNOSTIC END ===");
 };
 
 async function getVIData(path) {
