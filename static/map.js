@@ -1381,18 +1381,21 @@ window.refreshRowVoteBadge = function(rowElement){
         var activeVotesDb = {};
         try {
             if (rawDb) activeVotesDb = JSON.parse(rawDb);
-        } catch (e) {
-            console.error("❌ Error parsing active votes backup database:", e);
-        }
+        } catch (e) {}
 
         var houseVotes = activeVotesDb[selectedUnit] || {};
         var codes = Object.keys(houseVotes);
+
         if (codes.length > 0) {
             var highestCode = codes.reduce(function(a, b) {
                 return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
             });
             chosenViCode = String(highestCode).toUpperCase().trim();
             currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
+        } else {
+            // No historical data exists for this house! Force it to fall back to 'Uncanvassed'
+            chosenViCode = "UNCANVASSED";
+            currentVotes = 0;
         }
     }
 
