@@ -1418,17 +1418,22 @@ window.refreshRowVoteBadge = function(rowElement){
 // 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)
 // =========================================================================
 window.applyRowColorStyles = function(row) {
+    console.log("=== 🔍 DIAGNOSTIC START ===");
     var parentWindow = window.parent || window;
     var unitSel = row.querySelector('.unit-selector');
     var viSel = row.querySelector('.vi-selector');
     var voteBtn = row.querySelector('.vote-btn');
-    if (!unitSel || !viSel || !voteBtn) return;
+
+    if (!unitSel || !viSel || !voteBtn) {
+        console.warn("❌ Missing elements inside row:", { unitSel: !!unitSel, viSel: !!viSel, voteBtn: !!voteBtn });
+        return;
+    }
 
     var regionId = row.getAttribute('data-region');
     var streetName = row.getAttribute('data-street');
+    console.log(`📍 Context Location -> Region: ${regionId}, Street: ${streetName}`);
 
-    // ─── FORCE PLATFORM LOCAL FALLBACK PALETTE STRIP ───
-    // This bypasses polluted global variables to match your shortcodes directly
+    // ─── HARDCODED PALETTE TO PROVE THE OVERRIDE WORKS ───
     var vcoPalette = {
         "S": "#DC241F",   // Labour
         "C": "#0087DC",   // Conservative
@@ -1452,8 +1457,9 @@ window.applyRowColorStyles = function(row) {
 
     var houseViMap = {};
 
-    // 1. Parse initial database configurations safely
+    // 1. Read static data attribute
     var rawDb = row.getAttribute('data-active-votes-db');
+    console.log("💾 Raw data-active-votes-db attribute contents:", rawDb);
     if (rawDb) {
         try {
             var activeVotesDb = JSON.parse(rawDb);
@@ -1470,11 +1476,14 @@ window.applyRowColorStyles = function(row) {
                     }
                 }
             });
-        } catch (e) {}
+        } catch (e) {
+            console.error("❌ Failed to parse JSON attribute string:", e);
+        }
     }
 
-    // 2. Overlay live session adjustments
+    // 2. Overlay live session history
     var eventLog = parentWindow.BAKED_DATA || [];
+    console.log(`📦 Live Session BAKED_DATA entries count: ${eventLog.length}`);
     eventLog.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
             var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
@@ -1486,25 +1495,28 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // 3. Render updates to dropdown options
-    Array.from(unitSel.options).forEach(function(option) {
-        // Strip out existing characters cleanly to prevent duplication stacks
+    console.log("🗺️ Final generated house-to-VI mapping table:", JSON.stringify(houseViMap));
+
+    // 3. Render updates to the option nodes
+    console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
+    Array.from(unitSel.options).forEach(function(option, index) {
         var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
         var assignedVi = houseViMap[option.value];
+
+        console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${!!(assignedVi && vcoPalette[assignedVi])}`);
 
         if (assignedVi && vcoPalette[assignedVi]) {
             option.text = cleanName + "  " + viDots[assignedVi];
             option.style.color = vcoPalette[assignedVi];
             option.style.fontWeight = 'bold';
         } else {
-            // Keep clean formatting for empty/uncanvassed rows without throwing errors
             option.text = cleanName;
             option.style.color = '';
             option.style.fontWeight = '';
         }
     });
 
-    // 4. Repaint parent container row text colors
+    // 4. Update the row color wrapper directly
     var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
     var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
     var activeColor = vcoPalette[currentSelection];
@@ -1516,6 +1528,7 @@ window.applyRowColorStyles = function(row) {
         row.style.color = '';
         row.style.fontWeight = '';
     }
+    console.log("=== 🔍 DIAGNOSTIC END ===");
 };
 
 async function getVIData(path) {
