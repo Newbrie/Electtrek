@@ -338,7 +338,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     html += "</tbody></table></div>"
     return html
-    
+
 def preprocess_streets(df, task_tags=None):
     import pandas as pd
     from collections import Counter
@@ -1325,15 +1325,22 @@ class ExtendedFeatureGroup(FeatureGroup):
         if node_electors is None or node_electors.empty:
             return
 
-        # Check for the VI column (Voting Intention)
-        if 'VI' not in node_electors.columns:
-            logger.warning(f"VI column missing for path: {path}")
+        # =========================================================================
+        # --- Stage 4: Filter for Reform Pledges via 'PL' Tag ---
+        # =========================================================================
+        # Fallback safeguard if the Tags column hasn't been initialized yet
+        if 'Tags' not in node_electors.columns:
+            logger.warning(f"Tags column missing for path: {path}")
             return
 
-        # 4. Filter for Reform Pledges ('R')
-        reform_electors = node_electors[node_electors['VI'] == 'R']
+        # Match 'PL' as a whole token inside the string while ignoring null/NaN variants
+        reform_electors = node_electors[
+            node_electors['Tags'].astype(str).str.contains(r'\bPL\b', na=False, regex=True)
+        ]
+
         if reform_electors.empty:
             return
+        # =========================================================================
 
         # 5. Create Cluster and Process Markers
         cluster = MarkerCluster(name="Reform Pledges").add_to(self)
@@ -1397,6 +1404,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"DEBUG: Added {markers_added} Reform markers to cluster for node: {node.value}")
 
+        
     def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)
         print(f" ___GenMarkers: under {elections.route()} eventlist: {eventlist}")

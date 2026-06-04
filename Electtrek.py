@@ -641,7 +641,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         here = (CElection.get('cidLat', None), CElection.get('cidLong', None))
 
         # --- DEBUG 1: Path Cleanup ---
-        # If Ashford is a division, the '.html' in the territory path might be blocking the hierarchy
         clean_territory = territory_path.replace("-DIVS.html", "").replace(".html", "")
         path_parts = stepify(clean_territory)
 
@@ -674,11 +673,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             purpose = data.get('purpose')
             fixlevel = int(data.get('fixlevel', 0)) if data.get('fixlevel') else 0
 
-            # --- DEBUG 2: File Loading ---
-            is_ashford_file = "ASHFORD" in file_path.upper()
-            if is_ashford_file:
-                print(f"🔍 DEBUG [2/5] Ashford File Detected: {os.path.basename(file_path)}")
-
             if file_path.upper().endswith('.CSV'):
                 dfx = pd.read_csv(file_path, sep=None, engine='python', encoding='ISO-8859-1', keep_default_na=False, on_bad_lines='warn')
             elif file_path.upper().endswith('.XLSX'):
@@ -692,10 +686,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             results = normz(progress, RunningVals, Lookups, data.get('election'), file_path, dfx, fixlevel, purpose)
             temp_df = pd.DataFrame(results[0])
             DQstatslist.append(results[1])
-
-            if is_ashford_file:
-                print(f"   > Rows in raw file: {len(dfx)}")
-                print(f"   > Rows surviving 'normz': {len(temp_df)}")
 
             if purpose == 'main': mainframes.append(temp_df)
             elif purpose == 'delta': deltaframes.append(temp_df)
@@ -715,13 +705,108 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             if i < len(levels):
                 new_df[levels[i]] = value
 
-        # --- DEBUG 3: Post-Context & Pledge Check ---
-        print(f"🔍 DEBUG [3/5] Pre-Deduplication State:")
-        print(f"   > Total rows in new_df: {len(new_df)}")
-        # Check if any row has Ashford in any column
-        ashford_hits = new_df.astype(str).apply(lambda x: x.str.contains('ASHFORD', case=False)).any(axis=1).sum()
-        print(f"   > Rows containing 'Ashford' string: {ashford_hits}")
 
+    # =========================================================================
+        # --- Stage 3: AVI Attribute Tags Injection Engine ---
+        # =========================================================================
+        if aviframes:
+            print(f"🔗 TAGS ENGINE: Processing {len(aviframes)} Absent Voter (AVI) lookup datasets...")
+            avi_combined = pd.concat(aviframes, ignore_index=True)
+
+            if 'ENOP' in new_df.columns and 'ENOP' in avi_combined.columns:
+                # Force clean string formatting and remove leading/trailing whitespace
+                new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
+
+                # Extract unique, non-empty ENOPs from the Absent Voters list
+                # Adding .astype(str) here protects against any stray float NaN values
+                av_enops = set(avi_combined['ENOP'].astype(str).str.strip().unique())
+                av_enops.discard("")
+                av_enops.discard("nan") # Safety: discard stringified NaNs if they exist
+
+                print(f"   > Identified {len(av_enops)} unique Absent Voter ENOPs for tagging.")
+
+                # Initialize 'Tags' column if it doesn't exist in the main dataframe yet
+                if 'Tags' not in new_df.columns:
+                    new_df['Tags'] = ""
+                else:
+                    new_df['Tags'] = new_df['Tags'].fillna("")
+
+                # Safe match now that both sides are explicitly stripped string types
+                matching_rows_mask = new_df['ENOP'].isin(av_enops)
+                tagged_count = matching_rows_mask.sum()
+
+                # Inline lambda update: Append 'AV' cleanly, accounting for existing tags
+                def append_av_tag(current_tags):
+                    current_tags = str(current_tags).strip()
+                    if not current_tags or current_tags == "nan":
+                        return 'AV'
+
+                    # Split tags by common delimiters to see if 'AV' is already present
+                    existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
+                    if 'AV' in existing_tags:
+                        return current_tags # Already tagged, leave as-is
+
+                    # Append using a comma separator
+                    return f"{current_tags}, AV"
+
+                # Apply only to the matching records
+                new_df.loc[matching_rows_mask, 'Tags'] = new_df.loc[matching_rows_mask, 'Tags'].apply(append_av_tag)
+                print(f"   > Successfully injected 'AV' tag into {tagged_count} matching records.")
+            else:
+                print("⚠️ TAGS ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or AVI dataset.")
+        else:
+            print("ℹ️ TAGS ENGINE: No incoming AVI datasets discovered. Skipping tag updates.")
+        # =========================================================================
+# =========================================================================
+        # --- Stage 3.5: Pledge Attribute Tags Injection Engine ---
+        # =========================================================================
+        if pledge_frames:
+            print(f"🗳️ PLEDGE ENGINE: Processing {len(pledge_frames)} Pledge lookup datasets...")
+            pledge_combined = pd.concat(pledge_frames, ignore_index=True)
+
+            if 'ENOP' in new_df.columns and 'ENOP' in pledge_combined.columns:
+                # Force clean string formatting on main frame to ensure structural alignment
+                new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
+
+                # Extract unique, non-empty ENOPs from the Pledge list
+                pledge_enops = set(pledge_combined['ENOP'].astype(str).str.strip().unique())
+                pledge_enops.discard("")
+                pledge_enops.discard("nan")
+
+                print(f"   > Identified {len(pledge_enops)} unique Pledge ENOPs for tagging.")
+
+                # Ensure 'Tags' column exists and is cleared of float NaNs
+                if 'Tags' not in new_df.columns:
+                    new_df['Tags'] = ""
+                else:
+                    new_df['Tags'] = new_df['Tags'].fillna("")
+
+                # Safe matching mask on stripped string types
+                matching_pledge_mask = new_df['ENOP'].isin(pledge_enops)
+                pledge_tagged_count = matching_pledge_mask.sum()
+
+                # Inline lambda update: Append 'PL' cleanly, preserving any existing tags
+                def append_pl_tag(current_tags):
+                    current_tags = str(current_tags).strip()
+                    if not current_tags or current_tags == "nan":
+                        return 'PL'
+
+                    # Split tags by common delimiters to prevent redundant duplicate tags
+                    existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
+                    if 'PL' in existing_tags:
+                        return current_tags
+
+                    # Append with standard comma separation
+                    return f"{current_tags}, PL"
+
+                # Apply update selectively to the matching rows
+                new_df.loc[matching_pledge_mask, 'Tags'] = new_df.loc[matching_pledge_mask, 'Tags'].apply(append_pl_tag)
+                print(f"   > Successfully injected 'PL' tag into {pledge_tagged_count} matching records.")
+            else:
+                print("⚠️ PLEDGE ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or Pledge dataset.")
+        else:
+            print("ℹ️ PLEDGE ENGINE: No incoming Pledge datasets discovered. Skipping tag updates.")
+        # =========================================================================
         # --- Stage 4: Merge with Existing & Deduplicate ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
         new_df['is_new_import'] = True
