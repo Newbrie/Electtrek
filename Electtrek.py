@@ -2160,12 +2160,26 @@ def set_election():
             print("That node is outside of the election Territory:")
         persist(Treepolys, Fullpolys, Geo_index)
         print(f"____Route/set-election/results {constants}, options: {options}")
+# Convert your custom object into a clean dictionary for JSON parsing
+        # Use whatever serialization method your class provides:
+        if hasattr(CElection, 'to_dict'):
+            constants_dict = CElection.to_dict()
+        elif hasattr(CElection, 'data'):
+            constants_dict = CElection.data
+        else:
+            # Fallback wrapper if it acts strictly like a dictionary sub-class
+            constants_dict = dict(CElection)
 
-        return jsonify({'success':True,
-                'constants': constants,
-                'options': options,
-                'current_election': current_election
-            })
+        persist(Treepolys, Fullpolys, Geo_index)
+        print(f"____Route/set-election/results successfully serialized.")
+
+        return jsonify({
+            'success': True,
+            'constants': constants_dict, # Now cleanly serializable!
+            'options': options,
+            'current_election': current_election
+        })
+
 
     except Exception as e:
         print("____Route/set-election/exception", e)

@@ -549,16 +549,18 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         intention_type = elevels.get(node.level + 1)
 
-        if intention_type == "marker":
-            self.add_genmarkers(rlevels, node, static)
+        # 🔍 DEBUG TRACKER: See exactly what levels are arriving
+        print(f"DEBUG: RENDER Node ID: {getattr(node, 'nid', 'N/A')} | Node Level: {node.level} | Evaluated Key Level: {node.level + 1} | Found Intention: {intention_type}")
 
-        elif intention_type == "elector":
-            # Signature now matches add_voronoi
+# 🟢 ALTERNATIVE FIX: Run highlights independently of spatial markers
+        if intention_type in ("elector", "street", "walkleg"):
             self.add_vi_highlights(rlevels, node, static)
 
+        # Separate block for geometric structural drawings
+        if intention_type == "marker":
+            self.add_genmarkers(rlevels, node, static)
         elif intention_type in ("street", "walkleg"):
             self.add_nodemarks(rlevels, node, static)
-
         elif intention_type in ("polling_district", "walk"):
             self.add_voronoi(rlevels, node, static)
         else:
@@ -1305,6 +1307,44 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
+    def add_av_highlights(self, rlevels, node, static):
+        """
+        Renders spatial polygons highlighting records that carry the 'AV' (Absent Voter) tag,
+        matching the structural format of add_vi_highlights.
+        """
+        from flask import session
+        from state import Treepolys, Fullpolys
+
+        # 1. Fetch geometries belonging to this node from your spatial index
+        polys = Treepolys.get(node.id, [])
+        if not polys:
+            return
+
+        for poly in polys:
+            # 2. Extract the voter's tag sequence string safely
+            tags_string = getattr(poly, 'tags', '') or ''
+
+            # 3. Check for the presence of the AV tag using a clean boundary check
+            # This matches your regex logic: splitting by comma and stripping whitespace
+            voter_tags = [t.strip() for t in tags_string.split(',') if t.strip()]
+
+            if "AV" in voter_tags:
+                # 4. Generate the highlight element
+                # We clone the geometry or create an overlay using a distinct color (e.g., Violet/Indigo)
+                highlight_props = {
+                    "fillColor": "#8B5CF6",  # Violet color to contrast against pledge colors
+                    "fillOpacity": 0.6,
+                    "color": "#6D28D9",
+                    "weight": 1.5,
+                    "popup": f"Postal Voter<br>Ref: {getattr(poly, 'voter_id', 'N/A')}<br>Tags: {tags_string}",
+                    "layer_type": "av_highlight",
+                    "node_id": node.id
+                }
+
+                # Append this decorative overlay to your child element matrix
+                # Adjust the instantiation method below to match how your class appends children
+                self.add_child_geometry(poly, props=highlight_props)
+
     def add_vi_highlights(self, rlevels, node, static=False):
         """
         Retrieves elector data for the node's path and adds highlights to the layer.
@@ -1404,7 +1444,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"DEBUG: Added {markers_added} Reform markers to cluster for node: {node.value}")
 
-        
+
     def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)
         print(f" ___GenMarkers: under {elections.route()} eventlist: {eventlist}")
