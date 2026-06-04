@@ -1561,19 +1561,31 @@ window.applyRowColorStyles = function(row) {
     });
 
     // =========================================================================
-    // 4. CONTAINER ROW BACKGROUND RENDERING UPDATES
+    // 4. CONTAINER ROW & ATTACHED FORM COMPONENT STYLING UPDATES
     // =========================================================================
     var activeHouseNumber = unitSel.value;
     var activeHouseVi = houseViMap[activeHouseNumber];
 
     if (activeHouseVi && activeHouseVi !== 'U' && vcoPalette[activeHouseVi]) {
-        row.style.backgroundColor = vcoPalette[activeHouseVi];
+        var targetBgColor = vcoPalette[activeHouseVi];
+
+        // Style container row properties
+        row.style.backgroundColor = targetBgColor;
         row.style.color = "#ffffff";
         row.style.fontWeight = '500';
+
+        // Force dropdown elements to match row textual behavior styles
+        unitSel.style.color = "#ffffff";
+        unitSel.style.fontWeight = '500';
     } else {
+        // Reset row container rules
         row.style.backgroundColor = '';
         row.style.color = '';
         row.style.fontWeight = '';
+
+        // Reset dropdown styling rules completely
+        unitSel.style.color = '';
+        unitSel.style.fontWeight = '';
     }
 
     try {
