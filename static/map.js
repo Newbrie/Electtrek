@@ -1418,14 +1418,20 @@ window.refreshRowVoteBadge = function(rowElement){
 // 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)
 // =========================================================================
 window.applyRowColorStyles = function(row) {
+    console.log("=== 🔍 DIAGNOSTIC START ===");
     var parentWindow = window.parent || window;
     var unitSel = row.querySelector('.unit-selector');
     var viSel = row.querySelector('.vi-selector');
     var voteBtn = row.querySelector('.vote-btn');
-    if (!unitSel || !viSel || !voteBtn) return;
+
+    if (!unitSel || !viSel || !voteBtn) {
+        console.warn("❌ Missing elements inside row:", { unitSel: !!unitSel, viSel: !!viSel, voteBtn: !!voteBtn });
+        return;
+    }
 
     var regionId = row.getAttribute('data-region');
     var streetName = row.getAttribute('data-street');
+    console.log(`📍 Context Location -> Region: ${regionId}, Street: ${streetName}`);
 
     var vcoPalette = (window.options && window.options.VCO) ? window.options.VCO : {
         "S": "#DC241F", "C": "#0087DC", "LD": "#FAA61A", "G": "#6AB023",
@@ -1441,8 +1447,9 @@ window.applyRowColorStyles = function(row) {
 
     var houseViMap = {};
 
-    // ─── STEP A: INITIALIZE MAP FROM BACKEND STORAGE ATTR ───
+    // 1. Read static data attribute
     var rawDb = row.getAttribute('data-active-votes-db');
+    console.log("💾 Raw data-active-votes-db attribute contents:", rawDb);
     if (rawDb) {
         try {
             var activeVotesDb = JSON.parse(rawDb);
@@ -1457,12 +1464,13 @@ window.applyRowColorStyles = function(row) {
                 }
             });
         } catch (e) {
-            console.error("❌ UI Paint error reading initial server database weights:", e);
+            console.error("❌ Failed to parse JSON attribute string:", e);
         }
     }
 
-    // ─── STEP B: OVERLAY ACTIVE LIVE SESSION EDITS (BAKED_DATA) ───
+    // 2. Overlay live session history
     var eventLog = parentWindow.BAKED_DATA || [];
+    console.log(`📦 Live Session BAKED_DATA entries count: ${eventLog.length}`);
     eventLog.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
             var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
@@ -1474,10 +1482,16 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // ─── STEP C: REPAINT DROPDOWN OPTIONS AND DOT INDICATORS ───
-    Array.from(unitSel.options).forEach(function(option) {
+    console.log("🗺️ Final generated house-to-VI mapping table:", JSON.stringify(houseViMap));
+
+    // 3. Render updates to the option nodes
+    console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
+    Array.from(unitSel.options).forEach(function(option, index) {
         var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
         var assignedVi = houseViMap[option.value];
+
+        console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}"`);
+
         if (assignedVi && vcoPalette[assignedVi]) {
             option.text = cleanName + "  " + viDots[assignedVi];
             option.style.color = vcoPalette[assignedVi];
@@ -1489,7 +1503,7 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // ─── STEP D: COLOR MAIN CONTAINER TEXT ROW ───
+    // 4. Update the row color wrapper directly
     var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
     var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
     var activeColor = vcoPalette[currentSelection];
@@ -1501,6 +1515,7 @@ window.applyRowColorStyles = function(row) {
         row.style.color = '';
         row.style.fontWeight = '';
     }
+    console.log("=== 🔍 DIAGNOSTIC END ===");
 };
 
 async function getVIData(path) {
