@@ -1498,23 +1498,27 @@ window.applyRowColorStyles = function(row) {
     console.log("🗺️ Final generated house-to-VI mapping table:", JSON.stringify(houseViMap));
 
     // 3. Render updates to the option nodes
-    console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
-    Array.from(unitSel.options).forEach(function(option, index) {
-        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
-        var assignedVi = houseViMap[option.value];
+        console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
+        Array.from(unitSel.options).forEach(function(option, index) {
+            // SAFE ALTERNATIVE: Fallback to the value attribute (the house number)
+            // to completely bypass broken emoji regex string scrubbing.
+            var cleanName = option.value || option.text;
 
-        console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${!!(assignedVi && vcoPalette[assignedVi])}`);
+            var assignedVi = houseViMap[option.value];
 
-        if (assignedVi && vcoPalette[assignedVi]) {
-            option.text = cleanName + "  " + viDots[assignedVi];
-            option.style.color = vcoPalette[assignedVi];
-            option.style.fontWeight = 'bold';
-        } else {
-            option.text = cleanName;
-            option.style.color = '';
-            option.style.fontWeight = '';
-        }
-    });
+            console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${!!(assignedVi && vcoPalette[assignedVi])}`);
+
+            if (assignedVi && vcoPalette[assignedVi]) {
+                // Safely concatenate using the clean name value
+                option.text = cleanName + " " + viDots[assignedVi];
+                option.style.color = vcoPalette[assignedVi];
+                option.style.fontWeight = 'bold';
+            } else {
+                option.text = cleanName;
+                option.style.color = '';
+                option.style.fontWeight = '';
+            }
+        });
 
     // 4. Update the row color wrapper directly
     var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
