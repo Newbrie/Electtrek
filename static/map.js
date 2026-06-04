@@ -1341,96 +1341,129 @@ window.refreshRowVoteBadge = function(rowElement){
  * @param {HTMLSelectElement} unitSel - The active .unit-selector element
  */
  window.handleUnitChangeVIUpdate = function(unitSel) {
-     var parentWindow = window.parent || window;
-     var row = unitSel.closest('.canvass-row') || unitSel.closest('tr');
-     if (!row) return;
+    var parentWindow = window.parent || window;
+    var row = unitSel.closest('.canvass-row') || unitSel.closest('tr');
+    if (!row) return;
 
-     var selectedUnit = unitSel.value;
-     var viSel = row.querySelector('.vi-selector');
-     var voteBtn = row.querySelector('.vote-btn');
-     if (!viSel || !voteBtn) return;
+    var selectedUnit = unitSel.value;
+    var viSel = row.querySelector('.vi-selector');
+    var voteBtn = row.querySelector('.vote-btn');
+    if (!viSel || !voteBtn) return;
 
-     var regionId = row.getAttribute('data-region');
-     var streetName = row.getAttribute('data-street');
+    var regionId = row.getAttribute('data-region');
+    var streetName = row.getAttribute('data-street');
+    var chosenViCode = "";
+    var currentVotes = null;
+    var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
 
-     var chosenViCode = "";
-     var currentVotes = null;
-     var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
+    // Pull from BAKED_DATA
+    var eventLog = parentWindow.BAKED_DATA || [];
+    for (var i = eventLog.length - 1; i >= 0; i--) {
+        var entry = eventLog[i];
+        if (entry.region === regionId && entry.street === streetName && entry.house === selectedUnit) {
+            if (entry.vi !== undefined && entry.vi !== null) {
+                chosenViCode = String(entry.vi).toUpperCase().trim();
+                if (entry.votes !== undefined && entry.votes !== null) currentVotes = parseInt(entry.votes);
+                break;
+            }
+        }
+    }
 
-     // =========================================================================
-     // 1. PRIORITIZE LIVE SESSION HISTORY (BAKED_DATA)
-     // =========================================================================
-     var eventLog = parentWindow.BAKED_DATA || [];
+    // Fallback if not found in live session
+    if (!chosenViCode) {
+        var rawDb = row.getAttribute('data-active-votes-db');
+        var activeVotesDb = {};
+        try { if (rawDb) activeVotesDb = JSON.parse(rawDb); } catch (e) {}
+        var houseVotes = activeVotesDb[selectedUnit] || {};
+        var codes = Object.keys(houseVotes);
+        if (codes.length > 0) {
+            var highestCode = codes.reduce(function(a, b) { return (parseInt(houseVotes[a]||0) >= parseInt(houseVotes[b]||0)) ? a : b; });
+            chosenViCode = String(highestCode).toUpperCase().trim();
+            currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
+        }
+    }
 
-     // Scan backward through live session memory to find the latest intent for this unit
-     for (var i = eventLog.length - 1; i >= 0; i--) {
-         var entry = eventLog[i];
-         if (entry.region === regionId &&
-             entry.street === streetName &&
-             entry.house === selectedUnit) {
+    if (!chosenViCode && viSel.options.length > 0) chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
+    if (currentVotes === null || isNaN(currentVotes)) currentVotes = 0;
 
-             // If we find an active log entry, pull its exact VI code and vote counts
-             if (entry.vi !== undefined && entry.vi !== null) {
-                 chosenViCode = String(entry.vi).toUpperCase().trim();
-                 if (entry.votes !== undefined && entry.votes !== null) {
-                     currentVotes = parseInt(entry.votes);
-                 }
-                 break; // Found the true absolute state, break loop
-             }
-         }
-     }
+    // Update fields
+    viSel.value = chosenViCode;
+    voteBtn.setAttribute('data-count', currentVotes);
+    voteBtn.setAttribute('data-max', maxVotes);
+    voteBtn.innerText = currentVotes + '/' + maxVotes;
 
-     // =========================================================================
-     // 2. SECONDARY FALLBACK: PARSED ATTR DATABASE (data-active-votes-db)
-     // =========================================================================
-     if (!chosenViCode) {
-         var rawDb = row.getAttribute('data-active-votes-db');
-         var activeVotesDb = {};
-         try {
-             if (rawDb) activeVotesDb = JSON.parse(rawDb);
-         } catch (e) {
-             console.error("❌ Failed to parse data-active-votes-db attribute:", e);
-         }
+    // Simply repaint UI elements cleanly!
+    window.applyRowColorStyles(row);
+};
 
-         var houseVotes = activeVotesDb[selectedUnit] || {};
-         var codes = Object.keys(houseVotes);
+ // =========================================================================
+// 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)
+// =========================================================================
+window.applyRowColorStyles = function(row) {
+    var parentWindow = window.parent || window;
+    var unitSel = row.querySelector('.unit-selector');
+    var viSel = row.querySelector('.vi-selector');
+    var voteBtn = row.querySelector('.vote-btn');
+    if (!unitSel || !viSel || !voteBtn) return;
 
-         if (codes.length > 0) {
-             // Find the voting code targeting the highest metric tally integer
-             var highestCode = codes.reduce(function(a, b) {
-                 return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
-             });
-             chosenViCode = String(highestCode).toUpperCase().trim();
-             currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
-         }
-     }
+    var regionId = row.getAttribute('data-region');
+    var streetName = row.getAttribute('data-street');
 
-     // =========================================================================
-     // 3. ABSOLUTE FALLBACK (If house has never been touched or loaded with data)
-     // =========================================================================
-     if (!chosenViCode && viSel.options.length > 0) {
-         chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
-     }
-     if (currentVotes === null || isNaN(currentVotes)) {
-         currentVotes = 0;
-     }
+    var vcoPalette = (window.options && window.options.VCO) ? window.options.VCO : {
+        "S": "#DC241F", "C": "#0087DC", "LD": "#FAA61A", "G": "#6AB023",
+        "R": "#00BFFF", "O": "#8B4513", "I": "#4B0082", "PC": "#990033",
+        "SD": "#E65C00", "Z": "#7F8C8D", "W": "#FFFFFF", "X": "#34495E"
+    };
 
-     // =========================================================================
-     // 4. UPDATE UI DOM ELEMENTS DIRECTLY
-     // =========================================================================
-     viSel.value = chosenViCode;
-     voteBtn.setAttribute('data-count', currentVotes);
-     voteBtn.setAttribute('data-max', maxVotes);
-     voteBtn.innerText = currentVotes + '/' + maxVotes;
+    var viDots = {
+        'S': '🔴', 'C': '🔵', 'LD': '🟡', 'G': '🟢', 'R': '🔵',
+        'O': '🟤', 'I': '🟣', 'PC': '🟤', 'SD': '🟠', 'Z': '⚪',
+        'W': '⚪', 'X': '⚫'
+    };
 
-     // --- 🎨 FORCE REDRAW SYSTEM TRIGGER ---
-     // Now that variables match the live model state, call updateVI
-     // to recalculate row weights and handle all colored indicator dots!
-     if (typeof window.updateVI === 'function') {
-         window.updateVI(viSel);
-     }
- };
- 
+    // Build the mapping table based on current state ledger data
+    var houseViMap = {};
+    var eventLog = parentWindow.BAKED_DATA || [];
+    eventLog.forEach(function(ev) {
+        if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
+            var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
+            if (rawVi !== '' && rawVi !== 'UNCANVASSED' && rawVi !== 'U') {
+                houseViMap[ev.house] = rawVi;
+            } else {
+                delete houseViMap[ev.house];
+            }
+        }
+    });
+
+    // A. Clean and update dropdown selection display items
+    Array.from(unitSel.options).forEach(function(option) {
+        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
+        var assignedVi = houseViMap[option.value];
+        if (assignedVi && vcoPalette[assignedVi]) {
+            option.text = cleanName + "  " + viDots[assignedVi];
+            option.style.color = vcoPalette[assignedVi];
+            option.style.fontWeight = 'bold';
+        } else {
+            option.text = cleanName;
+            option.style.color = '';
+            option.style.fontWeight = '';
+        }
+    });
+
+    // B. Color the main row container text based on the active selection
+    var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
+    var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
+    var activeColor = vcoPalette[currentSelection];
+
+    if (finalVotes > 0 && activeColor && currentSelection !== 'UNCANVASSED' && currentSelection !== 'U') {
+        row.style.color = activeColor;
+        row.style.fontWeight = '500';
+    } else {
+        row.style.color = '';
+        row.style.fontWeight = '';
+    }
+};
+
 async function getVIData(path) {
 
   let table = document.getElementById("canvass-table");
@@ -1973,96 +2006,41 @@ window.updateVI = function(selectElement) {
     var voteBtn = row.querySelector('.vote-btn');
     if (!unitSel || !voteBtn) return;
 
-    // 1. Gather all required identifiers from the active layout state
     var regionId = row.getAttribute('data-region');
     var streetName = row.getAttribute('data-street');
     var uiScope = row.getAttribute('data-scope') || 'walk';
     var selectedHouse = unitSel.value;
 
-    // 2. 🔍 DETERMINISTIC VOTE COUNT CALCULATION
-    var finalVotes = null;
+    var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
+    var currentSelectionValue = selectElement.value ? selectElement.value.trim() : '';
 
+    // Calculate database weights...
     var eventLog = parentWindow.BAKED_DATA || [];
-    var recentLogEntry = null;
-
-    for (var i = eventLog.length - 1; i >= 0; i--) {
-        var entry = eventLog[i];
-        if (entry.region === regionId &&
-            entry.street === streetName &&
-            entry.house === selectedHouse) {
-            recentLogEntry = entry;
-            break;
-        }
-    }
-
-    if (recentLogEntry && recentLogEntry.votes !== undefined) {
-        finalVotes = parseInt(recentLogEntry.votes);
-        if (isNaN(finalVotes)) finalVotes = 0;
-    } else {
-        var rawDefault = row.getAttribute('data-initial-count') || voteBtn.getAttribute('data-initial-count');
-        if (rawDefault !== null && rawDefault !== undefined && rawDefault.trim() !== "") {
-            finalVotes = parseInt(rawDefault);
-            if (isNaN(finalVotes)) finalVotes = 0;
-        } else {
-            finalVotes = null;
-        }
-    }
-
-    if (finalVotes === null) {
-        finalVotes = 0;
-    }
-
-    // 3. Update UI states to visually display this synchronized calculation
-    var maxVotes = parseInt(voteBtn.getAttribute('data-max')) || 1;
-    voteBtn.setAttribute('data-count', finalVotes);
-    voteBtn.innerText = finalVotes + '/' + maxVotes;
-
-    // --- 📊 LEDGER-BASED DYNAMIC WEIGHT ENGINE ---
     var doc = row.ownerDocument;
     var streetWeight = 0;
     var regionWeight = 0;
-
     var activeHousesOnStreet = new Set();
 
     eventLog.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
-            var vCount = parseInt(ev.votes) || 0;
-            if (vCount > 0) {
-                activeHousesOnStreet.add(ev.house);
-            } else {
-                activeHousesOnStreet.delete(ev.house);
-            }
+            if ((parseInt(ev.votes) || 0) > 0) activeHousesOnStreet.add(ev.house);
+            else activeHousesOnStreet.delete(ev.house);
         }
     });
-
-    if (finalVotes !== null) {
-        if (finalVotes > 0) {
-            activeHousesOnStreet.add(selectedHouse);
-        } else {
-            activeHousesOnStreet.delete(selectedHouse);
-        }
-    }
-
+    if (finalVotes > 0) activeHousesOnStreet.add(selectedHouse);
+    else activeHousesOnStreet.delete(selectedHouse);
     streetWeight = activeHousesOnStreet.size;
 
     var countedStreetsInRegion = new Set();
-    var allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"]`);
-
-    allRowsInRegion.forEach(function(r) {
+    doc.querySelectorAll(`.canvass-row[data-region="${regionId}"]`).forEach(function(r) {
         var sKey = r.getAttribute('data-street');
         if (!sKey || countedStreetsInRegion.has(sKey)) return;
         countedStreetsInRegion.add(sKey);
-
         var sSel = r.querySelector('.unit-selector');
-        var sRows = doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${sKey}"]`);
-        regionWeight += sSel ? sSel.options.length : sRows.length;
+        regionWeight += sSel ? sSel.options.length : doc.querySelectorAll(`.canvass-row[data-region="${regionId}"][data-street="${sKey}"]`).length;
     });
 
-    console.log(`📈 VI Weights -> Distinct Active Houses: ${streetWeight}, Absolute Total Capacity: ${regionWeight}`);
-
-    // 4. FLAT LOG GENERATION LAYER
-    var currentSelectionValue = selectElement.value ? selectElement.value.trim() : '';
-
+    // Log the interaction explicitly
     parentWindow.BAKED_DATA.push({
         type: 'vi',
         uiScope: uiScope,
@@ -2077,97 +2055,15 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
-    // --- 🎨 DYNAMIC GLOBAL VCO COLOR ENGINE ---
-    // Fallback to web-friendly defaults if options.VCO isn't initialized on the window object yet
-    var vcoPalette = (window.options && window.options.VCO) ? window.options.VCO : {
-        "S": "#DC241F", "C": "#0087DC", "LD": "#FAA61A", "G": "#6AB023",
-        "R": "#00BFFF", "O": "#8B4513", "I": "#4B0082", "PC": "#990033",
-        "SD": "#E65C00", "Z": "#7F8C8D", "W": "#FFFFFF", "X": "#34495E"
-    };
+    // Run styling logic safely
+    window.applyRowColorStyles(row);
 
-    // Parallel dictionary linking shortcodes directly to text-safe Unicode emoji colors
-    var viDots = {
-        'S': '🔴',   // Red
-        'C': '🔵',   // Blue
-        'LD': '🟡',  // Yellow
-        'G': '🟢',   // Green
-        'R': '🔵',   // Sky Blue
-        'O': '🟤',   // Brown
-        'I': '🟣',   // Purple/Indigo
-        'PC': '🟤',  // Dark Red fallback
-        'SD': '🟠',  // Orange
-        'Z': '⚪',   // Grey
-        'W': '⚪',   // White
-        'X': '⚫'    // Dark Grey
-    };
-
-    // Re-verify the absolute latest house code mappings inside this tracking loop
-    var houseViMap = {};
-    parentWindow.BAKED_DATA.forEach(function(ev) {
-        if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
-            var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
-            if (rawVi !== '' && rawVi !== 'UNCANVASSED' && rawVi !== 'U') {
-                houseViMap[ev.house] = rawVi;
-            } else {
-                delete houseViMap[ev.house];
-            }
-        }
-    });
-
-    // A. Clean and update the text names & colors inside the unit dropdown select element
-    Array.from(unitSel.options).forEach(function(option) {
-        // Broadened regex pattern to securely sweep all new emoji options clean before rewriting
-        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
-
-        var assignedVi = houseViMap[option.value];
-        if (assignedVi && vcoPalette[assignedVi]) {
-            var dotIcon = viDots[assignedVi] || '⚪';
-            option.text = cleanName + "  " + dotIcon;
-
-            option.style.color = vcoPalette[assignedVi];
-            option.style.fontWeight = 'bold';
-        } else {
-            option.text = cleanName;
-            option.style.color = '';
-            option.style.fontWeight = '';
-        }
-    });
-
-    // B. Force refresh the layout row font color using the current live selector value
-    var currentSelection = currentSelectionValue.toUpperCase();
-    var activeColor = vcoPalette[currentSelection];
-
-    if (finalVotes > 0 && activeColor && currentSelection !== 'UNCANVASSED' && currentSelection !== 'U') {
-        row.style.color = activeColor;
-        row.style.fontWeight = '500';
-    } else {
-        row.style.color = '';
-        row.style.fontWeight = '';
-    }
-    // --- END COLOR ENGINE ---
-
-    // 5. Run standard file synchronization & downstream layout redraw cycles
-    if (typeof parentWindow.saveBakedData === 'function') {
-        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
-    }
-
-    if (typeof parentWindow.plotTaskProgress === 'function') {
-        parentWindow.plotTaskProgress(regionId, 'VI', uiScope);
-    } else if (typeof plotTaskProgress === 'function') {
-        plotTaskProgress(regionId, 'VI', uiScope);
-    }
-
-    if (typeof window.refreshDropdownColors === 'function') {
-        window.refreshDropdownColors(selectElement);
-    }
-
-    if (window.updateMarkerStatus) {
-        window.updateMarkerStatus(streetName);
-    }
-
-    var deployBtn = document.getElementById('deploy-btn');
-    if (deployBtn) deployBtn.disabled = false;
+    // Run downstream storage & synchronization tasks
+    if (typeof parentWindow.saveBakedData === 'function') parentWindow.saveBakedData(parentWindow.BAKED_DATA);
+    if (typeof parentWindow.plotTaskProgress === 'function') parentWindow.plotTaskProgress(regionId, 'VI', uiScope);
+    if (window.updateMarkerStatus) window.updateMarkerStatus(streetName);
 };
+
 
 window.createLozengeElement = function createLozengeElement(loz, { selectable = false, removable = false } = {}) {
  const div = document.createElement("div");
