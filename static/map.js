@@ -1500,25 +1500,34 @@ window.applyRowColorStyles = function(row) {
     // 3. Render updates to the option nodes
         console.log(`👥 Evaluation of ${unitSel.options.length} dropdown option elements:`);
         Array.from(unitSel.options).forEach(function(option, index) {
-            // SAFE ALTERNATIVE: Fallback to the value attribute (the house number)
-            // to completely bypass broken emoji regex string scrubbing.
+            // SAFETY: Fallback directly to the option's value (the raw house number string)
+            // to bypass regex string replacement bugs entirely.
             var cleanName = option.value || option.text;
-
             var assignedVi = houseViMap[option.value];
 
             console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${!!(assignedVi && vcoPalette[assignedVi])}`);
 
             if (assignedVi && vcoPalette[assignedVi]) {
-                // Safely concatenate using the clean name value
+                // Append the highly visible emoji string directly to the display text string
                 option.text = cleanName + " " + viDots[assignedVi];
+
+                // Inline styles are treated as secondary enhancements for browsers that support them
                 option.style.color = vcoPalette[assignedVi];
+                option.style.backgroundColor = "#ffffff";
                 option.style.fontWeight = 'bold';
             } else {
                 option.text = cleanName;
                 option.style.color = '';
+                option.style.backgroundColor = '';
                 option.style.fontWeight = '';
             }
         });
+
+        // Native trigger to force the current row display to visually repaint its elements
+        try {
+            var event = new Event('render');
+            unitSel.dispatchEvent(event);
+        } catch(e) {}
 
     // 4. Update the row color wrapper directly
     var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
