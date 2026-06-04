@@ -1356,43 +1356,61 @@ window.refreshRowVoteBadge = function(rowElement){
     var currentVotes = null;
     var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
 
-    // Pull from BAKED_DATA
+    // =========================================================================
+    // 1. PRIORITIZE LIVE SESSION HISTORY (BAKED_DATA)
+    // =========================================================================
     var eventLog = parentWindow.BAKED_DATA || [];
     for (var i = eventLog.length - 1; i >= 0; i--) {
         var entry = eventLog[i];
         if (entry.region === regionId && entry.street === streetName && entry.house === selectedUnit) {
             if (entry.vi !== undefined && entry.vi !== null) {
                 chosenViCode = String(entry.vi).toUpperCase().trim();
-                if (entry.votes !== undefined && entry.votes !== null) currentVotes = parseInt(entry.votes);
+                if (entry.votes !== undefined && entry.votes !== null) {
+                    currentVotes = parseInt(entry.votes);
+                }
                 break;
             }
         }
     }
 
-    // Fallback if not found in live session
-    if (!chosenViCode) {
+    // =========================================================================
+    // 2. FALLBACK TO DATABASE ATTRIBUTE (If house hasn't been edited this session)
+    // =========================================================================
+    if (!chosenViCode || chosenViCode === 'UNCANVASSED' || chosenViCode === 'U') {
         var rawDb = row.getAttribute('data-active-votes-db');
         var activeVotesDb = {};
-        try { if (rawDb) activeVotesDb = JSON.parse(rawDb); } catch (e) {}
+        try {
+            if (rawDb) activeVotesDb = JSON.parse(rawDb);
+        } catch (e) {
+            console.error("❌ Error parsing active votes backup database:", e);
+        }
+
         var houseVotes = activeVotesDb[selectedUnit] || {};
         var codes = Object.keys(houseVotes);
         if (codes.length > 0) {
-            var highestCode = codes.reduce(function(a, b) { return (parseInt(houseVotes[a]||0) >= parseInt(houseVotes[b]||0)) ? a : b; });
+            var highestCode = codes.reduce(function(a, b) {
+                return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
+            });
             chosenViCode = String(highestCode).toUpperCase().trim();
             currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
         }
     }
 
-    if (!chosenViCode && viSel.options.length > 0) chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
-    if (currentVotes === null || isNaN(currentVotes)) currentVotes = 0;
+    // Ensure fallback safety states
+    if (!chosenViCode && viSel.options.length > 0) {
+        chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
+    }
+    if (currentVotes === null || isNaN(currentVotes)) {
+        currentVotes = 0;
+    }
 
-    // Update fields
+    // Update form control values directly
     viSel.value = chosenViCode;
     voteBtn.setAttribute('data-count', currentVotes);
     voteBtn.setAttribute('data-max', maxVotes);
     voteBtn.innerText = currentVotes + '/' + maxVotes;
 
-    // Simply repaint UI elements cleanly!
+    // Repaint visual changes safely!
     window.applyRowColorStyles(row);
 };
 
@@ -1421,8 +1439,29 @@ window.applyRowColorStyles = function(row) {
         'W': '⚪', 'X': '⚫'
     };
 
-    // Build the mapping table based on current state ledger data
     var houseViMap = {};
+
+    // ─── STEP A: INITIALIZE MAP FROM BACKEND STORAGE ATTR ───
+    var rawDb = row.getAttribute('data-active-votes-db');
+    if (rawDb) {
+        try {
+            var activeVotesDb = JSON.parse(rawDb);
+            Object.keys(activeVotesDb).forEach(function(hKey) {
+                var houseVotes = activeVotesDb[hKey] || {};
+                var codes = Object.keys(houseVotes);
+                if (codes.length > 0) {
+                    var highestCode = codes.reduce(function(a, b) {
+                        return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
+                    });
+                    houseViMap[hKey] = String(highestCode).toUpperCase().trim();
+                }
+            });
+        } catch (e) {
+            console.error("❌ UI Paint error reading initial server database weights:", e);
+        }
+    }
+
+    // ─── STEP B: OVERLAY ACTIVE LIVE SESSION EDITS (BAKED_DATA) ───
     var eventLog = parentWindow.BAKED_DATA || [];
     eventLog.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
@@ -1435,7 +1474,7 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // A. Clean and update dropdown selection display items
+    // ─── STEP C: REPAINT DROPDOWN OPTIONS AND DOT INDICATORS ───
     Array.from(unitSel.options).forEach(function(option) {
         var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
         var assignedVi = houseViMap[option.value];
@@ -1450,7 +1489,7 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // B. Color the main row container text based on the active selection
+    // ─── STEP D: COLOR MAIN CONTAINER TEXT ROW ───
     var currentSelection = viSel.value ? viSel.value.toUpperCase().trim() : 'U';
     var finalVotes = parseInt(voteBtn.getAttribute('data-count')) || 0;
     var activeColor = vcoPalette[currentSelection];
