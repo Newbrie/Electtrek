@@ -1432,6 +1432,22 @@ window.applyRowColorStyles = function(row) {
         return;
     }
 
+    // =========================================================================
+    // NEW: SELF-BINDING CHANGE EVENT LISTENER
+    // This catches manual user selections and forces a clean style update
+    // =========================================================================
+    if (!unitSel.hasAttribute('data-styles-bound')) {
+        unitSel.setAttribute('data-styles-bound', 'true');
+        unitSel.addEventListener('change', function() {
+            console.log("🎯 Dropdown value changed by user! Forcing style re-application...");
+            // A tiny 10ms delay lets Leaflet's native event cycle clear out first
+            setTimeout(function() {
+                window.applyRowColorStyles(row);
+            }, 10);
+        });
+        console.log("🔗 Bound permanent change listener to .unit-selector");
+    }
+
     var regionId = row.getAttribute('data-region');
     var streetName = row.getAttribute('data-street');
     console.log(`📍 Context Location -> Region: ${regionId}, Street: ${streetName}`);
@@ -1527,7 +1543,7 @@ window.applyRowColorStyles = function(row) {
         var currentViValue = houseViMap[hKey];
         if (currentViValue && currentViValue !== 'U') {
             if (!parsedDbObject[hKey]) parsedDbObject[hKey] = {};
-            parsedDbObject[hKey] = {}; // Reset previous votes object structure cleanly
+            parsedDbObject[hKey] = {};
             parsedDbObject[hKey][currentViValue] = 1;
         } else if (currentViValue === 'U' && parsedDbObject[hKey]) {
             parsedDbObject[hKey] = {};
@@ -1547,7 +1563,7 @@ window.applyRowColorStyles = function(row) {
     Array.from(unitSel.options).forEach(function(option, index) {
         var cleanName = option.value || option.text;
 
-        // Strip any existing emoji dots before clean parsing loop validation runs
+        // Strip any existing emoji dots before verification
         cleanName = cleanName.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|\s\s🟢|\s\s🔴|\s\s🔵|\s\s🟡|\s\s🟣|\s\s🟤|\s\s⚪|\s\s⚫/g, '').trim();
 
         var assignedVi = houseViMap[option.value];
