@@ -1475,8 +1475,6 @@ class TreeNode:
         baked_dict = baked_manager.load()
         active_tags = dict(task_tags)
         active_tags["VI"] = "Voter Intention"
-        active_tags["PV"] = "Postal Voter"
-        active_tags["VR"] = "Voted Recently"
 
 
         for tag_code, tag_desc in active_tags.items():

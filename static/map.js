@@ -2035,37 +2035,38 @@ window.updateVI = function(selectElement) {
         synced: false
     });
 
-    // --- 🎨 RESTORED & FIXED PERSISTENT DROPDOWN DOT ENGINE ---
-    var viColors = {
-        'LAB': '#DC241F', 'L': '#DC241F',
-        'CON': '#0087DC', 'C': '#0087DC',
-        'LD': '#FAA61A',  'S': '#FAA61A',
-        'GRN': '#6AB023', 'G': '#6AB023',
-        'REF': '#00BFFF', 'R': '#00BFFF',
-        'IND': '#DCDCDC'
+    // --- 🎨 DYNAMIC GLOBAL VCO COLOR ENGINE ---
+    // Fallback to web-friendly defaults if options.VCO isn't initialized on the window object yet
+    var vcoPalette = (window.options && window.options.VCO) ? window.options.VCO : {
+        "S": "#DC241F", "C": "#0087DC", "LD": "#FAA61A", "G": "#6AB023",
+        "R": "#00BFFF", "O": "#8B4513", "I": "#4B0082", "PC": "#990033",
+        "SD": "#E65C00", "Z": "#7F8C8D", "W": "#FFFFFF", "X": "#34495E"
     };
 
+    // Parallel dictionary linking shortcodes directly to text-safe Unicode emoji colors
     var viDots = {
-        'LAB': '🔴', 'L': '🔴',
-        'CON': '🔵', 'C': '🔵',
-        'LD': '🟡',  'S': '🟡',
-        'GRN': '🟢', 'G': '🟢',
-        'REF': '🔵', 'R': '🔵',
-        'IND': '⚪'
+        'S': '🔴',   // Red
+        'C': '🔵',   // Blue
+        'LD': '🟡',  // Yellow
+        'G': '🟢',   // Green
+        'R': '🔵',   // Sky Blue
+        'O': '🟤',   // Brown
+        'I': '🟣',   // Purple/Indigo
+        'PC': '🟤',  // Dark Red fallback
+        'SD': '🟠',  // Orange
+        'Z': '⚪',   // Grey
+        'W': '⚪',   // White
+        'X': '⚫'    // Dark Grey
     };
 
-    // ✨ TRACKING FIX: Loop through the ledger to map out the newest status
-    // for EVERY house on this street, independent of the active vote count state.
+    // Re-verify the absolute latest house code mappings inside this tracking loop
     var houseViMap = {};
     parentWindow.BAKED_DATA.forEach(function(ev) {
         if (ev.type === 'vi' && ev.region === regionId && ev.street === streetName) {
             var rawVi = ev.vi ? ev.vi.toUpperCase().trim() : '';
-
-            // If the logged status is a valid party selection, cache it!
             if (rawVi !== '' && rawVi !== 'UNCANVASSED' && rawVi !== 'U') {
                 houseViMap[ev.house] = rawVi;
             } else {
-                // Remove the dot only if it is explicitly blanked or fully reset
                 delete houseViMap[ev.house];
             }
         }
@@ -2073,40 +2074,35 @@ window.updateVI = function(selectElement) {
 
     // A. Clean and update the text names & colors inside the unit dropdown select element
     Array.from(unitSel.options).forEach(function(option) {
-        // Safe regex to clear away any previously appended unicode dots/indicator spaces
-        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u✔️\s]+$/, '').trim();
+        // Broadened regex pattern to securely sweep all new emoji options clean before rewriting
+        var cleanName = option.text.replace(/[\u🔴\u🔵\u🟡\u🟢\u⚪\u🟤\u🟣\u🟠\u⚫\u✔️\s]+$/, '').trim();
 
         var assignedVi = houseViMap[option.value];
-        if (assignedVi && viColors[assignedVi]) {
-            // Re-apply the matched persistent color indicator dot next to the house identifier
+        if (assignedVi && vcoPalette[assignedVi]) {
             var dotIcon = viDots[assignedVi] || '⚪';
             option.text = cleanName + "  " + dotIcon;
 
-            // Text color modification for supporting browser picker dropdowns
-            option.style.color = viColors[assignedVi];
+            option.style.color = vcoPalette[assignedVi];
             option.style.fontWeight = 'bold';
         } else {
-            // Clean it up if the ledger indicates it has zero data or is wiped down
             option.text = cleanName;
             option.style.color = '';
             option.style.fontWeight = '';
         }
     });
 
-    // B. Color the active layout row font dynamically using the selected party value
+    // B. Force refresh the layout row font color using the current live selector value
     var currentSelection = currentSelectionValue.toUpperCase();
-    var activeColor = viColors[currentSelection];
+    var activeColor = vcoPalette[currentSelection];
 
-    // Only style the row font color if it has active votes and is set to a specific party
     if (finalVotes > 0 && activeColor && currentSelection !== 'UNCANVASSED' && currentSelection !== 'U') {
         row.style.color = activeColor;
         row.style.fontWeight = '500';
     } else {
-        // Clear back to your native layout defaults when set to uncanvassed
         row.style.color = '';
         row.style.fontWeight = '';
     }
-    // --------------------------------------------------------------
+    // --- END COLOR ENGINE ---
 
     // 5. Run standard file synchronization & downstream layout redraw cycles
     if (typeof parentWindow.saveBakedData === 'function') {
