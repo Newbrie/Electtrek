@@ -1452,31 +1452,39 @@ window.applyRowColorStyles = function(row) {
     var processedHouses = new Set();
 
     // =========================================================================
-    // 1. REVERSE LOG CHRONOLOGY EVALUATION (Newest Edits Win)
+    // 1. REVERSE LOG CHRONOLOGY EVALUATION (Aggressive Normalization)
     // =========================================================================
     var eventLog = parentWindow.BAKED_DATA || [];
     console.log(`📦 Live Session BAKED_DATA entries count: ${eventLog.length}`);
 
-    // Read the log array backward to capture the absolute newest changes first
+    var targetRegionToken = String(regionId || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+    var targetStreetToken = String(streetName || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+
     for (var i = eventLog.length - 1; i >= 0; i--) {
         var ev = eventLog[i];
+        if (!ev) continue;
 
-        var evType = String(ev.type || '').toLowerCase().trim();
-        var evRegion = String(ev.region || '').toUpperCase().trim();
-        var evStreet = String(ev.street || '').toUpperCase().trim();
+        var evType = String(ev.type || ev.model || '').toLowerCase().trim();
+        if (evType.indexOf('vi') !== -1) {
 
-        if (evType === 'vi' && evRegion === String(regionId).toUpperCase().trim() && evStreet === String(streetName).toUpperCase().trim()) {
-            var houseKey = String(ev.house || '');
+            var evRegionToken = String(ev.region || ev.regionId || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+            var evStreetToken = String(ev.street || ev.streetName || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 
-            // Only process the absolute newest event entry encountered for this unit
-            if (!processedHouses.has(houseKey)) {
-                processedHouses.add(houseKey);
+            if (evRegionToken === targetRegionToken && evStreetToken === targetStreetToken) {
+                var houseKey = String(ev.house || ev.unit || '').trim();
 
-                var rawVi = ev.vi ? String(ev.vi).toUpperCase().trim() : '';
-                console.log(`   🕒 Live Session History Match found at index [${i}] -> House: "${houseKey}" chosen VI: "${rawVi}" (Timestamp: ${ev.ts})`);
+                if (houseKey && !processedHouses.has(houseKey)) {
+                    processedHouses.add(houseKey); // Lock this house key out from older history
 
-                if (rawVi !== '' && rawVi !== 'UNCANVASSED' && rawVi !== 'U') {
-                    houseViMap[houseKey] = rawVi;
+                    var rawVi = ev.vi ? String(ev.vi).toUpperCase().trim() : '';
+                    console.log(`   🕒 Live Session History Match found at index [${i}] -> House: "${houseKey}" chosen VI: "${rawVi}"`);
+
+                    // Explicitly process Uncanvassed states to clear previous entries
+                    if (rawVi === '' || rawVi === 'UNCANVASSED' || rawVi === 'U') {
+                        houseViMap[houseKey] = 'U';
+                    } else {
+                        houseViMap[houseKey] = rawVi;
+                    }
                 }
             }
         }
@@ -1492,9 +1500,9 @@ window.applyRowColorStyles = function(row) {
         try {
             var activeVotesDb = JSON.parse(rawDb);
             Object.keys(activeVotesDb).forEach(function(hKey) {
-                // If a unit already has an active session modification, block the DB from overriding it
+                // Ignore the empty database schema fallback if edited this session
                 if (processedHouses.has(hKey)) {
-                    console.log(`   🛡️ Database fallback blocked for House "${hKey}" -> Session cache has priority.`);
+                    console.log(`   🛡️ Database fallback blocked for House "${hKey}" -> Live session cache has priority.`);
                     return;
                 }
 
@@ -1505,7 +1513,7 @@ window.applyRowColorStyles = function(row) {
                         return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
                     });
                     var normCode = String(highestCode).toUpperCase().trim();
-                    if (normCode && normCode !== '{}') {
+                    if (normCode && normCode !== '{}' && normCode !== 'U' && normCode !== 'UNCANVASSED') {
                         houseViMap[hKey] = normCode;
                     }
                 }
@@ -1524,7 +1532,7 @@ window.applyRowColorStyles = function(row) {
     Array.from(unitSel.options).forEach(function(option, index) {
         var cleanName = option.value || option.text;
         var assignedVi = houseViMap[option.value];
-        var hasMatch = !!(assignedVi && vcoPalette[assignedVi]);
+        var hasMatch = !!(assignedVi && assignedVi !== 'U' && vcoPalette[assignedVi]);
 
         console.log(`   👉 Option [${index}] value="${option.value}" | Clean name: "${cleanName}" | Matched VI shortcode: "${assignedVi}" | Palette Match Found: ${hasMatch}`);
 
@@ -1556,7 +1564,7 @@ window.applyRowColorStyles = function(row) {
         row.style.fontWeight = '';
     }
 
-    // Force native repaint loop
+    // Force a dynamic visual layout repaint
     try {
         var renderEvent = new Event('render');
         unitSel.dispatchEvent(renderEvent);
