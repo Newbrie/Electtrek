@@ -1433,7 +1433,7 @@ class TreeNode:
         # -------------------------------------------------
         # 2️⃣ Child Layer (Level + 1)
         # -------------------------------------------------
-        if self.level < 6:
+        if self.level < 6: #guard for node with no children
             child_layer = get_safe_layer(self.level + 1)
             if child_layer and childnodelist:
                 leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
@@ -1447,7 +1447,7 @@ class TreeNode:
         # -------------------------------------------------
         # 3️⃣ Sibling Layer (Current Level)
         # -------------------------------------------------
-        if self.level > 0:
+        if self.level > 0: #guard for node no siblings
             sibling_layer = get_safe_layer(self.level)
             if sibling_layer:
                 sibling_layer.create_layer(rlevels, [self.parent], static=False)
@@ -1456,7 +1456,7 @@ class TreeNode:
         # -------------------------------------------------
         # 4️⃣ Parent Layer (Level - 1)
         # -------------------------------------------------
-        if self.level > 1:
+        if self.level > 1: # guard for node with no grandparent to have parents as children
             parent_layer = get_safe_layer(self.level - 1)
             if parent_layer:
                 parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
@@ -1467,7 +1467,7 @@ class TreeNode:
         # -------------------------------------------------
         selected.append(factory["marker"])
 
-        # -------------------------------------------------
+# -------------------------------------------------
         # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
         # -------------------------------------------------
         # Always feed the deepest nodes available into highlights to match your level + 1 rules
@@ -1487,9 +1487,13 @@ class TreeNode:
                 "layer_type": "av_highlight"
             })
 
-            postal_layer.create_layer(rlevels, target_highlight_nodes, static=False)
+            # Explicitly loop and build highlights node by node
+            for target_node in target_highlight_nodes:
+                postal_layer.add_av_highlights(rlevels, target_node, static=False)
+
             if hasattr(postal_layer, '_children') and postal_layer._children:
                 selected.append(postal_layer)
+
 
             # --- B. Pledge Highlights Layer ---
             pledge_layer = ExtendedFeatureGroup(
@@ -1504,10 +1508,13 @@ class TreeNode:
                 "layer_type": "vi_highlight"
             })
 
-            # Use your custom pledge execution method
-            pledge_layer.create_layer(rlevels, target_highlight_nodes, static=False)
+            # Explicitly loop and build highlights node by node
+            for target_node in target_highlight_nodes:
+                pledge_layer.add_vi_highlights(rlevels, target_node, static=False)
+
             if hasattr(pledge_layer, '_children') and pledge_layer._children:
                 selected.append(pledge_layer)
+
 
         # -------------------------------------------------
         # 7️⃣ Ghost Task Progress Overlays
