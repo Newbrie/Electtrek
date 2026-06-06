@@ -555,6 +555,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 # 🟢 ALTERNATIVE FIX: Run highlights independently of spatial markers
         if intention_type in ("elector", "street", "walkleg"):
             self.add_vi_highlights(rlevels, node, static)
+            self.add_av_highlights(rlevels, node, static)
 
         # Separate block for geometric structural drawings
         if intention_type == "marker":
@@ -1316,7 +1317,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         from state import Treepolys, Fullpolys
 
         # 1. Fetch geometries belonging to this node from your spatial index
-        polys = Treepolys.get(node.id, [])
+        polys = Treepolys.get(node.nid, [])
         if not polys:
             return
 
@@ -1338,7 +1339,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     "weight": 1.5,
                     "popup": f"Postal Voter<br>Ref: {getattr(poly, 'voter_id', 'N/A')}<br>Tags: {tags_string}",
                     "layer_type": "av_highlight",
-                    "node_id": node.id
+                    "node_id": node.nid
                 }
 
                 # Append this decorative overlay to your child element matrix

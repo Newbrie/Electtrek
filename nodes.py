@@ -1372,7 +1372,7 @@ class TreeNode:
         used_tags = set()
 
         def get_safe_tag_layer(tag_code, tag_desc):
-            display_name = f"Data Overlay: [{tag_code}] {tag_desc}"
+            display_name = f"Task Overlay: [{tag_code}] {tag_desc}"
             if tag_code in used_tags:
                 display_name = f"{display_name} (Upper)"
             used_tags.add(tag_code)
@@ -1468,29 +1468,46 @@ class TreeNode:
         selected.append(factory["marker"])
 
         # -------------------------------------------------
-        # 6️⃣ Postal Voter Highlights Layer [AV]
+        # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
         # -------------------------------------------------
-        postal_layer = ExtendedFeatureGroup(
-            name="Data Overlay: [AV] Postal Voters",
-            overlay=True,
-            control=True,
-            show=False  # Hidden by default to save initial paint load
-        )
-        postal_layer.options = postal_layer.options or {}
-        postal_layer.options.update({
-            "tag": "AV",
-            "layer_type": "av_highlight"
-        })
-
-        # 🛡️ LEVEL ROUTING SANITY CHECK:
         # Always feed the deepest nodes available into highlights to match your level + 1 rules
         target_highlight_nodes = grandchildnodelist if grandchildnodelist else childnodelist
 
         if target_highlight_nodes:
+            # --- A. Postal Voters Layer ---
+            postal_layer = ExtendedFeatureGroup(
+                name="Elector Overlay: [AV] Postal Voters",
+                overlay=True,
+                control=True,
+                show=False  # Hidden by default to save initial paint load
+            )
+            postal_layer.options = postal_layer.options or {}
+            postal_layer.options.update({
+                "tag": "AV",
+                "layer_type": "av_highlight"
+            })
+
             postal_layer.create_layer(rlevels, target_highlight_nodes, static=False)
-            # Only push layer if geometries are inside it
             if hasattr(postal_layer, '_children') and postal_layer._children:
                 selected.append(postal_layer)
+
+            # --- B. Pledge Highlights Layer ---
+            pledge_layer = ExtendedFeatureGroup(
+                name="Elector Overlay: [VI] Pledged Voters",
+                overlay=True,
+                control=True,
+                show=False  # Hidden by default
+            )
+            pledge_layer.options = pledge_layer.options or {}
+            pledge_layer.options.update({
+                "tag": "VI",
+                "layer_type": "vi_highlight"
+            })
+
+            # Use your custom pledge execution method
+            pledge_layer.create_layer(rlevels, target_highlight_nodes, static=False)
+            if hasattr(pledge_layer, '_children') and pledge_layer._children:
+                selected.append(pledge_layer)
 
         # -------------------------------------------------
         # 7️⃣ Ghost Task Progress Overlays
@@ -1511,7 +1528,6 @@ class TreeNode:
             selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
-
 
     def sumupVI(self,viValue):
         origin = self
@@ -2212,12 +2228,13 @@ class TreeNode:
 
         # Configure only ghosts for testing
         accordion_configurations = [
-            {"prefix": "Data Overlay:", "title": "📊 Task Progress"},
+            {"prefix": "Task Overlay:", "title": "📊 Task Progress"},
+            {"prefix": "Elector Overlay:", "title": "📊 Elector Filters"},
         ]
 
         # Generate the snippet and inject it right before returning your map
         accordion_html = generate_map_accordions(accordion_configurations)
-        m.get_root().html.add_child(folium.Element(accordion_html))
+
 
         street_row_css = """
             <style>
@@ -2761,7 +2778,8 @@ class TreeNode:
         # Add popupclosure call to your Folium map
         FolMap.get_root().html.add_child(folium.Element(popupclosure_injection_js))
         # Add layer control accordion to your Folium map
-        FolMap.get_root().header.add_child(folium.Element(accordion_css))
+
+
         FolMap.get_root().header.add_child(folium.Element(accordion_html))
 
         # Add the LatLngPopup plugin
