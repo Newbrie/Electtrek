@@ -1306,43 +1306,106 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def add_av_highlights(self, rlevels, node, static):
+    def add_av_highlights(self, rlevels, node, static=False):
         """
-        Renders spatial polygons highlighting records that carry the 'AV' (Absent Voter) tag,
-        matching the structural format of add_vi_highlights.
+        Retrieves elector data for the node's path and adds postal voter highlights
+        to a clustered marker overlay layout, matching the exact format of add_vi_highlights.
         """
-        from flask import session
-        from state import Treepolys, Fullpolys
+        import pandas as pd
+        import folium
+        from folium.plugins import MarkerCluster
+        from elector import electors  # Local import to avoid circular dependencies
 
-        # 1. Fetch geometries belonging to this node from your spatial index
-        polys = Treepolys.get(node.nid, [])
-        if not polys:
+        # 1. Fetch the path from the node
+        path = node.mapfile()
+
+        # 2. Get the electors for this specific area
+        node_electors = electors.elector_for_path(rlevels, path)
+
+        # 3. Guard: Ensure we have data to work with
+        if node_electors is None or node_electors.empty:
             return
 
-        for poly in polys:
-            # 2. Extract the voter's tag sequence string safely
-            tags_string = getattr(poly, 'tags', '') or ''
+        # =========================================================================
+        # --- Stage 4: Filter for Absent Voters via 'AV' Tag ---
+        # =========================================================================
+        if 'Tags' not in node_electors.columns:
+            # Match your diagnostic warning format
+            import logging
+            logging.getLogger(__name__).warning(f"Tags column missing for path: {path}")
+            return
 
-            # 3. Check for the presence of the AV tag using a clean boundary check
-            # This matches your regex logic: splitting by comma and stripping whitespace
-            voter_tags = [t.strip() for t in tags_string.split(',') if t.strip()]
+        # Match 'AV' as a whole token inside the string while ignoring null/NaN variants
+        postal_electors = node_electors[
+            node_electors['Tags'].astype(str).str.contains(r'\bAV\b', na=False, regex=True)
+        ]
 
-            if "AV" in voter_tags:
-                # 4. Generate the highlight element
-                # We clone the geometry or create an overlay using a distinct color (e.g., Violet/Indigo)
-                highlight_props = {
-                    "fillColor": "#8B5CF6",  # Violet color to contrast against pledge colors
-                    "fillOpacity": 0.6,
-                    "color": "#6D28D9",
-                    "weight": 1.5,
-                    "popup": f"Postal Voter<br>Ref: {getattr(poly, 'voter_id', 'N/A')}<br>Tags: {tags_string}",
-                    "layer_type": "av_highlight",
-                    "node_id": node.nid
-                }
+        if postal_electors.empty:
+            return
+        # =========================================================================
 
-                # Append this decorative overlay to your child element matrix
-                # Adjust the instantiation method below to match how your class appends children
-                self.add_child_geometry(poly, props=highlight_props)
+        # 5. Create Cluster and Process Markers
+        cluster = MarkerCluster(name="Postal Voters").add_to(self)
+        markers_added = 0
+
+        for _, elector in postal_electors.iterrows():
+            lat, lon = elector.get('Lat'), elector.get('Long')
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+
+            # --- Granular Name Construction ---
+            fn = str(elector.get('Firstname', '')).replace('_', ' ').strip()
+            init = str(elector.get('Initials', '')).replace('_', ' ').strip()
+            sn = str(elector.get('Surname', '')).replace('_', ' ').strip()
+
+            name_parts = [p for p in [fn, init, sn] if p]
+            full_name = " ".join(name_parts).title()
+
+            # --- Granular Address Construction ---
+            def get_val(key):
+                val = elector.get(key, "")
+                return "" if pd.isna(val) else str(val).strip()
+
+            pref = get_val('AddressPrefix')
+            num = get_val('AddressNumber')
+            street = get_val('StreetName')
+            pc = get_val('Postcode')
+
+            main_line_parts = []
+            if pref:
+                main_line_parts.append(f"{pref},")
+            if num:
+                main_line_parts.append(num)
+            if street:
+                main_line_parts.append(street)
+
+            main_address = " ".join(main_line_parts).replace(" ,", ",")
+            display_address = f"{main_address}, {pc}" if pc else main_address
+
+            # --- HTML Construction (Using a styled Deep Purple/Violet color profile) ---
+            popup_html = f"""
+                <div style="font-family: Arial, sans-serif; min-width: 200px; font-size: 13px; line-height: 1.4;">
+                    <div style="background-color: #7C3AED; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 6px; text-align: center;">
+                        Postal Voter
+                    </div>
+                    <div style="font-weight: bold; font-size: 14px; color: #111;">{full_name}</div>
+                    <div style="color: #444; margin-bottom: 6px;">{display_address}</div>
+                    <div style="border-top: 1px dotted #ccc; padding-top: 4px; font-size: 11px; color: #777;">
+                        <strong>Elector No:</strong> {elector.get('ENOP', 'N/A')}
+                    </div>
+                </div>
+            """
+
+            folium.Marker(
+                location=[lat, lon],
+                icon=folium.Icon(color='purple', icon='envelope', prefix='fa'),
+                popup=folium.Popup(popup_html, max_width=350),
+                tooltip=full_name
+            ).add_to(cluster)
+            markers_added += 1
+
+        print(f"DEBUG: Added {markers_added} Postal markers to cluster for node: {node.value}")
+
 
     def add_vi_highlights(self, rlevels, node, static=False):
         """
