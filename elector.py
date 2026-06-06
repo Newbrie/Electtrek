@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _lock = threading.RLock()
 
 shapecolumn = {
+    "elector": "ElectorName",
     "street": "StreetName",
     "walkleg": "StreetName",
     "polling_district": "PD",

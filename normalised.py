@@ -49,6 +49,20 @@ def NormaliseName(df):
             df[col] = df[col].fillna('').astype(str)
     # --- FIX END ---
 
+    # =========================================================================
+    # 🧹 NEW FIX: Clean and strip out single and double quotes from ElectorName
+    # =========================================================================
+    if 'ElectorName' in df.columns:
+        df['ElectorName'] = (
+            df['ElectorName']
+            .fillna('')
+            .astype(str)
+            .str.replace("'", "", regex=False)  # Remove single quotes
+            .str.replace('"', '', regex=False)  # Remove double quotes
+            .str.strip()                        # Trim any whitespace left behind
+        )
+    # =========================================================================
+
     if 'ElectorName' not in df.columns:
         if 'Initials' not in df.columns:
             # This line used to crash; now it's safe because of the sanitize block above
@@ -60,8 +74,8 @@ def NormaliseName(df):
             df['ElectorName_Normalized'] = df['ElectorName']
     else:
         # Step 1: Split and extract initials
-        # Use fillna here too just in case ElectorName has nulls
-        parts = df['ElectorName'].fillna('').astype(str).apply(lambda x: x.strip().split())
+        # Modified to rely on our cleaned version above safely
+        parts = df['ElectorName'].apply(lambda x: x.split())
         processed = parts.apply(lambda x: extract_initials(x))
 
         df['Initials'] = processed.apply(lambda x: x[1])
@@ -86,7 +100,7 @@ def NormaliseName(df):
             lambda row: ' '.join(filter(None, row)), axis=1
         )
 
-                # Reorder if desired
+    # Reorder if desired
     cols_to_front = ['ElectorName', 'Firstname', 'Initials', 'Surname', 'ElectorName_Normalized']
     df = df[[c for c in cols_to_front if c in df.columns] + [c for c in df.columns if c not in cols_to_front]]
 
