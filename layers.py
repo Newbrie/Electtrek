@@ -552,13 +552,11 @@ class ExtendedFeatureGroup(FeatureGroup):
         # 🔍 DEBUG TRACKER: See exactly what levels are arriving
         print(f"DEBUG: RENDER Node ID: {getattr(node, 'nid', 'N/A')} | Node Level: {node.level} | Evaluated Key Level: {node.level + 1} | Found Intention: {intention_type}")
 
-# 🟢 ALTERNATIVE FIX: Run highlights independently of spatial markers
-        if intention_type in ("elector", "street", "walkleg"):
+        if intention_type in ("elector"):
             self.add_vi_highlights(rlevels, node, static)
             self.add_av_highlights(rlevels, node, static)
-
         # Separate block for geometric structural drawings
-        if intention_type == "marker":
+        elif intention_type == "marker":
             self.add_genmarkers(rlevels, node, static)
         elif intention_type in ("street", "walkleg"):
             self.add_nodemarks(rlevels, node, static)
