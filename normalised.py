@@ -49,32 +49,26 @@ def NormaliseName(df):
             df[col] = df[col].fillna('').astype(str)
     # --- FIX END ---
 
-    # =========================================================================
-    # 🧹 NEW FIX: Clean and strip out single and double quotes from ElectorName
-    # =========================================================================
+    # Wipe quotes upfront to protect the splitting logic
     if 'ElectorName' in df.columns:
         df['ElectorName'] = (
             df['ElectorName']
             .fillna('')
             .astype(str)
-            .str.replace("'", "", regex=False)  # Remove single quotes
-            .str.replace('"', '', regex=False)  # Remove double quotes
-            .str.strip()                        # Trim any whitespace left behind
+            .str.replace("'", "", regex=False)
+            .str.replace('"', '', regex=False)
+            .str.strip()
         )
-    # =========================================================================
 
     if 'ElectorName' not in df.columns:
         if 'Initials' not in df.columns:
-            # This line used to crash; now it's safe because of the sanitize block above
             df['ElectorName'] = df['Firstname'] + " " + df['Surname']
             df['ElectorName_Normalized'] = df['ElectorName']
         else:
-            # Safe now
             df['ElectorName'] = df['Firstname'] + " " + df['Initials'] + " " + df['Surname']
             df['ElectorName_Normalized'] = df['ElectorName']
     else:
         # Step 1: Split and extract initials
-        # Modified to rely on our cleaned version above safely
         parts = df['ElectorName'].apply(lambda x: x.split())
         processed = parts.apply(lambda x: extract_initials(x))
 
@@ -100,11 +94,26 @@ def NormaliseName(df):
             lambda row: ' '.join(filter(None, row)), axis=1
         )
 
-    # Reorder if desired
+    # =========================================================================
+    # 🛡️ THE IRONCLAD CLEAN: Strip quotes from ALL target fields at the end
+    # =========================================================================
+    target_clean_cols = ['ElectorName', 'Firstname', 'Surname', 'ElectorName_Normalized']
+    for col in target_clean_cols:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .fillna('')
+                .astype(str)
+                .str.replace("'", "", regex=False)  # Pulls out O'Connor -> OConnor
+                .str.replace('"', '', regex=False)  # Pulls out any double quotes
+                .str.strip()
+            )
+    # =========================================================================
+
+    # Reorder columns
     cols_to_front = ['ElectorName', 'Firstname', 'Initials', 'Surname', 'ElectorName_Normalized']
     df = df[[c for c in cols_to_front if c in df.columns] + [c for c in df.columns if c not in cols_to_front]]
 
-    # Return full enriched DataFrame
     return df
 
 def DFpostcodetoDF(df):
