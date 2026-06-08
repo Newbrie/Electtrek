@@ -94,22 +94,24 @@ def NormaliseName(df):
             lambda row: ' '.join(filter(None, row)), axis=1
         )
 
-    # =========================================================================
-    # 🛡️ THE IRONCLAD CLEAN: Strip quotes from ALL target fields at the end
+# =========================================================================
+    # 🛡️ THE IRONCLAD CLEAN: Strip ALL quote types, including backticks (`) and smart quotes (’‘)
     # =========================================================================
     target_clean_cols = ['ElectorName', 'Firstname', 'Surname', 'ElectorName_Normalized']
+
+    # This pattern catches: standard single quotes, double quotes, backticks, and smart curly quotes
+    quote_pattern = r'[\'"`’‘]'
+
     for col in target_clean_cols:
         if col in df.columns:
             df[col] = (
                 df[col]
                 .fillna('')
                 .astype(str)
-                .str.replace("'", "", regex=False)  # Pulls out O'Connor -> OConnor
-                .str.replace('"', '', regex=False)  # Pulls out any double quotes
+                .str.replace(quote_pattern, '', regex=True)  # Using regex=True to match the character set
                 .str.strip()
             )
     # =========================================================================
-
     # Reorder columns
     cols_to_front = ['ElectorName', 'Firstname', 'Initials', 'Surname', 'ElectorName_Normalized']
     df = df[[c for c in cols_to_front if c in df.columns] + [c for c in df.columns if c not in cols_to_front]]

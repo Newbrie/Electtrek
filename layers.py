@@ -552,9 +552,19 @@ class ExtendedFeatureGroup(FeatureGroup):
         # 🔍 DEBUG TRACKER: See exactly what levels are arriving
         print(f"DEBUG: RENDER Node ID: {getattr(node, 'nid', 'N/A')} | Node Level: {node.level} | Evaluated Key Level: {node.level + 1} | Found Intention: {intention_type}")
 
-        if intention_type in ("elector"):
-            self.add_vi_highlights(rlevels, node, static)
-            self.add_av_highlights(rlevels, node, static)
+        # 🎯 intercept at the elector level
+        if intention_type == "elector":
+            # self is our ExtendedFeatureGroup context layer instance
+            self.add_tag_layer(
+                rlevels=rlevels,
+                node=node,
+                tags=['PL'],
+                operator='OR',
+                layer_name="Reform Pledges",
+                icon_color="blue", icon_name="users", header_color="#2563EB",
+                static=static
+            )
+
         # Separate block for geometric structural drawings
         elif intention_type == "marker":
             self.add_genmarkers(rlevels, node, static)
@@ -564,7 +574,6 @@ class ExtendedFeatureGroup(FeatureGroup):
             self.add_voronoi(rlevels, node, static)
         else:
             self.add_nodemaps(rlevels, node, static, counters)
-
 
 
     def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
@@ -1306,187 +1315,86 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("________Layer map polys",herenode.value,herenode.level,self._children)
         return self._children
 
-    def add_av_highlights(self, rlevels, node, static=False):
+    def add_tag_layer(self, rlevels, node, tags, operator, layer_name, icon_color, icon_name, header_color, target_cluster=None, static=False):
         """
-        Retrieves elector data for the node's path and adds postal voter highlights
-        to a clustered marker overlay layout, matching the exact format of add_vi_highlights.
-        """
-        import pandas as pd
-        import folium
-        from folium.plugins import MarkerCluster
-        from elector import electors  # Local import to avoid circular dependencies
-
-        # 1. Fetch the path from the node
-        path = node.mapfile()
-
-        # 2. Get the electors for this specific area
-        node_electors = electors.elector_for_path(rlevels, path)
-
-        # 3. Guard: Ensure we have data to work with
-        if node_electors is None or node_electors.empty:
-            return
-
-        # =========================================================================
-        # --- Stage 4: Filter for Absent Voters via 'AV' Tag ---
-        # =========================================================================
-        if 'Tags' not in node_electors.columns:
-            # Match your diagnostic warning format
-            import logging
-            logging.getLogger(__name__).warning(f"Tags column missing for path: {path}")
-            return
-
-        # Match 'AV' as a whole token inside the string while ignoring null/NaN variants
-        postal_electors = node_electors[
-            node_electors['Tags'].astype(str).str.contains(r'\bAV\b', na=False, regex=True)
-        ]
-
-        if postal_electors.empty:
-            return
-        # =========================================================================
-
-        # 5. Create Cluster and Process Markers
-        cluster = MarkerCluster(name="Postal Voters").add_to(self)
-        markers_added = 0
-
-        for _, elector in postal_electors.iterrows():
-            lat, lon = elector.get('Lat'), elector.get('Long')
-            if pd.isna(lat) or pd.isna(lon):
-                continue
-
-            # --- Granular Name Construction ---
-            fn = str(elector.get('Firstname', '')).replace('_', ' ').strip()
-            init = str(elector.get('Initials', '')).replace('_', ' ').strip()
-            sn = str(elector.get('Surname', '')).replace('_', ' ').strip()
-
-            name_parts = [p for p in [fn, init, sn] if p]
-            full_name = " ".join(name_parts).title()
-
-            # --- Granular Address Construction ---
-            def get_val(key):
-                val = elector.get(key, "")
-                return "" if pd.isna(val) else str(val).strip()
-
-            pref = get_val('AddressPrefix')
-            num = get_val('AddressNumber')
-            street = get_val('StreetName')
-            pc = get_val('Postcode')
-
-            main_line_parts = []
-            if pref:
-                main_line_parts.append(f"{pref},")
-            if num:
-                main_line_parts.append(num)
-            if street:
-                main_line_parts.append(street)
-
-            main_address = " ".join(main_line_parts).replace(" ,", ",")
-            display_address = f"{main_address}, {pc}" if pc else main_address
-
-            # --- HTML Construction (Using a styled Deep Purple/Violet color profile) ---
-            popup_html = f"""
-                <div style="font-family: Arial, sans-serif; min-width: 200px; font-size: 13px; line-height: 1.4;">
-                    <div style="background-color: #7C3AED; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 6px; text-align: center;">
-                        Postal Voter
-                    </div>
-                    <div style="font-weight: bold; font-size: 14px; color: #111;">{full_name}</div>
-                    <div style="color: #444; margin-bottom: 6px;">{display_address}</div>
-                    <div style="border-top: 1px dotted #ccc; padding-top: 4px; font-size: 11px; color: #777;">
-                        <strong>Elector No:</strong> {elector.get('ENOP', 'N/A')}
-                    </div>
-                </div>
-            """
-
-            folium.Marker(
-                location=[lat, lon],
-                icon=folium.Icon(color='purple', icon='envelope', prefix='fa'),
-                popup=folium.Popup(popup_html, max_width=350),
-                tooltip=full_name
-            ).add_to(cluster)
-            markers_added += 1
-
-        print(f"DEBUG: Added {markers_added} Postal markers to cluster for node: {node.value}")
-
-
-    def add_vi_highlights(self, rlevels, node, static=False):
-        """
-        Retrieves elector data for the node's path and adds highlights to the layer.
+        Advanced centralized backend filter engine on the ExtendedFeatureGroup class.
+        Filters electors for the explicitly passed node and mounts them to the layer.
         """
         import pandas as pd
         import folium
+        import logging
         from folium.plugins import MarkerCluster
-        from elector import electors # Local import to avoid circular dependencies
+        from elector import electors
 
-        # 1. Fetch the path from the node
-        # Using mapfile() which usually contains the hierarchy path
+        logger = logging.getLogger(__name__)
+
+        # 🎯 FIX 1: Safely use the passed node to get the file path
         path = node.mapfile()
-
-        # 2. Get the electors for this specific area
         node_electors = electors.elector_for_path(rlevels, path)
 
-        # 3. Guard: Ensure we have data to work with
         if node_electors is None or node_electors.empty:
-            return
+            return 0
 
-        # =========================================================================
-        # --- Stage 4: Filter for Reform Pledges via 'PL' Tag ---
-        # =========================================================================
-        # Fallback safeguard if the Tags column hasn't been initialized yet
         if 'Tags' not in node_electors.columns:
             logger.warning(f"Tags column missing for path: {path}")
-            return
+            return 0
 
-        # Match 'PL' as a whole token inside the string while ignoring null/NaN variants
-        reform_electors = node_electors[
-            node_electors['Tags'].astype(str).str.contains(r'\bPL\b', na=False, regex=True)
-        ]
+        # ... [Keep your exact same Pandas tag filtering logic here] ...
+        if isinstance(tags, str):
+            tags = [tags]
+        tags = [t.strip() for t in tags if t.strip()]
+        if not tags:
+            return 0
 
-        if reform_electors.empty:
-            return
-        # =========================================================================
+        operator = operator.strip().upper()
+        tags_series = node_electors['Tags'].astype(str)
 
-        # 5. Create Cluster and Process Markers
-        cluster = MarkerCluster(name="Reform Pledges").add_to(self)
+        if len(tags) == 1 or operator == 'OR':
+            combined_pattern = rf"\b({'|'.join(tags)})\b"
+            mask = tags_series.str.contains(combined_pattern, na=False, regex=True)
+        elif operator == 'AND':
+            mask = pd.Series(True, index=node_electors.index)
+            for tag in tags:
+                mask &= tags_series.str.contains(rf"\b{tag}\b", na=False, regex=True)
+        else:
+            raise ValueError("Invalid operator selection. Use 'AND' or 'OR'.")
+
+        filtered_electors = node_electors[mask]
+        if filtered_electors.empty:
+            return 0
+
+        # 🎯 FIX 2: Cluster Management
+        # If no cluster was passed down, look for an existing one or create it directly on self
+        if target_cluster is None:
+            # Try to fetch an existing cluster child from this ExtendedFeatureGroup to prevent duplicate groups
+            existing_clusters = [child for child in self._children.values() if isinstance(child, MarkerCluster)]
+            if existing_clusters:
+                target_cluster = existing_clusters[0]
+            else:
+                # Initialize a clean cluster inside this ExtendedFeatureGroup container
+                target_cluster = MarkerCluster(name=layer_name, control=False).add_to(self)
+
         markers_added = 0
-
-        for _, elector in reform_electors.iterrows():
+        for _, elector in filtered_electors.iterrows():
             lat, lon = elector.get('Lat'), elector.get('Long')
             if pd.isna(lat) or pd.isna(lon):
                 continue
 
-            # --- Granular Name Construction ---
+            # --- Name & Address Construction ---
             fn = str(elector.get('Firstname', '')).replace('_', ' ').strip()
             init = str(elector.get('Initials', '')).replace('_', ' ').strip()
             sn = str(elector.get('Surname', '')).replace('_', ' ').strip()
+            full_name = " ".join([p for p in [fn, init, sn] if p]).title()
 
-            name_parts = [p for p in [fn, init, sn] if p]
-            full_name = " ".join(name_parts).title()
+            def get_val(k): return "" if pd.isna(elector.get(k, "")) else str(elector.get(k, "")).strip()
+            pref, num, street, pc = get_val('AddressPrefix'), get_val('AddressNumber'), get_val('StreetName'), get_val('Postcode')
+            main_line = " ".join([p for p in [f"{pref}," if pref else "", num, street] if p]).replace(" ,", ",")
+            display_address = f"{main_line}, {pc}" if pc else main_line
 
-            # --- Granular Address Construction ---
-            def get_val(key):
-                val = elector.get(key, "")
-                return "" if pd.isna(val) else str(val).strip()
-
-            pref = get_val('AddressPrefix')
-            num = get_val('AddressNumber')
-            street = get_val('StreetName')
-            pc = get_val('Postcode')
-
-            main_line_parts = []
-            if pref:
-                main_line_parts.append(f"{pref},")
-            if num:
-                main_line_parts.append(num)
-            if street:
-                main_line_parts.append(street)
-
-            main_address = " ".join(main_line_parts).replace(" ,", ",")
-            display_address = f"{main_address}, {pc}" if pc else main_address
-
-            # --- HTML Construction ---
             popup_html = f"""
                 <div style="font-family: Arial, sans-serif; min-width: 200px; font-size: 13px; line-height: 1.4;">
-                    <div style="background-color: #00B4D8; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 6px; text-align: center;">
-                        Reform Pledge
+                    <div style="background-color: {header_color}; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 6px; text-align: center;">
+                        {layer_name}
                     </div>
                     <div style="font-weight: bold; font-size: 14px; color: #111;">{full_name}</div>
                     <div style="color: #444; margin-bottom: 6px;">{display_address}</div>
@@ -1498,14 +1406,13 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             folium.Marker(
                 location=[lat, lon],
-                icon=folium.Icon(color='lightblue', icon='star', prefix='fa'),
+                icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa'),
                 popup=folium.Popup(popup_html, max_width=350),
                 tooltip=full_name
-            ).add_to(cluster)
+            ).add_to(target_cluster)
             markers_added += 1
 
-        print(f"DEBUG: Added {markers_added} Reform markers to cluster for node: {node.value}")
-
+        return markers_added
 
     def add_genmarkers(self,rlevels, node, static):
         eventlist = node.build_eventlist_dataframe(rlevels)

@@ -1467,9 +1467,11 @@ class TreeNode:
         # -------------------------------------------------
         selected.append(factory["marker"])
 
-# -------------------------------------------------
+        # -------------------------------------------------
         # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
         # -------------------------------------------------
+        from folium.plugins import MarkerCluster
+
         # Always feed the deepest nodes available into highlights to match your level + 1 rules
         target_highlight_nodes = grandchildnodelist if grandchildnodelist else childnodelist
 
@@ -1487,11 +1489,25 @@ class TreeNode:
                 "layer_type": "av_highlight"
             })
 
-            # Explicitly loop and build highlights node by node
-            for target_node in target_highlight_nodes:
-                postal_layer.add_av_highlights(rlevels, target_node, static=False)
+            # Create ONE central cluster group inside the layer container
+            postal_cluster = MarkerCluster(name="Postal Voters", control=False).add_to(postal_layer)
 
-            if hasattr(postal_layer, '_children') and postal_layer._children:
+            # Explicitly loop and build highlights node by node directly into the cluster
+            postal_markers_count = 0
+            for target_node in target_highlight_nodes:
+                # 🎯 FIX: Call the method on POSTAL_LAYER, and pass target_node down as an argument
+                postal_markers_count += postal_layer.add_tag_layer(
+                    rlevels=rlevels,
+                    node=target_node,
+                    tags=['AV'],
+                    operator='OR',
+                    layer_name="Postal Voter",
+                    icon_color="purple", icon_name="envelope", header_color="#7C3AED",
+                    target_cluster=postal_cluster
+                )
+
+            # Only append the layer if markers were actually generated
+            if postal_markers_count > 0:
                 selected.append(postal_layer)
 
 
@@ -1508,13 +1524,26 @@ class TreeNode:
                 "layer_type": "vi_highlight"
             })
 
-            # Explicitly loop and build highlights node by node
+            # Create ONE central cluster group inside the layer container
+            pledge_cluster = MarkerCluster(name="Reform Pledges", control=False).add_to(pledge_layer)
+
+            # Explicitly loop and build highlights node by node directly into the cluster
+            pledge_markers_count = 0
             for target_node in target_highlight_nodes:
-                pledge_layer.add_vi_highlights(rlevels, target_node, static=False)
+                # 🎯 FIX: Call the method on PLEDGE_LAYER, and pass target_node down as an argument
+                pledge_markers_count += pledge_layer.add_tag_layer(
+                    rlevels=rlevels,
+                    node=target_node,
+                    tags=['PL'],
+                    operator='OR',
+                    layer_name="Reform Pledge",
+                    icon_color="blue", icon_name="users", header_color="#2563EB",
+                    target_cluster=pledge_cluster
+                )
 
-            if hasattr(pledge_layer, '_children') and pledge_layer._children:
+            # Only append the layer if markers were actually generated
+            if pledge_markers_count > 0:
                 selected.append(pledge_layer)
-
 
         # -------------------------------------------------
         # 7️⃣ Ghost Task Progress Overlays
