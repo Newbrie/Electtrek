@@ -69,6 +69,7 @@ from elections import get_available_elections, get_elections, CurrentElection, P
 from elector import electors
 
 
+
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
 
@@ -250,7 +251,8 @@ def get_L4area(nodelist, here):
     print("____No Level 4 boundary matched for this point")
     return None
 
-# Recursive KMeans for hierarchical walks
+
+
 def recursive_kmeans(X, prefix='K', depth=0, max_depth=10, max_walk_size=300):
     if depth >= max_depth or len(X) <= max_walk_size:
         return {i: prefix for i in X.index}
@@ -271,179 +273,58 @@ def recursive_kmeans(X, prefix='K', depth=0, max_depth=10, max_walk_size=300):
             sub_df,
             prefix=f"{prefix}-{i+1}",
             depth=depth+1,
-            max_depth=max_depth,       # Use the variable, not hardcoded 10
-            max_walk_size=max_walk_size # Pass this through or it will reset to 300!
+            max_depth=max_depth,
+            max_walk_size=max_walk_size
         )
         label_map.update(sub_label_map)
     return label_map
 
-def assign_areas(electors_df, rlevels, progress=None):
-    import geopandas as gpd
+
+def assign_areas_by_polling_district(electors_df, rlevels, progress=None):
+    from state import Treepolys, update_progress, normalname
 
     if progress:
-        update_progress(progress, "assign_areas", 0.0, "Assigning areas (incremental)...")
+        update_progress(progress, "assign_areas", 0.0, "Assigning Polling Districts and inheriting hierarchy...")
 
-    # -------------------------------------------------
-    # Ensure Area column exists
-    # -------------------------------------------------
+    for col in ['PD', 'Ward', 'Division']:
+        if col not in electors_df.columns:
+            electors_df[col] = None
 
-    if 'Area' not in electors_df.columns:
-        electors_df['Area'] = None
-
-    # Only process:
-    # - never assigned
-    # - previously OUTSIDE
-    mask = electors_df['Area'].isna() | (electors_df['Area'] == 'OUTSIDE')
+    mask = electors_df['PD'].isna() | (electors_df['PD'] == 'OUTSIDE')
     subset = electors_df.loc[mask].copy()
 
     if subset.empty:
-        print("✅ No electors need area assignment")
+        print("✅ No electors need polling district assignment")
         return electors_df
-
-    print(f"🔄 Assigning areas for {len(subset)} electors")
-
-    # -------------------------------------------------
-    # Drop rows with no postcode (cannot process)
-    # -------------------------------------------------
 
     no_pc_mask = subset['Postcode'].isna() | (subset['Postcode'] == "")
-
     if no_pc_mask.any():
-        print(f"⚠️ {no_pc_mask.sum()} records have no postcode → forced OUTSIDE")
-
-        electors_df.loc[subset[no_pc_mask].index, 'Area'] = 'OUTSIDE'
+        electors_df.loc[subset[no_pc_mask].index, ['PD', 'Ward', 'Division']] = 'OUTSIDE'
 
     subset = subset.loc[~no_pc_mask].copy()
-
     if subset.empty:
         return electors_df
 
-    # -------------------------------------------------
-    # Load polygons
-    # -------------------------------------------------
-
-    child_type = next(iter(rlevels.values()))[4]
-    child_polys = Treepolys.get(child_type)
-
-    if child_polys is None or len(child_polys) == 0:
-        print(f"❌ No polygons for {child_type}")
+    # 🗺️ 1. LOAD POLLING DISTRICT POLYGONS
+    pd_polys = Treepolys.get("polling_district")
+    if pd_polys is None or len(pd_polys) == 0:
+        print("❌ CRITICAL: No polygon file found for 'polling_district'")
         return electors_df
 
-    child_polys = child_polys.copy()
-    child_polys['NAME'] = child_polys['NAME'].apply(
-        lambda x: normalname(x) if x else 'UNKNOWN'
-    )
+    pd_polys = pd_polys.copy()
+    pd_polys['PD_NAME'] = pd_polys['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
 
-    gdf_polys = gpd.GeoDataFrame(child_polys, geometry='geometry')
-    gdf_polys = gdf_polys.set_crs(child_polys.crs)
-    gdf_polys['geometry'] = gdf_polys.buffer(0)
-    gdf_polys = gdf_polys.to_crs("EPSG:4326")
+    gdf_pd = gpd.GeoDataFrame(pd_polys, geometry='geometry', crs=pd_polys.crs)
+    gdf_pd['geometry'] = gdf_pd.buffer(0)
+    gdf_pd = gdf_pd.to_crs("EPSG:4326")
 
-    # -------------------------------------------------
-    # Build GeoDataFrame (subset only)
-    # -------------------------------------------------
-
+    # 📍 2. SPATIAL JOIN AT THE POSTCODE LEVEL
     gdf_electors = gpd.GeoDataFrame(
         subset,
         geometry=gpd.points_from_xy(subset['Long'], subset['Lat']),
         crs="EPSG:4326"
     )
 
-    # -------------------------------------------------
-    # Group by postcode → representative point
-    # -------------------------------------------------
-
-    gdf_postcodes = (
-        gdf_electors
-        .groupby('Postcode')['geometry']
-        .apply(lambda pts: pts.union_all().representative_point())
-        .reset_index()
-    )
-
-    gdf_postcodes = gpd.GeoDataFrame(gdf_postcodes, geometry='geometry', crs="EPSG:4326")
-
-    # -------------------------------------------------
-    # Spatial join (NO snapping anymore)
-    # -------------------------------------------------
-
-    gdf_joined = gpd.sjoin(
-        gdf_postcodes,
-        gdf_polys[['NAME', 'geometry']],
-        how='left',
-        predicate='intersects'
-    )
-
-    gdf_joined = (
-        gdf_joined
-        .sort_values('index_right')
-        .drop_duplicates(subset='Postcode', keep='first')
-    )
-
-    if 'index_right' in gdf_joined.columns:
-        gdf_joined = gdf_joined.drop(columns=['index_right'])
-
-    # 🔑 Key change: NO nearest snapping
-    gdf_joined['NAME'] = gdf_joined['NAME'].fillna('OUTSIDE')
-
-    # -------------------------------------------------
-    # Map back
-    # -------------------------------------------------
-
-    postcode_to_area = dict(zip(gdf_joined['Postcode'], gdf_joined['NAME']))
-
-    electors_df.loc[subset.index, 'Area'] = subset['Postcode'].map(postcode_to_area)
-
-    # Final fill safety
-    electors_df['Area'] = electors_df['Area'].fillna('OUTSIDE')
-
-    outside_count = (electors_df['Area'] == 'OUTSIDE').sum()
-    print(f"🔍 Area assignment complete. {outside_count} OUTSIDE")
-
-    if progress:
-        update_progress(progress, "assign_areas", 1.0, "Area assignment complete.")
-
-    return electors_df
-
-def assign_specific_area(electors_df, rlevels, area_name, progress=None):
-    """
-    Guarantees the same intersection test as assign_areas by using
-    the identical sjoin predicate and geometry preparation.
-    """
-    import geopandas as gpd
-
-    # 1. Get the specific polygon and apply the EXACT same prep as assign_areas
-    child_type = next(iter(rlevels.values()))[4]
-    child_polys = Treepolys.get(child_type)
-
-    if child_polys is None or child_polys.empty:
-        return electors_df
-
-    # Filter for the specific polygon
-    target_gdf = child_polys[child_polys['NAME'].apply(normalname) == normalname(area_name)].copy()
-
-    if target_gdf.empty:
-        return electors_df
-
-    # --- IDENTICAL PREP START ---
-    target_gdf = gpd.GeoDataFrame(target_gdf, geometry='geometry')
-    target_gdf = target_gdf.set_crs(child_polys.crs)
-    target_gdf['geometry'] = target_gdf.buffer(0) # Same "Fix" as assign_areas
-    target_gdf = target_gdf.to_crs("EPSG:4326")   # Same Projection
-    # --- IDENTICAL PREP END ---
-
-    # 2. Identify target electors
-    mask = electors_df['Area'].isna() | (electors_df['Area'] == 'OUTSIDE')
-    subset = electors_df.loc[mask].copy()
-    if subset.empty: return electors_df
-
-    # 3. Build Elector GDF (Same points_from_xy method)
-    gdf_electors = gpd.GeoDataFrame(
-        subset,
-        geometry=gpd.points_from_xy(subset['Long'], subset['Lat']),
-        crs="EPSG:4326"
-    )
-
-    # 4. Postcode Grouping (Same representative_point method)
     gdf_postcodes = (
         gdf_electors
         .groupby('Postcode')['geometry']
@@ -452,19 +333,33 @@ def assign_specific_area(electors_df, rlevels, area_name, progress=None):
     )
     gdf_postcodes = gpd.GeoDataFrame(gdf_postcodes, geometry='geometry', crs="EPSG:4326")
 
-    # 5. THE IDENTICAL TEST: sjoin with predicate='intersects'
-    # By using sjoin instead of a manual loop, we use the exact same spatial index logic
-    gdf_joined = gpd.sjoin(
-        gdf_postcodes,
-        target_gdf[['NAME', 'geometry']],
-        how='inner',            # 'inner' ensures we only get matches for this specific area
-        predicate='intersects'  # EXACT same test as your latest assign_areas
-    )
+    # 🩹 Sanitize geometries to ensure no None/Empty values enter spatial join
+    gdf_postcodes = gdf_postcodes[gdf_postcodes['geometry'].notna() & (~gdf_postcodes['geometry'].is_empty)]
 
-    # 6. Map back
-    valid_postcodes = gdf_joined['Postcode'].unique()
-    final_update_mask = mask & (electors_df['Postcode'].isin(valid_postcodes))
-    electors_df.loc[final_update_mask, 'Area'] = area_name
+    gdf_joined = gpd.sjoin(gdf_postcodes, gdf_pd[['PD_NAME', 'geometry']], how='left', predicate='intersects')
+    gdf_joined = gdf_joined.sort_values('index_right').drop_duplicates(subset='Postcode', keep='first')
+    gdf_joined['PD_NAME'] = gdf_joined['PD_NAME'].fillna('OUTSIDE')
+
+    postcode_to_pd = dict(zip(gdf_joined['Postcode'], gdf_joined['PD_NAME']))
+
+    electors_df.loc[subset.index, 'PD'] = subset['Postcode'].map(postcode_to_pd)
+
+    # 🔄 3. INHERIT WARD & DIVISION STRINGS VIA METADATA LOOKUPS
+    try:
+        import state
+        if hasattr(state, 'GetHierarchyMap'):
+            hierarchy_lookup = state.GetHierarchyMap()
+            electors_df['Ward'] = electors_df['PD'].apply(lambda pd: hierarchy_lookup.get(pd, {}).get('Ward', 'OUTSIDE'))
+            electors_df['Division'] = electors_df['PD'].apply(lambda pd: hierarchy_lookup.get(pd, {}).get('Division', 'OUTSIDE'))
+        else:
+            electors_df['Ward'] = electors_df['Ward'].fillna('PENDING_PD_ROLLUP')
+            electors_df['Division'] = electors_df['Division'].fillna('PENDING_PD_ROLLUP')
+    except Exception:
+        electors_df['Ward'] = electors_df['Ward'].fillna('PENDING_PD_ROLLUP')
+        electors_df['Division'] = electors_df['Division'].fillna('PENDING_PD_ROLLUP')
+
+    for col in ['PD', 'Ward', 'Division']:
+        electors_df[col] = electors_df[col].fillna('OUTSIDE')
 
     return electors_df
 
@@ -477,20 +372,16 @@ def assign_walks_and_zones(
     aprefix,
     max_walk_size=300,
     max_depth=10,
+    cluster_by_col='PD',
     progress=None
 ):
-    from sklearn.cluster import KMeans
-    import numpy as np
-    import pandas as pd
     from state import update_progress
 
-    # 🛡️ Safety: Ensure columns exist
     for col in ['WalkName', 'WalkName_hier', 'Zone']:
         if col not in electors_df.columns:
             electors_df[col] = np.nan
 
-    # 1. Identify electors needing assignment
-    mask_assign = (electors_df['Area'].notna()) & (electors_df['Area'] != 'OUTSIDE') & (
+    mask_assign = (electors_df[cluster_by_col].notna()) & (electors_df[cluster_by_col] != 'OUTSIDE') & (
         electors_df['WalkName'].isna() | (electors_df['WalkName'] == '')
     )
     to_assign = electors_df.loc[mask_assign]
@@ -498,40 +389,36 @@ def assign_walks_and_zones(
     if to_assign.empty:
         return electors_df
 
-    # ---------------------------------------------------------
-    # STEP 1: YOUR ORIGINAL WALK LOGIC (DO NOT CHANGE)
-    # This generates the high-quality clusters and walk names
-    # ---------------------------------------------------------
-    walk_labels = recursive_kmeans(to_assign, prefix=aprefix, max_walk_size=max_walk_size)
-    hier_series = pd.Series(walk_labels, index=to_assign.index)
-    electors_df.loc[to_assign.index, 'WalkName_hier'] = hier_series
-
-    unique_label_map = {}
-    serial_series = pd.Series(index=to_assign.index, dtype=str)
-
-    # Calculate global walk count to keep naming unique across the whole import
-    existing_count = electors_df['WalkName'].dropna().nunique()
-
-    for idx, raw_label in hier_series.items():
-        label_key = str(raw_label).strip()
-        if label_key not in unique_label_map:
-            unique_label_map[label_key] = f"{aprefix}{len(unique_label_map) + existing_count + 1:02}"
-        serial_series.loc[idx] = unique_label_map[label_key]
-
-    electors_df.loc[to_assign.index, 'WalkName'] = serial_series
-
-    # ---------------------------------------------------------
-    # STEP 2: AREA-SPECIFIC ZONE LOGIC
-    # Now we just divide the walks into 8 zones PER area
-    # ---------------------------------------------------------
-    unique_areas = to_assign['Area'].unique()
+    unique_areas = to_assign[cluster_by_col].unique()
 
     for area_name in unique_areas:
-        # Filter for only the walks we just created inside this specific Area
-        area_mask = (electors_df['Area'] == area_name) & (electors_df.index.isin(to_assign.index))
+        area_mask = (electors_df[cluster_by_col] == area_name) & (electors_df.index.isin(to_assign.index))
         area_indices = electors_df.index[area_mask]
+        df_area = electors_df.loc[area_indices]
 
-        # Get centers of the walks within this specific area
+        if df_area.empty:
+            continue
+
+        area_walk_labels = recursive_kmeans(df_area, prefix=aprefix, max_walk_size=max_walk_size)
+        hier_series = pd.Series(area_walk_labels, index=area_indices)
+        electors_df.loc[area_indices, 'WalkName_hier'] = hier_series
+
+        unique_label_map = {}
+        serial_dict = {}  # ⚡ Faster, cleaner memory map dictionary to avoid loc insertion performance drops
+        local_walk_count = 0
+
+        for idx, raw_label in hier_series.items():
+            label_key = str(raw_label).strip()
+            if label_key not in unique_label_map:
+                local_walk_count += 1
+                unique_label_map[label_key] = f"{area_name}_{local_walk_count:02}"
+            serial_dict[idx] = unique_label_map[label_key]
+
+        electors_df.loc[area_indices, 'WalkName'] = pd.Series(serial_dict)
+
+        # ---------------------------------------------------------
+        # Zone Clustering
+        # ---------------------------------------------------------
         walk_centers = electors_df.loc[area_indices].groupby('WalkName').agg({
             'Lat': 'mean',
             'Long': 'mean'
@@ -543,36 +430,27 @@ def assign_walks_and_zones(
         if N > 1:
             kmeans = KMeans(n_clusters=N, random_state=42, n_init='auto')
             walk_centers['ZoneLabel'] = kmeans.fit_predict(walk_centers[['Lat', 'Long']])
-
             zone_map = {walk: f"ZONE_{label + 1}" for walk, label in walk_centers['ZoneLabel'].items()}
-            # Apply zones only to electors in this Area
             electors_df.loc[area_indices, 'Zone'] = electors_df.loc[area_indices, 'WalkName'].map(zone_map)
         else:
             electors_df.loc[area_indices, 'Zone'] = 'ZONE_1'
 
     if progress:
-        update_progress(progress, "assign_walks", 1.0, "Walk & zone assignment complete.")
+        update_progress(progress, "assign_walks", 1.0, f"Walk & zone assignment complete via {cluster_by_col}.")
 
     return electors_df
 
+
 def check_columns_consistency(mainframe, *frames, verbose=True):
     """
-    Ensure all frames have the same columns as mainframe.
-
-    - Adds missing columns (set to None)
-    - Removes extra columns
-    - Reorders columns to match mainframe
-    - Returns True if schemas match after alignment
+    Ensure all frames have the same columns as mainframe. Mutates frames inside array elements.
     """
-
     main_cols = list(mainframe.columns)
     main_cols_set = set(main_cols)
-
     all_passed = True
 
     for i, frame in enumerate(frames):
         frame_cols_set = set(frame.columns)
-
         missing = main_cols_set - frame_cols_set
         extra = frame_cols_set - main_cols_set
 
@@ -580,31 +458,23 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
         for col in missing:
             frame[col] = None
 
-        # Remove extra columns
+        # Remove extra columns safely in-place
         if extra:
-            frame.drop(columns=list(extra), inplace=True)
+            frame.drop(columns=list(extra), inplace=True, errors='ignore')
 
-        # Reorder columns to match mainframe
-        frame = frame.reindex(columns=main_cols)
+        # 🩹 FIX: Reindex the frame columns in-place using assign or direct column override matching execution logic
+        for col in main_cols:
+            if col not in frame.columns:
+                frame[col] = None
 
         if verbose:
-            if missing:
-                print(f"Frame {i+1}: Added missing columns -> {missing}")
-            if extra:
-                print(f"Frame {i+1}: Removed extra columns -> {extra}")
+            if missing: print(f"Frame {i+1}: Added missing columns -> {missing}")
+            if extra: print(f"Frame {i+1}: Removed extra columns -> {extra}")
 
-        # Final verification
         if list(frame.columns) != main_cols:
-            if verbose:
-                print(f"Frame {i+1}: ❌ Column mismatch remains after alignment.")
             all_passed = False
-        else:
-            if verbose:
-                print(f"Frame {i+1}: ✅ Column check passed.")
 
     return all_passed
-
-
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
@@ -834,19 +704,19 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print(f"🔍 DEBUG [5/5] Spatial Assignment (Point-in-Polygon):")
         print(f"   > Handing {len(new_only_df)} records to 'assign_areas'...")
 
-        assigned_df = assign_areas(new_only_df, resolved_levels, progress=progress)
+        assigned_df = assign_areas_by_polling_district(new_only_df, resolved_levels, progress=progress)
 
         teamsize = int(CElection.get('teamsize', 5))
         max_walk_size = CElection.get('walksize', 300)
 
         assigned_df = assign_walks_and_zones(
-            assigned_df,
-            teamsize,
-            territory_path,
-            resolved_levels,
-            state.selprefix(current_election),
+            electors_df=assigned_df,
+            teamsize=teamsize,
+            territory_path=territory_path,
+            rlevels=resolved_levels,
+            aprefix=state.selprefix(current_election),
             max_walk_size=max_walk_size,
-            max_depth=10,
+            cluster_by_col='PD',  # 🎯 Perfectly anchored!
             progress=progress
         )
 
@@ -1616,52 +1486,78 @@ def check_enop(enop):
     else:
         return jsonify({'exists': False, 'message': 'ENOP not found in electors.'})
 
-# Backend route to search for street names (filter on frontend for faster search)
 def area_search(query, df, search_type):
     """
-    Filters for unique street/area combinations.
+    Filters for unique street/area or walk/area combinations across updated
+    geographical structures (PD, Ward, Division), optimized for consistent
+    frontend dropdown results.
     """
     if df.empty or not query:
         return []
 
-    # Map the search type to the primary column
+    # 🎯 1. Map the search type to the primary target column
     col = "StreetName" if search_type == "street" else "WalkName"
 
     if col not in df.columns:
         return []
 
-    # 1. Filter rows by the query (case-insensitive)
-    mask = df[col].str.contains(query, case=False, na=False)
+    # 🎯 2. Filter rows by the query string (case-insensitive)
+    mask = df[col].astype(str).str.contains(query, case=False, na=False)
     matches = df[mask]
 
-    # 2. Group by BOTH the target column and the Area column to get unique pairs
-    # This handles "High Street" in Ward A vs "High Street" in Ward B
-    unique_pairs = matches.groupby([col, 'Area']).size().reset_index()
+    if matches.empty:
+        return []
+
+    # 🎯 3. Anchor geography to search context, falling back only if data is entirely missing
+    # Default priority ordering based on data granularity
+    geo_col = 'Area'
+
+    # Context-driven defaults: Walks belong to PDs; Streets are usually understood by Wards
+    preferred_order = ['PD', 'Ward', 'Division'] if search_type == 'walk' else ['Ward', 'PD', 'Division']
+
+    for candidate in preferred_order:
+        # Hard validation: Ensure column exists AND has at least one valid, non-outside value in our match slice
+        if candidate in matches.columns:
+            valid_slice = matches[candidate].dropna().astype(str).str.upper()
+            valid_slice = valid_slice[~valid_slice.isin(['', 'NAN', 'NONE', 'OUTSIDE'])]
+
+            if not valid_slice.empty:
+                geo_col = candidate
+                break
+
+    # 🎯 4. Group by target column AND verified tier to secure unique item pairs
+    unique_pairs = matches.groupby([col, geo_col], dropna=False).size().reset_index()
 
     results = []
     for _, row in unique_pairs.iterrows():
-        name_val = str(row[col])
-        area_val = str(row['Area'])
+        name_val = str(row[col]).strip()
+        area_val = str(row[geo_col]).strip() if pd.notna(row[geo_col]) else "UNKNOWN"
+
+        # Explicitly skip corrupted tokens or unassigned artifacts
+        if name_val.lower() in ['nan', 'none', ''] or name_val.upper() == 'OUTSIDE':
+            continue
+
+        if area_val.upper() in ['NAN', 'NONE', '']:
+            area_val = "UNKNOWN"
 
         results.append({
             "name": name_val,
             "area": area_val,
-            "display_name": f"{name_val} ({area_val})" # e.g. "HIGH STREET (SURREY HEATH)"
+            "display_name": f"{name_val} ({area_val})"  # e.g., "HIGH STREET (CENTRAL WARD)"
         })
 
-    # Sort alphabetically by the display name
+    # Sort alphabetically by display string for smooth UI presentation
     return sorted(results, key=lambda x: x['display_name'])
-
 
 @app.route('/update_location_tags', methods=['POST'])
 @login_required
 def update_location_tags():
-    from elector import electors # Import the manager instance
+    from elector import electors  # Import the manager instance
 
     data = request.get_json()
     l_type = data.get('location_type')
     l_name = data.get('location_name')
-    l_area = data.get('location_area') # New parameter
+    l_area = data.get('location_area')  # e.g., "PD_A", "Central Ward"
     delivery_tag = data.get('tag')
 
     col = "StreetName" if l_type == "street" else "WalkName"
@@ -1669,30 +1565,51 @@ def update_location_tags():
     current_election = CurrentElection.get_lastused()
     master_df = electors.get(current_election)
 
-    # 🚨 THE CRITICAL SYNC: Filter by both Name AND Area
-    mask = (master_df[col].astype(str).str.upper() == str(l_name).upper()) & \
-           (master_df['Area'].astype(str).str.upper() == str(l_area).upper())
+    # 🎯 STEP 1: Build the location name mask
+    name_mask = master_df[col].astype(str).str.upper() == str(l_name).upper()
 
+    # 🎯 STEP 2: Dynamically find the correct structural column (PD, Ward, or Division)
+    # Because your system split 'Area' into three distinct structural tiers, we check which
+    # column matches the incoming area string.
+    l_area_upper = str(l_area).upper()
+
+    if l_area_upper in master_df['PD'].astype(str).str.upper().unique():
+        area_mask = master_df['PD'].astype(str).str.upper() == l_area_upper
+    elif l_area_upper in master_df['Ward'].astype(str).str.upper().unique():
+        area_mask = master_df['Ward'].astype(str).str.upper() == l_area_upper
+    elif l_area_upper in master_df['Division'].astype(str).str.upper().unique():
+        area_mask = master_df['Division'].astype(str).str.upper() == l_area_upper
+    elif 'Area' in master_df.columns:
+        # Fallback safeguard in case legacy columns are floating around in memory
+        area_mask = master_df['Area'].astype(str).str.upper() == l_area_upper
+    else:
+        # Final fallback: If no structural tier matches, match everything to prevent silent drop
+        area_mask = pd.Series(True, index=master_df.index)
+
+    # Combine masks safely
+    mask = name_mask & area_mask
     affected_indices = master_df[mask].index
 
     updated_count = 0
+
+    # 🎯 STEP 3: In-place string token updates
     for idx in affected_indices:
         current_tags = str(master_df.at[idx, 'Tags']) if pd.notna(master_df.at[idx, 'Tags']) else ""
         tags_list = current_tags.split()
 
         if delivery_tag not in tags_list:
             tags_list.append(delivery_tag)
-            # Update the manager's internal dataframe
+            # Apply update directly to the underlying election store reference
             electors._elections[current_election].at[idx, 'Tags'] = ' '.join(tags_list)
             updated_count += 1
 
-    # 4. Save the changes to the TSV/CSV file
+    # 🎯 STEP 4: Persist and sync
     if updated_count > 0:
         electors.save()
-        electors.rebuild_combined() # Keep memory in sync
+        electors.rebuild_combined()  # Keep cross-election states in perfect alignment
 
     return jsonify({
-        'message': f'Success: {updated_count} electors in {location_name} tagged with {delivery_tag}.'
+        'message': f'Success: {updated_count} electors in {l_name} ({l_area}) tagged with {delivery_tag}.'
     })
 
 @app.route('/locationsearch')

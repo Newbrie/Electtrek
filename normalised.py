@@ -944,7 +944,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
     elif purpose == 'avi':
         electors2 = pd.DataFrame(electors100, columns=[
             'Election','Purpose','RNO','Tags','PD','Firstname',
-            'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV','Area'
+            'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV','Ward','Division'
         ])
 
 
