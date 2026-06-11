@@ -528,6 +528,84 @@ def t(msg, start=[time.perf_counter()]):
     start[0] = now
 
 
+def GetHierarchyMap():
+    """
+    Generates a nested dictionary mapping Polling District codes to their
+    parent Ward and Division boundaries using spatial containment.
+
+    Returns:
+        dict: { 'PD_CODE': {'Ward': 'Ward Name', 'Division': 'Division Name'}, ... }
+    """
+    from state import Treepolys, normalname
+
+    # 1. Pull the raw spatial layers from your state storage
+    pd_layer = Treepolys.get("polling_district")
+    ward_layer = Treepolys.get("ward")
+    div_layer = Treepolys.get("division")
+
+    # Safety check: If layers aren't loaded yet, return an empty map
+    if pd_layer is None or len(pd_layer) == 0:
+        print("⚠️ Warning: 'polling_district' spatial layer is not loaded. Empty map returned.")
+        return {}
+
+    # 2. Normalize and copy the layers to avoid modifying originals
+    gdf_pd = gpd.GeoDataFrame(pd_layer.copy(), geometry='geometry', crs=pd_layer.crs)
+
+    # We use representative points (centroids guaranteed to be inside the polygon)
+    # to find parent boundaries without border-overlap edge cases.
+    gdf_pd['rep_point'] = gdf_pd['geometry'].buffer(0).representative_point()
+    gdf_pd_points = gdf_pd.set_geometry('rep_point')
+
+    # Standardize the primary lookup key column
+    gdf_pd_points['PD_KEY'] = gdf_pd_points['NAME'].apply(lambda x: normalname(x) if x else None)
+    gdf_pd_points = gdf_pd_points.dropna(subset=['PD_KEY'])
+
+    # 3. Spatial Join with Wards
+    if ward_layer is not None and len(ward_layer) > 0:
+        gdf_ward = gpd.GeoDataFrame(ward_layer.copy(), geometry='geometry', crs=ward_layer.crs).to_crs(gdf_pd_points.crs)
+        # Spatial join: find which Ward contains the PD point
+        joined_ward = gpd.sjoin(gdf_pd_points, gdf_ward[['NAME', 'geometry']], how='left', predicate='within')
+        # Rename match to prevent conflicts
+        joined_ward = joined_ward.rename(columns={'NAME_right': 'Ward_Name'}).drop_duplicates(subset='PD_KEY')
+        pd_to_ward = dict(zip(joined_ward['PD_KEY'], joined_ward['Ward_Name']))
+    else:
+        pd_to_ward = {}
+
+    # 4. Spatial Join with Divisions
+    if div_layer is not None and len(div_layer) > 0:
+        gdf_div = gpd.GeoDataFrame(div_layer.copy(), geometry='geometry', crs=div_layer.crs).to_crs(gdf_pd_points.crs)
+        joined_div = gpd.sjoin(gdf_pd_points, gdf_div[['NAME', 'geometry']], how='left', predicate='within')
+        joined_div = joined_div.rename(columns={'NAME_right': 'Div_Name'}).drop_duplicates(subset='PD_KEY')
+        pd_to_div = dict(zip(joined_div['PD_KEY'], joined_div['Div_Name']))
+    else:
+        pd_to_div = {}
+
+    # 5. Compile the nested dictionary structure
+    hierarchy_map = {}
+    for pd_code in gdf_pd_points['PD_KEY'].unique():
+        # Fallback cleanly to 'OUTSIDE' if a spatial layer or intersection was missing
+        ward_name = pd_to_ward.get(pd_code)
+        div_name = pd_to_div.get(pd_code)
+
+        hierarchy_map[pd_code] = {
+            "Ward": ward_name if pd_not_empty(ward_name) else "OUTSIDE",
+            "Division": div_name if pd_not_empty(div_name) else "OUTSIDE"
+        }
+
+    print(f"✅ Pre-compiled Hierarchy Map with {len(hierarchy_map)} unique PD layout mappings.")
+    return hierarchy_map
+
+def pd_not_empty(val):
+    """Helper check to filter out NaN, None, or blank spatial strings."""
+    if val is None:
+        return False
+    if isinstance(val, float) and pd.isna(val):
+        return False
+    if str(val).strip() in ['', 'nan', 'None']:
+        return False
+    return True
+
+
 def ensure_treepolys_with_index(
     *,
     territory: str | None,
