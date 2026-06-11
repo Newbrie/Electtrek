@@ -282,34 +282,56 @@ def recursive_kmeans(X, prefix='K', depth=0, max_depth=10, max_walk_size=300):
 
 def assign_areas_by_polling_district(electors_df, rlevels, progress=None):
     from state import Treepolys, update_progress, normalname
+    import geopandas as gpd
+    import pandas as pd
+    import numpy as np
+
+    print("\n🚀 --- STARTING DEBUG: assign_areas_by_polling_district ---")
 
     if progress:
         update_progress(progress, "assign_areas", 0.0, "Assigning Polling Districts and inheriting hierarchy...")
 
+    # 🔬 DEBUG STAGE A: Inspect initial shape and column states
+    print(f"📊 Incoming DataFrame Shape: {electors_df.shape}")
     for col in ['PD', 'Ward', 'Division']:
-        if col not in electors_df.columns:
+        if col in electors_df.columns:
+            non_null = electors_df[col].notna().sum()
+            unique_vals = electors_df[col].dropna().unique()[:5]
+            print(f"   > Pre-existing column '{col}': {non_null} non-null values. Sample: {list(unique_vals)}")
+        else:
+            print(f"   > Column '{col}' missing from incoming DataFrame. Initialising as None.")
             electors_df[col] = None
+
+    # Snapshot existing data to prevent silent destruction
+    existing_wards = electors_df['Ward'].copy()
+    existing_divisions = electors_df['Division'].copy()
 
     mask = electors_df['PD'].isna() | (electors_df['PD'] == 'OUTSIDE')
     subset = electors_df.loc[mask].copy()
+    print(f"🔍 Rows marked for Spatial Assignment (PD is NaN or 'OUTSIDE'): {len(subset)} / {len(electors_df)}")
 
     if subset.empty:
-        print("✅ No electors need polling district assignment")
+        print("✅ No electors need polling district assignment. Returning early.")
         return electors_df
 
     no_pc_mask = subset['Postcode'].isna() | (subset['Postcode'] == "")
     if no_pc_mask.any():
+        print(f"⚠️ Found {no_pc_mask.sum()} rows missing postcodes. Setting to 'OUTSIDE'.")
         electors_df.loc[subset[no_pc_mask].index, ['PD', 'Ward', 'Division']] = 'OUTSIDE'
 
     subset = subset.loc[~no_pc_mask].copy()
     if subset.empty:
+        print("🛑 All targets lacked postcodes. Returning early.")
         return electors_df
 
     # 🗺️ 1. LOAD POLLING DISTRICT POLYGONS
     pd_polys = Treepolys.get("polling_district")
     if pd_polys is None or len(pd_polys) == 0:
-        print("❌ CRITICAL: No polygon file found for 'polling_district'")
+        print("❌ CRITICAL DEBUG: Treepolys['polling_district'] is empty or missing!")
+        print("   -> Bivalent creep or missing shapefile loading has stalled assignment.")
         return electors_df
+
+    print(f"🗺️ Loaded {len(pd_polys)} spatial polygons from Treepolys['polling_district']")
 
     pd_polys = pd_polys.copy()
     pd_polys['PD_NAME'] = pd_polys['NAME'].apply(lambda x: normalname(x) if x else 'UNKNOWN')
@@ -319,12 +341,14 @@ def assign_areas_by_polling_district(electors_df, rlevels, progress=None):
     gdf_pd = gdf_pd.to_crs("EPSG:4326")
 
     # 📍 2. SPATIAL JOIN AT THE POSTCODE LEVEL
+    print("📍 Constructing point geometries from Lat/Long points...")
     gdf_electors = gpd.GeoDataFrame(
         subset,
         geometry=gpd.points_from_xy(subset['Long'], subset['Lat']),
         crs="EPSG:4326"
     )
 
+    print("🧩 Aggregating postcodes to representative points for optimization...")
     gdf_postcodes = (
         gdf_electors
         .groupby('Postcode')['geometry']
@@ -333,36 +357,86 @@ def assign_areas_by_polling_district(electors_df, rlevels, progress=None):
     )
     gdf_postcodes = gpd.GeoDataFrame(gdf_postcodes, geometry='geometry', crs="EPSG:4326")
 
-    # 🩹 Sanitize geometries to ensure no None/Empty values enter spatial join
+    # 🩹 Sanitize geometries
     gdf_postcodes = gdf_postcodes[gdf_postcodes['geometry'].notna() & (~gdf_postcodes['geometry'].is_empty)]
 
+    print(f"🔄 Executing spatial join (`gpd.sjoin`) on {len(gdf_postcodes)} unique postcodes...")
     gdf_joined = gpd.sjoin(gdf_postcodes, gdf_pd[['PD_NAME', 'geometry']], how='left', predicate='intersects')
     gdf_joined = gdf_joined.sort_values('index_right').drop_duplicates(subset='Postcode', keep='first')
     gdf_joined['PD_NAME'] = gdf_joined['PD_NAME'].fillna('OUTSIDE')
 
+    outside_count = (gdf_joined['PD_NAME'] == 'OUTSIDE').sum()
+    print(f"🎯 Spatial Join Results: {len(gdf_joined) - outside_count} successfully matched. {outside_count} evaluated as 'OUTSIDE'.")
+
     postcode_to_pd = dict(zip(gdf_joined['Postcode'], gdf_joined['PD_NAME']))
 
+    # Apply mapped updates
     electors_df.loc[subset.index, 'PD'] = subset['Postcode'].map(postcode_to_pd)
 
     # 🔄 3. INHERIT WARD & DIVISION STRINGS VIA METADATA LOOKUPS
+    print("🔄 Entering Hierarchy Inheritance Pipeline...")
     try:
         import state
         if hasattr(state, 'GetHierarchyMap'):
             hierarchy_lookup = state.GetHierarchyMap()
-            electors_df['Ward'] = electors_df['PD'].apply(lambda pd: hierarchy_lookup.get(pd, {}).get('Ward', 'OUTSIDE'))
-            electors_df['Division'] = electors_df['PD'].apply(lambda pd: hierarchy_lookup.get(pd, {}).get('Division', 'OUTSIDE'))
-        else:
-            electors_df['Ward'] = electors_df['Ward'].fillna('PENDING_PD_ROLLUP')
-            electors_df['Division'] = electors_df['Division'].fillna('PENDING_PD_ROLLUP')
-    except Exception:
-        electors_df['Ward'] = electors_df['Ward'].fillna('PENDING_PD_ROLLUP')
-        electors_df['Division'] = electors_df['Division'].fillna('PENDING_PD_ROLLUP')
+            print(f"   ℹ️ state.GetHierarchyMap() active. Found {len(hierarchy_lookup)} keys in lookup dict.")
 
+            # Diagnostic check on key format matching
+            sample_lookup_keys = list(hierarchy_lookup.keys())[:3]
+            sample_assigned_pds = [x for x in electors_df['PD'].dropna().unique() if x != 'OUTSIDE'][:3]
+            print(f"   🔍 Lookup Map Schema Check:")
+            print(f"      > Sample dictionary lookup keys: {sample_lookup_keys}")
+            print(f"      > Sample assigned dataframe PDs: {sample_assigned_pds}")
+
+            # Define localized granular lookup tracing loop
+            def debug_rollup(pd_val, col_name, fallback_series, row_idx):
+                if pd_val and pd_val != 'OUTSIDE':
+                    node = hierarchy_lookup.get(pd_val)
+                    if node is None:
+                        # Catch missing keys in the lookup dictionary mapping
+                        print(f"   ⚠️ LOOKUP MISS: PD code '{pd_val}' completely missing from Hierarchy Map! Retaining fallback column state.")
+                        return fallback_series.loc[row_idx]
+
+                    target_val = node.get(col_name)
+                    if not target_val:
+                        print(f"   ⚠️ VALUE MISS: PD code '{pd_val}' found, but nested attribute key '{col_name}' is blank!")
+                        return fallback_series.loc[row_idx]
+
+                    return target_val
+                return fallback_series.loc[row_idx] if pd_val == 'OUTSIDE' else 'OUTSIDE'
+
+            # Execute explicit safe assignments
+            new_wards = [debug_rollup(pd_v, 'Ward', existing_wards, idx) for idx, pd_v in electors_df['PD'].items()]
+            new_divs = [debug_rollup(pd_v, 'Division', existing_divisions, idx) for idx, pd_v in electors_df['PD'].items()]
+
+            electors_df['Ward'] = new_wards
+            electors_df['Division'] = new_divs
+        else:
+            print("⚠️ WARNING: state.GetHierarchyMap missing. Falling back to simple fillna mapping.")
+            electors_df['Ward'] = electors_df['Ward'].fillna(existing_wards).fillna('PENDING_PD_ROLLUP')
+            electors_df['Division'] = electors_df['Division'].fillna(existing_divisions).fillna('PENDING_PD_ROLLUP')
+
+    except Exception as e:
+        print(f"❌ EXCEPTION inside hierarchy engine: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        electors_df['Ward'] = electors_df['Ward'].fillna(existing_wards).fillna('PENDING_PD_ROLLUP')
+        electors_df['Division'] = electors_df['Division'].fillna(existing_divisions).fillna('PENDING_PD_ROLLUP')
+
+    # Final cleanup execution loop monitoring
     for col in ['PD', 'Ward', 'Division']:
+        na_count = electors_df[col].isna().sum()
+        if na_count > 0:
+            print(f"🧹 Sweeping {na_count} remaining unassigned NaN values in '{col}' -> 'OUTSIDE'")
         electors_df[col] = electors_df[col].fillna('OUTSIDE')
 
-    return electors_df
+    print("\n🏁 --- END OF DEBUG SUMMARY ---")
+    for col in ['PD', 'Ward', 'Division']:
+        unique_summary = electors_df[col].value_counts().head(3).to_dict()
+        print(f"📌 Column '{col}' final distribution highlights: {unique_summary}")
+    print("--------------------------------------------------\n")
 
+    return electors_df
 
 def assign_walks_and_zones(
     electors_df,
@@ -736,7 +810,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print("❌ Exception:", e)
         print(traceback.format_exc())
         progress.update({"percent": 100, "status": "error", "message": str(e)})
-        
+
 # --------------------------
 # Utility Functions
 # --------------------------
