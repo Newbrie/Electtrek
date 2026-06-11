@@ -434,23 +434,14 @@ class CurrentElection(dict):
     def resolved_levels(self) -> dict[str, dict[int, str]]:
         """
         Lazily compute and cache resolved LEVELS wrapped in the election name.
+        Keeps compound names intact for bivalent extraction downstream.
         """
         if not hasattr(self, "_resolved_levels"):
             resolved: dict[int, str] = {}
-
             for level, name in sorted(LEVELS.items(), key=lambda x: x[0]):
-                if name == "ward/division":
-                    resolved[level] = "division" if self.territories in ("C", "U") else "ward"
-                elif name == "polling_district/walk":
-                    resolved[level] = "polling_district" if self.adminmode else "walk"
-                elif name == "street/walkleg":
-                    resolved[level] = "street" if self.adminmode else "walkleg"
-                else:
-                    resolved[level] = name
+                resolved[level] = name
 
-            # Wrap it in the election name
             self._resolved_levels = {self.name: resolved}
-
         return self._resolved_levels
 
     @property

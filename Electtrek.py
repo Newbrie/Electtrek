@@ -496,7 +496,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     logger = logging.getLogger(__name__)
 
     try:
-        # Outcols = pd.read_excel(GENESYS_FILE).columns # Assuming GENESYS_FILE is defined globally
         mainframes, deltaframes, aviframes, pledge_frames, DQstatslist = [], [], [], [], []
 
         # --- Stage 1: Sourcing & Path Resolution ---
@@ -526,8 +525,33 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             parent_levels=parent_levels
         )
 
-        levels = ["Country", "Nation", "County", "Constituency", "Division"] # Added Division
+        # Unpack the active levels mapping dictionary
+        (_, elevels), = resolved_levels.items()
+
+        # 🔥 FIX: Construct an explicitly index-aligned array matching path_parts structural offsets
+        # Base hardcoded geographic tiers (Levels 0, 1, 2)
+        levels = ["Country", "Nation", "County"]
+
+        # Calculate maximum possible length to prevent index bleeding or out-of-bounds loops
+        max_index = max(max(elevels.keys(), default=0) + 1, len(path_parts))
+
+        # Positionally evaluate every administrative layer from index 3 downward
+        for idx in range(3, max_index):
+            if idx in elevels:
+                layer_raw_token = elevels[idx]
+                # Dynamic split for bivalent targets ("ward/division" -> defaults to "Ward")
+                primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
+                levels.append(primary_layer.capitalize())
+            else:
+                # If index 3 wasn't explicitly in elevels, fallback to standard naming
+                if idx == 3:
+                    levels.append("Constituency")
+                else:
+                    levels.append(f"Level_{idx}")
+
         geo_context = {levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(levels)}
+        print(f"   > Mapped Schema Columns: {levels}")
+        print(f"   > Resolved Geo Context: {geo_context}")
 
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
 
@@ -535,7 +559,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         for idx, (index, data) in enumerate(sorted_items):
             file_path = data.get('saved_path') or data.get('stored_path', '')
             if file_path and not os.path.isabs(file_path):
-                file_path = os.path.join(config.workdirectories['workdir'], file_path)
+                # Safe context recovery if 'config' namespace isn't global
+                try:
+                    workdir = config.workdirectories['workdir']
+                except NameError:
+                    workdir = session_data.get('workdir', os.getcwd())
+                file_path = os.path.join(workdir, file_path)
 
             if not os.path.exists(file_path):
                 continue
@@ -570,13 +599,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         new_df = pd.concat(all_new, ignore_index=True)
 
-        # Apply Context Hierarchy
+        # Apply Context Hierarchy safely without index offsets
         for i, value in enumerate(path_parts):
             if i < len(levels):
                 new_df[levels[i]] = value
 
-
-    # =========================================================================
+        # =========================================================================
         # --- Stage 3: AVI Attribute Tags Injection Engine ---
         # =========================================================================
         if aviframes:
@@ -584,50 +612,38 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             avi_combined = pd.concat(aviframes, ignore_index=True)
 
             if 'ENOP' in new_df.columns and 'ENOP' in avi_combined.columns:
-                # Force clean string formatting and remove leading/trailing whitespace
                 new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
-
-                # Extract unique, non-empty ENOPs from the Absent Voters list
-                # Adding .astype(str) here protects against any stray float NaN values
                 av_enops = set(avi_combined['ENOP'].astype(str).str.strip().unique())
                 av_enops.discard("")
-                av_enops.discard("nan") # Safety: discard stringified NaNs if they exist
+                av_enops.discard("nan")
 
                 print(f"   > Identified {len(av_enops)} unique Absent Voter ENOPs for tagging.")
 
-                # Initialize 'Tags' column if it doesn't exist in the main dataframe yet
                 if 'Tags' not in new_df.columns:
                     new_df['Tags'] = ""
                 else:
                     new_df['Tags'] = new_df['Tags'].fillna("")
 
-                # Safe match now that both sides are explicitly stripped string types
                 matching_rows_mask = new_df['ENOP'].isin(av_enops)
                 tagged_count = matching_rows_mask.sum()
 
-                # Inline lambda update: Append 'AV' cleanly, accounting for existing tags
                 def append_av_tag(current_tags):
                     current_tags = str(current_tags).strip()
                     if not current_tags or current_tags == "nan":
                         return 'AV'
-
-                    # Split tags by common delimiters to see if 'AV' is already present
                     existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
                     if 'AV' in existing_tags:
-                        return current_tags # Already tagged, leave as-is
-
-                    # Append using a comma separator
+                        return current_tags
                     return f"{current_tags}, AV"
 
-                # Apply only to the matching records
                 new_df.loc[matching_rows_mask, 'Tags'] = new_df.loc[matching_rows_mask, 'Tags'].apply(append_av_tag)
                 print(f"   > Successfully injected 'AV' tag into {tagged_count} matching records.")
             else:
                 print("⚠️ TAGS ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or AVI dataset.")
         else:
             print("ℹ️ TAGS ENGINE: No incoming AVI datasets discovered. Skipping tag updates.")
+
         # =========================================================================
-# =========================================================================
         # --- Stage 3.5: Pledge Attribute Tags Injection Engine ---
         # =========================================================================
         if pledge_frames:
@@ -635,48 +651,37 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             pledge_combined = pd.concat(pledge_frames, ignore_index=True)
 
             if 'ENOP' in new_df.columns and 'ENOP' in pledge_combined.columns:
-                # Force clean string formatting on main frame to ensure structural alignment
                 new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
-
-                # Extract unique, non-empty ENOPs from the Pledge list
                 pledge_enops = set(pledge_combined['ENOP'].astype(str).str.strip().unique())
                 pledge_enops.discard("")
                 pledge_enops.discard("nan")
 
                 print(f"   > Identified {len(pledge_enops)} unique Pledge ENOPs for tagging.")
 
-                # Ensure 'Tags' column exists and is cleared of float NaNs
                 if 'Tags' not in new_df.columns:
                     new_df['Tags'] = ""
                 else:
                     new_df['Tags'] = new_df['Tags'].fillna("")
 
-                # Safe matching mask on stripped string types
                 matching_pledge_mask = new_df['ENOP'].isin(pledge_enops)
                 pledge_tagged_count = matching_pledge_mask.sum()
 
-                # Inline lambda update: Append 'PL' cleanly, preserving any existing tags
                 def append_pl_tag(current_tags):
                     current_tags = str(current_tags).strip()
                     if not current_tags or current_tags == "nan":
                         return 'PL'
-
-                    # Split tags by common delimiters to prevent redundant duplicate tags
                     existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
                     if 'PL' in existing_tags:
                         return current_tags
-
-                    # Append with standard comma separation
                     return f"{current_tags}, PL"
 
-                # Apply update selectively to the matching rows
                 new_df.loc[matching_pledge_mask, 'Tags'] = new_df.loc[matching_pledge_mask, 'Tags'].apply(append_pl_tag)
                 print(f"   > Successfully injected 'PL' tag into {pledge_tagged_count} matching records.")
             else:
                 print("⚠️ PLEDGE ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or Pledge dataset.")
         else:
             print("ℹ️ PLEDGE ENGINE: No incoming Pledge datasets discovered. Skipping tag updates.")
-        # =========================================================================
+
         # --- Stage 4: Merge with Existing & Deduplicate ---
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
         new_df['is_new_import'] = True
@@ -687,7 +692,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         pre_dedupe_count = len(combined)
         if 'ENOP' in combined.columns:
-            # Check for blank ENOPs which cause massive data loss in dedupe
             blanks = (combined['ENOP'] == "").sum()
             if blanks > 1:
                 print(f"⚠️ WARNING: Found {blanks} blank ENOPs. These will be merged into ONE record.")
@@ -716,10 +720,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             rlevels=resolved_levels,
             aprefix=state.selprefix(current_election),
             max_walk_size=max_walk_size,
-            cluster_by_col='PD',  # 🎯 Perfectly anchored!
+            cluster_by_col='PD',
             progress=progress
         )
-
 
         # Save
         electors.add_or_update(current_election, assigned_df)
@@ -733,7 +736,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print("❌ Exception:", e)
         print(traceback.format_exc())
         progress.update({"percent": 100, "status": "error", "message": str(e)})
-
+        
 # --------------------------
 # Utility Functions
 # --------------------------
