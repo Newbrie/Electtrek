@@ -2010,7 +2010,7 @@ class TreeNode:
             print(f"DEBUG: No child level found for level {self.level + 1}. Exiting.")
             return None
 
-        # 🎯 RESOLVE ALL POSSIBLE CHILD LAYERS (Handle single strings or "ward/division")
+        # RESOLVE ALL POSSIBLE CHILD LAYERS (Handle single strings or "ward/division")
         target_layers = []
         if "/" in str(raw_electtype):
             target_layers = [t.strip() for t in raw_electtype.split("/")]
@@ -2018,31 +2018,37 @@ class TreeNode:
         else:
             target_layers = [raw_electtype]
 
-        # Load parent geometry once
-        parent_poly = Treepolys.get(parenttype)
-        if parent_poly is None or parent_poly.empty:
-            raise ValueError(f"No polygons loaded for parent layer '{parenttype}'")
+        # 🎯 FIX: Identify if we are running at the top of the tree structure
+        is_root = (self.level == 0)
+        parent_geom = None
 
-        try:
-            search_fid = int(self.fid)
-            parent_row = parent_poly[parent_poly['FID'] == search_fid]
-        except Exception as e:
-            print(f"DEBUG: FID Conversion error: {e}")
-            raise
+        # Skip spatial boundary filtering only if this is the absolute root node
+        if not is_root:
+            parent_poly = Treepolys.get(parenttype)
+            if parent_poly is None or parent_poly.empty:
+                raise ValueError(f"No polygons loaded for parent layer '{parenttype}'")
 
-        if parent_row.empty:
-            raise Exception(f"EMPTY PARENT GEOMETRY for {self.value} (FID {self.fid})")
+            try:
+                search_fid = int(self.fid)
+                parent_row = parent_poly[parent_poly['FID'] == search_fid]
+            except Exception as e:
+                print(f"DEBUG: FID Conversion error: {e}")
+                raise
 
-        parent_geom = parent_row.geometry.values[0]
+            if parent_row.empty:
+                raise Exception(f"EMPTY PARENT GEOMETRY for {self.value} (FID {self.fid})")
 
-        # Set up bounding boxes
-        block = pd.DataFrame()
-        self.bbox, self.latlongroid = self.get_bounding_box(parenttype, block)
+            parent_geom = parent_row.geometry.values[0]
+
+            # Set up bounding boxes
+            block = pd.DataFrame()
+            self.bbox, self.latlongroid = self.get_bounding_box(parenttype, block)
+        else:
+            print(f"👑 Root Node architecture detected ({self.value}). Skipping spatial filter.")
 
         CE = elections.CurrentElection.load(c_election)
         gotv_pct = CE.get('GOTV', 0)
 
-        # This will hold ALL children created across ALL targeted layers
         all_created_children = []
 
         # 🔄 LOOP OVER EVERY TARGET LAYER (e.g., first 'ward', then 'division')
@@ -2056,10 +2062,14 @@ class TreeNode:
 
             print(f"🧭 Processing branch for layer '{electtype}' under parent '{parenttype}'")
 
-            # Filter child polygons within parent geometry
-            threshold = Overlaps.get(electtype, Overlaps.get(raw_electtype, 0.5))
-            selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
-            print(f"📦 Found {len(selected_children)} candidate children for layer '{electtype}'")
+            # 🎯 FIX: If root, select all rows within the layer directly without geometric intersection
+            if is_root:
+                selected_children = ChildPolylayer
+                print(f"📦 Root layer assignment: adopting all {len(selected_children)} features inside '{electtype}'")
+            else:
+                threshold = Overlaps.get(electtype, Overlaps.get(raw_electtype, 0.5))
+                selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
+                print(f"📦 Found {len(selected_children)} candidate children for layer '{electtype}'")
 
             fam_nodes = self.childrenoftype(electtype)
             fam_values = {x.value for x in fam_nodes}
@@ -2089,6 +2099,8 @@ class TreeNode:
 
                 # Attach node structurally to parent
                 egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
+
+                block = pd.DataFrame()
                 egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
 
                 # Set branch color based on absolute index
@@ -2118,7 +2130,6 @@ class TreeNode:
             print(f"⚠️ Warning: No children created anywhere under {self.value} for config target: {raw_electtype}")
 
         return all_created_children
-
 
     def create_area_map(self, resolved_levels, static=False):
         global SERVER_PASSWORD
