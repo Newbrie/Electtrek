@@ -359,7 +359,7 @@ class CurrentElection(dict):
             territory = self.territory
             steps = stepify(territory)
             level = len(steps) - 1
-            parent_row = Treepolys[elevels[level]]
+            parent_row = Treepolys[node.type]
 
             # ----- LOOKUP BY LAT/LON ---------------------------------------
             latitude = node.latlongroid[0]
@@ -368,7 +368,7 @@ class CurrentElection(dict):
             matched = parent_row[parent_row.contains(point)]
         except:
             print(
-                f"___under election {self.name} in a {elevels[level]} at {node.value} territory check exception : "
+                f"___under election {self.name} in a {node.type} at {node.value} territory check exception : "
             )
 
         self['cid'] = node.nid

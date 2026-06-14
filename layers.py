@@ -580,7 +580,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             div_group = folium.FeatureGroup(name="Boundaries: County Divisions", control=True).add_to(self)
             try:
                 folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, div_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters)
+                self.add_nodemaps(rlevels, node, static, counters, "division")
                 rendered_any_polygon = True
             finally:
                 folium.MacroElement.add_to = original_add_to
@@ -589,7 +589,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             ward_group = folium.FeatureGroup(name="Boundaries: Borough Wards", control=True, show=False).add_to(self)
             try:
                 folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, ward_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters)
+                self.add_nodemaps(rlevels, node, static, counters, "walk")
                 rendered_any_polygon = True
             finally:
                 folium.MacroElement.add_to = original_add_to
@@ -602,7 +602,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             pd_sub_group = folium.FeatureGroup(name="Data: Polling Districts (Polys)", control=True).add_to(self)
             try:
                 folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, pd_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static)
+                self.add_voronoi(rlevels, node, static, "polling_district")
                 rendered_any_polygon = True
             finally:
                 folium.MacroElement.add_to = original_add_to
@@ -611,7 +611,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             walk_sub_group = folium.FeatureGroup(name="Data: Canvass Walks (Polys)", control=True, show=False).add_to(self)
             try:
                 folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, walk_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static)
+                self.add_voronoi(rlevels, node, static, "walk")
                 rendered_any_polygon = True
             finally:
                 folium.MacroElement.add_to = original_add_to
@@ -629,11 +629,11 @@ class ExtendedFeatureGroup(FeatureGroup):
         has_streets = node.childrenoftype("street") or node.childrenoftype("walkleg")
 
         if has_streets or intention_type in ("street", "walkleg"):
-            self.add_nodemarks(rlevels, node, static)
+            self.add_nodemarks(rlevels, node, static,intention_type)
             return
 
         if intention_type == "marker":
-            self.add_genmarkers(rlevels, node, static)
+            self.add_genmarkers(rlevels, node, static,intention_type)
             return
 
         # -----------------------------------------------------------------
@@ -641,7 +641,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         # -----------------------------------------------------------------
         # If a node somehow slips through everything else, give it a default map
         print(f"WARNING: Node {node.value} hit safety fallback handler.")
-        self.add_nodemaps(rlevels, node, static, counters)
+        self.add_nodemaps(rlevels, node, static, counters,intention_type)
 
     def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
         """
@@ -737,7 +737,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def add_voronoi(self, rlevels, node, static=False):
+    def add_voronoi(self, rlevels, node, static=False, intention_type):
         from shapely.geometry import Point
         from shapely.ops import nearest_points
         import numpy as np
@@ -773,7 +773,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         CE = CurrentElection.load(c_election)
         task_tags, outcome_tags, all_tags = CE.get_tags()
 
-        pfile = Treepolys[elevels[node.level]]
+        pfile = Treepolys[node.type]
         Territory_boundary = pfile[pfile['FID'] == int(node.fid)]
         node.geometry = Territory_boundary.union_all()
 
@@ -791,9 +791,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         # This bridges the islands so geovoronoi treats all 61 points as one set
         calc_hull = parent_boundary.convex_hull
 
-        children = node.childrenoftype(elevels[node.level+1])
+        children = node.childrenoftype(intention_type)
         if not children:
-            print(f"⚠️ Node has no children of type {elevels[node.level+1]}")
+            print(f"⚠️ Node has no children of type {intention_type}")
             return
 
         # -------------------------------------------------
@@ -1515,7 +1515,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps (self,rlevels, herenode,static, counters):
+    def add_nodemaps (self,rlevels, herenode,static, counters, intention_type):
         from state import Treepolys, Fullpolys, Candidates, LastResults
         from flask import session, flash
         global levelcolours
@@ -1530,9 +1530,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"DEBUG: Unpacked election: {c_election}")
 
 
-        type = elevels[herenode.level+1]
-
-        childlist = herenode.childrenoftype(type)
+        childlist = herenode.childrenoftype(intention_type)
         allchildlist = herenode.children
         nodeshtml = build_nodemap_list_html(herenode)
 
@@ -1543,24 +1541,24 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "tooltip_html": nodeshtml
                             }
 
-        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{type} they are {[x.value for x in childlist]}" )
+        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{intention_type} they are {[x.value for x in childlist]}" )
 
 # reset counters of child type to so that child tag = this node's childno
         accumulate = session.get("accumulate", False)
         if not accumulate:
-            counters[elevels[herenode.level+1]] = 0
+            counters[intention_type] = 0
 
         for c in childlist:
-            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value,type}")
+            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value,intention_type}")
             print(f"______All nodemaps:{len(allchildlist)} at {herenode.value}")
 
-#            layerfids = [x.fid for x in self._children if x.type == type]
+#            layerfids = [x.fid for x in self._children if x.type == intention_type]
 #            if c.fid not in layerfids:
             if c.level+1 <= 5:
                 results = []
     #need to select the children boundaries associated with the children nodes - to paint
-                pfile = Treepolys[type]
-                print(f"______Add_Nodemap Treepolys type:{type} size:{len(pfile)}")
+                pfile = Treepolys[intention_type]
+                print(f"______Add_Nodemap Treepolys type:{intention_type} size:{len(pfile)}")
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
 
@@ -1569,7 +1567,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 )
 
                 if len(limbX) > 0:
-                    print("______Add_Nodes Treepolys type:",type)
+                    print("______Add_Nodes Treepolys type:",intention_type)
     #
                     # Setup clean, consistent styling defaults
                     font_style = "style='font-size: 12pt; color: gray'"
@@ -1585,11 +1583,11 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # LEVEL 0: Top Level Hierarchy
                     # ------------------------------------------------------------------
                     if herenode.level == 0:
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{type}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{intention_type}')"
                         up_js = f"moveUp('/upbut/{c_path}', '{c_val}', '{herenode.type}')"
 
                         uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{type}</button>"
+                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{intention_type}</button>"
 
                         limbX['UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
                         mapfile = f"/transfer/{c.mapfile()}"
@@ -1598,9 +1596,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # LEVEL 1: Regional / County Level
                     # ------------------------------------------------------------------
                     elif herenode.level == 1:
-                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{type}')"
-                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{type}')"
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{type}')"
+                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{intention_type}')"
+                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{intention_type}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{intention_type}')"
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
 
                         ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
@@ -1808,7 +1806,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return self._children
 
-    def add_nodemarks (self,rlevels,herenode,static):
+    def add_nodemarks (self,rlevels,herenode,static, intention_type):
         global levelcolours
 
         # Guard: Ensure we have exactly one election to unpack
@@ -1818,9 +1816,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
-        type = elevels[herenode.level + 1]
-
-        childlist = herenode.childrenoftype(type)
+        childlist = herenode.childrenoftype(intention_type)
         nodeshtml = build_nodemap_list_html(herenode)
 
         details = [c.value for c in childlist]
@@ -1829,11 +1825,11 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "details": details,
                             "tooltip_html": nodeshtml
                             }
-        num = len(herenode.childrenoftype(type))
-        print(f"___creating {num} add_nodemarks of type {type} for {herenode.value} at level {herenode.level}")
+        num = len(herenode.childrenoftype(intention_type))
+        print(f"___creating {num} add_nodemarks of type {intention_type} for {herenode.value} at level {herenode.level}")
 
 
-        children = herenode.childrenoftype(type)
+        children = herenode.childrenoftype(intention_type)
 
         for i, c in enumerate(children):
 
