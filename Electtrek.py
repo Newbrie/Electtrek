@@ -4104,11 +4104,11 @@ def deactivate_election(election_name):
         save_nodes(TREKNODE_FILE)
         persist(Treepolys, Fullpolys, Geo_index )
         return jsonify({"success": True, "message": f"Election {election_name} deactivated successfully."})
+    #  NEW FIXED CODE
     except Exception as e:
-        logger.error(f"Error deactivating election {election_name}: {str(e)}")
-        return jsonify({"success": False, "message": f"Error deactivating election {election_name}: {str(e)}"}), 500
-
-
+        import traceback
+        print(f"❌ Error deactivating election {election_name}: {str(e)}")
+        traceback.print_exc()
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required

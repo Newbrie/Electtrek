@@ -1176,30 +1176,43 @@ class TreeNode:
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
-
         for lev, ltype in elevels.items():
-            # lev is now 0, 1, 2...
-            # ltype is now 'country', 'ward', 'street'...
             print(f"Processing Level {lev}: {ltype}")
-            tree_gdf = Treepolys.get(ltype)
-            if tree_gdf is None or tree_gdf.empty:
-                print(f"____Ping/Treepolys {ltype} ->{elections.route()}- EMPTY")
-                continue
-            tot_tree = len(tree_gdf)
-            unique_name_tree = tree_gdf['NAME'].nunique()
-            unique_fid_tree = tree_gdf['FID'].nunique()
-            print(f"____Ping/Treepolys {ltype} - tot:{tot_tree} ->{elections.route()} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
 
-                # Same for Fullpolys
-            full_gdf = Fullpolys.get(ltype)
-            if full_gdf is None or full_gdf.empty:
-                print(f"____Ping/Fullpolys {ltype} - EMPTY ->{elections.route()}")
+            # Split bivalent layer strings into an iterable array
+            sub_types = [t.strip() for t in ltype.split("/")] if "/" in str(ltype) else [ltype]
+
+            # Check Treepolys across sub-types
+            valid_tree_type = None
+            for st in sub_types:
+                tree_gdf = Treepolys.get(st)
+                if tree_gdf is not None and not tree_gdf.empty:
+                    valid_tree_type = st
+                    tot_tree = len(tree_gdf)
+                    unique_name_tree = tree_gdf['NAME'].nunique()
+                    unique_fid_tree = tree_gdf['FID'].nunique()
+                    print(f"____Ping/Treepolys {st} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
+                    break
+
+            if not valid_tree_type:
+                print(f"____Ping/Treepolys {ltype} -> EMPTY")
                 continue
 
-            tot_full = len(full_gdf)
-            unique_name_full = full_gdf['NAME'].nunique()
-            unique_fid_full = full_gdf['FID'].nunique()
-            print(f"____Ping/Fullpolys {ltype} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full} ->{elections.route()}")
+            # Check Fullpolys across sub-types
+            valid_full_type = None
+            for st in sub_types:
+                full_gdf = Fullpolys.get(st)
+                if full_gdf is not None and not full_gdf.empty:
+                    valid_full_type = st
+                    tot_full = len(full_gdf)
+                    unique_name_full = full_gdf['NAME'].nunique()
+                    unique_fid_full = full_gdf['FID'].nunique()
+                    print(f"____Ping/Fullpolys {st} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_full_fid}")
+                    break
+
+            if not valid_full_type:
+                print(f"____Ping/Fullpolys {ltype} - EMPTY")
+                continue
 
 
         def strip_leaf_from_path(path):
