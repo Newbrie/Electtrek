@@ -1876,33 +1876,41 @@ class TreeNode:
     def create_data_branch(self, resolved_levels):
         from elector import electors
         from state import Treepolys, Fullpolys
+        import elections
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-        # The clean unpack you like
+        # Clean unpack
         (c_election, elevels), = resolved_levels.items()
 
-        nodelist = []
         CE = elections.CurrentElection.load(c_election)
-        electtype = elevels[self.level + 1]
-        print(f"✅ Creating {electtype} Data branch for election {c_election}")
+        raw_electtype = elevels[self.level + 1]
+        print(f"✅ Creating {raw_electtype} Data branch for election {c_election}")
 
         # ----------------------------------------
         # Load electors from ElectorManager
         # ----------------------------------------
-        areaelectors = electors.elector_for_path(resolved_levels,self.mapfile())
-
+        areaelectors = electors.elector_for_path(resolved_levels, self.mapfile())
 
         if areaelectors.empty:
             print(f"⚠️ No data from election {c_election} at node {self.value}")
             return []
 
-
         gotv_pct = CE['GOTV']
 
+        # 🎯 RESOLVE ALL POSSIBLE DATA TARGET LAYERS (e.g., ["walk", "polling_district"])
+        target_layers = []
+        if "/" in str(raw_electtype):
+            target_layers = [t.strip() for t in raw_electtype.split("/")]
+            print(f"🔄 Multi-branch data targets detected: {target_layers}")
+        else:
+            target_layers = [raw_electtype]
+
+        all_created_data_nodes = []
+
         # -------------------------------
-        # Refactored node elector processing
+        # Process each individual data sub-branch
         # -------------------------------
         try:
             from elector import shapecolumn
@@ -1914,17 +1922,30 @@ class TreeNode:
                 "walkleg": "-PRINT.html"
             }
 
-            if electtype in shapecolumn:
+            for electtype in target_layers:
+                if electtype not in shapecolumn:
+                    print(f"⚠️ Unknown elect type variant: {electtype}. Skipping sub-branch.")
+                    continue
+
                 colname = shapecolumn[electtype]
 
-                # We rename the 'electtype' column to 'Name' for the groupby
-                # Note: No manual if/elif filtering needed here anymore!
+                # Ensure the mapped target column actually exists in the elector dataset
+                if colname not in areaelectors.columns:
+                    print(f"⚠️ Column '{colname}' for type '{electtype}' not found in elector records. Skipping branch.")
+                    continue
 
+                print(f"🧭 Processing data branch for sub-type: '{electtype}' using column '{colname}'")
+
+                # Isolate target columns safely
                 select_cols = [colname, 'ENOP', 'Long', 'Lat', 'Zone']
-                # Only grab columns that actually exist in this specific CSV
                 existing_cols = [c for c in select_cols if c in areaelectors.columns]
 
                 df = areaelectors[existing_cols].rename(columns={colname: 'Name'})
+
+                # Skip aggregation if there is no name data to group by
+                if df['Name'].dropna().empty:
+                    print(f"⚠️ Data column '{colname}' contains only null values for this node territory. Skipping.")
+                    continue
 
                 # Aggregation
                 agg_dict = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count'}
@@ -1933,31 +1954,38 @@ class TreeNode:
 
                 nodeelectors = df.groupby(['Name']).agg(agg_dict).reset_index()
 
-                # Node creation
-                nodelist = self.create_name_nodes(
+                # Node creation for this specific target branch
+                branch_nodes = self.create_name_nodes(
                     resolved_levels,
                     gotv_pct,
-                    electtype,
+                    electtype,  # Stamped clean type context passed through
                     nodeelectors,
                     suffix_mapping.get(electtype, "-PRINT.html")
                 )
-            else:
-                print(f"⚠️ Unknown elect type: {electtype}")
+
+                print(f"📦 Created {len(branch_nodes)} nodes for type '{electtype}'")
+                all_created_data_nodes.extend(branch_nodes)
 
         except Exception as e:
             print("❌ Error during data branch generation:", e)
+            import traceback
+            traceback.print_exc()
             return []
 
         print(
-            f"✅ Created Data Branch for Election: {c_election} "
-            f"in area: {self.value} "
-            f"creating: {len(nodelist)} of type {electtype} "
-            f"from {len(areaelectors)} electors",
-            f"under resolved {resolved_levels} electors"
+            f"✅ Completed Multi-Data Branch for Election: {c_election} "
+            f"in area: {self.value} | Total nodes created: {len(all_created_data_nodes)} "
+            f"from {len(areaelectors)} base records."
         )
 
-        save_nodes(TREKNODE_FILE)
-        return nodelist
+        # Ensure global persistence method is clean
+        if 'save_nodes' in globals() or 'save_nodes' in dir(state):
+            try:
+                save_nodes(TREKNODE_FILE)
+            except NameError:
+                pass
+
+        return all_created_data_nodes
 
 
     def create_map_branch(self, resolved_levels):
@@ -1968,130 +1996,128 @@ class TreeNode:
         import state
         import elections
 
-        # 1. Debug the incoming structure
         print(f"DEBUG: Entering create_map_branch for {self.value} (Level {self.level})")
-        print(f"DEBUG: resolved_levels keys: {list(resolved_levels.keys())}")
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-        # The clean unpack
+        # Clean unpack
         (c_election, elevels), = resolved_levels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
+        raw_electtype = elevels.get(self.level + 1)
+        parenttype = self.type
 
-        # Use .get() to prevent crashes at the leaf level
-        electtype = elevels.get(self.level + 1)
-        parenttype = elevels.get(self.level)
-
-        if not electtype:
+        if not raw_electtype:
             print(f"DEBUG: No child level found for level {self.level + 1}. Exiting.")
             return None
 
-        print(f"🧭 create_map_branch {electtype} filtered by ({parenttype})")
+        # 🎯 RESOLVE ALL POSSIBLE CHILD LAYERS (Handle single strings or "ward/division")
+        target_layers = []
+        if "/" in str(raw_electtype):
+            target_layers = [t.strip() for t in raw_electtype.split("/")]
+            print(f"🔄 Multi-branch child target detected: {target_layers}")
+        else:
+            target_layers = [raw_electtype]
 
-        # Load parent and children layers
+        # Load parent geometry once
         parent_poly = Treepolys.get(parenttype)
         if parent_poly is None or parent_poly.empty:
-            raise ValueError(f"No polygons loaded for layer '{parenttype}'")
+            raise ValueError(f"No polygons loaded for parent layer '{parenttype}'")
 
-        # 2. Debug FID lookup
         try:
             search_fid = int(self.fid)
-            print(f"DEBUG: Searching {parenttype} for FID: {search_fid}")
             parent_row = parent_poly[parent_poly['FID'] == search_fid]
         except Exception as e:
             print(f"DEBUG: FID Conversion error: {e}")
             raise
 
         if parent_row.empty:
-            # Check if FIDs are actually strings in this layer
-            print(f"DEBUG: FID not found. Sample FIDs in {parenttype}: {parent_poly['FID'].head().tolist()}")
             raise Exception(f"EMPTY PARENT GEOMETRY for {self.value} (FID {self.fid})")
 
         parent_geom = parent_row.geometry.values[0]
 
-        # bbox
+        # Set up bounding boxes
         block = pd.DataFrame()
         self.bbox, self.latlongroid = self.get_bounding_box(parenttype, block)
 
-        # Load child polygons
-        ChildPolylayer = Treepolys.get(electtype)
-        if ChildPolylayer is None or ChildPolylayer.empty:
-            raise Exception(f"No geometries found for '{electtype}'")
-
-        print(f"📦 {len(ChildPolylayer)} candidate children for {self.value}")
-
-        # Filter children
-        threshold = Overlaps.get(electtype, 0.5)
-        selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
-        print(f"✅ Selected {len(selected_children)} children above threshold {threshold}")
-
-        fam_nodes = self.childrenoftype(electtype)
-        fam_values = {x.value for x in fam_nodes}
-
         CE = elections.CurrentElection.load(c_election)
-        gotv_pct = CE.get('GOTV', 0) # Safe get
+        gotv_pct = CE.get('GOTV', 0)
 
-        k = 0
-        j = 0
+        # This will hold ALL children created across ALL targeted layers
+        all_created_children = []
 
-        for _, limb in selected_children.iterrows():
-            newname = state.normalname(limb.NAME)
+        # 🔄 LOOP OVER EVERY TARGET LAYER (e.g., first 'ward', then 'division')
+        for electtype in target_layers:
+            ChildPolylayer = Treepolys.get(electtype)
 
-            if newname in fam_values:
-                j += 1
+            # Skip if the spatial table isn't loaded/active
+            if ChildPolylayer is None or ChildPolylayer.empty:
+                print(f"⚠️ Spatial table '{electtype}' is empty or not loaded. Skipping branch.")
                 continue
 
-            centroid_point = limb.geometry.representative_point()
-            here = (centroid_point.y, centroid_point.x)
+            print(f"🧭 Processing branch for layer '{electtype}' under parent '{parenttype}'")
 
-            print(f"➕ Adding child {newname} (FID: {limb.FID})")
+            # Filter child polygons within parent geometry
+            threshold = Overlaps.get(electtype, Overlaps.get(raw_electtype, 0.5))
+            selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
+            print(f"📦 Found {len(selected_children)} candidate children for layer '{electtype}'")
 
-            egg = TreeNode(
-                value=newname,
-                fid=limb.FID,
-                roid=here,
-                origin="ONS_MAPS",
-                node_type=electtype
-            )
+            fam_nodes = self.childrenoftype(electtype)
+            fam_values = {x.value for x in fam_nodes}
 
-            egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
+            k = 0
+            j = 0
 
-            # bbox + visuals
-            egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
+            for _, limb in selected_children.iterrows():
+                newname = state.normalname(limb.NAME)
 
-            # Color safety
-            color_idx = k % len(state.branchcolours)
-            egg.defcol = state.branchcolours[color_idx]
+                # Ensure uniqueness within this specific sub-layer type block
+                if newname in fam_values:
+                    j += 1
+                    continue
 
-            # 3. Debug the Update calls individually
-            try:
-                egg.updateParty()
-                egg.updateCandidates(elevels)
-                egg.updateTurnout(elevels)
-                egg.updateElectorate(elevels)
-                egg.updateGOTV(gotv_pct, elevels)
+                centroid_point = limb.geometry.representative_point()
+                here = (centroid_point.y, centroid_point.x)
 
-                fam_nodes.append(egg)
-                fam_values.add(newname)
-                k += 1
+                # Create the TreeNode stamped explicitly with this unique layer type
+                egg = TreeNode(
+                    value=newname,
+                    fid=limb.FID,
+                    roid=here,
+                    origin="ONS_MAPS",
+                    node_type=electtype
+                )
 
-            except Exception as e:
-                print(f"❌ ERROR during node update for {newname}: {str(e)}")
-                # This will now tell you EXACTLY which part of updateParty/Turnout etc failed
-                self.remove_child(egg)
-                raise
+                # Attach node structurally to parent
+                egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
+                egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
 
-        if not fam_nodes:
-            print(f"⚠️ No children created for {self.value}")
+                # Set branch color based on absolute index
+                color_idx = (len(all_created_children) + k) % len(state.branchcolours)
+                egg.defcol = state.branchcolours[color_idx]
 
-        print(f"___At {self.value}: added {k}, existing {j}, total now {len(fam_nodes)}")
+                try:
+                    egg.updateParty()
+                    egg.updateCandidates(elevels)
+                    egg.updateTurnout(elevels)
+                    egg.updateElectorate(elevels)
+                    egg.updateGOTV(gotv_pct, elevels)
 
-        # Ensure save_nodes and TREKNODE_FILE are defined globally or imported
-        # save_nodes(TREKNODE_FILE)
+                    fam_nodes.append(egg)
+                    all_created_children.append(egg)
+                    fam_values.add(newname)
+                    k += 1
 
-        return fam_nodes
+                except Exception as e:
+                    print(f"❌ ERROR during node update for {newname} ({electtype}): {str(e)}")
+                    self.remove_child(egg)
+                    raise
 
+            print(f"✅ Layer '{electtype}': Added {k}, skipped duplicate {j}. Total branch size: {len(fam_nodes)}")
+
+        if not all_created_children:
+            print(f"⚠️ Warning: No children created anywhere under {self.value} for config target: {raw_electtype}")
+
+        return all_created_children
 
 
     def create_area_map(self, resolved_levels, static=False):

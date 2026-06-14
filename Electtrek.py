@@ -553,7 +553,7 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
     Full background normalisation routine with targeted DEBUG instrumentation
-    to track the Ashford data disappearance.
+
     """
     import logging, os, traceback, re, pandas as pd
     from shapely.geometry import Point, Polygon
@@ -781,7 +781,42 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         print(f"🔍 DEBUG [5/5] Spatial Assignment (Point-in-Polygon):")
         print(f"   > Handing {len(new_only_df)} records to 'assign_areas'...")
+# =========================================================================
+        # --- PASSIVE DIAGNOSTIC INSPECTOR (SAFE TO RUN) ---
+        # =========================================================================
+        print("\n🚨 ==================== SCHEMA MISMATCH AUDIT ====================")
+        print(f"📊 Total Rows Handed Over: {len(new_only_df)}")
 
+        # 1. Capture the exact state of your DataFrame columns
+        exact_columns = list(new_only_df.columns)
+        print(f"📋 Exact DataFrame Columns currently in memory:\n   {exact_columns}")
+
+        # 2. Capture exactly what the elevels configuration dictionary says
+        print(f"\n⚙️ Raw elevels Dictionary Configuration:\n   {elevels}")
+
+        # 3. Simulate the exact string lookup match checks to catch the drift
+        print("\n🔬 Simulating Layer Name Lookups (Case-Sensitivity Check):")
+        for idx, layer_name in elevels.items():
+            print(f"   ↳ Level {idx} Config Type is: '{layer_name}'")
+
+            # Split out any bivalent targets like 'ward/division'
+            sub_types = [t.strip() for t in str(layer_name).split("/")] if "/" in str(layer_name) else [layer_name]
+
+            for st in sub_types:
+                # Direct check for lowercase
+                exact_match = st in exact_columns
+                # Case-insensitive check to find hidden variants
+                case_insensitive_matches = [c for c in exact_columns if c.lower() == st.lower()]
+
+                if exact_match:
+                    print(f"      ✅ Perfect Match found for column name: '{st}'")
+                elif case_insensitive_matches:
+                    print(f"      ❌ MISMATCH! Config expected lowercase '{st}', but DataFrame has capitalized: {case_insensitive_matches}")
+                else:
+                    print(f"      ❌ MISSING! Neither '{st}' nor any case variant exists in the DataFrame columns.")
+
+        print("==================================================================\n")
+        # =========================================================================
         assigned_df = assign_areas_by_polling_district(new_only_df, resolved_levels, progress=progress)
 
         teamsize = int(CElection.get('teamsize', 5))
