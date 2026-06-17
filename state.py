@@ -692,6 +692,12 @@ def ensure_treepolys_with_index(
     # 2. MAIN LOOP: Process Every Level in the Election Schema
     # -------------------------------------------------------------
     for level, compound_layer_type in elevels.items():
+        # --- FIX: Stop processing if we exceed Level 4 ---
+        if int(level) > 4:
+            logging.info(f"[LEVEL {level}] Exceeded maximum processing level (4). Terminating drill-down early.")
+            break
+        # -------------------------------------------------
+
         t(f"LEVEL {level} ({compound_layer_type}) start")
 
         # Split compound tokens dynamically ("ward/division" -> ['ward', 'division'])
