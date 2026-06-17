@@ -729,28 +729,22 @@ def ensure_treepolys_with_index(
                 src = layer["src"]
                 field = layer["field"]
 
-                # Alternative source resolution
-                county_name = get_path_step(sourcepath, 2) if sourcepath else ""
-
-                # Default fallbacks
+                # Default fallbacks (if src is a single string)
                 chosen_src = src
                 chosen_field = field
 
-                # If we have our bivalent list configuration, select the right index
-                if isinstance(src, list) and len(src) == 2:
-                    # Guard against county_name being None/empty safely
-                    safe_county = str(county_name).upper() if county_name else ""
+                # If we have a list configuration, scan for the correct file dynamically
+                if isinstance(src, list):
+                    # Default to the first item if no keyword match is found
+                    chosen_src = src[0]
+                    chosen_field = field[0] if isinstance(field, list) else field
 
-                    # Check if the second file choice targets our active county
-                    if src[1] and safe_county and safe_county in str(src[1]).upper():
-                        chosen_src = src[1]
-                        chosen_field = field[1] if isinstance(field, list) else field
-                    else:
-                        chosen_src = src[0]
-                        chosen_field = field[0] if isinstance(field, list) else field
-
-                # If src was not a list but somehow evaluated to None or an unexpected object,
-                # your script will now bypass the string checking gracefully.
+                    # Scan the filenames for the word "surrey"
+                    for index, filename in enumerate(src):
+                        if filename and "surrey" in str(filename).lower():
+                            chosen_src = src[index]
+                            chosen_field = field[index] if isinstance(field, list) else field
+                            break  # Match found, stop scanning
 
                 layer_local = dict(layer)
                 layer_local["src"] = chosen_src
