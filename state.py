@@ -844,6 +844,11 @@ def ensure_treepolys_with_index(
                         matched_path = this_path
                         matched_this_level = this_path
                         match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
+                else:
+                    # 🎯 FIX: Track deep path layers (Level 4+) beyond your initial target steps
+                    matched_path = this_path
+                    matched_this_level = this_path
+                    match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
 
                 # Append discovered nodes straight into the active parents cache
                 row_copy = row.copy()
