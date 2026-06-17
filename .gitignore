@@ -1,3 +1,4 @@
 friends/
 __pycache__/
-trekusers.db
+trekusers.d
+**/.DS_Store
