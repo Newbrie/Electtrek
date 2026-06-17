@@ -737,7 +737,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def add_voronoi(self, rlevels, node, static=False, intention_type):
+    def add_voronoi(self, rlevels, node, static=False, intention_type=None):
         from shapely.geometry import Point
         from shapely.ops import nearest_points
         import numpy as np
