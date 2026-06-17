@@ -1254,6 +1254,7 @@ class TreeNode:
         self_path = split_clean_path(self.mapfile())
         dest_parts = split_clean_path(path_str)
 
+        print(f"🪜 [DEBUG] dest_path: {dest_path}")
         print(f"🪜 [DEBUG] self_path: {self_path}")
         print(f"🪜 [DEBUG] dest_parts: {dest_parts}")
 
