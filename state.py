@@ -706,13 +706,15 @@ def ensure_treepolys_with_index(
         for layer_type in sub_layers:
             layer = layer_defs.get((level, layer_type))
             if not layer:
-                logging.warning(f"[LEVEL {level}] No layer definition for target: {layer_type}")
+                logging.warning(f"[LEVEL {level}] No layer definition found in layer_defs for target key: {(level, layer_type)}")
                 continue
 
             select_name = steps[level] if level < len(steps) else None
             roid = here
             parent_rows = active_parent_rows.get(level, [None])
             all_results = []
+
+            logging.info(f"[LEVEL {level} - sub_layer: {layer_type}] Starting processing pass with {len(parent_rows)} active parent rows.")
 
             # Load Layers
             for parent_row in parent_rows:
@@ -726,7 +728,6 @@ def ensure_treepolys_with_index(
 
                 src = layer["src"]
                 field = layer["field"]
-
 
                 # Alternative source resolution
                 county_name = get_path_step(sourcepath, 2) if sourcepath else ""
@@ -754,6 +755,8 @@ def ensure_treepolys_with_index(
                 layer_local = dict(layer)
                 layer_local["src"] = chosen_src
                 layer_local["field"] = chosen_field
+
+                logging.debug(f"[LEVEL {level} - {layer_type}] Calling load_layer with src: {chosen_src}, field: {chosen_field}")
 
                 name, tree_gdf, full_gdf = load_layer(
                     layer=layer_local,
@@ -783,8 +786,10 @@ def ensure_treepolys_with_index(
             # Combine & Upsert Dataframes
             if all_results:
                 tree_gdf = pd.concat(all_results, ignore_index=True)
+                logging.info(f"[LEVEL {level} - {layer_type}] Combined all_results total rows loaded: {len(tree_gdf)}")
             else:
                 tree_gdf = gpd.GeoDataFrame()
+                logging.warning(f"[LEVEL {level} - {layer_type}] No spatial records found across any parent branches. tree_gdf is EMPTY.")
 
             if tree_gdf.empty:
                 continue
@@ -792,9 +797,13 @@ def ensure_treepolys_with_index(
             existing = get_treepoly(layer_type)
             if existing is None:
                 new_tree_gdf = tree_gdf
+                logging.info(f"[LEVEL {level} - {layer_type}] No existing Treepolys for this layer. Preparing to insert all {len(new_tree_gdf)} rows.")
             else:
                 new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
+                logging.info(f"[LEVEL {level} - {layer_type}] Found {len(existing)} existing shapes. Filtered down to {len(new_tree_gdf)} completely NEW features to insert.")
 
+            # Trace execution precisely at point of storage insertion
+            logging.info(f"💾 [TREEPOLY INSERTION] Committing layer_type '{layer_type}' details into global store. Row count to upsert: {len(new_tree_gdf)}")
             set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
 
             # BUILD GEO INDEX & SEED NEXT LEVELS
