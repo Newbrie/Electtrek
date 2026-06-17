@@ -1370,6 +1370,7 @@ class TreeNode:
         from layers import make_feature_layers, ExtendedFeatureGroup
         from elections import CurrentElection
         from baked_data import BakedDataManager
+        import state # Ensure global state is imported for branchcolours
 
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1404,15 +1405,31 @@ class TreeNode:
             return tag_layer
 
         def get_safe_layer(level_idx):
-            key = elevels.get(level_idx)
-            if not key:
-                return None
-            if key in used_keys:
-                new_layer_instance = make_feature_layers()[key]
-                new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
-                return new_layer_instance
-            used_keys.add(key)
-            return factory[key]
+            raw_key = elevels.get(level_idx)
+            if not raw_key:
+                return []  # Return empty list instead of None for easier iteration downstream
+
+            # 1. Unpack bi-valent keys if a slash exists, otherwise make a single-element list
+            keys_to_process = raw_key.split('/') if '/' in raw_key else [raw_key]
+            resolved_layers = []
+
+            for key in keys_to_process:
+                # 2. Check if this specific sub-key is missing from the factory configuration
+                if key not in factory:
+                    print(f"⚠️ Warning: Component layer '{key}' from raw key '{raw_key}' not found in factory.")
+                    continue
+
+                # 3. Handle name collisions using your used_keys tracking logic
+                if key in used_keys:
+                    # Dynamically instantiate a fresh layer instance
+                    new_layer_instance = make_feature_layers()[key]
+                    new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
+                    resolved_layers.append(new_layer_instance)
+                else:
+                    used_keys.add(key)
+                    resolved_layers.append(factory[key])
+
+            return resolved_layers
 
         # -------------------------------------------------
         # 📂 BASELINE DATA: Establish Base Node Lists Upfront
@@ -1428,31 +1445,54 @@ class TreeNode:
         # -------------------------------------------------
         totalleaf = 0
         grandchildnodelist = []
+
         if self.level < 5:  # Under level 5, level + 2 safely exists
-            grandchild_layer = get_safe_layer(self.level + 2)
-            if grandchild_layer and childnodelist:
-                grandchildnodelist = [grandchild for child in childnodelist for grandchild in child.children]
+            grandchild_layers = get_safe_layer(self.level + 2)
 
-                if grandchildnodelist:
-                    # Capture how many items were successfully written
-                    leaf_count = grandchild_layer.create_layer(rlevels, grandchildnodelist, static=False)
-                    totalleaf += leaf_count
+            for grandchild_layer in grandchild_layers:
+                # 1. 🔎 Check if grandchildren exist for this specific layer type
+                has_grandchildren = False
+                if childnodelist:
+                    has_grandchildren = any(
+                        gc.type == grandchild_layer.key
+                        for child in childnodelist
+                        for gc in child.children
+                    )
 
-                    # 🛡️ FIX: Only add to the map if elements were actually created!
-                    if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
-                        grandchild_layer.show = True
-                        selected.append(grandchild_layer)
+                if has_grandchildren:
+                    print(f"Processing layer asset: {grandchild_layer.name}")
+
+                    # 2. Extract only the grandchildren that belong to this specific layer type
+                    layer_specific_grandchildren = [
+                        gc for child in childnodelist
+                        for gc in child.children
+                        if gc.type == grandchild_layer.key
+                    ]
+
+                    if layer_specific_grandchildren:
+                        # 3. Capture how many items were successfully written for THIS layer
+                        leaf_count = grandchild_layer.create_layer(rlevels, layer_specific_grandchildren, static=False)
+                        totalleaf += leaf_count
+
+                        # 4. 🛡️ Only add to the map if elements were actually created!
+                        if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
+                            grandchild_layer.show = True
+                            selected.append(grandchild_layer)
+
+                            # Keep track of all processed grandchildren across both layers for reference downstream
+                            grandchildnodelist.extend(layer_specific_grandchildren)
 
         # -------------------------------------------------
         # 2️⃣ Child Layer (Level + 1)
         # -------------------------------------------------
-        if self.level < 6: #guard for node with no children
-            child_layer = get_safe_layer(self.level + 1)
-            if child_layer and childnodelist:
+        if self.level < 6: # guard for node with no children
+            # 🏁 FIX: Extract the first layer from the returned list safely
+            child_layers = get_safe_layer(self.level + 1)
+            if child_layers and childnodelist:
+                child_layer = child_layers[0]
                 leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
                 totalleaf += leaf_count
 
-                # 🛡️ FIX: Same safety guard here. If a child layer is empty, don't break the UI.
                 if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
                     child_layer.show = True
                     selected.append(child_layer)
@@ -1460,32 +1500,36 @@ class TreeNode:
         # -------------------------------------------------
         # 3️⃣ Sibling Layer (Current Level)
         # -------------------------------------------------
-        if self.level > 0: #guard for node no siblings
-            sibling_layer = get_safe_layer(self.level)
-            if sibling_layer:
+        if self.level > 0: # guard for node no siblings
+            # 🏁 FIX: Extract the first layer from the returned list safely
+            sibling_layers = get_safe_layer(self.level)
+            if sibling_layers:
+                sibling_layer = sibling_layers[0]
                 sibling_layer.create_layer(rlevels, [self.parent], static=False)
                 selected.append(sibling_layer)
 
         # -------------------------------------------------
         # 4️⃣ Parent Layer (Level - 1)
         # -------------------------------------------------
-        if self.level > 1: # guard for node with no grandparent to have parents as children
-            parent_layer = get_safe_layer(self.level - 1)
-            if parent_layer:
+        if self.level > 1: # guard for node with no grandparent
+            # 🏁 FIX: Extract the first layer from the returned list safely
+            parent_layers = get_safe_layer(self.level - 1)
+            if parent_layers:
+                parent_layer = parent_layers[0]
                 parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
                 selected.append(parent_layer)
 
         # -------------------------------------------------
         # 5️⃣ Marker Asset Layer
         # -------------------------------------------------
-        selected.append(factory["marker"])
+        if "marker" in factory:
+            selected.append(factory["marker"])
 
         # -------------------------------------------------
         # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
         # -------------------------------------------------
         from folium.plugins import MarkerCluster
 
-        # Always feed the deepest nodes available into highlights to match your level + 1 rules
         target_highlight_nodes = grandchildnodelist if grandchildnodelist else childnodelist
 
         if target_highlight_nodes:
@@ -1494,7 +1538,7 @@ class TreeNode:
                 name="Elector Overlay: [AV] Postal Voters",
                 overlay=True,
                 control=True,
-                show=False  # Hidden by default to save initial paint load
+                show=False
             )
             postal_layer.options = postal_layer.options or {}
             postal_layer.options.update({
@@ -1502,13 +1546,10 @@ class TreeNode:
                 "layer_type": "av_highlight"
             })
 
-            # Create ONE central cluster group inside the layer container
             postal_cluster = MarkerCluster(name="Postal Voters", control=False).add_to(postal_layer)
 
-            # Explicitly loop and build highlights node by node directly into the cluster
             postal_markers_count = 0
             for target_node in target_highlight_nodes:
-                # 🎯 FIX: Call the method on POSTAL_LAYER, and pass target_node down as an argument
                 postal_markers_count += postal_layer.add_tag_layer(
                     rlevels=rlevels,
                     node=target_node,
@@ -1519,17 +1560,15 @@ class TreeNode:
                     target_cluster=postal_cluster
                 )
 
-            # Only append the layer if markers were actually generated
             if postal_markers_count > 0:
                 selected.append(postal_layer)
-
 
             # --- B. Pledge Highlights Layer ---
             pledge_layer = ExtendedFeatureGroup(
                 name="Elector Overlay: [VI] Pledged Voters",
                 overlay=True,
                 control=True,
-                show=False  # Hidden by default
+                show=False
             )
             pledge_layer.options = pledge_layer.options or {}
             pledge_layer.options.update({
@@ -1537,13 +1576,10 @@ class TreeNode:
                 "layer_type": "vi_highlight"
             })
 
-            # Create ONE central cluster group inside the layer container
             pledge_cluster = MarkerCluster(name="Reform Pledges", control=False).add_to(pledge_layer)
 
-            # Explicitly loop and build highlights node by node directly into the cluster
             pledge_markers_count = 0
             for target_node in target_highlight_nodes:
-                # 🎯 FIX: Call the method on PLEDGE_LAYER, and pass target_node down as an argument
                 pledge_markers_count += pledge_layer.add_tag_layer(
                     rlevels=rlevels,
                     node=target_node,
@@ -1554,7 +1590,6 @@ class TreeNode:
                     target_cluster=pledge_cluster
                 )
 
-            # Only append the layer if markers were actually generated
             if pledge_markers_count > 0:
                 selected.append(pledge_layer)
 
@@ -1577,6 +1612,7 @@ class TreeNode:
             selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
+
 
     def sumupVI(self,viValue):
         origin = self
