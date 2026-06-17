@@ -1281,19 +1281,18 @@ class TreeNode:
         moved = False
         levels_dict = elevels
 
-        # 2. Find the maximum level integer (e.g., 5)
+        # Find the maximum level integer (e.g., 7)
         max_level = max(elevels)
 
         for part in down_path:
             next_level = node.level + 1
-            # 1. Extract the inner dictionary of {int: str}
 
-            # 3. Perform the check
+            # Prevent breaking if we overshoot known levels
             if next_level > max_level:
-                # Your logic for exceeding the tree depth
-                pass
+                print(f"⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}.")
+                break
 
-            ntype = elevels[next_level]
+            ntype = str(elevels[next_level]) # Force string type checking
 
             print(f"➡️ [DEBUG] At node: {node.value} (L{node.level}), looking for part '{part}' at level {next_level} (type={ntype})")
             print(f"   Children before match: {[c.value for c in node.children]}")
@@ -1301,32 +1300,49 @@ class TreeNode:
             match = next((c for c in node.children if c.value == part), None)
 
             if create and not match:
-                print(f"   ⚙️ [DEBUG] Creating branch '{ntype}' under {node.value} to try and generate '{part}'")
+                print(f"   ⚙️ [DEBUG] Attempting branch creation for '{part}' under {node.value} (Level {next_level})")
+
+                # 🌟 DYNAMIC BIVALENT RESOLUTION: Try the primary logical fork first
                 try:
                     if next_level <= 4:
                         node.create_map_branch(rlevels)
                     else:
                         node.create_data_branch(rlevels)
                 except Exception as e:
-                    print(f"   ⚠️ [DEBUG] Branch creation failed: {e}")
+                    print(f"   ⚠️ [DEBUG] Primary branch creation failed: {e}")
 
+                # Re-check for a match
                 match = next((c for c in node.children if c.value == part), None)
+
+                # 🌟 FIX: Dynamic Bivalent Fallback Check!
+                # If there's still no match, and the type definition contains a "/", try the alternative method.
+                if not match and "/" in ntype:
+                    print(f"   🔄 [DEBUG] Bivalent Level Detected ('{ntype}'). Primary method missed target. Running alternative execution...")
+                    try:
+                        if next_level <= 4:
+                            node.create_data_branch(rlevels)   # Try data instead
+                        else:
+                            node.create_map_branch(rlevels)    # Try map instead
+                    except Exception as e:
+                        print(f"   ⚠️ [DEBUG] Alternative bivalent branch creation failed: {e}")
+
+                    # Final check for this pass
+                    match = next((c for c in node.children if c.value == part), None)
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
             if not match:
-                # no mstch found so best to return current node
+                # No match found, so best to fall back gracefully to the current node
                 if node.parent:
-                    print(f"[DEBUG] Ascended to: {node.parent.value} "
+                    print(f"[DEBUG] Ascended fallback to: {node.parent.value} "
                           f"(L{node.parent.level}), "
                           f"children: {[c.value for c in node.parent.children]}")
+                    return node.parent
                 else:
-                    print("[DEBUG] Node has no parent (root node)")
-
-                return node.parent  # or raise a controlled exception
+                    print("[DEBUG] Node has no parent (root node). Staying at root.")
+                    return node
 
             node = match
-
             moved = True
             print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
@@ -1339,24 +1355,34 @@ class TreeNode:
         print(f"✅ [DEBUG] Reached node: {node.value} (L{node.level}) with children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-
-        # ──────────────────────────────
         # Step 6: always expand children at final node
         next_level = node.level
 
         print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max_level} createmode :{create} rlevels: {rlevels}")
 
         if next_level <= max_level and create:
-            children_type = elevels[next_level]
+            children_type = str(elevels[next_level])
             print(f"🌿 [DEBUG] Expanding children of {node.level}-{node.value} as {children_type}")
+
+            # Execute primary expansion pass
             try:
                 if node.level < 4:
                     node.create_map_branch(rlevels)
                 else:
                     node.create_data_branch(rlevels)
             except Exception as e:
-                print(f"⚠️ [DEBUG] Branch expansion failed: {e}")
+                print(f"⚠️ [DEBUG] Primary branch expansion failed: {e}")
 
+            # 🌟 FIX: Exhaustively fire secondary strategy if current level specifies bivalent parsing with a "/"
+            if "/" in children_type:
+                print(f"🔄 [DEBUG] Level is bivalent ('{children_type}'). Expanding secondary alternative branches for final node {node.value}")
+                try:
+                    if node.level < 4:
+                        node.create_data_branch(rlevels)
+                    else:
+                        node.create_map_branch(rlevels)
+                except Exception as e:
+                    print(f"⚠️ [DEBUG] Secondary bivalent expansion failed: {e}")
 
         return node
 
