@@ -784,18 +784,16 @@ def ensure_treepolys_with_index(
 
             matched_this_level = None
 
+            # ... inside the row iteration loop ...
             for _, row in tree_gdf.iterrows():
                 child_name = normalname(row["NAME"])
                 parent_path = row.get("_parent_path", ROOT)
 
-                if child_name == ROOT:
-                    fid_to_path[row["FID"]] = ROOT
-                    row_copy = row.copy()
-                    row_copy["_parent_path"] = ROOT
-                    active_parent_rows[next_level].append(row_copy)
-                    continue
+                # 🏁 FIX: Treat level 0 rows as direct children of the absolute ROOT
+                if level == 0:
+                    parent_path = ROOT
 
-                this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}/{child_name}"
+                this_path = f"{ROOT}/{child_name}" if parent_path == ROOT else f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
                     Geo_index[this_path] = {
@@ -805,14 +803,19 @@ def ensure_treepolys_with_index(
                         "children": []
                     }
 
+                # Connect the absolute ROOT node to this nation entry
                 if parent_path in Geo_index:
                     if this_path not in Geo_index[parent_path]["children"]:
                         Geo_index[parent_path]["children"].append(this_path)
 
                 fid_to_path[row["FID"]] = this_path
 
-                # Match tracking
-                if level < len(steps):
+                # Force match on level 0 if the root step name matches or if we're resolving downwards
+                if level == 0:
+                    matched_path = this_path
+                    matched_this_level = this_path
+                    match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
+                elif level < len(steps):
                     expected_name = normalname(steps[level])
                     if child_name == expected_name:
                         matched_path = this_path
