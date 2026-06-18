@@ -1170,6 +1170,49 @@ class TreeNode:
         from flask import session
         from elector import electors
 
+        # Move helper utilities cleanly to the top of the scope
+        def strip_leaf_from_path(p_str):
+            leaf = p_str.split("/")[-1]
+            for suffix in [
+                "-PRINT.html", "-MAP.html", "-CAL.html", "-WALKS.html",
+                "-ZONES.html", "-PDS.html", "-DIVS.html",
+                "-WARDS.html", "-DEMO.html"
+            ]:
+                if leaf.endswith(suffix):
+                    leaf = leaf.replace(suffix, "")
+            return leaf.split("--")[-1]
+
+        def split_clean_path(p_str):
+            # Clean out empty spaces/trailing slashes first
+            p_str = p_str.strip("/")
+            if not p_str:
+                return []
+
+            leaf = strip_leaf_from_path(p_str)
+
+            # If it's a deep path with multiple steps
+            if "/" in p_str:
+                dir_path = "/".join(p_str.split("/")[:-1])
+                raw_parts = dir_path.split("/")
+            else:
+                raw_parts = []
+
+            parts = [
+                p for p in raw_parts
+                if p and p not in ["DIVS", "PDS", "WALKS", "WARDS"] and "@@@" not in p
+            ]
+
+            if leaf and leaf not in parts:
+                parts.append(leaf)
+
+            # 🎯 CRITICAL FIX: Eliminate sequential back-to-back duplicate root mutations
+            sanitized_parts = []
+            for item in parts:
+                if not sanitized_parts or item.upper() != sanitized_parts[-1].upper():
+                    sanitized_parts.append(item)
+
+            return sanitized_parts
+
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
         # The clean unpack
@@ -1207,44 +1250,27 @@ class TreeNode:
                     tot_full = len(full_gdf)
                     unique_name_full = full_gdf['NAME'].nunique()
                     unique_fid_full = full_gdf['FID'].nunique()
-                    print(f"____Ping/Fullpolys {st} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_full_fid}")
+                    # 🎯 FIX: Changed variable from typo 'unique_full_fid' to 'unique_fid_full'
+                    print(f"____Ping/Fullpolys {st} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
                     break
 
             if not valid_full_type:
                 print(f"____Ping/Fullpolys {ltype} - EMPTY")
                 continue
 
-
-        def strip_leaf_from_path(path):
-            leaf = path.split("/")[-1]
-            for suffix in [
-                "-PRINT.html", "-MAP.html", "-CAL.html", "-WALKS.html",
-                "-ZONES.html", "-PDS.html", "-DIVS.html",
-                "-WARDS.html", "-DEMO.html"
-            ]:
-                if leaf.endswith(suffix):
-                    leaf = leaf.replace(suffix, "")
-            return leaf.split("--")[-1]
-
-        def split_clean_path(path):
-            leaf = strip_leaf_from_path(path)
-            dir_path = "/".join(path.strip("/").split("/")[:-1])
-            parts = [
-                p for p in dir_path.split("/")
-                if p and p not in ["DIVS", "PDS", "WALKS", "WARDS"] and "@@@" not in p
-            ]
-            if leaf and leaf not in parts:
-                parts.append(leaf)
-            return parts
-
         # ──────────────────────────────
         # Step 0: keyword handling
         full_dest_path = dest_path.strip()
-        path_only, *kw = full_dest_path.rsplit(" ", 1)
 
-        if kw and kw[0].lower() in LEVEL_ZOOM_MAP:
-            keyword = kw[0].lower()
-            path_str = path_only
+        # Guard clause against paths with no extra parameter tokens
+        if " " in full_dest_path:
+            path_only, *kw = full_dest_path.rsplit(" ", 1)
+            if kw and kw[0].lower() in LEVEL_ZOOM_MAP:
+                keyword = kw[0].lower()
+                path_str = path_only
+            else:
+                keyword = None
+                path_str = full_dest_path
         else:
             keyword = None
             path_str = full_dest_path
@@ -1262,6 +1288,7 @@ class TreeNode:
         # Step 2: common ancestor
         common_len = get_common_prefix_len(self_path, dest_parts)
         print(f"🔗 [DEBUG] Common prefix length: {common_len}")
+
 
         node = self
 
