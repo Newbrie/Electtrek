@@ -605,153 +605,212 @@ def pd_not_empty(val):
         return False
     return True
 
+def initialise_root(ROOT):
+    from state import Geo_index
 
-def ensure_treepolys_with_index(
-    *,
-    territory: str | None,
-    sourcepath: str | None,
-    here: tuple[float, float] | None,
-    boundary_geom=None,
-    resolved_levels: dict[str, dict[int, str]],
-    parent_levels: dict[int, str]
+    if ROOT not in Geo_index:
+        Geo_index[ROOT] = {
+            "level": "root",
+            "name": ROOT,
+            "parent": None,
+            "children": []
+        }
+def preload_cached_geometry(elevels, ROOT):
+
+    active_parent_rows = {}
+    fid_to_path = {}
+
+    for lvl, compound_layer_type in elevels.items():
+
+        sub_layers = [
+            l.strip()
+            for l in compound_layer_type.split('/')
+            if l.strip()
+        ]
+
+        for l_type in sub_layers:
+
+            existing_polys = get_treepoly(l_type)
+
+            if existing_polys is not None:
+
+                if lvl not in active_parent_rows:
+                    active_parent_rows[lvl] = []
+
+                existing_fids = {
+                    r["FID"]
+                    for r in active_parent_rows[lvl]
+                    if r is not None and "FID" in r
+                }
+
+                for _, row in existing_polys.iterrows():
+
+                    if row.get("FID") not in existing_fids:
+                        active_parent_rows[lvl].append(row)
+
+    return active_parent_rows, fid_to_path
+
+def reconstruct_cached_paths(
+    active_parent_rows,
+    fid_to_path,
+    ROOT
+):
+
+    for lvl, rows in active_parent_rows.items():
+
+        for r in rows:
+
+            if (
+                r is not None
+                and "FID" in r
+                and "_parent_path" in r
+            ):
+
+                child_name = normalname(r["NAME"])
+
+                if lvl == 0:
+                    this_path = ROOT
+                else:
+                    parent_path = r["_parent_path"]
+
+                    if parent_path == ROOT:
+                        this_path = f"{ROOT}/{child_name}"
+                    else:
+                        this_path = f"{parent_path}/{child_name}"
+
+                fid_to_path[r["FID"]] = this_path
+
+    if not active_parent_rows.get(0):
+        active_parent_rows[0] = [None]
+
+
+def process_levels(
+    elevels,
+    parent_levels,
+    steps,
+    here,
+    boundary_geom,
+    active_parent_rows,
+    fid_to_path,
+    ROOT
 ):
     import geopandas as gpd
     import pandas as pd
     import logging
-    from state import Treepolys, Geo_index
-    from nodes import persist, FACEENDING
-
-    # 1. Define constants first
-    ROOT = "UNITED_KINGDOM"
-    if ROOT not in Geo_index:
-        Geo_index[ROOT] = {"level": "root", "name": ROOT, "parent": None, "children": []}
-
-    t("start")
-
-    if boundary_geom is not None:
-        boundary_geom = boundary_geom.buffer(0)
-
-    if not resolved_levels:
-        raise ValueError("resolved_levels is required")
-
-    # ✅ Keep your guard: exactly 1 election wrapping the levels dictionary
-    assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-
-    # Clean unpack of the single election
-    (c_election, elevels), = resolved_levels.items()
-
-    logging.debug(f"Starting treepolys with territory={territory} and sourcepath={sourcepath}")
-
-    sourcepath = sourcepath or territory
-    steps = stepify(sourcepath) if sourcepath else []
-
-    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
-
-    # Initialize parent and path tracking collections
-    active_parent_rows = {}
-    fid_to_path = {}
-
-    # -------------------------------------------------------------
-    # 1. PRE-LOAD AND AGGREGATE ALL CACHED GEOMETRIES
-    # -------------------------------------------------------------
-    for lvl, compound_layer_type in elevels.items():
-        # Handle possible compound strings like "ward/division" during seeding
-        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
-
-        for l_type in sub_layers:
-            existing_polys = get_treepoly(l_type)
-            if existing_polys is not None:
-                if lvl not in active_parent_rows:
-                    active_parent_rows[lvl] = []
-
-                # Deduplicate rows by FID
-                existing_fids = {r["FID"] for r in active_parent_rows[lvl] if r is not None and "FID" in r}
-
-                for _, row in existing_polys.iterrows():
-                    if row.get("FID") not in existing_fids:
-                        active_parent_rows[lvl].append(row)
-
-    # Reconstruct absolute paths for all pre-loaded database objects
-    for lvl, rows in active_parent_rows.items():
-        for r in rows:
-            if r is not None and "FID" in r:
-                if "_parent_path" in r:
-                    child_name = normalname(r["NAME"])
-                    parent_path = r["_parent_path"]
-                    this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}"
-                    fid_to_path[r["FID"]] = this_path
-                    logging.debug(f"[LEVEL {lvl} - FID:{r['FID']}] Cmaps to path: {this_path}")
-
-    # Guarantee Level 0 has a valid root reference point to build from
-    if not active_parent_rows.get(0):
-        active_parent_rows[0] = [None]
+    from state import Geo_index
 
     matched_path = ROOT
     match_full_filepath = None
 
+    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
+
     # -------------------------------------------------------------
-    # 2. MAIN LOOP: Process Every Level in the Election Schema
+    # MAIN LOOP
     # -------------------------------------------------------------
     for level, compound_layer_type in elevels.items():
-        # --- FIX: Stop processing if we exceed Level 4 ---
+
         if int(level) > 4:
-            logging.info(f"[LEVEL {level}] Exceeded maximum processing level (4). Terminating drill-down early.")
+            logging.info(
+                f"[LEVEL {level}] Exceeded maximum processing level (4). "
+                "Terminating drill-down early."
+            )
             break
-        # -------------------------------------------------
 
         t(f"LEVEL {level} ({compound_layer_type}) start")
 
-        # Split compound tokens dynamically ("ward/division" -> ['ward', 'division'])
-        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
+        sub_layers = [
+            l.strip()
+            for l in compound_layer_type.split('/')
+            if l.strip()
+        ]
 
         for layer_type in sub_layers:
+
             layer = layer_defs.get((level, layer_type))
+
             if not layer:
-                logging.warning(f"[LEVEL {level}] No layer definition found in layer_defs for target key: {(level, layer_type)}")
+                logging.warning(
+                    f"[LEVEL {level}] No layer definition found "
+                    f"for {(level, layer_type)}"
+                )
                 continue
 
             select_name = steps[level] if level < len(steps) else None
             roid = here
+
             parent_rows = active_parent_rows.get(level, [None])
+
             all_results = []
 
-            logging.info(f"[LEVEL {level} - sub_layer: {layer_type}] Starting processing pass with {len(parent_rows)} active parent rows.")
+            logging.info(
+                f"[LEVEL {level} - {layer_type}] "
+                f"Starting processing pass with "
+                f"{len(parent_rows)} active parent rows."
+            )
 
-            # Load Layers
+            # -----------------------------------------------------
+            # LOAD ALL BRANCHES FOR THIS LAYER
+            # -----------------------------------------------------
             for parent_row in parent_rows:
-                # Spatial filter to ensure branches don't attach to wrong parent types
+
                 if level > 0 and parent_row is not None:
+
                     parent_fid = parent_row.get("FID")
+
                     parent_path = fid_to_path.get(parent_fid, ROOT)
+
                     expected_parent_type = parent_levels.get(level)
-                    if expected_parent_type and Geo_index.get(parent_path, {}).get("level") != expected_parent_type:
+
+                    if (
+                        expected_parent_type
+                        and Geo_index.get(parent_path, {}).get("level")
+                        != expected_parent_type
+                    ):
                         continue
 
                 src = layer["src"]
                 field = layer["field"]
 
-                # Default fallbacks (if src is a single string)
                 chosen_src = src
                 chosen_field = field
 
-                # If we have a list configuration, scan for the correct file dynamically
                 if isinstance(src, list):
-                    # Default to the first item if no keyword match is found
-                    chosen_src = src[0]
-                    chosen_field = field[0] if isinstance(field, list) else field
 
-                    # Scan the filenames for the word "surrey"
+                    chosen_src = src[0]
+
+                    chosen_field = (
+                        field[0]
+                        if isinstance(field, list)
+                        else field
+                    )
+
                     for index, filename in enumerate(src):
-                        if filename and "surrey" in str(filename).lower():
+
+                        if (
+                            filename
+                            and "surrey" in str(filename).lower()
+                        ):
+
                             chosen_src = src[index]
-                            chosen_field = field[index] if isinstance(field, list) else field
-                            break  # Match found, stop scanning
+
+                            chosen_field = (
+                                field[index]
+                                if isinstance(field, list)
+                                else field
+                            )
+
+                            break
 
                 layer_local = dict(layer)
+
                 layer_local["src"] = chosen_src
                 layer_local["field"] = chosen_field
 
-                logging.debug(f"[LEVEL {level} - {layer_type}] Calling load_layer with src: {chosen_src}, field: {chosen_field}")
+                logging.debug(
+                    f"[LEVEL {level} - {layer_type}] "
+                    f"Calling load_layer with "
+                    f"src={chosen_src}"
+                )
 
                 name, tree_gdf, full_gdf = load_layer(
                     layer=layer_local,
@@ -765,108 +824,266 @@ def ensure_treepolys_with_index(
                 )
 
                 if tree_gdf is not None and not tree_gdf.empty:
+
                     tree_gdf = tree_gdf.copy()
 
                     if level == 0 or parent_row is None:
+
                         parent_path = ROOT
+
                     else:
+
                         parent_fid = parent_row["FID"]
+
                         if parent_fid not in fid_to_path:
-                            raise ValueError(f"[LEVEL {level}] Missing parent path for FID {parent_fid}")
+                            raise ValueError(
+                                f"[LEVEL {level}] Missing parent path "
+                                f"for FID {parent_fid}"
+                            )
+
                         parent_path = fid_to_path[parent_fid]
 
                     tree_gdf["_parent_path"] = parent_path
+
                     all_results.append(tree_gdf)
 
-            # Combine & Upsert Dataframes
+            # -----------------------------------------------------
+            # COMBINE RESULTS
+            # -----------------------------------------------------
             if all_results:
-                tree_gdf = pd.concat(all_results, ignore_index=True)
-                logging.info(f"[LEVEL {level} - {layer_type}] Combined all_results total rows loaded: {len(tree_gdf)}")
+
+                tree_gdf = pd.concat(
+                    all_results,
+                    ignore_index=True
+                )
+
+                logging.info(
+                    f"[LEVEL {level} - {layer_type}] "
+                    f"Combined rows={len(tree_gdf)}"
+                )
+
             else:
+
                 tree_gdf = gpd.GeoDataFrame()
-                logging.warning(f"[LEVEL {level} - {layer_type}] No spatial records found across any parent branches. tree_gdf is EMPTY.")
+
+                logging.warning(
+                    f"[LEVEL {level} - {layer_type}] "
+                    "No spatial records found."
+                )
 
             if tree_gdf.empty:
                 continue
 
+            # -----------------------------------------------------
+            # UPSERT TREEPOLYS
+            # -----------------------------------------------------
             existing = get_treepoly(layer_type)
+
             if existing is None:
+
                 new_tree_gdf = tree_gdf
-                logging.info(f"[LEVEL {level} - {layer_type}] No existing Treepolys for this layer. Preparing to insert all {len(new_tree_gdf)} rows.")
+
             else:
-                new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
-                logging.info(f"[LEVEL {level} - {layer_type}] Found {len(existing)} existing shapes. Filtered down to {len(new_tree_gdf)} completely NEW features to insert.")
 
-            # Trace execution precisely at point of storage insertion
-            logging.info(f"💾 [TREEPOLY INSERTION] Committing layer_type '{layer_type}' details into global store. Row count to upsert: {len(new_tree_gdf)}")
-            set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
+                new_tree_gdf = tree_gdf[
+                    ~tree_gdf["FID"].isin(existing["FID"])
+                ]
 
-            # BUILD GEO INDEX & SEED NEXT LEVELS
+            logging.info(
+                f"💾 inserting {len(new_tree_gdf)} rows "
+                f"into {layer_type}"
+            )
+
+            set_treepoly(
+                layer_type,
+                upsert_geodf(existing, new_tree_gdf)
+            )
+
+            # -----------------------------------------------------
+            # BUILD INDEX
+            # -----------------------------------------------------
             next_level = level + 1
+
             if next_level not in active_parent_rows:
                 active_parent_rows[next_level] = []
 
             matched_this_level = None
 
-            # ... inside the row iteration loop ...
             for _, row in tree_gdf.iterrows():
+
                 child_name = normalname(row["NAME"])
-                parent_path = row.get("_parent_path", ROOT)
 
-                # 🏁 FIX: Treat level 0 rows as direct children of the absolute ROOT
                 if level == 0:
-                    parent_path = ROOT
 
-                this_path = f"{ROOT}/{child_name}" if parent_path == ROOT else f"{parent_path}/{child_name}"
+                    parent_path = None
+                    this_path = ROOT
+
+                else:
+
+                    parent_path = row.get(
+                        "_parent_path",
+                        ROOT
+                    )
+
+                    if parent_path == ROOT:
+                        this_path = (
+                            f"{ROOT}/{child_name}"
+                        )
+                    else:
+                        this_path = (
+                            f"{parent_path}/{child_name}"
+                        )
 
                 if this_path not in Geo_index:
+
                     Geo_index[this_path] = {
+
                         "level": layer_type,
                         "name": child_name,
                         "parent": parent_path,
                         "children": []
+
                     }
 
-                # Connect the absolute ROOT node to this nation entry
                 if parent_path in Geo_index:
-                    if this_path not in Geo_index[parent_path]["children"]:
-                        Geo_index[parent_path]["children"].append(this_path)
+
+                    if (
+                        this_path
+                        not in Geo_index[parent_path]["children"]
+                    ):
+
+                        Geo_index[parent_path]["children"].append(
+                            this_path
+                        )
 
                 fid_to_path[row["FID"]] = this_path
 
-                # Force match on level 0 if the root step name matches or if we're resolving downwards
+                # ---------------------------------------------
+                # MATCH PATH
+                # ---------------------------------------------
                 if level == 0:
-                    matched_path = this_path
-                    matched_this_level = this_path
-                    match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
-                elif level < len(steps):
-                    expected_name = normalname(steps[level])
-                    if child_name == expected_name:
-                        matched_path = this_path
-                        matched_this_level = this_path
-                        match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
-                else:
-                    # 🎯 FIX: Track deep path layers (Level 4+) beyond your initial target steps
-                    matched_path = this_path
-                    matched_this_level = this_path
-                    match_full_filepath = f"{matched_path}{FACEENDING[layer_type]}"
 
-                # Append discovered nodes straight into the active parents cache
+                    matched_path = this_path
+                    matched_this_level = this_path
+
+                    match_full_filepath = (
+                        f"{matched_path}"
+                        f"{FACEENDING[layer_type]}"
+                    )
+
+                elif level < len(steps):
+
+                    expected_name = normalname(
+                        steps[level]
+                    )
+
+                    if child_name == expected_name:
+
+                        matched_path = this_path
+
+                        matched_this_level = this_path
+
+                        match_full_filepath = (
+                            f"{matched_path}"
+                            f"{FACEENDING[layer_type]}"
+                        )
+
+                else:
+
+                    matched_path = this_path
+
+                    matched_this_level = this_path
+
+                    match_full_filepath = (
+                        f"{matched_path}"
+                        f"{FACEENDING[layer_type]}"
+                    )
+
                 row_copy = row.copy()
+
                 row_copy["_parent_path"] = this_path
-                active_parent_rows[next_level].append(row_copy)
+
+                active_parent_rows[next_level].append(
+                    row_copy
+                )
 
             if level < len(steps):
-                expected_name = normalname(steps[level])
+
+                expected_name = normalname(
+                    steps[level]
+                )
+
                 if matched_this_level is None:
-                    logging.warning(f"[LEVEL {level}] No match found for step: {expected_name}")
+
+                    logging.warning(
+                        f"[LEVEL {level}] "
+                        f"No match found for {expected_name}"
+                    )
+
+    return match_full_filepath
+
+def ensure_treepolys_with_index(
+    *,
+    territory=None,
+    sourcepath=None,
+    here=None,
+    boundary_geom=None,
+    resolved_levels=None,
+    parent_levels=None
+):
+    from state import Treepolys, Geo_index
+    from nodes import persist
+
+    ROOT = "UNITED_KINGDOM"
+
+    initialise_root(ROOT)
+
+    t("start")
+
+    if boundary_geom is not None:
+        boundary_geom = boundary_geom.buffer(0)
+
+    if not resolved_levels:
+        raise ValueError("resolved_levels is required")
+
+    if len(resolved_levels) != 1:
+        raise ValueError(
+            f"Expected 1 election, got {len(resolved_levels)}"
+        )
+
+    (c_election, elevels), = resolved_levels.items()
+
+    sourcepath = sourcepath or territory
+    steps = stepify(sourcepath) if sourcepath else []
+
+    active_parent_rows, fid_to_path = preload_cached_geometry(
+        elevels,
+        ROOT
+    )
+
+    reconstruct_cached_paths(
+        active_parent_rows,
+        fid_to_path,
+        ROOT
+    )
+
+    match_full_filepath = process_levels(
+        elevels,
+        parent_levels,
+        steps,
+        here,
+        boundary_geom,
+        active_parent_rows,
+        fid_to_path,
+        ROOT
+    )
 
     logging.debug(f"Final matched_path: {match_full_filepath}")
-    logging.debug(f"___FULL GEO INDEX: {Geo_index}")
 
     persist(Treepolys, Fullpolys, Geo_index)
 
     return match_full_filepath, Geo_index
+
 
 def layer_loaded(layer_key):
     return (
