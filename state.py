@@ -779,7 +779,10 @@ def ensure_treepolys_with_index(
             logging.info(f"💾 [TREEPOLY INSERTION] Committing layer_type '{layer_type}'. Row count: {len(new_tree_gdf)}")
             set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
 
+
+# -------------------------------------------------------------
             # BUILD GEO INDEX & SEED NEXT LEVELS
+            # -------------------------------------------------------------
             next_level = level + 1
             if next_level not in active_parent_rows:
                 active_parent_rows[next_level] = []
@@ -789,13 +792,21 @@ def ensure_treepolys_with_index(
             for _, row in tree_gdf.iterrows():
                 child_name = normalname(row["NAME"])
 
-                # 🎯 UNIFIED STRATEGY FOR ROOT AND LOWER TIER PATH GENERATION
+                # 🎯 FIX: Explicitly stitch Level 0 beneath the absolute ROOT token
                 if level == 0:
-                    parent_path = None
-                    this_path = ROOT
+                    parent_path = ROOT
+                    # Avoid duplication if the child record is already named after the root
+                    if child_name == ROOT:
+                        this_path = ROOT
+                    else:
+                        this_path = f"{ROOT}/{child_name}"  # e.g., "UNITED_KINGDOM/ENGLAND"
                 else:
                     parent_path = row.get("_parent_path", ROOT)
-                    this_path = f"{ROOT}/{child_name}" if parent_path == ROOT else f"{parent_path}/{child_name}"
+                    # Protect against duplicate adjacent path parts
+                    if parent_path == ROOT:
+                        this_path = f"{ROOT}/{child_name}"
+                    else:
+                        this_path = f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
                     Geo_index[this_path] = {
@@ -810,6 +821,7 @@ def ensure_treepolys_with_index(
                         Geo_index[parent_path]["children"].append(this_path)
 
                 fid_to_path[row["FID"]] = this_path
+
 
                 # Evaluate step targets and compute file routing modifiers cleanly
                 is_matched_step = False
