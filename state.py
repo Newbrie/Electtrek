@@ -680,7 +680,7 @@ def ensure_treepolys_with_index(
                     parent_path = r["_parent_path"]
                     this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}/{child_name}"
                     fid_to_path[r["FID"]] = this_path
-                    logging.debug(f"[LEVEL {lvl} - FID:{r["FID"]}] Cmaps to path: {this_path}")
+                    logging.debug(f"[LEVEL {lvl} - FID:{r['FID']}] Cmaps to path: {this_path}")
 
     # Guarantee Level 0 has a valid root reference point to build from
     if not active_parent_rows.get(0):
