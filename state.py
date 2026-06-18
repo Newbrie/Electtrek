@@ -817,7 +817,7 @@ def ensure_treepolys_with_index(
                 if level == 0:
                     parent_path = ROOT
 
-                this_path = f"{ROOT}" if parent_path == ROOT else f"{parent_path}/{child_name}"
+                this_path = f"{ROOT}/{child_name}" if parent_path == ROOT else f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
                     Geo_index[this_path] = {
