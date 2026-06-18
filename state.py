@@ -678,7 +678,7 @@ def ensure_treepolys_with_index(
                 if "_parent_path" in r:
                     child_name = normalname(r["NAME"])
                     parent_path = r["_parent_path"]
-                    this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}/{child_name}"
+                    this_path = f"{parent_path}/{child_name}" if parent_path != ROOT else f"{ROOT}"
                     fid_to_path[r["FID"]] = this_path
                     logging.debug(f"[LEVEL {lvl} - FID:{r['FID']}] Cmaps to path: {this_path}")
 
