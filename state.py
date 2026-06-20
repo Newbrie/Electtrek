@@ -645,6 +645,8 @@ def ensure_treepolys_with_index(
 
     (_, elevels), = resolved_levels.items()
 
+    print("elevels =", elevels)
+
     logging.debug(
         f"Starting treepolys with territory={territory} "
         f"and sourcepath={sourcepath}"
@@ -688,7 +690,7 @@ def ensure_treepolys_with_index(
                     if row.get("FID") not in existing_fids:
                         active_parent_rows[lvl].append(row)
 
-    # Reconstruct absolute paths
+    # Reconstruct the absolute paths of the assigned parent records that filter child polys
     for lvl, rows in active_parent_rows.items():
 
         for r in rows:
@@ -697,15 +699,11 @@ def ensure_treepolys_with_index(
 
                 child_name = normalname(r["NAME"])
 
-                if lvl == 0:
+                if lvl == 0 or child_name == ROOT:
                     this_path = ROOT
                 else:
-                    parent_path = r["_parent_path"]
-
-                    if parent_path == ROOT:
-                        this_path = f"{ROOT}/{child_name}"
-                    else:
-                        this_path = f"{parent_path}/{child_name}"
+                    parent_path = r["_parent_path"] #the rows stored parent path
+                    this_path = f"{parent_path}/{child_name}"
 
                 fid_to_path[r["FID"]] = this_path
 
@@ -834,20 +832,18 @@ def ensure_treepolys_with_index(
                 if tree_gdf is not None and not tree_gdf.empty:
 
                     tree_gdf = tree_gdf.copy()
+                    if level == 0:
+                        parent_path = None
 
-                    if level == 0 or parent_row is None:
+                    elif parent_row is None:
                         parent_path = ROOT
+
                     else:
-
                         parent_fid = parent_row["FID"]
-
                         if parent_fid not in fid_to_path:
                             raise ValueError(
-                                f"[LEVEL {level}] "
-                                f"Missing parent path for "
-                                f"FID {parent_fid}"
+                                f"[LEVEL {level}] Missing parent path for FID {parent_fid}"
                             )
-
                         parent_path = fid_to_path[parent_fid]
 
                     tree_gdf["_parent_path"] = parent_path
@@ -919,6 +915,8 @@ def ensure_treepolys_with_index(
                 else None
             )
 
+            print(f"\nXLEVEL {level} ({layer_type})")
+            print(tree_gdf[["FID", "NAME", "_parent_path"]])
             for _, row in tree_gdf.iterrows():
 
                 child_name = normalname(row["NAME"])
@@ -927,12 +925,8 @@ def ensure_treepolys_with_index(
                     parent_path = None
                     this_path = ROOT
                 else:
-                    parent_path = row.get("_parent_path", ROOT)
-
-                    if parent_path == ROOT:
-                        this_path = f"{ROOT}/{child_name}"
-                    else:
-                        this_path = f"{parent_path}/{child_name}"
+                    parent_path = row["_parent_path"]
+                    this_path = f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
 
