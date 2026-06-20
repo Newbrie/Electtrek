@@ -624,7 +624,7 @@ def ensure_treepolys_with_index(
 
     if ROOT not in Geo_index:
         Geo_index[ROOT] = {
-            "level": "root",
+            "level": "country",
             "name": ROOT,
             "parent": None,
             "children": []
@@ -950,7 +950,7 @@ def ensure_treepolys_with_index(
                     parent_path = None
                     this_path = ROOT
                 else:
-                    parent_path = row["_parent_path"]
+                    parent_path = row.get("_parent_path", ROOT)
                     this_path = f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
