@@ -818,6 +818,13 @@ def ensure_treepolys_with_index(
                     f"load_layer src={chosen_src}"
                 )
 
+                print()
+                print(f"LEVEL {level}")
+                print("method =", layer_local["method"])
+                print("src =", layer_local["src"])
+                print("field =", layer_local["field"])
+                print("select_name =", select_name)
+
                 _, tree_gdf, _ = load_layer(
                     layer=layer_local,
                     level=level,
@@ -828,7 +835,18 @@ def ensure_treepolys_with_index(
                     roid=here,
                     boundary_geom=boundary_geom
                 )
+                print()
+                print(f"LOAD_LAYER level={level} type={layer_type}")
+                print("select_name =", select_name)
+                print("parent_row =", None if parent_row is None else parent_row["NAME"])
 
+                if tree_gdf is None:
+                    print("tree_gdf is None")
+                else:
+                    print("tree_gdf rows =", len(tree_gdf))
+                    if not tree_gdf.empty:
+                        print(tree_gdf[["FID","NAME"]])
+                        
                 if tree_gdf is not None and not tree_gdf.empty:
 
                     tree_gdf = tree_gdf.copy()
