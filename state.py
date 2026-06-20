@@ -773,6 +773,13 @@ def ensure_treepolys_with_index(
                     parent_path = fid_to_path.get(parent_fid, ROOT)
                     expected_parent_type = parent_levels.get(level)
 
+                    print()
+                    print("LEVEL",level)
+                    print("parent_fid =",parent_fid)
+                    print("parent_path =",parent_path)
+                    print("expected_parent_type =",expected_parent_type)
+                    print("actual type =",Geo_index.get(parent_path,{}).get("level"))
+
                     if (
                         expected_parent_type
                         and Geo_index.get(parent_path, {}).get("level")
@@ -846,7 +853,7 @@ def ensure_treepolys_with_index(
                     print("tree_gdf rows =", len(tree_gdf))
                     if not tree_gdf.empty:
                         print(tree_gdf[["FID","NAME"]])
-                        
+
                 if tree_gdf is not None and not tree_gdf.empty:
 
                     tree_gdf = tree_gdf.copy()
