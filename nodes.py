@@ -2080,8 +2080,7 @@ class TreeNode:
 
     def create_map_branch(self, resolved_levels):
         # Imports (keep them here if they are circular)
-        from state import Treepolys, Overlaps
-        from layers import get_children_within
+        from state import Treepolys, Geo_index, branchcolours
         import pandas as pd
         import state
         import elections
@@ -2108,58 +2107,51 @@ class TreeNode:
         else:
             target_layers = [raw_electtype]
 
-        # 🎯 FIX: Identify if we are running at the top of the tree structure
-        is_root = (self.level == 0)
-        parent_geom = None
+        # Build the self-path key to find our entry in the geoindex
+        # e.g., "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"
+        my_path_key = self.get_absolute_path_string()
 
-        # Skip spatial boundary filtering only if this is the absolute root node
-        if not is_root:
-            parent_poly = Treepolys.get(parenttype)
-            if parent_poly is None or parent_poly.empty:
-                raise ValueError(f"No polygons loaded for parent layer '{parenttype}'")
+        geo_node = Geo_index.get(my_path_key)
+        if not geo_node:
+            print(f"⚠️ Warning: Path {my_path_key} not found in Geo_index. Falling back to empty children.")
+            return []
 
-            try:
-                search_fid = int(self.fid)
-                parent_row = parent_poly[parent_poly['FID'] == search_fid]
-            except Exception as e:
-                print(f"DEBUG: FID Conversion error: {e}")
-                raise
-
-            if parent_row.empty:
-                raise Exception(f"EMPTY PARENT GEOMETRY for {self.value} (FID {self.fid})")
-
-            parent_geom = parent_row.geometry.values[0]
-
-            # Set up bounding boxes
-            block = pd.DataFrame()
-            self.bbox, self.latlongroid = self.get_bounding_box(parenttype, block)
-        else:
-            print(f"👑 Root Node architecture detected ({self.value}). Skipping spatial filter.")
+        # Get the precise pre-calculated list of child paths from our index
+        allowed_child_paths = geo_node.get("children", [])
 
         CE = elections.CurrentElection.load(c_election)
         gotv_pct = CE.get('GOTV', 0)
-
         all_created_children = []
-
-        # 🔄 LOOP OVER EVERY TARGET LAYER (e.g., first 'ward', then 'division')
+# 🔄 LOOP OVER EVERY TARGET LAYER (e.g., 'constituency')
         for electtype in target_layers:
             ChildPolylayer = Treepolys.get(electtype)
 
-            # Skip if the spatial table isn't loaded/active
             if ChildPolylayer is None or ChildPolylayer.empty:
-                print(f"⚠️ Spatial table '{electtype}' is empty or not loaded. Skipping branch.")
+                print(f"⚠️ Spatial table '{electtype}' is empty. Skipping.")
                 continue
 
-            print(f"🧭 Processing branch for layer '{electtype}' under parent '{parenttype}'")
+            # Extract just the normalized final token from the Geo_index children paths
+            # This yields exact keys like: 'DORKING_AND_HORLEY', 'GUILDFORD', etc.
+            valid_child_keys = {
+                path.split('/')[-1].strip().upper()
+                for path in allowed_child_paths
+            }
 
-            # 🎯 FIX: If root, select all rows within the layer directly without geometric intersection
-            if is_root:
-                selected_children = ChildPolylayer
-                print(f"📦 Root layer assignment: adopting all {len(selected_children)} features inside '{electtype}'")
-            else:
-                threshold = Overlaps.get(electtype, Overlaps.get(raw_electtype, 0.5))
-                selected_children = get_children_within(parent_geom, ChildPolylayer, threshold)
-                print(f"📦 Found {len(selected_children)} candidate children for layer '{electtype}'")
+            print(f"🎯 Target keys expected from Geo_index: {valid_child_keys}")
+
+            # Vectorized normalization on the spatial dataframe to ensure apples-to-apples matching
+            # We apply state.normalname to each row name dynamically
+            ChildPolylayer_normalized = ChildPolylayer.copy()
+            ChildPolylayer_normalized['NORMALIZED_NAME'] = ChildPolylayer_normalized['NAME'].apply(
+                lambda x: str(state.normalname(x)).strip().upper()
+            )
+
+            # Filter the dataframe using the normalized strings
+            selected_children = ChildPolylayer_normalized[
+                ChildPolylayer_normalized['NORMALIZED_NAME'].isin(valid_child_keys)
+            ]
+
+            print(f"📦 Found {len(selected_children)} / {len(valid_child_keys)} shapefile matches for Surrey.")
 
             fam_nodes = self.childrenoftype(electtype)
             fam_values = {x.value for x in fam_nodes}
@@ -2175,8 +2167,21 @@ class TreeNode:
                     j += 1
                     continue
 
-                centroid_point = limb.geometry.representative_point()
-                here = (centroid_point.y, centroid_point.x)
+                # Check if centroid/representative point coordinates are already baked into geoindex
+                # to skip spatial engine evaluation completely. Fallback to geometry calculation if absent.
+                # Avoid leading double slashes at the root level ("UNITED_KINGDOM/ENGLAND")
+                if my_path_key == "UNITED_KINGDOM":
+                    child_path_key = f"UNITED_KINGDOM/{newname}"
+                else:
+                    child_path_key = f"{my_path_key}/{newname}"
+
+                baked_roid = Geo_index.get(child_path_key, {}).get("roid")
+
+                if baked_roid:
+                    here = tuple(baked_roid)
+                else:
+                    centroid_point = limb.geometry.representative_point()
+                    here = (centroid_point.y, centroid_point.x)
 
                 # Create the TreeNode stamped explicitly with this unique layer type
                 egg = TreeNode(
@@ -2194,8 +2199,8 @@ class TreeNode:
                 egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
 
                 # Set branch color based on absolute index
-                color_idx = (len(all_created_children) + k) % len(state.branchcolours)
-                egg.defcol = state.branchcolours[color_idx]
+                color_idx = (len(all_created_children) + k) % len(branchcolours)
+                egg.defcol = branchcolours[color_idx]
 
                 try:
                     egg.updateParty()
@@ -3060,17 +3065,39 @@ class TreeNode:
             level += 1
         return level
 
+    def _build_absolute_path_list(self):
+        """
+        Core structural engine. Climbs the tree from the current node
+        up to the root, returning an ordered list of path elements.
+        Example: ['UNITED_KINGDOM', 'ENGLAND', 'SURREY', 'SURREY_HEATH']
+        """
+        parts = []
+        p = self
+        while p:
+            if p.level > 0 and p.value:
+                # Strip any slashes out of the node value just in case
+                parts.insert(0, str(p.value).strip("/"))
+            p = p.parent
+
+        parts.insert(0, "UNITED_KINGDOM")
+        return parts
+
+
+    def get_absolute_path_string(self):
+        """
+        Returns a clean dictionary key string for geoindex and data lookups.
+        Example: 'UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH'
+        """
+        return "/".join(self._build_absolute_path_list())
+
     def get_url(self):
-        level = 0
-        p = self.parent
-        d = []
-        while p :
-            if p.level > 0:
-                d = d.insert(0, "/"+p.value)
-                p = p.parent
-                level += 1
-        d = ''.join(d.insert(0,url_for('thru',path="UNITED_KINGDOM")))
-        return d
+        """
+        Returns a valid, web-safe Flask URL string for frontend routing.
+        Example: '/thru/UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH'
+        """
+        from flask import url_for
+        full_path_string = "/".join(self._build_absolute_path_list())
+        return url_for('thru', path=full_path_string)
 
     def remove_child(self, child):
         """

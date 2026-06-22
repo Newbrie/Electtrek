@@ -627,7 +627,8 @@ def ensure_treepolys_with_index(
             "level": "country",
             "name": ROOT,
             "parent": None,
-            "children": []
+            "children": [],
+            "roid": [54.5, -2.5]  # 🌟 Hardcoded center of the UK (Lat, Lon)
         }
 
     t("start")
@@ -952,14 +953,29 @@ def ensure_treepolys_with_index(
                 else:
                     parent_path = row.get("_parent_path", ROOT)
                     this_path = f"{parent_path}/{child_name}"
-
+                # -----------------------------------------------------------------
+                # 🌟 REPLACE WITH THIS AMENDED VERSION:
+                # -----------------------------------------------------------------
                 if this_path not in Geo_index:
 
+                    # 1. Safely pull the spatial geometry from the GeoPandas row
+                    roid_coords = None
+                    if hasattr(row, "geometry") and row.geometry is not None:
+                        try:
+                            # Calculate the heavy representative point once during creation
+                            centroid_point = row.geometry.representative_point()
+                            # Explicitly force float conversion to prevent JSON serialization errors
+                            roid_coords = [float(centroid_point.y), float(centroid_point.x)]
+                        except Exception as spatial_err:
+                            logging.warning(f"Could not calculate representative point for {this_path}: {spatial_err}")
+
+                    # 2. Inject 'roid' directly into your index master schema
                     Geo_index[this_path] = {
                         "level": layer_type,
                         "name": child_name,
                         "parent": parent_path,
-                        "children": []
+                        "children": [],
+                        "roid": roid_coords  # 🌟 Added permanently to the baked file output!
                     }
 
                 if parent_path in Geo_index:
