@@ -683,6 +683,48 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
+    from collections import defaultdict
+
+
+    def group_by_type(self, nodes):
+        groups = defaultdict(list)
+
+        for node in nodes:
+            groups[node.type].append(node)
+
+        return dict(groups)
+
+
+    def get_parent_layers(self):
+        if self.parent:
+            return {self.parent.type: [self.parent]}
+        return {}
+
+    def get_sibling_layers(self):
+        if not self.parent:
+            return {}
+
+        siblings = [
+            child
+            for child in self.parent.children
+            if child.type == self.type
+        ]
+
+        return {self.type: siblings}
+
+    def get_child_layers(self):
+        return self.group_by_type(self.children)
+
+    def get_grandchild_layers(self):
+
+        grandchildren = []
+
+        for child in self.children:
+            grandchildren.extend(child.children)
+
+        return self.group_by_type(grandchildren)
+
+
     def file(self, elevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
 
@@ -1444,288 +1486,26 @@ class TreeNode:
         used_keys = set()
         used_tags = set()
 
-        def get_safe_tag_layer(tag_code, tag_desc):
-            display_name = f"Task Overlay: [{tag_code}] {tag_desc}"
-            if tag_code in used_tags:
-                display_name = f"{display_name} (Upper)"
-            used_tags.add(tag_code)
+        def surrounding_layers(self):
+            yield from self.get_parent_layers().items()
+            yield from self.get_sibling_layers().items()
+            yield from self.get_child_layers().items()
+            yield from self.get_grandchild_layers().items()
 
-            tag_layer = ExtendedFeatureGroup(
-                name=display_name,
-                overlay=True,
-                control=True,
-                show=True
+        for layer_type, nodes in self.surrounding_layers():
+
+            layer = copy.copy(factory[layer_type])
+
+            leaf_count = layer.create_layer(
+                rlevels,
+                nodes,
+                static=static
             )
-            tag_layer.options = tag_layer.options or {}
-            tag_layer.options.update({
-                "tag": tag_code,
-                "layer_type": "ghost"
-            })
-            return tag_layer
 
-        def get_safe_level_layers(level_idx):
-            raw_key = elevels.get(level_idx)
-            print(f"  🔍 [Level Lookup] Target Level Index: {level_idx} -> Raw Key String: '{raw_key}'")
-            if not raw_key:
-                print(f"  ⚠️ [Level Lookup] No layer key mapping defined for level index {level_idx}")
-                return []
+            if leaf_count:
+                selected.append(layer)
 
-            keys_to_process = raw_key.split('/') if '/' in raw_key else [raw_key]
-            resolved_layers = []
 
-            for key in keys_to_process:
-                if key not in factory:
-                    print(f"  ❌ [Factory Miss] Component layer '{key}' not found inside active Map Factory keys.")
-                    continue
-
-                # 🏁 FIX THE STATE OVERWRITE TRAILER HERE:
-                if key in used_keys:
-                    print(f"  ♻️ [Factory Copy] Key '{key}' already occupied. Shallow copying instance to preserve stack separation.")
-                    new_layer_instance = copy.copy(factory[key])
-                    new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
-                    resolved_layers.append(new_layer_instance)
-                else:
-                    print(f"  ✅ [Factory Hit] Successfully loaded standalone layer instance for key: '{key}'")
-                    used_keys.add(key)
-                    resolved_layers.append(factory[key])
-
-            return resolved_layers
-
-        # -------------------------------------------------
-        # 📂 BASELINE DATA: Establish Base Node Lists Upfront
-        # -------------------------------------------------
-        if session.get("accumulate", False):
-            childnode_ids = session.get("accumulated_nodes", [])
-            childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
-            print(f"👥 [Scope Mode: ACCUMULATED] Total root nodes loaded: {len(childnodelist)}")
-        else:
-            childnodelist = [self]
-            print(f"👤 [Scope Mode: SINGLE NODE] Evaluating focus element: {self.name if hasattr(self, 'name') else self}")
-
-        if childnodelist:
-            test_node = childnodelist[0]
-            print(f"📋 [Base Node Sample] Sample ID: {getattr(test_node, 'id', 'N/A')} | Type: {getattr(test_node, 'type', 'MISSING')}, layer_type: {getattr(test_node, 'layer_type', 'MISSING')}, key: {getattr(test_node, 'key', 'MISSING')}")
-
-        # -------------------------------------------------
-        # 1️⃣ Grandchild Layer (Level + 2)
-        # -------------------------------------------------
-        totalleaf = 0
-        grandchildnodelist = []
-
-        if self.level < 5:
-            target_level = self.level + 2
-            print(f"\n--- 🏗️ Analyzing Level 1: Grandchildren (Targeting Level {target_level}) ---")
-            grandchild_layers = get_safe_level_layers(target_level)
-
-            for grandchild_layer in grandchild_layers:
-                print(f"    ⚙️ Checking structural layer: '{grandchild_layer.name}' (Target Type Match: '{grandchild_layer.type}')")
-
-                # Inline expansion for transparent debug tracing
-                has_grandchildren = False
-                if childnodelist:
-                    for child in childnodelist:
-                        child_children = getattr(child, 'children', [])
-                        print(f"      ↳ Sub-node '{child.name if hasattr(child, 'name') else child}' has {len(child_children)} active child-elements in memory registry.")
-                        for gc in child_children:
-                            if gc.type == grandchild_layer.type:
-                                has_grandchildren = True
-
-                print(f"    📊 Has matching grandchild nodes down this structural branch? {has_grandchildren}")
-
-                if has_grandchildren:
-                    print(f"    Processing layer asset: {grandchild_layer.name}")
-
-                    layer_specific_grandchildren = [
-                        gc for child in childnodelist
-                        for gc in getattr(child, 'children', [])
-                        if gc.type == grandchild_layer.type
-                    ]
-
-                    print(f"    📦 Extracted {len(layer_specific_grandchildren)} specific downstream '{grandchild_layer.type}' entries.")
-
-                    if layer_specific_grandchildren:
-                        leaf_count = grandchild_layer.create_layer(rlevels, layer_specific_grandchildren, static=False)
-                        print(f"    📥 create_layer output -> Added {leaf_count} features to '{grandchild_layer.name}'")
-                        totalleaf += leaf_count
-
-                        if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
-                            grandchild_layer.show = True
-                            selected.append(grandchild_layer)
-                            grandchildnodelist.extend(layer_specific_grandchildren)
-        else:
-            print(f"\n⏩ Skipping Grandchild layer generation (Node level {self.level} bounds checks maxed out).")
-
-        # -------------------------------------------------
-        # 2️⃣ Child Layer (Level + 1)
-        # -------------------------------------------------
-        if self.level < 6:
-            target_level = self.level + 1
-            print(f"\n--- 🏗️ Analyzing Level 2: Children (Targeting Level {target_level}) ---")
-            child_layers = get_safe_level_layers(target_level)
-
-            if child_layers and childnodelist:
-                for child_layer in child_layers:
-                    print(f"    ⚙️ Checking structural layer: '{child_layer.name}' (Target Type Match: '{child_layer.type}')")
-                    layer_specific_children = []
-
-                    if self.level >= 3:
-                        print(f"      🔍 Deep branch structural evaluation activated (Self Level >= 3)")
-                        for node in childnodelist:
-                            if node.type == child_layer.type:
-                                print(f"        🎯 Direct type match hit at root node: '{node.name if hasattr(node, 'name') else node}'")
-                                layer_specific_children.append(node)
-                            elif hasattr(node, 'children') and node.children:
-                                for ch in node.children:
-                                    if ch.type == child_layer.type:
-                                        layer_specific_children.append(ch)
-
-                    if not layer_specific_children:
-                        print(f"      ⚠️ No explicit type subset filtering hit. Defaulting entire local subset array layout.")
-                        layer_specific_children = childnodelist
-
-                    print(f"    📦 Processing branch payload context size: {len(layer_specific_children)} elements.")
-                    leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
-                    print(f"    📥 create_layer output -> Added {leaf_count} features to '{child_layer.name}'")
-                    totalleaf += leaf_count
-
-                    if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
-                        child_layer.show = True
-                        selected.append(child_layer)
-        else:
-            print(f"\n⏩ Skipping Child layer generation (Node level {self.level} out of processing scope bounds).")
-
-        # -------------------------------------------------
-        # 3️⃣ Sibling Layer (Current Level)
-        # -------------------------------------------------
-        print(f"\n--- 🏗️ Analyzing Level 3: Siblings (Level {self.level}) ---")
-        if self.level > 0:
-            sibling_layers = get_safe_level_layers(self.level)
-            if sibling_layers and self.parent:
-                for sibling_layer in sibling_layers:
-                    if self.type == sibling_layer.type:
-                        print(f"    ✅ Appending sibling structural layer context linked via parent node: '{self.parent.name if hasattr(self.parent, 'name') else self.parent}'")
-                        sibling_layer.create_layer(rlevels, [self.parent], static=False)
-                        selected.append(sibling_layer)
-            else:
-                print(f"    ℹ️ Processing isolated structural item: Has parent available? {bool(self.parent)}")
-        else:
-            print(f"    ⏩ Root element bypass (Level 0 elements possess no structural siblings).")
-
-        # -------------------------------------------------
-        # 4️⃣ Parent Layer (Level - 1)
-        # -------------------------------------------------
-        print(f"\n--- 🏗️ Analyzing Level 4: Parent Nodes (Targeting Level {self.level - 1}) ---")
-        if self.level > 1:
-            parent_layers = get_safe_level_layers(self.level - 1)
-            if parent_layers and self.parent and getattr(self.parent, 'parent', None):
-                for parent_layer in parent_layers:
-                    if self.parent.type == parent_layer.type:
-                        print(f"    ✅ Binding upstream grandparent framework baseline boundary: '{self.parent.parent.name if hasattr(self.parent.parent, 'name') else self.parent.parent}'")
-                        parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
-                        selected.append(parent_layer)
-            else:
-                print(f"    ℹ️ Ancestry missing: parent exists? {bool(self.parent)} | grandparent exists? {bool(getattr(self.parent, 'parent', None)) if self.parent else False}")
-        else:
-            print(f"    ⏩ Skipping upstream rendering (Insufficient processing depth at level {self.level}).")
-
-        # -------------------------------------------------
-        # 5️⃣ Marker Asset Layer
-        # -------------------------------------------------
-        if "marker" in factory:
-            selected.append(factory["marker"])
-
-        # -------------------------------------------------
-        # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
-        # -------------------------------------------------
-        from folium.plugins import MarkerCluster
-
-        target_highlight_nodes = grandchildnodelist if grandchildnodelist else childnodelist
-        print(f"\n--- 🗳️ Generating Elector Demographic Highlights (Target Array Size: {len(target_highlight_nodes)}) ---")
-
-        if target_highlight_nodes:
-            # --- A. Postal Voters Layer ---
-            postal_layer = ExtendedFeatureGroup(
-                name="Elector Overlay: [AV] Postal Voters",
-                overlay=True,
-                control=True,
-                show=False
-            )
-            postal_layer.options = postal_layer.options or {}
-            postal_layer.options.update({
-                "tag": "AV",
-                "layer_type": "av_highlight"
-            })
-
-            postal_cluster = MarkerCluster(name="Postal Voters", control=False).add_to(postal_layer)
-
-            postal_markers_count = 0
-            for target_node in target_highlight_nodes:
-                postal_markers_count += postal_layer.add_tag_layer(
-                    rlevels=rlevels,
-                    node=target_node,
-                    tags=['AV'],
-                    operator='OR',
-                    layer_name="Postal Voter",
-                    icon_color="purple", icon_name="envelope", header_color="#7C3AED",
-                    target_cluster=postal_cluster
-                )
-            print(f"    ✉️ Postal Highlights Clustered: Created {postal_markers_count} pins.")
-
-            if postal_markers_count > 0:
-                selected.append(postal_layer)
-
-            # --- B. Pledge Highlights Layer ---
-            pledge_layer = ExtendedFeatureGroup(
-                name="Elector Overlay: [VI] Pledged Voters",
-                overlay=True,
-                control=True,
-                show=False
-            )
-            pledge_layer.options = pledge_layer.options or {}
-            pledge_layer.options.update({
-                "tag": "VI",
-                "layer_type": "vi_highlight"
-            })
-
-            pledge_cluster = MarkerCluster(name="Reform Pledges", control=False).add_to(pledge_layer)
-
-            pledge_markers_count = 0
-            for target_node in target_highlight_nodes:
-                pledge_markers_count += pledge_layer.add_tag_layer(
-                    rlevels=rlevels,
-                    node=target_node,
-                    tags=['PL'],
-                    operator='OR',
-                    layer_name="Reform Pledge",
-                    icon_color="blue", icon_name="users", header_color="#2563EB",
-                    target_cluster=pledge_cluster
-                )
-            print(f"    🤝 Pledged Highlights Clustered: Created {pledge_markers_count} pins.")
-
-            if pledge_markers_count > 0:
-                selected.append(pledge_layer)
-
-        # -------------------------------------------------
-        # 7️⃣ Ghost Task Progress Overlays
-        # -------------------------------------------------
-        print(f"\n--- 👻 Baking Overlay Progress Maps (Ghost Engine) ---")
-        baked_manager = BakedDataManager()
-        baked_dict = baked_manager.load()
-        active_tags = dict(task_tags)
-        active_tags["VI"] = "Voter Intention"
-
-        for tag_code, tag_desc in active_tags.items():
-            tag_layer = get_safe_tag_layer(tag_code, tag_desc)
-            print(f"    🎨 Injecting tracking task tracking metrics block layer -> [{tag_code}] {tag_desc}")
-            tag_layer.add_ghosts(
-                tag_code=tag_code,
-                baked_dict=baked_dict,
-                nodes=childnodelist,
-                branchcolours=state.branchcolours
-            )
-            selected.append(tag_layer)
-
-        print(f"\n🏁 [DEBUG END: get_feature_layers] Pack compiled. Returning {len(selected)} total layer layers. Total Leafs: {totalleaf}")
         print(f"====================================================================\n")
         return list(reversed(selected)), totalleaf
 
