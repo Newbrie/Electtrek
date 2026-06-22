@@ -1514,7 +1514,7 @@ class TreeNode:
                 has_grandchildren = False
                 if childnodelist:
                     has_grandchildren = any(
-                        gc.type == grandchild_layer.key
+                        gc.type == grandchild_layer.type
                         for child in childnodelist
                         for gc in child.children
                     )
@@ -1526,7 +1526,7 @@ class TreeNode:
                     layer_specific_grandchildren = [
                         gc for child in childnodelist
                         for gc in child.children
-                        if gc.type == grandchild_layer.key
+                        if gc.type == grandchild_layer.type
                     ]
 
                     if layer_specific_grandchildren:
@@ -1550,7 +1550,7 @@ class TreeNode:
             if child_layers and childnodelist:
                 for child_layer in child_layers:
                     # Filter down to only nodes matching this layer asset's explicit type
-                    layer_specific_children = [c for c in childnodelist if c.type == child_layer.key]
+                    layer_specific_children = [c for c in childnodelist if c.type == child_layer.type]
 
                     if layer_specific_children:
                         leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
@@ -1568,7 +1568,7 @@ class TreeNode:
             if sibling_layers and self.parent:
                 for sibling_layer in sibling_layers:
                     # Ensure the sibling generation is scoped to the target layer's structural type
-                    if self.type == sibling_layer.key:
+                    if self.type == sibling_layer.type:
                         sibling_layer.create_layer(rlevels, [self.parent], static=False)
                         selected.append(sibling_layer)
 
@@ -1580,7 +1580,7 @@ class TreeNode:
             if parent_layers and self.parent and self.parent.parent:
                 for parent_layer in parent_layers:
                     # Ensure parent layer only builds if types align
-                    if self.parent.type == parent_layer.key:
+                    if self.parent.type == parent_layer.type:
                         parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
                         selected.append(parent_layer)
 
