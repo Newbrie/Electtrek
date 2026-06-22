@@ -547,15 +547,16 @@ class ExtendedFeatureGroup(FeatureGroup):
         assert len(rlevels) == 1
         (c_election, elevels), = rlevels.items()
 
-        target_child_level = node.level + 1
-        intention_type = elevels.get(target_child_level)
+        # Determine what structural type THIS layer instance is actually trying to process.
+        # Fall back to intention_type schema value if self.type isn't defined.
+        layer_target_type = getattr(self, "type", None) or elevels.get(node.level + 1)
 
-        print(f"DEBUG: BIVALENT RENDER | Node Value: {node.value} | Level: {node.level} | Primary Intention: {intention_type}")
+        print(f"DEBUG: BIVALENT RENDER | Node Value: {node.value} | Node Level: {node.level} | Layer Target Type: {layer_target_type}")
 
         # -----------------------------------------------------------------
-        # 🎯 TRACK 1: Elector Layer Interception (Keep as-is)
+        # 🎯 TRACK 1: Elector Layer Interception
         # -----------------------------------------------------------------
-        if intention_type == "elector":
+        if layer_target_type == "elector":
             self.add_tag_layer(
                 rlevels=rlevels, node=node,
                 tags=['PL'], operator='OR', layer_name="Reform Pledges",
@@ -565,83 +566,75 @@ class ExtendedFeatureGroup(FeatureGroup):
             return
 
         # -----------------------------------------------------------------
-        # 🗺️ TRACK 2: Structural Polygon Processing (Wards, Divisions, Districts, Walks)
+        # 🗺️ TRACK 2: Structural Polygon Processing (Isolated by Layer Type)
         # -----------------------------------------------------------------
         import folium
         original_add_to = folium.MacroElement.add_to
-        rendered_any_polygon = False
 
-        # --- A. Level 4 Children: County Divisions & Borough Wards ---
-        divisions = node.childrenoftype("division")
-        wards = node.childrenoftype("ward")
+        # --- A. Level 4 Children: County Divisions OR Borough Wards ---
+        if layer_target_type == "division":
+            divisions = node.childrenoftype("division")
+            if divisions:
+                div_group = folium.FeatureGroup(name="Boundaries: County Divisions", control=True).add_to(self)
+                try:
+                    folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, div_group) if target == self else original_add_to(obj, target)
+                    self.add_nodemaps(rlevels, node, static, counters, "division")
+                    return
+                finally:
+                    folium.MacroElement.add_to = original_add_to
 
-        if divisions:
-            # You can swap 'add_nodemaps' for 'add_voronoi' here if your divisions use the Voronoi engine too!
-            div_group = folium.FeatureGroup(name="Boundaries: County Divisions", control=True).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, div_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters, "division")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
+        if layer_target_type == "ward":
+            wards = node.childrenoftype("ward")
+            if wards:
+                ward_group = folium.FeatureGroup(name="Boundaries: Borough Wards", control=True, show=False).add_to(self)
+                try:
+                    folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, ward_group) if target == self else original_add_to(obj, target)
+                    # 🎯 FIXED TYPE BUG HERE: Changed "walk" back to "ward" to match your structural layer tracking
+                    self.add_nodemaps(rlevels, node, static, counters, "ward")
+                    return
+                finally:
+                    folium.MacroElement.add_to = original_add_to
 
-        if wards:
-            ward_group = folium.FeatureGroup(name="Boundaries: Borough Wards", control=True, show=False).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, ward_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters, "walk")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
+        # --- B. Level 5 Children: Polling Districts OR Canvass Walks ---
+        if layer_target_type == "polling_district":
+            polling_districts = node.childrenoftype("polling_district")
+            if polling_districts:
+                pd_sub_group = folium.FeatureGroup(name="Data: Polling Districts (Polys)", control=True).add_to(self)
+                try:
+                    folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, pd_sub_group) if target == self else original_add_to(obj, target)
+                    self.add_voronoi(rlevels, node, static, "polling_district")
+                    return
+                finally:
+                    folium.MacroElement.add_to = original_add_to
 
-        # --- B. Level 5 Children: Polling Districts & Canvass Walks ---
-        polling_districts = node.childrenoftype("polling_district")
-        canvass_walks = node.childrenoftype("walk")
-
-        if polling_districts:
-            pd_sub_group = folium.FeatureGroup(name="Data: Polling Districts (Polys)", control=True).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, pd_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static, "polling_district")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        if canvass_walks:
-            walk_sub_group = folium.FeatureGroup(name="Data: Canvass Walks (Polys)", control=True, show=False).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, walk_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static, "walk")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        # Clean short-circuit if we successfully processed any structural polygons
-        if rendered_any_polygon:
-            return
+        if layer_target_type == "walk":
+            canvass_walks = node.childrenoftype("walk")
+            if canvass_walks:
+                walk_sub_group = folium.FeatureGroup(name="Data: Canvass Walks (Polys)", control=True, show=False).add_to(self)
+                try:
+                    folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, walk_sub_group) if target == self else original_add_to(obj, target)
+                    self.add_voronoi(rlevels, node, static, "walk")
+                    return
+                finally:
+                    folium.MacroElement.add_to = original_add_to
 
         # -----------------------------------------------------------------
         # 📍 TRACK 3: Operational Linear Elements & Assets (Streets, Legs, Markers)
         # -----------------------------------------------------------------
-        # We can safely use childrenoftype() here too, falling back to intention_type
-        # just in case 'marker' isn't explicitly set as a node.type property.
-
-        has_streets = node.childrenoftype("street") or node.childrenoftype("walkleg")
-
-        if has_streets or intention_type in ("street", "walkleg"):
-            self.add_nodemarks(rlevels, node, static,intention_type)
+        if layer_target_type in ("street", "walkleg"):
+            self.add_nodemarks(rlevels, node, static, layer_target_type)
             return
 
-        if intention_type == "marker":
-            self.add_genmarkers(rlevels, node, static,intention_type)
+        if layer_target_type == "marker":
+            self.add_genmarkers(rlevels, node, static, layer_target_type)
             return
 
         # -----------------------------------------------------------------
-        # 🔄 TRACK 4: Ultimate Safety Catch
+        # 🔄 TRACK 4: Target-Aware Safety Catch
         # -----------------------------------------------------------------
-        # If a node somehow slips through everything else, give it a default map
-        print(f"WARNING: Node {node.value} hit safety fallback handler.")
-        self.add_nodemaps(rlevels, node, static, counters,intention_type)
+        # If execution gets here, the node has no children matching this layer's exact type track.
+        print(f"WARNING: Node {node.value} had no children matching target layout track: '{layer_target_type}'. Running strict safety fallback.")
+        self.add_nodemaps(rlevels, node, static, counters, layer_target_type)
 
     def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
         """
