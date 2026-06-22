@@ -263,32 +263,16 @@ def select_parent_geoms(*, Treepolys, parent_key, sourcepath=None, here=None):
     return parents
 
 def intersectingArea(
-    source,
-    sourcekey,
-    parent_levels,
-    child_level,
-    elevels,
-    destination,
-    *,
-    parent_row,
-    select_child_name=None,
-    roid=None,
-    boundary_geom=None
+    source, sourcekey, parent_levels, child_level, elevels, destination,
+    *, parent_row, select_child_name=None, roid=None, boundary_geom=None
 ):
-
-
     parent_name = normalname(parent_row["NAME"]) if parent_row is not None else "None"
     parent_type = parent_levels.get(child_level)
 
     if parent_type is None:
         raise ValueError(f"No parent type found for parent_level IN {parent_levels}")
 
-    print(f"\n[DEBUG] intersectingArea | source={source}")
-    print(f"[DEBUG] parent_name={parent_name} parent_type={parent_type}, roid={roid}, select_child_name={select_child_name}")
-
-    # ------------------------------------------------------------------
     # 1. Load child layer
-    # ------------------------------------------------------------------
     gdf_RAW = get_layer_gdf(source)
     gdf = ensure_4326(gdf_RAW)
 
@@ -300,100 +284,50 @@ def intersectingArea(
     if "OBJECTID" in gdf.columns:
         gdf = gdf.rename(columns={"OBJECTID": "FID"})
 
-    all_child_polygons = gdf
-    print(f"[DEBUG] Loaded {len(gdf)} child features and cols: {gdf.columns}")
-
-    # ------------------------------------------------------------------
-    # 2. Choose geometry (FIXED LOGIC)
-    # ------------------------------------------------------------------
+    # 2. Choose geometry
     if boundary_geom is not None:
         working_geom = boundary_geom
-        print("[DEBUG] Using boundary_geom for intersection")
-
     elif parent_row is not None and not parent_row.geometry.is_empty:
         working_geom = parent_row.geometry
-        print("[DEBUG] Using parent_row geometry")
-
     else:
-        print(f"[DEBUG] under {route()} No geometry available → returning all children")
-        return None, all_child_polygons, all_child_polygons
+        return None, gdf, gdf
 
     # ------------------------------------------------------------------
-    # 3. Intersection filter
+    # 🔄 REFACTORED CORE MATH CALL (Replaces Steps 3 & 4 completely!)
     # ------------------------------------------------------------------
     child_type = elevels[child_level]
-    threshold = Overlaps.get(child_type, 0)
 
-    print(f"[DEBUG] Intersection threshold ({child_type}): {threshold}")
-
-    candidates = gdf[gdf.geometry.intersects(working_geom)]
-
-    print(f"[DEBUG] Candidates intersecting bbox: {len(candidates)}")
-
-    if candidates.empty:
-        return None, gpd.GeoDataFrame(), all_child_polygons
-
-    # ------------------------------------------------------------------
-    # 4. Project + overlap
-    # ------------------------------------------------------------------
-    proj_crs = "EPSG:3857"
-
-    working_geom_proj = (
-        gpd.GeoSeries([working_geom], crs="EPSG:4326")
-        .to_crs(proj_crs)
-        .iloc[0]
+    child_polygons_within_parent = filter_gdf_by_overlap(
+        children_gdf=gdf,
+        parent_geometry=working_geom,
+        layer_type=child_type,
+        threshold_dict=OVERLAP_THRESHOLDS
     )
-# ... inside intersectingArea ...
-    candidates_proj = candidates.to_crs(proj_crs)
 
-    # Calculate overlap area
-    overlap_areas = candidates_proj.geometry.intersection(working_geom_proj).area
-    # Calculate child's total area
-    child_areas = candidates_proj.geometry.area
-
-    # Proportional check: Is 50% of the child inside the parent?
-    overlap_ratio = overlap_areas / child_areas
-    mask = overlap_ratio > threshold  # threshold should be 0.5 (50%)
-
-    child_polygons_within_parent = candidates[mask].copy()
-
-    print(f"[DEBUG] Children within parent above threshold: {len(child_polygons_within_parent)}")
-
-    # ------------------------------------------------------------------
-    # 5. Resolve selected child
-    # ------------------------------------------------------------------
+    # 5. Resolve selected child (Kept exactly as you wrote it)
     selected_child_name = None
-
-    if roid:
+    if roid and not child_polygons_within_parent.empty:
+        from shapely.geometry import Point
         lat, lon = roid
         pt = Point(lon, lat)
-
-        hit = child_polygons_within_parent[
-            child_polygons_within_parent.geometry.contains(pt)
-        ]
-
+        hit = child_polygons_within_parent[child_polygons_within_parent.geometry.contains(pt)]
         if not hit.empty:
             selected_child_name = normalname(hit.iloc[0]["NAME"])
 
-    if not selected_child_name and select_child_name:
-        hit = child_polygons_within_parent[
-            child_polygons_within_parent["NAME"].apply(normalname)
-            == normalname(select_child_name)
-        ]
-
+    if not selected_child_name and select_child_name and not child_polygons_within_parent.empty:
+        hit = child_polygons_within_parent[child_polygons_within_parent["NAME"].apply(normalname) == normalname(select_child_name)]
         if not hit.empty:
             selected_child_name = normalname(hit.iloc[0]["NAME"])
 
     if not selected_child_name and not child_polygons_within_parent.empty:
         selected_child_name = normalname(child_polygons_within_parent.iloc[0]["NAME"])
 
-    # ------------------------------------------------------------------
     # 6. Save
-    # ------------------------------------------------------------------
     if not child_polygons_within_parent.empty:
         child_polygons_within_parent.to_file(destination)
 
-    return selected_child_name, child_polygons_within_parent, all_child_polygons
+    return selected_child_name, child_polygons_within_parent, gdf
+
 
 def subending(filename, ending):
   stem = filename.replace(".XLSX", "@@@").replace(".CSV", "@@@").replace(".xlsx", "@@@").replace(".csv", "@@@").replace("-PRINT.html", "@@@").replace("-CAL.html", "@@@").replace("-MAP.html", "@@@").replace("-WALKS.html", "@@@").replace("-ZONES.html", "@@@").replace("-PDS.html", "@@@").replace("-DIVS.html", "@@@").replace("-WARDS.html", "@@@")
@@ -606,6 +540,58 @@ def pd_not_empty(val):
     return True
 
 
+def filter_gdf_by_overlap(children_gdf, parent_geometry, layer_type: str, threshold_dict, default_threshold=0.40):
+    """
+    Pure spatial math function: Takes a child GeoDataFrame and a parent geometry,
+    projects them to EPSG:3857, calculates proportional intersection area,
+    and returns a filtered copy of the children exceeding the configured threshold.
+    """
+    import geopandas as gpd
+
+    if children_gdf is None or children_gdf.empty or parent_geometry is None:
+        return gpd.GeoDataFrame(columns=children_gdf.columns) if children_gdf is not None else None
+
+    # 1. Resolve dynamic threshold configuration
+    primary_type = layer_type.split('/')[0].strip()
+    threshold = threshold_dict.get(primary_type, threshold_dict.get(layer_type, default_threshold))
+    print(f"[SPATIAL MATH] Filtering {layer_type} with threshold: {threshold}")
+
+    # 2. Fast Bounding-Box pre-filter to drop completely unrelated features immediately
+    if children_gdf.crs is None:
+        children_gdf = children_gdf.set_crs("EPSG:4326")
+    candidates = children_gdf[children_gdf.geometry.intersects(parent_geometry)].copy()
+
+    if candidates.empty:
+        return candidates
+
+    # 3. Project to Equal-Area/Metric CRS for precise ratio calculations
+    proj_crs = "EPSG:3857"
+    parent_geom_proj = gpd.GeoSeries([parent_geometry], crs="EPSG:4326").to_crs(proj_crs).iloc[0]
+    candidates_proj = candidates.to_crs(proj_crs)
+
+    # 4. Clean up invalid/empty geometries
+    valid_mask = candidates_proj.geometry.notnull() & ~candidates_proj.geometry.is_empty
+    valid_candidates_proj = candidates_proj[valid_mask].copy()
+
+    if valid_candidates_proj.empty:
+        return candidates.iloc[0:0] # Return empty GDF preserving original structure
+
+    # 5. Vectorized Math Operations
+    overlap_areas = valid_candidates_proj.geometry.intersection(parent_geom_proj).area
+    child_areas = valid_candidates_proj.geometry.area.replace(0, 1e-9) # Prevent division-by-zero
+
+    valid_candidates_proj['_overlap_ratio'] = overlap_areas / child_areas
+
+    # 6. Print diagnostics
+    for idx, row in valid_candidates_proj.iterrows():
+        name = row.get("name") or row.get("NAME") or f"Index-{idx}"
+        ov = row['_overlap_ratio']
+        print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} {'✅' if ov >= threshold else '❌'}")
+
+    # 7. Map back to original unprojected indices and return
+    matched_indices = valid_candidates_proj[valid_candidates_proj['_overlap_ratio'] >= threshold].index
+    return candidates.loc[matched_indices].copy()
+
 def ensure_treepolys_with_index(
     *,
     territory: str | None,
@@ -616,11 +602,53 @@ def ensure_treepolys_with_index(
     parent_levels: dict[int, str]
 ):
     import pandas as pd
+    import geopandas as gpd
     import logging
     from state import Treepolys, Geo_index
     from nodes import persist, FACEENDING
 
     ROOT = "UNITED_KINGDOM"
+
+    # Helper function modified to work inside the parent loop
+    def get_children_within_vectorized(parent_row, children_gdf, layer_type: str):
+        if children_gdf is None or children_gdf.empty:
+            return gpd.GeoDataFrame(columns=children_gdf.columns) if children_gdf is not None else None
+
+        if parent_row is None or not hasattr(parent_row, "geometry") or parent_row.geometry is None:
+            return children_gdf.copy()
+
+        proj_crs = "EPSG:3857"
+
+        # 🏁 LOOKUP THE DYNAMIC THRESHOLD
+        threshold = OVERLAP_THRESHOLDS.get(layer_type, DEFAULT_THRESHOLD)
+
+        # Project parent
+        parent_gs = gpd.GeoSeries([parent_row.geometry], crs="EPSG:4326").to_crs(proj_crs)
+        parent_geom_proj = parent_gs.iloc[0]
+
+        # Project children safely
+        if children_gdf.crs is None:
+            children_gdf = children_gdf.set_crs("EPSG:4326")
+        children_proj = children_gdf.to_crs(proj_crs)
+
+        # Vectorized calculations
+        valid_children = children_proj[children_proj.geometry.notnull() & ~children_proj.geometry.is_empty()].copy()
+        if valid_children.empty:
+            return valid_children
+
+        inter_areas = valid_children.geometry.intersection(parent_geom_proj).area
+        total_areas = valid_children.geometry.area.replace(0, 1e-9)
+        valid_children['_overlap_ratio'] = inter_areas / total_areas
+
+        # Diagnostic printout showing the dynamic target limit
+        for idx, row in valid_children.iterrows():
+            name = row.get("name") or row.get("NAME") or f"Index-{idx}"
+            ov = row['_overlap_ratio']
+            status = '✅' if ov >= threshold else '❌'
+            print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} (Req: {threshold}) {status}")
+
+        matched_indices = valid_children[valid_children['_overlap_ratio'] >= threshold].index
+        return children_gdf.loc[matched_indices].copy()
 
     if ROOT not in Geo_index:
         Geo_index[ROOT] = {
@@ -628,7 +656,7 @@ def ensure_treepolys_with_index(
             "name": ROOT,
             "parent": None,
             "children": [],
-            "roid": [54.5, -2.5]  # 🌟 Hardcoded center of the UK (Lat, Lon)
+            "roid": [54.5, -2.5]
         }
 
     t("start")
@@ -640,22 +668,13 @@ def ensure_treepolys_with_index(
         raise ValueError("resolved_levels is required")
 
     if len(resolved_levels) != 1:
-        raise ValueError(
-            f"Expected 1 election, got {len(resolved_levels)}"
-        )
+        raise ValueError(f"Expected 1 election, got {len(resolved_levels)}")
 
     (_, elevels), = resolved_levels.items()
-
     print("elevels =", elevels)
-
-    logging.debug(
-        f"Starting treepolys with territory={territory} "
-        f"and sourcepath={sourcepath}"
-    )
 
     sourcepath = sourcepath or territory
     steps = stepify(sourcepath) if sourcepath else []
-
     layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
 
     active_parent_rows = {}
@@ -665,392 +684,168 @@ def ensure_treepolys_with_index(
     # PRE-LOAD AND AGGREGATE ALL CACHED GEOMETRIES
     # -------------------------------------------------------------
     for lvl, compound_layer_type in elevels.items():
-
-        sub_layers = [
-            l.strip()
-            for l in compound_layer_type.split('/')
-            if l.strip()
-        ]
-
+        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
         for l_type in sub_layers:
-
             existing_polys = get_treepoly(l_type)
-
             if existing_polys is not None:
-
                 if lvl not in active_parent_rows:
                     active_parent_rows[lvl] = []
-
-                existing_fids = {
-                    r["FID"]
-                    for r in active_parent_rows[lvl]
-                    if r is not None and "FID" in r
-                }
-
+                existing_fids = {r["FID"] for r in active_parent_rows[lvl] if r is not None and "FID" in r}
                 for _, row in existing_polys.iterrows():
                     if row.get("FID") not in existing_fids:
                         active_parent_rows[lvl].append(row)
 
-    # Reconstruct the absolute paths of the assigned parent records that filter child polys
     for lvl, rows in active_parent_rows.items():
-
         for r in rows:
-
             if r is not None and "FID" in r and "_parent_path" in r:
-
                 child_name = normalname(r["NAME"])
-
-                if lvl == 0 or child_name == ROOT:
-                    this_path = ROOT
-                else:
-                    parent_path = r["_parent_path"] #the rows stored parent path
-                    this_path = f"{parent_path}/{child_name}"
-
+                this_path = ROOT if (lvl == 0 or child_name == ROOT) else f"{r['_parent_path']}/{child_name}"
                 fid_to_path[r["FID"]] = this_path
-
-                logging.debug(
-                    f"[LEVEL {lvl} - FID:{r['FID']}] "
-                    f"maps to path: {this_path}"
-                )
 
     if not active_parent_rows.get(0):
         active_parent_rows[0] = [None]
 
     matched_path = ROOT
-    match_full_filepath = None
 
     # -------------------------------------------------------------
     # MAIN LOOP
     # -------------------------------------------------------------
     for level, compound_layer_type in elevels.items():
-
         if int(level) > 4:
-            logging.info(
-                f"[LEVEL {level}] "
-                "Exceeded maximum processing level (4). "
-                "Terminating drill-down early."
-            )
             break
 
         t(f"LEVEL {level} ({compound_layer_type}) start")
-
-        sub_layers = [
-            l.strip()
-            for l in compound_layer_type.split('/')
-            if l.strip()
-        ]
+        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
 
         for layer_type in sub_layers:
-
             layer = layer_defs.get((level, layer_type))
-
             if not layer:
-                logging.warning(
-                    f"[LEVEL {level}] "
-                    f"No layer definition found for "
-                    f"{(level, layer_type)}"
-                )
                 continue
 
-            select_name = (
-                steps[level]
-                if level < len(steps)
-                else None
-            )
-
+            select_name = steps[level] if level < len(steps) else None
             parent_rows = active_parent_rows.get(level, [None])
             all_results = []
 
-            logging.info(
-                f"[LEVEL {level} - {layer_type}] "
-                f"Starting with {len(parent_rows)} parent rows"
-            )
-
             for parent_row in parent_rows:
-
                 if level > 0 and parent_row is not None:
-
                     parent_fid = parent_row.get("FID")
                     parent_path = fid_to_path.get(parent_fid, ROOT)
                     expected_parent_type = parent_levels.get(level)
 
-                    print()
-                    print("LEVEL",level)
-                    print("parent_fid =",parent_fid)
-                    print("parent_path =",parent_path)
-                    print("expected_parent_type =",expected_parent_type)
-                    print("actual type =",Geo_index.get(parent_path,{}).get("level"))
-
-                    if (
-                        expected_parent_type
-                        and Geo_index.get(parent_path, {}).get("level")
-                        != expected_parent_type
-                    ):
+                    if expected_parent_type and Geo_index.get(parent_path, {}).get("level") != expected_parent_type:
                         continue
 
                 src = layer["src"]
                 field = layer["field"]
-
-                chosen_src = src
-                chosen_field = field
+                chosen_src = src[0] if isinstance(src, list) else src
+                chosen_field = field[0] if isinstance(field, list) else field
 
                 if isinstance(src, list):
-
-                    chosen_src = src[0]
-                    chosen_field = (
-                        field[0]
-                        if isinstance(field, list)
-                        else field
-                    )
-
                     for index, filename in enumerate(src):
-
-                        if (
-                            filename
-                            and "surrey" in str(filename).lower()
-                        ):
+                        if filename and "surrey" in str(filename).lower():
                             chosen_src = src[index]
-                            chosen_field = (
-                                field[index]
-                                if isinstance(field, list)
-                                else field
-                            )
+                            chosen_field = field[index] if isinstance(field, list) else field
                             break
 
                 layer_local = dict(layer)
                 layer_local["src"] = chosen_src
                 layer_local["field"] = chosen_field
 
-                logging.debug(
-                    f"[LEVEL {level}-{layer_type}] "
-                    f"load_layer src={chosen_src}"
-                )
-
-                print()
-                print(f"LEVEL {level}")
-                print("method =", layer_local["method"])
-                print("src =", layer_local["src"])
-                print("field =", layer_local["field"])
-                print("select_name =", select_name)
-
                 _, tree_gdf, _ = load_layer(
-                    layer=layer_local,
-                    level=level,
-                    elevels=elevels,
-                    parent_levels=parent_levels,
-                    parent_row=parent_row,
-                    select_name=select_name,
-                    roid=here,
-                    boundary_geom=boundary_geom
+                    layer=layer_local, level=level, elevels=elevels,
+                    parent_levels=parent_levels, parent_row=parent_row,
+                    select_name=select_name, roid=here, boundary_geom=boundary_geom
                 )
-                print()
-                print(f"LOAD_LAYER level={level} type={layer_type}")
-                print("select_name =", select_name)
-                print("parent_row =", None if parent_row is None else parent_row["NAME"])
 
-                if tree_gdf is None:
-                    print("tree_gdf is None")
-                else:
-                    print("tree_gdf rows =", len(tree_gdf))
-                    if not tree_gdf.empty:
-                        print(tree_gdf[["FID","NAME"]])
-
+                # 2. Process the cleanly filtered results directly
                 if tree_gdf is not None and not tree_gdf.empty:
-
                     tree_gdf = tree_gdf.copy()
                     if level == 0:
                         parent_path = None
-
                     elif parent_row is None:
                         parent_path = ROOT
-
                     else:
                         parent_fid = parent_row["FID"]
-                        if parent_fid not in fid_to_path:
-                            raise ValueError(
-                                f"[LEVEL {level}] Missing parent path for FID {parent_fid}"
-                            )
                         parent_path = fid_to_path[parent_fid]
 
                     tree_gdf["_parent_path"] = parent_path
-
                     all_results.append(tree_gdf)
 
+
             if not all_results:
-
-                logging.warning(
-                    f"[LEVEL {level}-{layer_type}] "
-                    "No spatial records found"
-                )
-
                 continue
 
-            tree_gdf = pd.concat(
-                all_results,
-                ignore_index=True
-            )
-
-            logging.info(
-                f"[LEVEL {level}-{layer_type}] "
-                f"Combined rows={len(tree_gdf)}"
-            )
-
+            tree_gdf = pd.concat(all_results, ignore_index=True)
             existing = get_treepoly(layer_type)
+            new_tree_gdf = tree_gdf if existing is None else tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
 
-            if existing is None:
+            set_treepoly(layer_type, upsert_geodf(existing, new_tree_gdf))
 
-                new_tree_gdf = tree_gdf
-
-                logging.info(
-                    f"[LEVEL {level}-{layer_type}] "
-                    f"Inserting {len(new_tree_gdf)} rows"
-                )
-
-            else:
-
-                new_tree_gdf = tree_gdf[
-                    ~tree_gdf["FID"].isin(existing["FID"])
-                ]
-
-                logging.info(
-                    f"[LEVEL {level}-{layer_type}] "
-                    f"{len(new_tree_gdf)} new rows"
-                )
-
-            logging.info(
-                f"💾 inserting {len(new_tree_gdf)} rows "
-                f"for {layer_type}"
-            )
-
-            set_treepoly(
-                layer_type,
-                upsert_geodf(existing, new_tree_gdf)
-            )
-
-            # BUILD GEO INDEX & SEED NEXT LEVELS
             next_level = level + 1
-
             if next_level not in active_parent_rows:
                 active_parent_rows[next_level] = []
 
             matched_this_level = None
+            expected_name = normalname(steps[level]) if level < len(steps) else None
 
-            expected_name = (
-                normalname(steps[level])
-                if level < len(steps)
-                else None
-            )
-
-            print(f"\nXLEVEL {level} ({layer_type})")
-            print(tree_gdf[["FID", "NAME", "_parent_path"]])
-            for _, row in tree_gdf.iterrows():
-
+            # Process validated matches into index
+            for idx, row in tree_gdf.iterrows():
                 child_name = normalname(row["NAME"])
+                parent_path = None if level == 0 else row.get("_parent_path", ROOT)
+                this_path = ROOT if level == 0 else f"{parent_path}/{child_name}"
 
-                if level == 0:
-                    parent_path = None
-                    this_path = ROOT
-                else:
-                    parent_path = row.get("_parent_path", ROOT)
-                    this_path = f"{parent_path}/{child_name}"
-                # -----------------------------------------------------------------
-                # 🌟 REPLACE WITH THIS AMENDED VERSION:
-                # -----------------------------------------------------------------
                 if this_path not in Geo_index:
-
-                    # 1. Safely pull the spatial geometry from the GeoPandas row
                     roid_coords = None
                     if hasattr(row, "geometry") and row.geometry is not None:
                         try:
-                            # Calculate the heavy representative point once during creation
                             centroid_point = row.geometry.representative_point()
-                            # Explicitly force float conversion to prevent JSON serialization errors
                             roid_coords = [float(centroid_point.y), float(centroid_point.x)]
                         except Exception as spatial_err:
-                            logging.warning(f"Could not calculate representative point for {this_path}: {spatial_err}")
+                            logging.warning(f"Spatial error on {this_path}: {spatial_err}")
 
-                    # 2. Inject 'roid' directly into your index master schema
                     Geo_index[this_path] = {
                         "level": layer_type,
                         "name": child_name,
                         "parent": parent_path,
                         "children": [],
-                        "roid": roid_coords  # 🌟 Added permanently to the baked file output!
+                        "roid": roid_coords
                     }
 
                 if parent_path in Geo_index:
-
                     if this_path not in Geo_index[parent_path]["children"]:
                         Geo_index[parent_path]["children"].append(this_path)
 
                 fid_to_path[row["FID"]] = this_path
-
-                should_match = (
-                    level == 0
-                    or level >= len(steps)
-                    or child_name == expected_name
-                )
+                should_match = (level == 0 or level >= len(steps) or child_name == expected_name)
 
                 if should_match:
-
                     matched_path = this_path
                     matched_this_level = this_path
 
-                print("layer_type =", layer_type)
-                print("FACEENDING[layer_type] =", FACEENDING[layer_type])
-                print("matched_path =", matched_path)
-
-
-                # Append discovered nodes straight into the active parents cache
                 row_copy = row.copy()
                 row_copy["_parent_path"] = this_path
                 active_parent_rows[next_level].append(row_copy)
 
-            if level < len(steps) and matched_this_level is None:
-
-                logging.warning(
-                    f"[LEVEL {level}] "
-                    f"No match found for step: {expected_name}"
-                )
-
-    logging.debug(
-        f"Final matched_path: {matched_path}"
-    )
+    # Reconstruct final matching hierarchy track
     final_path = ROOT
-
     for step in steps[1:]:
         target = normalname(step)
-
         children = Geo_index[final_path]["children"]
-
         found = None
-
         for child_path in children:
             if Geo_index[child_path]["name"] == target:
                 found = child_path
                 break
-
         if found is None:
             break
-
         final_path = found
 
     node = Geo_index[final_path]
-
-    match_full_filepath = (
-        final_path +
-        FACEENDING[node["level"]]
-    )
-
-    print("match_full_filepath =", match_full_filepath)
-
-    logging.debug(
-        f"Geo_index contains {len(Geo_index)} entries"
-    )
-
+    match_full_filepath = final_path + FACEENDING[node["level"]]
     persist(Treepolys, Fullpolys, Geo_index)
 
     return match_full_filepath, Geo_index
+
 
 def layer_loaded(layer_key):
     return (
@@ -1378,18 +1173,20 @@ ROOT_LEVEL = {
 }
 
 
-Overlaps = {
-    "country": 0.5,            # almost complete overlap; usually one polygon
-    "nation": 0.5,             # moderate, allows small overseas regions
-    "county": 0.5,           # counties are large; even tiny overlap is ok
-    "constituency": 0.3,   # very small fraction of parent polygon
-    "ward": 0.3,          # tiny polygons; keep threshold tiny
-    "division": 0.3,      # similar to wards
-    "walk": 0.1,             # walking routes
-    "polling_district": 0.1, # small but meaningful overlap
-    "street": 0.05,           # street polygons
-    "walkleg": 0.05           # same as walk
+# Threshold configuration: (Intersection Area / Child Area) >= Threshold
+OVERLAP_THRESHOLDS = {
+    "country": 0.90,           # High precision: should be almost completely inside
+    "region": 0.75,            # Minor boundary clipping allowed
+    "county": 0.60,            # Forgiving of coastline/river edge mismatches
+    "constituency": 0.50,      # Balanced threshold for parliamentary lines
+    "ward": 0.45,              # Forgiving enough for Windlesham / Heathlands boundary bleed
+    "division": 0.45,          # Similar to wards
+    "polling_district": 0.30,  # Lower threshold: small shapes clipping complex edges
+    "street": 0.15,            # Streets can run right along borders; low threshold prevents exclusion
+    "walk": 0.10,              # Route paths frequently cross borders
+    "walkleg": 0.05            # Highly granular slivers
 }
+DEFAULT_THRESHOLD = 0.50       # Fallback safety blanket
 
 Candidates = {
     "ward": {},
