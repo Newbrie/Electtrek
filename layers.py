@@ -1996,25 +1996,23 @@ def make_feature_layers():
     Each layer has Python-only metadata: .key, .mytag, and .layer_type.
     """
     layers = {}
-
     for key, spec in FEATURE_LAYER_SPECS.items():
+        # 1. Initialize with standard, safe folium kwargs
         layer = ExtendedFeatureGroup(
             name=spec["name"],
-            mytag=spec["mytag"],
             overlay=spec["overlay"],
             control=spec["control"],
             show=spec["show"],
-            type=spec["type"]
         )
 
-        # Python-side metadata only, safe to reuse in counters, logging, etc.
+        # 2. Assign attributes dynamically on the Python side (Guaranteed safe!)
+        layer.type = spec["type"]                    # 👈 Fixes the 'gc.type == grandchild_layer.type' crash!
         layer.key = key
         layer.mytag = spec["mytag"]
-
-        # --- NEW: define the context / uiScope ---
-        layer.layer_type = spec.get("type", "test")  # walk / pd / ward
+        layer.layer_type = spec.get("type", "test")  # Backward compatibility
 
         layers[key] = layer
+
 
     return layers
 
