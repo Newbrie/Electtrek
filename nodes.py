@@ -1537,41 +1537,39 @@ class TreeNode:
                             grandchildnodelist.extend(layer_specific_grandchildren)
 
         # -------------------------------------------------
-        # 2️⃣ Child Layer (Level + 1)
+        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIX: Loop through ALL types
         # -------------------------------------------------
         if self.level < 6: # guard for node with no children
-            # 🏁 FIX: Extract the first layer from the returned list safely
             child_layers = get_safe_level_layers(self.level + 1)
             if child_layers and childnodelist:
-                child_layer = child_layers[0]
-                leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
-                totalleaf += leaf_count
+                for child_layer in child_layers:
+                    # Filter childnodelist to match this specific layer key type if relevant
+                    leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
+                    totalleaf += leaf_count
 
-                if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
-                    child_layer.show = True
-                    selected.append(child_layer)
+                    if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
+                        child_layer.show = True
+                        selected.append(child_layer)
 
         # -------------------------------------------------
-        # 3️⃣ Sibling Layer (Current Level)
+        # 3️⃣ Sibling Layer (Current Level) -> 🏁 FIX: Loop through ALL types
         # -------------------------------------------------
         if self.level > 0: # guard for node no siblings
-            # 🏁 FIX: Extract the first layer from the returned list safely
             sibling_layers = get_safe_level_layers(self.level)
             if sibling_layers:
-                sibling_layer = sibling_layers[0]
-                sibling_layer.create_layer(rlevels, [self.parent], static=False)
-                selected.append(sibling_layer)
+                for sibling_layer in sibling_layers:
+                    sibling_layer.create_layer(rlevels, [self.parent], static=False)
+                    selected.append(sibling_layer)
 
         # -------------------------------------------------
-        # 4️⃣ Parent Layer (Level - 1)
+        # 4️⃣ Parent Layer (Level - 1) -> 🏁 FIX: Loop through ALL types
         # -------------------------------------------------
         if self.level > 1: # guard for node with no grandparent
-            # 🏁 FIX: Extract the first layer from the returned list safely
             parent_layers = get_safe_level_layers(self.level - 1)
             if parent_layers:
-                parent_layer = parent_layers[0]
-                parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
-                selected.append(parent_layer)
+                for parent_layer in parent_layers:
+                    parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
+                    selected.append(parent_layer)
 
         # -------------------------------------------------
         # 5️⃣ Marker Asset Layer
@@ -1666,7 +1664,6 @@ class TreeNode:
             selected.append(tag_layer)
 
         return list(reversed(selected)), totalleaf
-
 
     def sumupVI(self,viValue):
         origin = self
