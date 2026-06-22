@@ -2010,7 +2010,7 @@ def make_feature_layers():
         layer.mytag = spec["mytag"]
 
         # --- NEW: define the context / uiScope ---
-        layer.layer_type = spec.get("type", "walk")  # walk / pd / ward
+        layer.layer_type = spec.get("type", "test")  # walk / pd / ward
 
         layers[key] = layer
 
