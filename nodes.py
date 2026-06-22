@@ -1431,6 +1431,10 @@ class TreeNode:
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
 
+        print(f"\n================ [DEBUG START: get_feature_layers] ================")
+        print(f"📍 CURRENT NODE: '{self.name if hasattr(self, 'name') else self}' | Level: {self.level} | Type: {getattr(self, 'type', 'N/A')}")
+        print(f"🔑 Election Key: {c_election} | Levels Schema Mapping: {elevels}")
+
         # Load election contexts and task tracking configurations
         current_election = CurrentElection.load(c_election)
         task_tags, _, _ = current_election.get_tags()
@@ -1461,7 +1465,9 @@ class TreeNode:
 
         def get_safe_level_layers(level_idx):
             raw_key = elevels.get(level_idx)
+            print(f"  🔍 [Level Lookup] Target Level Index: {level_idx} -> Raw Key String: '{raw_key}'")
             if not raw_key:
+                print(f"  ⚠️ [Level Lookup] No layer key mapping defined for level index {level_idx}")
                 return []
 
             keys_to_process = raw_key.split('/') if '/' in raw_key else [raw_key]
@@ -1469,16 +1475,17 @@ class TreeNode:
 
             for key in keys_to_process:
                 if key not in factory:
-                    print(f"⚠️ Warning: Component layer '{key}' from raw key '{raw_key}' not found in factory.")
+                    print(f"  ❌ [Factory Miss] Component layer '{key}' not found inside active Map Factory keys.")
                     continue
 
                 # 🏁 FIX THE STATE OVERWRITE TRAILER HERE:
                 if key in used_keys:
-                    # 🧠 Safely shallow-copy the target layer instead of invoking the full factory constructor
+                    print(f"  ♻️ [Factory Copy] Key '{key}' already occupied. Shallow copying instance to preserve stack separation.")
                     new_layer_instance = copy.copy(factory[key])
                     new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
                     resolved_layers.append(new_layer_instance)
                 else:
+                    print(f"  ✅ [Factory Hit] Successfully loaded standalone layer instance for key: '{key}'")
                     used_keys.add(key)
                     resolved_layers.append(factory[key])
 
@@ -1490,12 +1497,14 @@ class TreeNode:
         if session.get("accumulate", False):
             childnode_ids = session.get("accumulated_nodes", [])
             childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
+            print(f"👥 [Scope Mode: ACCUMULATED] Total root nodes loaded: {len(childnodelist)}")
         else:
             childnodelist = [self]
+            print(f"👤 [Scope Mode: SINGLE NODE] Evaluating focus element: {self.name if hasattr(self, 'name') else self}")
 
         if childnodelist:
             test_node = childnodelist[0]
-            print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
+            print(f"📋 [Base Node Sample] Sample ID: {getattr(test_node, 'id', 'N/A')} | Type: {getattr(test_node, 'type', 'MISSING')}, layer_type: {getattr(test_node, 'layer_type', 'MISSING')}, key: {getattr(test_node, 'key', 'MISSING')}")
 
         # -------------------------------------------------
         # 1️⃣ Grandchild Layer (Level + 2)
@@ -1504,47 +1513,66 @@ class TreeNode:
         grandchildnodelist = []
 
         if self.level < 5:
-            grandchild_layers = get_safe_level_layers(self.level + 2)
+            target_level = self.level + 2
+            print(f"\n--- 🏗️ Analyzing Level 1: Grandchildren (Targeting Level {target_level}) ---")
+            grandchild_layers = get_safe_level_layers(target_level)
 
             for grandchild_layer in grandchild_layers:
+                print(f"    ⚙️ Checking structural layer: '{grandchild_layer.name}' (Target Type Match: '{grandchild_layer.type}')")
+
+                # Inline expansion for transparent debug tracing
                 has_grandchildren = False
                 if childnodelist:
-                    has_grandchildren = any(
-                        gc.type == grandchild_layer.type
-                        for child in childnodelist
-                        for gc in child.children
-                    )
+                    for child in childnodelist:
+                        child_children = getattr(child, 'children', [])
+                        print(f"      ↳ Sub-node '{child.name if hasattr(child, 'name') else child}' has {len(child_children)} active child-elements in memory registry.")
+                        for gc in child_children:
+                            if gc.type == grandchild_layer.type:
+                                has_grandchildren = True
+
+                print(f"    📊 Has matching grandchild nodes down this structural branch? {has_grandchildren}")
 
                 if has_grandchildren:
-                    print(f"Processing layer asset: {grandchild_layer.name}")
+                    print(f"    Processing layer asset: {grandchild_layer.name}")
 
                     layer_specific_grandchildren = [
                         gc for child in childnodelist
-                        for gc in child.children
+                        for gc in getattr(child, 'children', [])
                         if gc.type == grandchild_layer.type
                     ]
 
+                    print(f"    📦 Extracted {len(layer_specific_grandchildren)} specific downstream '{grandchild_layer.type}' entries.")
+
                     if layer_specific_grandchildren:
                         leaf_count = grandchild_layer.create_layer(rlevels, layer_specific_grandchildren, static=False)
+                        print(f"    📥 create_layer output -> Added {leaf_count} features to '{grandchild_layer.name}'")
                         totalleaf += leaf_count
 
                         if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
                             grandchild_layer.show = True
                             selected.append(grandchild_layer)
                             grandchildnodelist.extend(layer_specific_grandchildren)
+        else:
+            print(f"\n⏩ Skipping Grandchild layer generation (Node level {self.level} bounds checks maxed out).")
 
         # -------------------------------------------------
         # 2️⃣ Child Layer (Level + 1)
         # -------------------------------------------------
         if self.level < 6:
-            child_layers = get_safe_level_layers(self.level + 1)
+            target_level = self.level + 1
+            print(f"\n--- 🏗️ Analyzing Level 2: Children (Targeting Level {target_level}) ---")
+            child_layers = get_safe_level_layers(target_level)
+
             if child_layers and childnodelist:
                 for child_layer in child_layers:
+                    print(f"    ⚙️ Checking structural layer: '{child_layer.name}' (Target Type Match: '{child_layer.type}')")
                     layer_specific_children = []
 
                     if self.level >= 3:
+                        print(f"      🔍 Deep branch structural evaluation activated (Self Level >= 3)")
                         for node in childnodelist:
                             if node.type == child_layer.type:
+                                print(f"        🎯 Direct type match hit at root node: '{node.name if hasattr(node, 'name') else node}'")
                                 layer_specific_children.append(node)
                             elif hasattr(node, 'children') and node.children:
                                 for ch in node.children:
@@ -1552,36 +1580,53 @@ class TreeNode:
                                         layer_specific_children.append(ch)
 
                     if not layer_specific_children:
+                        print(f"      ⚠️ No explicit type subset filtering hit. Defaulting entire local subset array layout.")
                         layer_specific_children = childnodelist
 
+                    print(f"    📦 Processing branch payload context size: {len(layer_specific_children)} elements.")
                     leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
+                    print(f"    📥 create_layer output -> Added {leaf_count} features to '{child_layer.name}'")
                     totalleaf += leaf_count
 
                     if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
                         child_layer.show = True
                         selected.append(child_layer)
+        else:
+            print(f"\n⏩ Skipping Child layer generation (Node level {self.level} out of processing scope bounds).")
 
         # -------------------------------------------------
         # 3️⃣ Sibling Layer (Current Level)
         # -------------------------------------------------
+        print(f"\n--- 🏗️ Analyzing Level 3: Siblings (Level {self.level}) ---")
         if self.level > 0:
             sibling_layers = get_safe_level_layers(self.level)
             if sibling_layers and self.parent:
                 for sibling_layer in sibling_layers:
                     if self.type == sibling_layer.type:
+                        print(f"    ✅ Appending sibling structural layer context linked via parent node: '{self.parent.name if hasattr(self.parent, 'name') else self.parent}'")
                         sibling_layer.create_layer(rlevels, [self.parent], static=False)
                         selected.append(sibling_layer)
+            else:
+                print(f"    ℹ️ Processing isolated structural item: Has parent available? {bool(self.parent)}")
+        else:
+            print(f"    ⏩ Root element bypass (Level 0 elements possess no structural siblings).")
 
         # -------------------------------------------------
         # 4️⃣ Parent Layer (Level - 1)
         # -------------------------------------------------
+        print(f"\n--- 🏗️ Analyzing Level 4: Parent Nodes (Targeting Level {self.level - 1}) ---")
         if self.level > 1:
             parent_layers = get_safe_level_layers(self.level - 1)
-            if parent_layers and self.parent and self.parent.parent:
+            if parent_layers and self.parent and getattr(self.parent, 'parent', None):
                 for parent_layer in parent_layers:
                     if self.parent.type == parent_layer.type:
+                        print(f"    ✅ Binding upstream grandparent framework baseline boundary: '{self.parent.parent.name if hasattr(self.parent.parent, 'name') else self.parent.parent}'")
                         parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
                         selected.append(parent_layer)
+            else:
+                print(f"    ℹ️ Ancestry missing: parent exists? {bool(self.parent)} | grandparent exists? {bool(getattr(self.parent, 'parent', None)) if self.parent else False}")
+        else:
+            print(f"    ⏩ Skipping upstream rendering (Insufficient processing depth at level {self.level}).")
 
         # -------------------------------------------------
         # 5️⃣ Marker Asset Layer
@@ -1595,6 +1640,7 @@ class TreeNode:
         from folium.plugins import MarkerCluster
 
         target_highlight_nodes = grandchildnodelist if grandchildnodelist else childnodelist
+        print(f"\n--- 🗳️ Generating Elector Demographic Highlights (Target Array Size: {len(target_highlight_nodes)}) ---")
 
         if target_highlight_nodes:
             # --- A. Postal Voters Layer ---
@@ -1623,6 +1669,7 @@ class TreeNode:
                     icon_color="purple", icon_name="envelope", header_color="#7C3AED",
                     target_cluster=postal_cluster
                 )
+            print(f"    ✉️ Postal Highlights Clustered: Created {postal_markers_count} pins.")
 
             if postal_markers_count > 0:
                 selected.append(postal_layer)
@@ -1653,6 +1700,7 @@ class TreeNode:
                     icon_color="blue", icon_name="users", header_color="#2563EB",
                     target_cluster=pledge_cluster
                 )
+            print(f"    🤝 Pledged Highlights Clustered: Created {pledge_markers_count} pins.")
 
             if pledge_markers_count > 0:
                 selected.append(pledge_layer)
@@ -1660,6 +1708,7 @@ class TreeNode:
         # -------------------------------------------------
         # 7️⃣ Ghost Task Progress Overlays
         # -------------------------------------------------
+        print(f"\n--- 👻 Baking Overlay Progress Maps (Ghost Engine) ---")
         baked_manager = BakedDataManager()
         baked_dict = baked_manager.load()
         active_tags = dict(task_tags)
@@ -1667,6 +1716,7 @@ class TreeNode:
 
         for tag_code, tag_desc in active_tags.items():
             tag_layer = get_safe_tag_layer(tag_code, tag_desc)
+            print(f"    🎨 Injecting tracking task tracking metrics block layer -> [{tag_code}] {tag_desc}")
             tag_layer.add_ghosts(
                 tag_code=tag_code,
                 baked_dict=baked_dict,
@@ -1675,8 +1725,9 @@ class TreeNode:
             )
             selected.append(tag_layer)
 
+        print(f"\n🏁 [DEBUG END: get_feature_layers] Pack compiled. Returning {len(selected)} total layer layers. Total Leafs: {totalleaf}")
+        print(f"====================================================================\n")
         return list(reversed(selected)), totalleaf
-
 
     def sumupVI(self,viValue):
         origin = self
