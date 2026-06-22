@@ -1541,24 +1541,37 @@ class TreeNode:
 
                             # Keep track of all processed grandchildren across both layers for reference downstream
                             grandchildnodelist.extend(layer_specific_grandchildren)
-
         # -------------------------------------------------
-        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIXED: Type-Filter Node List
+        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIXED: Level Guard against RAM Spikes
         # -------------------------------------------------
         if self.level < 6:
             child_layers = get_safe_level_layers(self.level + 1)
             if child_layers and childnodelist:
                 for child_layer in child_layers:
-                    # Filter down to only nodes matching this layer asset's explicit type
-                    layer_specific_children = [c for c in childnodelist if c.type == child_layer.type]
 
-                    if layer_specific_children:
-                        leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
-                        totalleaf += leaf_count
+                    layer_specific_children = []
 
-                        if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
-                            child_layer.show = True
-                            selected.append(child_layer)
+                    # 🚀 LEVEL GUARD: Only do deep extraction if we are at Constituency level (3) or deeper.
+                    # Otherwise, skip the intensive filtering to protect server memory.
+                    if self.level >= 3:
+                        for node in childnodelist:
+                            if node.type == child_layer.type:
+                                layer_specific_children.append(node)
+                            elif hasattr(node, 'children') and node.children:
+                                for ch in node.children:
+                                    if ch.type == child_layer.type:
+                                        layer_specific_children.append(ch)
+
+                    # If we are high up (Level 0, 1, 2), safely default to standard child lists
+                    if not layer_specific_children:
+                        layer_specific_children = childnodelist
+
+                    leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
+                    totalleaf += leaf_count
+
+                    if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
+                        child_layer.show = True
+                        selected.append(child_layer)
 
         # -------------------------------------------------
         # 3️⃣ Sibling Layer (Current Level) -> 🏁 FIXED: Type-Filter Parent Target
