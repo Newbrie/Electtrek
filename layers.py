@@ -2000,9 +2000,11 @@ def make_feature_layers():
     for key, spec in FEATURE_LAYER_SPECS.items():
         layer = ExtendedFeatureGroup(
             name=spec["name"],
+            mytag=spec["mytag"],
             overlay=spec["overlay"],
             control=spec["control"],
             show=spec["show"],
+            type=spec["type"]
         )
 
         # Python-side metadata only, safe to reuse in counters, logging, etc.
