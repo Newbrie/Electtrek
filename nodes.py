@@ -1537,39 +1537,47 @@ class TreeNode:
                             grandchildnodelist.extend(layer_specific_grandchildren)
 
         # -------------------------------------------------
-        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIX: Loop through ALL types
+        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIXED: Type-Filter Node List
         # -------------------------------------------------
-        if self.level < 6: # guard for node with no children
+        if self.level < 6:
             child_layers = get_safe_level_layers(self.level + 1)
             if child_layers and childnodelist:
                 for child_layer in child_layers:
-                    # Filter childnodelist to match this specific layer key type if relevant
-                    leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
-                    totalleaf += leaf_count
+                    # Filter down to only nodes matching this layer asset's explicit type
+                    layer_specific_children = [c for c in childnodelist if c.type == child_layer.key]
 
-                    if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
-                        child_layer.show = True
-                        selected.append(child_layer)
+                    if layer_specific_children:
+                        leaf_count = child_layer.create_layer(rlevels, layer_specific_children, static=False)
+                        totalleaf += leaf_count
+
+                        if leaf_count > 0 or (hasattr(child_layer, '_children') and child_layer._children):
+                            child_layer.show = True
+                            selected.append(child_layer)
 
         # -------------------------------------------------
-        # 3️⃣ Sibling Layer (Current Level) -> 🏁 FIX: Loop through ALL types
+        # 3️⃣ Sibling Layer (Current Level) -> 🏁 FIXED: Type-Filter Parent Target
         # -------------------------------------------------
-        if self.level > 0: # guard for node no siblings
+        if self.level > 0:
             sibling_layers = get_safe_level_layers(self.level)
-            if sibling_layers:
+            if sibling_layers and self.parent:
                 for sibling_layer in sibling_layers:
-                    sibling_layer.create_layer(rlevels, [self.parent], static=False)
-                    selected.append(sibling_layer)
+                    # Ensure the sibling generation is scoped to the target layer's structural type
+                    if self.type == sibling_layer.key:
+                        sibling_layer.create_layer(rlevels, [self.parent], static=False)
+                        selected.append(sibling_layer)
 
         # -------------------------------------------------
-        # 4️⃣ Parent Layer (Level - 1) -> 🏁 FIX: Loop through ALL types
+        # 4️⃣ Parent Layer (Level - 1) -> 🏁 FIXED: Type-Filter Grandparent Target
         # -------------------------------------------------
-        if self.level > 1: # guard for node with no grandparent
+        if self.level > 1:
             parent_layers = get_safe_level_layers(self.level - 1)
-            if parent_layers:
+            if parent_layers and self.parent and self.parent.parent:
                 for parent_layer in parent_layers:
-                    parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
-                    selected.append(parent_layer)
+                    # Ensure parent layer only builds if types align
+                    if self.parent.type == parent_layer.key:
+                        parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
+                        selected.append(parent_layer)
+
 
         # -------------------------------------------------
         # 5️⃣ Marker Asset Layer
