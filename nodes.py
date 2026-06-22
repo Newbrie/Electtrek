@@ -1415,7 +1415,7 @@ class TreeNode:
         return node
 
 
-    def get_feature_layers(self, rlevels, static=False):
+def get_feature_layers(self, rlevels, static=False):
         """
         Retrieves map layers for the node's parent, siblings(of the same type), children(of all types), and grandchildren(of all types),
         along with marker assets and dynamic ghost task progress overlays.
@@ -1425,6 +1425,7 @@ class TreeNode:
         from elections import CurrentElection
         from baked_data import BakedDataManager
         import state # Ensure global state is imported for branchcolours
+        import copy  # 🧠 Added to safely duplicate layer handles without side-effects
 
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1461,22 +1462,20 @@ class TreeNode:
         def get_safe_level_layers(level_idx):
             raw_key = elevels.get(level_idx)
             if not raw_key:
-                return []  # Return empty list instead of None for easier iteration downstream
+                return []
 
-            # 1. Unpack bi-valent keys if a slash exists, otherwise make a single-element list
             keys_to_process = raw_key.split('/') if '/' in raw_key else [raw_key]
             resolved_layers = []
 
             for key in keys_to_process:
-                # 2. Check if this specific sub-key is missing from the factory configuration
                 if key not in factory:
                     print(f"⚠️ Warning: Component layer '{key}' from raw key '{raw_key}' not found in factory.")
                     continue
 
-                # 3. Handle name collisions using your used_keys tracking logic
+                # 🏁 FIX THE STATE OVERWRITE TRAILER HERE:
                 if key in used_keys:
-                    # Dynamically instantiate a fresh layer instance
-                    new_layer_instance = make_feature_layers()[key]
+                    # 🧠 Safely shallow-copy the target layer instead of invoking the full factory constructor
+                    new_layer_instance = copy.copy(factory[key])
                     new_layer_instance.name = f"{new_layer_instance.name} (Upper)"
                     resolved_layers.append(new_layer_instance)
                 else:
@@ -1494,23 +1493,20 @@ class TreeNode:
         else:
             childnodelist = [self]
 
-            # -------------------------------------------------
-        # 🔍 QUICK DEBUG: Let's see what the nodes actually have
-        # -------------------------------------------------
         if childnodelist:
             test_node = childnodelist[0]
             print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
+
         # -------------------------------------------------
         # 1️⃣ Grandchild Layer (Level + 2)
         # -------------------------------------------------
         totalleaf = 0
         grandchildnodelist = []
 
-        if self.level < 5:  # Under level 5, level + 2 safely exists
+        if self.level < 5:
             grandchild_layers = get_safe_level_layers(self.level + 2)
 
             for grandchild_layer in grandchild_layers:
-                # 1. 🔎 Check if grandchildren exist for this specific layer type
                 has_grandchildren = False
                 if childnodelist:
                     has_grandchildren = any(
@@ -1522,7 +1518,6 @@ class TreeNode:
                 if has_grandchildren:
                     print(f"Processing layer asset: {grandchild_layer.name}")
 
-                    # 2. Extract only the grandchildren that belong to this specific layer type
                     layer_specific_grandchildren = [
                         gc for child in childnodelist
                         for gc in child.children
@@ -1530,29 +1525,23 @@ class TreeNode:
                     ]
 
                     if layer_specific_grandchildren:
-                        # 3. Capture how many items were successfully written for THIS layer
                         leaf_count = grandchild_layer.create_layer(rlevels, layer_specific_grandchildren, static=False)
                         totalleaf += leaf_count
 
-                        # 4. 🛡️ Only add to the map if elements were actually created!
                         if leaf_count > 0 or (hasattr(grandchild_layer, '_children') and grandchild_layer._children):
                             grandchild_layer.show = True
                             selected.append(grandchild_layer)
-
-                            # Keep track of all processed grandchildren across both layers for reference downstream
                             grandchildnodelist.extend(layer_specific_grandchildren)
+
         # -------------------------------------------------
-        # 2️⃣ Child Layer (Level + 1) -> 🏁 FIXED: Level Guard against RAM Spikes
+        # 2️⃣ Child Layer (Level + 1)
         # -------------------------------------------------
         if self.level < 6:
             child_layers = get_safe_level_layers(self.level + 1)
             if child_layers and childnodelist:
                 for child_layer in child_layers:
-
                     layer_specific_children = []
 
-                    # 🚀 LEVEL GUARD: Only do deep extraction if we are at Constituency level (3) or deeper.
-                    # Otherwise, skip the intensive filtering to protect server memory.
                     if self.level >= 3:
                         for node in childnodelist:
                             if node.type == child_layer.type:
@@ -1562,7 +1551,6 @@ class TreeNode:
                                     if ch.type == child_layer.type:
                                         layer_specific_children.append(ch)
 
-                    # If we are high up (Level 0, 1, 2), safely default to standard child lists
                     if not layer_specific_children:
                         layer_specific_children = childnodelist
 
@@ -1574,29 +1562,26 @@ class TreeNode:
                         selected.append(child_layer)
 
         # -------------------------------------------------
-        # 3️⃣ Sibling Layer (Current Level) -> 🏁 FIXED: Type-Filter Parent Target
+        # 3️⃣ Sibling Layer (Current Level)
         # -------------------------------------------------
         if self.level > 0:
             sibling_layers = get_safe_level_layers(self.level)
             if sibling_layers and self.parent:
                 for sibling_layer in sibling_layers:
-                    # Ensure the sibling generation is scoped to the target layer's structural type
                     if self.type == sibling_layer.type:
                         sibling_layer.create_layer(rlevels, [self.parent], static=False)
                         selected.append(sibling_layer)
 
         # -------------------------------------------------
-        # 4️⃣ Parent Layer (Level - 1) -> 🏁 FIXED: Type-Filter Grandparent Target
+        # 4️⃣ Parent Layer (Level - 1)
         # -------------------------------------------------
         if self.level > 1:
             parent_layers = get_safe_level_layers(self.level - 1)
             if parent_layers and self.parent and self.parent.parent:
                 for parent_layer in parent_layers:
-                    # Ensure parent layer only builds if types align
                     if self.parent.type == parent_layer.type:
                         parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
                         selected.append(parent_layer)
-
 
         # -------------------------------------------------
         # 5️⃣ Marker Asset Layer
@@ -1692,6 +1677,7 @@ class TreeNode:
 
         return list(reversed(selected)), totalleaf
 
+        
     def sumupVI(self,viValue):
         origin = self
         if self.type == 'street' or self.type == 'walkleg':
