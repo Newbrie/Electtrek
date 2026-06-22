@@ -1494,6 +1494,12 @@ class TreeNode:
         else:
             childnodelist = [self]
 
+            # -------------------------------------------------
+        # 🔍 QUICK DEBUG: Let's see what the nodes actually have
+        # -------------------------------------------------
+        if childnodelist:
+            test_node = childnodelist[0]
+            print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
         # -------------------------------------------------
         # 1️⃣ Grandchild Layer (Level + 2)
         # -------------------------------------------------
