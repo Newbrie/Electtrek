@@ -1415,7 +1415,7 @@ class TreeNode:
         return node
 
 
-def get_feature_layers(self, rlevels, static=False):
+    def get_feature_layers(self, rlevels, static=False):
         """
         Retrieves map layers for the node's parent, siblings(of the same type), children(of all types), and grandchildren(of all types),
         along with marker assets and dynamic ghost task progress overlays.
@@ -1677,7 +1677,7 @@ def get_feature_layers(self, rlevels, static=False):
 
         return list(reversed(selected)), totalleaf
 
-        
+
     def sumupVI(self,viValue):
         origin = self
         if self.type == 'street' or self.type == 'walkleg':
