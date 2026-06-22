@@ -683,15 +683,13 @@ class TreeNode:
         self.VR = state.VIC.copy()
         self.VI = state.VIC.copy()
 
-    from collections import defaultdict
 
 
     def group_by_type(self, nodes):
+        from collections import defaultdict
         groups = defaultdict(list)
-
         for node in nodes:
             groups[node.type].append(node)
-
         return dict(groups)
 
 
@@ -703,27 +701,28 @@ class TreeNode:
     def get_sibling_layers(self):
         if not self.parent:
             return {}
-
         siblings = [
             child
             for child in self.parent.children
             if child.type == self.type
         ]
-
         return {self.type: siblings}
 
     def get_child_layers(self):
         return self.group_by_type(self.children)
 
     def get_grandchild_layers(self):
-
         grandchildren = []
-
         for child in self.children:
             grandchildren.extend(child.children)
-
         return self.group_by_type(grandchildren)
 
+
+    def surrounding_layers(self):
+        yield from self.get_parent_layers().items()
+        yield from self.get_sibling_layers().items()
+        yield from self.get_child_layers().items()
+        yield from self.get_grandchild_layers().items()
 
     def file(self, elevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
@@ -1469,6 +1468,27 @@ class TreeNode:
         import state # Ensure global state is imported for branchcolours
         import copy  # 🧠 Added to safely duplicate layer handles without side-effects
 
+
+        def get_safe_tag_layer(tag_code, tag_desc):
+            display_name = f"Task Overlay: [{tag_code}] {tag_desc}"
+            if tag_code in used_tags:
+                display_name = f"{display_name} (Upper)"
+            used_tags.add(tag_code)
+
+            tag_layer = ExtendedFeatureGroup(
+                name=display_name,
+                overlay=True,
+                control=True,
+                show=True
+            )
+            tag_layer.options = tag_layer.options or {}
+            tag_layer.options.update({
+                "tag": tag_code,
+                "layer_type": "ghost"
+            })
+            return tag_layer
+
+
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
@@ -1486,11 +1506,25 @@ class TreeNode:
         used_keys = set()
         used_tags = set()
 
-        def surrounding_layers(self):
-            yield from self.get_parent_layers().items()
-            yield from self.get_sibling_layers().items()
-            yield from self.get_child_layers().items()
-            yield from self.get_grandchild_layers().items()
+# -------------------------------------------------
+        # 📂 BASELINE DATA: Establish Base Node Lists Upfront
+        # -------------------------------------------------
+        if session.get("accumulate", False):
+            childnode_ids = session.get("accumulated_nodes", [])
+            childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
+        else:
+            childnodelist = [self]
+
+        # -------------------------------------------------
+        # 🔍 QUICK DEBUG: Let's see what the nodes actually have
+        # -------------------------------------------------
+        if childnodelist:
+            test_node = childnodelist[0]
+            print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
+
+        totalleaf = 0
+
+        target_highlight_nodes = list(childnodelist)
 
         for layer_type, nodes in self.surrounding_layers():
 
@@ -1501,12 +1535,102 @@ class TreeNode:
                 nodes,
                 static=static
             )
+            totalleaf += leaf_count
+            target_highlight_nodes.extend(nodes)
 
             if leaf_count:
                 selected.append(layer)
 
+       # -------------------------------------------------
+        # 5️⃣ Marker Asset Layer
+        # -------------------------------------------------
+        if "marker" in factory:
+            selected.append(factory["marker"])
 
-        print(f"====================================================================\n")
+        # -------------------------------------------------
+        # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
+        # -------------------------------------------------
+        from folium.plugins import MarkerCluster
+
+        if target_highlight_nodes:
+            # --- A. Postal Voters Layer ---
+            postal_layer = ExtendedFeatureGroup(
+                name="Elector Overlay: [AV] Postal Voters",
+                overlay=True,
+                control=True,
+                show=False
+            )
+            postal_layer.options = postal_layer.options or {}
+            postal_layer.options.update({
+                "tag": "AV",
+                "layer_type": "av_highlight"
+            })
+
+            postal_cluster = MarkerCluster(name="Postal Voters", control=False).add_to(postal_layer)
+
+            postal_markers_count = 0
+            for target_node in target_highlight_nodes:
+                postal_markers_count += postal_layer.add_tag_layer(
+                    rlevels=rlevels,
+                    node=target_node,
+                    tags=['AV'],
+                    operator='OR',
+                    layer_name="Postal Voter",
+                    icon_color="purple", icon_name="envelope", header_color="#7C3AED",
+                    target_cluster=postal_cluster
+                )
+
+            if postal_markers_count > 0:
+                selected.append(postal_layer)
+
+            # --- B. Pledge Highlights Layer ---
+            pledge_layer = ExtendedFeatureGroup(
+                name="Elector Overlay: [VI] Pledged Voters",
+                overlay=True,
+                control=True,
+                show=False
+            )
+            pledge_layer.options = pledge_layer.options or {}
+            pledge_layer.options.update({
+                "tag": "VI",
+                "layer_type": "vi_highlight"
+            })
+
+            pledge_cluster = MarkerCluster(name="Reform Pledges", control=False).add_to(pledge_layer)
+
+            pledge_markers_count = 0
+            for target_node in target_highlight_nodes:
+                pledge_markers_count += pledge_layer.add_tag_layer(
+                    rlevels=rlevels,
+                    node=target_node,
+                    tags=['PL'],
+                    operator='OR',
+                    layer_name="Reform Pledge",
+                    icon_color="blue", icon_name="users", header_color="#2563EB",
+                    target_cluster=pledge_cluster
+                )
+
+            if pledge_markers_count > 0:
+                selected.append(pledge_layer)
+
+        # -------------------------------------------------
+        # 7️⃣ Ghost Task Progress Overlays
+        # -------------------------------------------------
+        baked_manager = BakedDataManager()
+        baked_dict = baked_manager.load()
+        active_tags = dict(task_tags)
+        active_tags["VI"] = "Voter Intention"
+
+        for tag_code, tag_desc in active_tags.items():
+            tag_layer = get_safe_tag_layer(tag_code, tag_desc)
+            tag_layer.add_ghosts(
+                tag_code=tag_code,
+                baked_dict=baked_dict,
+                nodes=childnodelist,
+                branchcolours=state.branchcolours
+            )
+            selected.append(tag_layer)
+
         return list(reversed(selected)), totalleaf
 
     def sumupVI(self,viValue):
