@@ -210,7 +210,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
     ne = [Conboundary.geometry.bounds.maxy.to_list()[0],Conboundary.geometry.bounds.maxx.to_list()[0]]
     swne = [sw,ne]
     rlevels = CElection.resolved_levels
-    Conmap = gapnode.create_area_map(rlevels, static=False)
+    Conmap = gapnode.create_node_map(rlevels, static=False)
 
     PDs = set(allelectors.PD.values)
     print("PDs", PDs)
@@ -375,7 +375,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           swne = [sw,ne]
 
       rlevels = CElection.resolved_levels
-      Wardmap = ward_node.create_area_map(rlevels, static=False)
+      Wardmap = ward_node.create_node_map(rlevels, static=False)
 
 
       Ward = Ward+"-MAP.html"
@@ -483,7 +483,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
         sw = PDelectors[['Lat', 'Long']].min().values.tolist()
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
-        PDmap = PD_node.create_area_map(current_election, CElection, static=False)
+        PDmap = PD_node.create_node_map(current_election, CElection, static=False)
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
 

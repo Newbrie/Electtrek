@@ -1,6 +1,6 @@
 from canvasscards import prodcards, find_boundary
 from walks import prodwalks
-#import electwalks, locfilepath, electorwalks.create_area_map, goup, godown, add_to_top_layer, find_boundary
+#import electwalks, locfilepath, electorwalks.create_node_map, goup, godown, add_to_top_layer, find_boundary
 import config
 from config import POSTCODE_FILE,TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,FULLPOLY_FILE,RESOURCE_FILE, DEVURLS, NATIONAL_DIVISION_FILE,DATA_FILE
 from normalised import normz
@@ -1200,7 +1200,7 @@ def delete_node():
         # The clean unpack
         (c_election, elevels), = rlevels.items()
 
-        parent.create_area_map(rlevels, static=False)
+        parent.create_node_map(rlevels, static=False)
 
         CElection.visit_node(parent)
 
@@ -1278,8 +1278,8 @@ def reassign_parent():
         subject_node.set_parent(new_parent_node)
         allelectors = electors.elector_for_path(rlevels,old_parent_node.mapfile())
         # Regenerate affected maps
-        old_parent_node.create_area_map(rlevels, static=False)
-        new_parent_node.create_area_map(rlevels, static=False)
+        old_parent_node.create_node_map(rlevels, static=False)
+        new_parent_node.create_node_map(rlevels, static=False)
 
         # Persist AFTER successful mutation
         persist(Treepolys, Fullpolys, Geo_index)
@@ -2119,7 +2119,7 @@ def election_report():
 
 
     print(f"XXXXMarkers at election {current_election} at node {current_node.value}")
-    current_node.create_area_map(rlevels, static=False)
+    current_node.create_node_map(rlevels, static=False)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
 
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
@@ -3348,7 +3348,7 @@ def LGdownST(path):
             streetelectors = PDelectors[mask]
             street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-        PD_node.create_area_map(rlevels, static=False)
+        PD_node.create_node_map(rlevels, static=False)
 
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
@@ -3403,7 +3403,7 @@ def WKdownST(path):
         streetelectors = areaelectors[mask]
         walkleg_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-        walk_node.create_area_map(rlevels, static=False)
+        walk_node.create_node_map(rlevels, static=False)
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
@@ -3450,7 +3450,7 @@ def wardreport(path):
 
     i = 0
     alreadylisted = []
-    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+current_node.child_type(rlevels)+" details"
+    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s  details"
     layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
     for group_node in current_node.childrenoftype('constituency'):
 
@@ -3537,9 +3537,9 @@ def fetch_areas():
 
 
 
-@app.route('/displayareas', methods=['POST', 'GET'])
+@app.route('/xxdisplayareas', methods=['POST', 'GET'])
 @login_required
-def displayareas():
+def xxdisplayareas():
     #calc values in displayed table
 
     global layeritems
@@ -3550,7 +3550,7 @@ def displayareas():
     current_node = CElection.get_last_node(create=False)
     rlevels = CElection.resolved_levels
     places = CElection['places']
-    print(f"____Route/displayareas for {current_node.value} in election {current_election} ")
+    print(f"____Route/xxdisplayareas for {current_node.value} in election {current_election} ")
     if current_election == "DEMO":
         if len(places) > 0:
             formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
@@ -3674,7 +3674,7 @@ def divreport(path):
     i = 0
     layeritems = pd.DataFrame()
     alreadylisted = []
-    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s "+current_node.child_type(rlevels)+" details"
+    formdata['tabledetails'] = "Click for "+current_node.value +  "\'s details"
     layeritems = get_layer_table(current_node.create_map_branch(session,'constituency'),formdata['tabledetails'],rlevels)
 
     for group_node in current_node.childrenoftype('division'):
@@ -3751,7 +3751,7 @@ def upbut(path):
 
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
-        current_node.create_area_map(rlevels, static=False)
+        current_node.create_node_map(rlevels, static=False)
 
     print("________chosen node url",current_node.mapfile())
     base = Path(config.workdirectories['workdir'])  # or wherever files live
@@ -4393,14 +4393,14 @@ def firstpage():
 
     print(f"🧪 current election 1 {current_election} - current_node:{current_node.value}")
     print("____Firstpage Mapfile",current_node.mapfile(), current_node.value)
-    atype = current_node.child_type(rlevels)
+#    atype = current_node.child_type(rlevels)
 # the map under the selected node map needs to be configured
 # the selected  boundary options need to be added to the layer
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
 
-    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} - atype:{atype} ")
-    current_node.create_area_map(rlevels, static=False)
-    print("______First selected node",atype,len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
+    print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} ")
+    current_node.create_node_map(rlevels, static=False)
+    print("______First selected node",len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
 
 
     ELECTIONS = get_available_elections()

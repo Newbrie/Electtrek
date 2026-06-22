@@ -122,7 +122,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
 #    ne = [Countyboundary.geometry.bounds.maxy.to_list()[0],Countyboundary.geometry.bounds.maxx.to_list()[0]]
 #    swne = [sw,ne]
 #
-#    Countymap = create_area_map (swne)
+#    Countymap = create_node_map (swne)
 #    Countymap.add_child(flayers[1].fg)
     print("______Directory:", os.getcwd())
 
@@ -213,7 +213,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
     sw = [Conboundary.geometry.bounds.miny.to_list()[0],Conboundary.geometry.bounds.minx.to_list()[0]]
     ne = [Conboundary.geometry.bounds.maxy.to_list()[0],Conboundary.geometry.bounds.maxx.to_list()[0]]
     swne = [sw,ne]
-    Conmap = gapnode.create_area_map (flayers,allelectors)
+    Conmap = gapnode.create_node_map (flayers,allelectors)
 
     PDs = set(allelectors.PD.values)
     print("PDs", PDs)
@@ -377,7 +377,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
           ne = wardelectors[['Lat', 'Long']].max().values.tolist()
           swne = [sw,ne]
 
-      Wardmap = ward_node.create_area_map (flayers,wardelectors)
+      Wardmap = ward_node.create_node_map (flayers,wardelectors)
 
       Ward = Ward+"-MAP.html"
       ward_node.locmappath("")
@@ -484,7 +484,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
         sw = PDelectors[['Lat', 'Long']].min().values.tolist()
         ne = PDelectors[['Lat', 'Long']].max().values.tolist()
         swne = [sw,ne]
-        PDmap = PD_node.create_area_map (flayers,PDelectors)
+        PDmap = PD_node.create_node_map (flayers,PDelectors)
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/print.css")
         PDmap.add_css_link("electtrekcss","https://newbrie.github.io/Electtrek/static/style.css")
 
@@ -543,7 +543,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
           sw = walk[['Lat', 'Long']].min().values.tolist()
           ne = walk[['Lat', 'Long']].max().values.tolist()
           swne = [sw,ne]
-          Walkmap = walk_node.create_area_map (flayers, walk)
+          Walkmap = walk_node.create_node_map (flayers, walk)
 
           Postcode = walk.loc[0].Postcode
           type_colour = allowed[walk_node.value]

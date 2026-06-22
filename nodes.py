@@ -25,10 +25,10 @@ FACEENDING = {
     'elector': "-PRINT.html",
     'street': "-MAP.html",
     'walkleg': "-MAP.html",
-    'polling_district': "-PDS.html",
-    'walk': "-WALKS.html",
-    'ward': "-WARDS.html",
-    'division': "-DIVS.html",
+    'polling_district': "-MAP.html",
+    'walk': "-MAP.html",
+    'ward': "-MAP.html",
+    'division': "-MAP.html",
     'constituency': "-MAP.html",
     'county': "-MAP.html",
     'nation': "-MAP.html",
@@ -688,8 +688,8 @@ class TreeNode:
 
         # This unpacks the single key-value pair from the dictionary
 
-        child = self.child_type(elevels)
-        suffix = FACEENDING.get(child, "")
+        type = self.type
+        suffix = FACEENDING.get(type, "")
         if self.type == "street":
             filename = f"{self.parent.value}--{self.value}{suffix}"
         else:
@@ -932,7 +932,7 @@ class TreeNode:
                 endpoint_created = True
 
         if next_level <= max_level and endpoint_created:
-            map, totalleaf = self.create_area_map(rlevels, static=static)
+            map, totalleaf = self.create_node_map(rlevels, static=static)
 
         accumulate = session.get("accumulate", False)
 # if the endpoint doesn t exist or we area accumulating
@@ -955,8 +955,8 @@ class TreeNode:
             # we force the parent map to re-render with the updated session list.
             if self.parent:
                 print(f"--- Triggering Parent Map Update for: {self.parent.value}")
-                # Call create_area_map on the parent
-                map, totalleaf = self.parent.create_area_map(rlevels, static=static)
+                # Call create_node_map on the parent
+                map, totalleaf = self.parent.create_node_map(rlevels, static=static)
         return endpoint_created, totalleaf
 
 
@@ -1417,7 +1417,7 @@ class TreeNode:
 
     def get_feature_layers(self, rlevels, static=False):
         """
-        Retrieves map layers for the node's parent, siblings, children, and grandchildren,
+        Retrieves map layers for the node's parent, siblings(of the same type), children(of all types), and grandchildren(of all types),
         along with marker assets and dynamic ghost task progress overlays.
         """
         from flask import session
@@ -1458,7 +1458,7 @@ class TreeNode:
             })
             return tag_layer
 
-        def get_safe_layer(level_idx):
+        def get_safe_level_layers(level_idx):
             raw_key = elevels.get(level_idx)
             if not raw_key:
                 return []  # Return empty list instead of None for easier iteration downstream
@@ -1501,7 +1501,7 @@ class TreeNode:
         grandchildnodelist = []
 
         if self.level < 5:  # Under level 5, level + 2 safely exists
-            grandchild_layers = get_safe_layer(self.level + 2)
+            grandchild_layers = get_safe_level_layers(self.level + 2)
 
             for grandchild_layer in grandchild_layers:
                 # 1. 🔎 Check if grandchildren exist for this specific layer type
@@ -1541,7 +1541,7 @@ class TreeNode:
         # -------------------------------------------------
         if self.level < 6: # guard for node with no children
             # 🏁 FIX: Extract the first layer from the returned list safely
-            child_layers = get_safe_layer(self.level + 1)
+            child_layers = get_safe_level_layers(self.level + 1)
             if child_layers and childnodelist:
                 child_layer = child_layers[0]
                 leaf_count = child_layer.create_layer(rlevels, childnodelist, static=False)
@@ -1556,7 +1556,7 @@ class TreeNode:
         # -------------------------------------------------
         if self.level > 0: # guard for node no siblings
             # 🏁 FIX: Extract the first layer from the returned list safely
-            sibling_layers = get_safe_layer(self.level)
+            sibling_layers = get_safe_level_layers(self.level)
             if sibling_layers:
                 sibling_layer = sibling_layers[0]
                 sibling_layer.create_layer(rlevels, [self.parent], static=False)
@@ -1567,7 +1567,7 @@ class TreeNode:
         # -------------------------------------------------
         if self.level > 1: # guard for node with no grandparent
             # 🏁 FIX: Extract the first layer from the returned list safely
-            parent_layers = get_safe_layer(self.level - 1)
+            parent_layers = get_safe_level_layers(self.level - 1)
             if parent_layers:
                 parent_layer = parent_layers[0]
                 parent_layer.create_layer(rlevels, [self.parent.parent], static=False)
@@ -2221,7 +2221,7 @@ class TreeNode:
 
         return all_created_children
 
-    def create_area_map(self, resolved_levels, static=False):
+    def create_node_map(self, resolved_levels, static=False):
         global SERVER_PASSWORD
 
         from folium import IFrame, Element  # 💡 Explicitly ensured Element is present

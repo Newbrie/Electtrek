@@ -980,9 +980,10 @@ def ensure_treepolys_with_index(
                     matched_path = this_path
                     matched_this_level = this_path
 
-                    match_full_filepath = (
-                        f"{matched_path}{FACEENDING[layer_type]}"
-                    )
+                print("layer_type =", layer_type)
+                print("FACEENDING[layer_type] =", FACEENDING[layer_type])
+                print("matched_path =", matched_path)
+
 
                 # Append discovered nodes straight into the active parents cache
                 row_copy = row.copy()
@@ -997,8 +998,35 @@ def ensure_treepolys_with_index(
                 )
 
     logging.debug(
-        f"Final matched_path: {match_full_filepath}"
+        f"Final matched_path: {matched_path}"
     )
+    final_path = ROOT
+
+    for step in steps[1:]:
+        target = normalname(step)
+
+        children = Geo_index[final_path]["children"]
+
+        found = None
+
+        for child_path in children:
+            if Geo_index[child_path]["name"] == target:
+                found = child_path
+                break
+
+        if found is None:
+            break
+
+        final_path = found
+
+    node = Geo_index[final_path]
+
+    match_full_filepath = (
+        final_path +
+        FACEENDING[node["level"]]
+    )
+
+    print("match_full_filepath =", match_full_filepath)
 
     logging.debug(
         f"Geo_index contains {len(Geo_index)} entries"

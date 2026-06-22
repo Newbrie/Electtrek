@@ -1969,21 +1969,21 @@ class ExtendedFeatureGroup(FeatureGroup):
 # Layer specs (cleaned up)
 # -----------------------------
 FEATURE_LAYER_SPECS = {
-    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False),
-    "country": dict(name="country", mytag="country", overlay=True, control=True, show=False),
-    "nation": dict(name="nation", mytag="nation", overlay=True, control=True, show=False),
-    "county": dict(name="county", mytag="county", overlay=True, control=True, show=False),
-    "constituency": dict(name="constituency", mytag="constituency", overlay=True, control=True, show=False),
-    "ward": dict(name="ward", mytag="ward", overlay=True, control=True, show=False),
-    "division": dict(name="division", mytag="division", overlay=True, control=True, show=False),
-    "polling_district": dict(name="polling_district", mytag="polling_district", overlay=True, control=True, show=False),
-    "walk": dict(name="walk", mytag="walk", overlay=True, control=True, show=False),
-    "walkleg": dict(name="walkleg", mytag="walkleg", overlay=True, control=True, show=False),
-    "street": dict(name="street", mytag="street", overlay=True, control=True, show=False),
-    "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False),
-    "result": dict(name="result", mytag="result", overlay=True, control=True, show=False),
-    "target": dict(name="target", mytag="target", overlay=True, control=True, show=False),
-    "data": dict(name="data", mytag="data", overlay=True, control=True, show=False),
+    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False,type="marker"),
+    "country": dict(name="country", mytag="country", overlay=True, control=True, show=False,type="country"),
+    "nation": dict(name="nation", mytag="nation", overlay=True, control=True, show=False,type="nation"),
+    "county": dict(name="county", mytag="county", overlay=True, control=True, show=False,type="county"),
+    "constituency": dict(name="constituency", mytag="constituency", overlay=True, control=True, show=False,type="constituency"),
+    "ward": dict(name="ward", mytag="ward", overlay=True, control=True, show=False, type="ward"),
+    "division": dict(name="division", mytag="division", overlay=True, control=True, show=False, type="division"),
+    "polling_district": dict(name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="polling_district"),
+    "walk": dict(name="walk", mytag="walk", overlay=True, control=True, show=False,type="walk"),
+    "walkleg": dict(name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="walkleg"),
+    "street": dict(name="street", mytag="street", overlay=True, control=True, show=False, type="street"),
+    "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False, type="elector"),
+    "result": dict(name="result", mytag="result", overlay=True, control=True, show=False, type="result"),
+    "target": dict(name="target", mytag="target", overlay=True, control=True, show=False, type="target"),
+    "data": dict(name="data", mytag="data", overlay=True, control=True, show=False, type="data"),
 }
 
 
