@@ -1466,8 +1466,13 @@ class TreeNode:
         from elections import CurrentElection
         from baked_data import BakedDataManager
         import state # Ensure global state is imported for branchcolours
-        import copy  # 🧠 Added to safely duplicate layer handles without side-effects
+        import copy  # 🧠 Retained if needed elsewhere, safely decoupled from cloning loops
 
+        from state import branchcolours
+        from collections import defaultdict
+
+        # 🔧 Fix 1: Initialize tracing set up high so the nested function can capture it in its closure scope
+        used_tags = set()
 
         def get_safe_tag_layer(tag_code, tag_desc):
             display_name = f"Task Overlay: [{tag_code}] {tag_desc}"
@@ -1489,6 +1494,57 @@ class TreeNode:
             return tag_layer
 
 
+        def _attach_elector_and_campaign_overlays(selected_list, tier_key, nodes, rlevels, active_tags, baked_dict):
+            """Assembles complex voter pin clusters and ghost overlays relative to the active target tier."""
+            from folium.plugins import MarkerCluster
+
+            # 📬 1. Postal Voters Layer
+            postal_layer = ExtendedFeatureGroup(
+                name=f"Elector Overlay: [AV] Postal Voters ({tier_key.title()})",
+                overlay=True, control=True, show=False
+            )
+            postal_layer.options = {"tag": "AV", "layer_type": "av_highlight"}
+            postal_cluster = MarkerCluster(name=f"Postal - {tier_key}", control=False).add_to(postal_layer)
+
+            # Pass nodes through to register cluster nodes directly
+            if hasattr(postal_layer, 'add_tag_layer'):
+                postal_count = postal_layer.add_tag_layer(
+                    rlevels=rlevels, node=nodes, tags=['AV'], operator='OR',
+                    layer_name="Postal Voter", icon_color="purple", icon_name="envelope",
+                    header_color="#7C3AED", target_cluster=postal_cluster
+                )
+                if postal_count > 0:
+                    selected_list.append(postal_layer)
+
+            # 🤝 2. Pledge Highlights Layer
+            pledge_layer = ExtendedFeatureGroup(
+                name=f"Elector Overlay: [VI] Pledged Voters ({tier_key.title()})",
+                overlay=True, control=True, show=False
+            )
+            pledge_layer.options = {"tag": "VI", "layer_type": "vi_highlight"}
+            pledge_cluster = MarkerCluster(name=f"Pledges - {tier_key}", control=False).add_to(pledge_layer)
+
+            if hasattr(pledge_layer, 'add_tag_layer'):
+                pledge_count = pledge_layer.add_tag_layer(
+                    rlevels=rlevels, node=nodes, tags=['PL'], operator='OR',
+                    layer_name="Reform Pledge", icon_color="blue", icon_name="users",
+                    header_color="#2563EB", target_cluster=pledge_cluster
+                )
+                if pledge_count > 0:
+                    selected_list.append(pledge_layer)
+
+            # 👻 3. Ghost Task Heatmaps
+            for tag_code, tag_desc in active_tags.items():
+                tag_layer = get_safe_tag_layer(tag_code, f"{tag_desc} ({tier_key.title()})")
+                if hasattr(tag_layer, 'add_ghosts'):
+                    tag_layer.add_ghosts(
+                        tag_code=tag_code,
+                        baked_dict=baked_dict,
+                        nodes=nodes,
+                        branchcolours=state.branchcolours
+                    )
+                    selected_list.append(tag_layer)
+
         # Guard & Unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
@@ -1504,9 +1560,8 @@ class TreeNode:
         factory = make_feature_layers()
         selected = []
         used_keys = set()
-        used_tags = set()
 
-# -------------------------------------------------
+        # -------------------------------------------------
         # 📂 BASELINE DATA: Establish Base Node Lists Upfront
         # -------------------------------------------------
         if session.get("accumulate", False):
@@ -1522,114 +1577,89 @@ class TreeNode:
             test_node = childnodelist[0]
             print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
 
-        totalleaf = 0
 
-        target_highlight_nodes = list(childnodelist)
-
-        for layer_type, nodes in self.surrounding_layers():
-
-            layer = copy.copy(factory[layer_type])
-
-            leaf_count = layer.create_layer(
-                rlevels,
-                nodes,
-                static=static
-            )
-            totalleaf += leaf_count
-            target_highlight_nodes.extend(nodes)
-
-            if leaf_count:
-                selected.append(layer)
-
-       # -------------------------------------------------
-        # 5️⃣ Marker Asset Layer
-        # -------------------------------------------------
-        if "marker" in factory:
-            selected.append(factory["marker"])
-
-        # -------------------------------------------------
-        # 6️⃣ ELECTOR DEMOGRAPHICS / HIGHLIGHTS LAYERS
-        # -------------------------------------------------
-        from folium.plugins import MarkerCluster
-
-        if target_highlight_nodes:
-            # --- A. Postal Voters Layer ---
-            postal_layer = ExtendedFeatureGroup(
-                name="Elector Overlay: [AV] Postal Voters",
-                overlay=True,
-                control=True,
-                show=False
-            )
-            postal_layer.options = postal_layer.options or {}
-            postal_layer.options.update({
-                "tag": "AV",
-                "layer_type": "av_highlight"
-            })
-
-            postal_cluster = MarkerCluster(name="Postal Voters", control=False).add_to(postal_layer)
-
-            postal_markers_count = 0
-            for target_node in target_highlight_nodes:
-                postal_markers_count += postal_layer.add_tag_layer(
-                    rlevels=rlevels,
-                    node=target_node,
-                    tags=['AV'],
-                    operator='OR',
-                    layer_name="Postal Voter",
-                    icon_color="purple", icon_name="envelope", header_color="#7C3AED",
-                    target_cluster=postal_cluster
-                )
-
-            if postal_markers_count > 0:
-                selected.append(postal_layer)
-
-            # --- B. Pledge Highlights Layer ---
-            pledge_layer = ExtendedFeatureGroup(
-                name="Elector Overlay: [VI] Pledged Voters",
-                overlay=True,
-                control=True,
-                show=False
-            )
-            pledge_layer.options = pledge_layer.options or {}
-            pledge_layer.options.update({
-                "tag": "VI",
-                "layer_type": "vi_highlight"
-            })
-
-            pledge_cluster = MarkerCluster(name="Reform Pledges", control=False).add_to(pledge_layer)
-
-            pledge_markers_count = 0
-            for target_node in target_highlight_nodes:
-                pledge_markers_count += pledge_layer.add_tag_layer(
-                    rlevels=rlevels,
-                    node=target_node,
-                    tags=['PL'],
-                    operator='OR',
-                    layer_name="Reform Pledge",
-                    icon_color="blue", icon_name="users", header_color="#2563EB",
-                    target_cluster=pledge_cluster
-                )
-
-            if pledge_markers_count > 0:
-                selected.append(pledge_layer)
-
-        # -------------------------------------------------
-        # 7️⃣ Ghost Task Progress Overlays
-        # -------------------------------------------------
+        # Setup infrastructure for task overlays
         baked_manager = BakedDataManager()
         baked_dict = baked_manager.load()
         active_tags = dict(task_tags)
         active_tags["VI"] = "Voter Intention"
 
-        for tag_code, tag_desc in active_tags.items():
-            tag_layer = get_safe_tag_layer(tag_code, tag_desc)
-            tag_layer.add_ghosts(
-                tag_code=tag_code,
-                baked_dict=baked_dict,
-                nodes=childnodelist,
-                branchcolours=state.branchcolours
-            )
-            selected.append(tag_layer)
+        totalleaf = 0
+        target_highlight_nodes = list(childnodelist)
+
+        # Pre-group dynamic geographic nodes by type for fast lookup
+        nodes_by_type = {}
+        for layer_type, nodes in self.surrounding_layers():
+            nodes_by_type[layer_type] = nodes
+
+        # 🎯 DIRECT STREAM ROUTING LOOP
+        for factory_key, layer in factory.items():
+            nodes_to_render = nodes_by_type.get(factory_key, [])
+            if not nodes_to_render and factory_key != "marker":
+                continue
+
+            # Apply standard leaf metric tracking and color cycle properties upfront
+            if factory_key != "marker":
+                totalleaf += len(nodes_to_render)
+                target_highlight_nodes.extend(nodes_to_render)
+                for idx, node in enumerate(nodes_to_render):
+                    node.defcol = branchcolours[idx % 12]
+
+            # Route directly to the precise drawing methods on the active layer
+            match factory_key:
+
+                # 📍 Pins & Global Anchors
+                case "marker":
+                    selected.append(layer)
+
+                # 🗺️ Polygon Map Layers (🔧 Fix 2: Added 'constituency' explicitly here)
+                case "constituency" | "division" | "ward" | "country" | "nation" | "county":
+                    counters = defaultdict(int)
+                    for node in nodes_to_render:
+                        layer.add_nodemaps(rlevels, node, static, counters, factory_key)
+                    selected.append(layer)
+
+                # 📐 Spatial Proximity Layers
+                case "polling_district" | "walk":
+                    for node in nodes_to_render:
+                        layer.add_voronoi(rlevels, node, static, factory_key)
+                    selected.append(layer)
+
+                # 🥾 Tactical Ground Elements & Fallbacks
+                case "street" | "walkleg":
+                    for node in nodes_to_render:
+                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    selected.append(layer)
+
+                # 🎯 Targeted Elector Telemetry Pins
+                case "elector":
+                    for node in nodes_to_render:
+                        layer.add_tag_layer(
+                            rlevels=rlevels, node=node,
+                            tags=['PL'], operator='OR', layer_name="Reform Pledges",
+                            icon_color="blue", icon_name="users", header_color="#2563EB",
+                            static=static
+                        )
+                    selected.append(layer)
+
+                # 📊 Custom Strategy Analytics
+                case "result" | "target" | "data":
+                    for node in nodes_to_render:
+                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    selected.append(layer)
+
+                # ⚠️ Catch-All Fallback Engine
+                case _:
+                    print(f"ℹ️ Factory key '{factory_key}' running default node markers routing.")
+                    for node in nodes_to_render:
+                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    selected.append(layer)
+
+            # 📬 Operational Overlay Attachment Trigger
+            if factory_key in ("constituency", "ward", "division", "polling_district", "walk"):
+                _attach_elector_and_campaign_overlays(
+                    selected, factory_key, nodes_to_render, rlevels, active_tags, baked_dict
+                )
 
         return list(reversed(selected)), totalleaf
 

@@ -543,106 +543,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.areashtml = {}
 
 
-    def _render_single_node(self, rlevels, node, static, counters):
-        assert len(rlevels) == 1
-        (c_election, elevels), = rlevels.items()
-
-        target_child_level = node.level + 1
-        intention_type = elevels.get(target_child_level)
-
-        print(f"DEBUG: BIVALENT RENDER | Node Value: {node.value} | Level: {node.level} | Primary Intention: {intention_type}")
-
-        # -----------------------------------------------------------------
-        # 🎯 TRACK 1: Elector Layer Interception (Keep as-is)
-        # -----------------------------------------------------------------
-        if intention_type == "elector":
-            self.add_tag_layer(
-                rlevels=rlevels, node=node,
-                tags=['PL'], operator='OR', layer_name="Reform Pledges",
-                icon_color="blue", icon_name="users", header_color="#2563EB",
-                static=static
-            )
-            return
-
-        # -----------------------------------------------------------------
-        # 🗺️ TRACK 2: Structural Polygon Processing (Wards, Divisions, Districts, Walks)
-        # -----------------------------------------------------------------
-        import folium
-        original_add_to = folium.MacroElement.add_to
-        rendered_any_polygon = False
-
-        # --- A. Level 4 Children: County Divisions & Borough Wards ---
-        divisions = node.childrenoftype("division")
-        wards = node.childrenoftype("ward")
-
-        if divisions:
-            # You can swap 'add_nodemaps' for 'add_voronoi' here if your divisions use the Voronoi engine too!
-            div_group = folium.FeatureGroup(name="Boundaries: County Divisions", control=True).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, div_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters, "division")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        if wards:
-            ward_group = folium.FeatureGroup(name="Boundaries: Borough Wards", control=True, show=False).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, ward_group) if target == self else original_add_to(obj, target)
-                self.add_nodemaps(rlevels, node, static, counters, "walk")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        # --- B. Level 5 Children: Polling Districts & Canvass Walks ---
-        polling_districts = node.childrenoftype("polling_district")
-        canvass_walks = node.childrenoftype("walk")
-
-        if polling_districts:
-            pd_sub_group = folium.FeatureGroup(name="Data: Polling Districts (Polys)", control=True).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, pd_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static, "polling_district")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        if canvass_walks:
-            walk_sub_group = folium.FeatureGroup(name="Data: Canvass Walks (Polys)", control=True, show=False).add_to(self)
-            try:
-                folium.MacroElement.add_to = lambda obj, target: original_add_to(obj, walk_sub_group) if target == self else original_add_to(obj, target)
-                self.add_voronoi(rlevels, node, static, "walk")
-                rendered_any_polygon = True
-            finally:
-                folium.MacroElement.add_to = original_add_to
-
-        # Clean short-circuit if we successfully processed any structural polygons
-        if rendered_any_polygon:
-            return
-
-        # -----------------------------------------------------------------
-        # 📍 TRACK 3: Operational Linear Elements & Assets (Streets, Legs, Markers)
-        # -----------------------------------------------------------------
-        # We can safely use childrenoftype() here too, falling back to intention_type
-        # just in case 'marker' isn't explicitly set as a node.type property.
-
-        has_streets = node.childrenoftype("street") or node.childrenoftype("walkleg")
-
-        if has_streets or intention_type in ("street", "walkleg"):
-            self.add_nodemarks(rlevels, node, static,intention_type)
-            return
-
-        if intention_type == "marker":
-            self.add_genmarkers(rlevels, node, static,intention_type)
-            return
-
-        # -----------------------------------------------------------------
-        # 🔄 TRACK 4: Ultimate Safety Catch
-        # -----------------------------------------------------------------
-        # If a node somehow slips through everything else, give it a default map
-        print(f"WARNING: Node {node.value} hit safety fallback handler.")
-        self.add_nodemaps(rlevels, node, static, counters,intention_type)
-
     def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
         """
         Populates this layer with ghost polygons based on baked data.
@@ -710,22 +610,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"DEBUG GHOSTS: Added {polygons_added} polygons to tag layer [{tag_code}]")
         return polygons_added
 
-    def create_layer(self, rlevels, nodelist, static=False):
-        from flask import session
-        from state import Treepolys, Fullpolys, branchcolours
-
-        from collections import defaultdict
-
-
-        print(f"Layer {self.name} memory id:", id(self))
-        counters = defaultdict(int)
-        i = 0
-        for n in nodelist:
-            n.defcol = branchcolours[i%12]
-            self._render_single_node(rlevels, n, static, counters)
-            i = i+1
-
-        return len(self._children)
 
 
 
