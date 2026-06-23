@@ -1619,7 +1619,7 @@ class TreeNode:
 
                 # 📍 Pins & Global Anchors
                 case "marker":
-                    layer.add_genmarkers(rlevels, nodes_to_render[0].parent, static, counters, factory_key)
+                    layer.add_genmarkers(rlevels, nodes_to_render[0].parent, static)
                     selected.append(layer)
 
                 # 🗺️ Polygon Map Layers (🔧 Fix 2: Added 'constituency' explicitly here)
@@ -2405,6 +2405,7 @@ class TreeNode:
             rlevels=resolved_levels,
             static=static
         )
+        print(f"___AFTER layer creation: on elections.route {elections.route()} layercount: {len(flayers)} creating file: ", self.mapfile())
 
         # Configure only ghosts for testing
         accordion_configurations = [
