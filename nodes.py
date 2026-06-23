@@ -1594,11 +1594,11 @@ class TreeNode:
             print(f"DEBUG NODES:",len(nodes))
 
         # 🎯 DIRECT STREAM ROUTING LOOP
-        TEST_LAYER = "nation"
+        TEST_LAYERS = {"nation", "marker"}
 
         for factory_key, layer in factory.items():
 
-            if TEST_LAYER and factory_key != TEST_LAYER:
+            if factory_key not in TEST_LAYERS:
                 continue
 
             nodes_to_render = nodes_by_type.get(factory_key, [])
