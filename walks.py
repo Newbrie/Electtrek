@@ -42,7 +42,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
             if item in dict:
                 return dict[item]
             else:
-                return 'gray'
+                return '#006064'
         print("FG0 Poly details:",boundary)
         flag = { "England":'white', "Wales":'red', "Scotland":'darkblue',  "Northern Ireland": 'green' }
         if boundary.iloc[0]['FID'] not in layerlist:

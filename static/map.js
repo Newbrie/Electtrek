@@ -1689,7 +1689,7 @@ async function fetchTableData(tableName) {
   const PARTY_COLORS = {
     O: "brown", R: "cyan", C: "blue", S: "red",
     LD: "yellow", G: "limegreen", I: "indigo",
-    PC: "darkred", SD: "orange", Z: "lightgray",
+    PC: "darkred", SD: "orange", Z: "#006064",
     W: "white", X: "darkgray"
   };
    const table = document.getElementById("content-table");

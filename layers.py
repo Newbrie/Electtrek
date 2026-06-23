@@ -1121,17 +1121,17 @@ class ExtendedFeatureGroup(FeatureGroup):
             showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels) +" street", herenode.value,'street')
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
 #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,child_type_of('polling_district',estyle))
-            downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageST,"STREETS",12)
-#            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessageWK,"WALKS",12)
-#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;color: gray' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.dir+"/"+herenode.file(elevels))
-            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+            downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageST,"STREETS",12)
+#            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageWK,"WALKS",12)
+#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.dir+"/"+herenode.file(elevels))
+            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
             limbX['UPDOWN'] = uptag1 +"<br>"+ downST
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
         elif type == 'walk':
             showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels)+" walkleg", herenode.value,'walkleg')
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
-            downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(showmessage,"STREETS",12)
-            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;color: gray'>{1}</button>".format(upmessage,"UP",12)
+            downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessage,"STREETS",12)
+            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
             streetstag = build_street_list_html(herenode.value,datablock, street_stats, task_tags)
             limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+ downtag+"<br>"+ streetstag+"<br></div>"
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
@@ -1455,7 +1455,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     print("______Add_Nodes Treepolys type:",intention_type)
     #
                     # Setup clean, consistent styling defaults
-                    font_style = "style='font-size: 12pt; color: gray'"
+                    font_style = "style='font-size: 12pt;'"
 
                     # Resolve target paths and values cleanly up front
                     c_path = f"{c.dir}/{c.file(elevels)}"

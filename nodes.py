@@ -674,7 +674,7 @@ class TreeNode:
         self.houses = 0
         self.target = 1
         self.party = "O"
-        self.defcol = "gray"
+        self.defcol = "#006064"
         self.candidates = {}
 
         # UI
@@ -1591,9 +1591,16 @@ class TreeNode:
         nodes_by_type = {}
         for layer_type, nodes in self.surrounding_layers():
             nodes_by_type[layer_type] = nodes
+            print(f"DEBUG NODES:",len(nodes))
 
         # 🎯 DIRECT STREAM ROUTING LOOP
+        TEST_LAYER = "nation"
+
         for factory_key, layer in factory.items():
+
+            if TEST_LAYER and factory_key != TEST_LAYER:
+                continue
+
             nodes_to_render = nodes_by_type.get(factory_key, [])
 
             if not nodes_to_render :
@@ -1605,8 +1612,7 @@ class TreeNode:
                 target_highlight_nodes.extend(nodes_to_render)
                 for idx, node in enumerate(nodes_to_render):
                     node.defcol = branchcolours[idx % 12]
-            if factory_key != "constituency":
-                continue
+
 
             # Route directly to the precise drawing methods on the active layer
             match factory_key:
