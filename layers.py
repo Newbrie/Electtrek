@@ -543,7 +543,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         self.areashtml = {}
 
 
-    def add_ghosts(self, tag_code, baked_dict, nodes, branchcolours):
+
+    def add_ghosts(self, tag_code, baked_dict, parent_node, branchcolours):
         """
         Populates this layer with ghost polygons based on baked data.
         Mirroring the logic of add_voronoi for high-fidelity data overlays.
@@ -551,7 +552,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         import folium
         polygons_added = 0
 
-        for node in nodes:
+        for node in parent_node.children:
             region_id = str(node.value)
 
             # Guard: Only process if we have data for this region

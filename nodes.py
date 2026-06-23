@@ -1494,7 +1494,7 @@ class TreeNode:
             return tag_layer
 
 
-        def _attach_elector_and_campaign_overlays(selected_list, tier_key, nodes, rlevels, active_tags, baked_dict):
+        def _attach_elector_and_campaign_overlays(selected_list, tier_key, node, rlevels, active_tags, baked_dict):
             """Assembles complex voter pin clusters and ghost overlays relative to the active target tier."""
             from folium.plugins import MarkerCluster
 
@@ -1509,7 +1509,7 @@ class TreeNode:
             # Pass nodes through to register cluster nodes directly
             if hasattr(postal_layer, 'add_tag_layer'):
                 postal_count = postal_layer.add_tag_layer(
-                    rlevels=rlevels, node=nodes, tags=['AV'], operator='OR',
+                    rlevels=rlevels, node=node, tags=['AV'], operator='OR',
                     layer_name="Postal Voter", icon_color="purple", icon_name="envelope",
                     header_color="#7C3AED", target_cluster=postal_cluster
                 )
@@ -1526,7 +1526,7 @@ class TreeNode:
 
             if hasattr(pledge_layer, 'add_tag_layer'):
                 pledge_count = pledge_layer.add_tag_layer(
-                    rlevels=rlevels, node=nodes, tags=['PL'], operator='OR',
+                    rlevels=rlevels, node=node, tags=['PL'], operator='OR',
                     layer_name="Reform Pledge", icon_color="blue", icon_name="users",
                     header_color="#2563EB", target_cluster=pledge_cluster
                 )
@@ -1540,7 +1540,7 @@ class TreeNode:
                     tag_layer.add_ghosts(
                         tag_code=tag_code,
                         baked_dict=baked_dict,
-                        nodes=nodes,
+                        parent_node=node,
                         branchcolours=state.branchcolours
                     )
                     selected_list.append(tag_layer)
@@ -1595,9 +1595,10 @@ class TreeNode:
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
             nodes_to_render = nodes_by_type.get(factory_key, [])
-            if not nodes_to_render and factory_key != "marker":
-                continue
 
+            if not nodes_to_render :
+                continue
+            print(f"NODES TO RENDER: ",nodes_to_render[0].value )
             # Apply standard leaf metric tracking and color cycle properties upfront
             if factory_key != "marker":
                 totalleaf += len(nodes_to_render)
@@ -1615,27 +1616,23 @@ class TreeNode:
                 # 🗺️ Polygon Map Layers (🔧 Fix 2: Added 'constituency' explicitly here)
                 case "constituency" | "division" | "ward" | "country" | "nation" | "county":
                     counters = defaultdict(int)
-                    for node in nodes_to_render:
-                        layer.add_nodemaps(rlevels, node, static, counters, factory_key)
+                    layer.add_nodemaps(rlevels, nodes_to_render[0].parent, static, counters, factory_key)
                     selected.append(layer)
 
                 # 📐 Spatial Proximity Layers
                 case "polling_district" | "walk":
-                    for node in nodes_to_render:
-                        layer.add_voronoi(rlevels, node, static, factory_key)
+                    layer.add_voronoi(rlevels, nodes_to_render[0].parent, static, factory_key)
                     selected.append(layer)
 
                 # 🥾 Tactical Ground Elements & Fallbacks
                 case "street" | "walkleg":
-                    for node in nodes_to_render:
-                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
                     selected.append(layer)
 
                 # 🎯 Targeted Elector Telemetry Pins
                 case "elector":
-                    for node in nodes_to_render:
-                        layer.add_tag_layer(
-                            rlevels=rlevels, node=node,
+                    layer.add_tag_layer(
+                            rlevels=rlevels, node=nodes_to_render[0].parent,
                             tags=['PL'], operator='OR', layer_name="Reform Pledges",
                             icon_color="blue", icon_name="users", header_color="#2563EB",
                             static=static
@@ -1644,21 +1641,19 @@ class TreeNode:
 
                 # 📊 Custom Strategy Analytics
                 case "result" | "target" | "data":
-                    for node in nodes_to_render:
-                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
                     selected.append(layer)
 
                 # ⚠️ Catch-All Fallback Engine
                 case _:
                     print(f"ℹ️ Factory key '{factory_key}' running default node markers routing.")
-                    for node in nodes_to_render:
-                        layer.add_nodemarks(rlevels, node, static, factory_key)
+                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
                     selected.append(layer)
 
             # 📬 Operational Overlay Attachment Trigger
             if factory_key in ("constituency", "ward", "division", "polling_district", "walk"):
                 _attach_elector_and_campaign_overlays(
-                    selected, factory_key, nodes_to_render, rlevels, active_tags, baked_dict
+                    selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
                 )
 
         return list(reversed(selected)), totalleaf
