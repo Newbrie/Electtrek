@@ -1605,6 +1605,8 @@ class TreeNode:
                 target_highlight_nodes.extend(nodes_to_render)
                 for idx, node in enumerate(nodes_to_render):
                     node.defcol = branchcolours[idx % 12]
+            if factory_key != "constituency":
+                continue
 
             # Route directly to the precise drawing methods on the active layer
             match factory_key:
