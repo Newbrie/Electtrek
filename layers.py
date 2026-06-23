@@ -552,8 +552,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         import folium
         polygons_added = 0
 
-        for node in parent_node.children:
-            region_id = str(node.value)
+        for child in parent_node.children:
+            region_id = str(child.value)
 
             # Guard: Only process if we have data for this region
             if region_id not in baked_dict:
@@ -586,9 +586,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                     fill_color = branchcolours[color_idx % 12]
 
                     # Create the GeoJson Feature
-                    # Note: We use node.geometry which is already a Shapely object
+                    # Note: We use child.geometry which is already a Shapely object
                     ghost_gj = folium.GeoJson(
-                        node.geometry,
+                        child.geometry,
                         name=f"ghost_{tag_code}_{region_id}",
                         style_function=lambda x, op=opacity, col=fill_color: {
                             'fillColor': col,
