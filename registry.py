@@ -1,8 +1,6 @@
 Treepolys: dict[str, gpd.GeoDataFrame] = {}
 Fullpolys: dict[str, gpd.GeoDataFrame] = {}
 Geo_index = {}
-print(f"DEBUG: Config Memory Address of Geo_index here: {id(Geo_index)}")
-# Then check the ID inside the persist function
 
 
 def clear_treepolys(from_level=None):

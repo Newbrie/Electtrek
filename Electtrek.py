@@ -63,7 +63,7 @@ from state import VNORM,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, s
 from state import Treepolys, Fullpolys,Geo_index,update_progress, normalname, route, stepify, resolve_here_or_redirect
 
 import nodes
-from nodes import get_layer_table, get_root,restore_from_persist, persist,parent_level_for, save_nodes, move_item
+from nodes import get_layer_table, get_trek_root,restore_from_persist, persist,parent_level_for, save_nodes, move_item
 import layers
 from elections import get_available_elections, get_elections, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 from elector import electors
@@ -2188,7 +2188,6 @@ def set_election():
             flash("That node is outside of the election Territory")
             print("That node is outside of the election Territory:")
         persist(Treepolys, Fullpolys, Geo_index)
-        print(f"____Route/set-election/results {constants}, options: {options}")
 # Convert your custom object into a clean dictionary for JSON parsing
         # Use whatever serialization method your class provides:
         if hasattr(CElection, 'to_dict'):
@@ -2200,7 +2199,7 @@ def set_election():
             constants_dict = dict(CElection)
 
         persist(Treepolys, Fullpolys, Geo_index)
-        print(f"____Route/set-election/results successfully serialized.")
+    
 
         return jsonify({
             'success': True,
@@ -2947,7 +2946,7 @@ def downbulk():
 
     # 4. ensure all nodes exist
     for node in nodelist:
-        get_root().ping_node(rlevels,node.mapfile(), create=True, accumulate=session.get("accumulate", False))
+        get_trek_root().ping_node(rlevels,node.mapfile(), create=True, accumulate=session.get("accumulate", False))
     # 4. Trigger the map creation
     map_filename = nodelist[0].parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
@@ -4385,8 +4384,7 @@ def firstpage():
     print("🧪 current_election:", current_election)
     print("🧪 session keys:", list(session.keys()))
     print("🧪 full session content:", dict(session))
-    print("🧪 full CElection content:", CElection)
-    print("🧪 Geo_index:", Geo_index)
+
 
     flash('_______ROUTE/firstpage')
     print('_______ROUTE/firstpage at :',current_node.value )
@@ -4400,7 +4398,7 @@ def firstpage():
 
     print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} ")
     current_node.create_node_map(rlevels, static=False)
-    print("______First selected node",len(current_node.children),current_node.value, current_node.level,current_node.file(rlevels))
+    print("______First selected node",len(current_node.children),current_node.value, current_node.level,current_node.mapfile())
 
 
     ELECTIONS = get_available_elections()

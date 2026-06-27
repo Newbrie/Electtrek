@@ -15,10 +15,11 @@ from folium import Map, Element
 import folium
 import uuid
 from pathlib import Path
-from datetime import datetime
+import sys
+from datetime import datetime, time
+import re
 
-import sys, math, stat, json
-import tempfile
+
 
 
 FACEENDING = {
@@ -44,7 +45,7 @@ def create_root_node() -> "TreeNode":
         node_type="country"
     )
 
-def get_root() -> "TreeNode":
+def get_trek_root() -> "TreeNode":
     """Always returns the single root node. Creates it if needed."""
 
     # If the root already exists, return it
@@ -65,22 +66,42 @@ def first_node() -> "TreeNode":
     return next(iter(TREK_NODES_BY_ID.values()), get_root())
 
 
-
 def parse_slot_key(slot_key):
     """
-    Convert keys like '2025-04-15_9 AM' to a Python datetime object.
+    Safely converts slot keys like '2026-04-16_5 PM' or '2026-04-16_11:30 AM'
+    to a Python datetime object by parsing strings explicitly. Completely
+    immune to operating system C-library or locale bugs.
     """
-    date_str, time_str = slot_key.split("_")
-    time_str = time_str.replace(" ", "")  # "9 AM" → "9AM"
-
     try:
-        if ":" in time_str:
-            dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %I:%M%p")
-        else:
-            dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %I%p")
-        return dt
+        # 1. Split date and time blocks cleanly
+        date_str, time_str = slot_key.split("_")
+
+        # 2. Extract hours, optional minutes, and AM/PM via regex
+        # Strips out all spaces and forces uppercase for reliable matching
+        clean_time = time_str.replace(" ", "").upper()
+        match = re.match(r"(\d+)(?::(\d+))?(AM|PM)", clean_time)
+
+        if not match:
+            raise ValueError(f"Time format unrecognized: {time_str}")
+
+        hour = int(match.group(1))
+        minute = int(match.group(2)) if match.group(2) else 0
+        period = match.group(3)
+
+        # 3. Apply standard 12-to-24 hour conversion mathematically
+        if period == "PM" and hour < 12:
+            hour += 12
+        elif period == "AM" and hour == 12:
+            hour = 0
+
+        # 4. Extract date fields directly from the ISO string layout
+        year, month, day = map(int, date_str.split("-"))
+
+        # 5. Build the object natively
+        return datetime(year, month, day, hour, minute)
+
     except Exception as e:
-        print(f"❌ Could not parse slot key {slot_key}: {e}")
+        print(f"❌ [PURE PARSER] Failed to parse slot key {slot_key}: {e}")
         return None
 
 def reset_nodes():
@@ -445,30 +466,33 @@ def atomic_pickle_dump(obj, path):
 
 
 def atomic_json_dump(obj, path):
-    """
-    Safely writes a JSON file by writing to a temp file first,
-    then replacing the original. Prevents 'forgetting' branches
-    due to file corruption during a crash.
-    """
-    d = os.path.dirname(path) or "."
-    tmp_path = None
+    # 🔧 FIX: Add the missing imports right here inside the function scope
+    import tempfile
+    import os
+    import json
 
+    abs_path = os.path.abspath(path)
+    d = os.path.dirname(abs_path)
+    os.makedirs(d, exist_ok=True)
+
+    tmp_name = None
     try:
-        # 1. Use 'w' mode (text) and 'utf-8' encoding
-        # delete=False is required so we can rename it after closing
+        # Now 'tempfile' is securely defined in this scope!
         with tempfile.NamedTemporaryFile(mode='w', dir=d, delete=False, encoding='utf-8', suffix='.tmp') as tf:
-            json.dump(obj, tf, indent=4) # indent=4 makes it human-readable for debugging
-            tmp_path = tf.name
+            tmp_name = tf.name
+            json.dump(obj, tf, ensure_ascii=False, indent=4)
+            tf.flush()
+            os.fsync(tf.fileno())
 
-        # 2. Atomic replacement (OS level move)
-        os.replace(tmp_path, path)
+        os.replace(tmp_name, abs_path)
 
     except Exception as e:
-        logging.error(f"❌ Atomic JSON dump failed for {path}: {e}")
-        # Clean up the temp file if it was created but not moved
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise  # Re-raise to let the caller know the save failed
+        if tmp_name and os.path.exists(tmp_name):
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+        raise e
 
 def safe_pickle_load(path, default):
     try:
@@ -522,11 +546,8 @@ def restore_from_persist(treepolys, fullpolys, geo_index):
     return
 
 def persist(treepolys, fullpolys, geo_index):
-    print(f'___persisting pickle under !{elections.route()}', TREEPOLY_FILE)
     atomic_pickle_dump(treepolys,TREEPOLY_FILE)
-    print('___persisting pickle ', FULLPOLY_FILE)
     atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
-    print('___persisting json ', geo_index)
     atomic_json_dump(geo_index,GEO_INDEX_FILE)
     return
 
@@ -574,51 +595,7 @@ def get_common_prefix_len(a, b):
             return i
     return min_len
 
-def strip_filename_from_path(path):
-    for suffix in [
-        "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
-        "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
-    ]:
-        path = path.replace(suffix, "@@@")
-    return path
 
-
-
-def find_node_by_path(basepath: str, debug=False):
-    if debug:
-        print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES_BY_ID)}")
-
-    if not basepath:
-        return None
-
-    parts = [state.normalname(p) for p in basepath.strip("/").split("/") if p]
-    if not parts:
-        return None
-
-    root = get_root()
-    node = root
-
-    if state.normalname(root.value) != parts[0]:
-        if debug:
-            print("[DEBUG] Root mismatch")
-        return None
-
-    for part in parts[1:]:
-        if debug:
-            print(f"[DEBUG] Descending to: {part}")
-
-        matches = [c for c in node.children if state.normalname(c.value) == part]
-        if not matches:
-            if debug:
-                print(f"[DEBUG] No child match for '{part}'")
-            return None
-
-        node = matches[0]
-
-    if debug:
-        print(f"[DEBUG] Found node: {node.value} ({node.nid})")
-
-    return node
 
 
 from geopy.distance import geodesic
@@ -1079,7 +1056,7 @@ class TreeNode:
 
 
         CE_resources = CE.get('resources',{})
-        CE_task_tags, CE_outcome_tags, CE_all_tags = get_tags_json(CE['Tags'])
+        CE_task_tags, CE_outcome_tags, CE_all_tags = CE.get_tags()
         CE_areas = self.get_areas()
         CE_places = CE.get("places", {})
         print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
@@ -1118,7 +1095,7 @@ class TreeNode:
         """
         Produce an eventlist dataframe matching the intent of the JS summary.
         """
-        from election import CurrentElection
+        from elections import CurrentElection
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1458,20 +1435,19 @@ class TreeNode:
 
     def get_feature_layers(self, rlevels, static=False):
         """
-        Retrieves map layers for the node's parent, siblings(of the same type), children(of all types), and grandchildren(of all types),
-        along with marker assets and dynamic ghost task progress overlays.
+        Retrieves map layers for the node's parent, siblings, children, and grandchildren,
+        applying a self-consistent visual hierarchy across both administrative boundaries
+        and operational campaign telemetry overlays.
         """
         from flask import session
         from layers import make_feature_layers, ExtendedFeatureGroup
         from elections import CurrentElection
         from baked_data import BakedDataManager
-        import state # Ensure global state is imported for branchcolours
-        import copy  # 🧠 Retained if needed elsewhere, safely decoupled from cloning loops
-
-        from state import branchcolours
+        import state
+        import copy
         from collections import defaultdict
 
-        # 🔧 Fix 1: Initialize tracing set up high so the nested function can capture it in its closure scope
+        # 🔧 Fix 1: Track tags to safely handle duplicate closure assignments
         used_tags = set()
 
         def get_safe_tag_layer(tag_code, tag_desc):
@@ -1480,17 +1456,9 @@ class TreeNode:
                 display_name = f"{display_name} (Upper)"
             used_tags.add(tag_code)
 
-            tag_layer = ExtendedFeatureGroup(
-                name=display_name,
-                overlay=True,
-                control=True,
-                show=True
-            )
+            tag_layer = ExtendedFeatureGroup(name=display_name, overlay=True, control=True, show=True)
             tag_layer.options = tag_layer.options or {}
-            tag_layer.options.update({
-                "tag": tag_code,
-                "layer_type": "ghost"
-            })
+            tag_layer.options.update({"tag": tag_code, "layer_type": "ghost"})
             return tag_layer
 
 
@@ -1498,15 +1466,18 @@ class TreeNode:
             """Assembles complex voter pin clusters and ghost overlays relative to the active target tier."""
             from folium.plugins import MarkerCluster
 
-            # 📬 1. Postal Voters Layer
+            # 📬 1. Postal Voters Layer (Thematic Accent: Amethyst Purple)
             postal_layer = ExtendedFeatureGroup(
                 name=f"Elector Overlay: [AV] Postal Voters ({tier_key.title()})",
                 overlay=True, control=True, show=False
             )
-            postal_layer.options = {"tag": "AV", "layer_type": "av_highlight"}
+            postal_layer.options = {
+                "tag": "AV",
+                "layer_type": "av_highlight",
+                "style": {"color": "#7C3AED", "weight": 2, "fillColor": "#A78BFA", "fillOpacity": 0.15}
+            }
             postal_cluster = MarkerCluster(name=f"Postal - {tier_key}", control=False).add_to(postal_layer)
 
-            # Pass nodes through to register cluster nodes directly
             if hasattr(postal_layer, 'add_tag_layer'):
                 postal_count = postal_layer.add_tag_layer(
                     rlevels=rlevels, node=node, tags=['AV'], operator='OR',
@@ -1516,12 +1487,16 @@ class TreeNode:
                 if postal_count > 0:
                     selected_list.append(postal_layer)
 
-            # 🤝 2. Pledge Highlights Layer
+            # 🤝 2. Pledge Highlights Layer (Thematic Accent: Action Blue)
             pledge_layer = ExtendedFeatureGroup(
                 name=f"Elector Overlay: [VI] Pledged Voters ({tier_key.title()})",
                 overlay=True, control=True, show=False
             )
-            pledge_layer.options = {"tag": "VI", "layer_type": "vi_highlight"}
+            pledge_layer.options = {
+                "tag": "VI",
+                "layer_type": "vi_highlight",
+                "style": {"color": "#2563EB", "weight": 2, "fillColor": "#60A5FA", "fillOpacity": 0.15}
+            }
             pledge_cluster = MarkerCluster(name=f"Pledges - {tier_key}", control=False).add_to(pledge_layer)
 
             if hasattr(pledge_layer, 'add_tag_layer'):
@@ -1533,9 +1508,14 @@ class TreeNode:
                 if pledge_count > 0:
                     selected_list.append(pledge_layer)
 
-            # 👻 3. Ghost Task Heatmaps
+            # 👻 3. Ghost Task Heatmaps (Thematic Accent: Flame Orange Campaign Highlight)
             for tag_code, tag_desc in active_tags.items():
                 tag_layer = get_safe_tag_layer(tag_code, f"{tag_desc} ({tier_key.title()})")
+
+                tag_layer.options.update({
+                    "style": {"color": "#EA580C", "weight": 1.5, "fillColor": "#F97316", "fillOpacity": 0.20}
+                })
+
                 if hasattr(tag_layer, 'add_ghosts'):
                     tag_layer.add_ghosts(
                         tag_code=tag_code,
@@ -1545,38 +1525,27 @@ class TreeNode:
                     )
                     selected_list.append(tag_layer)
 
-        # Guard & Unpack
+
+        # Guard & Unpack election data contexts
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
 
         print(f"\n================ [DEBUG START: get_feature_layers] ================")
-        print(f"📍 CURRENT NODE: '{self.name if hasattr(self, 'name') else self}' | Level: {self.level} | Type: {getattr(self, 'type', 'N/A')}")
-        print(f"🔑 Election Key: {c_election} | Levels Schema Mapping: {elevels}")
-
-        # Load election contexts and task tracking configurations
         current_election = CurrentElection.load(c_election)
         task_tags, _, _ = current_election.get_tags()
 
         factory = make_feature_layers()
         selected = []
-        used_keys = set()
+        counters = defaultdict(int)
 
-        # -------------------------------------------------
-        # 📂 BASELINE DATA: Establish Base Node Lists Upfront
-        # -------------------------------------------------
+        # Baseline Data: Establish Base Node Lists Upfront
         if session.get("accumulate", False):
             childnode_ids = session.get("accumulated_nodes", [])
             childnodelist = [TREK_NODES_BY_ID.get(nid) for nid in childnode_ids if nid in TREK_NODES_BY_ID]
         else:
             childnodelist = [self]
 
-        # -------------------------------------------------
-        # 🔍 QUICK DEBUG: Let's see what the nodes actually have
-        # -------------------------------------------------
-        if childnodelist:
-            test_node = childnodelist[0]
-            print(f"DEBUG NODE: type={getattr(test_node, 'type', 'MISSING')}, layer_type={getattr(test_node, 'layer_type', 'MISSING')}, key={getattr(test_node, 'key', 'MISSING')}")
-
+        test_node = childnodelist[0] if childnodelist else self
 
         # Setup infrastructure for task overlays
         baked_manager = BakedDataManager()
@@ -1585,87 +1554,113 @@ class TreeNode:
         active_tags["VI"] = "Voter Intention"
 
         totalleaf = 0
-        target_highlight_nodes = list(childnodelist)
 
         # Pre-group dynamic geographic nodes by type for fast lookup
         nodes_by_type = {}
         for layer_type, nodes in self.surrounding_layers():
             nodes_by_type[layer_type] = nodes
-            print(f"DEBUG NODES:",len(nodes))
+
+        # ------------------------------------------------------------------
+        # 🎨 SELF-CONSISTENT CHROMATIC HIERARCHY REGISTRY
+        # ------------------------------------------------------------------
+        # Weights drop as map elements tighten; styles gracefully step from neutral frames to vibrant metrics.
+        LAYER_STYLE_REGISTRY = {
+            "country":          {"color": "#0F172A", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
+            "nation":           {"color": "#1E293B", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
+            "county":           {"color": "#475569", "weight": 2.0, "fillColor": "#64748B", "fillOpacity": 0.03, "show": True},
+
+            "constituency":     {"color": "#0369A1", "weight": 2.0, "fillColor": "#0EA5E9", "fillOpacity": 0.07, "show": True},
+            "division":         {"color": "#0284C7", "weight": 1.5, "fillColor": "#38BDF8", "fillOpacity": 0.10, "show": True},
+            "ward":             {"color": "#0284C7", "weight": 1.5, "fillColor": "#38BDF8", "fillOpacity": 0.10, "show": True},
+
+            "polling_district": {"color": "#0D9488", "weight": 1.0, "fillColor": "#2DD4BF", "fillOpacity": 0.12, "show": False, "dashArray": "4,4"},
+            "walk":             {"color": "#0F766E", "weight": 1.0, "fillColor": "#14B8A6", "fillOpacity": 0.12, "show": False, "dashArray": "2,4"},
+
+            "street":           {"color": "#0F766E", "weight": 1.5, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
+            "walkleg":          {"color": "#115E59", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
+            "marker":           {"show": True}
+        }
+
+        # Control panel whitelist toggles
+        TEST_LAYERS = {"county", "constituency", "ward", "polling_district", "walk", "marker"}
 
         # 🎯 DIRECT STREAM ROUTING LOOP
-        TEST_LAYERS = {"nation", "marker"}
-
         for factory_key, layer in factory.items():
 
             if factory_key not in TEST_LAYERS:
                 continue
 
+            style_cfg = LAYER_STYLE_REGISTRY.get(factory_key, {
+                "color": "#94A3B8", "weight": 1, "fillColor": "#CBD5E1", "fillOpacity": 0.1, "show": False
+            })
+
             nodes_to_render = nodes_by_type.get(factory_key, [])
 
-            if not nodes_to_render :
+            if factory_key != "marker" and not nodes_to_render:
                 continue
-            print(f"NODES TO RENDER: ",nodes_to_render[0].value )
-            # Apply standard leaf metric tracking and color cycle properties upfront
-            if factory_key != "marker":
-                totalleaf += len(nodes_to_render)
-                target_highlight_nodes.extend(nodes_to_render)
-                for idx, node in enumerate(nodes_to_render):
-                    node.defcol = branchcolours[idx % 12]
 
-
-            # Route directly to the precise drawing methods on the active layer
+            # Route directly to precise rendering logic blocks
             match factory_key:
 
                 # 📍 Pins & Global Anchors
                 case "marker":
-                    layer.add_genmarkers(rlevels, nodes_to_render[0].parent, static)
-                    selected.append(layer)
+                    layer.add_genmarkers(rlevels, test_node, static)
 
-                # 🗺️ Polygon Map Layers (🔧 Fix 2: Added 'constituency' explicitly here)
+                # 🗺️ Polygon Map Layers
                 case "constituency" | "division" | "ward" | "country" | "nation" | "county":
-                    counters = defaultdict(int)
                     layer.add_nodemaps(rlevels, nodes_to_render[0].parent, static, counters, factory_key)
-                    selected.append(layer)
 
-                # 📐 Spatial Proximity Layers
+                # 📐 Spatial Proximity Layers (Voronoi Grids)
                 case "polling_district" | "walk":
                     layer.add_voronoi(rlevels, nodes_to_render[0].parent, static, factory_key)
-                    selected.append(layer)
 
-                # 🥾 Tactical Ground Elements & Fallbacks
-                case "street" | "walkleg":
+                # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
+                case "street" | "walkleg" | "result" | "target" | "data" | _:
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
-                    selected.append(layer)
 
-                # 🎯 Targeted Elector Telemetry Pins
-                case "elector":
-                    layer.add_tag_layer(
-                            rlevels=rlevels, node=nodes_to_render[0].parent,
-                            tags=['PL'], operator='OR', layer_name="Reform Pledges",
-                            icon_color="blue", icon_name="users", header_color="#2563EB",
-                            static=static
-                        )
-                    selected.append(layer)
+            # ------------------------------------------------------------------
+            # 🔧 POST-EXECUTION OVERRIDE: Enforce LayerControl Map States
+            # ------------------------------------------------------------------
+            layer.overlay = True
+            layer.control = True
+            layer.show = style_cfg.get("show", True)
 
-                # 📊 Custom Strategy Analytics
-                case "result" | "target" | "data":
-                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
-                    selected.append(layer)
+            if factory_key != "marker":
+                if not hasattr(layer, "options") or layer.options is None:
+                    layer.options = {}
 
-                # ⚠️ Catch-All Fallback Engine
-                case _:
-                    print(f"ℹ️ Factory key '{factory_key}' running default node markers routing.")
-                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
-                    selected.append(layer)
+                geojson_style = {
+                    "color": style_cfg["color"],
+                    "weight": style_cfg["weight"],
+                    "fillColor": style_cfg["fillColor"],
+                    "fillOpacity": style_cfg["fillOpacity"]
+                }
 
-            # 📬 Operational Overlay Attachment Trigger
+                if "dashArray" in style_cfg:
+                    geojson_style["dashArray"] = style_cfg["dashArray"]
+
+                if style_cfg["fillColor"] == "none":
+                    geojson_style["fillOpacity"] = 0.0
+
+                layer.options.update({"style": geojson_style})
+
+            # Append the baseline administrative layer
+            selected.append(layer)
+
+            # 📬 Operational Campaign Overlay Trigger
+            # Automatically generates dynamic interactive data groups directly parallel to the baseline layer
+            # 🛡️ REFACTOR: Match the factory loop key against our active structural self.type
+            # to prevent parent/upper tier overlays from being built.
             if factory_key in ("constituency", "ward", "division", "polling_district", "walk"):
-                _attach_elector_and_campaign_overlays(
-                    selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
-                )
+                if factory_key == self.type:
+                    _attach_elector_and_campaign_overlays(
+                        selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
+                    )
+                else:
+                    print(f"ℹ️ Skipping overlay for '{factory_key}' because active node type is '{self.type}'")
 
-        return list(reversed(selected)), totalleaf
+        # Flat layer array emission ensures Folium handles deep nesting and controls perfectly
+        return selected, totalleaf
 
     def sumupVI(self,viValue):
         origin = self
@@ -1977,15 +1972,6 @@ class TreeNode:
         raw_electtype = elevels[self.level + 1]
         print(f"✅ Creating {raw_electtype} Data branch for election {c_election}")
 
-        # ----------------------------------------
-        # Load electors from ElectorManager
-        # ----------------------------------------
-        areaelectors = electors.elector_for_path(resolved_levels, self.mapfile())
-
-        if areaelectors.empty:
-            print(f"⚠️ No data from election {c_election} at node {self.value}")
-            return []
-
         gotv_pct = CE['GOTV']
 
         # 🎯 RESOLVE ALL POSSIBLE DATA TARGET LAYERS (e.g., ["walk", "polling_district"])
@@ -2004,9 +1990,10 @@ class TreeNode:
         try:
             from elector import shapecolumn
 
+            # 🛠️ Updated suffix mapping per your system layout requirements
             suffix_mapping = {
-                "polling_district": "-PDS.html",
-                "walk": "-WALKS.html",
+                "polling_district": "-MAP.html",
+                "walk": "-MAP.html",
                 "street": "-PRINT.html",
                 "walkleg": "-PRINT.html"
             }
@@ -2017,6 +2004,20 @@ class TreeNode:
                     continue
 
                 colname = shapecolumn[electtype]
+                target_suffix = suffix_mapping.get(electtype, "-PRINT.html")
+
+                # Generate localized mapfile path layout matching this target suffix
+                if hasattr(self, 'mapfile') and callable(getattr(self, 'mapfile')):
+                    localized_path = self.mapfile(target_suffix)
+                else:
+                    localized_path = self.mapfile()
+
+                # Fetch the isolated electoral records matching this exact layer pass
+                areaelectors = electors.elector_for_path(resolved_levels, localized_path)
+
+                if areaelectors.empty:
+                    print(f"⚠️ No data from election {c_election} at node {self.value} for subtype '{electtype}'")
+                    continue
 
                 # Ensure the mapped target column actually exists in the elector dataset
                 if colname not in areaelectors.columns:
@@ -2049,7 +2050,7 @@ class TreeNode:
                     gotv_pct,
                     electtype,  # Stamped clean type context passed through
                     nodeelectors,
-                    suffix_mapping.get(electtype, "-PRINT.html")
+                    target_suffix
                 )
 
                 print(f"📦 Created {len(branch_nodes)} nodes for type '{electtype}'")
@@ -2063,8 +2064,7 @@ class TreeNode:
 
         print(
             f"✅ Completed Multi-Data Branch for Election: {c_election} "
-            f"in area: {self.value} | Total nodes created: {len(all_created_data_nodes)} "
-            f"from {len(areaelectors)} base records."
+            f"in area: {self.value} | Total nodes created: {len(all_created_data_nodes)}"
         )
 
         # Ensure global persistence method is clean
@@ -2075,7 +2075,6 @@ class TreeNode:
                 pass
 
         return all_created_data_nodes
-
 
     def create_map_branch(self, resolved_levels):
         # Imports (keep them here if they are circular)
@@ -2456,7 +2455,13 @@ class TreeNode:
             }
             </style>
             """
-
+        tile_override_css = """
+            <style>
+                .leaflet-tile-container img {
+                    filter: grayscale(100%) invert(5%) contrast(120%);
+                }
+            </style>
+            """
 
         move_close_button_css = """
             <style>
@@ -2952,6 +2957,8 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
 
+        FolMap.get_root().header.add_child(folium.Element(tile_override_css))
+
         FolMap.get_root().html.add_child(folium.Element(logo_css_injection))
 
         # 💡 Injected new static dictionary building capability cleanly into page generation blocks
@@ -3346,6 +3353,6 @@ allelectors.drop(allelectors.index, inplace=True)
 TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
 
 
-MapRoot = get_root()
+MapRoot = get_trek_root()
 TREK_NODES_BY_ID[MapRoot.nid] = MapRoot
 save_nodes(TREKNODE_FILE)

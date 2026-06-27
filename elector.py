@@ -31,6 +31,78 @@ shapecolumn = {
 }
 
 
+def strip_filename_from_path(path):
+    for suffix in [
+        "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
+        "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
+    ]:
+        path = path.replace(suffix, "@@@")
+    return path
+
+
+
+def find_node_by_path(basepath: str, debug=False):
+    from nodes import get_trek_root
+    if debug:
+        print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES_BY_ID)}")
+
+    if not basepath:
+        return None, {}
+
+    # Strip structural file markers or suffixes using your helper
+    clean_basepath = strip_filename_from_path(basepath).split("@@@")[0]
+    parts = [state.normalname(p) for p in clean_basepath.strip("/").split("/") if p]
+
+    if not parts:
+        return None, {}
+
+    # Initialize path traversal tracking structures
+    actual_levels = {}
+    current_depth = 0
+
+    root = get_trek_root()
+    node = root
+
+    # Handle the initial entry point (Level 0 / Root Anchor)
+    if state.normalname(root.value) != parts[0]:
+        if debug:
+            print("[DEBUG] Root mismatch")
+        return None, {}
+
+    # Record the root node's level configuration
+    actual_levels[current_depth] = getattr(node, "type", "country")
+
+    # Trace downward through the remaining string segments
+    for part in parts[1:]:
+        # Detect and safely bypass plural navigation markers (e.g., 'WARDS', 'DIVISIONS')
+        if part.upper() in ["WARDS", "DIVISIONS", "CONSTITUENCIES", "COUNTIES", "WALKS", "PDS"]:
+            if debug:
+                print(f"[DEBUG] Bypassing structural subdirectory segment: {part}")
+            continue
+
+        if debug:
+            print(f"[DEBUG] Descending to node segment: {part}")
+
+        # Find children matching the normalized segment name
+        matches = [c for c in node.children if state.normalname(c.value) == part]
+        if not matches:
+            if debug:
+                print(f"[DEBUG] No child node matches found for segment target: '{part}'")
+            return None, actual_levels
+
+        # Advance the node cursor down the tree hierarchy
+        node = matches[0]
+        current_depth += 1
+
+        # Capture the validated structural model type at the current tier
+        actual_levels[current_depth] = getattr(node, "type", "unknown")
+
+    if debug:
+        print(f"[DEBUG] Found target node: {node.value} ({node.nid})")
+        print(f"[DEBUG] Resulting actual_levels layout: {actual_levels}")
+
+    return node, actual_levels
+
 def resolve_targets(df, uiScope, region_value, street, house):
 
     scope_col = shapecolumn.get(uiScope)
@@ -308,17 +380,23 @@ class ElectorManager:
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-            # The clean unpack you like
+            # 1. Unpack election context key
             (c_election, elevels), = resolved_levels.items()
-
 
             df = self._elections.get(c_election)
             if df is None or df.empty:
                 logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            parts = state.stepify(raw_path)
+            # 2. 🌲 RESOLVE ACTUAL LEVELS VIA TREE TRAVERSAL
+            # This replaces string guessing with structural truth from the node schema tree
+            target_node, actual_levels = find_node_by_path(raw_path, debug=False)
 
+            if not actual_levels:
+                logger.error(f"❌ Failed to resolve actual tree hierarchy layout for path: {raw_path}")
+                return pd.DataFrame()
+
+            parts = state.stepify(raw_path)
             logger.debug(f"🔍 START FILTER: Path={parts} | Election={c_election}")
 
             filtered_df = df.copy()
@@ -327,7 +405,13 @@ class ElectorManager:
                 if depth == 0:
                     continue # Usually root/nation
 
-                node_type = elevels[depth]
+                # 🔄 FALLBACK PROTECTION: Use truth-source actual_levels first, fall back to elevels if depth is offset
+                node_type = actual_levels.get(depth, elevels.get(depth))
+
+                if not node_type:
+                    logger.debug(f"   Step {depth}: No structural level type resolved at this depth index. Skipping.")
+                    continue
+
                 col = shapecolumn.get(node_type)
                 target_val = state.normalname(value)
 
@@ -340,7 +424,6 @@ class ElectorManager:
                     continue
 
                 # --- The Decision Path Debug ---
-                # Get unique values currently in the column to see what we are comparing against
                 available_values = filtered_df[col].unique()[:5] # Show first 5 unique samples
 
                 logger.debug(
@@ -371,11 +454,12 @@ class ElectorManager:
         from elections import CurrentElection
         """
         Deletes electors by intersecting levels Step 1 (Constituency) and below.
+        Uses truth-source tree traversal to maintain safe schema index alignment.
         """
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-            # The clean unpack you like
+            # Unpack election context key
             (c_election, elevels), = resolved_levels.items()
 
             # 1. Access the specific election data
@@ -384,26 +468,32 @@ class ElectorManager:
                 logger.warning(f"No data found for election '{c_election}'")
                 return 0
 
-            # 2. Get the clean steps
+            # 2. 🌲 RESOLVE ACTUAL LEVELS VIA TREE TRAVERSAL
+            # Avoids index shifting traps caused by folder structural names
+            target_node, actual_levels = find_node_by_path(raw_path, debug=False)
+
+            if not actual_levels:
+                logger.error(f"❌ Failed to resolve actual tree hierarchy layout for deletion path: {raw_path}")
+                return 0
+
+            # 3. Get the clean steps
             parts = state.stepify(raw_path)
             if len(parts) < 2:
                 logger.warning(f"Path too shallow for targeted deletion: {raw_path}")
                 return 0
 
-            # 3. Load mapping
-
             original_len = len(df)
 
             # 4. Build the "Intersection Mask"
-            # Start by selecting everything, then narrow it down
             path_mask = pd.Series([True] * len(df), index=df.index)
 
             for depth, value in enumerate(parts):
-                # --- REFACTOR: Skip Country Level ---
+                # --- Skip Country Level ---
                 if depth == 0:
                     continue
 
-                node_type = elevels.get(depth)
+                # 🔄 Use actual_levels first, fallback to elevels if deep-nested indexing shifts
+                node_type = actual_levels.get(depth, elevels.get(depth))
                 if not node_type:
                     continue
 
@@ -416,16 +506,16 @@ class ElectorManager:
                     path_mask = path_mask & level_match
 
             # 5. Execute Deletion
-            # Check if we actually matched anything before re-assigning
+            # Check if we actually matched anything before dropping records
             if path_mask.any():
-                # Keep only what is NOT in the path_mask
+                # Keep only what is NOT matched by the inverted path_mask
                 self._elections[c_election] = df[~path_mask].copy()
                 deleted_count = original_len - len(self._elections[c_election])
             else:
                 deleted_count = 0
 
             if deleted_count > 0:
-                # 6. Housekeeping
+                # 6. Housekeeping & State Persistence
                 self.rebuild_combined()
                 self.save()
                 logger.info(f"Deleted {deleted_count} electors from '{c_election}' for path: {raw_path}")
