@@ -699,7 +699,7 @@ class TreeNode:
         yield from self.get_parent_layers().items()
         yield from self.get_sibling_layers().items()
         yield from self.get_child_layers().items()
-        yield from self.get_grandchild_layers().items()
+#        yield from self.get_grandchild_layers().items()
 
     def file(self, elevels: dict[int, str]) -> str:
         """Compute map filename dynamically."""
@@ -1582,7 +1582,7 @@ class TreeNode:
         }
 
         # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "polling_district", "walk", "marker"}
+        TEST_LAYERS = {"county", "constituency", "ward", "marker"}
 
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
@@ -2530,13 +2530,10 @@ class TreeNode:
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         ">{title} MAP</h2>
         '''
-        import base64
-    # 1. Convert PNG to Base64 (Keep as is)
-        with open(LOGO_FILE, "rb") as f:
-            b64_str = base64.b64encode(f.read()).decode('utf-8')
 
-        # 2. Updated Styles (Remove 'position: fixed' and 'bottom/left')
-        # We let Leaflet handle the positioning now.
+# 📈 FIX: Use your local server's static web route for the image asset
+        logo_web_path = LOGO_FILE  # Replace with your actual web asset path
+
         logo_styles = f"""
             <style>
                 .leaflet-logo-container {{
@@ -2547,16 +2544,16 @@ class TreeNode:
                     align-items: center;
                     justify-content: center;
                     pointer-events: none;
-                    margin-bottom: 10px !important; /* Spacing from map edge */
+                    margin-bottom: 10px !important;
                     margin-left: 10px !important;
                 }}
 
                 .leaflet-logo-icon {{
                     width: 100%;
                     height: 100%;
-                    background-color: #17B9D1; /* Your brand color */
-                    -webkit-mask-image: url("data:image/png;base64,{b64_str}");
-                    mask-image: url("data:image/png;base64,{b64_str}");
+                    background-color: #17B9D1;
+                    -webkit-mask-image: url("{logo_web_path}");
+                    mask-image: url("{logo_web_path}");
                     -webkit-mask-size: contain;
                     mask-size: contain;
                     -webkit-mask-repeat: no-repeat;
@@ -2566,8 +2563,6 @@ class TreeNode:
                 }}
             </style>
         """
-
-        # Add this to your Python map generation string
 
         logo_css_injection = f"""
         <style>
@@ -2580,9 +2575,8 @@ class TreeNode:
                 margin-bottom: 10px;
                 background-color: #00aaff;
 
-                /* 💡 Dynamic logo file path injected here */
-                -webkit-mask: url('{LOGO_FILE}') no-repeat center;
-                mask: url('{LOGO_FILE}') no-repeat center;
+                -webkit-mask: url('{logo_web_path}') no-repeat center;
+                mask: url('{logo_web_path}') no-repeat center;
                 -webkit-mask-size: contain;
                 mask-size: contain;
 
