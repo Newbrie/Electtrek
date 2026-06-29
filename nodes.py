@@ -1330,7 +1330,7 @@ class TreeNode:
                     print(f"   ⚠️ [DEBUG] Primary branch creation failed: {e}")
 
                 # Re-check for a match
-                match = next((c for c in node.children if c.value == part), None)
+                match = next((c for c in node.children if c.node_path == target_path), None)
 
                 # 🌟 FIX: Dynamic Bivalent Fallback Check!
                 # If there's still no match, and the type definition contains a "/", try the alternative method.
@@ -1345,7 +1345,7 @@ class TreeNode:
                         print(f"   ⚠️ [DEBUG] Alternative bivalent branch creation failed: {e}")
 
                     # Final check for this pass
-                    match = next((c for c in node.children if c.value == part), None)
+                    match = next((c for c in node.children if c.node_path == target_path), None)
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
