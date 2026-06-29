@@ -1430,7 +1430,6 @@ class TreeNode:
             tag_layer.options.update({"tag": tag_code, "layer_type": "ghost"})
             return tag_layer
 
-
         def _attach_elector_and_campaign_overlays(selected_list, tier_key, node, rlevels, active_tags, baked_dict):
             """Assembles complex voter pin clusters and ghost overlays relative to the active target tier."""
             from folium.plugins import MarkerCluster
@@ -1494,7 +1493,6 @@ class TreeNode:
                     )
                     selected_list.append(tag_layer)
 
-
         # Guard & Unpack election data contexts
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
@@ -1542,10 +1540,10 @@ class TreeNode:
             # ------------------------------------------------------------------
             # 🔧 CONTEXT PACKAGING: Safely pull style configurations from layer.options
             # ------------------------------------------------------------------
-            if factory_key != "marker":
-                style_cfg = getattr(layer, "options", {}) or {}
+            style_cfg = getattr(layer, "options", {}) or {}
 
-                # Build a uniform style dict directly from the layer properties
+            if factory_key != "marker":
+                # Build a uniform style dict directly from the layer properties safely
                 geojson_style = {
                     "color": style_cfg.get("color", "#94A3B8"),
                     "weight": style_cfg.get("weight", 1.0),
@@ -1584,31 +1582,36 @@ class TreeNode:
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" | _:
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
+
             # ------------------------------------------------------------------
-            # 🔧 POST-EXECUTION OVERRIDE: Enforce LayerControl Map States
+            # 🔧 POST-EXECUTION CLEANUP: Maintain Flat Property Architecture
             # ------------------------------------------------------------------
             layer.overlay = True
             layer.control = True
-            layer.show = style_cfg.get("show", True)
+
+            # Use safe explicit fallbacks for map initialization layers control panel states
+            if factory_key in ["ward", "division", "constituency"]:
+                layer.show = True
+            else:
+                layer.show = False
 
             if factory_key != "marker":
                 if not hasattr(layer, "options") or layer.options is None:
                     layer.options = {}
 
+                # 🎯 FIX: Build backup dictionary using defensive .get() calls to avoid KeyError crashes
                 geojson_style_backup = {
-                    "color": style_cfg["color"],
-                    "weight": style_cfg["weight"],
-                    "fillColor": style_cfg["fillColor"],
-                    "fillOpacity": style_cfg["fillOpacity"]
+                    "color": style_cfg.get("color", "#94A3B8"),
+                    "weight": style_cfg.get("weight", 1.0),
+                    "fillColor": style_cfg.get("fillColor", "none"),
+                    "fillOpacity": 0.0 if style_cfg.get("fillColor", "none") == "none" else style_cfg.get("fillOpacity", 0.0)
                 }
 
                 if "dashArray" in style_cfg:
                     geojson_style_backup["dashArray"] = style_cfg["dashArray"]
 
-                if style_cfg["fillColor"] == "none":
-                    geojson_style_backup["fillOpacity"] = 0.0
-
-                layer.options.update({"style": geojson_style_backup})
+                # 🎯 FIX: Merge directly into options as a FLAT dictionary mapping layer settings
+                layer.options.update(geojson_style_backup)
 
             # Append the baseline administrative layer
             selected.append(layer)
