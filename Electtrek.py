@@ -59,7 +59,7 @@ logging.getLogger("pyproj").setLevel(logging.WARNING)
 
 
 import state
-from state import VNORM,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending, check_level4_gap
+from state import VNORM,TABLE_TYPES,LEVEL_ZOOM_MAP, LastResults, levelcolours, subending
 from state import Treepolys, Fullpolys,Geo_index,update_progress, normalname, route, stepify, resolve_here_or_redirect
 
 import nodes
@@ -558,7 +558,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     import logging, os, traceback, re, pandas as pd
     from shapely.geometry import Point, Polygon
     from elector import electors
-    from state import Treepolys, Fullpolys, Geo_index, progress, DQstats, update_progress, check_level4_gap, ensure_treepolys_with_index
+    from state import Treepolys, Fullpolys, Geo_index, progress, DQstats, update_progress, ensure_treepolys_with_index
     from elections import CurrentElection
     from layers import create_boundary_geom
 
@@ -1016,8 +1016,11 @@ def fetch_table(rlevels,table_name, current_node):
 
 
 # 1. Create the app instance
-app = Flask(__name__, static_url_path='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static')
-
+app = Flask(
+    __name__,
+    static_folder='/Users/newbrie/Documents/ReformUK/GitHub/Electtrek/static',
+    static_url_path='/static'
+)
 # 2. Basic Flask & Path configurations
 sys.path.append(r'/Users/newbrie/Documents/ReformUK/GitHub/Electtrek')
 app.config['SECRET_KEY'] = 'rosebutt'
@@ -2198,9 +2201,6 @@ def set_election():
             # Fallback wrapper if it acts strictly like a dictionary sub-class
             constants_dict = dict(CElection)
 
-        persist(Treepolys, Fullpolys, Geo_index)
-    
-
         return jsonify({
             'success': True,
             'constants': constants_dict, # Now cleanly serializable!
@@ -3152,7 +3152,7 @@ def STupdate(path):
                     # Find the row where ENO matches electID
                     allelectors["ENOP"] = allelectors["ENOP"].astype(str)
                     mask = allelectors["ENOP"] == electID
-                    changefields.loc[i,'Path'] = street_node.dir+"/"+street_node.file(rlevels)(rlevels)
+                    changefields.loc[i,'Path'] = street_node.mapfile()
                     changefields.loc[i,'Lat'] = street_node.latlongroid[0]
                     changefields.loc[i,'Long'] = street_node.latlongroid[1]
                     changefields.loc[i,'ENOP'] = electID
@@ -3186,7 +3186,7 @@ def STupdate(path):
                     i = i+1
 
                 base_path = path2+"/INDATA"
-                base_name = current_node.file(rlevels).replace("-PRINT.html",fileending.replace(".html",""))
+                base_name = current_node.mapfile().replace("-PRINT.html",fileending.replace(".html",""))
                 changefields = changefields.drop_duplicates(subset=['ENOP', 'ElectorName'])
 
                 versioned_filename = get_versioned_filename(base_path, base_name, ".csv")
@@ -3217,8 +3217,6 @@ def STupdate(path):
     print(f"Creating new street/walklegfile:{sheetfile}")
     persist(Treepolys, Fullpolys, Geo_index)
     return current_node.render_face(current_election,CElection,True)
-
-
 
 
 
@@ -3270,7 +3268,7 @@ def PDdownST(path):
 
 #           only create a map if the branch does not already exist
 
-    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
+    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.mapfile())
 
 
     print(f"__PDdownST- {current_node.mapfile()}-l4area {current_node.value}, len area {len(areaelectors)}")
@@ -3350,7 +3348,7 @@ def LGdownST(path):
         PD_node.create_node_map(rlevels, static=False)
 
 
-    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.file(rlevels))
+    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.mapfile())
 
 
     persist(Treepolys, Fullpolys, Geo_index)
@@ -3391,7 +3389,7 @@ def WKdownST(path):
     areaelectors = electors.elector_for_path(rlevels,current_node.mapfile())
 
 # if there is a selected file , then areaelectors will be full of records
-    print("________PDMarker",walk_node.type,"|", walk_node.dir, "|",walk_node.file(rlevels))
+    print("________PDMarker",walk_node.type,"|", walk_node.mapfile())
 
     flash("No data for the selected election available!")
     walklegnodelist = walk_node.childrenoftype('walkleg')
@@ -3559,7 +3557,7 @@ def xxdisplayareas():
             formdata['tabledetails'] = "No data to display - please upload"
             layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'],rlevels)
     else:
-        path = current_node.dir+"/"+current_node.file(rlevels)
+        path = current_node.mapfile()
         ctype = current_node.child_type(rlevels)
 
         formdata = current_node.value +current_node.child_type(rlevels)+"s"
@@ -4203,7 +4201,7 @@ def postcode():
     rlevels = CElection.resolved_levels
     flash('__ROUTE/Findpostcode')
 
-    pthref = current_node.dir+"/"+current_node.file(rlevels)
+    pthref = current_node.mapfile()
     postcodeentry = request.form["postcodeentry"]
     if len(postcodeentry) > 8:
         postcodeentry = str(postcodeentry).replace(" ","")
@@ -4351,17 +4349,16 @@ def firstpage():
     if not CElection:
         return jsonify(success=False, error="Election not found"), 404
 
-    missing_layer = check_level4_gap(elevels)
 
-    if missing_layer:
-        filepath, Geo_index = ensure_treepolys_with_index(
-                territory=territory,
-                sourcepath= breadcrumb,
-                here=here,
-                resolved_levels=rlevels,
-                parent_levels=plevels
-            )
-        print(f"____Route/firstpage- path: {filepath},Loaded election: {current_election} CE data: {CElection}")
+    filepath, Geo_index = ensure_treepolys_with_index(
+            territory=territory,
+            sourcepath= breadcrumb,
+            here=here,
+            resolved_levels=rlevels,
+            parent_levels=plevels
+        )
+    print(f"____Route/firstpage- path: {filepath},Loaded election: {current_election} ")
+
 
 # nodes - will be restored throught load nodes process in restore_from_persist
 # cid should exist so why not just load from last_used_node

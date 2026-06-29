@@ -876,7 +876,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             upmessage = (
                 "moveUp('/upbut/{0}','{1}','{2}')"
                 .format(
-                    child.parent.dir + "/" + child.parent.file(elevels),
+                    child.parent.mapfile(),
                     child.parent.value,
                     child.parent.type
                 )
@@ -888,7 +888,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 showmessageST = (
                     "showMore('/PDdownST/{0}','{1}','street')"
-                    .format(child.dir + "/" + child.file(elevels), child.value)
+                    .format(child.mapfile(), child.value)
                 )
 
                 street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
@@ -1118,18 +1118,18 @@ class ExtendedFeatureGroup(FeatureGroup):
         limbX['col'] = herenode.col
 
         if type == 'polling_district':
-            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels) +" street", herenode.value,'street')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
-#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels), herenode.value,child_type_of('polling_district',estyle))
+            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile() +" street", herenode.value,'street')
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value,herenode.parent.type)
+#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value,child_type_of('polling_district',estyle))
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageST,"STREETS",12)
 #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageWK,"WALKS",12)
-#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.dir+"/"+herenode.file(elevels))
+#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.mapfile())
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
             limbX['UPDOWN'] = uptag1 +"<br>"+ downST
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
         elif type == 'walk':
-            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.dir+"/"+herenode.file(elevels)+" walkleg", herenode.value,'walkleg')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.dir+"/"+herenode.parent.file(elevels), herenode.parent.value,herenode.parent.type)
+            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile()+" walkleg", herenode.value,'walkleg')
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value,herenode.parent.type)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
             streetstag = build_street_list_html(herenode.value,datablock, street_stats, task_tags)
@@ -1400,22 +1400,39 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps (self,rlevels, herenode,static, counters, intention_type):
+    def add_nodemaps(self, rlevels, herenode, static, counters):
         from state import Treepolys, Fullpolys, Candidates, LastResults
         from flask import session, flash
         global levelcolours
         global Con_Results_data
         global OPTIONS
 
+        print("\n" + "="*80)
+        print("▶️ ENTERING add_nodemaps")
+        print("="*80)
+
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
-        # The clean unpack
+        # Clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
+        # 🎯 SELF-AWARE PROPERTIES
+        # Use self.mytag to pinpoint exactly what type of features this layer handles
+        layer_type = getattr(self, "mytag", "ward")
+        # Old:
+        # New: Read the dictionary directly since it's already flat!
+        layer_style = getattr(self, "options", {}) if getattr(self, "options", None) else {}
+        print(f"DEBUG: self class: {self.__class__.__name__}")
+        print(f"DEBUG: self.mytag evaluated to: '{layer_type}'")
+        print(f"DEBUG: herenode details -> value: '{herenode.value}', type: '{herenode.type}', level: {herenode.level}")
 
-        childlist = herenode.childrenoftype(intention_type)
+        # Look at every single child type currently attached to herenode to spot string mismatches
+        all_child_types = set(child.type for child in herenode.children) if herenode.children else set()
+        print(f"DEBUG: Distinct child types actually present on herenode: {list(all_child_types)}")
+
+        childlist = herenode.childrenoftype(layer_type)
         allchildlist = herenode.children
         nodeshtml = build_nodemap_list_html(herenode)
 
@@ -1426,24 +1443,33 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "tooltip_html": nodeshtml
                             }
 
-        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{intention_type} they are {[x.value for x in childlist]}" )
+        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{layer_type} they are {[x.value for x in childlist]}" )
 
-# reset counters of child type to so that child tag = this node's childno
+        if len(childlist) == 0:
+            print(f"❌ WARNING: childlist is EMPTY for type '{layer_type}'. The loops will be skipped!")
+
+        # Reset counters of child type so that child tag = this node's childno
         accumulate = session.get("accumulate", False)
         if not accumulate:
-            counters[intention_type] = 0
+            counters[layer_type] = counters.get(layer_type, 0)
+            print(f"DEBUG: Reset counters['{layer_type}'] to 0")
 
+        loop_counter = 0
         for c in childlist:
-            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value,intention_type}")
+            loop_counter += 1
+            print(f"\n--- Processing Child #{loop_counter}: '{c.value}' ---")
+            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value, layer_type}")
             print(f"______All nodemaps:{len(allchildlist)} at {herenode.value}")
 
-#            layerfids = [x.fid for x in self._children if x.type == intention_type]
-#            if c.fid not in layerfids:
             if c.level+1 <= 5:
                 results = []
-    #need to select the children boundaries associated with the children nodes - to paint
-                pfile = Treepolys[intention_type]
-                print(f"______Add_Nodemap Treepolys type:{intention_type} size:{len(pfile)}")
+                # Looking up the specific polygon dataset using the instance tag
+                if layer_type not in Treepolys:
+                    print(f"❌ ERROR: '{layer_type}' key missing from state.Treepolys dictionary!")
+                    continue
+
+                pfile = Treepolys[layer_type]
+                print(f"______Add_Nodemap Treepolys type:{layer_type} size:{len(pfile)}")
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
 
@@ -1452,38 +1478,36 @@ class ExtendedFeatureGroup(FeatureGroup):
                 )
 
                 if len(limbX) > 0:
-                    print("______Add_Nodes Treepolys type:",intention_type)
-    #
-                    # Setup clean, consistent styling defaults
+                    print("______Add_Nodes Treepolys type:", layer_type)
+
                     font_style = "style='font-size: 12pt;'"
-
-                    # Resolve target paths and values cleanly up front
-                    c_path = f"{c.dir}/{c.file(elevels)}"
-                    here_path = f"{herenode.dir}/{herenode.file(elevels)}"
-
+                    c_path = f"{c.mapfile()}"
+                    here_path = f"{herenode.mapfile()}"
                     c_val = c.value
                     here_val = herenode.value
+                    # 🔬 The Ultimate Structural Proof
+                    print(f"🔬 DATA GEOMETRY TYPE CHECK -> Layer: '{layer_type}' | Node: '{c_val}' | Geometry Type: {limbX.geometry.type.unique()}")
 
                     # ------------------------------------------------------------------
-                    # LEVEL 0: Top Level Hierarchy
+                    # LEVEL 0: Top Level Nation Hierarchy
                     # ------------------------------------------------------------------
-                    if herenode.level == 0:
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{intention_type}')"
+                    if herenode.type == 'country':
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{layer_type}')"
                         up_js = f"moveUp('/upbut/{c_path}', '{c_val}', '{herenode.type}')"
 
                         uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{intention_type}</button>"
+                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{layer_type}</button>"
 
                         limbX['UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
                         mapfile = f"/transfer/{c.mapfile()}"
 
                     # ------------------------------------------------------------------
-                    # LEVEL 1: Regional / County Level
+                    # LEVEL 1: Nation down to County Level
                     # ------------------------------------------------------------------
-                    elif herenode.level == 1:
-                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{intention_type}')"
-                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{intention_type}')"
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{intention_type}')"
+                    elif herenode.type == 'nation':
+                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{layer_type}')"
+                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{layer_type}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{layer_type}')"
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
 
                         ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
@@ -1495,9 +1519,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                         mapfile = f"/transfer/{c.mapfile()}"
 
                     # ------------------------------------------------------------------
-                    # LEVEL 2: Constituency Level
+                    # LEVEL 2: County down to Constituency Level
                     # ------------------------------------------------------------------
-                    elif herenode.level == 2:
+                    elif herenode.type == 'county':
                         ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'ward')"
                         div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'division')"
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
@@ -1510,13 +1534,12 @@ class ExtendedFeatureGroup(FeatureGroup):
                         mapfile = f"/transfer/{c.mapfile()}"
 
                     # ------------------------------------------------------------------
-                    # LEVEL 3: Ward / Division Leaf Node Layout
+                    # LEVEL 3: Constotuency down to Ward / Division Leaf Node Layout
                     # ------------------------------------------------------------------
-                    elif herenode.level == 3:
+                    elif herenode.type == 'constituency':
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
                         up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
 
-                        # 🪐 THE FIX: Passing scope strings as clean parameters, keeping the URL string intact!
                         sheet_btn = f"""
                             <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downbut/{c_path}', '{c_val}', 'polling_district');">
                                 Sheets
@@ -1538,33 +1561,21 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     party = "("+c.party+")"
 
-                    counters[c.type] += 1
+                    counters[c.type] = counters.get(c.type, 0) + 1
                     num = str(counters[c.type])
-
 
                     tag = str(c.value)
                     numtag = str(c.value)+party
 
-
                     here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
-                    # Convert the first row of the GeoDataFrame to a valid GeoJSON feature
-
-                    # Now you can use limb_geojson as a valid GeoJSON feature
-    #                print("GeoJSON Feature:", limb)
-
-
-                    # Add a property for the color to the GeoJSON
-
 
                     node_color = herenode.defcol
-                    limbX["fillColor"] = node_color  # per-node property
-
+                    limbX["fillColor"] = node_color
 
                     node_col = to_hex(limbX['fillColor'].values[0])
                     tcol_node = readable_text_color(node_col)
-                    print(f"_____Colour from {herenode.value} col:{herenode.defcol} and limbX {limbX['fillColor'].values[0]}")
                     fcol_node = tcol_node
-                    poly_col_node = node_col
+
                     if c.type == 'division' and isinstance(c.candidates, dict):
                         c1 = c.candidates.get('Candidate_1', '')
                         c2 = c.candidates.get('Candidate_2', '')
@@ -1572,8 +1583,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     else:
                         candidates = ""
 
-
-                    htmlhalo =f'''
+                    htmlhalo = f'''
                     <a href="{mapfile}" data-name="{tag}">
                       <div style="
                         color: {tcol_node};
@@ -1582,33 +1592,16 @@ class ExtendedFeatureGroup(FeatureGroup):
                         text-align: center;
                         padding: 2px;
                         white-space: nowrap;
-
-                        /* 🗺️ Cartographic halo */
-                        text-shadow:
-                          -1px -1px 0 #fff,
-                           1px -1px 0 #fff,
-                          -1px  1px 0 #fff,
-                           1px  1px 0 #fff,
-                           0px  0px 3px #fff;
+                        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;
                       ">
-                        <span style="
-                          background: {fcol_node};
-                          padding: 1px 2px;
-                          border-radius: 5px;
-                          border: 2px solid black;
-                        ">{num}</span>
+                        <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
-                        <span style="
-                            font-size: 6pt;
-                            font-weight: normal;
-                        ">
-                            {candidates}
-                        </span>
-
+                        <span style="font-size: 6pt; font-weight: normal;">{candidates}</span>
                       </div>
                     </a>
                     '''
-                    htmlhalostatic =f'''
+
+                    htmlhalostatic = f'''
                     <a href="" data-name="{tag}">
                       <div style="
                         color: {tcol_node};
@@ -1617,44 +1610,36 @@ class ExtendedFeatureGroup(FeatureGroup):
                         text-align: center;
                         padding: 2px;
                         white-space: nowrap;
-
-                        /* 🗺️ Cartographic halo */
-                        text-shadow:
-                          -1px -1px 0 #fff,
-                           1px -1px 0 #fff,
-                          -1px  1px 0 #fff,
-                           1px  1px 0 #fff,
-                           0px  0px 3px #fff;
+                        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;
                       ">
-                        <span style="
-                          background: {fcol_node};
-                          padding: 1px 2px;
-                          border-radius: 5px;
-                          border: 2px solid black;
-                        ">{num}</span>
+                        <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
-                        <span style="
-                            font-size: 6pt;
-                            font-weight: normal;
-                        ">
-
-                        </span>
-
+                        <span style="font-size: 6pt; font-weight: normal;"></span>
                       </div>
                     </a>
                     '''
 
-
+                    print(f"DEBUG: Generating Folium GeoJson for {c_val} using styles: {layer_style}")
+                    # Place this right above folium.GeoJson(...)
+                    print(f"🔬 NAMESPACE TRACE: {dir(self)}")
+                    print(f"🔬 RAW OPTIONS PROPERTY: {getattr(self, 'options', 'MISSING')}")
+                    print(f"🔬 RAW UNDER_OPTIONS PROPERTY: {getattr(self, '_options', 'MISSING')}")
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
-                            "fillColor": feature["properties"]["fillColor"],
-                            "color": adjust_boundary_color(feature["properties"]["fillColor"], 0.7),
-                            "weight": 3,
+                            # 🎯 FIX: Pull directly from your registry styles dictionary instead of feature properties
+                            "fillColor": layer_style.get("fillColor", "#EF4444"),
+                            "color": layer_style.get("color", "#991B1B"),
+
+                            "weight": layer_style.get("weight", 3.5),
                             "opacity": 1.0,
-                            "fillOpacity": 0.4,
+
+                            # 🎯 FIX: Force your high 0.70 / 0.65 values to render
+                            "fillOpacity": layer_style.get("fillOpacity", 0.70),
+
                             "stroke": True,
-                            "dashArray": "5,5",
+                            "fill": True,  # Explicitly tell Leaflet to render the interior area
+                            "dashArray": layer_style.get("dashArray", "0")
                         },
                         highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
                         tooltip=folium.Tooltip(htmlhalo),
@@ -1663,32 +1648,22 @@ class ExtendedFeatureGroup(FeatureGroup):
                             aliases=["Move:"],
                             labels=False,
                             localize=False,
+                            layer_name=getattr(self, 'name', 'Layer Boundary')
                         ),
                     ).add_to(self)
 
                     pathref = c.mapfile()
                     mapfile = '/transfer/'+pathref
 
-
-
                     if not static:
-                        self.add_child(folium.Marker(
-                             location=here,
-                             icon = folium.DivIcon(
-                                    html=htmlhalo,
-                                       )
-                                       )
-                                       )
+                        self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalo)))
                     else:
-                        self.add_child(folium.Marker(
-                             location=here,
-                             icon = folium.DivIcon(
-                                    html=htmlhalostatic,
-                                       )
-                                       )
-                                       )
+                        self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalostatic)))
+                else:
+                    print(f"❌ WARNING: limbX contains 0 matching polygon rows for FID {c.fid}")
 
-
+        print(f"\n🏁 LEAVING add_nodemaps. Processed {loop_counter} children.")
+        print("="*80 + "\n")
         return self._children
 
     def add_nodemarks (self,rlevels,herenode,static, intention_type):
@@ -1880,6 +1855,10 @@ def make_feature_layers():
     Returns a fresh dict of ExtendedFeatureGroup instances for a single map.
     Each layer has Python-only metadata: .key, .mytag, and .layer_type.
     """
+    # Grab global options context if it exists
+    global OPTIONS
+    global_options = globals().get("OPTIONS", {})
+
     layers = {}
     for key, spec in FEATURE_LAYER_SPECS.items():
         # 1. Initialize with standard, safe folium kwargs
@@ -1891,13 +1870,16 @@ def make_feature_layers():
         )
 
         # 2. Assign attributes dynamically on the Python side (Guaranteed safe!)
-        layer.type = spec["type"]                    # 👈 Fixes the 'gc.type == grandchild_layer.type' crash!
+        layer.type = spec["type"]
         layer.key = key
         layer.mytag = spec["mytag"]
-        layer.layer_type = spec.get("type", "test")  # Backward compatibility
+        layer.layer_type = spec.get("type", "test")
+
+        # 🎯 FIX CODE: Look inside the specific layer spec dictionary first,
+        # then drop back to global settings, defaulting to an empty dict.
+        layer.options = spec.get("options", global_options)
 
         layers[key] = layer
-
 
     return layers
 

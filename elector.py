@@ -22,8 +22,8 @@ shapecolumn = {
     "walkleg": "StreetName",
     "polling_district": "PD",
     "walk": "WalkName",
-    "ward": "Area",
-    "division": "Area",
+    "ward": "Ward",
+    "division": "Division",
     "constituency": "Constituency",
     "county": "County",
     "nation": "Nation",
@@ -31,77 +31,43 @@ shapecolumn = {
 }
 
 
-def strip_filename_from_path(path):
-    for suffix in [
-        "-PRINT.html", "-MAP.html", "-CAL.html","-WALKS.html", "-ZONES.html",
-        "-PDS.html", "-DIVS.html", "-WARDS.html", "-DEMO.html"
-    ]:
-        path = path.replace(suffix, "@@@")
-    return path
-
-
 
 def find_node_by_path(basepath: str, debug=False):
     from nodes import get_trek_root
     if debug:
-        print(f"[DEBUG] find_node_by_path: {basepath} on nodes of length {len(TREK_NODES_BY_ID)}")
+        print(f"[DEBUG] find_node_by_path: {basepath}")
 
     if not basepath:
-        return None, {}
+        return None
 
-    # Strip structural file markers or suffixes using your helper
-    clean_basepath = strip_filename_from_path(basepath).split("@@@")[0]
-    parts = [state.normalname(p) for p in clean_basepath.strip("/").split("/") if p]
-
+    parts = state.stepify(basepath)
     if not parts:
-        return None, {}
-
-    # Initialize path traversal tracking structures
-    actual_levels = {}
-    current_depth = 0
+        return None
 
     root = get_trek_root()
+
+    # Verify the root anchor matches
+    if root.value != parts[0]:
+        if debug:
+            print(f"[DEBUG] Root mismatch: expected {root.value}, got {parts[0]}")
+        return None
+
+    # Walk directly down the tree branches
     node = root
-
-    # Handle the initial entry point (Level 0 / Root Anchor)
-    if state.normalname(root.value) != parts[0]:
-        if debug:
-            print("[DEBUG] Root mismatch")
-        return None, {}
-
-    # Record the root node's level configuration
-    actual_levels[current_depth] = getattr(node, "type", "country")
-
-    # Trace downward through the remaining string segments
     for part in parts[1:]:
-        # Detect and safely bypass plural navigation markers (e.g., 'WARDS', 'DIVISIONS')
-        if part.upper() in ["WARDS", "DIVISIONS", "CONSTITUENCIES", "COUNTIES", "WALKS", "PDS"]:
+        match = next((c for c in node.children if c.value == part), None)
+
+        if not match:
             if debug:
-                print(f"[DEBUG] Bypassing structural subdirectory segment: {part}")
-            continue
+                print(f"[DEBUG] Traversal broke at segment: '{part}' under node: '{node.value}'")
+                # Diagnostic: What EXACTLY is inside node.children?
+                print(f"[DEBUG] Raw target part bytes: {repr(part)}")
+                print(f"[DEBUG] Available children details: {[(repr(c.value), c.type) for c in node.children]}")
+            return None
 
-        if debug:
-            print(f"[DEBUG] Descending to node segment: {part}")
+        node = match
 
-        # Find children matching the normalized segment name
-        matches = [c for c in node.children if state.normalname(c.value) == part]
-        if not matches:
-            if debug:
-                print(f"[DEBUG] No child node matches found for segment target: '{part}'")
-            return None, actual_levels
-
-        # Advance the node cursor down the tree hierarchy
-        node = matches[0]
-        current_depth += 1
-
-        # Capture the validated structural model type at the current tier
-        actual_levels[current_depth] = getattr(node, "type", "unknown")
-
-    if debug:
-        print(f"[DEBUG] Found target node: {node.value} ({node.nid})")
-        print(f"[DEBUG] Resulting actual_levels layout: {actual_levels}")
-
-    return node, actual_levels
+    return node
 
 def resolve_targets(df, uiScope, region_value, street, house):
 
@@ -202,24 +168,14 @@ class ElectorManager:
 
 
     def _inject_baked_data(self, specific_ename=None):
-        import sys
-        import importlib
+        from baked_data import baked_data
 
-        # 🪐 STEP 1: Purge the module cache so Python is forced to read the fresh file from disk
-        if 'baked_data' in sys.modules:
-            del sys.modules['baked_data']
-
+        # 🪐 FIX 1: Bypass Python's module reload engine completely.
+        # Call the instance's built-in .load() method to pull fresh text straight from disk.
         try:
-            # Force absolute clear import sequence
-            import baked_data
-            importlib.reload(baked_data)
-
-            all_events = baked_data.baked_data.load()
-        except (ImportError, ModuleNotFoundError):
-            print("⚠️ [INJECT] baked_data file does not exist on disk. Skipping injection.")
-            return
-        except AttributeError:
-            print("⚠️ [INJECT] baked_data loaded but is missing the expected load() function.")
+            all_events = baked_data.load()
+        except Exception as e:
+            print(f"⚠️ [INJECT] Failed to load baked data file from disk: {e}")
             return
 
         if not all_events:
@@ -251,11 +207,17 @@ class ElectorManager:
             # Populate Walk Lookup: (WalkName, StreetName, AddressPrefix/Number)
             if 'WalkName' in df.columns:
                 zipped_walk = zip(df.index, df['WalkName'], df['StreetName'], df.get('AddressPrefix', df.get('AddressNumber', df.index)))
+                # --- For Walk Lookup ---
                 for idx, wk, st, hs in zipped_walk:
-                    key = (str(wk), str(st), str(hs))
+                    key = (
+                        state.normalname(wk),
+                        state.normalname(st),
+                        state.normalname(hs)
+                    )
                     if key not in walk_lookup:
                         walk_lookup[key] = []
                     walk_lookup[key].append(idx)
+
                 print(f"🔍 [DEBUG] Built walk_lookup index with {len(walk_lookup)} unique location keys.")
             else:
                 print("⚠️ [DEBUG WARNING] 'WalkName' column missing from DataFrame!")
@@ -263,8 +225,13 @@ class ElectorManager:
             # Populate Polling District Lookup: (PD, StreetName, AddressPrefix/Number)
             if 'PD' in df.columns:
                 zipped_pd = zip(df.index, df['PD'], df['StreetName'], df.get('AddressPrefix', df.get('AddressNumber', df.index)))
+                # --- For PD Lookup ---
                 for idx, pd_code, st, hs in zipped_pd:
-                    key = (str(pd_code), str(st), str(hs))
+                    key = (
+                        state.normalname(pd_code),
+                        state.normalname(st),
+                        state.normalname(hs)
+                    )
                     if key not in pd_lookup:
                         pd_lookup[key] = []
                     pd_lookup[key].append(idx)
@@ -290,10 +257,20 @@ class ElectorManager:
                     print(f"❌ [DEBUG] Event skipped - expected dict, got: {type(ev)}")
                     continue
 
+                # 🪐 FIX 2: Check target assignment immediately inside the loop boundary!
+                if 'election' in ev and str(ev.get('election')).strip() != ename:
+                    continue
+
                 processed_count += 1
 
                 ui_scope = str(ev.get('uiScope', 'walk')).lower()
-                event_key = (str(ev.get('region')), str(ev.get('street')), str(ev.get('house')))
+
+                # Case-normalized lookup key alignment matching step 2 entries
+                event_key = (
+                    str(ev.get('region')).strip().upper(),
+                    str(ev.get('street')).strip().upper(),
+                    str(ev.get('house')).strip().upper()
+                )
 
                 # Route dynamically based on log scope mapping layout
                 if ui_scope == 'walk':
@@ -342,19 +319,18 @@ class ElectorManager:
                     vi_val = ev.get('vi') or ev.get('value') or ''
                     target_indexes = indexes[:vote_count]
 
-                    for idx in indexes:
-                        if idx in target_indexes:
-                            vi_dict[idx] = vi_val
-                        else:
-                            vi_dict[idx] = ''
+                    for idx in target_indexes:
+                        vi_dict[idx] = vi_val
 
             print(f"📈 [DEBUG SUMMARY] Processed {processed_count} dict events. Successfully matched keys to rows {matched_count} times.")
 
             # ------------------------------------------------------------------
             # STEP 5: Flush Mutation State Maps to DataFrame Storage Array
             # ------------------------------------------------------------------
-            df['Tags'] = df.index.map(tags_dict)
-            df['VI'] = df.index.map(vi_dict)
+            # 🪐 FIX 3: Converting maps cleanly to full Pandas Series indexes prevents
+            # unmutated entries from being overwritten or dropped out with NaN elements.
+            df['Tags'] = pd.Series(tags_dict, dtype=object)
+            df['VI'] = pd.Series(vi_dict, dtype=object)
 
             self._elections[ename] = df
             print(f"💾 [SUCCESS] Replay completed for target ledger collection: '{ename}'")
@@ -377,6 +353,7 @@ class ElectorManager:
         self._combined = combined
 
     def elector_for_path(self, resolved_levels, raw_path):
+        from elections import CurrentElection
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
@@ -388,64 +365,38 @@ class ElectorManager:
                 logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            # 2. 🌲 RESOLVE ACTUAL LEVELS VIA TREE TRAVERSAL
-            # This replaces string guessing with structural truth from the node schema tree
-            target_node, actual_levels = find_node_by_path(raw_path, debug=False)
-
-            if not actual_levels:
-                logger.error(f"❌ Failed to resolve actual tree hierarchy layout for path: {raw_path}")
+            # 2. 🌲 Find the target node using structural truth
+            target_node = find_node_by_path(raw_path, debug=True)
+            if not target_node:
+                logger.error(f"❌ Failed to find matching node tree object for path: {raw_path}")
                 return pd.DataFrame()
 
-            parts = state.stepify(raw_path)
-            logger.debug(f"🔍 START FILTER: Path={parts} | Election={c_election}")
+            logger.debug(f"🔍 START FILTER: Node={target_node.value} | Type={target_node.type} | Election={c_election}")
 
+            # 3. Climb up the node's lineage to collect the exact column-to-value targets
+            filter_targets = {}
+            cur = target_node
+            while cur:
+                # Look up what column in the DataFrame corresponds to this node's type
+                col = shapecolumn.get(cur.type)
+                if col:
+                    filter_targets[col] = cur.value
+                cur = cur.parent
+
+            # 4. Apply vector filtering across all matching layers instantly
             filtered_df = df.copy()
-
-            for depth, value in enumerate(parts):
-                if depth == 0:
-                    continue # Usually root/nation
-
-                # 🔄 FALLBACK PROTECTION: Use truth-source actual_levels first, fall back to elevels if depth is offset
-                node_type = actual_levels.get(depth, elevels.get(depth))
-
-                if not node_type:
-                    logger.debug(f"   Step {depth}: No structural level type resolved at this depth index. Skipping.")
-                    continue
-
-                col = shapecolumn.get(node_type)
-                target_val = state.normalname(value)
-
-                if not col:
-                    logger.debug(f"   Step {depth}: No column mapping for type '{node_type}'. Skipping.")
-                    continue
-
+            for col, target_val in filter_targets.items():
                 if col not in filtered_df.columns:
-                    logger.warning(f"   Step {depth}: Column '{col}' missing from DataFrame! (Type: {node_type})")
+                    logger.warning(f"⚠️ Column '{col}' missing from DataFrame! Skipping field filter.")
                     continue
 
-                # --- The Decision Path Debug ---
-                available_values = filtered_df[col].unique()[:5] # Show first 5 unique samples
+                # Vectorized clean match filter
+                mask = filtered_df[col].astype(str).str.strip().str.upper() == target_val.upper()
+                filtered_df = filtered_df[mask]
 
-                logger.debug(
-                    f"   Step {depth} ({node_type}): Column='{col}' | Target='{target_val}'"
-                )
-
-                mask = filtered_df[col].astype(str).str.strip().str.upper() == target_val
-                new_filtered = filtered_df[mask]
-
-                if new_filtered.empty:
-                    # Logic failure alert: Show exactly why the match failed
-                    logger.error(
-                        f"   ❌ FILTER BREAK at Step {depth} ({node_type})!\n"
-                        f"      Column: '{col}'\n"
-                        f"      Target Value: '{target_val}'\n"
-                        f"      Sample Values in Column: {available_values}\n"
-                        f"      Rows before: {len(filtered_df)} | Rows after: 0"
-                    )
+                if filtered_df.empty:
+                    logger.error(f"❌ FILTER BREAK! Column: '{col}' | Target Value: '{target_val}' left 0 rows.")
                     return pd.DataFrame()
-
-                filtered_df = new_filtered
-                logger.debug(f"   ✅ Match! Remaining rows: {len(filtered_df)}")
 
             logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
             return filtered_df
@@ -470,9 +421,9 @@ class ElectorManager:
 
             # 2. 🌲 RESOLVE ACTUAL LEVELS VIA TREE TRAVERSAL
             # Avoids index shifting traps caused by folder structural names
-            target_node, actual_levels = find_node_by_path(raw_path, debug=False)
+            target_node = find_node_by_path(raw_path, debug=False)
 
-            if not actual_levels:
+            if not target_node:
                 logger.error(f"❌ Failed to resolve actual tree hierarchy layout for deletion path: {raw_path}")
                 return 0
 
@@ -524,34 +475,38 @@ class ElectorManager:
 
             return deleted_count
 
+    @staticmethod
     def add_household_vi(df, indexes, vi, votes):
+        """
+        Updates the Voting Intention (VI) for an entire household.
 
-        if len(indexes) == 0:
+        Args:
+            df (pd.DataFrame): The DataFrame slice for the current election.
+            indexes (list): List of DataFrame row indices belonging to this household.
+            vi (str): The voting intention party code/value.
+            votes (int or str): Number of electors in the house matching this intention.
+        """
+        if not indexes:
             return
 
-        # Normalize vote count
+        # 1. Cleanly parse the vote target count safely
         try:
             vote_count = int(votes or 0)
-        except (TypeError, ValueError):
+        except (ValueError, TypeError):
             vote_count = 0
 
-        # Clamp to available electors
-        vote_count = max(0, min(vote_count, len(indexes)))
+        # 2. Slice the household array down to the intended target quota
+        # (e.g., if votes=2, target the first two row indices found at this location)
+        target_indexes = indexes[:vote_count]
 
-        # ---------------------------------
-        # Clear all existing household VI
-        # ---------------------------------
+        # 3. Update the DataFrame directly using .at or .loc for stability
         for idx in indexes:
-
-            df.at[idx, 'VI'] = ''
-            df.at[idx, 'Votes'] = str(vote_count)
-
-        # ---------------------------------
-        # Apply VI to first N electors
-        # ---------------------------------
-        for idx in indexes[:vote_count]:
-
-            df.at[idx, 'VI'] = vi
+            if idx in df.index:
+                if idx in target_indexes:
+                    df.at[idx, 'VI'] = str(vi)
+                else:
+                    # Clear out or reset remaining electors in the house who didn't match the count
+                    df.at[idx, 'VI'] = ''
 
     def add_or_update(self, election, df: pd.DataFrame):
         with _lock:

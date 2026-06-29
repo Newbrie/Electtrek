@@ -631,8 +631,15 @@ window.incrementVoteCount = function(btn) {
     var parentWindow = window.parent || window;
     if (!parentWindow.BAKED_DATA) parentWindow.BAKED_DATA = [];
 
+    // =========================================================================
+    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA STAMPING (MODULARIZED)
+    // =========================================================================
+    var currentElection = window.getCurrentElectionContext(parentWindow.BAKED_DATA, doc);
+
+    // Append the logged entry completely tagged with its election timeline target
     parentWindow.BAKED_DATA.push({
         type: 'vi',
+        election: currentElection, // <-- STAMPED CONTEXT
         uiScope: uiScope,
         region: region,
         street: street,
@@ -708,8 +715,15 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     // Write logs straight up to global parent window memory space
     var parentWindow = window.parent || window;
     parentWindow.BAKED_DATA ||= [];
+
+    // =========================================================================
+    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA STAMPING (MODULARIZED)
+    // =========================================================================
+    const currentElection = window.getCurrentElectionContext(parentWindow.BAKED_DATA, doc);
+
     parentWindow.BAKED_DATA.push({
         type: 'tag',
+        election: currentElection, // <-- STAMPED CONTEXT
         ts: Date.now(),
         uiScope,
         region,
@@ -722,9 +736,14 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         synced: false
     });
 
+    // --- ADDED: Auto-Save execution to match your layout pipeline ---
+    if (typeof parentWindow.saveBakedData === 'function') {
+        parentWindow.saveBakedData(parentWindow.BAKED_DATA);
+    }
+
     // Keep map progression charting if necessary
     if (typeof parentWindow.plotTaskProgress === 'function') {
-        parentWindow.plotTaskProgress(region, code, uiScope);
+        parentWindow.plotWindowProgress(region, code, uiScope);
     } else if (typeof plotTaskProgress === 'function') {
         plotTaskProgress(region, code, uiScope);
     }
@@ -745,7 +764,7 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     // 1. EXTRACT BASELINE TRUTH FROM THE ELECTOR ROW DATA
     const baselineTagsString = row.dataset.tags || '';
 
-    // Parse the baseline (e.g., "L1,L2" becomes a Set or an array of active codes)
+    // Parse the baseline (e.g., "L1,L2" becomes an array of active codes)
     const baselineActiveCodes = baselineTagsString.split(',')
         .map(t => t.trim().toUpperCase())
         .filter(Boolean);
@@ -759,8 +778,16 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     // 2. FIXED CONTEXT LAYER: Read event logs directly from parent storage array
     const parentWindow = window.parent || window;
     const events = parentWindow.BAKED_DATA || [];
+
+    // =========================================================================
+    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA FILTERING (MODULARIZED)
+    // =========================================================================
+    const currentElection = window.getCurrentElectionContext(events, row.ownerDocument);
+
+    // Filter events to only match the current scope, location, AND active election
     const relevantEvents = events.filter(e =>
         e.type === 'tag' &&
+        e.election === currentElection && // <-- FILTER BY ACTIVE TIMELINE
         e.uiScope === uiScope &&
         e.region === region &&
         e.street === street &&
@@ -792,7 +819,6 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
     });
 };
 
-
 window.replayLocalBakedDataForPopup = function(popupDocument) {
     const doc = popupDocument || document;
 
@@ -819,13 +845,20 @@ window.replayLocalBakedDataForPopup = function(popupDocument) {
     }
 
     const localLogs = parentWindow.getBakedData() || [];
-    console.log(`🔄 [POPUP REPLAY] Scanning local transaction ledger for Region: ${currentRegion} [Scope: ${currentScope}]`);
+
+    // =========================================================================
+    // DISCOVER CURRENT ELECTION CONTEXT FOR REPLAY FILTERING (MODULARIZED)
+    // =========================================================================
+    const currentElection = window.getCurrentElectionContext(localLogs, doc);
+
+    console.log(`🔄 [POPUP REPLAY] Scanning local ledger for Region: ${currentRegion} [Scope: ${currentScope}] [Election: ${currentElection || 'NONE'}]`);
 
     // 3. Scan ledger to paint overrides onto the HTML view
     localLogs.forEach(ev => {
         if (!ev) return;
 
-        // Guard: Verify event belongs to this scope and region
+        // Guard: Verify event belongs to this election timeline, scope, and region
+        if (ev.type !== 'context_switch' && ev.election !== currentElection) return;
         if (ev.uiScope !== currentScope) return;
         if (String(ev.region).trim().toUpperCase() !== currentRegion) return;
 
@@ -853,7 +886,8 @@ window.replayLocalBakedDataForPopup = function(popupDocument) {
         else if (ev.type === 'vi') {
             const viSel = targetRow.querySelector('.vi-selector');
             if (viSel) {
-                viSel.value = ev.value || '';
+                // FIX: Stamped payload properties use 'ev.vi', not 'ev.value'
+                viSel.value = ev.vi || '';
             }
             const voteBtn = targetRow.querySelector('.vote-btn');
             if (voteBtn && ev.votes !== undefined) {
@@ -866,21 +900,51 @@ window.replayLocalBakedDataForPopup = function(popupDocument) {
     });
 };
 
+/**
+ * Resolves the active election timeline context from event logs or the DOM fallback.
+ * @param {Array} events - The array of events (BAKED_DATA).
+ * @param {Document} [customDoc] - Optional document context for tab fallbacks.
+ * @returns {string} The active election code in uppercase, or empty string.
+ */
+window.getCurrentElectionContext = function(events, customDoc) {
+    const logList = events || window.BAKED_DATA || [];
 
+    // 1. Scan backward for a context switch boundary token
+    for (let k = logList.length - 1; k >= 0; k--) {
+        if (logList[k] && logList[k].type === "context_switch") {
+            return String(logList[k].election).toUpperCase();
+        }
+    }
+
+    // 2. Safety Fallback: Query active DOM tabs if array token isn't present
+    const doc = customDoc || document;
+    const activeTab = doc.querySelector(".election-tab.active") ||
+                      (window.parent !== window ? window.parent.document.querySelector(".election-tab.active") : null);
+
+    if (activeTab) {
+        return (activeTab.dataset.election || activeTab.textContent.trim()).toUpperCase();
+    }
+
+    return "";
+};
 
 window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
 
     if (!region_id) return;
 
     // -------------------------------------------------
-    // 1️⃣ DERIVE STATE FROM EVENTS
+    // 1️⃣ DERIVE STATE FROM EVENTS (CONTEXT FILTERED)
     // -------------------------------------------------
     const events = window.BAKED_DATA || [];
+
+    // Call our brand-new modular context look-up helper!
+    const currentElection = window.getCurrentElectionContext(events);
 
     const state = {};
 
     for (const e of events) {
-
+        // Guard against other elections, scopes, and regions
+        if (e.type !== 'context_switch' && e.election !== currentElection) continue;
         if (e.uiScope !== uiScope) continue;
         if (e.region !== region_id) continue;
 
@@ -1338,84 +1402,108 @@ window.refreshRowVoteBadge = function(rowElement){
  * Automatically recalculates and updates the strongest VI and vote counts
  * when a user changes the house unit dropdown selection.
  *
- * @param {HTMLSelectElement} unitSel - The active .unit-selector element
+ * @param HTMLSelectElement} unitSel - The active .unit-selector element
  */
  window.handleUnitChangeVIUpdate = function(unitSel) {
-    var parentWindow = window.parent || window;
-    var row = unitSel.closest('.canvass-row') || unitSel.closest('tr');
-    if (!row) return;
+     var parentWindow = window.parent || window;
+     var row = unitSel.closest('.canvass-row') || unitSel.closest('tr');
+     if (!row) return;
 
-    var selectedUnit = unitSel.value;
-    var viSel = row.querySelector('.vi-selector');
-    var voteBtn = row.querySelector('.vote-btn');
-    if (!viSel || !voteBtn) return;
+     var selectedUnit = unitSel.value;
+     var viSel = row.querySelector('.vi-selector');
+     var voteBtn = row.querySelector('.vote-btn');
+     if (!viSel || !voteBtn) return;
 
-    var regionId = row.getAttribute('data-region');
-    var streetName = row.getAttribute('data-street');
-    var chosenViCode = "";
-    var currentVotes = null;
-    var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
+     var regionId = row.getAttribute('data-region');
+     var streetName = row.getAttribute('data-street');
 
-    // =========================================================================
-    // 1. PRIORITIZE LIVE SESSION HISTORY (BAKED_DATA)
-    // =========================================================================
-    var eventLog = parentWindow.BAKED_DATA || [];
-    for (var i = eventLog.length - 1; i >= 0; i--) {
-        var entry = eventLog[i];
-        if (entry.region === regionId && entry.street === streetName && entry.house === selectedUnit) {
-            if (entry.vi !== undefined && entry.vi !== null) {
-                chosenViCode = String(entry.vi).toUpperCase().trim();
-                if (entry.votes !== undefined && entry.votes !== null) {
-                    currentVotes = parseInt(entry.votes);
-                }
-                break;
-            }
-        }
-    }
+     var chosenViCode = "";
+     var currentVotes = null;
+     var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
 
-    // =========================================================================
-    // 2. FALLBACK TO DATABASE ATTRIBUTE (If house hasn't been edited this session)
-    // =========================================================================
-    if (!chosenViCode || chosenViCode === 'UNCANVASSED' || chosenViCode === 'U') {
-        var rawDb = row.getAttribute('data-active-votes-db');
-        var activeVotesDb = {};
-        try {
-            if (rawDb) activeVotesDb = JSON.parse(rawDb);
-        } catch (e) {}
+     var eventLog = parentWindow.BAKED_DATA || [];
 
-        var houseVotes = activeVotesDb[selectedUnit] || {};
-        var codes = Object.keys(houseVotes);
+     // =========================================================================
+     // 1. DISCOVER ACTIVE ELECTION CONTEXT FIRST
+     // =========================================================================
+     var currentElection = "";
+     for (var k = eventLog.length - 1; k >= 0; k--) {
+         if (eventLog[k].type === "context_switch") {
+             currentElection = eventLog[k].election;
+             break; // Found the absolute latest context, stop scanning
+         }
+     }
 
-        if (codes.length > 0) {
-            var highestCode = codes.reduce(function(a, b) {
-                return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
-            });
-            chosenViCode = String(highestCode).toUpperCase().trim();
-            currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
-        } else {
-            // No historical data exists for this house! Force it to fall back to 'Uncanvassed'
-            chosenViCode = "UNCANVASSED";
-            currentVotes = 0;
-        }
-    }
+     // =========================================================================
+     // 2. MATCH THE HOUSE RECORD WITHIN THE CURRENT ELECTION
+     // =========================================================================
+     if (currentElection) {
+         for (var i = eventLog.length - 1; i >= 0; i--) {
+             var entry = eventLog[i];
 
-    // Ensure fallback safety states
-    if (!chosenViCode && viSel.options.length > 0) {
-        chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
-    }
-    if (currentVotes === null || isNaN(currentVotes)) {
-        currentVotes = 0;
-    }
+             // Match the house record and ensure it belongs to the current active election
+             if (entry.region === regionId &&
+                 entry.street === streetName &&
+                 entry.house === selectedUnit &&
+                 entry.election === currentElection) {
 
-    // Update form control values directly
-    viSel.value = chosenViCode;
-    voteBtn.setAttribute('data-count', currentVotes);
-    voteBtn.setAttribute('data-max', maxVotes);
-    voteBtn.innerText = currentVotes + '/' + maxVotes;
+                 if (entry.vi !== undefined && entry.vi !== null) {
+                     chosenViCode = String(entry.vi).toUpperCase().trim();
+                     if (entry.votes !== undefined && entry.votes !== null) {
+                         currentVotes = parseInt(entry.votes);
+                     }
+                     break; // Found our current session match, exit loop
+                 }
+             }
+         }
+     }
 
-    // Repaint visual changes safely!
-    window.applyRowColorStyles(row);
-};
+
+     // =========================================================================
+     // 3. FALLBACK TO DATABASE ATTRIBUTE (If house hasn't been edited this session)
+     // =========================================================================
+     if (!chosenViCode || chosenViCode === 'UNCANVASSED' || chosenViCode === 'U') {
+         var rawDb = row.getAttribute('data-active-votes-db');
+         var activeVotesDb = {};
+         try {
+             if (rawDb) activeVotesDb = JSON.parse(rawDb);
+         } catch (e) {}
+
+         var houseVotes = activeVotesDb[selectedUnit] || {};
+         var codes = Object.keys(houseVotes);
+
+         if (codes.length > 0) {
+             var highestCode = codes.reduce(function(a, b) {
+                 return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
+             });
+             chosenViCode = String(highestCode).toUpperCase().trim();
+             if (currentVotes === null) {
+                 currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
+             }
+         } else {
+             // No historical data exists for this house! Force it to fall back to 'Uncanvassed'
+             chosenViCode = "UNCANVASSED";
+             currentVotes = 0;
+         }
+     }
+
+     // Ensure fallback safety states
+     if (!chosenViCode && viSel.options.length > 0) {
+         chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
+     }
+     if (currentVotes === null || isNaN(currentVotes)) {
+         currentVotes = 0;
+     }
+
+     // Update form control values directly
+     viSel.value = chosenViCode;
+     voteBtn.setAttribute('data-count', currentVotes);
+     voteBtn.setAttribute('data-max', maxVotes);
+     voteBtn.innerText = currentVotes + '/' + maxVotes;
+
+     // Repaint visual changes safely!
+     window.applyRowColorStyles(row);
+ };
 
  // =========================================================================
 // 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)

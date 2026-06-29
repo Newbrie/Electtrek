@@ -563,6 +563,16 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
     const mapfiles = data.constants?.mapfiles || [];
     const lastMapFile = mapfiles.slice(-1)[0];
 
+    // =========================================================================
+    // ADDED: INJECT ELECTION CONTEXT SWITCH EVENT INTO BAKED_DATA
+    // =========================================================================
+    window.BAKED_DATA = window.BAKED_DATA || [];
+    window.BAKED_DATA.push({
+        "type": "context_switch",
+        "election": String(electionName).toUpperCase().trim(),
+        "ts": Date.now()
+    });
+
     // 5. Load Calendar
     if (window.plan && window.plan.slots) {
         buildCalendarGrid("calendar-grid", 45);
@@ -677,39 +687,23 @@ function accumulateToggle(element) {
 
 
 async function setActiveElectionOnStartup() {
-  const activeTab = await ensureOneTabActive();
-  const electionName = activeTab.dataset.election || activeTab.textContent.trim();
-  console.log("📩 setting startup active tab::", electionName);
-  if (!electionName) {
-      console.error("No election name found for active tab!", activeTab);
-      return;
-  }
+    const activeTab = await ensureOneTabActive();
+    const electionName = activeTab.dataset.election || activeTab.textContent.trim();
+    console.log("📩 Setting startup active tab::", electionName);
 
-  try {
-      const res = await fetch("/set-election", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ election: electionName })
-      });
+    if (!electionName) {
+        console.error("No election name found for active tab!", activeTab);
+        return;
+    }
 
-      const data = await res.json();
-//      window.latestConstants = data.constants;
-//      window.latestOptions = data.options;
-
-//      updateConstantsUI(data.constants, data.options);
-
-//      console.log("📩  startup (set-election returned data for:", data.current_election);
-//      console.log("🔀 startup places on DOM reload :", window.places);
-//      console.log("🔀 startup resources on DOM reload :", window.resources);
-//      console.log("🔀 startup areas on DOM reload :", window.areas);
-//      console.log("🔀 startup task_tags on DOM reload :", window.task_tags);
-//      console.log("🔀 startup outcome_tags on DOM reload :", window.outcome_tags);
-//     window.plan = data.constants?.calendar_plan;
-//     console.log("📩 calendar_plan::", plan);
-  } catch (e) {
-      console.error("Failed to set active election:", e);
-  }
+    try {
+        // Delegate all network fetching, DOM rendering, and context-switch logging
+        // directly to your centralized orchestration function
+        await window.switchElection(electionName);
+        console.log("🚀 Startup initialization fully completed for election:", electionName);
+    } catch (e) {
+        console.error("Failed to set active election on startup:", e);
+    }
 }
 
 // ----------------------------

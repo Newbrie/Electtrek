@@ -342,7 +342,7 @@ class CurrentElection(dict):
 
 
     def visit_node(self, node):
-        from state import Treepolys, Fullpolys, Geo_index
+        from state import Treepolys, Fullpolys, Geo_index, stepify, pathify
         rlevels = self.resolved_levels
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
@@ -374,6 +374,7 @@ class CurrentElection(dict):
         self['cid'] = node.nid
         self['cidLat'] = node.latlongroid[0]
         self['cidLong'] = node.latlongroid[1]
+
         newlist = self.add_breadcrumb(node.mapfile())
 
         self.save()

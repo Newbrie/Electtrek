@@ -55,25 +55,46 @@ def resolve_here_or_redirect(here):
 
     return here, None
 
-def stepify(path):
-    if not path:
-        return []
+def clean_path_part(part):
+    """Clean file suffixes, or return None if ignorable/empty."""
+    if part in IGNORABLE_SEGMENTS:
+        return None
+    for suffix in FILE_SUFFIXES:
+        if part.endswith(suffix):
+            return part.replace(suffix, "")
+    return part
 
-    routeone = (
-        path.replace('/WALKS/', '/')
-            .replace('/PDS/', '/')
-            .replace('/WARDS/', '/')
-            .replace('/DIVS/', '/')
-    )
-    parts = routeone.split("/")
-    last = parts.pop()
+def stepify(path_str):
+    """Split path string, clean each segment, and remove sequential duplicates."""
+    parts = path_str.strip().split("/")
+    cleaned = []
 
-    if "-PRINT.html" in last:
-        leaf = subending(last, "").split("--").pop()
-        parts.append(leaf)
+    for part in parts:
+        cleaned_part = clean_path_part(part)
+        if cleaned_part:
+            # Only append if it's the first element OR not a duplicate of the previous element
+            if not cleaned or cleaned[-1] != cleaned_part:
+                cleaned.append(cleaned_part)
 
-    print("____LEAFNODE:", path, parts)
-    return parts
+    return cleaned
+
+def pathify(parts):
+    """
+    Takes a clean list of geographic parts and builds a node path.
+    Automatically infers whether it's a MAP or a PRINT view based on array depth.
+    """
+    if not parts:
+        return ""
+
+    base_path = "/".join(parts)
+
+    # Inference rules based on hierarchy depth:
+    # Length 1-5: Country, Region, County, Constituency, Ward -> Always MAP overviews
+    # Length 6+: Polling Districts (PDS) or Walks -> Swaps to PRINT sheets
+    if len(parts) >= 6:
+        return f"{base_path}--PRINT.html"
+    else:
+        return f"{base_path}-MAP.html"
 
 def selprefix(election):
     from elections import list_elections
@@ -636,18 +657,31 @@ def ensure_treepolys_with_index(
         if valid_children.empty:
             return valid_children
 
+        # 🎯 FIX PART 1: Compute Centroid containment to handle cross-border split wards
+        # This checks if the geographic center point of the ward sits inside the parent boundary
+        valid_children['_centroid_inside'] = valid_children.geometry.centroid.within(parent_geom_proj)
+
+        # Standard Area Ratio calculation (keep it for larger geographic tracking fallback)
         inter_areas = valid_children.geometry.intersection(parent_geom_proj).area
         total_areas = valid_children.geometry.area.replace(0, 1e-9)
         valid_children['_overlap_ratio'] = inter_areas / total_areas
 
-        # Diagnostic printout showing the dynamic target limit
+        # Diagnostic printout showing why shapes pass or fail
         for idx, row in valid_children.iterrows():
             name = row.get("name") or row.get("NAME") or f"Index-{idx}"
             ov = row['_overlap_ratio']
-            status = '✅' if ov >= threshold else '❌'
-            print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} (Req: {threshold}) {status}")
+            center_pass = row['_centroid_inside']
 
-        matched_indices = valid_children[valid_children['_overlap_ratio'] >= threshold].index
+            # A shape passes if it meets the ratio OR its center point is contained inside
+            status = '✅' if (ov >= threshold or center_pass) else '❌'
+            print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} | Centroid Inside: {center_pass} -> {status}")
+
+        # 🎯 FIX PART 2: Match rows if they meet the area threshold OR if their centroid lands inside
+        matched_indices = valid_children[
+            (valid_children['_overlap_ratio'] >= threshold) |
+            (valid_children['_centroid_inside'] == True)
+        ].index
+
         return children_gdf.loc[matched_indices].copy()
 
     if ROOT not in Geo_index:
@@ -991,19 +1025,6 @@ def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
 def has_treepoly(layer_type: str) -> bool:
     return layer_type in Treepolys and not Treepolys[layer_type].empty
 
-def check_level4_gap(elevels: list) -> bool:
-    if len(elevels) <= 4:
-        return True
-
-    level_type = elevels[4]
-    gdf = Treepolys.get(level_type)
-
-    if gdf is None:
-        return True
-
-    return gdf.empty
-
-
 
 # original dict
 _LEVEL_ZOOM_MAP = {
@@ -1248,6 +1269,7 @@ progress = {
     "message": "Waiting...", # Optional string
     "dqstats_html": ""
     }
+
 
 def update_progress(progress, stage_name, stage_local_fraction, message=""):
     stages = progress["stages"]

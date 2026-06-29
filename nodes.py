@@ -36,6 +36,8 @@ FACEENDING = {
     'country': "-MAP.html",
 }
 
+_MASTER_ROOT = None
+
 def create_root_node() -> "TreeNode":
     return TreeNode(
         value="UNITED_KINGDOM",
@@ -46,24 +48,26 @@ def create_root_node() -> "TreeNode":
     )
 
 def get_trek_root() -> "TreeNode":
-    """Always returns the single root node. Creates it if needed."""
+    """Finds the genuine absolute root by its true structural name."""
+    global _MASTER_ROOT
 
-    # If the root already exists, return it
+    # 1. Return cached pointer if we've already found it
+    if _MASTER_ROOT is not None:
+        return _MASTER_ROOT
+
+    # 2. Look for the explicit UNITED_KINGDOM anchor in the registry
     for node in TREK_NODES_BY_ID.values():
-        if node.parent is None:
-            return node
-    # Otherwise, create the root and store it
+        if node.value == "UNITED_KINGDOM" and node.parent is None:
+            _MASTER_ROOT = node
+            return _MASTER_ROOT
+
+    # 3. Fallback/Creation if it doesn't exist yet
     root = create_root_node()
     TREK_NODES_BY_ID[root.nid] = root
+    _MASTER_ROOT = root
 
     return root
 
-
-
-
-def first_node() -> "TreeNode":
-    """Return the first inserted node, or the root if empty."""
-    return next(iter(TREK_NODES_BY_ID.values()), get_root())
 
 
 def parse_slot_key(slot_key):
@@ -339,11 +343,11 @@ def get_layer_table(nodelist,title,elevels):
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
             elif x.type == 'walk':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
             else:
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.dir}/{x.file(elevels)}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.mapfile()}&#39;); return false;">{x.value}</a>'
             # 1. Identify grandparent
             grandparent = x.parent.parent if x.parent else None
 
@@ -568,24 +572,7 @@ def restore_fullpolys(node_type):
     return
 
 
-def clean_path_part(part):
-    """Clean file suffixes, or return None if ignorable/empty."""
-    if part in IGNORABLE_SEGMENTS:
-        return None
-    for suffix in FILE_SUFFIXES:
-        if part.endswith(suffix):
-            return part.replace(suffix, "")
-    return part
 
-def split_clean_path(path_str):
-    """Split path string and clean each segment."""
-    parts = path_str.strip().split("/")
-    cleaned = []
-    for part in parts:
-        cleaned_part = clean_path_part(part)
-        if cleaned_part:
-            cleaned.append(cleaned_part)
-    return cleaned
 
 def get_common_prefix_len(a, b):
     """Returns length of common prefix between lists a and b."""
@@ -701,19 +688,6 @@ class TreeNode:
         yield from self.get_child_layers().items()
 #        yield from self.get_grandchild_layers().items()
 
-    def file(self, elevels: dict[int, str]) -> str:
-        """Compute map filename dynamically."""
-
-        # This unpacks the single key-value pair from the dictionary
-
-        type = self.type
-        suffix = FACEENDING.get(type, "")
-        if self.type == "street":
-            filename = f"{self.parent.value}--{self.value}{suffix}"
-        else:
-            filename = f"{self.value}{suffix}"
-
-        return filename
 
     @classmethod
     def from_dict(cls, data):
@@ -894,6 +868,30 @@ class TreeNode:
         else:
             return f"{self.parent.dir}/{self.value}"
 
+    @property
+    def layer_path(self) -> str:
+        """
+        Computes the structural type blueprint trail dynamically from root to node.
+        Example: "country/nation/county/constituency/ward"
+        """
+        if self.parent is None:
+            return self.type
+        return f"{self.parent.layer_path}/{self.type}"
+
+    @property
+    def actual_levels(self) -> dict[int, str]:
+        """
+        Generates the absolute depth-to-type map dynamically.
+        Perfect for structural mapping and verifying path depth layouts.
+        Example: {0: 'country', 1: 'nation', 2: 'county', 3: 'constituency', 4: 'ward'}
+        """
+        levels_map = {}
+        cur = self
+        while cur:
+            levels_map[cur.level] = cur.type
+            cur = cur.parent
+        # Return sorted by depth level index ascending
+        return dict(sorted(levels_map.items()))
 
     def child_type(self, elevels: dict) -> str | None:
         if not elevels:
@@ -1059,7 +1057,7 @@ class TreeNode:
         CE_task_tags, CE_outcome_tags, CE_all_tags = CE.get_tags()
         CE_areas = self.get_areas()
         CE_places = CE.get("places", {})
-        print(f"___Processing resources : {CE_resources} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
+        print(f"___Processing lozenges : {len(CE_resources)} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
         for loz in lozenges:
             ltype = loz.get("type")
             code = loz.get("code")
@@ -1171,65 +1169,26 @@ class TreeNode:
         return node
 
     def mapfile(self):
-        from flask import session
-        from elections import CurrentElection
-        rlevels = CurrentElection.load(session.get("current_election")).resolved_levels
+        """Compute map filename dynamically."""
         # This unpacks the single key-value pair from the dictionary
-        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-        # The clean unpack
-        (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked mapfile election: {c_election} - el:{elevels}")
-        return f"{self.dir}/{self.file(elevels)}"
+        type = self.type
+        suffix = FACEENDING.get(type, "")
+        if self.type in { "street", "walkleg"}:
+            filename = f"{self.parent.value}--{self.value}{suffix}"
+        else:
+            filename = f"{self.value}{suffix}"
 
+        return f"{self.dir}/{filename}"
 
 
     def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
-        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
+        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys, stepify
         from flask import session
         from elector import electors
-
-        # Move helper utilities cleanly to the top of the scope
-        def strip_leaf_from_path(p_str):
-            leaf = p_str.split("/")[-1]
-            for suffix in [
-                "-PRINT.html", "-MAP.html", "-CAL.html", "-WALKS.html",
-                "-ZONES.html", "-PDS.html", "-DIVS.html",
-                "-WARDS.html", "-DEMO.html"
-            ]:
-                if leaf.endswith(suffix):
-                    leaf = leaf.replace(suffix, "")
-            return leaf.split("--")[-1]
-
-        def split_clean_path(p_str):
-            # Clean out empty spaces/trailing slashes first
-            p_str = p_str.strip("/")
-            if not p_str:
-                return []
-
-            leaf = strip_leaf_from_path(p_str)
-
-            # If it's a deep path with multiple steps
-            if "/" in p_str:
-                dir_path = "/".join(p_str.split("/")[:-1])
-                raw_parts = dir_path.split("/")
-            else:
-                raw_parts = []
-
-            parts = [
-                p for p in raw_parts
-                if p and p not in ["DIVS", "PDS", "WALKS", "WARDS"] and "@@@" not in p
-            ]
-
-            if leaf and leaf not in parts:
-                parts.append(leaf)
-
-            # 🎯 CRITICAL FIX: Eliminate sequential back-to-back duplicate root mutations
-            sanitized_parts = []
-            for item in parts:
-                if not sanitized_parts or item.upper() != sanitized_parts[-1].upper():
-                    sanitized_parts.append(item)
-
-            return sanitized_parts
+        # map nodes are already pre-named and pre-exist in geometry, treknodes are derived from name and type keys in geo_index
+        # data nodes are also pre-named and pre-exist in allelectors, treknodes are derived from name and presence in "Walkname" or "PD" col values
+        # ping_node should return treknode (country/nation/county/constituency/division etc)
+        # actual levels should be stored as a node variable (self.layer_path)
 
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
@@ -1295,8 +1254,8 @@ class TreeNode:
 
         # ──────────────────────────────
         # Step 1: clean paths
-        self_path = split_clean_path(self.mapfile())
-        dest_parts = split_clean_path(path_str)
+        self_path = state.stepify(self.mapfile())
+        dest_parts = state.stepify(path_str)
 
         print(f"🪜 [DEBUG] dest_path: {dest_path}")
         print(f"🪜 [DEBUG] self_path: {self_path}")
@@ -1442,7 +1401,7 @@ class TreeNode:
         from flask import session
         from layers import make_feature_layers, ExtendedFeatureGroup
         from elections import CurrentElection
-        from baked_data import BakedDataManager
+        from baked_data import baked_data
         import state
         import copy
         from collections import defaultdict
@@ -1547,9 +1506,6 @@ class TreeNode:
 
         test_node = childnodelist[0] if childnodelist else self
 
-        # Setup infrastructure for task overlays
-        baked_manager = BakedDataManager()
-        baked_dict = baked_manager.load()
         active_tags = dict(task_tags)
         active_tags["VI"] = "Voter Intention"
 
@@ -1561,28 +1517,28 @@ class TreeNode:
             nodes_by_type[layer_type] = nodes
 
         # ------------------------------------------------------------------
-        # 🎨 SELF-CONSISTENT CHROMATIC HIERARCHY REGISTRY
+        # 🎨 RED & YELLOW LEVEL 4 OVERLAP REGISTRY
         # ------------------------------------------------------------------
-        # Weights drop as map elements tighten; styles gracefully step from neutral frames to vibrant metrics.
         LAYER_STYLE_REGISTRY = {
             "country":          {"color": "#0F172A", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
             "nation":           {"color": "#1E293B", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
-            "county":           {"color": "#475569", "weight": 2.0, "fillColor": "#64748B", "fillOpacity": 0.03, "show": True},
+            "county":           {"color": "#475569", "weight": 2.5, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
 
-            "constituency":     {"color": "#0369A1", "weight": 2.0, "fillColor": "#0EA5E9", "fillOpacity": 0.07, "show": True},
-            "division":         {"color": "#0284C7", "weight": 1.5, "fillColor": "#38BDF8", "fillOpacity": 0.10, "show": True},
-            "ward":             {"color": "#0284C7", "weight": 1.5, "fillColor": "#38BDF8", "fillOpacity": 0.10, "show": True},
+            "constituency":     {"color": "#0369A1", "weight": 2.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
 
-            "polling_district": {"color": "#0D9488", "weight": 1.0, "fillColor": "#2DD4BF", "fillOpacity": 0.12, "show": False, "dashArray": "4,4"},
-            "walk":             {"color": "#0F766E", "weight": 1.0, "fillColor": "#14B8A6", "fillOpacity": 0.12, "show": False, "dashArray": "2,4"},
+            # 🗳️ LEVEL 4 STRATIFICATION (UPDATED BORDER COLOURS)
+            "ward":             {"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "show": True, "dashArray": "0"},
+            "division":         {"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "show": True, "dashArray": "0"},
+
+            "polling_district": {"color": "#0D9488", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False, "dashArray": "4,4"},
+            "walk":             {"color": "#0F766E", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False, "dashArray": "2,4"},
 
             "street":           {"color": "#0F766E", "weight": 1.5, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
             "walkleg":          {"color": "#115E59", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
             "marker":           {"show": True}
         }
-
         # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "marker"}
+        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division","marker"}
 
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
@@ -1599,6 +1555,30 @@ class TreeNode:
             if factory_key != "marker" and not nodes_to_render:
                 continue
 
+            # ------------------------------------------------------------------
+            # 🔧 PRE-MATCH LAYER BINDING: Package Style Config directly into context
+            # ------------------------------------------------------------------
+            if factory_key != "marker":
+                geojson_style = {
+                    "color": style_cfg["color"],
+                    "weight": style_cfg["weight"],
+                    "fillColor": style_cfg["fillColor"],
+                    "fillOpacity": 0.0 if style_cfg["fillColor"] == "none" else style_cfg["fillOpacity"]
+                }
+                if "dashArray" in style_cfg:
+                    geojson_style["dashArray"] = style_cfg["dashArray"]
+
+                # Build a runtime custom transport context payload inside rlevels
+                styled_rlevels = copy.copy(rlevels)
+                for r_key in styled_rlevels.keys():
+                    styled_rlevels[r_key] = {
+                        "elevels": rlevels[r_key],
+                        "layer_style": geojson_style,
+                        "layer_type": factory_key
+                    }
+            else:
+                styled_rlevels = rlevels
+
             # Route directly to precise rendering logic blocks
             match factory_key:
 
@@ -1608,11 +1588,11 @@ class TreeNode:
 
                 # 🗺️ Polygon Map Layers
                 case "constituency" | "division" | "ward" | "country" | "nation" | "county":
-                    layer.add_nodemaps(rlevels, nodes_to_render[0].parent, static, counters, factory_key)
+                    layer.add_nodemaps(styled_rlevels, nodes_to_render[0].parent, static, counters)
 
                 # 📐 Spatial Proximity Layers (Voronoi Grids)
                 case "polling_district" | "walk":
-                    layer.add_voronoi(rlevels, nodes_to_render[0].parent, static, factory_key)
+                    layer.add_voronoi(styled_rlevels, nodes_to_render[0].parent, static, factory_key)
 
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" | _:
@@ -1629,7 +1609,7 @@ class TreeNode:
                 if not hasattr(layer, "options") or layer.options is None:
                     layer.options = {}
 
-                geojson_style = {
+                geojson_style_backup = {
                     "color": style_cfg["color"],
                     "weight": style_cfg["weight"],
                     "fillColor": style_cfg["fillColor"],
@@ -1637,30 +1617,19 @@ class TreeNode:
                 }
 
                 if "dashArray" in style_cfg:
-                    geojson_style["dashArray"] = style_cfg["dashArray"]
+                    geojson_style_backup["dashArray"] = style_cfg["dashArray"]
 
                 if style_cfg["fillColor"] == "none":
-                    geojson_style["fillOpacity"] = 0.0
+                    geojson_style_backup["fillOpacity"] = 0.0
 
-                layer.options.update({"style": geojson_style})
+                layer.options.update({"style": geojson_style_backup})
 
             # Append the baseline administrative layer
             selected.append(layer)
 
-            # 📬 Operational Campaign Overlay Trigger
-            # Automatically generates dynamic interactive data groups directly parallel to the baseline layer
-            # 🛡️ REFACTOR: Match the factory loop key against our active structural self.type
-            # to prevent parent/upper tier overlays from being built.
-            if factory_key in ("constituency", "ward", "division", "polling_district", "walk"):
-                if factory_key == self.type:
-                    _attach_elector_and_campaign_overlays(
-                        selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
-                    )
-                else:
-                    print(f"ℹ️ Skipping overlay for '{factory_key}' because active node type is '{self.type}'")
-
         # Flat layer array emission ensures Folium handles deep nesting and controls perfectly
         return selected, totalleaf
+
 
     def sumupVI(self,viValue):
         origin = self
@@ -1868,7 +1837,7 @@ class TreeNode:
         return str(target)
 
 
-    def create_name_nodes(self,resolved_levels,gotv_pct,nodetype,namepoints,ending):
+    def create_name_nodes(self,resolved_levels,gotv_pct,nodetype,namepoints):
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
@@ -1880,7 +1849,7 @@ class TreeNode:
         fam_nodes = []
         if namepoints.empty:
             raise ValueError("No data in namepoints DataFrame.")
-        print(f"____Namepoints nodes: at {self.value} of type:{nodetype} there are {len(namepoints)} in fileending{ending}")
+        print(f"____Namepoints nodes: at {self.value} of type:{nodetype} there are {len(namepoints)} ")
         geometry = gpd.points_from_xy(namepoints.Long.values,namepoints.Lat.values, crs="EPSG:4326")
         block = gpd.GeoDataFrame(
             namepoints, geometry=geometry
@@ -1990,27 +1959,10 @@ class TreeNode:
         try:
             from elector import shapecolumn
 
-            # 🛠️ Updated suffix mapping per your system layout requirements
-            suffix_mapping = {
-                "polling_district": "-MAP.html",
-                "walk": "-MAP.html",
-                "street": "-PRINT.html",
-                "walkleg": "-PRINT.html"
-            }
 
             for electtype in target_layers:
-                if electtype not in shapecolumn:
-                    print(f"⚠️ Unknown elect type variant: {electtype}. Skipping sub-branch.")
-                    continue
 
-                colname = shapecolumn[electtype]
-                target_suffix = suffix_mapping.get(electtype, "-PRINT.html")
-
-                # Generate localized mapfile path layout matching this target suffix
-                if hasattr(self, 'mapfile') and callable(getattr(self, 'mapfile')):
-                    localized_path = self.mapfile(target_suffix)
-                else:
-                    localized_path = self.mapfile()
+                localized_path = self.mapfile()
 
                 # Fetch the isolated electoral records matching this exact layer pass
                 areaelectors = electors.elector_for_path(resolved_levels, localized_path)
@@ -2019,6 +1971,7 @@ class TreeNode:
                     print(f"⚠️ No data from election {c_election} at node {self.value} for subtype '{electtype}'")
                     continue
 
+                colname = shapecolumn[electtype]
                 # Ensure the mapped target column actually exists in the elector dataset
                 if colname not in areaelectors.columns:
                     print(f"⚠️ Column '{colname}' for type '{electtype}' not found in elector records. Skipping branch.")
@@ -2049,8 +2002,7 @@ class TreeNode:
                     resolved_levels,
                     gotv_pct,
                     electtype,  # Stamped clean type context passed through
-                    nodeelectors,
-                    target_suffix
+                    nodeelectors
                 )
 
                 print(f"📦 Created {len(branch_nodes)} nodes for type '{electtype}'")
@@ -2376,7 +2328,7 @@ class TreeNode:
 
         # 2. SET UP FILE PATHS
         # Use render_node for the filename so child updates overwrite the parent map
-        mapfile_name = self.file(elevels)
+        mapfile_name = self.mapfile().split("/")[-1]
         target = self.locfilepath(mapfile_name)
 
         # 3. SET UP VISUALS (Title and Bounding Box)
@@ -2532,7 +2484,7 @@ class TreeNode:
         '''
 
 # 📈 FIX: Use your local server's static web route for the image asset
-        logo_web_path = LOGO_FILE  # Replace with your actual web asset path
+        logo_web_path = "/static/images/logo.png"  # Replace with your actual web asset path
 
         logo_styles = f"""
             <style>
@@ -3293,9 +3245,9 @@ class TreeNode:
 
     def path_intersect(self, path, elevels):
         # start at the leaf of path 1 and test membership of path 2
-        first = state.state.stepify(self.dir+"/"+self.file(elevels))
-        second = state.state.stepify(path)
-        print("intersecting paths ",self.dir+"/"+self.file(elevels), path)
+        first = state.stepify(self.dir+"/"+self.mapfile(elevels))
+        second = state.stepify(path)
+        print("intersecting paths ",self.dir+"/"+self.mapfile(elevels), path)
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}
         d3 = {k: d1[k] for k in d1 if k in d2}
