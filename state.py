@@ -91,10 +91,8 @@ def pathify(parts):
     # Inference rules based on hierarchy depth:
     # Length 1-5: Country, Region, County, Constituency, Ward -> Always MAP overviews
     # Length 6+: Polling Districts (PDS) or Walks -> Swaps to PRINT sheets
-    if len(parts) >= 6:
-        return f"{base_path}--PRINT.html"
-    else:
-        return f"{base_path}-MAP.html"
+    return f"{base_path}"
+
 
 def selprefix(election):
     from elections import list_elections
@@ -657,31 +655,18 @@ def ensure_treepolys_with_index(
         if valid_children.empty:
             return valid_children
 
-        # 🎯 FIX PART 1: Compute Centroid containment to handle cross-border split wards
-        # This checks if the geographic center point of the ward sits inside the parent boundary
-        valid_children['_centroid_inside'] = valid_children.geometry.centroid.within(parent_geom_proj)
-
-        # Standard Area Ratio calculation (keep it for larger geographic tracking fallback)
         inter_areas = valid_children.geometry.intersection(parent_geom_proj).area
         total_areas = valid_children.geometry.area.replace(0, 1e-9)
         valid_children['_overlap_ratio'] = inter_areas / total_areas
 
-        # Diagnostic printout showing why shapes pass or fail
+        # Diagnostic printout showing the dynamic target limit
         for idx, row in valid_children.iterrows():
             name = row.get("name") or row.get("NAME") or f"Index-{idx}"
             ov = row['_overlap_ratio']
-            center_pass = row['_centroid_inside']
+            status = '✅' if ov >= threshold else '❌'
+            print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} (Req: {threshold}) {status}")
 
-            # A shape passes if it meets the ratio OR its center point is contained inside
-            status = '✅' if (ov >= threshold or center_pass) else '❌'
-            print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} | Centroid Inside: {center_pass} -> {status}")
-
-        # 🎯 FIX PART 2: Match rows if they meet the area threshold OR if their centroid lands inside
-        matched_indices = valid_children[
-            (valid_children['_overlap_ratio'] >= threshold) |
-            (valid_children['_centroid_inside'] == True)
-        ].index
-
+        matched_indices = valid_children[valid_children['_overlap_ratio'] >= threshold].index
         return children_gdf.loc[matched_indices].copy()
 
     if ROOT not in Geo_index:
@@ -1198,9 +1183,9 @@ OVERLAP_THRESHOLDS = {
     "region": 0.75,            # Minor boundary clipping allowed
     "county": 0.60,            # Forgiving of coastline/river edge mismatches
     "constituency": 0.50,      # Balanced threshold for parliamentary lines
-    "ward": 0.45,              # Forgiving enough for Windlesham / Heathlands boundary bleed
-    "division": 0.45,          # Similar to wards
-    "polling_district": 0.30,  # Lower threshold: small shapes clipping complex edges
+    "ward": 0.25,              # Forgiving enough for Windlesham / Heathlands boundary bleed
+    "division": 0.25,          # Similar to wards
+    "polling_district": 0.20,  # Lower threshold: small shapes clipping complex edges
     "street": 0.15,            # Streets can run right along borders; low threshold prevents exclusion
     "walk": 0.10,              # Route paths frequently cross borders
     "walkleg": 0.05            # Highly granular slivers

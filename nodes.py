@@ -879,6 +879,16 @@ class TreeNode:
         return f"{self.parent.layer_path}/{self.type}"
 
     @property
+    def node_path(self) -> str:
+        """
+        Computes the node name blueprint trail dynamically from root to node.
+        Example: "UNITED_KINGDOM/ENGLAND/SURREY"
+        """
+        if self.parent is None:
+            return self.value
+        return f"{self.parent.node_path}/{self.value}"
+
+    @property
     def actual_levels(self) -> dict[int, str]:
         """
         Generates the absolute depth-to-type map dynamically.
@@ -1516,29 +1526,8 @@ class TreeNode:
         for layer_type, nodes in self.surrounding_layers():
             nodes_by_type[layer_type] = nodes
 
-        # ------------------------------------------------------------------
-        # 🎨 RED & YELLOW LEVEL 4 OVERLAP REGISTRY
-        # ------------------------------------------------------------------
-        LAYER_STYLE_REGISTRY = {
-            "country":          {"color": "#0F172A", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
-            "nation":           {"color": "#1E293B", "weight": 3.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
-            "county":           {"color": "#475569", "weight": 2.5, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
-
-            "constituency":     {"color": "#0369A1", "weight": 2.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": True},
-
-            # 🗳️ LEVEL 4 STRATIFICATION (UPDATED BORDER COLOURS)
-            "ward":             {"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "show": True, "dashArray": "0"},
-            "division":         {"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "show": True, "dashArray": "0"},
-
-            "polling_district": {"color": "#0D9488", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False, "dashArray": "4,4"},
-            "walk":             {"color": "#0F766E", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False, "dashArray": "2,4"},
-
-            "street":           {"color": "#0F766E", "weight": 1.5, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
-            "walkleg":          {"color": "#115E59", "weight": 1.0, "fillColor": "none",    "fillOpacity": 0.0,  "show": False},
-            "marker":           {"show": True}
-        }
         # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division","marker"}
+        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division", "marker"}
 
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
@@ -1546,24 +1535,22 @@ class TreeNode:
             if factory_key not in TEST_LAYERS:
                 continue
 
-            style_cfg = LAYER_STYLE_REGISTRY.get(factory_key, {
-                "color": "#94A3B8", "weight": 1, "fillColor": "#CBD5E1", "fillOpacity": 0.1, "show": False
-            })
-
             nodes_to_render = nodes_by_type.get(factory_key, [])
-
             if factory_key != "marker" and not nodes_to_render:
                 continue
 
             # ------------------------------------------------------------------
-            # 🔧 PRE-MATCH LAYER BINDING: Package Style Config directly into context
+            # 🔧 CONTEXT PACKAGING: Safely pull style configurations from layer.options
             # ------------------------------------------------------------------
             if factory_key != "marker":
+                style_cfg = getattr(layer, "options", {}) or {}
+
+                # Build a uniform style dict directly from the layer properties
                 geojson_style = {
-                    "color": style_cfg["color"],
-                    "weight": style_cfg["weight"],
-                    "fillColor": style_cfg["fillColor"],
-                    "fillOpacity": 0.0 if style_cfg["fillColor"] == "none" else style_cfg["fillOpacity"]
+                    "color": style_cfg.get("color", "#94A3B8"),
+                    "weight": style_cfg.get("weight", 1.0),
+                    "fillColor": style_cfg.get("fillColor", "none"),
+                    "fillOpacity": 0.0 if style_cfg.get("fillColor", "none") == "none" else style_cfg.get("fillOpacity", 0.0)
                 }
                 if "dashArray" in style_cfg:
                     geojson_style["dashArray"] = style_cfg["dashArray"]
@@ -1597,7 +1584,6 @@ class TreeNode:
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" | _:
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
-
             # ------------------------------------------------------------------
             # 🔧 POST-EXECUTION OVERRIDE: Enforce LayerControl Map States
             # ------------------------------------------------------------------
@@ -3074,34 +3060,45 @@ class TreeNode:
 
 
     def add_Tchild(self, child_node, etype, elect):
-
+        # 🚨 TRACK INITIAL STATE BEFORE OVERWRITE
+        orig_type = getattr(child_node, 'type', 'NOT_SET')
         child_node.type = etype
 
         registry = TREK_NODES_BY_ID
 
         print(f"[DEBUG] registry id in add_Tchild: {id(TREK_NODES_BY_ID)}")
         print(f"[DEBUG] registry size in add_Tchild: {len(TREK_NODES_BY_ID)}")
-        print(f"\n🟢 [DEBUG] add_Tchild called for node '{child_node.value}' ({child_node.nid}), type: {child_node.type}")
-        print(f"   - Parent: {self.value if self else 'None'}")
+        print(f"\n🟢 [DEBUG] add_Tchild called for node '{child_node.value}' ({child_node.nid})")
+        print(f"   - Type passed in: '{etype}' (Original node type was: '{orig_type}')")
+        print(f"   - Proposed Parent: {self.value if self else 'None'} (Type: {getattr(self, 'type', 'None')})")
+        print(f"   - Current Node Parent: {child_node.parent.value if child_node.parent else 'None'}")
         print(f"   - Registry size before: {len(registry)}")
 
         # ---------------------------------------------------------
         # 1️⃣ Prevent multiple root country nodes
         # ---------------------------------------------------------
         if child_node.parent is None and etype == "country":
-            # Check if any existing node of type country is already a root
             for existing in registry.values():
                 if existing.type == "country" and existing.parent is None:
                     raise ValueError(
                         f"Cannot add another root node of type 'country': {child_node.value}"
                     )
 
-
         # ---------------------------------------------------------
-        # 2️⃣ Prevent duplicates of same type + value
+        # 2️⃣ Prevent duplicates of same type + value (Robust Path Tracking)
         # ---------------------------------------------------------
         found_in_registry = False
+
+        parent_path = self.node_path if (self and hasattr(self, 'node_path')) else ""
+        target_path = f"{parent_path} -> {child_node.value}" if parent_path else child_node.value
+        print(f"   - 🧭 Calculated target path for matching: '{target_path}'")
+
         for nid, existing in registry.items():
+            # 🕵️‍♂️ TRACK NAME COLLISIONS WITH DIFFERENT TYPES
+            if existing.value == child_node.value and existing.type != etype:
+                print(f"   - ⚠️ [COLLISION] Found node with same name '{existing.value}' but mismatched type! "
+                      f"Registry node type: '{existing.type}' vs. Incoming target type: '{etype}'.")
+
             if existing.type != etype:
                 continue
 
@@ -3110,13 +3107,16 @@ class TreeNode:
 
             is_ons_map = getattr(child_node, "origin", None) == "ONS_MAPS"
             match_found = False
-            if is_ons_map and existing.fid == child_node.fid:
-                match_found = True
-            elif existing.value == child_node.value:
-                match_found = True
+
+            if is_ons_map and hasattr(existing, 'fid') and hasattr(child_node, 'fid'):
+                if existing.fid == child_node.fid:
+                    match_found = True
+            else:
+                if existing.node_path == target_path:
+                    match_found = True
 
             if match_found:
-                print(f"🔍 [DEBUG] Node matched in registry: {existing.value} ({existing.nid})")
+                print(f"🔍 [DEBUG] Node matched in registry by path: {existing.node_path} ({existing.nid})")
                 child_node = existing
                 found_in_registry = True
                 break
@@ -3124,17 +3124,25 @@ class TreeNode:
         print(f"   - Found in registry: {found_in_registry}")
 
         # ---------------------------------------------------------
-        # 3️⃣ Attach to parent
+        # 3️⃣ Attach to parent (With Parent Hijack Alarms)
         # ---------------------------------------------------------
         if child_node not in self.children:
             if child_node.parent and child_node.parent is not self:
+                # 🚨 HIJACK ALERT
+                print(f"💥 [ALARM] NODE POACHING DETECTED!")
+                print(f"   - Node '{child_node.value}' ({child_node.nid}) is being ripped away from old parent!")
+                print(f"   - Old Parent: '{child_node.parent.value}' (Path: {child_node.parent.node_path})")
+                print(f"   - New Parent: '{self.value}' (Path: {self.node_path})")
+
                 # Detach from old parent
                 child_node.parent.children.remove(child_node)
+
             child_node.parent = self
             self.children.append(child_node)
             print(f"✅ Linked {child_node.value} to {self.value} (children now: {len(self.children)})")
         else:
             # Already attached
+            print(f"ℹ️ Node '{child_node.value}' already present in parent '{self.value}' children array.")
             child_node.parent = self
 
         # ---------------------------------------------------------
@@ -3145,6 +3153,7 @@ class TreeNode:
             print(f"💾 Registered new node {child_node.value} ({child_node.nid})")
         else:
             print(f"ℹ️ Node {child_node.value} ({child_node.nid}) already in registry")
+
         save_nodes(TREKNODE_FILE)
         return child_node
 

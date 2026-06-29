@@ -1423,7 +1423,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         layer_type = getattr(self, "mytag", "ward")
         # Old:
         # New: Read the dictionary directly since it's already flat!
-        layer_style = getattr(self, "options", {}) if getattr(self, "options", None) else {}
+        # 🎯 FIX: Extract options and safely look for a nested 'style' block if it exists
+        raw_opts = getattr(self, "options", {}) or {}
+        layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
         print(f"DEBUG: self class: {self.__class__.__name__}")
         print(f"DEBUG: self.mytag evaluated to: '{layer_type}'")
         print(f"DEBUG: herenode details -> value: '{herenode.value}', type: '{herenode.type}', level: {herenode.level}")
@@ -1829,17 +1831,52 @@ class ExtendedFeatureGroup(FeatureGroup):
 # Layer specs (cleaned up)
 # -----------------------------
 FEATURE_LAYER_SPECS = {
-    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False,type="marker"),
-    "country": dict(name="country", mytag="country", overlay=True, control=True, show=False,type="node"),
-    "nation": dict(name="nation", mytag="nation", overlay=True, control=True, show=False,type="node"),
-    "county": dict(name="county", mytag="county", overlay=True, control=True, show=False,type="node"),
-    "constituency": dict(name="constituency", mytag="constituency", overlay=True, control=True, show=False,type="node"),
-    "ward": dict(name="ward", mytag="ward", overlay=True, control=True, show=False, type="node"),
-    "division": dict(name="division", mytag="division", overlay=True, control=True, show=False, type="node"),
-    "polling_district": dict(name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="node"),
-    "walk": dict(name="walk", mytag="walk", overlay=True, control=True, show=False,type="node"),
-    "walkleg": dict(name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="node"),
-    "street": dict(name="street", mytag="street", overlay=True, control=True, show=False, type="node"),
+    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False, type="marker"),
+
+    "country": dict(
+        name="country", mytag="country", overlay=True, control=True, show=False, type="node",
+        options={"color": "#0F172A", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+    "nation": dict(
+        name="nation", mytag="nation", overlay=True, control=True, show=False, type="node",
+        options={"color": "#1E293B", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+    "county": dict(
+        name="county", mytag="county", overlay=True, control=True, show=False, type="node",
+        options={"color": "#475569", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+    "constituency": dict(
+        name="constituency", mytag="constituency", overlay=True, control=True, show=False, type="node",
+        options={"color": "#0369A1", "weight": 2.0, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+
+    # 🗳️ LEVEL 4 STRATIFICATION (UPDATED BOUNDARY SPECS)
+    "ward": dict(
+        name="ward", mytag="ward", overlay=True, control=True, show=False, type="node",
+        options={"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "0"}
+    ),
+    "division": dict(
+        name="division", mytag="division", overlay=True, control=True, show=False, type="node",
+        options={"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "0"}
+    ),
+
+    "polling_district": dict(
+        name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="node",
+        options={"color": "#0D9488", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "4,4"}
+    ),
+    "walk": dict(
+        name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",
+        options={"color": "#0F766E", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "2,4"}
+    ),
+    "walkleg": dict(
+        name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="node",
+        options={"color": "#115E59", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+    "street": dict(
+        name="street", mytag="street", overlay=True, control=True, show=False, type="node",
+        options={"color": "#0F766E", "weight": 1.5, "fillColor": "none", "fillOpacity": 0.0}
+    ),
+
     "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False, type="marker"),
     "result": dict(name="result", mytag="result", overlay=True, control=True, show=False, type="marker"),
     "target": dict(name="target", mytag="target", overlay=True, control=True, show=False, type="marker"),
