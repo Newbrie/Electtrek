@@ -1299,7 +1299,10 @@ class TreeNode:
         # Find the maximum level integer (e.g., 7)
         max_level = max(elevels)
 
+        target_path = node.node_path
+
         for part in down_path:
+            target_path = part if not target_path else f"{target_path}/{part}"
             next_level = node.level + 1
 
             # Prevent breaking if we overshoot known levels
@@ -1312,7 +1315,7 @@ class TreeNode:
             print(f"➡️ [DEBUG] At node: {node.value} (L{node.level}), looking for part '{part}' at level {next_level} (type={ntype})")
             print(f"   Children before match: {[c.value for c in node.children]}")
 
-            match = next((c for c in node.children if c.value == part), None)
+            match = next((c for c in node.children if c.node_path == target_path), None)
 
             if create and not match:
                 print(f"   ⚙️ [DEBUG] Attempting branch creation for '{part}' under {node.value} (Level {next_level})")

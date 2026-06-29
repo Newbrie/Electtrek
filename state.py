@@ -309,7 +309,10 @@ def intersectingArea(
     elif parent_row is not None and not parent_row.geometry.is_empty:
         working_geom = parent_row.geometry
     else:
-        return None, gdf, gdf
+        # 🎯 FIX: Return an empty GeoDataFrame copy for the filtered slot (index 2)
+        # instead of leaking the unfiltered global dataset!
+        empty_filtered_gdf = gpd.GeoDataFrame(columns=gdf.columns, crs=gdf.crs)
+        return None, empty_filtered_gdf, gdf
 
     # ------------------------------------------------------------------
     # 🔄 REFACTORED CORE MATH CALL (Replaces Steps 3 & 4 completely!)
