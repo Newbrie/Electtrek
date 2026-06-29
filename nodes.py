@@ -2093,7 +2093,7 @@ class TreeNode:
             print(f"📦 Found {len(selected_children)} / {len(valid_child_keys)} shapefile matches for Surrey.")
 
             fam_nodes = self.childrenoftype(electtype)
-            fam_values = {x.value for x in fam_nodes}
+            fam_values = {x.node_path for x in fam_nodes}
 
             k = 0
             j = 0
@@ -2101,10 +2101,7 @@ class TreeNode:
             for _, limb in selected_children.iterrows():
                 newname = state.normalname(limb.NAME)
 
-                # Ensure uniqueness within this specific sub-layer type block
-                if newname in fam_values:
-                    j += 1
-                    continue
+
 
                 # Check if centroid/representative point coordinates are already baked into geoindex
                 # to skip spatial engine evaluation completely. Fallback to geometry calculation if absent.
@@ -2113,6 +2110,11 @@ class TreeNode:
                     child_path_key = f"UNITED_KINGDOM/{newname}"
                 else:
                     child_path_key = f"{my_path_key}/{newname}"
+
+                # Ensure uniqueness within this specific sub-layer type block
+                if child_path_key in fam_values:
+                    j += 1
+                    continue
 
                 baked_roid = Geo_index.get(child_path_key, {}).get("roid")
 
@@ -2150,7 +2152,7 @@ class TreeNode:
 
                     fam_nodes.append(egg)
                     all_created_children.append(egg)
-                    fam_values.add(newname)
+                    fam_values.add(child_path_key)
                     k += 1
 
                 except Exception as e:

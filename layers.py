@@ -1459,9 +1459,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         loop_counter = 0
         for c in childlist:
             loop_counter += 1
-            print(f"\n--- Processing Child #{loop_counter}: '{c.value}' ---")
-            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.value} of type {c.value, layer_type}")
-            print(f"______All nodemaps:{len(allchildlist)} at {herenode.value}")
+            print(f"\n--- Processing Child #{loop_counter}: '{c.node_path}' ---")
+            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.node_path} of type {c.value, layer_type}")
+            print(f"______All nodemaps:{len(allchildlist)} at {herenode.node_path}")
 
             if c.level+1 <= 5:
                 results = []
@@ -1853,11 +1853,11 @@ FEATURE_LAYER_SPECS = {
     # 🗳️ LEVEL 4 STRATIFICATION (UPDATED BOUNDARY SPECS)
     "ward": dict(
         name="ward", mytag="ward", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "0"}
+        options={"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "4,4"}
     ),
     "division": dict(
         name="division", mytag="division", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "0"}
+        options={"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "4,4"}
     ),
 
     "polling_district": dict(

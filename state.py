@@ -842,7 +842,9 @@ def ensure_treepolys_with_index(
                     matched_this_level = this_path
 
                 row_copy = row.copy()
-                row_copy["_parent_path"] = this_path
+                # 🎯 FIX: Preserve the calculated parent path context
+                # so the downstream loop reads the District, not the Ward
+                row_copy["_parent_path"] = parent_path if level > 0 else ROOT
                 active_parent_rows[next_level].append(row_copy)
 
     # Reconstruct final matching hierarchy track

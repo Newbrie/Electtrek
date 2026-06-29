@@ -2998,7 +2998,7 @@ def transfer(path):
 
 # transfering to another any other node with siblings listed below
 # use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = get_root().ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
+    current_node = get_trek_root().ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
     created, totalleaf = current_node.endpoint_created(rlevels, current_node.mapfile(),static=False)
 
