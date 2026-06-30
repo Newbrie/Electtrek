@@ -782,15 +782,17 @@ def ensure_treepolys_with_index(
                 # 2. Process the cleanly filtered results directly
                 if tree_gdf is not None and not tree_gdf.empty:
                     tree_gdf = tree_gdf.copy()
+
                     if level == 0:
-                        parent_path = None
+                        tree_gdf["_parent_path"] = None
                     elif parent_row is None:
-                        parent_path = ROOT
+                        tree_gdf["_parent_path"] = ROOT
                     else:
                         parent_fid = parent_row["FID"]
-                        parent_path = fid_to_path[parent_fid]
+                        # 🛡️ Safe fallback context to avoid reading poisoned global state maps
+                        computed_parent = fid_to_path.get(parent_fid) or parent_row.get("_parent_path", ROOT)
+                        tree_gdf["_parent_path"] = computed_parent
 
-                    tree_gdf["_parent_path"] = parent_path
                     all_results.append(tree_gdf)
 
 

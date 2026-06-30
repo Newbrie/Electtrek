@@ -1192,9 +1192,10 @@ class TreeNode:
 
 
     def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
-        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys, stepify
+        from state import LEVEL_ZOOM_MAP, Geo_index, stepify  # 🔄 Swapped Treepolys for geo_index
         from flask import session
         from elector import electors
+
         # map nodes are already pre-named and pre-exist in geometry, treknodes are derived from name and type keys in geo_index
         # data nodes are also pre-named and pre-exist in allelectors, treknodes are derived from name and presence in "Walkname" or "PD" col values
         # ping_node should return treknode (country/nation/county/constituency/division etc)
@@ -1206,47 +1207,49 @@ class TreeNode:
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
+        # ──────────────────────────────
+        # Step 00: Inspect Derived Geo Index instead of Treepolys
         for lev, ltype in elevels.items():
             print(f"Processing Level {lev}: {ltype}")
 
             # Split bivalent layer strings into an iterable array
             sub_types = [t.strip() for t in ltype.split("/")] if "/" in str(ltype) else [ltype]
 
-            # Check Treepolys across sub-types
-            valid_tree_type = None
+            # 🛡️ Aggregate ALL matching nodes across the sub_types first
+            all_matching_nodes = {}
             for st in sub_types:
-                tree_gdf = Treepolys.get(st)
-                if tree_gdf is not None and not tree_gdf.empty:
-                    valid_tree_type = st
-                    tot_tree = len(tree_gdf)
-                    unique_name_tree = tree_gdf['NAME'].nunique()
-                    unique_fid_tree = tree_gdf['FID'].nunique()
-                    print(f"____Ping/Treepolys {st} - tot:{tot_tree} unique_NAME:{unique_name_tree} unique_FID:{unique_fid_tree}")
-                    break
+                print(f"🔍 [DEBUG] Scanning geo_index keys for level matching: '{st}' in '{sub_types}'")
 
-            if not valid_tree_type:
-                print(f"____Ping/Treepolys {ltype} -> EMPTY")
+                nodes_for_st = {
+                    path: data for path, data in Geo_index.items()
+                    if data.get("level") == st
+                }
+                all_matching_nodes.update(nodes_for_st)
+
+            if all_matching_nodes:
+                tot_geo = len(all_matching_nodes)
+                unique_name_geo = len(set(data["name"] for data in all_matching_nodes.values()))
+                unique_fid_geo = len(all_matching_nodes)
+
+                print(f"____Ping/GeoIndex {ltype} - tot:{tot_geo} unique_NAME:{unique_name_geo} unique_ID/FID:{unique_fid_geo}")
+
+                sample_keys = list(all_matching_nodes.keys())[:3]
+                print(f"   [DEBUG] Sample combined matched paths for '{ltype}': {sample_keys}")
+            else:
+                print(f"____Ping/GeoIndex {ltype} -> EMPTY or MISSING IN INDEX")
                 continue
 
-            # Check Fullpolys across sub-types
-            valid_full_type = None
-            for st in sub_types:
-                full_gdf = Fullpolys.get(st)
-                if full_gdf is not None and not full_gdf.empty:
-                    valid_full_type = st
-                    tot_full = len(full_gdf)
-                    unique_name_full = full_gdf['NAME'].nunique()
-                    unique_fid_full = full_gdf['FID'].nunique()
-                    # 🎯 FIX: Changed variable from typo 'unique_full_fid' to 'unique_fid_full'
-                    print(f"____Ping/Fullpolys {st} - tot:{tot_full} unique_NAME:{unique_name_full} unique_FID:{unique_fid_full}")
-                    break
-
-            if not valid_full_type:
-                print(f"____Ping/Fullpolys {ltype} - EMPTY")
+            if not valid_geo_type:
+                print(f"____Ping/GeoIndex {ltype} -> EMPTY or MISSING IN INDEX")
                 continue
+
+        # 🛡️ CLEANUP SCOPE LEAKS: Erase the lingering loop variables
+        # so downstream logic doesn't mistake 'st' for the current active layer target.
+        if 'st' in locals(): del st
+        if 'matching_nodes' in locals(): del matching_nodes
 
         # ──────────────────────────────
-        # Step 0: keyword handling
+        # Step 1: keyword handling
         full_dest_path = dest_path.strip()
 
         # Guard clause against paths with no extra parameter tokens
@@ -1263,24 +1266,23 @@ class TreeNode:
             path_str = full_dest_path
 
         # ──────────────────────────────
-        # Step 1: clean paths
-        self_path = state.stepify(self.mapfile())
-        dest_parts = state.stepify(path_str)
+        # Step 2: clean paths
+        self_path = stepify(self.mapfile())
+        dest_parts = stepify(path_str)
 
         print(f"🪜 [DEBUG] dest_path: {dest_path}")
         print(f"🪜 [DEBUG] self_path: {self_path}")
         print(f"🪜 [DEBUG] dest_parts: {dest_parts}")
 
         # ──────────────────────────────
-        # Step 2: common ancestor
+        # Step 3: common ancestor
         common_len = get_common_prefix_len(self_path, dest_parts)
         print(f"🔗 [DEBUG] Common prefix length: {common_len}")
-
 
         node = self
 
         # ──────────────────────────────
-        # Step 3: move UP
+        # Step 4: move UP
         for _ in range(len(self_path) - common_len):
             if not node.parent:
                 print(f"⚠️ [DEBUG] Reached root while moving up from {node.value}")
@@ -1289,7 +1291,7 @@ class TreeNode:
             print(f"🔼 [DEBUG] Moved up to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 4: move DOWN
+        # Step 5: move DOWN
         down_path = dest_parts[common_len:]
         print(f"⬇️ [DEBUG] Moving down path: {down_path}")
 
@@ -1329,11 +1331,10 @@ class TreeNode:
                 except Exception as e:
                     print(f"   ⚠️ [DEBUG] Primary branch creation failed: {e}")
 
-                # Re-check for a match
+                # Re-check for a match using target_path
                 match = next((c for c in node.children if c.node_path == target_path), None)
 
                 # 🌟 FIX: Dynamic Bivalent Fallback Check!
-                # If there's still no match, and the type definition contains a "/", try the alternative method.
                 if not match and "/" in ntype:
                     print(f"   🔄 [DEBUG] Bivalent Level Detected ('{ntype}'). Primary method missed target. Running alternative execution...")
                     try:
@@ -1344,13 +1345,12 @@ class TreeNode:
                     except Exception as e:
                         print(f"   ⚠️ [DEBUG] Alternative bivalent branch creation failed: {e}")
 
-                    # Final check for this pass
+                    # Final check for this pass using target_path
                     match = next((c for c in node.children if c.node_path == target_path), None)
 
             print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
 
             if not match:
-                # No match found, so best to fall back gracefully to the current node
                 if node.parent:
                     print(f"[DEBUG] Ascended fallback to: {node.parent.value} "
                           f"(L{node.parent.level}), "
@@ -1365,7 +1365,7 @@ class TreeNode:
             print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 5: keyword zoom
+        # Step 6: keyword zoom
         if keyword:
             node.zoom_level = LEVEL_ZOOM_MAP[keyword]
             print(f"🔍 [DEBUG] Applied keyword zoom '{keyword}' → zoom_level {node.zoom_level}")
@@ -1373,7 +1373,7 @@ class TreeNode:
         print(f"✅ [DEBUG] Reached node: {node.value} (L{node.level}) with children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 6: always expand children at final node
+        # Step 7: always expand children at final node
         next_level = node.level
 
         print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max_level} createmode :{create} rlevels: {rlevels}")
