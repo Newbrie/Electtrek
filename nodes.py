@@ -1,4 +1,4 @@
-from config import workdirectories, DATA_FILE, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, FULLPOLY_FILE, GEO_INDEX_FILE
+from config import workdirectories, DATA_FILE, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, GEO_INDEX_FILE
 import os
 import state
 import layers
@@ -535,12 +535,11 @@ def safe_json_load(path, default):
 
 
 
-def restore_from_persist(treepolys, fullpolys, geo_index):
+def restore_from_persist(Treepolys, geo_index):
     print(f'____Restore from persist under !{elections.route()} called to restore nodes and polys! ')
 
-    safe_pickle_load(TREEPOLY_FILE,treepolys)
+    safe_pickle_load(TREEPOLY_FILE,Treepolys)
 
-    safe_pickle_load(FULLPOLY_FILE,fullpolys)
 
     load_nodes(TREKNODE_FILE)
 
@@ -549,26 +548,9 @@ def restore_from_persist(treepolys, fullpolys, geo_index):
     print("AFTER LOAD:")
     return
 
-def persist(treepolys, fullpolys, geo_index):
-    atomic_pickle_dump(treepolys,TREEPOLY_FILE)
-    atomic_pickle_dump(fullpolys,FULLPOLY_FILE)
-    atomic_json_dump(geo_index,GEO_INDEX_FILE)
-    return
-
-def restore_fullpolys(node_type):
-
-    from state import Treepolys, Fullpolys
-
-    safe_pickle_load(TREEPOLY_FILE,Treepolys)
-
-    safe_pickle_load(FULLPOLY_FILE,Fullpolys)
-
-    Treepolys[node_type] = Fullpolys[node_type]
-
-    print('___persisting pickle ', TREEPOLY_FILE)
+def persist(Treepolys, geo_index):
     atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
-
-
+    atomic_json_dump(geo_index,GEO_INDEX_FILE)
     return
 
 
@@ -1226,7 +1208,10 @@ class TreeNode:
                 }
                 all_matching_nodes.update(nodes_for_st)
 
+            # 🎯 FIX: Explicitly initialize and set valid_geo_type here
+            valid_geo_type = None
             if all_matching_nodes:
+                valid_geo_type = ltype  # Mark this level as successfully found
                 tot_geo = len(all_matching_nodes)
                 unique_name_geo = len(set(data["name"] for data in all_matching_nodes.values()))
                 unique_fid_geo = len(all_matching_nodes)
@@ -1526,6 +1511,7 @@ class TreeNode:
         nodes_by_type = {}
         for layer_type, nodes in self.surrounding_layers():
             nodes_by_type[layer_type] = nodes
+            print(f"Surrounding layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
         # Control panel whitelist toggles
         TEST_LAYERS = {"county", "constituency", "ward", "walk", "division", "marker"}
@@ -1556,16 +1542,6 @@ class TreeNode:
                 if "dashArray" in style_cfg:
                     geojson_style["dashArray"] = style_cfg["dashArray"]
 
-                # Build a runtime custom transport context payload inside rlevels
-                styled_rlevels = copy.copy(rlevels)
-                for r_key in styled_rlevels.keys():
-                    styled_rlevels[r_key] = {
-                        "elevels": rlevels[r_key],
-                        "layer_style": geojson_style,
-                        "layer_type": factory_key
-                    }
-            else:
-                styled_rlevels = rlevels
 
             # Route directly to precise rendering logic blocks
             match factory_key:
@@ -1576,11 +1552,11 @@ class TreeNode:
 
                 # 🗺️ Polygon Map Layers
                 case "constituency" | "division" | "ward" | "country" | "nation" | "county":
-                    layer.add_nodemaps(styled_rlevels, nodes_to_render[0].parent, static, counters)
+                    layer.add_nodemaps(rlevels, nodes_to_render[0].parent, static, counters)
 
                 # 📐 Spatial Proximity Layers (Voronoi Grids)
                 case "polling_district" | "walk":
-                    layer.add_voronoi(styled_rlevels, nodes_to_render[0].parent, static, factory_key)
+                    layer.add_voronoi(rlevels, nodes_to_render[0].parent, static, factory_key)
 
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" | _:
@@ -1597,24 +1573,6 @@ class TreeNode:
                 layer.show = True
             else:
                 layer.show = False
-
-            if factory_key != "marker":
-                if not hasattr(layer, "options") or layer.options is None:
-                    layer.options = {}
-
-                # 🎯 FIX: Build backup dictionary using defensive .get() calls to avoid KeyError crashes
-                geojson_style_backup = {
-                    "color": style_cfg.get("color", "#94A3B8"),
-                    "weight": style_cfg.get("weight", 1.0),
-                    "fillColor": style_cfg.get("fillColor", "none"),
-                    "fillOpacity": 0.0 if style_cfg.get("fillColor", "none") == "none" else style_cfg.get("fillOpacity", 0.0)
-                }
-
-                if "dashArray" in style_cfg:
-                    geojson_style_backup["dashArray"] = style_cfg["dashArray"]
-
-                # 🎯 FIX: Merge directly into options as a FLAT dictionary mapping layer settings
-                layer.options.update(geojson_style_backup)
 
             # Append the baseline administrative layer
             selected.append(layer)
@@ -1920,7 +1878,7 @@ class TreeNode:
 
     def create_data_branch(self, resolved_levels):
         from elector import electors
-        from state import Treepolys, Fullpolys
+        from state import Treepolys
         import elections
 
         # Guard: Ensure we have exactly one election to unpack
@@ -1931,7 +1889,7 @@ class TreeNode:
 
         CE = elections.CurrentElection.load(c_election)
         raw_electtype = elevels[self.level + 1]
-        print(f"✅ Creating {raw_electtype} Data branch for election {c_election}")
+        print(f"✅ Creating Data branch {raw_electtype}  for election {c_election}")
 
         gotv_pct = CE['GOTV']
 
@@ -2072,28 +2030,19 @@ class TreeNode:
                 print(f"⚠️ Spatial table '{electtype}' is empty. Skipping.")
                 continue
 
-            # Extract just the normalized final token from the Geo_index children paths
-            # This yields exact keys like: 'DORKING_AND_HORLEY', 'GUILDFORD', etc.
-            valid_child_keys = {
-                path.split('/')[-1].strip().upper()
-                for path in allowed_child_paths
-            }
+            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in Geo_index
+            valid_child_fids = set()
+            for path in allowed_child_paths:
+                node = Geo_index.get(path)
+                if node and node.get("fid") is not None:
+                    valid_child_fids.add(node["fid"])
 
-            print(f"🎯 Target keys expected from Geo_index: {valid_child_keys}")
+            print(f"🎯 Target FIDs expected from Geo_index: {valid_child_fids}")
 
-            # Vectorized normalization on the spatial dataframe to ensure apples-to-apples matching
-            # We apply state.normalname to each row name dynamically
-            ChildPolylayer_normalized = ChildPolylayer.copy()
-            ChildPolylayer_normalized['NORMALIZED_NAME'] = ChildPolylayer_normalized['NAME'].apply(
-                lambda x: str(state.normalname(x)).strip().upper()
-            )
+            # Direct, vectorized filtering on the integer column — no string manipulation required
+            selected_children = ChildPolylayer[ChildPolylayer['FID'].isin(valid_child_fids)]
 
-            # Filter the dataframe using the normalized strings
-            selected_children = ChildPolylayer_normalized[
-                ChildPolylayer_normalized['NORMALIZED_NAME'].isin(valid_child_keys)
-            ]
-
-            print(f"📦 Found {len(selected_children)} / {len(valid_child_keys)} shapefile matches for Surrey.")
+            print(f"📦 Found {len(selected_children)} / {len(valid_child_fids)} precise shapefile matches via FID alignment.")
 
             fam_nodes = self.childrenoftype(electtype)
             fam_values = {x.node_path for x in fam_nodes}
@@ -2104,11 +2053,7 @@ class TreeNode:
             for _, limb in selected_children.iterrows():
                 newname = state.normalname(limb.NAME)
 
-
-
-                # Check if centroid/representative point coordinates are already baked into geoindex
-                # to skip spatial engine evaluation completely. Fallback to geometry calculation if absent.
-                # Avoid leading double slashes at the root level ("UNITED_KINGDOM/ENGLAND")
+                # Reconstruct path safely using context
                 if my_path_key == "UNITED_KINGDOM":
                     child_path_key = f"UNITED_KINGDOM/{newname}"
                 else:
@@ -2165,16 +2110,11 @@ class TreeNode:
 
             print(f"✅ Layer '{electtype}': Added {k}, skipped duplicate {j}. Total branch size: {len(fam_nodes)}")
 
-        if not all_created_children:
-            print(f"⚠️ Warning: No children created anywhere under {self.value} for config target: {raw_electtype}")
-
-        return all_created_children
-
     def create_node_map(self, resolved_levels, static=False):
         global SERVER_PASSWORD
 
         from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
-        from state import LEVEL_ZOOM_MAP, Treepolys, Fullpolys
+        from state import LEVEL_ZOOM_MAP, Treepolys
         from layers import make_counters, FEATURE_LAYER_SPECS, ExtendedFeatureGroup
 
         import hashlib
@@ -2956,7 +2896,7 @@ class TreeNode:
       return [Point(latmin,longmin),Point(latmax,longmax)]
 
     def get_bounding_box(self, ntype,block):
-        from state import Treepolys, Fullpolys
+        from state import Treepolys
 
         if self.level < 3:
             pfile = Treepolys[ntype]

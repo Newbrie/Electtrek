@@ -628,7 +628,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         import numpy as np
         from flask import url_for
         from geovoronoi import voronoi_regions_from_coords
-        from state import Treepolys, Fullpolys
+        from state import Treepolys
         import geopandas as gpd
         import pandas as pd
         import folium
@@ -874,7 +874,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             nav_html = ""
 
             upmessage = (
-                "moveUp('/upbut/{0}','{1}','{2}')"
+                "moveUp('/upbut/{0}','{1}')"
                 .format(
                     child.parent.mapfile(),
                     child.parent.value,
@@ -887,7 +887,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             if not static:
 
                 showmessageST = (
-                    "showMore('/PDdownST/{0}','{1}','street')"
+                    "showMore('/PDdownST/{0}','{1}')"
                     .format(child.mapfile(), child.value)
                 )
 
@@ -1118,9 +1118,9 @@ class ExtendedFeatureGroup(FeatureGroup):
         limbX['col'] = herenode.col
 
         if type == 'polling_district':
-            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile() +" street", herenode.value,'street')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value,herenode.parent.type)
-#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value,child_type_of('polling_district',estyle))
+            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value)
+#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageST,"STREETS",12)
 #            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageWK,"WALKS",12)
 #            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.mapfile())
@@ -1128,8 +1128,8 @@ class ExtendedFeatureGroup(FeatureGroup):
             limbX['UPDOWN'] = uptag1 +"<br>"+ downST
             print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
         elif type == 'walk':
-            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile()+" walkleg", herenode.value,'walkleg')
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value,herenode.parent.type)
+            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
+            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value)
             downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessage,"STREETS",12)
             uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
             streetstag = build_street_list_html(herenode.value,datablock, street_stats, task_tags)
@@ -1401,7 +1401,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return eventlist
 
     def add_nodemaps(self, rlevels, herenode, static, counters):
-        from state import Treepolys, Fullpolys, Candidates, LastResults
+        from state import Treepolys, Candidates, LastResults
         from flask import session, flash
         global levelcolours
         global Con_Results_data
@@ -1494,8 +1494,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # LEVEL 0: Top Level Nation Hierarchy
                     # ------------------------------------------------------------------
                     if herenode.type == 'country':
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{layer_type}')"
-                        up_js = f"moveUp('/upbut/{c_path}', '{c_val}', '{herenode.type}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+                        up_js = f"moveUp('/upbut/{c_path}', '{c_val}')"
 
                         uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
                         downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{layer_type}</button>"
@@ -1507,10 +1507,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # LEVEL 1: Nation down to County Level
                     # ------------------------------------------------------------------
                     elif herenode.type == 'nation':
-                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}', '{layer_type}')"
-                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}', '{layer_type}')"
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}', '{layer_type}')"
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
+                        ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}')"
+                        div_js = f"moveDown('/divreport/{c_path}', '{c_val}')"
+                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
 
                         ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
                         div_tag = f"<button type='button' id='btn_div_l1' onclick=\"{div_js}\" {font_style}>DIV Report</button>"
@@ -1524,32 +1524,32 @@ class ExtendedFeatureGroup(FeatureGroup):
                     # LEVEL 2: County down to Constituency Level
                     # ------------------------------------------------------------------
                     elif herenode.type == 'county':
-                        ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'ward')"
-                        div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}', 'division')"
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
+                        ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+                        div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
 
-                        ward_tag = f"<button type='button' id='btn_ward_l2' onclick=\"{ward_down_js}\" {font_style}>WARDS</button>"
+                        wardiv_tag = f"<button type='button' id='btn_ward_l2' onclick=\"{ward_down_js}\" {font_style}>WARDS+DIVS</button>"
                         div_tag = f"<button type='button' id='btn_div_l2' onclick=\"{div_down_js}\" {font_style}>DIVS</button>"
                         up_tag = f"<button type='button' id='btn_up_l2' onclick=\"{up_js}\" {font_style}>UP</button>"
 
-                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag} {div_tag}"
+                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{wardiv_tag}"
                         mapfile = f"/transfer/{c.mapfile()}"
 
                     # ------------------------------------------------------------------
-                    # LEVEL 3: Constotuency down to Ward / Division Leaf Node Layout
+                    # LEVEL 3: Constituency down to Ward / Division Leaf Node Layout
                     # ------------------------------------------------------------------
                     elif herenode.type == 'constituency':
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}', '{herenode.type}')"
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
                         up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
 
                         sheet_btn = f"""
-                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downbut/{c_path}', '{c_val}', 'polling_district');">
+                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downbut/{c_path}', '{c_val}');">
                                 Sheets
                             </button>
                         """
 
                         app_btn = f"""
-                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downMWbut/{c_path}', '{c_val}', 'walk');">
+                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downMWbut/{c_path}', '{c_val}');">
                                 App
                             </button>
                         """
@@ -1571,12 +1571,12 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
 
-                    node_color = herenode.defcol
-                    limbX["fillColor"] = node_color
+        #            node_color = herenode.defcol
+        #            limbX["fillColor"] = node_color
 
-                    node_col = to_hex(limbX['fillColor'].values[0])
-                    tcol_node = readable_text_color(node_col)
-                    fcol_node = tcol_node
+                    node_col = layer_style.get("color", "#991B1B") #boundary
+                    tcol_node = layer_style.get("fontColor", "#EF4444") #font colour
+                    fcol_node = layer_style.get("fillColor", "#EF4444")  #area colour
 
                     if c.type == 'division' and isinstance(c.candidates, dict):
                         c1 = c.candidates.get('Candidate_1', '')
@@ -1589,7 +1589,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     <a href="{mapfile}" data-name="{tag}">
                       <div style="
                         color: {tcol_node};
-                        font-size: 10pt;
+                        font-size: 8pt;
                         font-weight: bold;
                         text-align: center;
                         padding: 2px;
@@ -1607,7 +1607,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     <a href="" data-name="{tag}">
                       <div style="
                         color: {tcol_node};
-                        font-size: 10pt;
+                        font-size: 8pt;
                         font-weight: bold;
                         text-align: center;
                         padding: 2px;
@@ -1622,10 +1622,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                     '''
 
                     print(f"DEBUG: Generating Folium GeoJson for {c_val} using styles: {layer_style}")
-                    # Place this right above folium.GeoJson(...)
-                    print(f"🔬 NAMESPACE TRACE: {dir(self)}")
-                    print(f"🔬 RAW OPTIONS PROPERTY: {getattr(self, 'options', 'MISSING')}")
-                    print(f"🔬 RAW UNDER_OPTIONS PROPERTY: {getattr(self, '_options', 'MISSING')}")
+
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
@@ -1719,22 +1716,21 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             print("______Display childrenx:",c.value, c.level,type,c.latlongroid )
 
-            tcol = get_text_color(to_hex(c.col))
-            bcol = adjust_boundary_color(to_hex(c.col),0.7)
-            fcol = invert_black_white(tcol)
+            bcol = layer_style.get("color", "#991B1B") #boundary
+            tcol = layer_style.get("fontColor", "#EF4444") #font colour
+            fcol = layer_style.get("fillColor", "#EF4444")  #area colour
 
-            node_col = to_hex(herenode.defcol)
-            tcol_node = readable_text_color(node_col)
-            print(f"_____Colour from {herenode.value} col:{herenode.defcol}")
-            fcol_node = tcol_node
-            poly_col_node = node_col
+            node_col = tcol #
+            tcol_node = tcol
+            fcol_node = fcol
+            poly_col_node = tcol
 
 
             htmlhalo =f'''
             <a href="{mapfile}" data-name="{tag}">
               <div style="
                 color: {tcol_node};
-                font-size: 10pt;
+                font-size: 8pt;
                 font-weight: bold;
                 text-align: center;
                 padding: 2px;
@@ -1769,7 +1765,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             <a href="" data-name="{tag}">
               <div style="
                 color: {tcol_node};
-                font-size: 10pt;
+                font-size: 8pt;
                 font-weight: bold;
                 text-align: center;
                 padding: 2px;
@@ -1835,46 +1831,46 @@ FEATURE_LAYER_SPECS = {
 
     "country": dict(
         name="country", mytag="country", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F172A", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#0F172A", "fontColor": "#0F172A", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
     ),
     "nation": dict(
         name="nation", mytag="nation", overlay=True, control=True, show=False, type="node",
-        options={"color": "#1E293B", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
     ),
     "county": dict(
         name="county", mytag="county", overlay=True, control=True, show=False, type="node",
-        options={"color": "#475569", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
     ),
     "constituency": dict(
         name="constituency", mytag="constituency", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0369A1", "weight": 2.0, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#0369A1", "fontColor": "#0369A1", "weight": 2.0, "fillColor": "#E0F2FE", "fillOpacity": 0.25}
     ),
 
-    # 🗳️ LEVEL 4 STRATIFICATION (UPDATED BOUNDARY SPECS)
+    # 🗳️ LEVEL 4 STRATIFICATION
     "ward": dict(
         name="ward", mytag="ward", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "4,4"}
+        options={"color": "#EAB308", "fontColor": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "4,4"}
     ),
     "division": dict(
         name="division", mytag="division", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "4,4"}
+        options={"color": "#EC4899", "fontColor": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "4,4"}
     ),
 
     "polling_district": dict(
         name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0D9488", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "4,4"}
+        options={"color": "#0D9488", "fontColor": "#0D9488", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "4,4"}
     ),
     "walk": dict(
         name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "2,4"}
+        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "2,4"}
     ),
     "walkleg": dict(
         name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="node",
-        options={"color": "#115E59", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#115E59", "fontColor": "#115E59", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0}
     ),
     "street": dict(
         name="street", mytag="street", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "weight": 1.5, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.5, "fillColor": "none", "fillOpacity": 0.0}
     ),
 
     "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False, type="marker"),
@@ -1882,7 +1878,6 @@ FEATURE_LAYER_SPECS = {
     "target": dict(name="target", mytag="target", overlay=True, control=True, show=False, type="marker"),
     "data": dict(name="data", mytag="data", overlay=True, control=True, show=False, type="marker"),
 }
-
 
 # -----------------------------
 # Factory: make fresh layers per map

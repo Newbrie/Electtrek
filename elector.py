@@ -34,6 +34,8 @@ shapecolumn = {
 
 def find_node_by_path(basepath: str, debug=False):
     from nodes import get_trek_root
+    import state  # Ensure state is imported to access clean_path_part
+
     if debug:
         print(f"[DEBUG] find_node_by_path: {basepath}")
 
@@ -55,12 +57,24 @@ def find_node_by_path(basepath: str, debug=False):
     # Walk directly down the tree branches
     node = root
     for part in parts[1:]:
-        match = next((c for c in node.children if c.value == part), None)
+
+        # 🎯 Invoke the existing global utility from state.py
+        cleaned_part = state.clean_path_part(part)
+
+        # If it returns None (meaning it was an ignorable segment like 'WALKS'), skip it
+        if cleaned_part is None:
+            continue
+
+        # If stripping the file suffix results in the current node value
+        # (e.g. 'LA_01-MAP.html' -> 'LA_01' when we are already AT 'LA_01'), skip it
+        if cleaned_part == node.value:
+            continue
+
+        match = next((c for c in node.children if c.value == cleaned_part), None)
 
         if not match:
             if debug:
-                print(f"[DEBUG] Traversal broke at segment: '{part}' under node: '{node.value}'")
-                # Diagnostic: What EXACTLY is inside node.children?
+                print(f"[DEBUG] Traversal broke at segment: '{cleaned_part}' (raw: '{part}') under node: '{node.value}'")
                 print(f"[DEBUG] Raw target part bytes: {repr(part)}")
                 print(f"[DEBUG] Available children details: {[(repr(c.value), c.type) for c in node.children]}")
             return None
@@ -403,9 +417,11 @@ class ElectorManager:
 
     def delete_elector_for_path(self, resolved_levels, raw_path):
         from elections import CurrentElection
+        import pandas as pd
+
         """
-        Deletes electors by intersecting levels Step 1 (Constituency) and below.
-        Uses truth-source tree traversal to maintain safe schema index alignment.
+        Deletes electors associated with the territory of a given election path.
+        Uses target node identification to target the precise column instantly.
         """
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
@@ -419,59 +435,43 @@ class ElectorManager:
                 logger.warning(f"No data found for election '{c_election}'")
                 return 0
 
-            # 2. 🌲 RESOLVE ACTUAL LEVELS VIA TREE TRAVERSAL
-            # Avoids index shifting traps caused by folder structural names
+            # 2. 🌲 RESOLVE THE TARGET LAYER VIA THE TREE NODE DIRECTLY
             target_node = find_node_by_path(raw_path, debug=False)
 
             if not target_node:
                 logger.error(f"❌ Failed to resolve actual tree hierarchy layout for deletion path: {raw_path}")
                 return 0
 
-            # 3. Get the clean steps
-            parts = state.stepify(raw_path)
-            if len(parts) < 2:
-                logger.warning(f"Path too shallow for targeted deletion: {raw_path}")
+            # Pull values straight from the resolved node object
+            node_type = target_node.type  # e.g., 'constituency' or 'ward'
+            node_value = state.normalname(target_node.value) # e.g., 'SURREY_HEATH'
+
+            # 3. Match against the DataFrame columns using shapecolumn specs
+            col = shapecolumn.get(node_type)
+            if not col or col not in df.columns:
+                logger.warning(f"Spatial column for node type '{node_type}' not found in election DataFrame.")
                 return 0
 
             original_len = len(df)
 
-            # 4. Build the "Intersection Mask"
-            path_mask = pd.Series([True] * len(df), index=df.index)
-
-            for depth, value in enumerate(parts):
-                # --- Skip Country Level ---
-                if depth == 0:
-                    continue
-
-                # 🔄 Use actual_levels first, fallback to elevels if deep-nested indexing shifts
-                node_type = actual_levels.get(depth, elevels.get(depth))
-                if not node_type:
-                    continue
-
-                col = shapecolumn.get(node_type)
-                if col and col in df.columns:
-                    target_val = state.normalname(value)
-
-                    # Boolean AND: narrowing the target area
-                    level_match = df[col].astype(str).str.strip().str.upper() == target_val
-                    path_mask = path_mask & level_match
+            # 4. Create a clean, fast vectorized match mask
+            path_mask = df[col].astype(str).str.strip().str.upper() == node_value
 
             # 5. Execute Deletion
-            # Check if we actually matched anything before dropping records
             if path_mask.any():
-                # Keep only what is NOT matched by the inverted path_mask
+                # Invert the mask to keep everything EXCEPT the target territory records
                 self._elections[c_election] = df[~path_mask].copy()
                 deleted_count = original_len - len(self._elections[c_election])
             else:
                 deleted_count = 0
 
+            # 6. Housekeeping & State Persistence
             if deleted_count > 0:
-                # 6. Housekeeping & State Persistence
                 self.rebuild_combined()
                 self.save()
-                logger.info(f"Deleted {deleted_count} electors from '{c_election}' for path: {raw_path}")
+                logger.info(f"🗑️ Deleted {deleted_count} electors from '{c_election}' for territory: {node_value} ({node_type})")
             else:
-                logger.debug(f"No electors found to delete for path: {raw_path}")
+                logger.debug(f"No electors found to delete for territory: {node_value}")
 
             return deleted_count
 

@@ -63,8 +63,8 @@ window.addEventListener('message', function (e) {
 });
 
 
-var moveDown = function (msg, area, type) {
-    window.parent.postMessage({ type: `Drilling down to ${type} level within ${area}`}, '*');
+var moveDown = function (msg, area) {
+    window.parent.postMessage({ type: `Drilling down to next level within ${area}`}, '*');
 
     const ul = parent.document.getElementById("logwin");
     if (ul) ul.scrollTop = ul.scrollHeight;
@@ -74,17 +74,17 @@ var moveDown = function (msg, area, type) {
 };
 
 
-var moveUp = function (msg,area, type) {
+var moveUp = function (msg,area) {
   // Send a message to the parent
-      window.parent.postMessage({ type:"Moving up to "+ area + " "+ type+ " level "}, '*');
+      window.parent.postMessage({ type:"Moving up to "+ area + " level "}, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;
 
       };
-var showMore = function (msg,area, type) {
+var showMore = function (msg,area) {
   // Send a message to the parent
-      window.parent.postMessage({ type: "Showing the "+type+ " level within "+ area}, '*');
+      window.parent.postMessage({ type: "Showing the level within "+ area}, '*');
       window.location.assign(msg);
       var ul = parent.document.getElementById("logwin");
       ul.scrollTop = ul.scrollHeight;

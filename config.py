@@ -19,7 +19,6 @@ ELECTIONS_FILE = os.path.join(workdirectories['workdir'],'static','elections','E
 TREEPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Treepolys.pkl')
 ELECTOR_FILE = Path(workdirectories['workdir']) /'static'/ 'registers' / 'allelectors.csv'
 TREKNODE_FILE = Path(workdirectories['workdir']) /'static'/ 'nodes' / 'Treknodes.json'
-FULLPOLY_FILE = os.path.join(workdirectories['workdir'],'static','nodes','Fullpolys.pkl')
 GEO_INDEX_FILE = Path(workdirectories['workdir']) /'static'/ 'nodes' / 'Geo_index.json'
 TABLE_FILE = os.path.join(workdirectories['workdir'],'static','registers','stream_data.json')
 RESOURCE_FILE = Path(workdirectories['workdir']) /'static'/ 'resources' / 'Resources.csv'
