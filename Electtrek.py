@@ -2966,7 +2966,7 @@ def downbulk():
     map_filename = target_parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
-    created, totalleaf = target_parent.endpoint_created(rlevels, map_filename, static=False)
+    created, totalleaf = target_parent.endpoint_created(rlevels, map_filename, static=True)
     print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
 
     # 6. File verification
