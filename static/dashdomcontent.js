@@ -666,6 +666,11 @@ resourcesSelect?.addEventListener("blur", () => {
   // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 
+  // 1. Define the reusable helper function
+  window.getActiveElectionName = function() {
+      const activeTab = document.querySelector('#election-tabs .election-tab.active');
+      return activeTab ? activeTab.getAttribute('data-election') : null;
+  };
 // Listtener for the bulkaction select
 // Use a named function to prevent accidental double-binding
 function handleBulkAction() {
@@ -675,6 +680,18 @@ function handleBulkAction() {
     // 1. Clear previous logs
     console.clear();
     console.log("🚀 Bulk Action Started");
+
+    // 🎯 Get the active election context
+    const selectedElection = window.getActiveElectionName ? window.getActiveElectionName() : null;
+
+    if (!selectedElection) {
+        alert("Error: Could not determine the active election context.");
+        console.error("Bulk action halted: window.getActiveElectionName() returned empty or is not defined.");
+        return;
+    }
+
+    console.log(`Election Context: [${selectedElection}]`);
+
     // Inside your btnRunGroupAction click listener:
     const selectedNids = Array.from(document.querySelectorAll(".selectRow:checked"))
         .map(cb => {
@@ -692,15 +709,18 @@ function handleBulkAction() {
         return;
     }
 
-
     // 3. Disable the button to prevent "Quick Succession" double-clicks
     const btn = document.getElementById("btnRunGroupAction");
     btn.disabled = true;
 
+    // 📦 Send both election context and NIDs to the server
     fetch(targetRoute, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nids: selectedNids })
+        body: JSON.stringify({
+            election: selectedElection,
+            nids: selectedNids
+        })
     })
     .then(res => res.json())
     .then(data => {

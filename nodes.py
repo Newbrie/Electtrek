@@ -1196,7 +1196,7 @@ class TreeNode:
         # ──────────────────────────────
         # Step 2: Compute Common Ancestor and Move Up
         # ──────────────────────────────
-        from nodes import get_common_prefix_len # Ensure this helper is imported
+        from nodes import get_common_prefix_len
         common_len = get_common_prefix_len(self_path, dest_parts)
 
         node = self
@@ -1212,8 +1212,8 @@ class TreeNode:
         target_path = node.node_path
 
         for part in down_path:
-            # Build the exact path string for the upcoming level
-            target_path = part if not target_path else f"{target_path}/{part}"
+            # Safely handle root or sub-path string compounding
+            target_path = f"{target_path}/{part}" if target_path else part
             next_level = node.level + 1
 
             if next_level > max_level:
@@ -1223,19 +1223,16 @@ class TreeNode:
             ntype = str(elevels[next_level])
 
             # --- 🛡️ PATH VALIDATION ENGINE ---
-            # Before we look for or create a branch, verify the path is real using your rules
             is_valid_path = False
             if next_level < 5:
-                # Look up directly in the O(1) Geo_index dictionary instead of looping
                 is_valid_path = target_path in Geo_index
             else:
-                # Query the elector framework framework to see if data exists
                 df_check = electors.elector_for_path(rlevels, target_path)
                 is_valid_path = df_check is not None and not df_check.empty
 
             if not is_valid_path:
                 print(f"🛑 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
-                return node # Safe fallback to current deepest valid node
+                return node # Return the deepest valid node achieved
 
             # Look for existing child match
             match = next((c for c in node.children if c.node_path == target_path), None)
@@ -1244,41 +1241,40 @@ class TreeNode:
             if create and not match:
                 print(f"⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
                 try:
-                    if next_level < 5:
+                    if next_level <= 4:
                         node.create_map_branch(rlevels)
                     else:
                         node.create_data_branch(rlevels, target_path)
                 except Exception as e:
                     print(f"⚠️ [PING] Primary creation pass failed: {e}")
 
-                # Re-verify match
                 match = next((c for c in node.children if c.node_path == target_path), None)
 
                 # --- BIVALENT FALLBACK ---
+                # NOTE: Ensure your framework modifies parameters here if bivalent types
+                # require alternative logic (e.g., passing ntype or an override flag)
                 if not match and "/" in ntype:
                     print(f"🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
                     try:
-                        if next_level < 5:
-                            node.create_data_branch(rlevels, target_path)
-                        else:
+                        if next_level <= 4:
                             node.create_map_branch(rlevels)
+                        else:
+                            node.create_data_branch(rlevels, target_path)
                     except Exception as e:
                         print(f"⚠️ [PING] Alternative bivalent strategy failed: {e}")
 
                     match = next((c for c in node.children if c.node_path == target_path), None)
 
-            # Handle catastrophic uncreated state or missing target
             if not match:
                 print(f"❌ [PING] Could not match or create node for path: {target_path}")
-                return node.parent if node.parent else node
+                return node  # FIX: Returning 'node' preserves the last valid state
 
             node = match
 
         # ──────────────────────────────
         # Step 4: Keyword Zoom Handling
         # ──────────────────────────────
-        # (Assuming keyword extraction logic matches your framework if keywords are added)
-        keyword = None
+        keyword = None  # Implement keyword extraction logic as needed
         if keyword and keyword in LEVEL_ZOOM_MAP:
             node.zoom_level = LEVEL_ZOOM_MAP[keyword]
 
@@ -1287,31 +1283,31 @@ class TreeNode:
         # ──────────────────────────────
         if node.level <= max_level and create:
             children_type = str(elevels.get(node.level, ""))
+            next_level = node.level + 1
 
-            # Guard final expansion check against the database/index rule as well
             should_expand = False
-            if (node.level + 1) < 5:
-                # If the upcoming children are map levels, check if any keys start with this node's path
-                should_expand = any(k.startswith(node.node_path) for k in Geo_index.keys())
+            if next_level <= 4:
+                # Optimized O(1) fallback check via direct path matching instead of looping keys
+                should_expand = node.node_path in Geo_index or any(k.startswith(node.node_path + "/") for k in Geo_index)
             else:
                 df_check = electors.elector_for_path(rlevels, node.mapfile())
                 should_expand = df_check is not None and not df_check.empty
 
             if should_expand:
                 try:
-                    if node.level < 4:  # Children are Level < 5
+                    if next_level <= 4:
                         node.create_map_branch(rlevels)
-                    else:               # Children are Level >= 5
+                    else:
                         node.create_data_branch(rlevels, node.node_path)
                 except Exception as e:
                     print(f"⚠️ [PING] Final node primary expansion failed: {e}")
 
                 if "/" in children_type:
                     try:
-                        if node.level < 4:
-                            node.create_data_branch(rlevels, node.node_path)
-                        else:
+                        if next_level <= 4:
                             node.create_map_branch(rlevels)
+                        else:
+                            node.create_data_branch(rlevels, node.node_path)
                     except Exception as e:
                         print(f"⚠️ [PING] Final node bivalent expansion failed: {e}")
 
