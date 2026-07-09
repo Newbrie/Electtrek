@@ -99,37 +99,54 @@ window.selectNode = function(path) {
  * 3. Bulk Action Logic
  * Collects checked NIDs and triggers the composite map generation
  */
-window.handleDownBulk = function() {
-    // Collect all checked checkboxes using the class defined in renderNodeList
-    const checked = document.querySelectorAll('.node-checkbox:checked');
+ // 1. Define the reusable helper function
+ window.getActiveElectionName = function() {
+     const activeTab = document.querySelector('#election-tabs .election-tab.active');
+     return activeTab ? activeTab.getAttribute('data-election') : null;
+ };
 
-    // Extract the NIDs
-    const nids = Array.from(checked).map(cb => cb.getAttribute('data-nid'));
+ // 2. Incorporate it into your bulk handler
+ window.handleDownBulk = function() {
+     // 🎯 Call the helper function to get the current selection
+     const selectedElection = window.getActiveElectionName();
 
-    if (nids.length === 0) {
-        alert("Please select at least one area to render.");
-        return;
-    }
+     if (!selectedElection) {
+         alert("Could not determine the active election context.");
+         return;
+     }
 
-    console.log("Bulk rendering NIDs:", nids);
+     // Collect all checked checkboxes using the class defined in renderNodeList
+     const checked = document.querySelectorAll('.node-checkbox:checked');
 
-    fetch('/downbulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nids: nids })
-    })
-    .then(res => res.json())
-    .then(data => {
-        // Update the iframe with the resulting multi-layer map
-        const iframe = document.getElementById('iframe1');
-        if (iframe && data.map_url) {
-            iframe.src = data.map_url;
-            console.log(`Successfully rendered ${data.count} layers.`);
-        }
-    })
-    .catch(err => console.error("Bulk Action Error:", err));
-};
+     // Extract the NIDs
+     const nids = Array.from(checked).map(cb => cb.getAttribute('data-nid'));
 
+     if (nids.length === 0) {
+         alert("Please select at least one area to render.");
+         return;
+     }
+
+     console.log(`Bulk rendering NIDs for election context [${selectedElection}]:`, nids);
+
+     fetch('/downbulk', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+             election: selectedElection,
+             nids: nids
+         })
+     })
+     .then(res => res.json())
+     .then(data => {
+         // Update the iframe with the resulting multi-layer map
+         const iframe = document.getElementById('iframe1');
+         if (iframe && data.map_url) {
+             iframe.src = data.map_url;
+             console.log(`Successfully rendered ${data.count} layers.`);
+         }
+     })
+     .catch(err => console.error("Bulk Action Error:", err));
+ };
 /**
  * 4. Select All Helper (Optional but highly recommended)
  */

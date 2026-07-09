@@ -371,46 +371,77 @@ class ElectorManager:
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
 
-            # 1. Unpack election context key
             (c_election, elevels), = resolved_levels.items()
-
             df = self._elections.get(c_election)
             if df is None or df.empty:
                 logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            # 2. 🌲 Find the target node using structural truth
-            target_node = find_node_by_path(raw_path, debug=True)
-            if not target_node:
-                logger.error(f"❌ Failed to find matching node tree object for path: {raw_path}")
+            clean_segments = state.stepify(raw_path)
+            logger.debug(f"🔍 START DETERMINISTIC FILTER: Path={clean_segments}")
+
+            filtered_df = df.copy()
+
+            # 1. First, lock down the base geographic hierarchy (Levels 0-3)
+            # This maps Country, Nation, County, Constituency based on what exists in the frame
+            base_mappings = ["Country", "Nation", "County", "Constituency"]
+
+            for idx, col_name in enumerate(base_mappings):
+                if idx >= len(clean_segments):
+                    break
+                if col_name in filtered_df.columns:
+                    target_val = clean_segments[idx]
+                    mask = filtered_df[col_name].astype(str).str.strip().str.upper() == target_val.upper()
+                    filtered_df = filtered_df[mask]
+
+            if filtered_df.empty:
+                logger.error("❌ Base geography filter (up to Constituency) left 0 rows. Path mismatch.")
                 return pd.DataFrame()
 
-            logger.debug(f"🔍 START FILTER: Node={target_node.value} | Type={target_node.type} | Election={c_election}")
+# Level 4: Ward vs Division
+            if len(clean_segments) >= 5:
+                target_ward_div = clean_segments[4].upper()
+                level_4_filtered = False
 
-            # 3. Climb up the node's lineage to collect the exact column-to-value targets
-            filter_targets = {}
-            cur = target_node
-            while cur:
-                # Look up what column in the DataFrame corresponds to this node's type
-                col = shapecolumn.get(cur.type)
-                if col:
-                    filter_targets[col] = cur.value
-                cur = cur.parent
+                # Plan A: Try filtering via the Ward column first
+                if "Ward" in filtered_df.columns:
+                    ward_mask = filtered_df["Ward"].astype(str).str.strip().str.upper() == target_ward_div
+                    ward_df = filtered_df[ward_mask]
+                    if not ward_df.empty:
+                        filtered_df = ward_df
+                        level_4_filtered = True
 
-            # 4. Apply vector filtering across all matching layers instantly
-            filtered_df = df.copy()
-            for col, target_val in filter_targets.items():
-                if col not in filtered_df.columns:
-                    logger.warning(f"⚠️ Column '{col}' missing from DataFrame! Skipping field filter.")
-                    continue
+                # Plan B: Fall back to the Division column if Ward missed or doesn't exist
+                if not level_4_filtered and "Division" in filtered_df.columns:
+                    div_mask = filtered_df["Division"].astype(str).str.strip().str.upper() == target_ward_div
+                    div_df = filtered_df[div_mask]
+                    if not div_df.empty:
+                        filtered_df = div_df
+                        level_4_filtered = True
 
-                # Vectorized clean match filter
-                mask = filtered_df[col].astype(str).str.strip().str.upper() == target_val.upper()
-                filtered_df = filtered_df[mask]
+# Level 5: Polling District / Walk Dynamic Fallback
+            if len(clean_segments) >= 6:
+                target_value = clean_segments[5].upper()
+                level_5_filtered = False
 
-                if filtered_df.empty:
-                    logger.error(f"❌ FILTER BREAK! Column: '{col}' | Target Value: '{target_val}' left 0 rows.")
-                    return pd.DataFrame()
+                # Plan A: Try filtering by PD column first
+                if "PD" in filtered_df.columns:
+                    pd_mask = filtered_df["PD"].astype(str).str.strip().str.upper() == target_value
+                    pd_filtered = filtered_df[pd_mask]
+                    if not pd_filtered.empty:
+                        filtered_df = pd_filtered
+                        level_5_filtered = True
+
+                # Plan B: Check WalkName if PD missed or doesn't exist
+                if not level_5_filtered and "WalkName" in filtered_df.columns:
+                    walk_mask = filtered_df["WalkName"].astype(str).str.strip().str.upper() == target_value
+                    walk_filtered = filtered_df[walk_mask]
+                    if not walk_filtered.empty:
+                        filtered_df = walk_filtered
+                        level_5_filtered = True
+            if filtered_df.empty:
+                logger.error("❌ Deep hierarchy filter broke. 0 rows returned.")
+                return pd.DataFrame()
 
             logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
             return filtered_df

@@ -622,7 +622,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def add_voronoi(self, rlevels, node, static=False, intention_type=None):
+    def add_voronoi(self, rlevels, node, nodes_list, static=False):
         from shapely.geometry import Point
         from shapely.ops import nearest_points
         import numpy as np
@@ -634,19 +634,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         import folium
         from elector import electors  # your ElectorManager instance
         from elections import CurrentElection
-        zonecolour = {
-            "ZONE_0": "#1A1A1B",  # Deep Charcoal (Better than pure black)
-            "ZONE_1": "#E63946",  # Vibrant Red
-            "ZONE_2": "#2A9D8F",  # Deep Teal (Cleaner than Lime)
-            "ZONE_3": "#0077B6",  # Sapphire Blue
-            "ZONE_4": "#2D6A4F",  # Hunter Green
-            "ZONE_5": "#00B4D8",  # Sky Blue
-            "ZONE_6": "#7209B7",  # Deep Royal Purple
-            "ZONE_7": "#FB8500",  # Vivid Orange
-            "ZONE_8": "#B5179E",  # Deep Pink/Magenta
-            "ZONE_9": "#6F4E37",  # Coffee Brown
-            "ZONE_10": "#4A4E69"  # Slate Blue-Gray
-        }
 
 
         # Guard: Ensure we have exactly one election to unpack
@@ -673,25 +660,22 @@ class ExtendedFeatureGroup(FeatureGroup):
             parent_boundary = parent_boundary.buffer(0)
 
         # CREATE A CALCULATION HULL
-        # This bridges the islands so geovoronoi treats all 61 points as one set
         calc_hull = parent_boundary.convex_hull
 
-        children = node.childrenoftype(intention_type)
-        if not children:
-            print(f"⚠️ Node has no children of type {intention_type}")
+        # 🔥 CHANGE 1: Use the explicit list passed from the caller instead of node.childrenoftype
+        if not nodes_list:
+            print(f"⚠️ No nodes provided in nodes_list for Voronoi calculation under {node.value}")
             return
 
         # -------------------------------------------------
-        # Build points from children
+        # Build points from the provided nodes list
         # -------------------------------------------------
-
         points = []
         point_to_child = {}
-
         child_elector_map = {}
 
-        for child in children:
-            child_elector_map[child] = electors.elector_for_path(rlevels,child.mapfile())
+        for child in nodes_list:
+            child_elector_map[child] = electors.elector_for_path(rlevels, child.mapfile())
             if child.latlongroid and len(child.latlongroid) == 2:
                 child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
             else:
@@ -705,25 +689,10 @@ class ExtendedFeatureGroup(FeatureGroup):
             points.append(pt)
 
         if not points:
-            print("⚠️ No valid child centres")
+            print("⚠️ No valid child centres in the provided nodes_list")
             return
 
         coords = np.array(points)  # directly usable for geovoronoi
-
-
-        # -------------------------------------------------
-        # Parent boundary
-        # -------------------------------------------------
-
-        parent_boundary = node.geometry
-        if parent_boundary is None:
-            print("⚠️ Parent boundary missing")
-            return
-
-        # -------------------------------------------------
-        # Move pts outside inside parent boundary for Voronoi
-        # -------------------------------------------------
-
 
         # Ensure all points are inside the parent boundary
         fixed_points = []
@@ -742,48 +711,92 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             fixed_points.append(new_pt)
 
-            # 🔑 IMPORTANT: map the FIXED point, not original
+            # map the FIXED point, not original
             point_to_child_fixed[new_pt] = point_to_child.get(
                 (round(pt[0], 6), round(pt[1], 6))
             )
-        print(f"DEBUG: N273 in point_to_child? {'Yes' if any(c.value == 'N273' for c in point_to_child.values()) else 'NO'}")
+
         print(f"DEBUG: Number of unique points: {len(set(fixed_points))} out of {len(fixed_points)}")
         coords = np.array(fixed_points)
         point_to_child = point_to_child_fixed  # overwrite mapping
-        # -------------------------------------------------
+
+
+# -------------------------------------------------
         # Generate Voronoi
         # -------------------------------------------------
-        # Skip if too few points
-        if len(coords) < 2:
-            print(f"⚠️ Not enough points ({len(coords)}) to generate Voronoi for {node.value}")
+        if len(coords) < 1:
+            print(f"⚠️ No points available to generate Voronoi for {node.value}")
             return
 
-        # Clean the geometry to fix self-intersections or slivers
-        if not parent_boundary.is_valid:
-            print(f"⚠️ Fixing invalid geometry for {self.name} using buffer(0)")
-            parent_boundary = parent_boundary.buffer(0)
+    # Initialize standard geovoronoi collections
+        region_polys = {}
+        region_pts = {}
 
-        # Generate Voronoi using the Hull to prevent the "1 point in geometry" error
-        region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
+        if len(coords) >= 4:
+            # --- Standard Path: Run your normal geovoronoi setup ---
+            region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
+            print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons using Convex Hull")
 
-        print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons using Convex Hull")
+        else:
+            # --- Fallback Path: Low point counts that would crash Qhull ---
+            print(f"ℹ️ Point count ({len(coords)}) too low for Voronoi calculation. Falling back to clean geometry layouts.")
 
-        # -------------------------------------------------
-        # Load electors
-        # -------------------------------------------------
+            if len(coords) == 1:
+                # 1 Point: The single Polling District gets the whole hull shape
+                region_polys = {0: calc_hull}
+                region_pts = {0: [0]}
 
-        nodeelectors = electors.elector_for_path(rlevels,node.mapfile())
+            elif len(coords) == 2:
+                # 2 Points: Split the hull shape cleanly down the perpendicular center line between the points
+                from shapely.ops import split
+                from shapely.geometry import LineString
 
+                pt1, pt2 = coords[0], coords[1]
+                mid_x, mid_y = (pt1[0] + pt2[0]) / 2, (pt1[1] + pt2[1]) / 2
+                dx, dy = pt2[0] - pt1[0], pt2[1] - pt1[1]
+
+                scale = 20.0
+                dividing_line = LineString([
+                    (mid_x - (-dy) * scale, mid_y - dx * scale),
+                    (mid_x + (-dy) * scale, mid_y + dx * scale)
+                ])
+
+                split_result = split(calc_hull, dividing_line)
+                geoms = list(split_result.geoms) if hasattr(split_result, 'geoms') else [split_result]
+
+                for r_idx, geom in enumerate(geoms):
+                    dist0 = geom.centroid.distance(Point(pt1))
+                    dist1 = geom.centroid.distance(Point(pt2))
+                    assigned_pt_idx = 0 if dist0 < dist1 else 1
+
+                    region_polys[r_idx] = geom
+                    region_pts[r_idx] = [assigned_pt_idx]
+
+            elif len(coords) == 3:
+                # 3 Points: Inject a hidden dummy 4th point far outside the bounding box
+                min_x, min_y, max_x, max_y = calc_hull.bounds
+                dummy_point = np.array([[max_x + 10.0, max_y + 10.0]])
+                extended_coords = np.vstack([coords, dummy_point])
+
+                ext_polys, ext_pts = voronoi_regions_from_coords(extended_coords, calc_hull)
+
+                r_idx = 0
+                for k, poly in ext_polys.items():
+                    assigned_indices = ext_pts[k]
+                    if 3 not in assigned_indices and not poly.is_empty:
+                        region_polys[r_idx] = poly
+                        region_pts[r_idx] = assigned_indices
+                        r_idx += 1
+
+        # ✂️ REMOVED THE DUPLICATE/OVERWRITING LINES HERE ✂️
+    
+        # Load electors for the structural node envelope
+        nodeelectors = electors.elector_for_path(rlevels, node.mapfile())
         if nodeelectors is None or nodeelectors.empty:
-            print("DEBUG ELECTORS: ⚠️ No electors for node")
+            print("DEBUG ELECTORS: ⚠️ No electors for boundary node")
             return
-
 
         print(f"DEBUG ELECTORS: Loaded {len(nodeelectors)} electors for node {node.value}")
-
-        # -------------------------------------------------
-        # Counters
-        # -------------------------------------------------
 
         total_regions = 0
         missing_child = 0
@@ -792,145 +805,111 @@ class ExtendedFeatureGroup(FeatureGroup):
         total_electorate = 0
         total_houses = 0
 
-        # -------------------------------------------------
-        # Loop regions
-        # -------------------------------------------------
-
+# Loop regions
         for region_id, poly in region_polys.items():
-            # ✂️ COOKIE CUTTER STEP
-            # Intersect the Voronoi region with the ACTUAL multipolygon boundary
-            # ✂️ COOKIE CUTTER STEP
-            # This can sometimes create stray points or lines on the edges
             raw_intersection = poly.intersection(parent_boundary)
 
             if raw_intersection.is_empty:
                 continue
-            # 🛡️ THE FIX: Ensure we only have Polygons/MultiPolygons
-            # This strips out stray Points or Lines that cause the JS crash
+
             if raw_intersection.geom_type == 'Polygon' or raw_intersection.geom_type == 'MultiPolygon':
                 actual_shape_poly = raw_intersection
             elif raw_intersection.geom_type == 'GeometryCollection':
-                # Extract ONLY the polygonal parts from the collection
                 polys = [g for g in raw_intersection.geoms if g.geom_type in ['Polygon', 'MultiPolygon']]
                 if not polys:
-                    print(f"DEBUG: Skipping region {region_id} - no valid polygons in collection")
                     continue
                 from shapely.ops import unary_union
                 actual_shape_poly = unary_union(polys)
             else:
-                print(f"DEBUG: Skipping region {region_id} - geom_type was {raw_intersection.geom_type}")
                 continue
 
-            # Double-check: if it's still empty or invalid after filtering, skip it
             if actual_shape_poly.is_empty or not actual_shape_poly.is_valid:
                 continue
 
-            # 🔑 CRITICAL: Use 'actual_shape_poly' for your GeoJson, NOT 'poly'
-            # From here on, replace 'poly' with 'actual_shape_poly' in your Folium code
             total_regions += 1
-            print(f"DEBUG REGION: Processing region {region_id}")
-
             idx = region_pts[region_id]
 
             if isinstance(idx, (list, np.ndarray)):
                 idx = idx[0]
 
-            print(f"DEBUG REGION: Coord index {idx}")
-
             coord = coords[idx]
-
             coord_key = (round(float(coord[0]), 6), round(float(coord[1]), 6))
-            print(f"DEBUG REGION: Rounded coord key {coord_key}")
-
             child = point_to_child.get(coord_key)
 
             if child is None:
-                print(f"DEBUG MATCH: ⚠️ No child found for coordinate {coord_key}")
                 missing_child += 1
                 continue
 
-            print(f"DEBUG MATCH: Matched child {child.value}")
-
             child.voronoi_region = actual_shape_poly
-
-            # -------------------------
-            # Electors
-            # -------------------------
-
 
             region_electors = child_elector_map.get(child)
 
-            print(f"DEBUG ELECTORS: {child.value} has {len(region_electors)} electors")
+            # 🎯 FIX 1: If it's None, coerce to a clean empty DataFrame
+            if region_electors is None:
+                region_electors = pd.DataFrame()
 
+            # 🎯 FIX 2: Track regions with 0 electors, but DO NOT skip drawing them!
             if region_electors.empty:
-                print(f"DEBUG ELECTORS: ⚠️ Skipping {child.value} (no electors)")
                 no_electors += 1
-                continue
 
             # -------------------------
             # Navigation links
             # -------------------------
-
             nav_html = ""
 
-            upmessage = (
-                "moveUp('/upbut/{0}','{1}')"
-                .format(
-                    child.parent.mapfile(),
-                    child.parent.value,
-                    child.parent.type
-                )
-            )
+            has_parent = child.parent is not None
+            parent_mapfile = child.parent.mapfile() if has_parent else node.mapfile()
+            parent_value = child.parent.value if has_parent else node.value
 
+            upmessage = "moveUp('/upbut/{0}','{1}')".format(parent_mapfile, parent_value)
             up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
             if not static:
-
-                showmessageST = (
-                    "showMore('/PDdownST/{0}','{1}')"
-                    .format(child.mapfile(), child.value)
-                )
-
+                showmessageST = "showMore('/PDdownST/{0}','{1}')".format(child.mapfile(), child.value)
                 street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
-
                 nav_html = f"""
                 <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
                 {street_link}<br>
                 {up_link}
                 </div>
                 """
-
             else:
-
                 nav_html = f"""
                 <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
                 {up_link}
                 </div>
                 """
 
-            # -------------------------
-            # Preprocess street data
-            # -------------------------
-            # Before calling preprocess_streets
-            print(f"DEBUG: Filtered DF size: {len(region_electors)}")
-            print(f"DEBUG: Unique tags found in this slice: {region_electors['Tags'].unique()}")
-            street_stats, house_count = preprocess_streets(region_electors,task_tags)
+            street_stats, house_count = preprocess_streets(region_electors, task_tags)
             missing_total = sum(d['house_gaps'] for d in street_stats.values())
+
             child.electorate = len(region_electors)
             child.houses = house_count
             total_electorate += len(region_electors)
             total_houses += house_count
-            # --- NEW COLOR LOGIC ---
-            # Get the Zone from the first elector in this region
-            if not region_electors.empty:
-                actual_zone = region_electors.iloc[0].get('Zone', 'MISSING')
-                print(f"DEBUG: Child {child.value} has Zone: {actual_zone}") # Check your console for this!
-                region_color = zonecolour.get(actual_zone, '#808080')
-            else:
-                region_color = 'black'
-            # -----------------------
 
-            # Build tooltip
+            # =================================================================
+            # 🎨 FIX 3: Robust PD Color Generation (Even for Empty Frameworks)
+            # =================================================================
+            if not region_electors.empty and 'PD' in region_electors.columns:
+                pd_code = str(region_electors.iloc[0]['PD']).strip().upper()
+            else:
+                # Extracts base PD group code from string node (e.g., 'LA_01' -> 'LA')
+                pd_code = str(child.value).split('_')[0].strip().upper()
+
+            if not hasattr(self, '_pd_color_cache'):
+                self._pd_color_cache = {}
+
+            if pd_code not in self._pd_color_cache:
+                import hashlib
+                hash_bytes = hashlib.md5(pd_code.encode('utf-8')).digest()
+                r = (hash_bytes[0] % 180) + 50
+                g = (hash_bytes[1] % 180) + 50
+                b = (hash_bytes[2] % 180) + 50
+                self._pd_color_cache[pd_code] = f"#{r:02x}{g:02x}{b:02x}"
+
+            region_color = self._pd_color_cache[pd_code]
+
             tooltip_html = f"""
             <b>{child.value}</b><br>
             Electors: {len(region_electors)}<br>
@@ -939,34 +918,22 @@ class ExtendedFeatureGroup(FeatureGroup):
             House gaps: {missing_total}
             """
 
+            street_html = nav_html + "<hr>" + build_street_list_html(child.value, region_electors, street_stats, task_tags)
 
-
-            # Build popup
-            street_html = nav_html + "<hr>" + build_street_list_html(child.value,region_electors, street_stats, task_tags)
-
-            # Update the style to use the NEW region_color
             style = {
-                "fillColor": region_color,  # Driven by elector Zone, not child.defcol
+                "fillColor": region_color,
                 "color": "white",
                 "weight": 1,
                 "fillOpacity": 0.6,
             }
-            # -------------------------
-            # Polygon (with tooltip and nid)
-            # -------------------------
-    # -------------------------------------------------
-            # Polygon (With Tooltip, Properties, and Direct Popup!)
-            # -------------------------------------------------
-            try:
-                print(f"DEBUG POLYGON: Adding polygon for {child.value}")
 
-                # Prepare properties for JS interaction
+            try:
                 feature_properties = {
-                    'nid': child.nid,               # 🔑 THE KEY REF: Link to node in JS
-                    'region_id': child.value,        # Human readable ID (e.g., PD tag)
+                    'nid': child.nid,
+                    'region_id': child.value,
                     'type': 'voronoi_poly',
                     'expected_houses': house_count,
-                    'level': child.level             # Helpful for filtering in JS
+                    'level': getattr(child, 'level', 'PD')
                 }
 
                 if getattr(self, 'is_ghost', False):
@@ -983,26 +950,15 @@ class ExtendedFeatureGroup(FeatureGroup):
                     style_function=lambda x, s=style: s,
                     tooltip=folium.Tooltip(
                         tooltip_html,
-                        sticky=False,             # 1️⃣ Stop tracking cursor movements
-                        direction="bottom",       # 2️⃣ Force tooltip to anchor BELOW the target entry point
-                        offset=(0, 15),           # 3️⃣ A tuple is cleaner for Folium's internal parser
-                        style="""
-                            background-color: white;
-                            color: #333;
-                            font-family: sans-serif;
-                            border-radius: 4px;
-                            padding: 6px;
-                            border: 1px solid #ccc;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-                        """
+                        sticky=False,
+                        direction="bottom",
+                        offset=(0, 15),
+                        style="background-color: white; color: #333; font-family: sans-serif; border-radius: 4px; padding: 6px; border: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
                     )
                 )
 
-                # 🎯 THE FIX: Attach the street list popup directly to the Polygon Layer shape!
                 popup = folium.Popup(street_html, max_width=900, show=False)
                 gj.add_child(popup)
-
-                # Add to the ExtendedFeatureGroup (self)
                 gj.add_to(self)
                 polygons_added += 1
 
@@ -1011,18 +967,12 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         node.electorate = total_electorate
         node.houses = total_houses
-        # -------------------------------------------------
-        # Summary
-        # -------------------------------------------------
 
         print("DEBUG SUMMARY:")
         print(f"Total regions processed: {total_regions}")
         print(f"Missing child matches: {missing_child}")
         print(f"Regions with no electors: {no_electors}")
         print(f"Polygons added to layer: {polygons_added}")
-        print(f"Final layer child count: {len(self._children)}")
-
-
 
 
     def add_shapenodes (self,rlevels,herenode,stype):
@@ -1400,9 +1350,10 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps(self, rlevels, herenode, static, counters):
+    def add_nodemaps(self, rlevels, herenode, nodes_list, static, counters):
         from state import Treepolys, Candidates, LastResults
         from flask import session, flash
+        import folium  # Make sure folium is imported cleanly
         global levelcolours
         global Con_Results_data
         global OPTIONS
@@ -1419,33 +1370,28 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"DEBUG: Unpacked election: {c_election}")
 
         # 🎯 SELF-AWARE PROPERTIES
-        # Use self.mytag to pinpoint exactly what type of features this layer handles
         layer_type = getattr(self, "mytag", "ward")
-        # Old:
-        # New: Read the dictionary directly since it's already flat!
-        # 🎯 FIX: Extract options and safely look for a nested 'style' block if it exists
+
         raw_opts = getattr(self, "options", {}) or {}
         layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
         print(f"DEBUG: self class: {self.__class__.__name__}")
         print(f"DEBUG: self.mytag evaluated to: '{layer_type}'")
         print(f"DEBUG: herenode details -> value: '{herenode.value}', type: '{herenode.type}', level: {herenode.level}")
 
-        # Look at every single child type currently attached to herenode to spot string mismatches
-        all_child_types = set(child.type for child in herenode.children) if herenode.children else set()
-        print(f"DEBUG: Distinct child types actually present on herenode: {list(all_child_types)}")
-
-        childlist = herenode.childrenoftype(layer_type)
-        allchildlist = herenode.children
-        nodeshtml = build_nodemap_list_html(herenode)
+        # 🎯 THE SIGNATURE CHANGE REPLACEMENT:
+        # Instead of reading from structural childrenoftype(), use our decoupled explicit list!
+        childlist = nodes_list
+        allchildlist = herenode.children if herenode else []
+        nodeshtml = build_nodemap_list_html(herenode) if herenode else ""
 
         details = [c.value for c in childlist]
         self.areashtml[herenode.value] = {
-                            "code": herenode.value,
-                            "details": details,
-                            "tooltip_html": nodeshtml
-                            }
+            "code": herenode.value,
+            "details": details,
+            "tooltip_html": nodeshtml
+        }
 
-        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} children of type:{layer_type} they are {[x.value for x in childlist]}" )
+        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} features to map of type:{layer_type}")
 
         if len(childlist) == 0:
             print(f"❌ WARNING: childlist is EMPTY for type '{layer_type}'. The loops will be skipped!")
@@ -1459,124 +1405,87 @@ class ExtendedFeatureGroup(FeatureGroup):
         loop_counter = 0
         for c in childlist:
             loop_counter += 1
-            print(f"\n--- Processing Child #{loop_counter}: '{c.node_path}' ---")
-            print(f"______Displayed nodemaps:{len(childlist)} at {herenode.node_path} of type {c.value, layer_type}")
-            print(f"______All nodemaps:{len(allchildlist)} at {herenode.node_path}")
+            print(f"\n--- Processing Feature #{loop_counter}: '{c.node_path}' ---")
 
             if c.level+1 <= 5:
-                results = []
-                # Looking up the specific polygon dataset using the instance tag
                 if layer_type not in Treepolys:
                     print(f"❌ ERROR: '{layer_type}' key missing from state.Treepolys dictionary!")
                     continue
 
                 pfile = Treepolys[layer_type]
-                print(f"______Add_Nodemap Treepolys type:{layer_type} size:{len(pfile)}")
                 mask = pfile['FID']==int(c.fid)
                 limbX = pfile[mask].copy()
 
-                print(
-                    f"⚠️ Boundary rows for node {c.value} (FID={c.fid}): {len(limbX)}"
-                )
-
                 if len(limbX) > 0:
-                    print("______Add_Nodes Treepolys type:", layer_type)
+                    # Fix: Force-clean duplicate geographic slice occurrences to 1 clean unique spatial entity row
+                    if len(limbX) > 1:
+                        limbX = limbX.iloc[[0]].copy()
 
+                    target_idx = limbX.index[0]
                     font_style = "style='font-size: 12pt;'"
                     c_path = f"{c.mapfile()}"
                     here_path = f"{herenode.mapfile()}"
                     c_val = c.value
                     here_val = herenode.value
-                    # 🔬 The Ultimate Structural Proof
-                    print(f"🔬 DATA GEOMETRY TYPE CHECK -> Layer: '{layer_type}' | Node: '{c_val}' | Geometry Type: {limbX.geometry.type.unique()}")
 
                     # ------------------------------------------------------------------
-                    # LEVEL 0: Top Level Nation Hierarchy
+                    # LEVEL ROUTING RULES (Kept exactly intact for map workflows)
                     # ------------------------------------------------------------------
-                    if herenode.type == 'country':
+                    if layer_type == 'nation':
                         down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
                         up_js = f"moveUp('/upbut/{c_path}', '{c_val}')"
-
                         uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
                         downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{layer_type}</button>"
-
-                        limbX['UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
+                        limbX.at[target_idx, 'UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
                         mapfile = f"/transfer/{c.mapfile()}"
 
-                    # ------------------------------------------------------------------
-                    # LEVEL 1: Nation down to County Level
-                    # ------------------------------------------------------------------
-                    elif herenode.type == 'nation':
+                    elif layer_type == 'county':
                         ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}')"
                         div_js = f"moveDown('/divreport/{c_path}', '{c_val}')"
                         down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-
                         ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
                         div_tag = f"<button type='button' id='btn_div_l1' onclick=\"{div_js}\" {font_style}>DIV Report</button>"
                         down_tag = f"<button type='button' id='btn_down_l1' onclick=\"{down_js}\" {font_style}>CONSTITUENCIES</button>"
                         up_tag = f"<button type='button' id='btn_up_l1' onclick=\"{up_js}\" {font_style}>UP</button>"
-
-                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag}{div_tag}<br>{down_tag}"
+                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag}{div_tag}<br>{down_tag}"
                         mapfile = f"/transfer/{c.mapfile()}"
 
-                    # ------------------------------------------------------------------
-                    # LEVEL 2: County down to Constituency Level
-                    # ------------------------------------------------------------------
-                    elif herenode.type == 'county':
+                    elif layer_type == 'constituency':
                         ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
                         div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-
                         wardiv_tag = f"<button type='button' id='btn_ward_l2' onclick=\"{ward_down_js}\" {font_style}>WARDS+DIVS</button>"
-                        div_tag = f"<button type='button' id='btn_div_l2' onclick=\"{div_down_js}\" {font_style}>DIVS</button>"
                         up_tag = f"<button type='button' id='btn_up_l2' onclick=\"{up_js}\" {font_style}>UP</button>"
-
-                        limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{wardiv_tag}"
+                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{wardiv_tag}"
                         mapfile = f"/transfer/{c.mapfile()}"
 
-                    # ------------------------------------------------------------------
-                    # LEVEL 3: Constituency down to Ward / Division Leaf Node Layout
-                    # ------------------------------------------------------------------
-                    elif herenode.type == 'constituency':
+                    elif layer_type == 'ward':
                         up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
                         up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
-
-                        sheet_btn = f"""
-                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downbut/{c_path}', '{c_val}');">
-                                Sheets
-                            </button>
-                        """
-
-                        app_btn = f"""
-                            <button type='button' class='guil-button btn btn-norm' onclick="moveDown('/downMWbut/{c_path}', '{c_val}');">
-                                App
-                            </button>
-                        """
-
-                        if not static:
-                            limbX['UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}"
-                        else:
-                            limbX['UPDOWN'] = f"<br>{c_val}<br>"
-
+                        sheet_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downbut/{c_path}', '{c_val}');\">Sheets</button>"
+                        app_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downMWbut/{c_path}', '{c_val}');\">App</button>"
+                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}" if not static else f"<br>{c_val}<br>"
                         mapfile = f"/transfer/{c.mapfile()}"
 
-                    party = "("+c.party+")"
+                    elif layer_type == 'division':
+                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
+                        up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
+                        sheet_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downbut/{c_path}', '{c_val}');\">Sheets</button>"
+                        app_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downMWbut/{c_path}', '{c_val}');\">App</button>"
+                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}" if not static else f"<br>{c_val}<br>"
+                        mapfile = f"/transfer/{c.mapfile()}"
 
+                    party_val = getattr(c, 'party', '')
+                    party = f"({party_val})" if party_val else "X"
                     counters[c.type] = counters.get(c.type, 0) + 1
                     num = str(counters[c.type])
-
                     tag = str(c.value)
                     numtag = str(c.value)+party
-
                     here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
 
-        #            node_color = herenode.defcol
-        #            limbX["fillColor"] = node_color
-
-                    node_col = layer_style.get("color", "#991B1B") #boundary
-                    tcol_node = layer_style.get("fontColor", "#EF4444") #font colour
-                    fcol_node = layer_style.get("fillColor", "#EF4444")  #area colour
+                    tcol_node = layer_style.get("fontColor", "#EF4444")
+                    fcol_node = layer_style.get("fillColor", "#EF4444")
 
                     if c.type == 'division' and isinstance(c.candidates, dict):
                         c1 = c.candidates.get('Candidate_1', '')
@@ -1587,15 +1496,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     htmlhalo = f'''
                     <a href="{mapfile}" data-name="{tag}">
-                      <div style="
-                        color: {tcol_node};
-                        font-size: 8pt;
-                        font-weight: bold;
-                        text-align: center;
-                        padding: 2px;
-                        white-space: nowrap;
-                        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;
-                      ">
+                      <div style="color: {tcol_node}; font-size: 8pt; font-weight: bold; text-align: center; padding: 2px; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;">
                         <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
                         <span style="font-size: 6pt; font-weight: normal;">{candidates}</span>
@@ -1605,54 +1506,34 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     htmlhalostatic = f'''
                     <a href="" data-name="{tag}">
-                      <div style="
-                        color: {tcol_node};
-                        font-size: 8pt;
-                        font-weight: bold;
-                        text-align: center;
-                        padding: 2px;
-                        white-space: nowrap;
-                        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;
-                      ">
+                      <div style="color: {tcol_node}; font-size: 8pt; font-weight: bold; text-align: center; padding: 2px; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;">
                         <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
-                        <span style="font-size: 6pt; font-weight: normal;"></span>
                       </div>
                     </a>
                     '''
 
-                    print(f"DEBUG: Generating Folium GeoJson for {c_val} using styles: {layer_style}")
+                    # Create a robust string extractor that bypasses Pandas series string dumps
+                    html_popup_content = str(limbX.at[target_idx, 'UPDOWN'])
+                    click_popup = folium.Popup(html_popup_content, max_width=300)
 
                     folium.GeoJson(
                         limbX,
                         style_function=lambda feature: {
-                            # 🎯 FIX: Pull directly from your registry styles dictionary instead of feature properties
                             "fillColor": layer_style.get("fillColor", "#EF4444"),
                             "color": layer_style.get("color", "#991B1B"),
-
                             "weight": layer_style.get("weight", 3.5),
                             "opacity": 1.0,
-
-                            # 🎯 FIX: Force your high 0.70 / 0.65 values to render
                             "fillOpacity": layer_style.get("fillOpacity", 0.70),
-
                             "stroke": True,
-                            "fill": True,  # Explicitly tell Leaflet to render the interior area
+                            "fill": True,
                             "dashArray": layer_style.get("dashArray", "0")
                         },
                         highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
                         tooltip=folium.Tooltip(htmlhalo),
-                        popup=folium.GeoJsonPopup(
-                            fields=["UPDOWN"],
-                            aliases=["Move:"],
-                            labels=False,
-                            localize=False,
-                            layer_name=getattr(self, 'name', 'Layer Boundary')
-                        ),
+                        popup=click_popup,
                     ).add_to(self)
 
-                    pathref = c.mapfile()
-                    mapfile = '/transfer/'+pathref
 
                     if not static:
                         self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalo)))
@@ -1858,19 +1739,19 @@ FEATURE_LAYER_SPECS = {
 
     "polling_district": dict(
         name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0D9488", "fontColor": "#0D9488", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "4,4"}
+        options={"color": "#0D9488", "fontColor": "#0D9488", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "4,4"}
     ),
     "walk": dict(
         name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0, "dashArray": "2,4"}
+        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
     ),
     "walkleg": dict(
         name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="node",
-        options={"color": "#115E59", "fontColor": "#115E59", "weight": 1.0, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#115E59", "fontColor": "#115E59", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5}
     ),
     "street": dict(
         name="street", mytag="street", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.5, "fillColor": "none", "fillOpacity": 0.0}
+        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.5, "fillColor": "#FBCFE8", "fillOpacity": 0.5}
     ),
 
     "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False, type="marker"),

@@ -1,6 +1,5 @@
 from canvasscards import prodcards, find_boundary
 from walks import prodwalks
-#import electwalks, locfilepath, electorwalks.create_node_map, goup, godown, add_to_top_layer, find_boundary
 import config
 from config import POSTCODE_FILE,TABLE_FILE,LAST_RESULTS_FILE,ELECTIONS_FILE,TREEPOLY_FILE,GENESYS_FILE,ELECTOR_FILE,TREKNODE_FILE,RESOURCE_FILE, DEVURLS, NATIONAL_DIVISION_FILE,DATA_FILE
 from normalised import normz
@@ -1198,7 +1197,7 @@ def delete_node():
         # The clean unpack
         (c_election, elevels), = rlevels.items()
 
-        parent.create_node_map(rlevels, static=False)
+        map, totalleaf = parent.create_node_map(rlevels, static=False)
 
         CElection.visit_node(parent)
 
@@ -1276,8 +1275,8 @@ def reassign_parent():
         subject_node.set_parent(new_parent_node)
         allelectors = electors.elector_for_path(rlevels,old_parent_node.mapfile())
         # Regenerate affected maps
-        old_parent_node.create_node_map(rlevels, static=False)
-        new_parent_node.create_node_map(rlevels, static=False)
+        map,totalleaf = old_parent_node.create_node_map(rlevels, static=False)
+        map,totalleaf = new_parent_node.create_node_map(rlevels, static=False)
 
         # Persist AFTER successful mutation
         persist(Treepolys, Geo_index)
@@ -2117,7 +2116,7 @@ def election_report():
 
 
     print(f"XXXXMarkers at election {current_election} at node {current_node.value}")
-    current_node.create_node_map(rlevels, static=False)
+    map,totalleaf = current_node.create_node_map(rlevels, static=False)
     reportdate = datetime.strptime(str(date.today()), "%Y-%m-%d").strftime('%d/%m/%Y')
 
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
@@ -2897,9 +2896,12 @@ def downbulk():
     print("🚀 ENTERING ROUTE: /downbulk")
     print("="*40)
 
-    # 1. Get the list of NIDs from the request body
-    data = request.json
+    # 1. Unpack payload parameters
+    data = request.json or {}
     nids = data.get('nids', [])
+    selected_election = data.get('election') # 🎯 Plucked from your new JS payload
+
+    print(f"🗳️ Client-selected election tab: {selected_election}")
     print(f"📦 Payload received: {len(nids)} NIDs")
     print(f"🔍 Raw NID list: {nids}")
 
@@ -2924,11 +2926,19 @@ def downbulk():
     if missing_nids:
         print(f"⚠️ WARNING: Could not find objects for NIDs: {missing_nids}")
 
-    # 3. Setup Election context
-    current_election = CurrentElection.get_lastused()
+    if not nodelist:
+        return jsonify({"success": False, "error": "None of the selected NIDs could be resolved."}), 400
+
+    # 3. Setup Election context (Triage selected tab vs system fallback)
+    if selected_election:
+        current_election = selected_election
+    else:
+        current_election = CurrentElection.get_lastused()
+        print(f"ℹ️ No explicit tab sent. Falling back to last used: {current_election}")
+
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
-    print(f"🗳️ Election: {current_election} | Resolved Levels: {rlevels}")
+    print(f"🗳️ Active Election Context: {current_election} | Resolved Levels: {rlevels}")
 
     # Set up the context node (The "Parent" container for the render)
     current_node = CElection.get_last_node(create=True)
@@ -2939,21 +2949,28 @@ def downbulk():
     session.modified = True
     print(f"💾 Session updated with 'accumulated_nodes'")
 
-    # 4. ensure all nodes exist
+    # 4. Ensure all nodes exist using clean Node paths
+    # (Your updated ping_node will now safely check levels < 5 in Geo_index or use electors)
     for node in nodelist:
-        get_trek_root().ping_node(rlevels,node.mapfile(), create=True, accumulate=session.get("accumulate", False))
-    # 4. Trigger the map creation
-    map_filename = nodelist[0].parent.mapfile()
+        # Utilizing node.node_path directly to match your path validation logic
+        get_trek_root().ping_node(
+            rlevels,
+            node.node_path,
+            create=True,
+            accumulate=session.get("accumulate", False)
+        )
+
+    # 5. Trigger the map creation
+    # Using the safe index 0 guard since we verified nodelist is not empty
+    target_parent = nodelist[0].parent
+    map_filename = target_parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
-    # We pass the nodelist explicitly to create_layer (if endpoint_created uses it)
-    # or ensure current_node knows to render its 'accumulated' children.
-    created, totalleaf = nodelist[0].parent.endpoint_created(rlevels, map_filename, static=False)
-
+    created, totalleaf = target_parent.endpoint_created(rlevels, map_filename, static=False)
     print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
 
-    # 5. File verification
-    CElection.visit_node(nodelist[0].parent.parent)
+    # 6. File verification
+    CElection.visit_node(target_parent.parent)
     base = Path(config.workdirectories['workdir'])
     fullpath = base / map_filename
 
@@ -3340,7 +3357,7 @@ def LGdownST(path):
             streetelectors = PDelectors[mask]
             street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-        PD_node.create_node_map(rlevels, static=False)
+        map,totalleaf = PD_node.create_node_map(rlevels, static=False)
 
 
     print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.mapfile())
@@ -3395,7 +3412,7 @@ def WKdownST(path):
         streetelectors = areaelectors[mask]
         walkleg_node.create_streetsheet(current_election,rlevels,streetelectors)
 
-        walk_node.create_node_map(rlevels, static=False)
+        map,totalleaf = walk_node.create_node_map(rlevels, static=False)
 
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
@@ -3743,7 +3760,7 @@ def upbut(path):
 
         flash("No data for the selected node available,attempting to generate !")
         print("No data for the selected node available,attempting to generate !")
-        current_node.create_node_map(rlevels, static=False)
+        map,totalleaf = current_node.create_node_map(rlevels, static=False)
 
     print("________chosen node url",current_node.mapfile())
     base = Path(config.workdirectories['workdir'])  # or wherever files live
@@ -4390,16 +4407,15 @@ def firstpage():
     print(f"____/FIRST OPTIONS areas for calendar node {current_node.value} are {OPTIONS['areas']} ")
 
     print(f"🧪 current election 2 {current_election} - current_node:{current_node.value} ")
-    current_node.create_node_map(rlevels, static=False)
-    print("______First selected node",len(current_node.children),current_node.value, current_node.level,current_node.mapfile())
-
+    map, totalleaf = current_node.create_node_map(rlevels, static=False)
+    print(f"______First selected node: {current_node.value} leafno: {totalleaf} level:{current_node.level} node_path: {current_node.node_path}")
 
     ELECTIONS = get_available_elections()
 
     BAKED_DATA = baked_data.load()
 
 #
-    print(f"🧪 firstpage level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
+    print(f"🧪 firstpage election: {current_election} - current_node path:{current_node.node_path} - OPTIONS html {OPTIONS['areas']}")
     persist(Treepolys, Geo_index)
     return render_template(
         "Dash0.html",
@@ -4411,8 +4427,6 @@ def firstpage():
         baked_data=BAKED_DATA,
         mapfile=current_node.mapfile()
     )
-
-
 
 @app.route('/cards', methods=['POST','GET'])
 @login_required
@@ -4426,8 +4440,6 @@ def cards():
     global streamrag
     global environment
     global TABLE_TYPES
-
-
 
     flash('_______ROUTE/canvasscards',session, request.form, current_node.level)
 

@@ -647,12 +647,15 @@ class TreeNode:
     def get_sibling_layers(self):
         if not self.parent:
             return {}
-        siblings = [
-            child
-            for child in self.parent.children
-            if child.type == self.type
-        ]
-        return {self.type: siblings}
+
+        sibling_groups = {}
+        for child in self.parent.children:
+            # Group every sibling cleanly by its own type
+            if child.type not in sibling_groups:
+                sibling_groups[child.type] = []
+            sibling_groups[child.type].append(child)
+
+        return sibling_groups
 
     def get_child_layers(self):
         return self.group_by_type(self.children)
@@ -855,6 +858,7 @@ class TreeNode:
         """
         Computes the structural type blueprint trail dynamically from root to node.
         Example: "country/nation/county/constituency/ward"
+        note that parents of treknodes can change if ping_node selected
         """
         if self.parent is None:
             return self.type
@@ -1174,221 +1178,144 @@ class TreeNode:
 
 
     def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
-        from state import LEVEL_ZOOM_MAP, Geo_index, stepify  # 🔄 Swapped Treepolys for geo_index
+        from state import LEVEL_ZOOM_MAP, Geo_index, stepify
         from flask import session
         from elector import electors
 
-        # map nodes are already pre-named and pre-exist in geometry, treknodes are derived from name and type keys in geo_index
-        # data nodes are also pre-named and pre-exist in allelectors, treknodes are derived from name and presence in "Walkname" or "PD" col values
-        # ping_node should return treknode (country/nation/county/constituency/division etc)
-        # actual levels should be stored as a node variable (self.layer_path)
-
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-        # The clean unpack
         (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
-
-        # ──────────────────────────────
-        # Step 00: Inspect Derived Geo Index instead of Treepolys
-        for lev, ltype in elevels.items():
-            print(f"Processing Level {lev}: {ltype}")
-
-            # Split bivalent layer strings into an iterable array
-            sub_types = [t.strip() for t in ltype.split("/")] if "/" in str(ltype) else [ltype]
-
-            # 🛡️ Aggregate ALL matching nodes across the sub_types first
-            all_matching_nodes = {}
-            for st in sub_types:
-                print(f"🔍 [DEBUG] Scanning geo_index keys for level matching: '{st}' in '{sub_types}'")
-
-                nodes_for_st = {
-                    path: data for path, data in Geo_index.items()
-                    if data.get("level") == st
-                }
-                all_matching_nodes.update(nodes_for_st)
-
-            # 🎯 FIX: Explicitly initialize and set valid_geo_type here
-            valid_geo_type = None
-            if all_matching_nodes:
-                valid_geo_type = ltype  # Mark this level as successfully found
-                tot_geo = len(all_matching_nodes)
-                unique_name_geo = len(set(data["name"] for data in all_matching_nodes.values()))
-                unique_fid_geo = len(all_matching_nodes)
-
-                print(f"____Ping/GeoIndex {ltype} - tot:{tot_geo} unique_NAME:{unique_name_geo} unique_ID/FID:{unique_fid_geo}")
-
-                sample_keys = list(all_matching_nodes.keys())[:3]
-                print(f"   [DEBUG] Sample combined matched paths for '{ltype}': {sample_keys}")
-            else:
-                print(f"____Ping/GeoIndex {ltype} -> EMPTY or MISSING IN INDEX")
-                continue
-
-            if not valid_geo_type:
-                print(f"____Ping/GeoIndex {ltype} -> EMPTY or MISSING IN INDEX")
-                continue
-
-        # 🛡️ CLEANUP SCOPE LEAKS: Erase the lingering loop variables
-        # so downstream logic doesn't mistake 'st' for the current active layer target.
-        if 'st' in locals(): del st
-        if 'matching_nodes' in locals(): del matching_nodes
-
-        # ──────────────────────────────
-        # Step 1: keyword handling
-        full_dest_path = dest_path.strip()
-
-        # Guard clause against paths with no extra parameter tokens
-        if " " in full_dest_path:
-            path_only, *kw = full_dest_path.rsplit(" ", 1)
-            if kw and kw[0].lower() in LEVEL_ZOOM_MAP:
-                keyword = kw[0].lower()
-                path_str = path_only
-            else:
-                keyword = None
-                path_str = full_dest_path
-        else:
-            keyword = None
-            path_str = full_dest_path
-
-        # ──────────────────────────────
-        # Step 2: clean paths
-        self_path = stepify(self.mapfile())
-        dest_parts = stepify(path_str)
-
-        print(f"🪜 [DEBUG] dest_path: {dest_path}")
-        print(f"🪜 [DEBUG] self_path: {self_path}")
-        print(f"🪜 [DEBUG] dest_parts: {dest_parts}")
-
-        # ──────────────────────────────
-        # Step 3: common ancestor
-        common_len = get_common_prefix_len(self_path, dest_parts)
-        print(f"🔗 [DEBUG] Common prefix length: {common_len}")
-
-        node = self
-
-        # ──────────────────────────────
-        # Step 4: move UP
-        for _ in range(len(self_path) - common_len):
-            if not node.parent:
-                print(f"⚠️ [DEBUG] Reached root while moving up from {node.value}")
-                break
-            node = node.parent
-            print(f"🔼 [DEBUG] Moved up to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
-
-        # ──────────────────────────────
-        # Step 5: move DOWN
-        down_path = dest_parts[common_len:]
-        print(f"⬇️ [DEBUG] Moving down path: {down_path}")
-
-        moved = False
-        levels_dict = elevels
-
-        # Find the maximum level integer (e.g., 7)
         max_level = max(elevels)
 
+        # ──────────────────────────────
+        # Step 1: Clean & Normalize Paths
+        # ──────────────────────────────
+        full_dest_path = dest_path.strip()
+        self_path = stepify(self.mapfile())
+        dest_parts = stepify(full_dest_path)
+
+        # ──────────────────────────────
+        # Step 2: Compute Common Ancestor and Move Up
+        # ──────────────────────────────
+        from nodes import get_common_prefix_len # Ensure this helper is imported
+        common_len = get_common_prefix_len(self_path, dest_parts)
+
+        node = self
+        for _ in range(len(self_path) - common_len):
+            if not node.parent:
+                break
+            node = node.parent
+
+        # ──────────────────────────────
+        # Step 3: Traverse Downwards with Strict Target Validation
+        # ──────────────────────────────
+        down_path = dest_parts[common_len:]
         target_path = node.node_path
 
         for part in down_path:
+            # Build the exact path string for the upcoming level
             target_path = part if not target_path else f"{target_path}/{part}"
             next_level = node.level + 1
 
-            # Prevent breaking if we overshoot known levels
             if next_level > max_level:
                 print(f"⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}.")
                 break
 
-            ntype = str(elevels[next_level]) # Force string type checking
+            ntype = str(elevels[next_level])
 
-            print(f"➡️ [DEBUG] At node: {node.value} (L{node.level}), looking for part '{part}' at level {next_level} (type={ntype})")
-            print(f"   Children before match: {[c.value for c in node.children]}")
+            # --- 🛡️ PATH VALIDATION ENGINE ---
+            # Before we look for or create a branch, verify the path is real using your rules
+            is_valid_path = False
+            if next_level < 5:
+                # Look up directly in the O(1) Geo_index dictionary instead of looping
+                is_valid_path = target_path in Geo_index
+            else:
+                # Query the elector framework framework to see if data exists
+                df_check = electors.elector_for_path(rlevels, target_path)
+                is_valid_path = df_check is not None and not df_check.empty
 
+            if not is_valid_path:
+                print(f"🛑 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
+                return node # Safe fallback to current deepest valid node
+
+            # Look for existing child match
             match = next((c for c in node.children if c.node_path == target_path), None)
 
+            # --- BRANCH CREATION ON MISS ---
             if create and not match:
-                print(f"   ⚙️ [DEBUG] Attempting branch creation for '{part}' under {node.value} (Level {next_level})")
-
-                # 🌟 DYNAMIC BIVALENT RESOLUTION: Try the primary logical fork first
+                print(f"⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
                 try:
-                    if next_level <= 4:
+                    if next_level < 5:
                         node.create_map_branch(rlevels)
                     else:
-                        node.create_data_branch(rlevels)
+                        node.create_data_branch(rlevels, target_path)
                 except Exception as e:
-                    print(f"   ⚠️ [DEBUG] Primary branch creation failed: {e}")
+                    print(f"⚠️ [PING] Primary creation pass failed: {e}")
 
-                # Re-check for a match using target_path
+                # Re-verify match
                 match = next((c for c in node.children if c.node_path == target_path), None)
 
-                # 🌟 FIX: Dynamic Bivalent Fallback Check!
+                # --- BIVALENT FALLBACK ---
                 if not match and "/" in ntype:
-                    print(f"   🔄 [DEBUG] Bivalent Level Detected ('{ntype}'). Primary method missed target. Running alternative execution...")
+                    print(f"🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
                     try:
-                        if next_level <= 4:
-                            node.create_data_branch(rlevels)   # Try data instead
+                        if next_level < 5:
+                            node.create_data_branch(rlevels, target_path)
                         else:
-                            node.create_map_branch(rlevels)    # Try map instead
+                            node.create_map_branch(rlevels)
                     except Exception as e:
-                        print(f"   ⚠️ [DEBUG] Alternative bivalent branch creation failed: {e}")
+                        print(f"⚠️ [PING] Alternative bivalent strategy failed: {e}")
 
-                    # Final check for this pass using target_path
                     match = next((c for c in node.children if c.node_path == target_path), None)
 
-            print(f"   Children after branch creation: {create} {[c.value for c in node.children]}")
-
+            # Handle catastrophic uncreated state or missing target
             if not match:
-                if node.parent:
-                    print(f"[DEBUG] Ascended fallback to: {node.parent.value} "
-                          f"(L{node.parent.level}), "
-                          f"children: {[c.value for c in node.parent.children]}")
-                    return node.parent
-                else:
-                    print("[DEBUG] Node has no parent (root node). Staying at root.")
-                    return node
+                print(f"❌ [PING] Could not match or create node for path: {target_path}")
+                return node.parent if node.parent else node
 
             node = match
-            moved = True
-            print(f"✅ [DEBUG] Descended to: {node.value} (L{node.level}), children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 6: keyword zoom
-        if keyword:
+        # Step 4: Keyword Zoom Handling
+        # ──────────────────────────────
+        # (Assuming keyword extraction logic matches your framework if keywords are added)
+        keyword = None
+        if keyword and keyword in LEVEL_ZOOM_MAP:
             node.zoom_level = LEVEL_ZOOM_MAP[keyword]
-            print(f"🔍 [DEBUG] Applied keyword zoom '{keyword}' → zoom_level {node.zoom_level}")
-
-        print(f"✅ [DEBUG] Reached node: {node.value} (L{node.level}) with children: {[c.value for c in node.children]}")
 
         # ──────────────────────────────
-        # Step 7: always expand children at final node
-        next_level = node.level
+        # Step 5: Exhaustive Bottom-Node Child Expansion
+        # ──────────────────────────────
+        if node.level <= max_level and create:
+            children_type = str(elevels.get(node.level, ""))
 
-        print(f"✅ [DEBUG] Expanding node: {node.value} (L{node.level}) Max {max_level} createmode :{create} rlevels: {rlevels}")
+            # Guard final expansion check against the database/index rule as well
+            should_expand = False
+            if (node.level + 1) < 5:
+                # If the upcoming children are map levels, check if any keys start with this node's path
+                should_expand = any(k.startswith(node.node_path) for k in Geo_index.keys())
+            else:
+                df_check = electors.elector_for_path(rlevels, node.mapfile())
+                should_expand = df_check is not None and not df_check.empty
 
-        if next_level <= max_level and create:
-            children_type = str(elevels[next_level])
-            print(f"🌿 [DEBUG] Expanding children of {node.level}-{node.value} as {children_type}")
-
-            # Execute primary expansion pass
-            try:
-                if node.level < 4:
-                    node.create_map_branch(rlevels)
-                else:
-                    node.create_data_branch(rlevels)
-            except Exception as e:
-                print(f"⚠️ [DEBUG] Primary branch expansion failed: {e}")
-
-            # 🌟 FIX: Exhaustively fire secondary strategy if current level specifies bivalent parsing with a "/"
-            if "/" in children_type:
-                print(f"🔄 [DEBUG] Level is bivalent ('{children_type}'). Expanding secondary alternative branches for final node {node.value}")
+            if should_expand:
                 try:
-                    if node.level < 4:
-                        node.create_data_branch(rlevels)
-                    else:
+                    if node.level < 4:  # Children are Level < 5
                         node.create_map_branch(rlevels)
+                    else:               # Children are Level >= 5
+                        node.create_data_branch(rlevels, node.node_path)
                 except Exception as e:
-                    print(f"⚠️ [DEBUG] Secondary bivalent expansion failed: {e}")
+                    print(f"⚠️ [PING] Final node primary expansion failed: {e}")
+
+                if "/" in children_type:
+                    try:
+                        if node.level < 4:
+                            node.create_data_branch(rlevels, node.node_path)
+                        else:
+                            node.create_map_branch(rlevels)
+                    except Exception as e:
+                        print(f"⚠️ [PING] Final node bivalent expansion failed: {e}")
 
         return node
-
 
     def get_feature_layers(self, rlevels, static=False):
         """
@@ -1514,7 +1441,7 @@ class TreeNode:
             print(f"Surrounding layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
         # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division", "marker"}
+        TEST_LAYERS = {"county", "constituency", "ward", "walk", "polling_district", "division", "marker"}
 
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
@@ -1544,6 +1471,7 @@ class TreeNode:
 
 
             # Route directly to precise rendering logic blocks
+            # Route directly to precise rendering logic blocks
             match factory_key:
 
                 # 📍 Pins & Global Anchors
@@ -1551,17 +1479,33 @@ class TreeNode:
                     layer.add_genmarkers(rlevels, test_node, static)
 
                 # 🗺️ Polygon Map Layers
+                # 🗺️ Polygon Map Layers
                 case "constituency" | "division" | "ward" | "country" | "nation" | "county":
-                    layer.add_nodemaps(rlevels, nodes_to_render[0].parent, static, counters)
+                    # 🔥 Call the new signature, feeding it the structured dynamic stream array
+                    print(f"Nodemap layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
+                    layer.add_nodemaps(
+                        rlevels=rlevels,
+                        herenode=nodes_to_render[0].parent,
+                        nodes_list=nodes_to_render,
+                        static=static,
+                        counters=counters
+                    )
                 # 📐 Spatial Proximity Layers (Voronoi Grids)
                 case "polling_district" | "walk":
-                    layer.add_voronoi(rlevels, nodes_to_render[0].parent, static, factory_key)
+                    # Bypass the crashing local filter and delegate straight to add_voronoi!
+                    boundary_envelope = self
+                    print(f"Voronoi layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
+                    layer.add_voronoi(
+                        rlevels=rlevels,
+                        node=boundary_envelope,
+                        nodes_list=nodes_to_render,
+                        static=static
+                    )
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" | _:
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
-
             # ------------------------------------------------------------------
             # 🔧 POST-EXECUTION CLEANUP: Maintain Flat Property Architecture
             # ------------------------------------------------------------------
@@ -1824,6 +1768,7 @@ class TreeNode:
 
             if existing:
                 egg = existing
+                egg.parent = self
             else:
                 datafid = index
                 newnode = TreeNode(
@@ -1876,7 +1821,7 @@ class TreeNode:
         return node
 
 
-    def create_data_branch(self, resolved_levels):
+    def create_data_branch(self, resolved_levels, localized_path):
         from elector import electors
         from state import Treepolys
         import elections
@@ -1911,8 +1856,6 @@ class TreeNode:
 
 
             for electtype in target_layers:
-
-                localized_path = self.mapfile()
 
                 # Fetch the isolated electoral records matching this exact layer pass
                 areaelectors = electors.elector_for_path(resolved_levels, localized_path)
