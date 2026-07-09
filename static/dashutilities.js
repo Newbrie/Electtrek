@@ -95,13 +95,7 @@ window.selectNode = function(path) {
              </div>`;
      }).join('');
  }
-/**
- * 3. Bulk Action Logic
- * Collects checked NIDs and triggers the composite map generation
- */
 
- * 4. Select All Helper (Optional but highly recommended)
- */
 window.toggleAllCheckboxes = function(masterCheckbox) {
     const checkboxes = document.querySelectorAll('.node-checkbox');
     checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
