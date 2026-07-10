@@ -622,7 +622,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def add_voronoi(self, rlevels, node, nodes_list, static=False):
+    def add_voronoi(self, rlevels, nodes_list, static=False):
         from shapely.geometry import Point
         from shapely.ops import nearest_points
         import numpy as np
@@ -632,43 +632,47 @@ class ExtendedFeatureGroup(FeatureGroup):
         import geopandas as gpd
         import pandas as pd
         import folium
-        from elector import electors  # your ElectorManager instance
+        from elector import electors
         from elections import CurrentElection
-
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
-        # The clean unpack
+        if not nodes_list:
+            print("⚠️ No sub-units provided in nodes_list for Voronoi calculation.")
+            return
+
+        # 🎯 Automatically extract parent context from the node stream
+        parent_node = nodes_list[0].parent
+        if not parent_node:
+            print("⚠️ Nodes in nodes_list lack a valid parent relationship container.")
+            return
+
+        # Clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
         CE = CurrentElection.load(c_election)
         task_tags, outcome_tags, all_tags = CE.get_tags()
 
-        pfile = Treepolys[node.type]
-        Territory_boundary = pfile[pfile['FID'] == int(node.fid)]
-        node.geometry = Territory_boundary.union_all()
+        # Resolve the explicit parent geometry out of the structural framework file
+        pfile = Treepolys[parent_node.type]
+        Territory_boundary = pfile[pfile['FID'] == int(parent_node.fid)]
+        parent_node.geometry = Territory_boundary.union_all()
 
-        # --- Parent boundary logic ---
-        parent_boundary = node.geometry
+        parent_boundary = parent_node.geometry
         if parent_boundary is None:
-            print("⚠️ Parent boundary missing")
+            print(f"⚠️ Parent boundary missing for parent node: {parent_node.value} ({parent_node.type})")
             return
 
-        # Ensure it's valid
+        # Ensure geometric validity
         if not parent_boundary.is_valid:
             parent_boundary = parent_boundary.buffer(0)
 
-        # CREATE A CALCULATION HULL
+        # Create a clean calculation bounding hull
         calc_hull = parent_boundary.convex_hull
 
-        # 🔥 CHANGE 1: Use the explicit list passed from the caller instead of node.childrenoftype
-        if not nodes_list:
-            print(f"⚠️ No nodes provided in nodes_list for Voronoi calculation under {node.value}")
-            return
-
         # -------------------------------------------------
-        # Build points from the provided nodes list
+        # Build coordinates from provided sub-unit stream list
         # -------------------------------------------------
         points = []
         point_to_child = {}
@@ -689,15 +693,14 @@ class ExtendedFeatureGroup(FeatureGroup):
             points.append(pt)
 
         if not points:
-            print("⚠️ No valid child centres in the provided nodes_list")
+            print("⚠️ No valid sub-unit centers found in nodes_list")
             return
 
-        coords = np.array(points)  # directly usable for geovoronoi
+        coords = np.array(points)
 
-        # Ensure all points are inside the parent boundary
+        # Ensure all points fall safely inside parent envelope
         fixed_points = []
         point_to_child_fixed = {}
-        outside_points = []
 
         for pt in coords:
             point = Point(pt)
@@ -705,49 +708,36 @@ class ExtendedFeatureGroup(FeatureGroup):
             if not parent_boundary.contains(point):
                 nearest = nearest_points(parent_boundary, point)[0]
                 new_pt = (round(nearest.x, 6), round(nearest.y, 6))
-                outside_points.append(pt)
             else:
                 new_pt = (round(pt[0], 6), round(pt[1], 6))
 
             fixed_points.append(new_pt)
+            point_to_child_fixed[new_pt] = point_to_child.get((round(pt[0], 6), round(pt[1], 6)))
 
-            # map the FIXED point, not original
-            point_to_child_fixed[new_pt] = point_to_child.get(
-                (round(pt[0], 6), round(pt[1], 6))
-            )
-
-        print(f"DEBUG: Number of unique points: {len(set(fixed_points))} out of {len(fixed_points)}")
+        print(f"DEBUG: Unique points tracking: {len(set(fixed_points))} out of {len(fixed_points)}")
         coords = np.array(fixed_points)
-        point_to_child = point_to_child_fixed  # overwrite mapping
+        point_to_child = point_to_child_fixed  # Overwrite map mapping keys seamlessly
 
-
-# -------------------------------------------------
-        # Generate Voronoi
+        # -------------------------------------------------
+        # Run Voronoi Calculation Paths
         # -------------------------------------------------
         if len(coords) < 1:
-            print(f"⚠️ No points available to generate Voronoi for {node.value}")
+            print(f"⚠️ No coordinates accessible to build Voronoi for {parent_node.value}")
             return
 
-    # Initialize standard geovoronoi collections
         region_polys = {}
         region_pts = {}
 
         if len(coords) >= 4:
-            # --- Standard Path: Run your normal geovoronoi setup ---
             region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
-            print(f"DEBUG VORONOI: Generated {len(region_polys)} Voronoi polygons using Convex Hull")
-
+            print(f"DEBUG VORONOI: Built {len(region_polys)} regional cells using Convex Hull.")
         else:
-            # --- Fallback Path: Low point counts that would crash Qhull ---
-            print(f"ℹ️ Point count ({len(coords)}) too low for Voronoi calculation. Falling back to clean geometry layouts.")
-
+            print(f"ℹ️ Low density point array ({len(coords)}). Initializing custom layout splittings...")
             if len(coords) == 1:
-                # 1 Point: The single Polling District gets the whole hull shape
                 region_polys = {0: calc_hull}
                 region_pts = {0: [0]}
 
             elif len(coords) == 2:
-                # 2 Points: Split the hull shape cleanly down the perpendicular center line between the points
                 from shapely.ops import split
                 from shapely.geometry import LineString
 
@@ -773,7 +763,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                     region_pts[r_idx] = [assigned_pt_idx]
 
             elif len(coords) == 3:
-                # 3 Points: Inject a hidden dummy 4th point far outside the bounding box
                 min_x, min_y, max_x, max_y = calc_hull.bounds
                 dummy_point = np.array([[max_x + 10.0, max_y + 10.0]])
                 extended_coords = np.vstack([coords, dummy_point])
@@ -788,15 +777,13 @@ class ExtendedFeatureGroup(FeatureGroup):
                         region_pts[r_idx] = assigned_indices
                         r_idx += 1
 
-        # ✂️ REMOVED THE DUPLICATE/OVERWRITING LINES HERE ✂️
-    
-        # Load electors for the structural node envelope
-        nodeelectors = electors.elector_for_path(rlevels, node.mapfile())
+        # Load global elector data block for envelope tracking metrics
+        nodeelectors = electors.elector_for_path(rlevels, parent_node.mapfile())
         if nodeelectors is None or nodeelectors.empty:
-            print("DEBUG ELECTORS: ⚠️ No electors for boundary node")
+            print("DEBUG ELECTORS: ⚠️ Structural parent node boundary empty of elector rows.")
             return
 
-        print(f"DEBUG ELECTORS: Loaded {len(nodeelectors)} electors for node {node.value}")
+        print(f"DEBUG ELECTORS: Loaded {len(nodeelectors)} total boundary envelope electors.")
 
         total_regions = 0
         missing_child = 0
@@ -805,14 +792,14 @@ class ExtendedFeatureGroup(FeatureGroup):
         total_electorate = 0
         total_houses = 0
 
-# Loop regions
+        # Loop through regions, intersection-clipping against the parent boundary
         for region_id, poly in region_polys.items():
             raw_intersection = poly.intersection(parent_boundary)
 
             if raw_intersection.is_empty:
                 continue
 
-            if raw_intersection.geom_type == 'Polygon' or raw_intersection.geom_type == 'MultiPolygon':
+            if raw_intersection.geom_type in ['Polygon', 'MultiPolygon']:
                 actual_shape_poly = raw_intersection
             elif raw_intersection.geom_type == 'GeometryCollection':
                 polys = [g for g in raw_intersection.geoms if g.geom_type in ['Polygon', 'MultiPolygon']]
@@ -828,7 +815,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             total_regions += 1
             idx = region_pts[region_id]
-
             if isinstance(idx, (list, np.ndarray)):
                 idx = idx[0]
 
@@ -841,31 +827,25 @@ class ExtendedFeatureGroup(FeatureGroup):
                 continue
 
             child.voronoi_region = actual_shape_poly
-
             region_electors = child_elector_map.get(child)
 
-            # 🎯 FIX 1: If it's None, coerce to a clean empty DataFrame
             if region_electors is None:
                 region_electors = pd.DataFrame()
 
-            # 🎯 FIX 2: Track regions with 0 electors, but DO NOT skip drawing them!
             if region_electors.empty:
                 no_electors += 1
 
-            # -------------------------
-            # Navigation links
-            # -------------------------
+            # Navigation UI layout
             nav_html = ""
-
             has_parent = child.parent is not None
-            parent_mapfile = child.parent.mapfile() if has_parent else node.mapfile()
-            parent_value = child.parent.value if has_parent else node.value
+            parent_mapfile = child.parent.mapfile() if has_parent else parent_node.mapfile()
+            parent_value = child.parent.value if has_parent else parent_node.value
 
-            upmessage = "moveUp('/upbut/{0}','{1}')".format(parent_mapfile, parent_value)
+            upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
             up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
             if not static:
-                showmessageST = "showMore('/PDdownST/{0}','{1}')".format(child.mapfile(), child.value)
+                showmessageST = f"showMore('/PDdownST/{child.mapfile()}','{child.value}')"
                 street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                 nav_html = f"""
                 <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
@@ -888,13 +868,9 @@ class ExtendedFeatureGroup(FeatureGroup):
             total_electorate += len(region_electors)
             total_houses += house_count
 
-            # =================================================================
-            # 🎨 FIX 3: Robust PD Color Generation (Even for Empty Frameworks)
-            # =================================================================
             if not region_electors.empty and 'PD' in region_electors.columns:
                 pd_code = str(region_electors.iloc[0]['PD']).strip().upper()
             else:
-                # Extracts base PD group code from string node (e.g., 'LA_01' -> 'LA')
                 pd_code = str(child.value).split('_')[0].strip().upper()
 
             if not hasattr(self, '_pd_color_cache'):
@@ -963,16 +939,17 @@ class ExtendedFeatureGroup(FeatureGroup):
                 polygons_added += 1
 
             except Exception as e:
-                print(f"DEBUG ERROR: Failed adding polygon for {child.value} -> {e}")
+                print(f"DEBUG ERROR: Failed adding canvas feature for {child.value} -> {e}")
 
-        node.electorate = total_electorate
-        node.houses = total_houses
+        # Update parent metrics
+        parent_node.electorate = total_electorate
+        parent_node.houses = total_houses
 
         print("DEBUG SUMMARY:")
         print(f"Total regions processed: {total_regions}")
         print(f"Missing child matches: {missing_child}")
         print(f"Regions with no electors: {no_electors}")
-        print(f"Polygons added to layer: {polygons_added}")
+        print(f"Polygons successfully added to canvas: {polygons_added}")
 
 
     def add_shapenodes (self,rlevels,herenode,stype):

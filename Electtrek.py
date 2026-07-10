@@ -2944,30 +2944,31 @@ def downbulk():
     current_node = CElection.get_last_node(create=True)
     print(f"📍 Context Node: {current_node.value} (NID: {current_node.nid})")
 
-    # Update Session
+    # ==================================================================
+    # 🧠 FIX: Explicitly flag the structural accumulation state
+    # ==================================================================
+    session['accumulate'] = True
     session['accumulated_nodes'] = nids
     session.modified = True
-    print(f"💾 Session updated with 'accumulated_nodes'")
+    print(f"💾 Session updated with bulk accumulation flags for {current_election}")
+    # ==================================================================
 
     # 4. Ensure all nodes exist using clean Node paths
-    # (Your updated ping_node will now safely check levels < 5 in Geo_index or use electors)
     for node in nodelist:
-        # Utilizing node.node_path directly to match your path validation logic
         get_trek_root().ping_node(
             rlevels,
             node.node_path,
             create=True,
-            accumulate=session.get("accumulate", False)
+            accumulate=session.get("accumulate", False)  # This will now safely read True!
         )
 
     # 5. Trigger the map creation
-    # Using the safe index 0 guard since we verified nodelist is not empty
     target_parent = nodelist[0].parent
     map_filename = target_parent.mapfile()
     print(f"🛠️ Triggering endpoint_created for: {map_filename}")
 
     created, totalleaf = target_parent.endpoint_created(rlevels, map_filename, static=True)
-    print(f"📊 Render Result: Created={created}, Total Leaf Nodes={totalleaf}")
+    print(f"📊 Render Result: File: {map_filename} Created={created}, Total Leaf Nodes={totalleaf}")
 
     # 6. File verification
     CElection.visit_node(target_parent.parent)

@@ -661,17 +661,35 @@ class TreeNode:
         return self.group_by_type(self.children)
 
     def get_grandchild_layers(self):
-        grandchildren = []
-        for child in self.children:
-            grandchildren.extend(child.children)
-        return self.group_by_type(grandchildren)
+        from flask import session
+        from nodes import TREK_NODES_BY_ID
 
+        accumulated_ids = session.get("accumulated_nodes", [])
+
+        if accumulated_ids:
+            print(f"🔮 [GRANDCHILD EXTRACTION] Extracting grandchildren from {len(accumulated_ids)} session-staged child nodes.")
+            grandchildren = []
+
+            for nid in accumulated_ids:
+                child_node = TREK_NODES_BY_ID.get(nid)
+                if child_node and hasattr(child_node, 'children'):
+                    # The children of the passed wards/divisions are the walks/polling districts (grandchildren)
+                    grandchildren.extend(child_node.children)
+
+            print(f"✅ Extracted {len(grandchildren)} total grandchild nodes from the staged child selection.")
+        else:
+            # Standard structural tree fallback
+            grandchildren = []
+            for child in self.children:
+                grandchildren.extend(child.children)
+
+        return self.group_by_type(grandchildren)
 
     def surrounding_layers(self):
         yield from self.get_parent_layers().items()
         yield from self.get_sibling_layers().items()
         yield from self.get_child_layers().items()
-#        yield from self.get_grandchild_layers().items()
+        yield from self.get_grandchild_layers().items()
 
 
     @classmethod
@@ -900,8 +918,8 @@ class TreeNode:
     def endpoint_created(self, rlevels, newpath, static=False):
         from flask import session
         """
-        Creates a map node (HTML) if it doesn't already exist or
-        the one that does exist is older than the node's last modification.
+        Creates a map node (HTML) if it doesn't already exist,
+        is stale, or if active node accumulation overrides the cache.
         """
         totalleaf =  0
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -913,28 +931,22 @@ class TreeNode:
         print(f"___under {elections.route()} testing endpoint:", newpath)
         print("endpoint children:", [c.value for c in self.children])
 
-        # 1. Extract the inner dictionary of {int: str}
-
-
-        # 2. Find the maximum level integer (e.g., 5)
         max_level = max(elevels)
 
         if next_level > max_level:
-            return False  # No further levels to process
+            return False, 0
 
         atype = elevels[next_level]
 
         workdir = workdirectories.get('workdir')
         if not workdir:
             print("⚠️ [ERROR] 'workdir' not found in workdirectories!")
-            return False
-
+            return False, 0
 
         fullpath = Path(workdir) / newpath
 
         # Determine if the map is stale
         endpoint_created = False
-
 
         if not fullpath.exists():
             endpoint_created = True
@@ -943,34 +955,20 @@ class TreeNode:
             if self.last_modified > file_mtime:
                 endpoint_created = True
 
+        # 🧠 THE SESSION CHECK: If we have an active accumulation layout,
+        # force the update flag to True to bypass old files on disk.
+        accumulated = session.get('accumulated_nodes', [])
+        if accumulated:
+            print(f"🔄 [ACCUMULATION OVERRIDE] Found {len(accumulated)} target nodes in session. Forcing map refresh.")
+            endpoint_created = True
+
         if next_level <= max_level and endpoint_created:
             map, totalleaf = self.create_node_map(rlevels, static=static)
+        else:
+            # Fallback leaf-count calculation for clean exits
+            totalleaf = len([c for c in self.children if c.level == max_level])
 
-        accumulate = session.get("accumulate", False)
-# if the endpoint doesn t exist or we area accumulating
-        render_node = self
-        if accumulate:
-            render_node = self.parent if self.parent else self
-            endpoint_created = True
-            print(f"=== ACCUMULATING === {self.nid}")
-            print(f"DEBUG: Current Session List BEFORE: {session.get('accumulated_nodes')}")
-
-            # 1. Update the list
-            lst = session.get("accumulated_nodes", [])
-            if self.nid not in lst:
-                lst.append(self.nid)
-            session["accumulated_nodes"] = lst
-            session.modified = True
-
-            # 2. TRIGGER THE PARENT UPDATE
-            # This ensures that even though we are 'visiting' a child,
-            # we force the parent map to re-render with the updated session list.
-            if self.parent:
-                print(f"--- Triggering Parent Map Update for: {self.parent.value}")
-                # Call create_node_map on the parent
-                map, totalleaf = self.parent.create_node_map(rlevels, static=static)
         return endpoint_created, totalleaf
-
 
 
     def set_parent(self, new_parent):
@@ -1227,20 +1225,21 @@ class TreeNode:
         down_path = dest_parts[common_len:]
         print(f"  [3] Remaining downstream path to traverse: {down_path}")
 
-        # Track the path sequence accurately using parts list to avoid string compounding issues
         current_parts = dest_parts[:common_len]
+        target_path = node.node_path  # Track target path sequence outside loop safely
+        next_level = node.level
 
         for idx, part in enumerate(down_path):
             current_parts.append(part)
             target_path = "/".join(current_parts)
             next_level = node.level + 1
 
-            print(f"\n  👉 [ITERATION {idx+1}] Processing part: '{part}'")
-            print(f"     Constructed target_path: '{target_path}'")
-            print(f"     Evaluating next_level:   {next_level}")
+            print(f"\n     👉 [ITERATION {idx+1}] Processing part: '{part}'")
+            print(f"       Constructed target_path: '{target_path}'")
+            print(f"       Evaluating next_level:   {next_level}")
 
             if next_level > max_level:
-                print(f"     ⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}. Breaking.")
+                print(f"       ⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}. Breaking.")
                 break
 
             ntype = str(elevels[next_level])
@@ -1249,50 +1248,50 @@ class TreeNode:
             is_valid_path = False
             if next_level < 5:
                 is_valid_path = target_path in Geo_index
-                print(f"     🛡️ Checked Geo_index for '{target_path}': Found = {is_valid_path}")
+                print(f"       🛡️ Checked Geo_index for '{target_path}': Found = {is_valid_path}")
             else:
                 df_check = electors.elector_for_path(rlevels, target_path)
                 is_valid_path = df_check is not None and not df_check.empty
-                print(f"     🛡️ Checked DB electors for '{target_path}': Found Rows = {is_valid_path}")
+                print(f"       🛡️ Checked DB electors for '{target_path}': Found Rows = {is_valid_path}")
 
             if not is_valid_path:
-                print(f"     🚫 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
+                print(f"       🚫 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
                 print(f"🔍 [DEBUG PING_NODE ABORT-EXIT] Returning node: '{node.node_path}'\n" + "="*50)
                 return node
 
             # Look for existing child match
             match = next((c for c in node.children if c.node_path == target_path), None)
             if match:
-                print(f"     ✅ Found existing memory-cached child node for: '{target_path}'")
+                print(f"       ✅ Found existing memory-cached child node for: '{target_path}'")
 
             # --- BRANCH CREATION ON MISS ---
             if create and not match:
-                print(f"     ⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
+                print(f"       ⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
                 try:
                     if next_level <= 4:
                         node.create_map_branch(rlevels)
                     else:
                         node.create_data_branch(rlevels, target_path)
                 except Exception as e:
-                    print(f"     ⚠️ [PING] Primary creation pass failed: {e}")
+                    print(f"       ⚠️ [PING] Primary creation pass failed: {e}")
 
                 match = next((c for c in node.children if c.node_path == target_path), None)
 
                 # --- BIVALENT FALLBACK ---
                 if not match and "/" in ntype:
-                    print(f"     🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
+                    print(f"       🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
                     try:
                         if next_level <= 4:
                             node.create_map_branch(rlevels)
                         else:
                             node.create_data_branch(rlevels, target_path)
                     except Exception as e:
-                        print(f"     ⚠️ [PING] Alternative bivalent strategy failed: {e}")
+                        print(f"       ⚠️ [PING] Alternative bivalent strategy failed: {e}")
 
                     match = next((c for c in node.children if c.node_path == target_path), None)
 
             if not match:
-                print(f"     ❌ [PING] Could not match or create node for path: {target_path}")
+                print(f"       ❌ [PING] Could not match or create node for path: {target_path}")
                 print(f"🔍 [DEBUG PING_NODE FAIL-EXIT] Returning node: '{node.node_path}'\n" + "="*50)
                 return node
 
@@ -1309,6 +1308,13 @@ class TreeNode:
         # ──────────────────────────────
         # Step 5: Exhaustive Bottom-Node Child Expansion
         # ──────────────────────────────
+        # 🎯 OPTION C TRANSFORMATION: Drops straight through into hydration block rather than exiting early.
+        if len(down_path) > 0 and node.node_path == target_path:
+            if next_level > max_level:
+                print(f"🎯 [DEBUG PING_NODE SUCCESS-EXIT] Target matched exactly at max leaf depth. Skipping expansion.")
+                return node
+            print(f"🌊 [AUTOMATIC DEEP HYDRATION] Target matched. Dropping into expansion to unpack nested children layers...")
+
         print(f"\n  [5] Entering exhaustive bottom-node expansion phase for: '{node.node_path}'")
         if node.level <= max_level and create:
             children_type = str(elevels.get(node.level, ""))
@@ -1325,7 +1331,7 @@ class TreeNode:
 
             if should_expand:
                 try:
-                    print(f"     ⚙️ Triggering bottom-node branch expansion pass...")
+                    print(f"     ⚙️ Triggering bottom-node branch expansion pass for children...")
                     if next_level <= 4:
                         node.create_map_branch(rlevels)
                     else:
@@ -1523,13 +1529,13 @@ class TreeNode:
                     )
                 # 📐 Spatial Proximity Layers (Voronoi Grids)
                 case "polling_district" | "walk":
-                    # Bypass the crashing local filter and delegate straight to add_voronoi!
-                    boundary_envelope = self
-                    print(f"Voronoi layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
+                    print(f"Voronoi layer: {factory_key} count: {len(nodes_to_render)}")
+
+                    # 🎯 FIX: Anchor the clipping envelope to the true parent container
+                    # of the specific sub-units being drawn, fall back to self if list is empty.
 
                     layer.add_voronoi(
                         rlevels=rlevels,
-                        node=boundary_envelope,
                         nodes_list=nodes_to_render,
                         static=static
                     )
