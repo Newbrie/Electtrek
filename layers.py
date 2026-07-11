@@ -634,6 +634,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         import folium
         from elector import electors
         from elections import CurrentElection
+        from collections import defaultdict
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -642,315 +643,309 @@ class ExtendedFeatureGroup(FeatureGroup):
             print("⚠️ No sub-units provided in nodes_list for Voronoi calculation.")
             return
 
-        # 🎯 Automatically extract parent context from the node stream
-        parent_node = nodes_list[0].parent
-        if not parent_node:
-            print("⚠️ Nodes in nodes_list lack a valid parent relationship container.")
-            return
-
         # Clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
         CE = CurrentElection.load(c_election)
         task_tags, outcome_tags, all_tags = CE.get_tags()
 
-        # Resolve the explicit parent geometry out of the structural framework file
-        pfile = Treepolys[parent_node.type]
-        Territory_boundary = pfile[pfile['FID'] == int(parent_node.fid)]
-        parent_node.geometry = Territory_boundary.union_all()
-
-        parent_boundary = parent_node.geometry
-        if parent_boundary is None:
-            print(f"⚠️ Parent boundary missing for parent node: {parent_node.value} ({parent_node.type})")
-            return
-
-        # Ensure geometric validity
-        if not parent_boundary.is_valid:
-            parent_boundary = parent_boundary.buffer(0)
-
-        # Create a clean calculation bounding hull
-        calc_hull = parent_boundary.convex_hull
-
+# -------------------------------------------------
+        # 📦 STEP 1: Group by a structurally unique tuple key
         # -------------------------------------------------
-        # Build coordinates from provided sub-unit stream list
-        # -------------------------------------------------
-        points = []
-        point_to_child = {}
-        child_elector_map = {}
+        grouped_by_parent = defaultdict(list)
+        parent_registry = {}  # Holds one concrete parent object instance per key
 
         for child in nodes_list:
-            child_elector_map[child] = electors.elector_for_path(rlevels, child.mapfile())
-            if child.latlongroid and len(child.latlongroid) == 2:
-                child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
-            else:
-                child.centre = None
-
-            if not child.centre:
+            if not child.parent:
+                print(f"⚠️ Skipping node {child.value}; it lacks a parent relation.")
                 continue
 
-            pt = (round(float(child.centre.x), 6), round(float(child.centre.y), 6))
-            point_to_child[pt] = child
-            points.append(pt)
+            # Create an immutable structural key
+            parent_key = (child.parent.type, child.parent.value, child.parent.fid)
 
-        if not points:
-            print("⚠️ No valid sub-unit centers found in nodes_list")
-            return
+            grouped_by_parent[parent_key].append(child)
+            if parent_key not in parent_registry:
+                parent_registry[parent_key] = child.parent
 
-        coords = np.array(points)
-
-        # Ensure all points fall safely inside parent envelope
-        fixed_points = []
-        point_to_child_fixed = {}
-
-        for pt in coords:
-            point = Point(pt)
-
-            if not parent_boundary.contains(point):
-                nearest = nearest_points(parent_boundary, point)[0]
-                new_pt = (round(nearest.x, 6), round(nearest.y, 6))
-            else:
-                new_pt = (round(pt[0], 6), round(pt[1], 6))
-
-            fixed_points.append(new_pt)
-            point_to_child_fixed[new_pt] = point_to_child.get((round(pt[0], 6), round(pt[1], 6)))
-
-        print(f"DEBUG: Unique points tracking: {len(set(fixed_points))} out of {len(fixed_points)}")
-        coords = np.array(fixed_points)
-        point_to_child = point_to_child_fixed  # Overwrite map mapping keys seamlessly
+        # Total diagnostic counters across all groups
+        grand_total_polygons_added = 0
 
         # -------------------------------------------------
-        # Run Voronoi Calculation Paths
+        # 🔁 STEP 2: Process each parent group independently
         # -------------------------------------------------
-        if len(coords) < 1:
-            print(f"⚠️ No coordinates accessible to build Voronoi for {parent_node.value}")
-            return
+        for parent_key, sub_nodes in grouped_by_parent.items():
+            parent_node = parent_registry[parent_key]
+            p_type, p_value, p_fid = parent_key
 
-        region_polys = {}
-        region_pts = {}
-
-        if len(coords) >= 4:
-            region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
-            print(f"DEBUG VORONOI: Built {len(region_polys)} regional cells using Convex Hull.")
-        else:
-            print(f"ℹ️ Low density point array ({len(coords)}). Initializing custom layout splittings...")
-            if len(coords) == 1:
-                region_polys = {0: calc_hull}
-                region_pts = {0: [0]}
-
-            elif len(coords) == 2:
-                from shapely.ops import split
-                from shapely.geometry import LineString
-
-                pt1, pt2 = coords[0], coords[1]
-                mid_x, mid_y = (pt1[0] + pt2[0]) / 2, (pt1[1] + pt2[1]) / 2
-                dx, dy = pt2[0] - pt1[0], pt2[1] - pt1[1]
-
-                scale = 20.0
-                dividing_line = LineString([
-                    (mid_x - (-dy) * scale, mid_y - dx * scale),
-                    (mid_x + (-dy) * scale, mid_y + dx * scale)
-                ])
-
-                split_result = split(calc_hull, dividing_line)
-                geoms = list(split_result.geoms) if hasattr(split_result, 'geoms') else [split_result]
-
-                for r_idx, geom in enumerate(geoms):
-                    dist0 = geom.centroid.distance(Point(pt1))
-                    dist1 = geom.centroid.distance(Point(pt2))
-                    assigned_pt_idx = 0 if dist0 < dist1 else 1
-
-                    region_polys[r_idx] = geom
-                    region_pts[r_idx] = [assigned_pt_idx]
-
-            elif len(coords) == 3:
-                min_x, min_y, max_x, max_y = calc_hull.bounds
-                dummy_point = np.array([[max_x + 10.0, max_y + 10.0]])
-                extended_coords = np.vstack([coords, dummy_point])
-
-                ext_polys, ext_pts = voronoi_regions_from_coords(extended_coords, calc_hull)
-
-                r_idx = 0
-                for k, poly in ext_polys.items():
-                    assigned_indices = ext_pts[k]
-                    if 3 not in assigned_indices and not poly.is_empty:
-                        region_polys[r_idx] = poly
-                        region_pts[r_idx] = assigned_indices
-                        r_idx += 1
-
-        # Load global elector data block for envelope tracking metrics
-        nodeelectors = electors.elector_for_path(rlevels, parent_node.mapfile())
-        if nodeelectors is None or nodeelectors.empty:
-            print("DEBUG ELECTORS: ⚠️ Structural parent node boundary empty of elector rows.")
-            return
-
-        print(f"DEBUG ELECTORS: Loaded {len(nodeelectors)} total boundary envelope electors.")
-
-        total_regions = 0
-        missing_child = 0
-        no_electors = 0
-        polygons_added = 0
-        total_electorate = 0
-        total_houses = 0
-
-        # Loop through regions, intersection-clipping against the parent boundary
-        for region_id, poly in region_polys.items():
-            raw_intersection = poly.intersection(parent_boundary)
-
-            if raw_intersection.is_empty:
-                continue
-
-            if raw_intersection.geom_type in ['Polygon', 'MultiPolygon']:
-                actual_shape_poly = raw_intersection
-            elif raw_intersection.geom_type == 'GeometryCollection':
-                polys = [g for g in raw_intersection.geoms if g.geom_type in ['Polygon', 'MultiPolygon']]
-                if not polys:
-                    continue
-                from shapely.ops import unary_union
-                actual_shape_poly = unary_union(polys)
-            else:
-                continue
-
-            if actual_shape_poly.is_empty or not actual_shape_poly.is_valid:
-                continue
-
-            total_regions += 1
-            idx = region_pts[region_id]
-            if isinstance(idx, (list, np.ndarray)):
-                idx = idx[0]
-
-            coord = coords[idx]
-            coord_key = (round(float(coord[0]), 6), round(float(coord[1]), 6))
-            child = point_to_child.get(coord_key)
-
-            if child is None:
-                missing_child += 1
-                continue
-
-            child.voronoi_region = actual_shape_poly
-            region_electors = child_elector_map.get(child)
-
-            if region_electors is None:
-                region_electors = pd.DataFrame()
-
-            if region_electors.empty:
-                no_electors += 1
-
-            # Navigation UI layout
-            nav_html = ""
-            has_parent = child.parent is not None
-            parent_mapfile = child.parent.mapfile() if has_parent else parent_node.mapfile()
-            parent_value = child.parent.value if has_parent else parent_node.value
-
-            upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
-            up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
-
-            if not static:
-                showmessageST = f"showMore('/PDdownST/{child.mapfile()}','{child.value}')"
-                street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
-                nav_html = f"""
-                <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
-                {street_link}<br>
-                {up_link}
-                </div>
-                """
-            else:
-                nav_html = f"""
-                <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
-                {up_link}
-                </div>
-                """
-
-            street_stats, house_count = preprocess_streets(region_electors, task_tags)
-            missing_total = sum(d['house_gaps'] for d in street_stats.values())
-
-            child.electorate = len(region_electors)
-            child.houses = house_count
-            total_electorate += len(region_electors)
-            total_houses += house_count
-
-            if not region_electors.empty and 'PD' in region_electors.columns:
-                pd_code = str(region_electors.iloc[0]['PD']).strip().upper()
-            else:
-                pd_code = str(child.value).split('_')[0].strip().upper()
-
-            if not hasattr(self, '_pd_color_cache'):
-                self._pd_color_cache = {}
-
-            if pd_code not in self._pd_color_cache:
-                import hashlib
-                hash_bytes = hashlib.md5(pd_code.encode('utf-8')).digest()
-                r = (hash_bytes[0] % 180) + 50
-                g = (hash_bytes[1] % 180) + 50
-                b = (hash_bytes[2] % 180) + 50
-                self._pd_color_cache[pd_code] = f"#{r:02x}{g:02x}{b:02x}"
-
-            region_color = self._pd_color_cache[pd_code]
-
-            tooltip_html = f"""
-            <b>{child.value}</b><br>
-            Electors: {len(region_electors)}<br>
-            Houses: {house_count}<br>
-            Elector/house: {round(len(region_electors)/house_count,2) if house_count else 0}<br>
-            House gaps: {missing_total}
-            """
-
-            street_html = nav_html + "<hr>" + build_street_list_html(child.value, region_electors, street_stats, task_tags)
-
-            style = {
-                "fillColor": region_color,
-                "color": "white",
-                "weight": 1,
-                "fillOpacity": 0.6,
-            }
+            print(f"\n--- Processing Voronoi Group for Parent: {p_value} ({p_type}) | Sub-nodes: {len(sub_nodes)} ---")
 
             try:
-                feature_properties = {
-                    'nid': child.nid,
-                    'region_id': child.value,
-                    'type': 'voronoi_poly',
-                    'expected_houses': house_count,
-                    'level': getattr(child, 'level', 'PD')
-                }
-
-                if getattr(self, 'is_ghost', False):
-                    feature_properties['style_type'] = 'grey_ghost'
-
-                geojson_feature = {
-                    "type": "Feature",
-                    "geometry": actual_shape_poly.__geo_interface__,
-                    "properties": feature_properties
-                }
-
-                gj = folium.GeoJson(
-                    geojson_feature,
-                    style_function=lambda x, s=style: s,
-                    tooltip=folium.Tooltip(
-                        tooltip_html,
-                        sticky=False,
-                        direction="bottom",
-                        offset=(0, 15),
-                        style="background-color: white; color: #333; font-family: sans-serif; border-radius: 4px; padding: 6px; border: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
-                    )
-                )
-
-                popup = folium.Popup(street_html, max_width=900, show=False)
-                gj.add_child(popup)
-                gj.add_to(self)
-                polygons_added += 1
-
+                pfile = Treepolys[parent_node.type]
+                Territory_boundary = pfile[pfile['FID'] == int(parent_node.fid)]
+                parent_node.geometry = Territory_boundary.union_all()
             except Exception as e:
-                print(f"DEBUG ERROR: Failed adding canvas feature for {child.value} -> {e}")
+                print(f"⚠️ Failed to look up spatial poly framework layer for {parent_node.type}: {e}")
+                continue
 
-        # Update parent metrics
-        parent_node.electorate = total_electorate
-        parent_node.houses = total_houses
+            parent_boundary = parent_node.geometry
+            if parent_boundary is None:
+                print(f"⚠️ Parent boundary missing for parent node: {parent_node.value}")
+                continue
 
-        print("DEBUG SUMMARY:")
-        print(f"Total regions processed: {total_regions}")
-        print(f"Missing child matches: {missing_child}")
-        print(f"Regions with no electors: {no_electors}")
-        print(f"Polygons successfully added to canvas: {polygons_added}")
+            # Ensure geometric validity
+            if not parent_boundary.is_valid:
+                parent_boundary = parent_boundary.buffer(0)
 
+            # Create a clean calculation bounding hull
+            calc_hull = parent_boundary.convex_hull
+
+            # Build coordinates for this isolated parent group
+            points = []
+            point_to_child = {}
+            child_elector_map = {}
+
+            for child in sub_nodes:
+                child_elector_map[child] = electors.elector_for_path(rlevels, child.mapfile())
+                if child.latlongroid and len(child.latlongroid) == 2:
+                    child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
+                else:
+                    child.centre = None
+
+                if not child.centre:
+                    continue
+
+                pt = (round(float(child.centre.x), 6), round(float(child.centre.y), 6))
+                point_to_child[pt] = child
+                points.append(pt)
+
+            if not points:
+                print(f"⚠️ No valid sub-unit centers found inside {parent_node.value}")
+                continue
+
+            coords = np.array(points)
+
+            # Ensure all points fall safely inside parent envelope
+            fixed_points = []
+            point_to_child_fixed = {}
+
+            for pt in coords:
+                point = Point(pt)
+                if not parent_boundary.contains(point):
+                    nearest = nearest_points(parent_boundary, point)[0]
+                    new_pt = (round(nearest.x, 6), round(nearest.y, 6))
+                else:
+                    new_pt = (round(pt[0], 6), round(pt[1], 6))
+
+                fixed_points.append(new_pt)
+                point_to_child_fixed[new_pt] = point_to_child.get((round(pt[0], 6), round(pt[1], 6)))
+
+            coords = np.array(fixed_points)
+            point_to_child = point_to_child_fixed
+
+            if len(coords) < 1:
+                continue
+
+            region_polys = {}
+            region_pts = {}
+
+            # Run Voronoi Calculation Paths for this group
+            if len(coords) >= 4:
+                region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
+            else:
+                if len(coords) == 1:
+                    region_polys = {0: calc_hull}
+                    region_pts = {0: [0]}
+                elif len(coords) == 2:
+                    from shapely.ops import split
+                    from shapely.geometry import LineString
+
+                    pt1, pt2 = coords[0], coords[1]
+                    mid_x, mid_y = (pt1[0] + pt2[0]) / 2, (pt1[1] + pt2[1]) / 2
+                    dx, dy = pt2[0] - pt1[0], pt2[1] - pt1[1]
+
+                    scale = 20.0
+                    dividing_line = LineString([
+                        (mid_x - (-dy) * scale, mid_y - dx * scale),
+                        (mid_x + (-dy) * scale, mid_y + dx * scale)
+                    ])
+
+                    split_result = split(calc_hull, dividing_line)
+                    geoms = list(split_result.geoms) if hasattr(split_result, 'geoms') else [split_result]
+
+                    for r_idx, geom in enumerate(geoms):
+                        dist0 = geom.centroid.distance(Point(pt1))
+                        dist1 = geom.centroid.distance(Point(pt2))
+                        assigned_pt_idx = 0 if dist0 < dist1 else 1
+
+                        region_polys[r_idx] = geom
+                        region_pts[r_idx] = [assigned_pt_idx]
+
+                elif len(coords) == 3:
+                    min_x, min_y, max_x, max_y = calc_hull.bounds
+                    dummy_point = np.array([[max_x + 10.0, max_y + 10.0]])
+                    extended_coords = np.vstack([coords, dummy_point])
+
+                    ext_polys, ext_pts = voronoi_regions_from_coords(extended_coords, calc_hull)
+
+                    r_idx = 0
+                    for k, poly in ext_polys.items():
+                        assigned_indices = ext_pts[k]
+                        if 3 not in assigned_indices and not poly.is_empty:
+                            region_polys[r_idx] = poly
+                            region_pts[r_idx] = assigned_indices
+                            r_idx += 1
+
+            # Load electors for this group's parent node envelope
+            nodeelectors = electors.elector_for_path(rlevels, parent_node.mapfile())
+
+            total_electorate = 0
+            total_houses = 0
+
+            # Loop through cells, intersection-clipping against this group's specific parent boundary
+            for region_id, poly in region_polys.items():
+                raw_intersection = poly.intersection(parent_boundary)
+
+                if raw_intersection.is_empty:
+                    continue
+
+                if raw_intersection.geom_type in ['Polygon', 'MultiPolygon']:
+                    actual_shape_poly = raw_intersection
+                elif raw_intersection.geom_type == 'GeometryCollection':
+                    polys = [g for g in raw_intersection.geoms if g.geom_type in ['Polygon', 'MultiPolygon']]
+                    if not polys:
+                        continue
+                    from shapely.ops import unary_union
+                    actual_shape_poly = unary_union(polys)
+                else:
+                    continue
+
+                if actual_shape_poly.is_empty or not actual_shape_poly.is_valid:
+                    continue
+
+                idx = region_pts[region_id]
+                if isinstance(idx, (list, np.ndarray)):
+                    idx = idx[0]
+
+                coord = coords[idx]
+                coord_key = (round(float(coord[0]), 6), round(float(coord[1]), 6))
+                child = point_to_child.get(coord_key)
+
+                if child is None:
+                    continue
+
+                child.voronoi_region = actual_shape_poly
+                region_electors = child_elector_map.get(child, pd.DataFrame())
+
+                # Navigation UI Links
+                has_parent = child.parent is not None
+                parent_mapfile = child.parent.mapfile() if has_parent else parent_node.mapfile()
+                parent_value = child.parent.value if has_parent else parent_node.value
+
+                upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
+                up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
+
+                if not static:
+                    showmessageST = f"showMore('/PDdownST/{child.mapfile()}','{child.value}')"
+                    street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
+                    nav_html = f"""
+                    <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                    {street_link}<br>
+                    {up_link}
+                    </div>
+                    """
+                else:
+                    nav_html = f"""
+                    <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                    {up_link}
+                    </div>
+                    """
+
+                street_stats, house_count = preprocess_streets(region_electors, task_tags)
+                missing_total = sum(d['house_gaps'] for d in street_stats.values())
+
+                child.electorate = len(region_electors)
+                child.houses = house_count
+                total_electorate += len(region_electors)
+                total_houses += house_count
+
+                if not region_electors.empty and 'PD' in region_electors.columns:
+                    pd_code = str(region_electors.iloc[0]['PD']).strip().upper()
+                else:
+                    pd_code = str(child.value).split('_')[0].strip().upper()
+
+                if not hasattr(self, '_pd_color_cache'):
+                    self._pd_color_cache = {}
+
+                if pd_code not in self._pd_color_cache:
+                    import hashlib
+                    hash_bytes = hashlib.md5(pd_code.encode('utf-8')).digest()
+                    r = (hash_bytes[0] % 180) + 50
+                    g = (hash_bytes[1] % 180) + 50
+                    b = (hash_bytes[2] % 180) + 50
+                    self._pd_color_cache[pd_code] = f"#{r:02x}{g:02x}{b:02x}"
+
+                region_color = self._pd_color_cache[pd_code]
+
+                tooltip_html = f"""
+                <b>{child.value}</b><br>
+                Electors: {len(region_electors)}<br>
+                Houses: {house_count}<br>
+                Elector/house: {round(len(region_electors)/house_count,2) if house_count else 0}<br>
+                House gaps: {missing_total}
+                """
+
+                street_html = nav_html + "<hr>" + build_street_list_html(child.value, region_electors, street_stats, task_tags)
+
+                style = {
+                    "fillColor": region_color,
+                    "color": "white",
+                    "weight": 1,
+                    "fillOpacity": 0.6,
+                }
+
+                try:
+                    feature_properties = {
+                        'nid': child.nid,
+                        'region_id': child.value,
+                        'type': 'voronoi_poly',
+                        'expected_houses': house_count,
+                        'level': getattr(child, 'level', 'PD')
+                    }
+
+                    if getattr(self, 'is_ghost', False):
+                        feature_properties['style_type'] = 'grey_ghost'
+
+                    geojson_feature = {
+                        "type": "Feature",
+                        "geometry": actual_shape_poly.__geo_interface__,
+                        "properties": feature_properties
+                    }
+
+                    gj = folium.GeoJson(
+                        geojson_feature,
+                        style_function=lambda x, s=style: s,
+                        tooltip=folium.Tooltip(
+                            tooltip_html,
+                            sticky=False,
+                            direction="bottom",
+                            offset=(0, 15),
+                            style="background-color: white; color: #333; font-family: sans-serif; border-radius: 4px; padding: 6px; border: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
+                        )
+                    )
+
+                    popup = folium.Popup(street_html, max_width=900, show=False)
+                    gj.add_child(popup)
+                    gj.add_to(self)
+                    grand_total_polygons_added += 1
+
+                except Exception as e:
+                    print(f"DEBUG ERROR: Failed adding canvas feature for {child.value} -> {e}")
+
+            # Assign totals back to each respective parent container node safely
+            parent_node.electorate = total_electorate
+            parent_node.houses = total_houses
+
+        print(f"\n🚀 GLOBAL VORONOI SUMMARY: Total map elements rendered across all groups: {grand_total_polygons_added}")
 
     def add_shapenodes (self,rlevels,herenode,stype):
         global allelectors
