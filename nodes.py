@@ -1382,8 +1382,8 @@ class TreeNode:
             tag_layer.options.update({"tag": tag_code, "layer_type": "ghost"})
             return tag_layer
 
-        def _attach_elector_and_campaign_overlays(selected_list, tier_key, node, rlevels, active_tags, baked_dict):
-            """Assembles complex voter pin clusters and ghost overlays relative to the active target tier."""
+        def _attach_elector_overlays(selected_list, tier_key, node, rlevels):
+            """Assembles complex voter demographic pin clusters (Postal and Pledges) relative to the active target tier."""
             from folium.plugins import MarkerCluster
 
             # 📬 1. Postal Voters Layer (Thematic Accent: Amethyst Purple)
@@ -1427,6 +1427,10 @@ class TreeNode:
                 )
                 if pledge_count > 0:
                     selected_list.append(pledge_layer)
+
+        def _attach_task_campaign_overlays(selected_list, tier_key, node, active_tags, baked_dict):
+            """Generates ghost progression overlays and tracking layers for active campaign operations."""
+            import state  # Ensures state execution variables are explicitly bound
 
             # 👻 3. Ghost Task Heatmaps (Thematic Accent: Flame Orange Campaign Highlight)
             for tag_code, tag_desc in active_tags.items():
@@ -1554,10 +1558,10 @@ class TreeNode:
                     selected.append(layer)
 
             # 📬 Operational Overlay Attachment Trigger
-#            if factory_key in ("constituency", "ward", "division", "walk"):
-#                _attach_elector_and_campaign_overlays(
-#                    selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
-#                )
+            if factory_key in ("constituency", "ward", "division", "walk"):
+                _attach_task_campaign_overlays(
+                    selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
+                )
 
             # ------------------------------------------------------------------
             # 🔧 POST-EXECUTION CLEANUP: Maintain Flat Property Architecture

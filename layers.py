@@ -512,6 +512,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         import folium
         polygons_added = 0
 
+        is_vi_task = (str(tag_code).upper() == 'VI')
+
         for child in parent_node.children:
             region_id = str(child.value)
 
@@ -523,15 +525,28 @@ class ExtendedFeatureGroup(FeatureGroup):
             completed_weight = 0
 
             # -------------------------------------------------
-            # 1. Calculate Tag Weight (The Logic Engine)
+            # 1. Calculate Task Weight (The Logic Engine)
             # -------------------------------------------------
             for street_data in region_info.values():
                 if isinstance(street_data, dict):
-                    # Check 'y' status for this specific tag_code
-                    has_tag = any(u.get('tags', {}).get(tag_code) == 'y'
-                                 for u in street_data.values() if isinstance(u, dict))
-                    if has_tag:
-                        completed_weight += street_data.get('street_weight', 0)
+
+                    # --- FIX: Branch logic depending on whether we check for active tags or non-zero VIs ---
+                    if is_vi_task:
+                        # VI task counts if ANY house unit on this street has captured votes > 0
+                        has_task_progress = any(
+                            int(u.get('votes', 0)) > 0
+                            for u in street_data.values() if isinstance(u, dict)
+                        )
+                    else:
+                        # Regular tasks check for 'y' status
+                        has_task_progress = any(
+                            u.get('tags', {}).get(tag_code) == 'y'
+                            for u in street_data.values() if isinstance(u, dict)
+                        )
+
+                    if has_task_progress:
+                        # Extract weight from street base level container
+                        completed_weight += street_data.get('street_weight', 1)
 
             total_possible = region_info.get('region_total_houses', 1)
             opacity = (0.8 * (completed_weight / total_possible)) if total_possible > 0 else 0
@@ -541,12 +556,14 @@ class ExtendedFeatureGroup(FeatureGroup):
             # -------------------------------------------------
             if opacity > 0:
                 try:
-                    # Determine color from index (e.g., L1, L2)
-                    color_idx = int(tag_code[1:]) if tag_code[1:].isdigit() else 0
-                    fill_color = branchcolours[color_idx % 12]
+                    # Determine color index
+                    if is_vi_task:
+                        fill_color = "#00aaff"  # Action Blue for VI overlays
+                    else:
+                        color_idx = int(tag_code[1:]) if tag_code[1:].isdigit() else 0
+                        fill_color = branchcolours[color_idx % 12]
 
                     # Create the GeoJson Feature
-                    # Note: We use child.geometry which is already a Shapely object
                     ghost_gj = folium.GeoJson(
                         child.geometry,
                         name=f"ghost_{tag_code}_{region_id}",
@@ -558,7 +575,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         }
                     )
 
-                    # 🔑 CRITICAL: Inject the ghost_id for your JavaScript findBucket logic
+                    # Inject the ghost_id for your JavaScript findBucket logic
                     ghost_gj.ghost_id = f"ghost_{tag_code}_{region_id}"
 
                     # Add to self (this ExtendedFeatureGroup)
@@ -570,8 +587,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"DEBUG GHOSTS: Added {polygons_added} polygons to tag layer [{tag_code}]")
         return polygons_added
-
-
 
 
     def reset(self):
