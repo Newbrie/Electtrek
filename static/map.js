@@ -1060,6 +1060,24 @@ function deriveState(events) {
     return state;
 }
 
+// ⚡ Local Interceptor: Hijack the pre-baked popup content
+map.on('popupopen', function(e) {
+    // 1. Get the raw pre-baked street HTML right out of the opening popup
+    const preBakedHtml = e.popup.getContent();
+
+    if (preBakedHtml) {
+        // 2. Instantly close the little map bubble before the user sees it
+        map.closePopup();
+
+        // 3. Drop that exact street data into our full-screen modal container
+        document.getElementById('modal-table-body').innerHTML = preBakedHtml;
+
+        // 4. Launch the Bootstrap Modal to take control of the screen
+        const modalElement = document.getElementById('streetListModal');
+        const bsModal = new bootstrap.Modal(modalElement);
+        bsModal.show();
+    }
+});
 
 window.plotTaskProgress = function (
     region_id,

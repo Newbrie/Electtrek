@@ -172,7 +172,17 @@ function deriveTags(tags = {}) {
     {% block modals %}
     {% endblock %}
 
-  <div id="drawer-container"></div>
+    <div class="modal fade" id="streetListModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+          <div class="modal-content bg-dark text-white">
+              <div class="modal-header border-secondary bg-dark">
+                  <h5 class="modal-title text-info fw-bold">Region Street Details</h5>
+                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body bg-dark p-0" id="modal-table-body"></div>
+          </div>
+      </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
