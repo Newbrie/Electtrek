@@ -1546,6 +1546,9 @@ class TreeNode:
                         nodes_list=nodes_to_render,
                         static=static
                     )
+                    _attach_task_campaign_overlays(
+                        selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
+                    )
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" | "walkleg" | "result" | "target" | "data" :
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
@@ -1558,10 +1561,6 @@ class TreeNode:
                     selected.append(layer)
 
             # 📬 Operational Overlay Attachment Trigger
-            if factory_key in ("constituency", "ward", "division", "walk"):
-                _attach_task_campaign_overlays(
-                    selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
-                )
 
             # ------------------------------------------------------------------
             # 🔧 POST-EXECUTION CLEANUP: Maintain Flat Property Architecture
@@ -1570,7 +1569,7 @@ class TreeNode:
             layer.control = True
 
             # Use safe explicit fallbacks for map initialization layers control panel states
-            if factory_key in ["ward", "division", "constituency"]:
+            if factory_key in ["ward", "division", "constituency", "walk"]:
                 layer.show = True
             else:
                 layer.show = False

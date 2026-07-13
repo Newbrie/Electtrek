@@ -157,24 +157,49 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
     sorted_task_codes = sorted(task_tags.keys())
 
-    tag_headers_html = "".join([f'<th class="th-tag">{code}</th>' for code in sorted_task_codes])
+    tag_headers_html = "".join([f'<th class="text-center text-info small" style="min-width: 45px;">{code}</th>' for code in sorted_task_codes])
     ui_scope_json = json.dumps(uiScope)
     vid_json_payload = json.dumps(VID)
 
+    # Added mobile override styles to force full-screen coverage on viewport widths < 576px
     persistence_js = f'''
         <style>
-            .canvass-wrapper {{ border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap; }}
-            .canvass-table {{ border-collapse: collapse; width: 100%; }}
-            .th-blue {{ text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff; }}
-            .th-tag {{ text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff; }}
-            .td-cell {{ padding:8px; }}
-            .td-center {{ padding:8px; font-size:7pt; text-align:center; }}
-            .td-italic-center {{ padding:8px; font-size:7pt; text-align:center; font-style: italic; }}
-            .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
-            .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
-            .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
-            .select-box {{ font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc; }}
-            .vote-btn {{ font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }}
+            /* Global Tag styles */
+            .tag-toggle {{
+                cursor: pointer;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 0.85rem;
+                display: inline-block;
+                min-width: 28px;
+                text-align: center;
+                border: 1px solid #444;
+                transition: background 0.2s, transform 0.1s;
+            }}
+            .tag-toggle:active {{
+                transform: scale(0.92);
+            }}
+            .tag-active {{ background: #198754; color: white; border-color: #157347; }}
+            .tag-inactive {{ background: #343a40; color: #6c757d; border-color: #495057; }}
+
+            /* RESPONSIVE MOBILE OVERRIDES FOR THE MASTER DRAWER */
+            @media (max-width: 575.98px) {{
+                /* Force the drawer container to override Bootstrap default bottom sheet constraints */
+                #canvassOffcanvas.offcanvas-bottom {{
+                    height: 100dvh !important; /* Take up 100% of the mobile device height */
+                    max-height: 100dvh !important;
+                    width: 100vw !important;  /* Take up 100% of the mobile device width */
+                    border-top-left-radius: 0 !important;
+                    border-top-right-radius: 0 !important;
+                }}
+
+                /* Optimize table wrapping on tiny screens to avoid layout breaks */
+                .table-responsive {{
+                    max-height: calc(100dvh - 56px); /* Keeps headers sticky and body scrollable */
+                    overflow-y: auto;
+                }}
+            }}
         </style>
 
         <script>
@@ -205,21 +230,28 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     '''
 
     html = persistence_js + f'''
-        <div class="canvass-wrapper">
-            <table class="canvass-table">
-                <thead>
-                    <tr style="background-color:#001f3f;">
-                        <th class="th-blue">Street Name</th>
-                        <th class="th-blue">Total</th>
-                        <th class="th-blue">Range</th>
-                        <th class="th-blue" style="width:80px;">Unit</th>
-                        {tag_headers_html}
-                        <th class="th-blue">VI</th>
-                        <th class="th-blue">Votes</th>
-                        <th class="th-blue">Gaps</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <div class="offcanvas-header bg-dark text-white border-bottom border-secondary py-3 px-3">
+            <h6 class="offcanvas-title fw-bold text-info m-0 d-flex align-items-center fs-5">
+                <i class="bi bi-geo-alt-fill me-2"></i> Region: {reg_id} ({uiScope.upper()})
+            </h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close" style="transform: scale(1.2);"></button>
+        </div>
+        <div class="offcanvas-body bg-dark text-white p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover align-middle m-0" style="font-size: 0.85rem; min-width: 650px;">
+                    <thead>
+                        <tr class="table-active text-secondary">
+                            <th class="ps-3 py-2">Street Name</th>
+                            <th class="text-center py-2">Total</th>
+                            <th class="text-center py-2">Range</th>
+                            <th class="py-2" style="width: 110px;">Unit</th>
+                            {tag_headers_html}
+                            <th class="py-2" style="width: 100px;">VI</th>
+                            <th class="py-2 text-center" style="width: 100px;">Votes</th>
+                            <th class="text-center pe-3 py-2">Gaps</th>
+                        </tr>
+                    </thead>
+                    <tbody>
     '''
 
     for i, (street_name, data) in enumerate(street_stats.items()):
@@ -231,10 +263,11 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         unit_list = data.get("unit_list", [])
         unit_counts = data.get("unit_counts", {})
         hos = data.get("houses", 0)
-        num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
+        num_display = f"{data['min_num']} - {data['max_num']}" if data.get("min_num") is not None else "- / -"
         house_gaps_display = data.get("house_gaps", 0)
         tags = data.get("tags", {})
 
+        # Build tag toggles
         tag_cells = ""
         for code in sorted_task_codes:
             is_active = str(tags.get(code, 'n')).lower() == 'y'
@@ -242,7 +275,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             display_char = "y" if is_active else "n"
 
             tag_cells += f'''
-                <td style="text-align:center; padding:4px;">
+                <td class="text-center px-1">
                     <span class="tag-toggle {status_class}" data-code="{code}" data-value="{display_char}" role="button" tabindex="0"
                           onclick="parent.handleTagClick(this, '{uiScope}'); (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
@@ -250,7 +283,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 </td>'''
 
         unit_options = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
-        unit_dropdown = f'<select class="unit-selector select-box" onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));" style="width:100%;">{unit_options}</select>'
+        unit_dropdown = f'<select class="unit-selector form-select form-select-sm bg-secondary text-white border-0" onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));" style="max-width: 95px;">{unit_options}</select>'
 
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
@@ -267,36 +300,37 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         if not default_vi_code and VID:
             default_vi_code = str(next(iter(VID.keys()))).upper()
 
-        # FIX: Generate option tags directly inside Python to ensure they load regardless of script context
         vi_options_html = ""
         if VID:
             for key, val in VID.items():
                 selected_attr = ' selected="selected"' if str(key).upper() == str(default_vi_code).upper() else ""
                 vi_options_html += f'<option value="{key}"{selected_attr}>{val}</option>'
 
-        vi_select = f'<select class="vi-selector select-box" data-default="{default_vi_code}" onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));">{vi_options_html}</select>'
+        vi_select = f'<select class="vi-selector form-select form-select-sm bg-secondary text-white border-0" data-default="{default_vi_code}" onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));">{vi_options_html}</select>'
 
         db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
         initial_votes, initial_count_attr, visual_button_text = (int(db_vote_value), str(db_vote_value), f"{db_vote_value}/{max_votes}") if db_vote_value is not None and str(db_vote_value).strip() != "" else (0, "", f"0/{max_votes}")
 
-        vote_button = f'<button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-initial-count="{initial_count_attr}" data-max="{max_votes}">{visual_button_text}</button>'
+        vote_button = f'<button class="btn btn-sm btn-info text-dark fw-bold w-100" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-initial-count="{initial_count_attr}" data-max="{max_votes}">{visual_button_text}</button>'
         json_active_votes_db = json.dumps(unit_active_votes).replace('"', '&quot;')
-        row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
-        <tr class="{row_class} canvass-row" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-initial-count="{initial_count_attr}" data-active-votes-db="{json_active_votes_db}">
-            <td class="td-cell"><b>{street_name}</b> <small style="color:#888;">({pd_code})</small></td>
-            <td class="td-italic-center">{hos}</td>
-            <td class="td-center">{num_display}</td>
-            <td class="td-cell" style="width:60px;">{unit_dropdown}</td>
+        <tr class="canvass-row border-secondary" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-initial-count="{initial_count_attr}" data-active-votes-db="{json_active_votes_db}">
+            <td class="ps-3">
+                <div class="fw-bold">{street_name}</div>
+                <div class="text-muted" style="font-size: 0.75rem;">{pd_code}</div>
+            </td>
+            <td class="text-center font-monospace">{hos}</td>
+            <td class="text-center font-monospace text-nowrap">{num_display}</td>
+            <td>{unit_dropdown}</td>
             {tag_cells}
-            <td class="td-cell">{vi_select}</td>
-            <td class="td-cell">{vote_button}</td>
-            <td class="td-center">{house_gaps_display}</td>
+            <td>{vi_select}</td>
+            <td>{vote_button}</td>
+            <td class="text-center font-monospace pe-3">{house_gaps_display}</td>
         </tr>
         '''
 
-    html += "</tbody></table></div>"
+    html += "</tbody></table></div></div>"
     return html
 
 def preprocess_streets(df, task_tags=None):
