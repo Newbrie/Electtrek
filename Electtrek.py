@@ -954,8 +954,8 @@ def fetch_table(rlevels,table_name, current_node):
     # Handle dynamic tables like _layer or _xref
     if table_name.endswith("_layer"):
         tabtype = table_name.removesuffix("_layer")
-        lev = parent_level_for(tabtype)
-        tabnode = current_node.findnodeat_Level(lev)
+        print(f"FINDNODE AT TYPE: {tabtype}")
+        tabnode = current_node.findnodeparenting_type(tabtype)
         column_headers, rows, title = get_layer_table(
             tabnode.childrenoftype(tabtype),
             str(tabtype) + "s",
@@ -3068,7 +3068,7 @@ def downMWbut(path):
         base = Path(config.workdirectories['workdir'])  # or wherever files live
         fullpath = base / current_node.mapfile()
 
-        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(), static=True)
+        created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(), static=False)
         if created:
             if not fullpath.exists():
                 abort(404, f" Route/downMW File not found: {fullpath}")
@@ -3533,7 +3533,7 @@ def fetch_areas():
 
     else:
         # Move up to constituency level
-        current_node = current_node.findnodeat_Level(3)
+        current_node = current_node.findnodeparenting_type("constituency")
         nodelist = [current_node]
 
     accordion = current_node.get_areas(nodelist=nodelist)

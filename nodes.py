@@ -207,6 +207,7 @@ def parent_level_for(node_type):
     Returns the level index of the node you must be on
     to list children of `node_type`.
     """
+    from elections import LEVELS, LEVEL_INDEX
 
 
     if node_type not in LEVEL_INDEX:
@@ -1362,7 +1363,7 @@ class TreeNode:
         from flask import session
         from layers import make_feature_layers, ExtendedFeatureGroup
         from elections import CurrentElection
-        from baked_data import baked_data
+        from baked_data import baked_data, BakedDataManager
         import state
         import copy
         from collections import defaultdict
@@ -1464,7 +1465,8 @@ class TreeNode:
             childnodelist = [self]
 
         test_node = childnodelist[0] if childnodelist else self
-
+       # Setup infrastructure for task overlays
+        baked_dict = baked_data.load()
         active_tags = dict(task_tags)
         active_tags["VI"] = "Voter Intention"
 
@@ -1477,7 +1479,8 @@ class TreeNode:
             print(f"Surrounding layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
         # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "walk", "polling_district", "division", "marker"}
+        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division", "marker", "elector", "street", "walkleg"}
+
 
         # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
@@ -1528,7 +1531,7 @@ class TreeNode:
                         counters=counters
                     )
                 # 📐 Spatial Proximity Layers (Voronoi Grids)
-                case "polling_district" | "walk":
+                case "walk":
                     print(f"Voronoi layer: {factory_key} count: {len(nodes_to_render)}")
 
                     # 🎯 FIX: Anchor the clipping envelope to the true parent container
@@ -1540,8 +1543,22 @@ class TreeNode:
                         static=static
                     )
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
-                case "street" | "walkleg" | "result" | "target" | "data" | _:
+                case "street" | "walkleg" | "result" | "target" | "data" :
                     layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
+
+
+                             # ⚠️ Catch-All Fallback Engine
+                case _:
+                    print(f"ℹ️ Factory key '{factory_key}' running default node markers routing.")
+                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
+                    selected.append(layer)
+
+            # 📬 Operational Overlay Attachment Trigger
+#            if factory_key in ("constituency", "ward", "division", "walk"):
+#                _attach_elector_and_campaign_overlays(
+#                    selected, factory_key, nodes_to_render[0].parent, rlevels, active_tags, baked_dict
+#                )
+
             # ------------------------------------------------------------------
             # 🔧 POST-EXECUTION CLEANUP: Maintain Flat Property Architecture
             # ------------------------------------------------------------------
@@ -1742,7 +1759,7 @@ class TreeNode:
             sumnode = sumnode.parent
             self = origin
 
-        print ("_____OriginHouses:",self.findnodeat_Level(0).houses,self.value,self.type,self.houses)
+        print ("_____OriginHouses:",self.findnodeparenting_type("country").houses,self.value,self.type,self.houses)
         return
 
     def childrenoftype(self,electtype):
@@ -1856,6 +1873,20 @@ class TreeNode:
 
         return node
 
+    def findnodeparenting_type(self, target_type):
+        node = self
+        print(f"find node at self: {self.value} of type {self.type} looking for parent of {target_type}")
+
+        while node is not None:
+            # Check if this current node has any children of the target type
+            if hasattr(node, 'childrenoftype') and node.childrenoftype(target_type):
+                return node
+
+            # Climb up to the next ancestral level
+            node = node.parent
+
+        # If we reached the root (None) and found nothing, return None safely
+        return None
 
     def create_data_branch(self, resolved_levels, localized_path):
         from elector import electors
@@ -3090,6 +3121,7 @@ class TreeNode:
         Generates an HTML streetsheet for a given walk/polling district.
         Uses Flask's render_template safely inside an app context.
         """
+        import math
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
         # The clean unpack
@@ -3208,21 +3240,6 @@ class TreeNode:
         print("_________leafnodes  ",count)
         return
 
-LEVEL_INDEX = {
-    'country': 0,
-    'nation': 1,
-    'county': 2,
-    'constituency': 3,
-    'ward': 4,
-    'division': 4,
-    'polling_district': 5,
-    'walk': 5,
-    'street': 6,
-    'walkleg': 6,
-    'elector': 7
-}
-
-levels = ['country','nation','county','constituency','ward/division','polling_district/walk','street/walkleg','elector']
 
 from typing import Dict
 

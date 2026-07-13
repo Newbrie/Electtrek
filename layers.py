@@ -155,70 +155,73 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     import json
     from state import VID
 
-    # 1. Prepare dynamic tag headers (Styled with matching color syntax)
     sorted_task_codes = sorted(task_tags.keys())
-    tag_headers_html = "".join([f'<th style="text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff;">{code}</th>' for code in sorted_task_codes])
 
-    # Ensure ui_scope_json is strictly formatted
+    tag_headers_html = "".join([f'<th class="th-tag">{code}</th>' for code in sorted_task_codes])
     ui_scope_json = json.dumps(uiScope)
+    vid_json_payload = json.dumps(VID)
 
-    # ------------------------------------------------------------------
-    # 2. COMPACT BOOTSTRAP TRIGGER (Control Panel Block Removed)
-    # ------------------------------------------------------------------
     persistence_js = f'''
         <style>
+            .canvass-wrapper {{ border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap; }}
+            .canvass-table {{ border-collapse: collapse; width: 100%; }}
+            .th-blue {{ text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff; }}
+            .th-tag {{ text-align:center; padding:8px; border-bottom:2px solid #00aaff; font-size:7pt; color:#00aaff; }}
+            .td-cell {{ padding:8px; }}
+            .td-center {{ padding:8px; font-size:7pt; text-align:center; }}
+            .td-italic-center {{ padding:8px; font-size:7pt; text-align:center; font-style: italic; }}
             .tag-toggle {{ cursor: pointer; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 8pt; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #555; }}
             .tag-active {{ background: #28a745; color: white; border-color: #1e7e34; }}
             .tag-inactive {{ background: #444; color: #999; border-color: #333; }}
+            .select-box {{ font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc; }}
+            .vote-btn {{ font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }}
         </style>
 
         <script>
         (function() {{
             var scope = {ui_scope_json};
+            window.VID_DATA = {vid_json_payload};
 
             setTimeout(function() {{
                 var parentWindow = window.parent || window;
 
-                // Run centralized row initialization engine
-                if (typeof parentWindow.initializeStreetRowState === 'function') {{
-                    document.querySelectorAll('.unit-selector').forEach(function(sel) {{
-                        parentWindow.initializeStreetRowState(sel, scope);
-                    }});
-                }}
-
-                // Run map.js pop-up trace ledger replay loops
-                if (typeof parentWindow.replayLocalBakedDataForPopup === 'function') {{
+                document.querySelectorAll('.unit-selector').forEach(function(sel) {{
                     try {{
-                        parentWindow.replayLocalBakedDataForPopup(document);
-                    }} catch (err) {{
-                        console.error("❌ Error running local replay engine modules:", err);
+                        if (typeof parentWindow.initializeStreetRowState === 'function') {{
+                            parentWindow.initializeStreetRowState(sel, scope);
+                        }}
+                    }} catch (rowErr) {{
+                        console.error("❌ Error running initializeStreetRowState on row:", rowErr);
                     }}
+                }});
+
+                if (typeof parentWindow.replayLocalBakedDataForPopup === 'function') {{
+                    try {{ parentWindow.replayLocalBakedDataForPopup(document); }}
+                    catch (err) {{ console.error("❌ Local replay error:", err); }}
                 }}
             }}, 220);
         }})();
         <\/script>
     '''
 
-    # 3. THE UI: Table Layout (Unified header color attributes)
     html = persistence_js + f'''
-        <div style="border: 2px solid #002b5c; border-radius: 8px; padding: 14px; background-color: #003366; color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.25); max-width: 850px; overflow-x: auto; font-family: Arial, sans-serif; font-weight: 600; font-size: 8pt; white-space: nowrap;">
-            <table style="border-collapse: collapse; width: 100%;">
+        <div class="canvass-wrapper">
+            <table class="canvass-table">
                 <thead>
                     <tr style="background-color:#001f3f;">
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Street Name</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Total</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Range</th>
-                        <th style="text-align:left; padding:8px; width:80px; border-bottom:2px solid #00aaff; color:#00aaff;">Unit</th>
+                        <th class="th-blue">Street Name</th>
+                        <th class="th-blue">Total</th>
+                        <th class="th-blue">Range</th>
+                        <th class="th-blue" style="width:80px;">Unit</th>
                         {tag_headers_html}
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">VI</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Votes</th>
-                        <th style="text-align:left; padding:8px; border-bottom:2px solid #00aaff; color:#00aaff;">Gaps</th>
+                        <th class="th-blue">VI</th>
+                        <th class="th-blue">Votes</th>
+                        <th class="th-blue">Gaps</th>
                     </tr>
                 </thead>
                 <tbody>
     '''
 
-    # 4. Build Rows
     for i, (street_name, data) in enumerate(street_stats.items()):
         try:
             pd_code = streets_df[streets_df['StreetName'] == street_name]['PD'].iloc[0]
@@ -230,7 +233,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         hos = data.get("houses", 0)
         num_display = f"({data['min_num']} - {data['max_num']})" if data.get("min_num") is not None else "( - )"
         house_gaps_display = data.get("house_gaps", 0)
-
         tags = data.get("tags", {})
 
         tag_cells = ""
@@ -241,25 +243,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 
             tag_cells += f'''
                 <td style="text-align:center; padding:4px;">
-                    <span class="tag-toggle {status_class}"
-                          data-code="{code}"
-                          data-value="{display_char}"
-                          role="button"
-                          tabindex="0"
-                          onclick="parent.handleTagClick(this, '{uiScope}');
-                                   (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
+                    <span class="tag-toggle {status_class}" data-code="{code}" data-value="{display_char}" role="button" tabindex="0"
+                          onclick="parent.handleTagClick(this, '{uiScope}'); (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
                         {display_char}
                     </span>
                 </td>'''
 
-        # Unit dropdown
-        unit_dropdown = f'''
-        <select class="unit-selector"
-                onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));"
-                style="width:100%; font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;">
-            {"".join(f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list)}
-        </select>
-        '''
+        unit_options = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
+        unit_dropdown = f'<select class="unit-selector select-box" onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));" style="width:100%;">{unit_options}</select>'
 
         unit_active_votes = data.get("unit_active_votes", {})
         first_unit = unit_list[0] if unit_list else None
@@ -271,68 +262,37 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         if first_unit_votes and isinstance(first_unit_votes, dict):
             valid_votes = {k: int(v) for k, v in first_unit_votes.items() if v is not None}
             if valid_votes:
-                default_vi_code = max(valid_votes, key=valid_votes.get)
-                default_vi_code = str(default_vi_code).upper()
+                default_vi_code = str(max(valid_votes, key=valid_votes.get)).upper()
 
         if not default_vi_code and VID:
             default_vi_code = str(next(iter(VID.keys()))).upper()
 
-        vi_options = ""
-        for key, value in VID.items():
-            is_selected = "selected" if str(key).upper() == default_vi_code else ""
-            vi_options += f'<option value="{key}" {is_selected}>{value}</option>'
+        # FIX: Generate option tags directly inside Python to ensure they load regardless of script context
+        vi_options_html = ""
+        if VID:
+            for key, val in VID.items():
+                selected_attr = ' selected="selected"' if str(key).upper() == str(default_vi_code).upper() else ""
+                vi_options_html += f'<option value="{key}"{selected_attr}>{val}</option>'
 
-        vi_select = f'''
-        <select class="vi-selector"
-                style="font-size:9pt; padding:3px; background:#e6f2ff; color:#001f3f; border:1px solid #007acc;"
-                onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest('.canvass-row'));">
-            {vi_options}
-        </select>
-        '''
+        vi_select = f'<select class="vi-selector select-box" data-default="{default_vi_code}" onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));">{vi_options_html}</select>'
 
         db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
+        initial_votes, initial_count_attr, visual_button_text = (int(db_vote_value), str(db_vote_value), f"{db_vote_value}/{max_votes}") if db_vote_value is not None and str(db_vote_value).strip() != "" else (0, "", f"0/{max_votes}")
 
-        if db_vote_value is not None and str(db_vote_value).strip() != "":
-            initial_votes = int(db_vote_value)
-            initial_count_attr = str(initial_votes)
-            visual_button_text = f"{initial_votes}/{max_votes}"
-        else:
-            initial_votes = 0
-            initial_count_attr = ""
-            visual_button_text = f"0/{max_votes}"
-
-        vote_button = f'''
-        <button class="vote-btn" onclick="parent.incrementVoteCount(this)"
-                data-count="{initial_votes}"
-                data-initial-count="{initial_count_attr}"
-                data-max="{max_votes}"
-                style="font-size:9pt; padding:4px 8px; background:#00aaff; color:#ffffff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">
-            {visual_button_text}
-        </button>
-        '''
-
+        vote_button = f'<button class="vote-btn" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-initial-count="{initial_count_attr}" data-max="{max_votes}">{visual_button_text}</button>'
         json_active_votes_db = json.dumps(unit_active_votes).replace('"', '&quot;')
         row_class = "street-row-even" if i % 2 == 0 else "street-row-odd"
 
         html += f'''
-        <tr class="{row_class} canvass-row"
-            data-scope="{uiScope}"
-            data-region="{reg_id}"
-            data-street="{street_name}"
-            data-district="{pd_code}"
-            data-initial-count="{initial_count_attr}"
-            data-active-votes-db="{json_active_votes_db}">
-            <td style="padding:8px;">
-                <b data-name="{street_name}">{street_name}</b>
-                <small style="color:#888;">({pd_code})</small>
-            </td>
-            <td style="padding:8px; font-size:7pt; text-align:center;"><i>{hos}</i></td>
-            <td style="padding:8px; font-size:7pt; text-align:center;">{num_display}</td>
-            <td style="padding:8px; width:60px;">{unit_dropdown}</td>
+        <tr class="{row_class} canvass-row" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-initial-count="{initial_count_attr}" data-active-votes-db="{json_active_votes_db}">
+            <td class="td-cell"><b>{street_name}</b> <small style="color:#888;">({pd_code})</small></td>
+            <td class="td-italic-center">{hos}</td>
+            <td class="td-center">{num_display}</td>
+            <td class="td-cell" style="width:60px;">{unit_dropdown}</td>
             {tag_cells}
-            <td style="padding:8px;">{vi_select}</td>
-            <td style="padding:8px;">{vote_button}</td>
-            <td style="padding:8px; text-align:center;">{house_gaps_display}</td>
+            <td class="td-cell">{vi_select}</td>
+            <td class="td-cell">{vote_button}</td>
+            <td class="td-center">{house_gaps_display}</td>
         </tr>
         '''
 
@@ -745,16 +705,22 @@ class ExtendedFeatureGroup(FeatureGroup):
             if len(coords) < 1:
                 continue
 
+# -------------------------------------------------
+            # Run Voronoi Calculation Paths for this group
+            # -------------------------------------------------
             region_polys = {}
             region_pts = {}
 
-            # Run Voronoi Calculation Paths for this group
-            if len(coords) >= 4:
+            # ✅ geovoronoi handles 3+ points flawlessly on its own without dummy hacks
+            if len(coords) >= 3:
                 region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
+                print(f"DEBUG VORONOI: Built {len(region_polys)} regional cells using Convex Hull.")
             else:
+                print(f"ℹ️ Low density point array ({len(coords)}). Initializing custom layout splittings...")
                 if len(coords) == 1:
                     region_polys = {0: calc_hull}
                     region_pts = {0: [0]}
+
                 elif len(coords) == 2:
                     from shapely.ops import split
                     from shapely.geometry import LineString
@@ -1518,7 +1484,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("="*80 + "\n")
         return self._children
 
-    def add_nodemarks (self,rlevels,herenode,static, intention_type):
+    def add_nodemarks(self, rlevels, herenode, static, intention_type):
         global levelcolours
 
         # Guard: Ensure we have exactly one election to unpack
@@ -1528,18 +1494,21 @@ class ExtendedFeatureGroup(FeatureGroup):
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
+        # 🎯 SELF-AWARE PROPERTY STRIPPING (Mirrors add_nodemaps logic)
+        raw_opts = getattr(self, "options", {}) or {}
+        layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
+
         childlist = herenode.childrenoftype(intention_type)
         nodeshtml = build_nodemap_list_html(herenode)
 
         details = [c.value for c in childlist]
         self.areashtml[herenode.value] = {
-                            "code": herenode.value,
-                            "details": details,
-                            "tooltip_html": nodeshtml
-                            }
+            "code": herenode.value,
+            "details": details,
+            "tooltip_html": nodeshtml
+        }
         num = len(herenode.childrenoftype(intention_type))
         print(f"___creating {num} add_nodemarks of type {intention_type} for {herenode.value} at level {herenode.level}")
-
 
         children = herenode.childrenoftype(intention_type)
 
@@ -1567,19 +1536,19 @@ class ExtendedFeatureGroup(FeatureGroup):
             pathref = c.mapfile()
             mapfile = '/transfer/'+pathref
 
-            print("______Display childrenx:",c.value, c.level,type,c.latlongroid )
+            print("______Display childrenx:", c.value, c.level, type, c.latlongroid)
 
-            bcol = layer_style.get("color", "#991B1B") #boundary
-            tcol = layer_style.get("fontColor", "#EF4444") #font colour
-            fcol = layer_style.get("fillColor", "#EF4444")  #area colour
+            # 🎯 layer_style is now safely defined up top!
+            bcol = layer_style.get("color", "#991B1B")       # boundary
+            tcol = layer_style.get("fontColor", "#EF4444")   # font colour
+            fcol = layer_style.get("fillColor", "#EF4444")   # area colour
 
-            node_col = tcol #
+            node_col = tcol
             tcol_node = tcol
             fcol_node = fcol
             poly_col_node = tcol
 
-
-            htmlhalo =f'''
+            htmlhalo = f'''
             <a href="{mapfile}" data-name="{tag}">
               <div style="
                 color: {tcol_node};
@@ -1614,7 +1583,7 @@ class ExtendedFeatureGroup(FeatureGroup):
               </div>
             </a>
             '''
-            htmlhalostatic =f'''
+            htmlhalostatic = f'''
             <a href="" data-name="{tag}">
               <div style="
                 color: {tcol_node};
@@ -1653,7 +1622,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             if not static:
                 self.add_child(folium.Marker(
                      location=here,
-                     icon = folium.DivIcon(
+                     icon=folium.DivIcon(
                             html=htmlhalo,
                            )
                            )
@@ -1661,15 +1630,13 @@ class ExtendedFeatureGroup(FeatureGroup):
             else:
                 self.add_child(folium.Marker(
                      location=here,
-                     icon = folium.DivIcon(
+                     icon=folium.DivIcon(
                             html=htmlhalostatic,
                            )
                            )
                            )
 
-
-
-        print("________Layer map points",herenode.value,herenode.level,len(self._children))
+        print("________Layer map points", herenode.value, herenode.level, len(self._children))
 
         return self._children
 
@@ -1707,11 +1674,6 @@ FEATURE_LAYER_SPECS = {
     "division": dict(
         name="division", mytag="division", overlay=True, control=True, show=False, type="node",
         options={"color": "#EC4899", "fontColor": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "4,4"}
-    ),
-
-    "polling_district": dict(
-        name="polling_district", mytag="polling_district", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0D9488", "fontColor": "#0D9488", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "4,4"}
     ),
     "walk": dict(
         name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",

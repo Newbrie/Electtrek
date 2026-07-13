@@ -20,7 +20,6 @@ LEVEL_INDEX = {
     "constituency": 3,
     "ward": 4,
     "division": 4,
-    "polling_district": 5,
     "walk": 5,
     "street": 6,
     "walkleg": 6,
@@ -33,7 +32,7 @@ LEVELS = {
     2: "county",
     3: "constituency",
     4: "ward/division",
-    5: "polling_district/walk",
+    5: "walk",
     6: "street/walkleg",
     7: "elector",
 }
