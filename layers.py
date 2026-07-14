@@ -318,7 +318,6 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         <tr class="canvass-row border-secondary" data-scope="{uiScope}" data-region="{reg_id}" data-street="{street_name}" data-district="{pd_code}" data-initial-count="{initial_count_attr}" data-active-votes-db="{json_active_votes_db}">
             <td class="ps-3">
                 <div class="fw-bold">{street_name}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">{pd_code}</div>
             </td>
             <td class="text-center font-monospace">{hos}</td>
             <td class="text-center font-monospace text-nowrap">{num_display}</td>
@@ -909,6 +908,8 @@ class ExtendedFeatureGroup(FeatureGroup):
                 House gaps: {missing_total}
                 """
 
+    # ... (rest of your loop remains unchanged) ...
+
                 street_html = nav_html + "<hr>" + build_street_list_html(child.value, region_electors, street_stats, task_tags)
 
                 style = {
@@ -924,7 +925,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                         'region_id': child.value,
                         'type': 'voronoi_poly',
                         'expected_houses': house_count,
-                        'level': getattr(child, 'level', 'PD')
+                        'level': getattr(child, 'level', 'PD'),
+                        # 📦 Store the complete pre-baked HTML right inside the properties!
+                        'street_html': street_html
                     }
 
                     if getattr(self, 'is_ghost', False):
@@ -948,14 +951,15 @@ class ExtendedFeatureGroup(FeatureGroup):
                         )
                     )
 
-                    popup = folium.Popup(street_html, max_width=900, show=False)
-                    gj.add_child(popup)
+                    # ❌ REMOVED: Do not add folium.Popup here anymore!
+                    # popup = folium.Popup(street_html, max_width=900, show=False)
+                    # gj.add_child(popup)
+
                     gj.add_to(self)
                     grand_total_polygons_added += 1
 
                 except Exception as e:
                     print(f"DEBUG ERROR: Failed adding canvas feature for {child.value} -> {e}")
-
             # Assign totals back to each respective parent container node safely
             parent_node.electorate = total_electorate
             parent_node.houses = total_houses

@@ -530,6 +530,54 @@ async function searchMap() {
     }
 }
 
+function setupModalInterceptors() {
+    // 🎯 Uses the exact same window.fmap reference that searchMap() uses!
+    const fmap = window.fmap;
+
+    if (!fmap) {
+        console.warn("⏳ window.fmap not discovered yet. Retrying interceptors in 200ms...");
+        setTimeout(setupModalInterceptors, 200);
+        return;
+    }
+
+    console.log("⚡ Binding Full-Screen Modal Click Handlers to Voronoi Layers...");
+    let boundCount = 0;
+
+    fmap.eachLayer(function(layer) {
+        // Look for our GeoJSON layers that have our custom pre-baked metadata
+        if (layer.feature && layer.feature.properties && layer.feature.properties.street_html) {
+
+            // ❌ Stop the default popup from hijacking our clicks
+            if (layer.unbindPopup) {
+                layer.unbindPopup();
+            }
+
+            // 🎯 Route the click straight to your Bootstrap Modal shell
+            layer.on('click', function(e) {
+                if (e.originalEvent) {
+                    e.originalEvent.stopPropagation();
+                }
+                L.DomEvent.stopPropagation(e);
+
+                const preBakedHtml = layer.feature.properties.street_html;
+                const modalBody = document.getElementById('modal-table-body');
+
+                if (modalBody) {
+                    modalBody.innerHTML = preBakedHtml;
+
+                    const modalElement = document.getElementById('streetListModal');
+                    const bsModal = new bootstrap.Modal(modalElement);
+                    bsModal.show();
+
+                    console.log("✨ Modal opened for region: " + (layer.feature.properties.region_id || "Unknown"));
+                }
+            });
+            boundCount++;
+        }
+    });
+    console.log(`✅ Fully hijacked ${boundCount} map layers for full-screen presentations.`);
+}
+
 window.updateRowAppearance = function(row, count, max) {
     if (!row) return;
 
@@ -1043,41 +1091,6 @@ window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
     });
 };
 
-function deriveState(events) {
-
-    const state = {};
-
-    for (const e of events) {
-
-        state[e.uiScope] ??= {};
-        state[e.uiScope][e.region] ??= {};
-        state[e.uiScope][e.region][e.street] ??= {};
-        state[e.uiScope][e.region][e.street][e.house] ??= { tags: {} };
-
-        state[e.uiScope][e.region][e.street][e.house].tags[e.code] = e.value;
-    }
-
-    return state;
-}
-
-// ⚡ Local Interceptor: Hijack the pre-baked popup content
-map.on('popupopen', function(e) {
-    // 1. Get the raw pre-baked street HTML right out of the opening popup
-    const preBakedHtml = e.popup.getContent();
-
-    if (preBakedHtml) {
-        // 2. Instantly close the little map bubble before the user sees it
-        map.closePopup();
-
-        // 3. Drop that exact street data into our full-screen modal container
-        document.getElementById('modal-table-body').innerHTML = preBakedHtml;
-
-        // 4. Launch the Bootstrap Modal to take control of the screen
-        const modalElement = document.getElementById('streetListModal');
-        const bsModal = new bootstrap.Modal(modalElement);
-        bsModal.show();
-    }
-});
 
 window.plotTaskProgress = function (
     region_id,

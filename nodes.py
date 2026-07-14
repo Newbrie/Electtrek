@@ -2533,6 +2533,8 @@ class TreeNode:
 
         # --- Inject map finding , click handling and layer control adding functionality
 
+    # --- Inject map finding , click handling and layer control adding functionality
+
         fmap_tags_js = r"""
             <script>
             (function() {
@@ -2561,14 +2563,26 @@ class TreeNode:
                         if (key.startsWith("map_") && val instanceof L.Map) {
                             window.fmap = val;
 
-                            // 🎯 RIGHT HERE: Bind your custom reverse-geocoding click workflow
-                            // the exact millisecond the map is discovered in memory.
+                            // ⚓ Bind your custom reverse-geocoding click workflow
                             if (typeof window.handleMapClick === 'function') {
                                 console.log("⚓ Binding handleMapClick directly via detection hook.");
                                 window.fmap.on('click', window.handleMapClick);
                             } else {
                                 console.warn("⚠️ handleMapClick function not found in scope during map binding.");
                             }
+
+                            // 🎯 TARGET CALL: Safely trigger the interceptors
+                            // We poll here to make sure 'map.js' has fully loaded.
+                            function triggerInterceptors() {
+                                if (typeof window.setupModalInterceptors === 'function') {
+                                    console.log("⚡ Found setupModalInterceptors! Executing...");
+                                    window.setupModalInterceptors();
+                                } else {
+                                    console.warn("⏳ map.js not loaded yet. Retrying setupModalInterceptors in 100ms...");
+                                    setTimeout(triggerInterceptors, 100);
+                                }
+                            }
+                            triggerInterceptors();
 
                             startLayerPolling();
                             return;
