@@ -2533,72 +2533,116 @@ class TreeNode:
 
         # --- Inject map finding , click handling and layer control adding functionality
 
-    # --- Inject map finding , click handling and layer control adding functionality
-
         fmap_tags_js = r"""
-            <script>
-            (function() {
+                <script>
+                (function() {
+                    console.log("🗺️ fmap_marker_js loaded (Direct Map Discovery & Modal Binding)");
 
-                console.log("🗺️ fmap_marker_js loaded (Layer Control Dictionary Search & Click Binding)");
+                    window.fmap = null;
+                    window.MarkerLayer = null;
 
-                window.fmap = null;
-                window.MarkerLayer = null;
+                    let pollAttempts = 0;
+                    const MAX_ATTEMPTS = 100;
 
-                let pollAttempts = 0;
-                const MAX_ATTEMPTS = 100; // 10 seconds timeout
-
-                // ---------------------------------------------------------
-                // 1️⃣ Stage 1: Detect the Folium map object
-                // ---------------------------------------------------------
-                function detectFoliumMap() {
-                    if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
-                        setTimeout(detectFoliumMap, 100);
-                        return;
-                    }
-
-                    for (const key in window) {
-                        if (!window.hasOwnProperty(key)) continue;
-                        const val = window[key];
-
-                        if (key.startsWith("map_") && val instanceof L.Map) {
-                            window.fmap = val;
-
-                            // ⚓ Bind your custom reverse-geocoding click workflow
-                            if (typeof window.handleMapClick === 'function') {
-                                console.log("⚓ Binding handleMapClick directly via detection hook.");
-                                window.fmap.on('click', window.handleMapClick);
-                            } else {
-                                console.warn("⚠️ handleMapClick function not found in scope during map binding.");
-                            }
-
-                            // 🎯 TARGET CALL: Safely trigger the interceptors
-                            // We poll here to make sure 'map.js' has fully loaded.
-                            function triggerInterceptors() {
-                                if (typeof window.setupModalInterceptors === 'function') {
-                                    console.log("⚡ Found setupModalInterceptors! Executing...");
-                                    window.setupModalInterceptors();
-                                } else {
-                                    console.warn("⏳ map.js not loaded yet. Retrying setupModalInterceptors in 100ms...");
-                                    setTimeout(triggerInterceptors, 100);
-                                }
-                            }
-                            triggerInterceptors();
-
-                            startLayerPolling();
+                    function detectFoliumMap() {
+                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
+                            setTimeout(detectFoliumMap, 100);
                             return;
                         }
+
+                        for (const key in window) {
+                            if (!window.hasOwnProperty(key)) continue;
+                            const val = window[key];
+
+                            if (key.startsWith("map_") && val instanceof L.Map) {
+                                window.fmap = val;
+                                console.log(`✅ Folium Map discovered: ${key}`);
+
+                                if (typeof window.handleMapClick === 'function') {
+                                    window.fmap.on('click', window.handleMapClick);
+                                }
+
+                                console.log("⚡ Binding Full-Screen Modal Handlers directly to layers...");
+                                let boundCount = 0;
+
+                                window.fmap.eachLayer(function(layer) {
+                                    if (layer.feature && layer.feature.properties && layer.feature.properties.street_html) {
+
+                                        if (layer.unbindPopup) layer.unbindPopup();
+
+                                        // 👇 RIGHT HERE! THIS IS WHERE THE LAYER.ON CODE GOES 👇
+                                        layer.on('click', function(e) {
+                                            if (e.originalEvent) e.originalEvent.stopPropagation();
+                                            L.DomEvent.stopPropagation(e);
+
+                                            console.log("鼠标 Map layer clicked!");
+
+                                            const props = layer.feature ? layer.feature.properties : null;
+                                            if (!props || !props.street_html) {
+                                                console.error("❌ Error: 'street_html' is missing on this layer feature.");
+                                                return;
+                                            }
+
+                                            // 🎯 Reaching out to the parent document if we are trapped in an iframe
+                                            const modalBody = document.getElementById('modal-table-body') || parent.document.getElementById('modal-table-body');
+                                            const modalElement = document.getElementById('streetListModal') || parent.document.getElementById('streetListModal');
+
+                                            console.log("Target elements resolved:", { modalBody, modalElement });
+
+                                            if (!modalBody || !modalElement) {
+                                                console.error("❌ Error: Could not find #modal-table-body or #streetListModal in either local or parent document.");
+                                                return;
+                                            }
+
+                                            // Resolve bootstrap instance from parent window if local window doesn't have it
+                                            const activeBootstrap = (typeof bootstrap !== 'undefined') ? bootstrap : parent.bootstrap;
+
+                                            if (typeof activeBootstrap === 'undefined') {
+                                                console.error("❌ Error: 'bootstrap' library is not defined in local or parent scope.");
+                                                return;
+                                            }
+
+                                            try {
+                                                // 1. Inject the raw HTML table content
+                                                modalBody.innerHTML = props.street_html;
+
+                                                // 2. CRITICAL FIX: Move the modal markup to the root <body> of the main page
+                                                // This pulls it out of any map divs or wrappers messing with the z-index
+                                                const parentBody = parent.document.body || document.body;
+                                                parentBody.appendChild(modalElement);
+
+                                                // 3. Initialize and display using the parent's Bootstrap object
+                                                const bsModal = new activeBootstrap.Modal(modalElement);
+                                                bsModal.show();
+
+                                                console.log("✨ Success! Modal pushed to root body and opened.");
+                                            } catch (err) {
+                                                console.error("❌ Crash during modal display sequence:", err);
+                                            }
+                                        });
+                                        // 👆 END OF THE LAYER.ON CODE 👆
+
+                                        boundCount++;
+                                    }
+                                });
+                                console.log(`✅ Configured ${boundCount} map layers for modal presentations.`);
+
+                                startLayerPolling();
+                                return;
+                            }
+                        }
+                        setTimeout(detectFoliumMap, 100);
                     }
-                    setTimeout(detectFoliumMap, 100);
-                }
+
+                    // ... (keep the findTargetLayer and startLayerPolling functions exactly as they were below this)
 
                 // ---------------------------------------------------------
-                // 2️⃣ Stage 2: Targeted Polling for the Layer Control Dictionary
+                // 2️⃣ Stage 2: Targeted Polling for Layer Control Dictionary
                 // ---------------------------------------------------------
                 function findTargetLayer() {
                     pollAttempts++;
-
                     if (pollAttempts > MAX_ATTEMPTS) {
-                        console.error("❌ Layer Control Dictionary not found after 100 attempts. Timeout exceeded.");
+                        console.error("❌ Layer Control Dictionary timeout.");
                         clearInterval(poll_interval_id);
                         return;
                     }
@@ -2610,7 +2654,7 @@ class TreeNode:
                         if (key.startsWith("layer_control_") && val && val.overlays) {
                             if (val.overlays.marker) {
                                 window.MarkerLayer = val.overlays.marker;
-                                console.log(`🔥 'marker' Layer found via Layer Control Dictionary: ${key}`);
+                                console.log(`🔥 'marker' Layer mapped: ${key}`);
                                 clearInterval(poll_interval_id);
                                 return;
                             }
@@ -2624,7 +2668,6 @@ class TreeNode:
                 }
 
                 document.addEventListener("DOMContentLoaded", detectFoliumMap);
-
             })();
             </script>
             """
