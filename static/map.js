@@ -534,18 +534,17 @@ window.updateRowAppearance = function(row, count, max) {
     if (!row) return;
 
     if (count >= max && max > 0) {
-        row.style.backgroundColor = "#28a745"; // Green
+        row.style.backgroundColor = "#28a745"; // Green (Completed)
         row.style.color = "#ffffff";
     } else if (count > 0) {
-        row.style.backgroundColor = "#ffcc00"; // Yellow
+        row.style.backgroundColor = "#ffcc00"; // Yellow (In Progress)
         row.style.color = "#000000";
     } else {
-        // CRITICAL: This resets the row when switching to an unvoted house
-        row.style.backgroundColor = "";
+        row.style.backgroundColor = "";        // Reset Default Dark background
         row.style.color = "#ffffff";
     }
 
-    // Force all text to respect the new background
+    // Force nested elements to respect inherit styling rules
     row.querySelectorAll('td, b, i, span').forEach(el => {
         el.style.color = "inherit";
     });
@@ -553,21 +552,25 @@ window.updateRowAppearance = function(row, count, max) {
 
 
 function deriveState(events) {
-
     const state = {};
-
     for (const e of events) {
+        if (!e.uiScope || !e.region || !e.street || !e.house) continue;
 
         state[e.uiScope] ??= {};
         state[e.uiScope][e.region] ??= {};
         state[e.uiScope][e.region][e.street] ??= {};
-        state[e.uiScope][e.region][e.street][e.house] ??= { tags: {} };
+        state[e.uiScope][e.region][e.street][e.house] ??= { tags: {}, votes: 0, vi: "" };
 
-        state[e.uiScope][e.region][e.street][e.house].tags[e.code] = e.value;
+        if (e.type === 'tag') {
+            state[e.uiScope][e.region][e.street][e.house].tags[e.code] = e.value;
+        } else if (e.type === 'vi') {
+            state[e.uiScope][e.region][e.street][e.house].votes = parseInt(e.votes || 0, 10);
+            state[e.uiScope][e.region][e.street][e.house].vi = e.vi || "";
+        }
     }
-
     return state;
 }
+
 
 window.incrementVoteCount = function(btn) {
     var row = btn.closest('.canvass-row');
@@ -684,12 +687,37 @@ window.handleTagClick = function(span, uiScope = 'walk') {
     // Get the popup container/document context
     const doc = row.ownerDocument;
     const sel = row.querySelector('.unit-selector');
+    const house = sel?.value;
+    if (!region || !street || !house) return;
 
-    // 1. Calculate specific Street Weight
-    const streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
-    const streetWeight = sel ? sel.options.length : streetRows.length;
+    // =========================================================================
+    // 1. ACTIVE WEIGHT ESTIMATION
+    // =========================================================================
+    let streetWeight = 0;
 
-    // 2. Calculate global Region Weight (Total houses in the entire popup)
+    // CRITICAL FIX: If toggling to 'n' (inactive), weight should be explicitly 0
+    // to signal deletion/untagging to the mapping engine.
+    if (newValue === 'y') {
+        const streetRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${street}"]`);
+
+        streetRows.forEach(r => {
+            const targetSpan = r.querySelector(`.tag-toggle[data-code="${code}"]`);
+            let isTagActiveOnRow = targetSpan ? (targetSpan.getAttribute('data-value') === 'y') : false;
+
+            // Use the newly clicked state look-ahead for the row being actively modified
+            if (r === row) {
+                isTagActiveOnRow = true;
+            }
+
+            if (isTagActiveOnRow) {
+                streetWeight++;
+            }
+        });
+    } else {
+        streetWeight = 0; // Explicitly zero out the weight on untag
+    }
+
+    // 2. Calculate global Region Weight
     let regionWeight = 0;
     const countedStreetsInRegion = new Set();
     const allRowsInRegion = doc.querySelectorAll(`.canvass-row[data-region="${region}"]`);
@@ -700,56 +728,71 @@ window.handleTagClick = function(span, uiScope = 'walk') {
         countedStreetsInRegion.add(sKey);
 
         const sSel = r.querySelector('.unit-selector');
-        const sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
-        regionWeight += sSel ? sSel.options.length : sRows.length;
+        if (sSel) {
+            regionWeight += Array.from(sSel.options).reduce((sum, opt) => {
+                return sum + parseInt(opt.getAttribute('data-max') || 1, 10);
+            }, 0);
+        } else {
+            const sRows = doc.querySelectorAll(`.canvass-row[data-region="${region}"][data-street="${sKey}"]`);
+            regionWeight += sRows.length;
+        }
     });
 
-    const house = sel?.value;
-    if (!region || !street || !house) return;
-
-    // UI Updates
+    // =========================================================================
+    // 3. STATE SYNCHRONIZATION AND DOM WRITING
+    // =========================================================================
     span.classList.toggle('tag-active', newValue === 'y');
     span.classList.toggle('tag-inactive', newValue === 'n');
     span.innerText = newValue;
+
+    // Set attribute so updateTagToggles and our look-ahead loop read it accurately
+    span.setAttribute('data-value', newValue);
 
     // Write logs straight up to global parent window memory space
     var parentWindow = window.parent || window;
     parentWindow.BAKED_DATA ||= [];
 
-    // =========================================================================
-    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA STAMPING (MODULARIZED)
-    // =========================================================================
+    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA STAMPING
     const currentElection = window.getCurrentElectionContext(parentWindow.BAKED_DATA, doc);
 
     parentWindow.BAKED_DATA.push({
         type: 'tag',
-        election: currentElection, // <-- STAMPED CONTEXT
+        election: currentElection,
         ts: Date.now(),
-        uiScope,
-        region,
-        street,
-        house,
-        code,
+        uiScope: uiScope,
+        region: region,
+        street: street,
+        house: house,
+        tag_code: code,
         value: newValue,
         streetWeight: streetWeight,
         regionWeight: regionWeight,
         synced: false
     });
 
-    // --- ADDED: Auto-Save execution to match your layout pipeline ---
+    // --- Auto-Save execution ---
     if (typeof parentWindow.saveBakedData === 'function') {
         parentWindow.saveBakedData(parentWindow.BAKED_DATA);
     }
 
-    // Keep map progression charting if necessary
-    if (typeof parentWindow.plotTaskProgress === 'function') {
-        parentWindow.plotWindowProgress(region, code, uiScope);
-    } else if (typeof plotTaskProgress === 'function') {
-        plotTaskProgress(region, code, uiScope);
+    // Keep map progression charting synced
+    // FIX: Trigger BOTH the specific code and the fallback 'VI' (Voting Intention)
+    // code in case the map's ghost layer only listens to overall 'VI' progress.
+    const plotProgress = (reg, cd, scope) => {
+        if (typeof parentWindow.plotTaskProgress === 'function') {
+            parentWindow.plotTaskProgress(reg, cd, scope);
+        } else if (typeof plotTaskProgress === 'function') {
+            plotTaskProgress(reg, cd, scope);
+        }
+    };
+
+    plotProgress(region, code, uiScope);
+    if (code !== 'VI') {
+        plotProgress(region, 'VI', uiScope); // Fallback to update global coverage
     }
 
     // Toggle save button state to remind them there are un-deployed adjustments
-    var deployBtn = document.getElementById('deploy-btn');
+    var deployBtn = parentWindow.document.getElementById('deploy-btn') || document.getElementById('deploy-btn');
     if (deployBtn) deployBtn.disabled = false;
 };
 
@@ -759,63 +802,62 @@ window.updateTagToggles = function(selector, uiScope = 'walk') {
 
     const region = row.dataset.region;
     const street = row.dataset.street;
-    const house = selector.value;
+    const house = selector.value; // The currently selected unit (e.g. house number)
 
-    // 1. EXTRACT BASELINE TRUTH FROM THE ELECTOR ROW DATA
-    const baselineTagsString = row.dataset.tags || '';
-
-    // Parse the baseline (e.g., "L1,L2" becomes an array of active codes)
-    const baselineActiveCodes = baselineTagsString.split(',')
-        .map(t => t.trim().toUpperCase())
-        .filter(Boolean);
-
-    // Initialize our tracking truth map with the baseline defaults ('y')
-    const finalComputedTags = {};
-    baselineActiveCodes.forEach(code => {
-        finalComputedTags[code] = 'y';
-    });
-
-    // 2. FIXED CONTEXT LAYER: Read event logs directly from parent storage array
+    // 1. EXTRACT ELECTION CONTEXT
     const parentWindow = window.parent || window;
     const events = parentWindow.BAKED_DATA || [];
-
-    // =========================================================================
-    // DISCOVER CURRENT ELECTION CONTEXT FOR DATA FILTERING (MODULARIZED)
-    // =========================================================================
     const currentElection = window.getCurrentElectionContext(events, row.ownerDocument);
 
-    // Filter events to only match the current scope, location, AND active election
+    // 2. DISCOVER BASELINE DATA FOR SELECTED HOUSE
+    // Note: Since tags are only server-rendered for the FIRST unit, we default
+    // any other unit's baseline to 'n' (inactive) unless updated by BAKED_DATA logs.
+    const firstOption = row.querySelector('.unit-selector option');
+    const isFirstUnitSelected = firstOption && (firstOption.value === house);
+
+    const finalComputedTags = {};
+
+    row.querySelectorAll('.tag-toggle').forEach(span => {
+        const code = span.dataset.code ? span.dataset.code.toUpperCase() : '';
+        if (!code) return;
+
+        // If the user selected the first unit, read the backend's server-rendered state
+        // from the HTML attributes. Otherwise, other units start fresh ('n')
+        if (isFirstUnitSelected) {
+            finalComputedTags[code] = (span.getAttribute('data-value') || 'n').toLowerCase();
+        } else {
+            finalComputedTags[code] = 'n';
+        }
+    });
+
+    // 3. APPLY BAKED_DATA OVERRIDES FOR THE SELECTED UNIT CHRONOLOGICALLY
     const relevantEvents = events.filter(e =>
         e.type === 'tag' &&
-        e.election === currentElection && // <-- FILTER BY ACTIVE TIMELINE
+        e.election === currentElection &&
         e.uiScope === uiScope &&
         e.region === region &&
         e.street === street &&
         e.house === house
     );
 
-    // 3. LAYER LOG OVERRIDES: Chronologically apply log updates over the baseline
     relevantEvents.forEach(e => {
         if (e.code) {
-            finalComputedTags[e.code.toUpperCase()] = e.value;
+            finalComputedTags[e.code.toUpperCase()] = String(e.value).toLowerCase();
         }
     });
 
-    // 4. PRECISION UI TARGETING
+    // 4. PRECISION UI UPDATE & SYNC
     row.querySelectorAll('.tag-toggle').forEach(span => {
         const code = span.dataset.code ? span.dataset.code.toUpperCase() : '';
         if (!code) return;
 
-        // If it's not in the baseline AND not in the logs, it defaults to 'n'
-        const hasHistory = finalComputedTags.hasOwnProperty(code);
-        const val = hasHistory ? finalComputedTags[code] : 'n';
+        const val = finalComputedTags[code] === 'y' ? 'y' : 'n';
 
-        // 🌟 FIXED LOGIC COMPARISON: Force clean lower-case match check to align with UI text blocks
-        if (span.innerText.trim().toLowerCase() !== val.toLowerCase()) {
-            span.classList.toggle('tag-active', val === 'y');
-            span.classList.toggle('tag-inactive', val !== 'y');
-            span.innerText = val;
-        }
+        // Update classes and internal tracker values so subsequent clicks read accurately
+        span.classList.toggle('tag-active', val === 'y');
+        span.classList.toggle('tag-inactive', val !== 'y');
+        span.innerText = val;
+        span.setAttribute('data-value', val); // Maintain state parity inside DOM
     });
 };
 
@@ -941,17 +983,15 @@ window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
     const currentElection = window.getCurrentElectionContext(events);
 
     const state = {};
-
+    // Inside updateMarkerStatus:
     for (const e of events) {
-        // Guard against other elections, scopes, and regions
         if (e.type !== 'context_switch' && e.election !== currentElection) continue;
         if (e.uiScope !== uiScope) continue;
         if (e.region !== region_id) continue;
+        if (e.type !== 'vi') continue; // 🌟 FIX: Only parse 'vi' events for vote-weight tracking
 
         state[e.street] ??= {};
-        state[e.street][e.house] ??= {
-            votes: 0
-        };
+        state[e.street][e.house] ??= { votes: 0 };
 
         if (typeof e.votes === 'number') {
             state[e.street][e.house].votes = e.votes;
@@ -1025,257 +1065,251 @@ window.updateMarkerStatus = function(region_id, uiScope = 'walk') {
         }
     });
 };
-// map.js
-
-
-window.plotTaskProgress = function (
-    region_id,
-    targetTag = 'L1',
-    uiScope = 'walk'
-) {
-    console.group(`🏗️ FLAT-EVENT PROGRESS MODEL: ${region_id} [${targetTag}]`);
-
-    const activeMap = window.fmap || parent.fmap;
-    const Leaflet = window.L || parent.L;
-    const cleanId = String(region_id).trim().toUpperCase();
-    const isViTarget = targetTag === 'VI';
-
-    // Try to find open popup elements in the DOM
-    const doc = document.getElementById('iframe1')?.contentWindow?.document || document;
-    const rows = doc.querySelectorAll(`.canvass-row[data-region="${cleanId}"]`);
-
-    let totalHouses = 0;
-    let completedHouses = 0;
-
-    // -----------------------------------------------------------------
-    // CONDITION A: Popup is OPEN (Scrape live DOM elements)
-    // -----------------------------------------------------------------
-    if (rows.length > 0) {
-        console.log("📊 Popup is open. Calculating opacity from live DOM elements...");
-
-        if (isViTarget) {
-            // 🗳️ VI Live Extraction Strategy: Calculate directly via individual units
-            rows.forEach(r => {
-                totalHouses++; // Every row represents a unique unit capacity target
-
-                // Check both potential selector classes interchangeably
-                const voteBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
-
-                // Fall back gracefully to check .getAttribute() if dataset property is un-hydrated
-                const voteCount = parseInt(voteBtn?.getAttribute('data-count') || voteBtn?.dataset?.count || '0');
-
-                if (voteCount > 0) {
-                    completedHouses++;
-                }
-            });
-        } else {
-            // 🏷️ Standard Task Tag Extraction Strategy (Original Binary Street Logic)
-            const countedStreets = new Set();
-
-            rows.forEach(row => {
-                const street = row.getAttribute('data-street');
-                if (!street || countedStreets.has(street)) return;
-                countedStreets.add(street);
-
-                const streetRows = doc.querySelectorAll(
-                    `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
-                );
-
-                const firstRow = streetRows[0];
-                const sel = firstRow?.querySelector('.unit-selector');
-                const streetWeight = sel ? sel.options.length : streetRows.length;
-
-                totalHouses += streetWeight;
-
-                let streetIsActive = false;
-                streetRows.forEach(r => {
-                    if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
-                        streetIsActive = true;
-                    }
-                });
-
-                if (streetIsActive) {
-                    completedHouses += streetWeight;
-                }
-            });
-        }
-    }
-    // -----------------------------------------------------------------
-    // CONDITION B: Popup is CLOSED (Parse flat ledger arrays)
-    // -----------------------------------------------------------------
-    else {
-        console.log("💾 Popup is closed. Calculating opacity via baked region weights...");
-
-        const eventLog = window.BAKED_DATA || [];
-
-        let bakedRegionCeiling = 0;
-        const streetWeightRegistry = {};
-        const streetActiveHouses = {};
-
-        // Chronological ledger scan
-        eventLog.forEach(ev => {
-            if (ev.uiScope !== uiScope) return;
-            if (String(ev.region).trim().toUpperCase() !== cleanId) return;
-
-            const street = ev.street;
-            const house = ev.house;
-
-            if (ev.streetWeight) streetWeightRegistry[street] = ev.streetWeight;
-            if (ev.regionWeight) bakedRegionCeiling = ev.regionWeight;
-
-            if (!streetActiveHouses[street]) {
-                streetActiveHouses[street] = new Set();
-            }
-
-            if (ev.type === 'tag') {
-                if (ev.code === targetTag) {
-                    if (ev.value === 'y') {
-                        streetActiveHouses[street].add(house);
-                    } else if (ev.value === 'n') {
-                        streetActiveHouses[street].delete(house);
-                    }
-                }
-            }
-            else if (isViTarget && ev.type === 'vi' && ev.votes !== undefined) {
-                const voteValue = parseInt(ev.votes || '0');
-                if (voteValue > 0) {
-                    streetActiveHouses[street].add(house);
-                } else {
-                    streetActiveHouses[street].delete(house);
-                }
-            }
-        });
-
-        for (const street in streetActiveHouses) {
-            const streetIsActive = streetActiveHouses[street].size > 0;
-            if (streetIsActive) {
-                const streetWeight = streetWeightRegistry[street] || 1;
-                completedHouses += streetWeight;
-            }
-        }
-
-        totalHouses = bakedRegionCeiling;
-
-        if (totalHouses === 0 && completedHouses > 0) {
-            for (const street in streetWeightRegistry) {
-                totalHouses += streetWeightRegistry[street];
-            }
-        }
-    }
-
-    // -------------------------------------------------
-    // 2️⃣ FINAL OPACITY FORMULA FLUSH
-    // -------------------------------------------------
-    const finalOpacity = totalHouses > 0 ? 0.8 * (completedHouses / totalHouses) : 0;
-
-    console.log("📐 OPACITY ANALYSIS METRICS:", {
-        region: cleanId,
-        totalHouses,
-        completedHouses,
-        calculatedOpacity: finalOpacity
-    });
-
-    // -------------------------------------------------
-    // 3️⃣ LAYER TARGET GROUP DISCOVERY
-    // -------------------------------------------------
-    const findBucket = () => {
-        const mapWin = document.getElementById('iframe1')?.contentWindow || window;
-        for (const key in mapWin) {
-            if (!key.startsWith("layer_control_")) continue;
-            const layers = mapWin[key].overlays || mapWin[key]._layers;
-            for (const name in layers) {
-                if (name.includes(`[${targetTag}]`)) {
-                    return layers[name].layer || layers[name];
-                }
-            }
-        }
-        return null;
-    };
-
-    const targetGroup = findBucket();
-    if (!targetGroup) {
-        console.warn(`❌ Target Layer Control Overlay bucket missing for [${targetTag}].`);
-        console.groupEnd();
-        return;
-    }
-
-    // -------------------------------------------------
-    // 4️⃣ APPLY OPACITY / UPDATE EXISTING GHOST
-    // -------------------------------------------------
-    const ghostId = `ghost_${targetTag}_${cleanId}`;
-    let ghost = null;
-
-    targetGroup.eachLayer(l => {
-        if (l.ghost_id === ghostId) ghost = l;
-    });
-
-    if (ghost) {
-        ghost.setStyle({ fillOpacity: finalOpacity });
-        console.log(`♻️ Refreshed opacity style for ghost: ${ghostId}`);
-        console.groupEnd();
-        return;
-    }
-
-    // -------------------------------------------------
-    // 5️⃣ GEOMETRY STRUCTURAL LOOKUP (🏎️ Fast Index Upgrade)
-    // -------------------------------------------------
-    const mapWin = document.getElementById('iframe1')?.contentWindow || window;
-    const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
-
-    const targetVectorLayer = cache[cleanId];
-    let geometry = null;
-
-    if (targetVectorLayer && targetVectorLayer.feature?.geometry) {
-        geometry = targetVectorLayer.feature.geometry;
-    }
-
-    if (!geometry) {
-        console.log(`ℹ️ Skipping: Region ID ${cleanId} is outside current map view.`);
-        console.groupEnd();
-        return;
-    }
-
-    // -----------------------------------------------------------------
-    // 6️⃣ INSTANTIATE NEW LAYER GHOST ENTITY
-    // -----------------------------------------------------------------
-    const poly = Leaflet.geoJSON(geometry, {
-        pane: 'overlayPane',
-        style: {
-            color: "transparent",
-            fillColor: targetTag === 'VI' ? "#800080" : "#333",
-            fillOpacity: finalOpacity,
-            interactive: false
-        }
-    });
-
-    poly.is_ghost = true;
-    poly.ghost_id = ghostId;
-
-    targetGroup.addLayer(poly);
-
-    console.log(`✨ Ghost successfully registered to group: ${ghostId}`);
-    console.groupEnd();
-};
 
 /**
- * Synchronizes a freshly rendered street list row with un-synced BAKED_DATA overrides
- * and runs standard startup layout calculations.
- *
- * @param {HTMLSelectElement} sel - The element (.unit-selector) inside the row
- * @param {string} scope - The active canvas scope ('walk', 'drive', etc.)
+ * 2. Visual Model Heatmap Engine
+ * Aligned to search both parent page or local iframe environments
+ * and targets '.vote-btn' elements.
+ */
+ window.plotTaskProgress = function (
+     region_id,
+     targetTag = 'L1',
+     uiScope = 'walk'
+ ) {
+     console.group(`🏗️ FLAT-EVENT PROGRESS MODEL: ${region_id} [${targetTag}]`);
+
+     const activeMap = window.fmap || parent.fmap;
+     const Leaflet = window.L || parent.L;
+     const cleanId = String(region_id).trim().toUpperCase();
+     const isViTarget = targetTag === 'VI';
+
+     // Find Document Context (Parent Dashboard vs Nested IFrame Container)
+     const doc = document.getElementById('iframe1')?.contentWindow?.document || document;
+     const rows = doc.querySelectorAll(`.canvass-row[data-region="${cleanId}"]`);
+
+     let totalHouses = 0;
+     let completedHouses = 0;
+
+     // -----------------------------------------------------------------
+     // CONDITION A: Canvas View is OPEN (Check DOM Elements)
+     // -----------------------------------------------------------------
+     if (rows.length > 0) {
+         console.log("📊 UI active. Calculating opacity from live canvas elements...");
+
+         if (isViTarget) {
+             rows.forEach(r => {
+                 totalHouses++; // Every row represents a unique unit capacity target
+
+                 // Matches restored .vote-btn class name
+                 const voteBtn = r.querySelector('.vote-btn') || r.querySelector('.vote-count-btn');
+                 const voteCount = parseInt(voteBtn?.getAttribute('data-count') || voteBtn?.dataset?.count || '0');
+
+                 if (voteCount > 0) {
+                     completedHouses++;
+                 }
+             });
+         } else {
+             const countedStreets = new Set();
+
+             rows.forEach(row => {
+                 const street = row.getAttribute('data-street');
+                 if (!street || countedStreets.has(street)) return;
+                 countedStreets.add(street);
+
+                 const streetRows = doc.querySelectorAll(
+                     `.canvass-row[data-region="${cleanId}"][data-street="${street}"]`
+                 );
+
+                 const firstRow = streetRows[0];
+                 const sel = firstRow?.querySelector('.unit-selector');
+                 const streetWeight = sel ? sel.options.length : streetRows.length;
+
+                 totalHouses += streetWeight;
+
+                 let streetIsActive = false;
+                 streetRows.forEach(r => {
+                     if (r.querySelector(`.tag-toggle[data-code="${targetTag}"].tag-active`)) {
+                         streetIsActive = true;
+                     }
+                 });
+
+                 if (streetIsActive) {
+                     completedHouses += streetWeight;
+                 }
+             });
+         }
+     }
+     // -----------------------------------------------------------------
+     // CONDITION B: Canvas View is CLOSED (Read Local Cache Logs)
+     // -----------------------------------------------------------------
+     else {
+         console.log("💾 UI closed. Calculating opacity via baked region weights...");
+
+         const eventLog = window.BAKED_DATA || parent.BAKED_DATA || [];
+
+         // 🌟 FIX 1: Resolve current election context so past election data doesn't skew stats
+         const currentElection = window.getCurrentElectionContext(eventLog, doc);
+
+         let bakedRegionCeiling = 0;
+         const streetWeightRegistry = {};
+         const streetActiveHouses = {};
+
+         eventLog.forEach(ev => {
+             if (!ev) return;
+             // 🌟 FIX 2: Skip context switches or mismatches from other elections
+             if (ev.type === 'context_switch' || ev.election !== currentElection) return;
+             if (ev.uiScope !== uiScope) return;
+             if (String(ev.region).trim().toUpperCase() !== cleanId) return;
+
+             const street = ev.street;
+             const house = ev.house;
+
+             if (ev.streetWeight) streetWeightRegistry[street] = ev.streetWeight;
+             if (ev.regionWeight) bakedRegionCeiling = ev.regionWeight;
+
+             if (!streetActiveHouses[street]) {
+                 streetActiveHouses[street] = new Set();
+             }
+
+             // 🌟 FIX 3: Process the normalized tag changes
+             if (ev.type === 'tag') {
+                 if (String(ev.code).toUpperCase() === String(targetTag).toUpperCase()) {
+                     if (ev.value === 'y') {
+                         streetActiveHouses[street].add(house);
+                     } else if (ev.value === 'n') {
+                         streetActiveHouses[street].delete(house);
+                     }
+                 }
+             }
+             // 🌟 FIX 4: Aligned 'vi' parameter structures
+             else if (isViTarget && ev.type === 'vi' && ev.votes !== undefined) {
+                 const voteValue = parseInt(ev.votes || '0', 10);
+                 if (voteValue > 0) {
+                     streetActiveHouses[street].add(house);
+                 } else {
+                     streetActiveHouses[street].delete(house);
+                 }
+             }
+         });
+
+         for (const street in streetActiveHouses) {
+             const streetIsActive = streetActiveHouses[street].size > 0;
+             if (streetIsActive) {
+                 const streetWeight = streetWeightRegistry[street] || 1;
+                 completedHouses += streetWeight;
+             }
+         }
+
+         totalHouses = bakedRegionCeiling;
+
+         if (totalHouses === 0 && completedHouses > 0) {
+             for (const street in streetWeightRegistry) {
+                 totalHouses += streetWeightRegistry[street];
+             }
+         }
+     }
+
+     const finalOpacity = totalHouses > 0 ? 0.8 * (completedHouses / totalHouses) : 0;
+
+     console.log("📐 OPACITY ANALYSIS METRICS:", {
+         region: cleanId,
+         totalHouses,
+         completedHouses,
+         calculatedOpacity: finalOpacity
+     });
+
+     // -------------------------------------------------
+     // LAYER TARGET GROUP DISCOVERY
+     // -------------------------------------------------
+     const findBucket = () => {
+         const mapWin = document.getElementById('iframe1')?.contentWindow || window;
+         for (const key in mapWin) {
+             if (!key.startsWith("layer_control_")) continue;
+             const layers = mapWin[key].overlays || mapWin[key]._layers;
+             for (const name in layers) {
+                 if (name.includes(`[${targetTag}]`)) {
+                     return layers[name].layer || layers[name];
+                 }
+             }
+         }
+         return null;
+     };
+
+     const targetGroup = findBucket();
+     if (!targetGroup) {
+         console.warn(`❌ Target Layer Control Overlay bucket missing for [${targetTag}].`);
+         console.groupEnd();
+         return;
+     }
+
+     // -------------------------------------------------
+     // APPLY OPACITY / UPDATE EXISTING GHOST
+     // -------------------------------------------------
+     const ghostId = `ghost_${targetTag}_${cleanId}`;
+     let ghost = null;
+
+     targetGroup.eachLayer(l => {
+         if (l.ghost_id === ghostId) ghost = l;
+     });
+
+     if (ghost) {
+         ghost.setStyle({ fillOpacity: finalOpacity });
+         console.log(`♻️ Refreshed opacity style for ghost: ${ghostId}`);
+         console.groupEnd();
+         return;
+     }
+
+     // -------------------------------------------------
+     // GEOMETRY STRUCTURAL LOOKUP
+     // -------------------------------------------------
+     const mapWin = document.getElementById('iframe1')?.contentWindow || window;
+     const cache = mapWin.regionLayerCache || window.regionLayerCache || {};
+
+     const targetVectorLayer = cache[cleanId];
+     let geometry = null;
+
+     if (targetVectorLayer && targetVectorLayer.feature?.geometry) {
+         geometry = targetVectorLayer.feature.geometry;
+     }
+
+     if (!geometry) {
+         console.log(`ℹ️ Skipping: Region ID ${cleanId} is outside current map view.`);
+         console.groupEnd();
+         return;
+     }
+
+     const poly = Leaflet.geoJSON(geometry, {
+         pane: 'overlayPane',
+         style: {
+             color: "transparent",
+             fillColor: targetTag === 'VI' ? "#800080" : "#333",
+             fillOpacity: finalOpacity,
+             interactive: false
+         }
+     });
+
+     poly.is_ghost = true;
+     poly.ghost_id = ghostId;
+
+     targetGroup.addLayer(poly);
+
+     console.log(`✨ Ghost successfully registered to group: ${ghostId}`);
+     console.groupEnd();
+ };
+/**
+ * 3. Initialize State Sync on Row Load
+ * Synchronizes select-option values and vote UI elements.
  */
 window.initializeStreetRowState = function(sel, scope) {
     var parentWindow = window.parent || window;
     var row = sel.closest('.canvass-row');
     if (!row) return;
 
-    // 1. Intercept state with un-synced BAKED_DATA local memory updates
     if (parentWindow.BAKED_DATA && Array.isArray(parentWindow.BAKED_DATA)) {
         var currentUnit = sel.value;
         var streetName = row.getAttribute('data-street');
         var regionId = row.getAttribute('data-region');
 
-        // Scan backward through history to pick up the absolute newest action
         for (var i = parentWindow.BAKED_DATA.length - 1; i >= 0; i--) {
             var log = parentWindow.BAKED_DATA[i];
             if (log.type === 'vi' &&
@@ -1284,13 +1318,11 @@ window.initializeStreetRowState = function(sel, scope) {
                 String(log.street) === String(streetName) &&
                 String(log.house) === String(currentUnit)) {
 
-                // Align selector dropdown
                 var viSel = row.querySelector('.vi-selector');
                 if (viSel) {
                     viSel.value = log.vi;
                 }
 
-                // Align live button metrics
                 var voteBtn = row.querySelector('.vote-btn');
                 if (voteBtn) {
                     var maxVal = voteBtn.getAttribute('data-max') || 1;
@@ -1302,18 +1334,18 @@ window.initializeStreetRowState = function(sel, scope) {
         }
     }
 
-    // 2. Fallback execution of standard structural style handlers
     if (typeof parentWindow.loadHouseData === 'function') parentWindow.loadHouseData(sel);
     if (typeof parentWindow.refreshDropdownColors === 'function') parentWindow.refreshDropdownColors(sel);
     if (typeof parentWindow.updateTagToggles === 'function') parentWindow.updateTagToggles(sel, scope);
 
-    // 3. Render the target indicators
     if (typeof parentWindow.refreshRowVoteBadge === 'function') {
         parentWindow.refreshRowVoteBadge(row);
     }
 };
 
-// 🌟 SHARED LOCAL HANDLER FOR DYNAMIC PY-BAKED COUNTS
+/**
+ * 4. Active Row Badge Repaint Handlers
+ */
 window.refreshRowVoteBadge = function(rowElement){
     if (!rowElement) return;
     var unitSel = rowElement.querySelector('.unit-selector');
@@ -1324,11 +1356,9 @@ window.refreshRowVoteBadge = function(rowElement){
     var currentUnit = unitSel.value;
     var currentVi = viSel.value ? viSel.value.toUpperCase() : "";
 
-    // 1. Re-read max capacity directly from the selected option template metadata
     var selectedOpt = unitSel.options[unitSel.selectedIndex];
     var maxVotes = selectedOpt ? (selectedOpt.getAttribute('data-max') || 1) : 1;
 
-    // 2. Identify the matching context fields out of the HTML row parameters
     var streetName = rowElement.getAttribute('data-street');
     var scope = rowElement.getAttribute('data-scope') || 'walk';
     var regionId = rowElement.getAttribute('data-region');
@@ -1336,10 +1366,10 @@ window.refreshRowVoteBadge = function(rowElement){
     var count = 0;
     var foundInFreshLogs = false;
 
-    // 3. SCAN EVENT LOG FROM NEWEST TO OLDEST FOR OVERRIDES
-    if (window.BAKED_DATA && Array.isArray(window.BAKED_DATA)) {
-        for (var i = window.BAKED_DATA.length - 1; i >= 0; i--) {
-            var log = window.BAKED_DATA[i];
+    var bakedLogs = window.BAKED_DATA || parent.BAKED_DATA || [];
+    if (Array.isArray(bakedLogs)) {
+        for (var i = bakedLogs.length - 1; i >= 0; i--) {
+            var log = bakedLogs[i];
 
             if (log.type === 'vi' &&
                 String(log.uiScope) === String(scope) &&
@@ -1355,7 +1385,6 @@ window.refreshRowVoteBadge = function(rowElement){
         }
     }
 
-    // 4. FALLBACK: Use Python's pre-baked database state if no user log edits exist
     if (!foundInFreshLogs) {
         var activeVotesDb = {};
         try {
@@ -1364,7 +1393,6 @@ window.refreshRowVoteBadge = function(rowElement){
             console.error("Failed to parse row data-active-votes-db", e);
         }
 
-        // Case-insensitive key checks against the pre-baked dictionary layout
         if (activeVotesDb[currentUnit]) {
             for (var key in activeVotesDb[currentUnit]) {
                 if (key.toUpperCase() === currentVi) {
@@ -1375,17 +1403,13 @@ window.refreshRowVoteBadge = function(rowElement){
         }
     }
 
-    // 5. Update UI elements
     btn.setAttribute('data-count', count);
     btn.setAttribute('data-max', maxVotes);
     btn.innerText = count + '/' + maxVotes;
 };
 
 /**
- * Automatically recalculates and updates the strongest VI and vote counts
- * when a user changes the house unit dropdown selection.
- *
- * @param HTMLSelectElement} unitSel - The active .unit-selector element
+ * 5. Dropdown Navigation State Synchronizer
  */
  window.handleUnitChangeVIUpdate = function(unitSel) {
      var parentWindow = window.parent || window;
@@ -1399,98 +1423,66 @@ window.refreshRowVoteBadge = function(rowElement){
 
      var regionId = row.getAttribute('data-region');
      var streetName = row.getAttribute('data-street');
+     var uiScope = row.getAttribute('data-scope') || 'walk';
 
      var chosenViCode = "";
-     var currentVotes = null;
+     var currentVotes = 0;
      var maxVotes = parseInt(unitSel.options[unitSel.selectedIndex].getAttribute('data-max')) || 1;
 
-     var eventLog = parentWindow.BAKED_DATA || [];
+     var eventLog = parentWindow.BAKED_DATA || window.BAKED_DATA || [];
+     var currentElection = window.getCurrentElectionContext(eventLog, row.ownerDocument);
 
-     // =========================================================================
-     // 1. DISCOVER ACTIVE ELECTION CONTEXT FIRST
-     // =========================================================================
-     var currentElection = "";
+     // Scan backwards through the flat ledger for the latest matching VI record
      for (var k = eventLog.length - 1; k >= 0; k--) {
-         if (eventLog[k].type === "context_switch") {
-             currentElection = eventLog[k].election;
-             break; // Found the absolute latest context, stop scanning
+         var log = eventLog[k];
+         if (
+             log.type === 'vi' &&
+             log.election === currentElection &&
+             String(log.uiScope) === String(uiScope) &&
+             String(log.region) === String(regionId) &&
+             String(log.street) === String(streetName) &&
+             String(log.house) === String(selectedUnit)
+         ) {
+             chosenViCode = log.vi || "";
+             currentVotes = parseInt(log.votes) || 0;
+             break;
          }
      }
 
-     // =========================================================================
-     // 2. MATCH THE HOUSE RECORD WITHIN THE CURRENT ELECTION
-     // =========================================================================
-     if (currentElection) {
-         for (var i = eventLog.length - 1; i >= 0; i--) {
-             var entry = eventLog[i];
-
-             // Match the house record and ensure it belongs to the current active election
-             if (entry.region === regionId &&
-                 entry.street === streetName &&
-                 entry.house === selectedUnit &&
-                 entry.election === currentElection) {
-
-                 if (entry.vi !== undefined && entry.vi !== null) {
-                     chosenViCode = String(entry.vi).toUpperCase().trim();
-                     if (entry.votes !== undefined && entry.votes !== null) {
-                         currentVotes = parseInt(entry.votes);
-                     }
-                     break; // Found our current session match, exit loop
-                 }
-             }
-         }
-     }
-
-
-     // =========================================================================
-     // 3. FALLBACK TO DATABASE ATTRIBUTE (If house hasn't been edited this session)
-     // =========================================================================
-     if (!chosenViCode || chosenViCode === 'UNCANVASSED' || chosenViCode === 'U') {
-         var rawDb = row.getAttribute('data-active-votes-db');
+     // Fallback to dataset baseline values if no local modifications exist in flat logs
+     if (!chosenViCode) {
          var activeVotesDb = {};
          try {
-             if (rawDb) activeVotesDb = JSON.parse(rawDb);
-         } catch (e) {}
+             activeVotesDb = JSON.parse(row.getAttribute('data-active-votes-db') || '{}');
+         } catch (e) {
+             console.error("Failed to parse row data-active-votes-db", e);
+         }
 
-         var houseVotes = activeVotesDb[selectedUnit] || {};
-         var codes = Object.keys(houseVotes);
-
-         if (codes.length > 0) {
-             var highestCode = codes.reduce(function(a, b) {
-                 return (parseInt(houseVotes[a] || 0) >= parseInt(houseVotes[b] || 0)) ? a : b;
-             });
-             chosenViCode = String(highestCode).toUpperCase().trim();
-             if (currentVotes === null) {
-                 currentVotes = parseInt(houseVotes[chosenViCode]) || 0;
+         if (activeVotesDb[selectedUnit]) {
+             // Find the key with non-zero votes, or default to the first key
+             var keys = Object.keys(activeVotesDb[selectedUnit]);
+             if (keys.length > 0) {
+                 chosenViCode = keys[0];
+                 currentVotes = activeVotesDb[selectedUnit][chosenViCode] || 0;
              }
-         } else {
-             // No historical data exists for this house! Force it to fall back to 'Uncanvassed'
-             chosenViCode = "UNCANVASSED";
-             currentVotes = 0;
          }
      }
 
-     // Ensure fallback safety states
-     if (!chosenViCode && viSel.options.length > 0) {
-         chosenViCode = String(viSel.options[0].value).toUpperCase().trim();
-     }
-     if (currentVotes === null || isNaN(currentVotes)) {
-         currentVotes = 0;
+     // Update UI DOM states
+     if (chosenViCode) {
+         viSel.value = chosenViCode;
+     } else {
+         viSel.selectedIndex = 0; // Reset to default VI code option
      }
 
-     // Update form control values directly
-     viSel.value = chosenViCode;
      voteBtn.setAttribute('data-count', currentVotes);
      voteBtn.setAttribute('data-max', maxVotes);
      voteBtn.innerText = currentVotes + '/' + maxVotes;
-
-     // Repaint visual changes safely!
-     window.applyRowColorStyles(row);
  };
 
- // =========================================================================
-// 🎨 NEW STANDALONE VISUAL ENGINE (Safe to call anywhere!)
-// =========================================================================
+/**
+ * 6. Visual Theme Engine Renderer
+ */
 window.applyRowColorStyles = function(row) {
     var parentWindow = window.parent || window;
     var unitSel = row.querySelector('.unit-selector');
@@ -1501,9 +1493,6 @@ window.applyRowColorStyles = function(row) {
         return;
     }
 
-    // =========================================================================
-    // SELF-BINDING CHANGE EVENT LISTENER
-    // =========================================================================
     if (!unitSel.hasAttribute('data-styles-bound')) {
         unitSel.setAttribute('data-styles-bound', 'true');
         unitSel.addEventListener('change', function() {
@@ -1531,10 +1520,7 @@ window.applyRowColorStyles = function(row) {
     var houseViMap = {};
     var processedHouses = new Set();
 
-    // =========================================================================
-    // 1. REVERSE LOG CHRONOLOGY EVALUATION
-    // =========================================================================
-    var eventLog = parentWindow.BAKED_DATA || [];
+    var eventLog = parentWindow.BAKED_DATA || window.BAKED_DATA || [];
     var targetRegionToken = String(regionId || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     var targetStreetToken = String(streetName || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 
@@ -1566,9 +1552,6 @@ window.applyRowColorStyles = function(row) {
         }
     }
 
-    // =========================================================================
-    // 2. STATIC DATABASE CONSOLIDATION & RUNTIME INJECTION
-    // =========================================================================
     var rawDb = row.getAttribute('data-active-votes-db');
     var parsedDbObject = {};
 
@@ -1608,9 +1591,6 @@ window.applyRowColorStyles = function(row) {
 
     row.setAttribute('data-active-votes-db', JSON.stringify(parsedDbObject));
 
-    // =========================================================================
-    // 3. RENDER STYLES NATIVELY TO DROPDOWN OPTIONS
-    // =========================================================================
     Array.from(unitSel.options).forEach(function(option) {
         var cleanName = option.value || option.text;
         cleanName = cleanName.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|\s\s🟢|\s\s🔴|\s\s🔵|\s\s🟡|\s\s🟣|\s\s🟤|\s\s⚪|\s\s⚫/g, '').trim();
@@ -1631,30 +1611,23 @@ window.applyRowColorStyles = function(row) {
         }
     });
 
-    // =========================================================================
-    // 4. CONTAINER ROW & ATTACHED FORM COMPONENT STYLING UPDATES
-    // =========================================================================
     var activeHouseNumber = unitSel.value;
     var activeHouseVi = houseViMap[activeHouseNumber];
 
     if (activeHouseVi && activeHouseVi !== 'U' && vcoPalette[activeHouseVi]) {
         var targetBgColor = vcoPalette[activeHouseVi];
 
-        // Style container row properties
         row.style.backgroundColor = targetBgColor;
         row.style.color = "#ffffff";
         row.style.fontWeight = '500';
 
-        // Force dropdown elements to match row textual behavior styles
         unitSel.style.color = "#ffffff";
         unitSel.style.fontWeight = '500';
     } else {
-        // Reset row container rules
         row.style.backgroundColor = '';
         row.style.color = '';
         row.style.fontWeight = '';
 
-        // Reset dropdown styling rules completely
         unitSel.style.color = '';
         unitSel.style.fontWeight = '';
     }

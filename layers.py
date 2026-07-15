@@ -154,17 +154,46 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk"):
     import json
     from state import VID
+    from baked_data import baked_data
 
     sorted_task_codes = sorted(task_tags.keys())
-
-    tag_headers_html = "".join([f'<th class="text-center text-info small" style="min-width: 45px;">{code}</th>' for code in sorted_task_codes])
+    tag_headers_html = "".join([f'<th class="text-center text-info small" style="min-width: 45px; position: sticky; top: 0; z-index: 2; background: #212529;">{code}</th>' for code in sorted_task_codes])
     ui_scope_json = json.dumps(uiScope)
     vid_json_payload = json.dumps(VID)
 
-    # Added mobile override styles to force full-screen coverage on viewport widths < 576px
+    # Convert event logs to a list safely
+    events = baked_data if isinstance(baked_data, list) else []
+
+    # Filter events to only this region
+    region_events = [e for e in events if str(e.get('region')) == str(reg_id)]
+
+    # Process events to find current state for UI rendering
+    # { street_name: { unit_name: { "votes": X, "tags": { tag_code: val }, "active_votes": { vi_code: votes } } } }
+    live_state = {}
+    for ev in region_events:
+        st_name = ev.get('street')
+        unit_name = ev.get('unit')
+        if not st_name or not unit_name:
+            continue
+
+        if st_name not in live_state:
+            live_state[st_name] = {}
+        if unit_name not in live_state[st_name]:
+            live_state[st_name][unit_name] = {"tags": {}, "votes": 0, "active_votes": {}}
+
+        ev_type = ev.get('type')
+        if ev_type == 'tag':
+            t_code = ev.get('tag_code')
+            t_val = ev.get('value')
+            live_state[st_name][unit_name]["tags"][t_code] = t_val
+        elif ev_type == 'vote':
+            v_val = int(ev.get('value', 0))
+            vi_code = ev.get('vi_code', 'VI')
+            live_state[st_name][unit_name]["votes"] = v_val
+            live_state[st_name][unit_name]["active_votes"][vi_code] = v_val
+
     persistence_js = f'''
         <style>
-            /* Global Tag styles */
             .tag-toggle {{
                 cursor: pointer;
                 padding: 4px 8px;
@@ -183,22 +212,26 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             .tag-active {{ background: #198754; color: white; border-color: #157347; }}
             .tag-inactive {{ background: #343a40; color: #6c757d; border-color: #495057; }}
 
-            /* RESPONSIVE MOBILE OVERRIDES FOR THE MASTER DRAWER */
             @media (max-width: 575.98px) {{
-                /* Force the drawer container to override Bootstrap default bottom sheet constraints */
-                #canvassOffcanvas.offcanvas-bottom {{
-                    height: 100dvh !important; /* Take up 100% of the mobile device height */
+                .offcanvas.offcanvas-bottom {{
+                    height: 100dvh !important;
                     max-height: 100dvh !important;
-                    width: 100vw !important;  /* Take up 100% of the mobile device width */
+                    width: 100vw !important;
                     border-top-left-radius: 0 !important;
                     border-top-right-radius: 0 !important;
                 }}
-
-                /* Optimize table wrapping on tiny screens to avoid layout breaks */
                 .table-responsive {{
-                    max-height: calc(100dvh - 56px); /* Keeps headers sticky and body scrollable */
+                    max-height: calc(100dvh - 58px);
                     overflow-y: auto;
                 }}
+            }}
+
+            .table-responsive thead th {{
+                position: sticky;
+                top: 0;
+                z-index: 5;
+                background-color: #212529 !important;
+                box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
             }}
         </style>
 
@@ -226,7 +259,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 }}
             }}, 220);
         }})();
-        <\/script>
+        </script>
     '''
 
     html = persistence_js + f'''
@@ -241,14 +274,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 <table class="table table-dark table-striped table-hover align-middle m-0" style="font-size: 0.85rem; min-width: 650px;">
                     <thead>
                         <tr class="table-active text-secondary">
-                            <th class="ps-3 py-2">Street Name</th>
-                            <th class="text-center py-2">Total</th>
-                            <th class="text-center py-2">Range</th>
-                            <th class="py-2" style="width: 110px;">Unit</th>
+                            <th class="ps-3 py-2" style="position: sticky; top: 0; z-index: 2; background: #212529;">Street Name</th>
+                            <th class="py-2" style="width: 110px; position: sticky; top: 0; z-index: 2; background: #212529;">Unit</th>
                             {tag_headers_html}
-                            <th class="py-2" style="width: 100px;">VI</th>
-                            <th class="py-2 text-center" style="width: 100px;">Votes</th>
-                            <th class="text-center pe-3 py-2">Gaps</th>
+                            <th class="py-2" style="width: 100px; position: sticky; top: 0; z-index: 2; background: #212529;">VI</th>
+                            <th class="py-2 text-center" style="width: 100px; position: sticky; top: 0; z-index: 2; background: #212529;">Votes</th>
+                            <th class="text-center py-2" style="position: sticky; top: 0; z-index: 2; background: #212529;">Total</th>
+                            <th class="text-center py-2" style="position: sticky; top: 0; z-index: 2; background: #212529;">Range</th>
+                            <th class="text-center pe-3 py-2" style="position: sticky; top: 0; z-index: 2; background: #212529;">Gaps</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -265,10 +298,14 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
         hos = data.get("houses", 0)
         num_display = f"{data['min_num']} - {data['max_num']}" if data.get("min_num") is not None else "- / -"
         house_gaps_display = data.get("house_gaps", 0)
-        tags = data.get("tags", {})
 
-        # Build tag toggles
+        # Retrieve current unit and state
+        first_unit = unit_list[0] if unit_list else None
+        first_unit_state = live_state.get(street_name, {}).get(first_unit, {}) if first_unit else {}
+
+        # 1. Build Tag cells based on live state
         tag_cells = ""
+        tags = first_unit_state.get("tags", {})
         for code in sorted_task_codes:
             is_active = str(tags.get(code, 'n')).lower() == 'y'
             status_class = "tag-active" if is_active else "tag-inactive"
@@ -277,22 +314,24 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             tag_cells += f'''
                 <td class="text-center px-1">
                     <span class="tag-toggle {status_class}" data-code="{code}" data-value="{display_char}" role="button" tabindex="0"
-                          onclick="parent.handleTagClick(this, '{uiScope}'); (window.plotTaskProgress || parent.plotTaskProgress || function(){{}})('{reg_id}', '{code}', '{uiScope}');">
+                          onclick="var p = window.parent || window; if(typeof p.handleTagClick === 'function') {{ p.handleTagClick(this, '{uiScope}'); }} if(typeof p.plotTaskProgress === 'function') {{ p.plotTaskProgress('{reg_id}', '{code}', '{uiScope}'); }} else if(typeof window.plotTaskProgress === 'function') {{ window.plotTaskProgress('{reg_id}', '{code}', '{uiScope}'); }}">
                         {display_char}
                     </span>
                 </td>'''
 
         unit_options = "".join([f'<option value="{u}" data-max="{unit_counts.get(u, 1)}">{u}</option>' for u in unit_list])
-        unit_dropdown = f'<select class="unit-selector form-select form-select-sm bg-secondary text-white border-0" onchange="parent.handleUnitChangeVIUpdate(this); parent.updateMaxVote(this); parent.loadHouseData(this); parent.updateTagToggles(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));" style="max-width: 95px;">{unit_options}</select>'
+        unit_dropdown = f'<select class="unit-selector form-select form-select-sm bg-secondary text-white border-0" onchange="var p = window.parent || window; p.handleUnitChangeVIUpdate(this); p.updateMaxVote(this); p.loadHouseData(this); p.updateTagToggles(this); p.refreshRowVoteBadge(this.closest(\'.canvass-row\'));" style="max-width: 95px;">{unit_options}</select>'
 
-        unit_active_votes = data.get("unit_active_votes", {})
-        first_unit = unit_list[0] if unit_list else None
         max_votes = unit_counts.get(first_unit, 1) if first_unit else 1
+
+        # 2. Determine default VI Code & active vote allocations
+        unit_active_votes = {}
+        for u in unit_list:
+            unit_active_votes[u] = live_state.get(street_name, {}).get(u, {}).get("active_votes", {})
 
         default_vi_code = ""
         first_unit_votes = unit_active_votes.get(first_unit, {}) if first_unit else {}
-
-        if first_unit_votes and isinstance(first_unit_votes, dict):
+        if first_unit_votes:
             valid_votes = {k: int(v) for k, v in first_unit_votes.items() if v is not None}
             if valid_votes:
                 default_vi_code = str(max(valid_votes, key=valid_votes.get)).upper()
@@ -306,12 +345,12 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
                 selected_attr = ' selected="selected"' if str(key).upper() == str(default_vi_code).upper() else ""
                 vi_options_html += f'<option value="{key}"{selected_attr}>{val}</option>'
 
-        vi_select = f'<select class="vi-selector form-select form-select-sm bg-secondary text-white border-0" data-default="{default_vi_code}" onchange="parent.updateVI(this); parent.refreshRowVoteBadge(this.closest(\'.canvass-row\'));">{vi_options_html}</select>'
+        vi_select = f'<select class="vi-selector form-select form-select-sm bg-secondary text-white border-0" data-default="{default_vi_code}" onchange="var p = window.parent || window; p.updateVI(this); p.refreshRowVoteBadge(this.closest(\'.canvass-row\'));">{vi_options_html}</select>'
 
         db_vote_value = first_unit_votes.get(default_vi_code) if first_unit_votes else None
         initial_votes, initial_count_attr, visual_button_text = (int(db_vote_value), str(db_vote_value), f"{db_vote_value}/{max_votes}") if db_vote_value is not None and str(db_vote_value).strip() != "" else (0, "", f"0/{max_votes}")
 
-        vote_button = f'<button class="btn btn-sm btn-info text-dark fw-bold w-100" onclick="parent.incrementVoteCount(this)" data-count="{initial_votes}" data-initial-count="{initial_count_attr}" data-max="{max_votes}">{visual_button_text}</button>'
+        vote_button = f'<button class="vote-btn btn btn-sm btn-info text-dark fw-bold w-100" onclick="var p = window.parent || window; p.incrementVoteCount(this)" data-count="{initial_votes}" data-initial-count="{initial_count_attr}" data-max="{max_votes}">{visual_button_text}</button>'
         json_active_votes_db = json.dumps(unit_active_votes).replace('"', '&quot;')
 
         html += f'''
@@ -319,12 +358,12 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
             <td class="ps-3">
                 <div class="fw-bold">{street_name}</div>
             </td>
-            <td class="text-center font-monospace">{hos}</td>
-            <td class="text-center font-monospace text-nowrap">{num_display}</td>
             <td>{unit_dropdown}</td>
             {tag_cells}
             <td>{vi_select}</td>
             <td>{vote_button}</td>
+            <td class="text-center font-monospace">{hos}</td>
+            <td class="text-center font-monospace text-nowrap">{num_display}</td>
             <td class="text-center font-monospace pe-3">{house_gaps_display}</td>
         </tr>
         '''
@@ -537,66 +576,79 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_ghosts(self, tag_code, baked_dict, parent_node, branchcolours):
+    def add_ghosts(self, tag_code, baked_events, parent_node, branchcolours):
         """
-        Populates this layer with ghost polygons based on baked data.
-        Mirroring the logic of add_voronoi for high-fidelity data overlays.
+        Populates this layer with ghost polygons based on flat baked event logs.
         """
         import folium
         polygons_added = 0
 
         is_vi_task = (str(tag_code).upper() == 'VI')
 
+        # Convert incoming events to a list if it isn't already
+        events = baked_events if isinstance(baked_events, list) else []
+
         for child in parent_node.children:
             region_id = str(child.value)
 
-            # Guard: Only process if we have data for this region
-            if region_id not in baked_dict:
+            # 1. Filter events down to this specific region
+            region_events = [e for e in events if str(e.get('region')) == region_id]
+            if not region_events:
                 continue
 
-            region_info = baked_dict[region_id]
+            # 2. Build the current state of each street from the event logs
+            # Structure: { street_name: { unit_name: { "votes": X, "tags": { tag: val } } } }
+            street_states = {}
+            for ev in region_events:
+                st_name = ev.get('street')
+                unit_name = ev.get('house')
+                if not st_name:
+                    continue
+
+                if st_name not in street_states:
+                    street_states[st_name] = {}
+
+                # Apply state mutation based on event
+                ev_type = ev.get('type')
+                if unit_name:
+                    if unit_name not in street_states[st_name]:
+                        street_states[st_name][unit_name] = {"tags": {}, "votes": 0}
+
+                    if ev_type == 'tag':
+                        t_code = ev.get('tag_code')
+                        t_val = ev.get('value')
+                        street_states[st_name][unit_name]["tags"][t_code] = t_val
+                    elif ev_type == 'vote':
+                        street_states[st_name][unit_name]["votes"] = int(ev.get('value', 0))
+
+            # 3. Calculate Task Weight
             completed_weight = 0
+            total_possible = len(street_states) if street_states else 1  # Fallback ceiling
 
-            # -------------------------------------------------
-            # 1. Calculate Task Weight (The Logic Engine)
-            # -------------------------------------------------
-            for street_data in region_info.values():
-                if isinstance(street_data, dict):
+            for street_name, units in street_states.items():
+                has_task_progress = False
 
-                    # --- FIX: Branch logic depending on whether we check for active tags or non-zero VIs ---
-                    if is_vi_task:
-                        # VI task counts if ANY house unit on this street has captured votes > 0
-                        has_task_progress = any(
-                            int(u.get('votes', 0)) > 0
-                            for u in street_data.values() if isinstance(u, dict)
-                        )
-                    else:
-                        # Regular tasks check for 'y' status
-                        has_task_progress = any(
-                            u.get('tags', {}).get(tag_code) == 'y'
-                            for u in street_data.values() if isinstance(u, dict)
-                        )
+                if is_vi_task:
+                    # Active if any unit has votes > 0
+                    has_task_progress = any(u.get('votes', 0) > 0 for u in units.values())
+                else:
+                    # Active if any unit has the target tag set to 'y'
+                    has_task_progress = any(u.get('tags', {}).get(tag_code) == 'y' for u in units.values())
 
-                    if has_task_progress:
-                        # Extract weight from street base level container
-                        completed_weight += street_data.get('street_weight', 1)
+                if has_task_progress:
+                    completed_weight += 1  # Treating each active street as weight 1
 
-            total_possible = region_info.get('region_total_houses', 1)
             opacity = (0.8 * (completed_weight / total_possible)) if total_possible > 0 else 0
 
-            # -------------------------------------------------
-            # 2. Build the Ghost Polygon
-            # -------------------------------------------------
+            # 4. Build the Ghost Polygon
             if opacity > 0:
                 try:
-                    # Determine color index
                     if is_vi_task:
-                        fill_color = "#00aaff"  # Action Blue for VI overlays
+                        fill_color = "#800080"  # Purple for VI
                     else:
                         color_idx = int(tag_code[1:]) if tag_code[1:].isdigit() else 0
                         fill_color = branchcolours[color_idx % 12]
 
-                    # Create the GeoJson Feature
                     ghost_gj = folium.GeoJson(
                         child.geometry,
                         name=f"ghost_{tag_code}_{region_id}",
@@ -604,14 +656,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                             'fillColor': col,
                             'color': 'transparent',
                             'fillOpacity': op,
-                            'interactive': False  # Ghosts are non-interactive overlays
+                            'interactive': False
                         }
                     )
-
-                    # Inject the ghost_id for your JavaScript findBucket logic
                     ghost_gj.ghost_id = f"ghost_{tag_code}_{region_id}"
-
-                    # Add to self (this ExtendedFeatureGroup)
                     ghost_gj.add_to(self)
                     polygons_added += 1
 
@@ -620,7 +668,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"DEBUG GHOSTS: Added {polygons_added} polygons to tag layer [{tag_code}]")
         return polygons_added
-
 
     def reset(self):
         # This clears internal children before rendering
@@ -920,14 +967,15 @@ class ExtendedFeatureGroup(FeatureGroup):
                 }
 
                 try:
+                    # Clean up the HTML string to make sure it doesn't break JSON parsing
+
                     feature_properties = {
                         'nid': child.nid,
                         'region_id': child.value,
                         'type': 'voronoi_poly',
                         'expected_houses': house_count,
                         'level': getattr(child, 'level', 'PD'),
-                        # 📦 Store the complete pre-baked HTML right inside the properties!
-                        'street_html': street_html
+                        'street_html': street_html  # 👈 Pass the clean, safe string
                     }
 
                     if getattr(self, 'is_ghost', False):

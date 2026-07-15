@@ -1443,7 +1443,7 @@ class TreeNode:
                 if hasattr(tag_layer, 'add_ghosts'):
                     tag_layer.add_ghosts(
                         tag_code=tag_code,
-                        baked_dict=baked_dict,
+                        baked_events=baked_dict,
                         parent_node=node,
                         branchcolours=state.branchcolours
                     )
@@ -2531,6 +2531,34 @@ class TreeNode:
 
 
 
+
+        # 1. Inject Bootstrap CSS and JS directly into the Folium Header/Body
+
+
+        # Assuming 'my_map' is your Folium Map object
+        header_html = """
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        """
+
+        # 2. Inject the Modal Skeleton HTML into the Map Body
+        modal_html = """
+        <div class="modal fade" id="streetListModal" tabindex="-1" aria-hidden="true" style="z-index: 99999;">
+          <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Street Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body" id="modal-table-body">
+                </div>
+              <div class="modal-footer">
+                <button type="button" class="btn class-secondary" data-bs-dismiss="modal">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        """
         # --- Inject map finding , click handling and layer control adding functionality
 
         fmap_tags_js = r"""
@@ -2575,49 +2603,67 @@ class TreeNode:
                                             if (e.originalEvent) e.originalEvent.stopPropagation();
                                             L.DomEvent.stopPropagation(e);
 
-                                            console.log("鼠标 Map layer clicked!");
+                                            // ================== DEBUG STATEMENT (RETAINED) ==================
+                                            console.log("================== DEBUG CLICK START ==================");
+                                            console.log("Raw Click Event Object:", e);
 
-                                            const props = layer.feature ? layer.feature.properties : null;
+                                            if (e.target) {
+                                                console.log("Target Found:", e.target);
+                                                console.log("Target Feature:", e.target.feature);
+                                                if (e.target.feature) {
+                                                    console.log("Target Feature Properties:", e.target.feature.properties);
+                                                }
+                                            }
+
+                                            console.log("Layer Found:", layer);
+                                            console.log("Layer Feature:", layer.feature);
+                                            if (layer.feature) {
+                                                console.log("Layer Feature Properties:", layer.feature.properties);
+                                            }
+
+                                            if (e.target && e.target.options) {
+                                                console.log("Target Options:", e.target.options);
+                                            }
+                                            console.log("================== DEBUG CLICK END ==================");
+                                            // ================================================================
+
+                                            const clickedLayer = e.target;
+                                            const feature = clickedLayer.feature || (clickedLayer.options && clickedLayer.options.feature);
+                                            const props = feature ? feature.properties : null;
+
                                             if (!props || !props.street_html) {
-                                                console.error("❌ Error: 'street_html' is missing on this layer feature.");
+                                                console.warn("⚠️ No street properties found on this layer.");
                                                 return;
                                             }
 
-                                            // 🎯 Reaching out to the parent document if we are trapped in an iframe
-                                            const modalBody = document.getElementById('modal-table-body') || parent.document.getElementById('modal-table-body');
-                                            const modalElement = document.getElementById('streetListModal') || parent.document.getElementById('streetListModal');
-
-                                            console.log("Target elements resolved:", { modalBody, modalElement });
-
-                                            if (!modalBody || !modalElement) {
-                                                console.error("❌ Error: Could not find #modal-table-body or #streetListModal in either local or parent document.");
+                                            // 🎯 Find the active modal container
+                                            const modalElement = document.getElementById('streetListModal');
+                                            if (!modalElement) {
+                                                console.error("❌ Critical: Could not find modal element with ID 'streetListModal'.");
                                                 return;
                                             }
 
-                                            // Resolve bootstrap instance from parent window if local window doesn't have it
-                                            const activeBootstrap = (typeof bootstrap !== 'undefined') ? bootstrap : parent.bootstrap;
-
-                                            if (typeof activeBootstrap === 'undefined') {
-                                                console.error("❌ Error: 'bootstrap' library is not defined in local or parent scope.");
+                                            // Find the body container strictly inside our target modal
+                                            const modalBody = modalElement.querySelector('.modal-body') || document.getElementById('modal-table-body');
+                                            if (!modalBody) {
+                                                console.error("❌ Critical: Could not find any modal body container.");
                                                 return;
                                             }
 
-                                            try {
-                                                // 1. Inject the raw HTML table content
-                                                modalBody.innerHTML = props.street_html;
+                                            // 🚀 Directly inject the clean HTML string
+                                            console.log(props.street_html);
+                                            console.log(typeof props.street_html);
+                                            console.log(props.street_html.length);
+                                            modalBody.innerHTML = props.street_html;
+                                            console.log("✨ Successfully wrote content to active DOM element:", modalBody);
 
-                                                // 2. CRITICAL FIX: Move the modal markup to the root <body> of the main page
-                                                // This pulls it out of any map divs or wrappers messing with the z-index
-                                                const parentBody = parent.document.body || document.body;
-                                                parentBody.appendChild(modalElement);
-
-                                                // 3. Initialize and display using the parent's Bootstrap object
-                                                const bsModal = new activeBootstrap.Modal(modalElement);
+                                            // Trigger the modal display
+                                            if (typeof bootstrap !== 'undefined') {
+                                                const bsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
                                                 bsModal.show();
-
-                                                console.log("✨ Success! Modal pushed to root body and opened.");
-                                            } catch (err) {
-                                                console.error("❌ Crash during modal display sequence:", err);
+                                                console.log("🚀 Modal display triggered via Bootstrap.");
+                                            } else {
+                                                console.error("❌ Bootstrap JS is not loaded.");
                                             }
                                         });
                                         // 👆 END OF THE LAYER.ON CODE 👆
@@ -2894,6 +2940,8 @@ class TreeNode:
 
         # Ensure there's only one LayerControl
         FolMap.add_child(folium.LayerControl(collapsed=True))
+        FolMap.get_root().header.add_child(folium.Element(header_html))
+        FolMap.get_root().html.add_child(folium.Element(modal_html))
 
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
