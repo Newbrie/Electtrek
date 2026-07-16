@@ -2673,8 +2673,10 @@ class TreeNode:
                                                     });
                                                 }
 
-                                                const bsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
-                                                bsModal.show();
+                                                window.streetBsModal = window.streetBsModal ||
+                                                    bootstrap.Modal.getOrCreateInstance(modalElement);
+
+                                                window.streetBsModal.show();
 
                                                 console.log("🚀 Modal display triggered via Bootstrap.");
 
