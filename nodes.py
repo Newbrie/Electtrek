@@ -2603,9 +2603,6 @@ class TreeNode:
                                             if (e.originalEvent) e.originalEvent.stopPropagation();
                                             L.DomEvent.stopPropagation(e);
 
-                                            // ================== DEBUG STATEMENT (RETAINED) ==================
-                                            console.log("================== DEBUG CLICK START ==================");
-                                            console.log("Raw Click Event Object:", e);
 
                                             if (e.target) {
                                                 console.log("Target Found:", e.target);
@@ -2624,8 +2621,6 @@ class TreeNode:
                                             if (e.target && e.target.options) {
                                                 console.log("Target Options:", e.target.options);
                                             }
-                                            console.log("================== DEBUG CLICK END ==================");
-                                            // ================================================================
 
                                             const clickedLayer = e.target;
                                             const feature = clickedLayer.feature || (clickedLayer.options && clickedLayer.options.feature);
@@ -2651,17 +2646,38 @@ class TreeNode:
                                             }
 
                                             // 🚀 Directly inject the clean HTML string
-                                            console.log(props.street_html);
-                                            console.log(typeof props.street_html);
-                                            console.log(props.street_html.length);
                                             modalBody.innerHTML = props.street_html;
                                             console.log("✨ Successfully wrote content to active DOM element:", modalBody);
 
-                                            // Trigger the modal display
                                             if (typeof bootstrap !== 'undefined') {
+
+                                                if (!modalElement.__eventsBound) {
+
+                                                    modalElement.__eventsBound = true;
+
+                                                    modalElement.addEventListener("show.bs.modal", () => {
+                                                        console.log("🟢 show.bs.modal");
+                                                    });
+
+                                                    modalElement.addEventListener("shown.bs.modal", () => {
+                                                        console.log("🟢 shown.bs.modal");
+                                                    });
+
+                                                    modalElement.addEventListener("hide.bs.modal", () => {
+                                                        console.log("🔴 hide.bs.modal");
+                                                    });
+
+                                                    modalElement.addEventListener("hidden.bs.modal", () => {
+                                                        console.log("🔴 hidden.bs.modal");
+                                                        window.syncBackend?.();
+                                                    });
+                                                }
+
                                                 const bsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
                                                 bsModal.show();
+
                                                 console.log("🚀 Modal display triggered via Bootstrap.");
+
                                             } else {
                                                 console.error("❌ Bootstrap JS is not loaded.");
                                             }

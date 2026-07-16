@@ -128,55 +128,134 @@ var fmap;
      }
 };
 
+
 /**
  * Gathers un-synced entries out of local memory storage and drops them to the
  * backend server framework endpoint in a single batch query chain.
  *
  * @returns {Promise<boolean>} Resolves true if sync is clean or succeeds, false on network errors.
  */
-window.syncBackend = function() {
-    var parentWindow = window.parent || window;
-    const eventLog = parentWindow.BAKED_DATA || [];
+ window.syncBackend = function() {
+     // 1. Safely retrieve the BAKED_DATA array across window contexts
+     var parentWindow = window.parent || window;
+     const iframe = document.getElementById('iframe1');
+     const iframeWin = iframe?.contentWindow;
 
-    // Filter down exclusively to operations missing a true synchronization check mark
-    const unsynced = eventLog.filter(e => !e.synced);
+     // Fallback order: Iframe data -> Parent/Main window data -> empty array
+     const eventLog = (iframeWin && iframeWin.BAKED_DATA) || parentWindow.BAKED_DATA || window.BAKED_DATA || [];
 
-    if (unsynced.length === 0) {
-        console.log("ℹ️ No un-synced local changes found.");
-        return Promise.resolve(true);
-    }
+     // 2. Filter down strictly to events that are explicitly NOT synced
+     // Treating undefined/missing 'synced' properties as un-synced (false)
+     const unsynced = eventLog.filter(e => e.synced !== true);
 
-    console.log(`🚀 Batch uploading ${unsynced.length} un-synced changes to server...`);
+     if (unsynced.length === 0) {
+         console.log("ℹ️ No un-synced local changes found.");
+         return Promise.resolve(true);
+     }
 
-    // Match your original route string endpoint: '/upload_data'
-    return fetch('/upload_data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ events: unsynced })
-    })
-    .then(res => {
-        if (!res.ok) throw new Error("Network collection upload synchronization failed");
+     console.log(`🚀 Batch uploading ${unsynced.length} un-synced changes to server...`);
 
-        // Mark only successfully uploaded elements as synced in our live global array
-        unsynced.forEach(e => {
-            e.synced = true;
+     // 3. POST the unsynced changes wrapped in an 'events' object to match the backend expectations
+     return fetch('/upload_data', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ events: unsynced })
+     })
+     .then(res => {
+         if (!res.ok) throw new Error("Network collection upload synchronization failed");
+
+         // 4. Mark successfully uploaded elements as synced in the active memory array
+         unsynced.forEach(e => {
+             e.synced = true;
+         });
+
+         // 5. Sync state to LocalStorage for safety
+         localStorage.setItem('CANVASS_BAKED_DATA', JSON.stringify(eventLog));
+         console.log("🚀 Sync complete! Remote server updated and local cache synchronized.");
+
+         // Clear warning indicators or toggle save button elements if present
+         var deployBtn = document.getElementById('deploy-btn') || parentWindow.document.getElementById('deploy-btn');
+         if (deployBtn) deployBtn.disabled = true;
+
+         return true;
+     })
+     .catch(err => {
+         console.error("❌ Failed to push batch payload modifications to database container:", err);
+         return false;
+     });
+ };
+
+ (function startMapCatcher() {
+
+     // Helper function to safely execute the sync call
+     const runBackendSync = () => {
+         const parentWindow = window.parent || window;
+         const targetSync = parentWindow.syncBackend || window.syncBackend;
+         if (typeof targetSync === 'function') {
+             console.log("💾 [DISMISS SYNC] Closing trigger detected. Syncing to backend...");
+             targetSync().then(success => {
+                 if (success) {
+                     console.log("✅ Auto-sync successful on dismissal.");
+                 } else {
+                     console.warn("⚠️ Auto-sync failed on dismissal.");
+                 }
+             }).catch(err => {
+                 console.error("❌ Error running syncBackend:", err);
+             });
+         }
+     };
+
+     // -------------------------------------------------------------
+     // GLOBAL BUBBLED EVENT LISTENER (Folium/Dynamic Friendly)
+     // -------------------------------------------------------------
+     // Since Folium injects the elements dynamically on click, we intercept
+     // the Bootstrap event at the document root level where it always bubbles up.
+
+     document.addEventListener('hidden.bs.modal', async (event) => {
+        if (event.target.id !== 'slotModal')
+            return;
+        console.log("🎯 Modal closed. Syncing...");
+        if (typeof window.syncBackend === "function") {
+            await window.syncBackend();
+        }
         });
 
-        // Re-stringify the updated log array and persist to local storage backup cache
-        localStorage.setItem('CANVASS_BAKED_DATA', JSON.stringify(parentWindow.BAKED_DATA));
-        console.log("🚀 Sync complete! Remote server updated and local cache synchronized.");
+     // Global console manual test hook
+     window.triggerManualDebugClose = () => {
+         const offcanvasEl = document.getElementById('streetOffcanvas');
+         if (!offcanvasEl) {
+             console.warn("❌ [DEBUG-MANUAL] Cannot trigger close. Open a region on the map first so Folium renders the element!");
+             return;
+         }
+         console.log("🔌 [DEBUG-MANUAL] Artificially dispatching hide event on live element...");
+         offcanvasEl.dispatchEvent(new Event('hide.bs.offcanvas', { bubbles: true }));
+     };
 
-        // Clear warning indicators or toggle save button elements if present
-        var deployBtn = document.getElementById('deploy-btn');
-        if (deployBtn) deployBtn.disabled = true;
+     // -------------------------------------------------------------
+     // LEAFLET MAP REFRESH FINDER
+     // -------------------------------------------------------------
+     const findMap = () => {
+         for (const key in window) {
+             if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
+                 window.fmap = window[key];
+                 window.fmap.invalidateSize();
+                 window.MAP_READY = true;
+                 hydrateMapOnce();
+                 if (window.__pendingRender) window.__pendingRender = null;
+                 return true;
+             }
+         }
+         return false;
+     };
 
-        return true;
-    })
-    .catch(err => {
-        console.error("❌ Failed to push batch payload modifications to database container:", err);
-        return false;
-    });
-};
+     if (!findMap()) {
+         const interval = setInterval(() => {
+             if (findMap()) clearInterval(interval);
+         }, 100);
+         setTimeout(() => clearInterval(interval), 10000);
+     }
+
+})();
 
 /**
  * Loads the data back from storage on page load.
@@ -273,119 +352,7 @@ window.syncBackend = function() {
      }
  }
 
-(function startMapCatcher() {
 
-    const findMap = () => {
-
-        for (const key in window) {
-            if (key.startsWith('map_') && window.L && window[key] instanceof window.L.Map) {
-
-                window.fmap = window[key];
-
-                const fmap = window.fmap;
-
-                // -------------------------
-                // POPUP REFRESH (SAFE)
-                // -------------------------
-                fmap.on('popupopen', function(e) {
-                    const container = e.popup._contentNode;
-                    const firstRow = container.querySelector('.canvass-row');
-
-                    if (!firstRow || !window.plotTaskProgress) return;
-
-                    const region_id = firstRow.getAttribute('data-region');
-
-                    const tagsToUpdate = Object.keys(window.task_tags || {});
-                    for (const tagCode of tagsToUpdate) {
-                        window.plotTaskProgress(region_id, tagCode, 'walk');
-                    }
-                });
-
-                // Inside your main map initialization file (map.js) where your 'map' object lives:
-                fmap.on('popupclose', function(e) {
-                    console.log("🔄 [LEAFLET POPUP CLOSE] User closed street list view. Syncing to backend...");
-
-                    if (typeof window.syncBackend === 'function') {
-                        window.syncBackend().then(success => {
-                            if (success) {
-                                console.log("✅ Auto-sync successful on popup close.");
-                            } else {
-                                console.warn("⚠️ Auto-sync failed on popup close.");
-                            }
-                        });
-                    }
-                });
-
-                fmap.invalidateSize();
-
-                // -------------------------------------------------------------
-                // SINGLE HYDRATION PASS
-                // -------------------------------------------------------------
-                window.MAP_READY = true;
-
-                // This does the definitive drawing loop exactly once
-                hydrateMapOnce();
-
-                // Safely clear the tracking reference without double-invoking the loops
-                if (window.__pendingRender) {
-                    window.__pendingRender = null;
-                }
-
-                return true;
-            }
-        }
-
-        // iframe fallback
-        const frame = document.getElementById('iframe1');
-
-        if (frame?.contentWindow) {
-            const frameWin = frame.contentWindow;
-
-            for (const key in frameWin) {
-                if (key.startsWith('map_') && frameWin.L && frameWin[key] instanceof frameWin.L.Map) {
-
-                    window.fmap = frameWin[key];
-
-                    const fmap = window.fmap;
-
-                    fmap.on('popupopen', function(e) {
-                        const container = e.popup._contentNode;
-                        const firstRow = container.querySelector('.canvass-row');
-
-                        if (!firstRow || !window.plotTaskProgress) return;
-
-                        const region_id = firstRow.getAttribute('data-region');
-
-                        for (const tagCode of Object.keys(window.task_tags || {})) {
-                            window.plotTaskProgress(region_id, tagCode, 'walk');
-                        }
-                    });
-
-                    fmap.invalidateSize();
-
-                    window.MAP_READY = true;
-
-                    hydrateMapOnce();
-
-                    console.log("🎯 Map found in iframe:", key);
-
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    };
-
-    if (!findMap()) {
-        const interval = setInterval(() => {
-            if (findMap()) clearInterval(interval);
-        }, 100);
-
-        setTimeout(() => clearInterval(interval), 10000);
-    }
-
-})();
 
 
 // 2. Calendar Toggle Logic

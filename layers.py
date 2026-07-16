@@ -263,11 +263,15 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     '''
 
     html = persistence_js + f'''
-        <div class="offcanvas-header bg-dark text-white border-bottom border-secondary py-3 px-3">
+    <div class="offcanvas-header bg-dark text-white border-bottom border-secondary py-3 px-3">
             <h6 class="offcanvas-title fw-bold text-info m-0 d-flex align-items-center fs-5">
                 <i class="bi bi-geo-alt-fill me-2"></i> Region: {reg_id} ({uiScope.upper()})
             </h6>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close" style="transform: scale(1.2);"></button>
+            # No inline onclick handlers, no escaping headaches!
+            <button type="button" class="btn-close btn-close-white"
+                    data-bs-dismiss="offcanvas"
+                    aria-label="Close"
+                    style="transform: scale(1.2);"></button>
         </div>
         <div class="offcanvas-body bg-dark text-white p-0">
             <div class="table-responsive">

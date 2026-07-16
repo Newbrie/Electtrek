@@ -3912,12 +3912,27 @@ def upload_data():
     print("📥 [DEBUG] /upload_data route triggered!")
     print("="*60)
 
-    data = request.get_json()
-    incoming_events = data.get('events', [])
+    # Safely get JSON payload (handling missing or invalid Content-Type headers)
+    try:
+        data = request.get_json(force=True) or []
+    except Exception as e:
+        print(f"⚠️ [DEBUG] Failed to parse request JSON: {e}")
+        return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
+
+    # --- FIX: Support BOTH raw lists and dictionary wrappers ---
+    if isinstance(data, list):
+        print("📦 [DEBUG] Detected raw array payload from frontend.")
+        incoming_events = data
+    elif isinstance(data, dict):
+        print("📦 [DEBUG] Detected wrapped object payload from frontend.")
+        incoming_events = data.get('events', data.get('baked_data', []))
+    else:
+        incoming_events = []
+
     file_path = DATA_FILE
 
     print(f"🔍 [DEBUG] Path to file being read: {os.path.abspath(file_path)}")
-    print(f"📦 [DEBUG] Total incoming events received from frontend: {len(incoming_events)}")
+    print(f"📦 [DEBUG] Total incoming events received: {len(incoming_events)}")
     if incoming_events:
         print(f"   📋 [DEBUG] First incoming sample: {incoming_events[0]}")
 
