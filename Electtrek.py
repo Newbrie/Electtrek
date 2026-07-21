@@ -4328,144 +4328,91 @@ def postcode():
     return redirect(url_for('dashboard'))
 
 
+def convert_csv_to_clean_json(csv_path):
+    resources = {}
+    existing_codes = set()
+    csv_path = Path(csv_path)
+    json_path = csv_path.with_suffix(".json")
+
+    if not csv_path.exists():
+        logging.warning(f"Resource CSV file not found at {csv_path}")
+        return resources
+
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            firstname = clean_text(row.get("Firstname"))
+            surname = clean_text(row.get("Surname"))
+
+            if not firstname and not surname:
+                continue
+
+            code = clean_text(row.get("Code"))
+            if not code:
+                code = generate_code(firstname, surname, existing_codes)
+
+            existing_codes.add(code)
+            resources[code] = {
+                "Firstname": firstname,
+                "Surname": surname,
+                "Postcode": clean_text(row.get("Postcode")),
+                "Address1": clean_text(row.get("Address1")),
+                "Address2": clean_text(row.get("Address2")),
+                "campaignMgremail": clean_text(row.get("campaignMgremail")),
+                "Mobile": clean_mobile(row.get("Mobile")),
+                "Role": clean_text(row.get("Role"))
+            }
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(resources, f, indent=2)
+
+    print(f"✅ Clean JSON written to {json_path}")
+    return resources
+
+
 @app.route('/firstpage', methods=['GET', 'POST'])
 @login_required
 def firstpage():
-
     from elector import electors
     from state import Treepolys, Geo_index, ensure_treepolys_with_index
-    global workdirectories
-    global environment
-    global layeritems
-    global streamrag
-    global TABLE_TYPES
 
-    import csv
-    import json
-    import re
-    from pathlib import Path
-    from baked_data import baked_data
+    # 1. Resource synchronization
+    resource_file = globals().get('RESOURCE_FILE', 'resources.csv')
+    try:
+        convert_csv_to_clean_json(resource_file)
+    except Exception as e:
+        logging.error(f"Failed converting resource CSV to JSON: {e}")
 
-
-    def clean_text(value):
-        """Remove hidden unicode chars and trim whitespace."""
-        if value is None:
-            return ""
-
-        value = str(value)
-
-        # Remove unicode direction control characters
-        value = re.sub(r'[\u202a-\u202e]', '', value)
-
-        # Remove leading/trailing whitespace
-        value = value.strip()
-
-        return value
-
-
-    def clean_mobile(value):
-        """Normalise mobile numbers."""
-        value = clean_text(value)
-
-        # Remove "M:" prefix if present
-        value = value.replace("M:", "").strip()
-
-        # Remove spaces
-        value = value.replace(" ", "")
-
-        return value
-
-
-    def generate_code(firstname, surname, existing_codes):
-        """Generate a short unique code like MH or RB1."""
-        base = (firstname[:1] + surname[:1]).upper()
-
-        if base not in existing_codes:
-            return base
-
-        # Add numeric suffix if needed
-        i = 1
-        while f"{base}{i}" in existing_codes:
-            i += 1
-
-        return f"{base}{i}"
-
-
-    def convert_csv_to_clean_json(csv_path):
-        resources = {}
-        existing_codes = set()
-        from pathlib import Path
-
-        csv_path = Path(csv_path)
-        json_path = csv_path.with_suffix(".json")
-
-
-        with open(csv_path, newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f, delimiter="\t")
-
-            for row in reader:
-                firstname = clean_text(row.get("Firstname"))
-                surname = clean_text(row.get("Surname"))
-
-                if not firstname and not surname:
-                    continue  # skip empty rows
-
-                code = clean_text(row.get("Code"))
-
-                if not code:
-                    code = generate_code(firstname, surname, existing_codes)
-
-                existing_codes.add(code)
-
-                resources[code] = {
-                    "Firstname": firstname,
-                    "Surname": surname,
-                    "Postcode": clean_text(row.get("Postcode")),
-                    "Address1": clean_text(row.get("Address1")),
-                    "Address2": clean_text(row.get("Address2")),
-                    "campaignMgremail": clean_text(row.get("campaignMgremail")),
-                    "Mobile": clean_mobile(row.get("Mobile")),
-                    "Role": clean_text(row.get("Role"))
-                }
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(resources, f, indent=2)
-
-        print(f"✅ Clean JSON written to {json_path}")
-
-        return resources
-
-    convert_csv_to_clean_json(RESOURCE_FILE)
-
-
-# restore the last used local geometries, location name index, election data
+    # 2. State & Election restore
     restore_from_persist(Treepolys, Geo_index)
     current_election = CurrentElection.get_lastused()
     session["current_election"] = current_election
+
     CElection = CurrentElection.load(current_election)
-    rlevels = CElection.resolved_levels # driven by election type
-
-    assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-    # The clean unpack you like
-    (c_election, elevels), = rlevels.items()
-
-
-    plevels = CElection.parent_levels
-    territory = CElection['territory'] # limits election breadcrumbs and caps election geometries
-    breadcrumb = CElection['mapfiles'][-1]
-    here = (CElection.get('cidLat',None),CElection.get('cidLong',None)) # last breadcrumb lat long
     if not CElection:
         return jsonify(success=False, error="Election not found"), 404
 
+    rlevels = CElection.resolved_levels
+    assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+    (c_election, elevels), = rlevels.items()
 
+    plevels = CElection.parent_levels
+    territory = CElection['territory']
+    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
+
+    # Standardized lat/lon tuple format
+    lat = CElection.get('cidLat')
+    lon = CElection.get('cidLong')
+    here = (lat, lon) if (lat is not None and lon is not None) else None
+
+    # 3. Index & Boundary sync
     filepath, Geo_index = ensure_treepolys_with_index(
-            territory=territory,
-            sourcepath= breadcrumb,
-            here=here,
-            resolved_levels=rlevels,
-            parent_levels=plevels
-        )
+        territory=territory,
+        sourcepath=breadcrumb,
+        here=here,
+        resolved_levels=rlevels,
+        parent_levels=plevels
+    )
 
 # nodes - will be restored throught load nodes process in restore_from_persist
 # cid should exist so why not just load from last_used_node
