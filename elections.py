@@ -445,33 +445,39 @@ class CurrentElection(dict):
         return self._resolved_levels
 
     @property
-    def parent_levels(self) -> dict[int, str]:
+    def parent_levels(self) -> dict[int, str | None]:
         """
-        Derive parent filtering levels from the resolved levels.
+        Dynamically compute parent_levels using the active election's resolved_levels.
+        For any level N, its parent is the resolved layer name at level N - 1.
         """
-        parent_levels: dict[int, str] = {}
-        territory_level = len(stepify(self.territory)) - 1 if self.territory else -1
-        logging.debug(f"[DEBUG] territory_level: {territory_level}")
-        # 1. Extract the inner mapping once
-        # rlevels is now {'ElectionName': {0: 'country', 1: 'ward', ...}}
-        election_name = next(iter(self._resolved_levels))
-        inner_levels = self._resolved_levels[election_name]
+        if not hasattr(self, "_parent_levels"):
+            # Get the inner dict of {level: "name"} for this specific election
+            election_levels = self.resolved_levels.get(self.name, {})
 
-        # 2. Loop through the actual integer levels
-        for level, layer_type in inner_levels.items():
-            # Clamp parent level
-            parent_idx = max(0, min(level - 1, territory_level))
+            parent_map: dict[int, str | None] = {0: None}
 
-            # Access the parent type from our extracted dict
-            parent_type = inner_levels[parent_idx]
-            parent_levels[level] = parent_type
+            # Sort levels to guarantee we resolve them sequentially
+            sorted_levels = sorted(election_levels.keys())
 
-            logging.debug(
-                f"[DEBUG] Election: {election_name} | level: {level} ({layer_type}) | "
-                f"parent: {parent_idx} ({parent_type})"
-            )
+            for level in sorted_levels:
+                if level == 0:
+                    continue
 
-        self._parent_levels = parent_levels
+                # Determine the parent's level index (typically level - 1)
+                parent_level_idx = level - 1
+
+                # Retrieve the raw parent name (e.g., "ward/division" or "county")
+                raw_parent_name = election_levels.get(parent_level_idx)
+
+                if raw_parent_name:
+                    # If the parent level has a compound name (like 'ward/division'),
+                    # default to the first primary type ('ward') for clean index lookups.
+                    parent_map[level] = raw_parent_name.split('/')[0].strip()
+                else:
+                    parent_map[level] = None
+
+            self._parent_levels = parent_map
+
         return self._parent_levels
 
 

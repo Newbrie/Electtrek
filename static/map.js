@@ -222,14 +222,14 @@ var fmap;
 
      // Global console manual test hook
      window.triggerManualDebugClose = () => {
-         const offcanvasEl = document.getElementById('streetOffcanvas');
-         if (!offcanvasEl) {
-             console.warn("❌ [DEBUG-MANUAL] Cannot trigger close. Open a region on the map first so Folium renders the element!");
-             return;
-         }
-         console.log("🔌 [DEBUG-MANUAL] Artificially dispatching hide event on live element...");
-         offcanvasEl.dispatchEvent(new Event('hide.bs.offcanvas', { bubbles: true }));
-     };
+      const modalEl = document.getElementById("slotModal");
+      if (!modalEl) {
+          console.warn("No slotModal found.");
+          return;
+      }
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.hide();
+      };
 
      // -------------------------------------------------------------
      // LEAFLET MAP REFRESH FINDER

@@ -34,7 +34,7 @@ from werkzeug.exceptions import HTTPException
 from datetime import datetime, timedelta, date
 import geocoder
 from pathlib import Path
-from shapely.geometry import Point, Polygon, MultiPolygon
+from shapely.geometry import Point, Polygon, MultiPolygon, shape
 
 from flask_session import Session
 from flask_cors import CORS
@@ -546,10 +546,15 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
-    Full background normalisation routine with targeted DEBUG instrumentation
-
+    Full background normalisation routine with targeted dynamic pre-flight
+    spatial exploration and vectorized spatial join operations.
     """
-    import logging, os, traceback, re, pandas as pd
+    import logging
+    import os
+    import traceback
+    import re
+    import pandas as pd
+    import geopandas as gpd
     from shapely.geometry import Point, Polygon
     from elector import electors
     from state import Treepolys, Geo_index, progress, DQstats, update_progress, ensure_treepolys_with_index
@@ -565,8 +570,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
     try:
         mainframes, deltaframes, aviframes, pledge_frames, DQstatslist = [], [], [], [], []
+        ROOT = "ROOT"
 
+        # =========================================================================
         # --- Stage 1: Sourcing & Path Resolution ---
+        # =========================================================================
         update_progress(progress, "sourcing", 0.0, "Sourcing data...")
 
         current_election = session_data.get('current_election', 'UNKNOWN')
@@ -575,9 +583,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         parent_levels = CElection.parent_levels
         territory_path = CElection['territory']
         lastfilepath = CElection['mapfiles'][-1]
-        here = (CElection.get('cidLat', None), CElection.get('cidLong', None))
 
-        # --- DEBUG 1: Path Cleanup ---
+        # Path Cleanup & Tokenization
         clean_territory = territory_path.replace("-DIVS.html", "").replace(".html", "")
         path_parts = stepify(clean_territory)
 
@@ -585,33 +592,19 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print(f"   > Raw Territory: {territory_path}")
         print(f"   > Cleaned Parts: {path_parts}")
 
-        lastfilepath, Geo_index = ensure_treepolys_with_index(
-            territory=territory_path,
-            sourcepath=lastfilepath,
-            here=here,
-            resolved_levels=resolved_levels,
-            parent_levels=parent_levels
-        )
-
         # Unpack the active levels mapping dictionary
         (_, elevels), = resolved_levels.items()
 
-        # 🔥 FIX: Construct an explicitly index-aligned array matching path_parts structural offsets
-        # Base hardcoded geographic tiers (Levels 0, 1, 2)
+        # Construct an explicitly index-aligned array matching path_parts structural offsets
         levels = ["Country", "Nation", "County"]
-
-        # Calculate maximum possible length to prevent index bleeding or out-of-bounds loops
         max_index = max(max(elevels.keys(), default=0) + 1, len(path_parts))
 
-        # Positionally evaluate every administrative layer from index 3 downward
         for idx in range(3, max_index):
             if idx in elevels:
                 layer_raw_token = elevels[idx]
-                # Dynamic split for bivalent targets ("ward/division" -> defaults to "Ward")
                 primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
                 levels.append(primary_layer.capitalize())
             else:
-                # If index 3 wasn't explicitly in elevels, fallback to standard naming
                 if idx == 3:
                     levels.append("Constituency")
                 else:
@@ -623,11 +616,12 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
 
-        # --- Stage 2: Process files ---
+        # =========================================================================
+        # --- Stage 2: Process Raw File Imports ---
+        # =========================================================================
         for idx, (index, data) in enumerate(sorted_items):
             file_path = data.get('saved_path') or data.get('stored_path', '')
             if file_path and not os.path.isabs(file_path):
-                # Safe context recovery if 'config' namespace isn't global
                 try:
                     workdir = config.workdirectories['workdir']
                 except NameError:
@@ -647,7 +641,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             else:
                 continue
 
-            # Clean columns
+            # Clean column names
             dfx.columns = [c.encode('ascii', 'ignore').decode('ascii').strip() for c in dfx.columns]
 
             results = normz(progress, RunningVals, Lookups, data.get('election'), file_path, dfx, fixlevel, purpose)
@@ -659,18 +653,113 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             elif purpose == 'avi': aviframes.append(temp_df)
             elif purpose == 'pledge': pledge_frames.append(temp_df)
 
-        # --- Combine Electoral Roll ---
+        # Combine main and delta frames to form the raw import baseline
         all_new = mainframes + deltaframes
         if not all_new:
             progress.update({"percent": 100, "status": "error", "message": "No valid electoral files"})
             return
 
-        new_df = pd.concat(all_new, ignore_index=True)
+        # =========================================================================
+        # --- Stage 2.1: Pre-Flight Spatial Discovery Pass ---
+        # =========================================================================
+        preflight_df = pd.concat(all_new, ignore_index=True)
+        preflight_df['latitude'] = pd.to_numeric(preflight_df.get('latitude', preflight_df.get('Lat')), errors='coerce')
+        preflight_df['longitude'] = pd.to_numeric(preflight_df.get('longitude', preflight_df.get('Long')), errors='coerce')
 
-        # Apply Context Hierarchy safely without index offsets
-        for i, value in enumerate(path_parts):
-            if i < len(levels):
-                new_df[levels[i]] = value
+        # Drop NaNs and duplicates to maintain an optimal spatial footprint
+        unique_coords_df = preflight_df[preflight_df['latitude'].notna() & preflight_df['longitude'].notna()]
+        unique_anchors = unique_coords_df[['latitude', 'longitude']].drop_duplicates().values.tolist()
+
+        print(f"📡 PRE-FLIGHT: Extracted {len(unique_anchors)} distinct spatial anchor points from imported data.")
+
+        # Hydrate bounds using the discovered point list to pull only target + neighbor boundaries
+        lastfilepath, Geo_index = ensure_treepolys_with_index(
+            territory=territory_path,
+            sourcepath=lastfilepath,
+            here=unique_anchors,  # Send the full collection array down to the geometry parser
+            resolved_levels=resolved_levels,
+            parent_levels=parent_levels
+        )
+
+        # Clone and establish the base target dataframe context
+        new_df = preflight_df.copy()
+
+        # =========================================================================
+        # --- Stage 2.5: Dynamic Vectorized Spatial Join Assignment Engine ---
+        # =========================================================================
+        print("🌐 SPATIAL ENGINE: Commencing point-in-polygon vector analysis...")
+
+
+        poly_records = []
+        geometries = []  # Separate list to prevent key collisions with FID/properties
+
+        for level_key, polys_dict in Treepolys.items():
+            for unique_path, geom_obj in polys_dict.items():
+                path_tokens = [t for t in unique_path.split('/') if t and t != 'ROOT']
+
+                # Convert dicts (GeoJSON) to valid Shapely shapes
+                try:
+                    actual_geom = shape(geom_obj) if isinstance(geom_obj, dict) else geom_obj
+                except Exception as e:
+                    print(f"⚠️ Spatial engine skipped invalid shape for {unique_path}: {e}")
+                    continue
+
+                # Build record metadata WITHOUT putting a 'geometry' key in the dict
+                record = {"_full_path": unique_path}
+                for i, token in enumerate(path_tokens):
+                    if i < len(levels):
+                        record[levels[i]] = token
+
+                poly_records.append(record)
+                geometries.append(actual_geom)
+
+        if not poly_records:
+            print("⚠️ SPATIAL ENGINE WARNING: No geographic boundaries found in Treepolys cache!")
+            for i, value in enumerate(path_parts):
+                if i < len(levels):
+                    new_df[levels[i]] = value
+        else:
+            # Pass geometries directly as a dedicated list to GeoPandas
+            df_records = pd.DataFrame(poly_records)
+            boundaries_gdf = gpd.GeoDataFrame(
+                df_records,
+                geometry=geometries,
+                crs="EPSG:4326"
+            )
+
+            spatial_valid_mask = new_df['latitude'].notna() & new_df['longitude'].notna()
+            print(f"📊 Coordinate Check: Found {spatial_valid_mask.sum()} records out of {len(new_df)} with active Lat/Long data.")
+
+
+            # Seed empty string layout assignments across schema expectations
+            for lbl in levels:
+                if lbl not in new_df.columns:
+                    new_df[lbl] = ""
+
+            if spatial_valid_mask.any():
+                points_gdf = gpd.GeoDataFrame(
+                    new_df[spatial_valid_mask].copy(),
+                    geometry=gpd.points_from_xy(
+                        new_df[spatial_valid_mask]['longitude'],
+                        new_df[spatial_valid_mask]['latitude']
+                    ),
+                    crs="EPSG:4326"
+                )
+
+                # Execute fast point-in-polygon cross-border spatial join
+                joined_points = gpd.sjoin(points_gdf, boundaries_gdf, how="left", predicate="within")
+
+                # Overwrite assigned variables where geometry checks passed
+                columns_to_update = [lbl for lbl in levels if lbl in joined_points.columns]
+                for col in columns_to_update:
+                    new_df.loc[spatial_valid_mask, col] = joined_points[col]
+
+                if '_full_path' in joined_points.columns:
+                    new_df.loc[spatial_valid_mask, '_resolved_spatial_path'] = joined_points['_full_path']
+
+                print(f"🎯 SPATIAL ENGINE COMPLETE: Successfully intersection-mapped cross-border rows.")
+            else:
+                print("❌ SPATIAL ENGINE CRITICAL: Spatial engine bypassed. No records contained valid Lat/Long coordinates.")
 
         # =========================================================================
         # --- Stage 3: AVI Attribute Tags Injection Engine ---
@@ -750,7 +839,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         else:
             print("ℹ️ PLEDGE ENGINE: No incoming Pledge datasets discovered. Skipping tag updates.")
 
+        # =========================================================================
         # --- Stage 4: Merge with Existing & Deduplicate ---
+        # =========================================================================
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
         new_df['is_new_import'] = True
         if not existing_all.empty:
@@ -765,52 +856,42 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 print(f"⚠️ WARNING: Found {blanks} blank ENOPs. These will be merged into ONE record.")
             combined = combined.drop_duplicates(subset='ENOP', keep='last')
 
-        # --- DEBUG 4: Deduplication Impact ---
         print(f"🔍 DEBUG [4/5] Deduplication Results:")
         print(f"   > Rows before dedupe: {pre_dedupe_count}")
         print(f"   > Rows after dedupe: {len(combined)}")
 
+        # =========================================================================
         # --- Stage 5: Assignment ---
+        # =========================================================================
         new_only_df = combined[combined['is_new_import'] == True].copy()
 
         print(f"🔍 DEBUG [5/5] Spatial Assignment (Point-in-Polygon):")
         print(f"   > Handing {len(new_only_df)} records to 'assign_areas'...")
-# =========================================================================
-        # --- PASSIVE DIAGNOSTIC INSPECTOR (SAFE TO RUN) ---
-        # =========================================================================
+
+        # --- PASSIVE DIAGNOSTIC INSPECTOR ---
         print("\n🚨 ==================== SCHEMA MISMATCH AUDIT ====================")
         print(f"📊 Total Rows Handed Over: {len(new_only_df)}")
-
-        # 1. Capture the exact state of your DataFrame columns
         exact_columns = list(new_only_df.columns)
         print(f"📋 Exact DataFrame Columns currently in memory:\n   {exact_columns}")
-
-        # 2. Capture exactly what the elevels configuration dictionary says
         print(f"\n⚙️ Raw elevels Dictionary Configuration:\n   {elevels}")
-
-        # 3. Simulate the exact string lookup match checks to catch the drift
         print("\n🔬 Simulating Layer Name Lookups (Case-Sensitivity Check):")
+
         for idx, layer_name in elevels.items():
             print(f"   ↳ Level {idx} Config Type is: '{layer_name}'")
-
-            # Split out any bivalent targets like 'ward/division'
             sub_types = [t.strip() for t in str(layer_name).split("/")] if "/" in str(layer_name) else [layer_name]
 
             for st in sub_types:
-                # Direct check for lowercase
                 exact_match = st in exact_columns
-                # Case-insensitive check to find hidden variants
                 case_insensitive_matches = [c for c in exact_columns if c.lower() == st.lower()]
 
                 if exact_match:
-                    print(f"      ✅ Perfect Match found for column name: '{st}'")
+                    print(f"       ✅ Perfect Match found for column name: '{st}'")
                 elif case_insensitive_matches:
-                    print(f"      ❌ MISMATCH! Config expected lowercase '{st}', but DataFrame has capitalized: {case_insensitive_matches}")
+                    print(f"       ❌ MISMATCH! Config expected lowercase '{st}', but DataFrame has capitalized: {case_insensitive_matches}")
                 else:
-                    print(f"      ❌ MISSING! Neither '{st}' nor any case variant exists in the DataFrame columns.")
-
+                    print(f"       ❌ MISSING! Neither '{st}' nor any case variant exists in the DataFrame columns.")
         print("==================================================================\n")
-        # =========================================================================
+
         assigned_df = assign_areas_by_polling_district(new_only_df, resolved_levels, progress=progress)
 
         teamsize = int(CElection.get('teamsize', 5))
@@ -827,7 +908,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress=progress
         )
 
-        # Save
+        # Persistence Framework Saves
         electors.add_or_update(current_election, assigned_df)
         electors.save()
         assigned_df.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
@@ -2122,7 +2203,7 @@ def election_report():
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
 
 
-@app.route("/set-election", methods=["POST"])
+@app.route("/set-election", methods=['GET', 'POST'])
 @login_required
 def set_election():
     from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
@@ -4385,9 +4466,6 @@ def firstpage():
             resolved_levels=rlevels,
             parent_levels=plevels
         )
-    print(f"____Route/firstpage- path: {filepath},Loaded election: {current_election} ")
-    print(f"____Route/firstpage- wardlayers: {Treepolys['ward']}")
-    print(f"____Route/firstpage- divlayers: {Treepolys['division']}")
 
 # nodes - will be restored throught load nodes process in restore_from_persist
 # cid should exist so why not just load from last_used_node
