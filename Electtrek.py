@@ -68,7 +68,6 @@ from elections import get_available_elections, get_elections, CurrentElection, P
 from elector import electors
 
 
-
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
 
 
@@ -555,8 +554,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     import re
     import pandas as pd
     import geopandas as gpd
-    from shapely.geometry import Point, Polygon
-    from elector import electors
+    from shapely.geometry import Point, Polygon, shape  # Fixed missing shape import
+    from elector import electors, shapecolumn
     from state import Treepolys, Geo_index, progress, DQstats, update_progress, ensure_treepolys_with_index
     from elections import CurrentElection
     from layers import create_boundary_geom
@@ -595,23 +594,20 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # Unpack the active levels mapping dictionary
         (_, elevels), = resolved_levels.items()
 
-        # Construct an explicitly index-aligned array matching path_parts structural offsets
-        levels = ["Country", "Nation", "County"]
+        # Construct schema levels
+        schema_levels = ["Country", "Nation", "County"]
         max_index = max(max(elevels.keys(), default=0) + 1, len(path_parts))
 
         for idx in range(3, max_index):
             if idx in elevels:
                 layer_raw_token = elevels[idx]
                 primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
-                levels.append(primary_layer.capitalize())
+                schema_levels.append(primary_layer.capitalize())
             else:
-                if idx == 3:
-                    levels.append("Constituency")
-                else:
-                    levels.append(f"Level_{idx}")
+                schema_levels.append("Constituency" if idx == 3 else f"Level_{idx}")
 
-        geo_context = {levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(levels)}
-        print(f"   > Mapped Schema Columns: {levels}")
+        geo_context = {schema_levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(schema_levels)}
+        print(f"   > Mapped Schema Columns: {schema_levels}")
         print(f"   > Resolved Geo Context: {geo_context}")
 
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
@@ -653,194 +649,198 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             elif purpose == 'avi': aviframes.append(temp_df)
             elif purpose == 'pledge': pledge_frames.append(temp_df)
 
-        # Combine main and delta frames to form the raw import baseline
         all_new = mainframes + deltaframes
         if not all_new:
             progress.update({"percent": 100, "status": "error", "message": "No valid electoral files"})
             return
 
+
+
         # =========================================================================
-        # --- Stage 2.1: Pre-Flight Spatial Discovery Pass ---
+        # --- Stage 2.1: Pre-Flight Spatial Discovery Pass (1 Point Per PD) ---
         # =========================================================================
         preflight_df = pd.concat(all_new, ignore_index=True)
         preflight_df['latitude'] = pd.to_numeric(preflight_df.get('latitude', preflight_df.get('Lat')), errors='coerce')
         preflight_df['longitude'] = pd.to_numeric(preflight_df.get('longitude', preflight_df.get('Long')), errors='coerce')
 
-        # Drop NaNs and duplicates to maintain an optimal spatial footprint
-        unique_coords_df = preflight_df[preflight_df['latitude'].notna() & preflight_df['longitude'].notna()]
-        unique_anchors = unique_coords_df[['latitude', 'longitude']].drop_duplicates().values.tolist()
+        # Filter valid coordinates
+        valid_coords_df = preflight_df[preflight_df['latitude'].notna() & preflight_df['longitude'].notna()].copy()
 
-        print(f"📡 PRE-FLIGHT: Extracted {len(unique_anchors)} distinct spatial anchor points from imported data.")
+        # Map to GeoDataFrame to compute 1 centroid per PD
+        # Replace 'pd_id' with your actual Planning District column name (e.g., 'pd_code', 'district_id')
+        pd_column = 'pd_id'
 
-        # Hydrate bounds using the discovered point list to pull only target + neighbor boundaries
+        if pd_column in valid_coords_df.columns:
+            gdf = gpd.GeoDataFrame(
+                valid_coords_df,
+                geometry=gpd.points_from_xy(valid_coords_df['longitude'], valid_coords_df['latitude'])
+            )
+
+            # Group by PD and calculate the true geometric centroid of all points in each district
+            centroids_per_pd = gdf.groupby(pd_column).geometry.apply(lambda g: g.unary_union.centroid)
+
+            # Extract [[latitude, longitude]] format for hydration
+            unique_anchors = [[point.y, point.x] for point in centroids_per_pd]
+        else:
+            # Fallback to deduplicated anchors if pd_column is missing
+            unique_anchors = valid_coords_df[['latitude', 'longitude']].drop_duplicates().values.tolist()
+
+        print(f"📡 PRE-FLIGHT: Reduced to {len(unique_anchors)} distinct spatial anchor points (1 per PD).")
+
+
+        # =========================================================================
+        # --- Stage 2.2: Pre-Flight Treepolys Hydration Pass ---
+        # =========================================================================
+
         lastfilepath, Geo_index = ensure_treepolys_with_index(
             territory=territory_path,
             sourcepath=lastfilepath,
-            here=unique_anchors,  # Send the full collection array down to the geometry parser
+            here=unique_anchors,
             resolved_levels=resolved_levels,
             parent_levels=parent_levels
         )
 
-        # Clone and establish the base target dataframe context
         new_df = preflight_df.copy()
+
 
         # =========================================================================
         # --- Stage 2.5: Dynamic Vectorized Spatial Join Assignment Engine ---
         # =========================================================================
         print("🌐 SPATIAL ENGINE: Commencing point-in-polygon vector analysis...")
 
+        # 1. Resolve canonical spatial levels using shapecolumn
+        spatial_levels = []
+        for depth_key, lvl_str in elevels.items():
+            for sub_lvl in str(lvl_str).split('/'):
+                cleaned_token = sub_lvl.strip().lower()
+                mapped_name = shapecolumn.get(cleaned_token, sub_lvl.strip().capitalize())
+                if mapped_name and mapped_name not in spatial_levels:
+                    spatial_levels.append(mapped_name)
+
+        # 2. Guarantee target columns exist in new_df (initialized to "" if missing)
+        for lvl in spatial_levels:
+            if lvl not in new_df.columns:
+                new_df[lvl] = ""
+
+        # 3. Direct column assignment via shapecolumn targets
+        pd_col    = shapecolumn.get('polling_district', 'PD')
+        ward_col  = shapecolumn.get('ward', 'Ward')
+        div_col   = shapecolumn.get('division', 'Division')
+        const_col = shapecolumn.get('constituency', 'Constituency')
 
         poly_records = []
-        geometries = []  # Separate list to prevent key collisions with FID/properties
-
         for level_key, polys_dict in Treepolys.items():
+            if not isinstance(polys_dict, dict):
+                continue
+
             for unique_path, geom_obj in polys_dict.items():
                 path_tokens = [t for t in unique_path.split('/') if t and t != 'ROOT']
-
-                # Convert dicts (GeoJSON) to valid Shapely shapes
+                actual_geom = None
                 try:
-                    actual_geom = shape(geom_obj) if isinstance(geom_obj, dict) else geom_obj
+                    if isinstance(geom_obj, gpd.GeoDataFrame):
+                        actual_geom = geom_obj.geometry.unary_union
+                    elif isinstance(geom_obj, gpd.GeoSeries):
+                        actual_geom = geom_obj.unary_union
+                    elif isinstance(geom_obj, pd.Series) and 'geometry' in geom_obj:
+                        actual_geom = geom_obj['geometry']
+                    elif isinstance(geom_obj, dict):
+                        actual_geom = shape(geom_obj)
+                    else:
+                        actual_geom = geom_obj
+
+                    if actual_geom is None or getattr(actual_geom, "is_empty", True):
+                        continue
                 except Exception as e:
                     print(f"⚠️ Spatial engine skipped invalid shape for {unique_path}: {e}")
                     continue
 
-                # Build record metadata WITHOUT putting a 'geometry' key in the dict
-                record = {"_full_path": unique_path}
+                record = {"_full_path": unique_path, "geometry": actual_geom}
                 for i, token in enumerate(path_tokens):
-                    if i < len(levels):
-                        record[levels[i]] = token
-
+                    if i < len(spatial_levels):
+                        record[spatial_levels[i]] = token
                 poly_records.append(record)
-                geometries.append(actual_geom)
 
-        if not poly_records:
-            print("⚠️ SPATIAL ENGINE WARNING: No geographic boundaries found in Treepolys cache!")
-            for i, value in enumerate(path_parts):
-                if i < len(levels):
-                    new_df[levels[i]] = value
-        else:
-            # Pass geometries directly as a dedicated list to GeoPandas
-            df_records = pd.DataFrame(poly_records)
-            boundaries_gdf = gpd.GeoDataFrame(
-                df_records,
-                geometry=geometries,
-                crs="EPSG:4326"
-            )
+        if poly_records:
+            boundaries_gdf = gpd.GeoDataFrame(poly_records, geometry="geometry", crs="EPSG:4326")
+            lat_col = next((c for c in ['latitude', 'Lat', 'LAT'] if c in new_df.columns), None)
+            lon_col = next((c for c in ['longitude', 'Long', 'LONG'] if c in new_df.columns), None)
 
-            spatial_valid_mask = new_df['latitude'].notna() & new_df['longitude'].notna()
-            print(f"📊 Coordinate Check: Found {spatial_valid_mask.sum()} records out of {len(new_df)} with active Lat/Long data.")
+            if lat_col and lon_col:
+                spatial_valid_mask = new_df[lat_col].notna() & new_df[lon_col].notna()
+                if spatial_valid_mask.any():
+                    points_gdf = gpd.GeoDataFrame(
+                        new_df[spatial_valid_mask].copy(),
+                        geometry=gpd.points_from_xy(
+                            new_df.loc[spatial_valid_mask, lon_col],
+                            new_df.loc[spatial_valid_mask, lat_col]
+                        ),
+                        crs="EPSG:4326"
+                    )
 
+                    joined = gpd.sjoin(points_gdf, boundaries_gdf, how="left", predicate="within")
 
-            # Seed empty string layout assignments across schema expectations
-            for lbl in levels:
-                if lbl not in new_df.columns:
-                    new_df[lbl] = ""
+                    for lvl in spatial_levels:
+                        if lvl in joined.columns:
+                            new_df.loc[spatial_valid_mask, lvl] = joined[lvl].fillna(new_df.loc[spatial_valid_mask, lvl])
 
-            if spatial_valid_mask.any():
-                points_gdf = gpd.GeoDataFrame(
-                    new_df[spatial_valid_mask].copy(),
-                    geometry=gpd.points_from_xy(
-                        new_df[spatial_valid_mask]['longitude'],
-                        new_df[spatial_valid_mask]['latitude']
-                    ),
-                    crs="EPSG:4326"
-                )
+                    print("🎯 SPATIAL ENGINE COMPLETE: Spatial join mapping finished.")
 
-                # Execute fast point-in-polygon cross-border spatial join
-                joined_points = gpd.sjoin(points_gdf, boundaries_gdf, how="left", predicate="within")
+        # --- Safe Vectorized Fallback PD Assignment ---
+        unassigned_mask = (
+            new_df[ward_col].astype(str).str.strip().eq("") |
+            new_df[ward_col].astype(str).str.strip().eq("OUTSIDE") |
+            new_df[ward_col].isna()
+        )
 
-                # Overwrite assigned variables where geometry checks passed
-                columns_to_update = [lbl for lbl in levels if lbl in joined_points.columns]
-                for col in columns_to_update:
-                    new_df.loc[spatial_valid_mask, col] = joined_points[col]
+        if unassigned_mask.any() and pd_col in new_df.columns:
+            valid_assigned = new_df[~unassigned_mask & new_df[pd_col].notna() & (new_df[pd_col].astype(str).str.strip() != "")]
 
-                if '_full_path' in joined_points.columns:
-                    new_df.loc[spatial_valid_mask, '_resolved_spatial_path'] = joined_points['_full_path']
+            if not valid_assigned.empty:
+                lookup_cols = [c for c in [ward_col, div_col, const_col] if c in valid_assigned.columns]
+                pd_lookup = valid_assigned.groupby(pd_col)[lookup_cols].first()
 
-                print(f"🎯 SPATIAL ENGINE COMPLETE: Successfully intersection-mapped cross-border rows.")
-            else:
-                print("❌ SPATIAL ENGINE CRITICAL: Spatial engine bypassed. No records contained valid Lat/Long coordinates.")
+                for col in lookup_cols:
+                    mapped_vals = new_df.loc[unassigned_mask, pd_col].map(pd_lookup[col]).fillna("OUTSIDE")
+                    new_df.loc[unassigned_mask, col] = mapped_vals
+
+        # Default remaining unassigned rows to OUTSIDE
+        new_df[ward_col] = new_df[ward_col].replace("", "OUTSIDE").fillna("OUTSIDE")
 
         # =========================================================================
-        # --- Stage 3: AVI Attribute Tags Injection Engine ---
+        # --- Stage 3: Tag Injection (AVI & Pledge) ---
         # =========================================================================
-        if aviframes:
-            print(f"🔗 TAGS ENGINE: Processing {len(aviframes)} Absent Voter (AVI) lookup datasets...")
-            avi_combined = pd.concat(aviframes, ignore_index=True)
+        def apply_tags(target_df, source_frames, tag_code, label):
+            if not source_frames or 'ENOP' not in target_df.columns:
+                return target_df
 
-            if 'ENOP' in new_df.columns and 'ENOP' in avi_combined.columns:
-                new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
-                av_enops = set(avi_combined['ENOP'].astype(str).str.strip().unique())
-                av_enops.discard("")
-                av_enops.discard("nan")
+            combined_source = pd.concat(source_frames, ignore_index=True)
+            if 'ENOP' not in combined_source.columns:
+                return target_df
 
-                print(f"   > Identified {len(av_enops)} unique Absent Voter ENOPs for tagging.")
+            target_df['ENOP'] = target_df['ENOP'].astype(str).str.strip()
+            valid_enops = set(combined_source['ENOP'].astype(str).str.strip().unique()) - {"", "nan", "None"}
 
-                if 'Tags' not in new_df.columns:
-                    new_df['Tags'] = ""
-                else:
-                    new_df['Tags'] = new_df['Tags'].fillna("")
+            if 'Tags' not in target_df.columns:
+                target_df['Tags'] = ""
 
-                matching_rows_mask = new_df['ENOP'].isin(av_enops)
-                tagged_count = matching_rows_mask.sum()
+            mask = target_df['ENOP'].isin(valid_enops)
 
-                def append_av_tag(current_tags):
-                    current_tags = str(current_tags).strip()
-                    if not current_tags or current_tags == "nan":
-                        return 'AV'
-                    existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
-                    if 'AV' in existing_tags:
-                        return current_tags
-                    return f"{current_tags}, AV"
+            def append_tag(val):
+                val_str = str(val).strip() if pd.notna(val) else ""
+                if not val_str or val_str == "nan":
+                    return tag_code
+                existing = [t.strip() for t in re.split(r'[,;|]', val_str)]
+                return val_str if tag_code in existing else f"{val_str}, {tag_code}"
 
-                new_df.loc[matching_rows_mask, 'Tags'] = new_df.loc[matching_rows_mask, 'Tags'].apply(append_av_tag)
-                print(f"   > Successfully injected 'AV' tag into {tagged_count} matching records.")
-            else:
-                print("⚠️ TAGS ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or AVI dataset.")
-        else:
-            print("ℹ️ TAGS ENGINE: No incoming AVI datasets discovered. Skipping tag updates.")
+            target_df.loc[mask, 'Tags'] = target_df.loc[mask, 'Tags'].apply(append_tag)
+            print(f"   > Injected '{tag_code}' tag into {mask.sum()} records.")
+            return target_df
+
+        new_df = apply_tags(new_df, aviframes, 'AV', 'AVI')
+        new_df = apply_tags(new_df, pledge_frames, 'PL', 'Pledge')
 
         # =========================================================================
-        # --- Stage 3.5: Pledge Attribute Tags Injection Engine ---
-        # =========================================================================
-        if pledge_frames:
-            print(f"🗳️ PLEDGE ENGINE: Processing {len(pledge_frames)} Pledge lookup datasets...")
-            pledge_combined = pd.concat(pledge_frames, ignore_index=True)
-
-            if 'ENOP' in new_df.columns and 'ENOP' in pledge_combined.columns:
-                new_df['ENOP'] = new_df['ENOP'].astype(str).str.strip()
-                pledge_enops = set(pledge_combined['ENOP'].astype(str).str.strip().unique())
-                pledge_enops.discard("")
-                pledge_enops.discard("nan")
-
-                print(f"   > Identified {len(pledge_enops)} unique Pledge ENOPs for tagging.")
-
-                if 'Tags' not in new_df.columns:
-                    new_df['Tags'] = ""
-                else:
-                    new_df['Tags'] = new_df['Tags'].fillna("")
-
-                matching_pledge_mask = new_df['ENOP'].isin(pledge_enops)
-                pledge_tagged_count = matching_pledge_mask.sum()
-
-                def append_pl_tag(current_tags):
-                    current_tags = str(current_tags).strip()
-                    if not current_tags or current_tags == "nan":
-                        return 'PL'
-                    existing_tags = [t.strip() for t in re.split(r'[,;|]', current_tags)]
-                    if 'PL' in existing_tags:
-                        return current_tags
-                    return f"{current_tags}, PL"
-
-                new_df.loc[matching_pledge_mask, 'Tags'] = new_df.loc[matching_pledge_mask, 'Tags'].apply(append_pl_tag)
-                print(f"   > Successfully injected 'PL' tag into {pledge_tagged_count} matching records.")
-            else:
-                print("⚠️ PLEDGE ENGINE WARNING: 'ENOP' key tracking attribute missing from either main data or Pledge dataset.")
-        else:
-            print("ℹ️ PLEDGE ENGINE: No incoming Pledge datasets discovered. Skipping tag updates.")
-
-        # =========================================================================
-        # --- Stage 4: Merge with Existing & Deduplicate ---
+        # --- Stage 4: Safe Merge & Deduplication ---
         # =========================================================================
         existing_all = pd.concat(electors.elections.values(), ignore_index=True) if electors.elections else pd.DataFrame()
         new_df['is_new_import'] = True
@@ -849,48 +849,19 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         combined = pd.concat([existing_all, new_df], ignore_index=True)
 
-        pre_dedupe_count = len(combined)
         if 'ENOP' in combined.columns:
-            blanks = (combined['ENOP'] == "").sum()
-            if blanks > 1:
-                print(f"⚠️ WARNING: Found {blanks} blank ENOPs. These will be merged into ONE record.")
-            combined = combined.drop_duplicates(subset='ENOP', keep='last')
+            # Separate records with valid ENOPs from records with empty ENOPs to prevent wiping out unindexed rows
+            has_enop = combined['ENOP'].astype(str).str.strip().ne("") & combined['ENOP'].notna()
 
-        print(f"🔍 DEBUG [4/5] Deduplication Results:")
-        print(f"   > Rows before dedupe: {pre_dedupe_count}")
-        print(f"   > Rows after dedupe: {len(combined)}")
+            df_with_enop = combined[has_enop].drop_duplicates(subset='ENOP', keep='last')
+            df_without_enop = combined[~has_enop]
+
+            combined = pd.concat([df_with_enop, df_without_enop], ignore_index=True)
 
         # =========================================================================
-        # --- Stage 5: Assignment ---
+        # --- Stage 5: Spatial Assignment & Persistence ---
         # =========================================================================
         new_only_df = combined[combined['is_new_import'] == True].copy()
-
-        print(f"🔍 DEBUG [5/5] Spatial Assignment (Point-in-Polygon):")
-        print(f"   > Handing {len(new_only_df)} records to 'assign_areas'...")
-
-        # --- PASSIVE DIAGNOSTIC INSPECTOR ---
-        print("\n🚨 ==================== SCHEMA MISMATCH AUDIT ====================")
-        print(f"📊 Total Rows Handed Over: {len(new_only_df)}")
-        exact_columns = list(new_only_df.columns)
-        print(f"📋 Exact DataFrame Columns currently in memory:\n   {exact_columns}")
-        print(f"\n⚙️ Raw elevels Dictionary Configuration:\n   {elevels}")
-        print("\n🔬 Simulating Layer Name Lookups (Case-Sensitivity Check):")
-
-        for idx, layer_name in elevels.items():
-            print(f"   ↳ Level {idx} Config Type is: '{layer_name}'")
-            sub_types = [t.strip() for t in str(layer_name).split("/")] if "/" in str(layer_name) else [layer_name]
-
-            for st in sub_types:
-                exact_match = st in exact_columns
-                case_insensitive_matches = [c for c in exact_columns if c.lower() == st.lower()]
-
-                if exact_match:
-                    print(f"       ✅ Perfect Match found for column name: '{st}'")
-                elif case_insensitive_matches:
-                    print(f"       ❌ MISMATCH! Config expected lowercase '{st}', but DataFrame has capitalized: {case_insensitive_matches}")
-                else:
-                    print(f"       ❌ MISSING! Neither '{st}' nor any case variant exists in the DataFrame columns.")
-        print("==================================================================\n")
 
         assigned_df = assign_areas_by_polling_district(new_only_df, resolved_levels, progress=progress)
 
@@ -908,7 +879,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress=progress
         )
 
-        # Persistence Framework Saves
         electors.add_or_update(current_election, assigned_df)
         electors.save()
         assigned_df.to_csv("zonedelectors.csv", sep='\t', encoding='utf-8', index=False)
@@ -2669,11 +2639,6 @@ def validate_tags():
         return jsonify(valid=True)
 
 
-from flask import render_template, flash, session
-from elector import ElectorManager
-from elections import CurrentElection
-from baked_data import baked_data
-
 @app.route("/", methods=['POST', 'GET'])
 def index():
     global streamrag
@@ -2688,7 +2653,6 @@ def index():
         formdata = {}
 
         # Fetch the stream processing status using the new method
-        electors = ElectorManager()  # Make sure the ElectorManager instance is initialized
         streamrag = electors.getstreamrag()  # This is your new way of getting stream processing data
 
         # You may have to handle cases where streamrag is empty or has no valid data
@@ -4228,28 +4192,44 @@ def deactivate_election(election_name):
     from elections import CurrentElection
     from elector import electors
     from state import Treepolys, Geo_index
+
     try:
         restore_from_persist(Treepolys, Geo_index)
         CElection = CurrentElection.load(election_name)
         territory_path = CElection['territory']
         rlevels = CElection.resolved_levels
         print(f" Deactivate after restore: {election_name} path {territory_path} rlevels {rlevels}")
-        territory_node = nodes.MapRoot.ping_node(rlevels,territory_path, create=False,accumulate=session.get("accumulate", False))
+
+        # Resolve the territory node for subtree pruning
+        territory_node = nodes.MapRoot.ping_node(
+            rlevels,
+            territory_path,
+            create=False,
+            accumulate=session.get("accumulate", False)
+        )
         print(f" Deactivate : {election_name} node: {territory_node.mapfile()}")
 
-        electors.delete_elector_for_path(rlevels,territory_node.mapfile())
+        # ✅ FIXED: Purge electors directly by election name (bypasses broken spatial columns/OUTSIDE records)
+        deleted_count = electors.delete_by_election(election_name)
+        print(f" Deactivate PURGED: {deleted_count} elector records for '{election_name}'")
 
-#        electors.deactivate_election(election_name)  # Call the method to deactivate the election
         print(f"Deactivate PRUNING {territory_node.value}")
         prune_subtree(territory_node)
+
         save_nodes(TREKNODE_FILE)
-        persist(Treepolys, Geo_index )
-        return jsonify({"success": True, "message": f"Election {election_name} deactivated successfully."})
-    #  NEW FIXED CODE
+        persist(Treepolys, Geo_index)
+
+        return jsonify({
+            "success": True,
+            "message": f"Election {election_name} deactivated successfully.",
+            "deleted_count": deleted_count
+        })
+
     except Exception as e:
         import traceback
         print(f"❌ Error deactivating election {election_name}: {str(e)}")
         traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/walks', methods=['POST','GET'])
 @login_required
@@ -4375,6 +4355,7 @@ def convert_csv_to_clean_json(csv_path):
 def firstpage():
     from elector import electors
     from state import Treepolys, Geo_index, ensure_treepolys_with_index
+    from baked_data import baked_data
 
     # 1. Resource synchronization
     resource_file = globals().get('RESOURCE_FILE', 'resources.csv')
@@ -4573,7 +4554,7 @@ def normalise():
     if 'stream_processing' not in CElection:
         CElection['stream_processing'] = {"files": [], "last_run": None, "status": "idle"}
 
-    # --- Build meta_data expected by background_normalise ---
+    # --- Build meta_data expected by  ---
     meta_data = {}
     for idx, f in enumerate(files):
         meta_data[str(idx)] = {

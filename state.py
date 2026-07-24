@@ -438,29 +438,37 @@ def subending(filename, ending):
 
 
 def upsert_geodf(existing, incoming, key="FID"):
-
     if existing is None or existing.empty:
         return incoming
-
     if incoming is None or incoming.empty:
         return existing
 
     # Ensure CRS compatibility
     if existing.crs is None and incoming.crs is not None:
         existing = existing.set_crs(incoming.crs)
-    elif existing.crs is not None and incoming.crs is not None and existing.crs != incoming.crs:
+    elif (
+        existing.crs is not None
+        and incoming.crs is not None
+        and existing.crs != incoming.crs
+    ):
         incoming = incoming.to_crs(existing.crs)
 
-    # Combine
+    # Combine DataFrames
     combined = pd.concat([existing, incoming], ignore_index=True)
 
-    # Drop duplicates keeping newest (incoming overwrites existing)
+    # Drop duplicates keeping newest
     combined = combined.drop_duplicates(subset=key, keep="last")
 
-    # Rebuild GeoDataFrame safely
-    combined = gpd.GeoDataFrame(combined, geometry=existing.geometry.name, crs=existing.crs)
+    # ✅ SAFELY Rebuild GeoDataFrame ensuring 'geometry' column is used
+    geom_col = (
+        existing.geometry.name
+        if isinstance(existing, gpd.GeoDataFrame)
+        else "geometry"
+    )
+    if geom_col not in combined.columns:
+        geom_col = "geometry"
 
-    return combined
+    return gpd.GeoDataFrame(combined, geometry=geom_col, crs=existing.crs)
 
 LAYER_CACHE = {}
 
@@ -590,6 +598,12 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 
+import logging
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point
+
+
 def ensure_treepolys_with_index(
     *,
     territory: str | None,
@@ -597,14 +611,22 @@ def ensure_treepolys_with_index(
     here=None,
     boundary_geom=None,
     resolved_levels: dict[str, dict[int, str]],
-    parent_levels: dict[int, str]
+    parent_levels: dict[int, str],
 ):
-    from state import Treepolys, Geo_index, get_treepoly, set_treepoly, upsert_geodf, normalname, stepify
-    from nodes import persist, FACEENDING
-    import config
+    from nodes import FACEENDING, persist
+    from state import (
+        Geo_index,
+        Treepolys,
+        get_treepoly,
+        normalname,
+        set_treepoly,
+        stepify,
+        upsert_geodf,
+    )
 
     logging.info("==================================================")
     logging.info("🚀 [DEBUG START] ensure_treepolys_with_index")
+    logging.info(f"   ↳ Initial Geo_index size: {len(Geo_index)}")
     logging.info(f"   ↳ territory: {territory}")
     logging.info(f"   ↳ sourcepath: {sourcepath}")
     logging.info(f"   ↳ here (raw): {here}")
@@ -614,87 +636,168 @@ def ensure_treepolys_with_index(
 
     ROOT = "UNITED_KINGDOM"
 
-    # Pre-allocate key layers in Treepolys to avoid key errors
-    STANDARD_LEVEL_KEYS = ['country', 'nation', 'county', 'constituency', 'ward', 'walk', 'street', 'elector']
-    for k in STANDARD_LEVEL_KEYS:
-        if k not in Treepolys or Treepolys[k] is None:
-            logging.debug(f"[INIT] Pre-initializing missing Treepolys key: '{k}'")
-            Treepolys[k] = gpd.GeoDataFrame()
-
     if ROOT not in Geo_index:
         logging.debug(f"[INIT] Injecting default ROOT '{ROOT}' into Geo_index")
         Geo_index[ROOT] = {
-            "level": "country", "name": ROOT, "parent": None,
-            "children": [], "roid": [54.5, -2.5], "fid": 238
+            "level": "country",
+            "name": ROOT,
+            "parent": None,
+            "children": [],
+            "roid": [54.5, -2.5],
+            "fid": 238,
         }
+    else:
+        logging.debug(f"[INIT] ROOT '{ROOT}' already exists in Geo_index")
 
     if boundary_geom is not None:
         boundary_geom = boundary_geom.buffer(0)
-        logging.debug("   ↳ Applied buffer(0) to boundary_geom to sanitize geometry")
+        logging.debug(
+            "   ↳ Applied buffer(0) to boundary_geom to sanitize geometry"
+        )
 
     if not resolved_levels or len(resolved_levels) != 1:
-        logging.error(f"❌ Invalid resolved_levels configuration: {resolved_levels}")
+        logging.error(
+            f"❌ Invalid resolved_levels configuration: {resolved_levels}"
+        )
         raise ValueError("Invalid resolved_levels configuration.")
 
     (_, elevels), = resolved_levels.items()
     sourcepath = sourcepath or territory
+
+    # ------------------------------------------------------------------
+    # 🌟 GEOMETRY PRE-LOADER: Source Path + Point-Derived Territory Paths
+    # ------------------------------------------------------------------
+    candidate_paths = set()
+
+    if sourcepath:
+        candidate_paths.add(sourcepath)
+
+    coords = parse_coords(here) if "parse_coords" in globals() else []
+    if coords:
+        lat, lon = coords[0]
+        if "classify_record_coords" in globals():
+            classification = classify_record_coords(
+                lat, lon, sourcepath, parent_levels
+            )
+            derived_path = classification.get("_derived_path")
+            if derived_path:
+                logging.info(
+                    f"📍 Derived territory path from point ({lat}, {lon}): {derived_path}"
+                )
+                candidate_paths.add(derived_path)
+
+    LAYERS = globals().get("LAYERS", [])
+    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
+
+    for path in candidate_paths:
+        path_steps = stepify(path)
+        for depth, step_name in enumerate(path_steps):
+            level_key = parent_levels.get(depth)
+            if not level_key:
+                logging.warning(
+                    f"⚠️ [PRE-LOAD] No parent_level key mapped for depth {depth} (step: '{step_name}')"
+                )
+                continue
+
+            existing_gdf = get_treepoly(level_key)
+            norm_step = normalname(step_name)
+
+            already_loaded = (
+                existing_gdf is not None
+                and not existing_gdf.empty
+                and "NAME" in existing_gdf.columns
+                and (existing_gdf["NAME"].apply(normalname) == norm_step).any()
+            )
+
+            if not already_loaded:
+                for (lvl, key), l_def in layer_defs.items():
+                    if key == level_key:
+                        src, field = l_def["src"], l_def["field"]
+                        chosen_src = src[0] if isinstance(src, list) else src
+                        chosen_field = (
+                            field[0] if isinstance(field, list) else field
+                        )
+                        out_file = f"{config.workdirectories['bounddir']}/{l_def['out']}"
+
+                        _, step_gdf, _ = filterArea(
+                            source=f"{config.workdirectories['bounddir']}/{chosen_src}",
+                            sourcekey=chosen_field,
+                            destination=out_file,
+                            name=step_name,
+                        )
+
+                        if step_gdf is not None and not step_gdf.empty:
+                            upserted = upsert_geodf(existing_gdf, step_gdf)
+                            set_treepoly(level_key, upserted)
+                            logging.info(
+                                f"✅ Pre-loaded step geometry '{norm_step}' into Treepolys['{level_key}']"
+                            )
+                        else:
+                            logging.warning(
+                                f"⚠️ [PRE-LOAD] filterArea returned empty/None GDF for '{step_name}'"
+                            )
+                        break
+
+    # ------------------------------------------------------------------
+    # MAIN PROCESSING ENGINE LOOP
+    # ------------------------------------------------------------------
+
     steps = stepify(sourcepath) if sourcepath else []
     target_depth = len(steps) - 1 if steps else 0
-
     logging.info(f"   ↳ Parsed Steps: {steps} | Target Depth: {target_depth}")
 
-    # Build lookup map for LAYERS (assuming LAYERS is globally available)
-    LAYERS = globals().get('LAYERS', [])
-    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
     active_parent_rows = {}
     fid_to_path = {}
 
-    # Pre-load cached geometries
     logging.info("🔎 Scanning cached geometries in state...")
-    for lvl, compound_layer_type in elevels.items():
-        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
-        for l_type in sub_layers:
-            existing_polys = get_treepoly(l_type)
-            if existing_polys is not None and not existing_polys.empty:
-                logging.debug(f"   ↳ Found {len(existing_polys)} existing records for layer '{l_type}'")
-                if lvl not in active_parent_rows:
-                    active_parent_rows[lvl] = []
-                existing_fids = {r["FID"] for r in active_parent_rows[lvl] if r is not None and "FID" in r}
-                for _, row in existing_polys.iterrows():
-                    if row.get("FID") not in existing_fids:
-                        active_parent_rows[lvl].append(row)
 
-    for lvl, rows in active_parent_rows.items():
-        for r in rows:
-            if r is not None and "FID" in r and "_parent_path" in r:
-                child_name = normalname(r["NAME"])
-                fid_to_path[r["FID"]] = ROOT if (lvl == 0 or child_name == ROOT) else f"{r['_parent_path']}/{child_name}"
-
-    if not active_parent_rows.get(0):
-        logging.debug("   ↳ No level 0 active parent row found. Defaulting to [None].")
-        active_parent_rows[0] = [None]
-
-    # Main Processing Engine Loop
+    # Level execution loop
     for level, compound_layer_type in elevels.items():
-        sub_layers = [l.strip() for l in compound_layer_type.split('/') if l.strip()]
+        sub_layers = [
+            l.strip() for l in compound_layer_type.split("/") if l.strip()
+        ]
         logging.info(f"🔄 Processing Level {level} with layers: {sub_layers}")
+
+        next_level = level + 1
+        if next_level not in active_parent_rows:
+            active_parent_rows[next_level] = []
 
         for layer_type in sub_layers:
             layer = layer_defs.get((level, layer_type))
             if not layer:
-                logging.warning(f"⚠️ Layer definition missing for level={level}, key={layer_type}")
+                logging.warning(
+                    f"⚠️ Layer definition missing for level={level}, key={layer_type}"
+                )
                 continue
 
             select_name = None
-            if level < target_depth:
+
+            # ------------------------------------------------------------------
+            # FIX: Properly set name filter up to target_depth, allow children at target_depth + 1
+            # ------------------------------------------------------------------
+            if level <= target_depth and level < len(steps):
+                # We are at or above the target node: filter by step name
                 select_name = steps[level]
-                logging.debug(f"   ↳ Level {level} < Target Depth {target_depth}. Filtering name: '{select_name}'")
+                logging.debug(
+                    f"   ↳ Level {level} <= Target Depth {target_depth}. Filtering name: '{select_name}'"
+                )
+            elif level == target_depth + 1:
+                # We are fetching the children of the target node: NO name filter (fetch all children)
+                select_name = None
+                logging.debug(
+                    f"   ↳ Level {level} is Target Depth + 1. Fetching all child boundaries for parent..."
+                )
             elif level > target_depth + 1:
-                logging.debug(f"   ↳ Level {level} exceeds target depth window (+1). Skipping layer '{layer_type}'.")
+                # Exceeds the target node + 1 window: skip
+                logging.debug(
+                    f"   ↳ Level {level} exceeds target depth window (+1). Skipping layer '{layer_type}'."
+                )
                 continue
 
             parent_rows = active_parent_rows.get(level, [None])
-            logging.debug(f"   ↳ Executing load_layer across {len(parent_rows)} parent row(s)")
+            logging.debug(
+                f"   ↳ Executing load_layer across {len(parent_rows)} parent row(s)"
+            )
             all_results = []
 
             for p_idx, parent_row in enumerate(parent_rows):
@@ -702,77 +805,126 @@ def ensure_treepolys_with_index(
                     parent_path = fid_to_path.get(parent_row.get("FID"), ROOT)
                     expected_type = parent_levels.get(level)
                     actual_type = Geo_index.get(parent_path, {}).get("level")
+
                     if expected_type != actual_type:
-                        logging.warning(f"   ↳ Skipping parent [{p_idx}]: type mismatch (Expected {expected_type}, got {actual_type})")
+                        logging.warning(
+                            f"❌ [GEO_INDEX SKIP] Skipping parent [{p_idx}] (FID: {parent_row.get('FID')}): "
+                            f"Type mismatch! Expected level type '{expected_type}', but Geo_index['{parent_path}'] has level '{actual_type}'."
+                        )
                         continue
 
-                # Single-resolution handling for source/field definitions
                 src, field = layer["src"], layer["field"]
                 chosen_src = src[0] if isinstance(src, list) else src
                 chosen_field = field[0] if isinstance(field, list) else field
 
                 if isinstance(src, list):
-                    for idx, filename in enumerate(src):
-                        if filename and "surrey" in str(filename).lower():
-                            chosen_src = src[idx]
-                            chosen_field = field[idx] if isinstance(field, list) else field
-                            logging.debug(f"   ↳ Override source selected: {chosen_src}")
-                            break
+                    is_surrey_context = sourcepath and "surrey" in str(sourcepath).lower()
+                    if is_surrey_context:
+                        chosen_idx = next(
+                            (i for i, f in enumerate(src) if f and "surrey" in str(f).lower()), 0
+                        )
+                    else:
+                        chosen_idx = next(
+                            (i for i, f in enumerate(src) if f and "surrey" not in str(f).lower()), 0
+                        )
+                    chosen_src = src[chosen_idx]
+                    chosen_field = field[chosen_idx] if isinstance(field, list) else field
 
                 layer_local = dict(layer)
                 layer_local["src"], layer_local["field"] = chosen_src, chosen_field
 
                 try:
-                    logging.debug(f"   ↳ Calling load_layer for '{layer_type}' (Src: {chosen_src})...")
-                    selected_child_name, tree_gdf, raw_gdf = load_layer(
-                        layer=layer_local, level=level, intention_type=layer_type,
-                        parent_levels=parent_levels, parent_row=parent_row,
-                        select_name=select_name, roid=here, boundary_geom=boundary_geom
+                    logging.debug(
+                        f"   ↳ Calling load_layer for '{layer_type}' (Src: {chosen_src})..."
                     )
-                    logging.debug(f"   ↳ load_layer returned child name: '{selected_child_name}', tree_gdf count: {len(tree_gdf) if tree_gdf is not None else 0}")
+                    selected_child_name, tree_gdf, raw_gdf = load_layer(
+                        layer=layer_local,
+                        level=level,
+                        intention_type=layer_type,
+                        parent_levels=parent_levels,
+                        parent_row=parent_row,
+                        select_name=select_name,
+                        roid=here,
+                        boundary_geom=boundary_geom,
+                    )
+                    logging.debug(
+                        f"   ↳ load_layer returned child name: '{selected_child_name}', tree_gdf count: {len(tree_gdf) if tree_gdf is not None else 0}"
+                    )
                 except Exception as load_err:
-                    logging.error(f"❌ Exception in load_layer for {layer_type}: {load_err}", exc_info=True)
+                    logging.error(
+                        f"❌ Exception in load_layer for {layer_type}: {load_err}",
+                        exc_info=True,
+                    )
                     tree_gdf = None
 
-                if tree_gdf is not None and hasattr(tree_gdf, 'empty') and not tree_gdf.empty:
+                if (
+                    tree_gdf is not None
+                    and hasattr(tree_gdf, "empty")
+                    and not tree_gdf.empty
+                ):
                     tree_gdf = tree_gdf.copy()
 
-                    # 🚨 DEBUG & SAFETY FIX: Ensure FID column exists
                     if "FID" not in tree_gdf.columns:
-                        logging.warning(f"⚠️ 'FID' column missing in output for layer '{layer_type}'. Standardizing ID column...")
+                        logging.warning(
+                            f"⚠️ 'FID' column missing in output for layer '{layer_type}'. Standardizing ID column..."
+                        )
                         if "OBJECTID" in tree_gdf.columns:
                             tree_gdf = tree_gdf.rename(columns={"OBJECTID": "FID"})
                         elif "id" in tree_gdf.columns:
                             tree_gdf = tree_gdf.rename(columns={"id": "FID"})
                         else:
-                            logging.warning("⚠️ No standard ID column found; generating synthetic FID from Index.")
+                            logging.warning(
+                                "⚠️ No standard ID column found; generating synthetic FID from Index."
+                            )
                             tree_gdf["FID"] = tree_gdf.index.astype(int)
 
-                    # Spatial Anchor Evaluation Rule
-                    coords = parse_coords(here) if 'parse_coords' in globals() else []
+                    coords = (
+                        parse_coords(here)
+                        if "parse_coords" in globals()
+                        else []
+                    )
                     anchor_points = [Point(lon, lat) for lat, lon in coords]
                     if level < target_depth and anchor_points:
-                        logging.debug(f"   ↳ Applying spatial point mask using {len(anchor_points)} coordinate pair(s)...")
+                        logging.debug(
+                            f"   ↳ Applying spatial point mask using {len(anchor_points)} coordinate pair(s)..."
+                        )
+
                         def matches_any_point(geom):
                             if geom is None or geom.is_empty:
                                 return False
-                            return any(geom.contains(pt) for pt in anchor_points)
+                            return any(
+                                geom.contains(pt) for pt in anchor_points
+                            )
 
                         spatial_mask = tree_gdf.geometry.apply(matches_any_point)
                         text_mask = tree_gdf["NAME"].apply(normalname) == normalname(steps[level])
                         tree_gdf = tree_gdf[spatial_mask | text_mask]
-                        logging.debug(f"   ↳ Records remaining after spatial/text mask: {len(tree_gdf)}")
+                        logging.debug(
+                            f"   ↳ Records remaining after spatial/text mask: {len(tree_gdf)}"
+                        )
 
                     if not tree_gdf.empty:
-                        tree_gdf["_parent_path"] = None if level == 0 else (fid_to_path.get(parent_row["FID"]) if parent_row is not None else ROOT)
+                        tree_gdf["_parent_path"] = (
+                            ROOT
+                            if level == 0
+                            else (
+                                fid_to_path.get(parent_row["FID"], ROOT)
+                                if parent_row is not None
+                                else ROOT
+                            )
+                        )
                         all_results.append(tree_gdf)
 
             if not all_results:
-                logging.warning(f"⚠️ No results compiled for level={level}, layer_type='{layer_type}'")
+                logging.warning(
+                    f"⚠️ No results compiled for level={level}, layer_type='{layer_type}'"
+                )
                 continue
 
             tree_gdf = pd.concat(all_results, ignore_index=True)
-            logging.info(f"📊 Combined tree_gdf for layer '{layer_type}': {len(tree_gdf)} total row(s)")
+            logging.info(
+                f"📊 Combined tree_gdf for layer '{layer_type}': {len(tree_gdf)} total row(s)"
+            )
 
             raw_out = layer_local.get("out")
             if raw_out and not tree_gdf.empty:
@@ -782,67 +934,137 @@ def ensure_treepolys_with_index(
 
             existing = get_treepoly(layer_type)
 
-            # Safe checking for existing dataset and FID column
-            logging.debug(f"   ↳ Deduplicating against existing dataset (Existing rows: {len(existing) if existing is not None else 0})...")
-            if existing is None or "FID" not in existing.columns or "FID" not in tree_gdf.columns:
-                logging.debug("   ↳ Skipping FID deduplication (Existing or 'FID' column missing). Using all new records.")
+            if (
+                existing is None
+                or "FID" not in existing.columns
+                or "FID" not in tree_gdf.columns
+            ):
                 new_tree_gdf = tree_gdf
             else:
                 new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
-                logging.debug(f"   ↳ Deduplicated {len(tree_gdf) - len(new_tree_gdf)} duplicate record(s). New unique rows: {len(new_tree_gdf)}")
 
             upserted_gdf = upsert_geodf(existing, new_tree_gdf)
             set_treepoly(layer_type, upserted_gdf)
 
-            next_level = level + 1
-            if next_level not in active_parent_rows:
-                active_parent_rows[next_level] = []
+            # ------------------------------------------------------------------
+            # 🔍 [FIXED] GEO_INDEX POPULATION LOOP
+            # ------------------------------------------------------------------
+            logging.info(
+                f"🗂️ [GEO_INDEX POPULATION] Iterating through {len(tree_gdf)} row(s) to populate Geo_index..."
+            )
 
             for idx, row in tree_gdf.iterrows():
-                child_name = normalname(row["NAME"])
-                parent_path = None if level == 0 else row.get("_parent_path", ROOT)
-                this_path = ROOT if level == 0 else f"{parent_path}/{child_name}"
+                raw_name = row.get("NAME")
+                if pd.isna(raw_name) or raw_name is None:
+                    logging.error(
+                        f"❌ [GEO_INDEX FAIL] Row index {idx} in layer '{layer_type}' has a missing/NaN 'NAME' value! Row content: {dict(row)}"
+                    )
+                    child_name = f"UNNAMED_{idx}"
+                else:
+                    child_name = normalname(str(raw_name))
+
+                # FIX 1: Explicitly build distinct hierarchy paths per level
+                parent_path = row.get("_parent_path", ROOT)
+                if level == 0:
+                    this_path = ROOT if child_name == ROOT else f"{ROOT}/{child_name}"
+                else:
+                    this_path = f"{parent_path}/{child_name}"
 
                 if this_path not in Geo_index:
                     roid_coords = None
                     if hasattr(row, "geometry") and row.geometry is not None:
                         try:
                             centroid_point = row.geometry.representative_point()
-                            roid_coords = [float(centroid_point.y), float(centroid_point.x)]
+                            roid_coords = [
+                                float(centroid_point.y),
+                                float(centroid_point.x),
+                            ]
                         except Exception as spatial_err:
-                            logging.warning(f"   ↳ Spatial error resolving centroid on '{this_path}': {spatial_err}")
+                            logging.warning(
+                                f"   ↳ Spatial error resolving centroid on '{this_path}': {spatial_err}"
+                            )
 
                     Geo_index[this_path] = {
-                        "level": layer_type, "name": child_name, "parent": parent_path,
-                        "children": [], "roid": roid_coords,
-                        "fid": int(row["FID"]) if pd.notna(row.get("FID")) else None
+                        "level": layer_type,
+                        "name": child_name,
+                        "parent": parent_path if level > 0 else None,
+                        "children": [],
+                        "roid": roid_coords,
+                        "fid": (
+                            int(row["FID"]) if pd.notna(row.get("FID")) else None
+                        ),
                     }
+                    logging.info(
+                        f"   ➕ [GEO_INDEX POPULATED] Added path: '{this_path}' | Level: {layer_type} | FID: {row.get('FID')}"
+                    )
 
-                if parent_path in Geo_index and this_path not in Geo_index[parent_path]["children"]:
+                if (
+                    parent_path in Geo_index
+                    and this_path not in Geo_index[parent_path]["children"]
+                ):
                     Geo_index[parent_path]["children"].append(this_path)
+                    logging.debug(
+                        f"   ↳ Linked child '{this_path}' to parent '{parent_path}'"
+                    )
 
                 fid_to_path[row["FID"]] = this_path
 
                 row_copy = row.copy()
-                row_copy["_parent_path"] = parent_path if level > 0 else ROOT
-                active_parent_rows[next_level].append(row_copy)
+                row_copy["_parent_path"] = this_path
 
-    # Path Traversal resolution logic
+                # FIX 2: Prevent duplicate row accumulation in active_parent_rows
+                existing_fids = {
+                    r["FID"] for r in active_parent_rows[next_level]
+                    if r is not None and "FID" in r
+                }
+                if row_copy["FID"] not in existing_fids:
+                    active_parent_rows[next_level].append(row_copy)
+
+    # ------------------------------------------------------------------
+    # 📊 DIAGNOSTIC SUMMARY
+    # ------------------------------------------------------------------
+    logging.info("==================================================")
+    logging.info("📈 [GEO_INDEX DIAGNOSTIC SUMMARY]")
+    logging.info(f"   Total entries in Geo_index: {len(Geo_index)}")
+    logging.info("   Keys present in Geo_index:")
+    for key, val in Geo_index.items():
+        logging.info(
+            f"    - '{key}' => Level: {val.get('level')}, Children Count: {len(val.get('children', []))}"
+        )
+    logging.info("==================================================")
+
+    # Final Path Traversal resolution logic
     final_path = ROOT
     for step in steps[1:]:
         target = normalname(step)
         children = Geo_index.get(final_path, {}).get("children", [])
-        found = next((cp for cp in children if Geo_index.get(cp, {}).get("name") == target), None)
+        found = next(
+            (
+                cp
+                for cp in children
+                if Geo_index.get(cp, {}).get("name") == target
+            ),
+            None,
+        )
         if found is None:
-            logging.warning(f"⚠️ Could not resolve target path step '{target}' from '{final_path}'")
+            logging.warning(
+                f"⚠️ Could not resolve target path step '{target}' from '{final_path}' (Available children: {children})"
+            )
             break
         final_path = found
 
     node = Geo_index.get(final_path, {"level": "country"})
-    match_full_filepath = final_path + FACEENDING.get(node["level"], "-MAP.html")
+    match_full_filepath = final_path + FACEENDING.get(
+        node["level"], "-MAP.html"
+    )
 
-    logging.info(f"🏁 [DEBUG END] Target Path Resolved: '{final_path}' | Map File: '{match_full_filepath}'")
+    logging.info(
+        f"🏁 [DEBUG END] Target Path Resolved: '{final_path}' | Map File: '{match_full_filepath}'"
+    )
     logging.info("==================================================")
+# Add this explicit validation before persist()
+    logging.info(f"SURREY children right before persist: {Geo_index.get('UNITED_KINGDOM/ENGLAND/SURREY', {}).get('children')}")
+
 
     persist(Treepolys, Geo_index)
 

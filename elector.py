@@ -376,6 +376,38 @@ class ElectorManager:
             logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
             return filtered_df
 
+    def delete_by_election(self, election_id: str) -> int:
+        """Completely removes all elector records for a given election ID.
+
+        Bypasses spatial hierarchy matching to prevent orphaned records or
+        unmatched 'OUTSIDE' rows from lingering during deactivation.
+        """
+        with _lock:
+            # 1. Normalize key representation if needed
+            c_election = str(election_id).strip()
+
+            # 2. Check if the election DataFrame exists
+            if c_election not in self._elections:
+                logger.warning(f"⚠️ Deactivate/Delete skipped: Election '{c_election}' not found in manager.")
+                return 0
+
+            df = self._elections[c_election]
+            deleted_count = len(df) if df is not None else 0
+
+            # 3. Purge the election dataset completely from memory
+            del self._elections[c_election]
+
+            # 4. Rebuild combined indices and persist state if records were purged
+            if deleted_count > 0:
+                self.rebuild_combined()
+                self.save()
+                logger.info(f"🗑️ Deactivated '{c_election}': Purged all {deleted_count} elector records.")
+            else:
+                logger.debug(f"Deactivated '{c_election}': Election contained 0 records.")
+
+            return deleted_count
+
+
     def delete_elector_for_path(self, resolved_levels, raw_path):
         from elections import CurrentElection
         import pandas as pd
