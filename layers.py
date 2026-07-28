@@ -1565,14 +1565,18 @@ class ExtendedFeatureGroup(FeatureGroup):
                         style_function=lambda feature: {
                             "fillColor": layer_style.get("fillColor", "#EF4444"),
                             "color": layer_style.get("color", "#991B1B"),
-                            "weight": layer_style.get("weight", 3.5),
+                            "weight": layer_style.get("weight", 2.5),
                             "opacity": 1.0,
-                            "fillOpacity": layer_style.get("fillOpacity", 0.70),
+                            "fillOpacity": layer_style.get("fillOpacity", 0.15),
                             "stroke": True,
                             "fill": True,
-                            "dashArray": layer_style.get("dashArray", "0")
+                            "dashArray": layer_style.get("dashArray", "0"),
                         },
-                        highlight_function=lambda _: {"fillColor": "lightgray", "fillOpacity": 0.4},
+                        highlight_function=lambda feature: {
+                            "weight": layer_style.get("weight", 2.5) + 2,
+                            "fillOpacity": 0.35,
+                            "opacity": 1.0,
+                        },
                         tooltip=folium.Tooltip(htmlhalo),
                         popup=click_popup,
                     ).add_to(self)
@@ -1773,12 +1777,37 @@ FEATURE_LAYER_SPECS = {
 
     # 🗳️ LEVEL 4 STRATIFICATION
     "ward": dict(
-        name="ward", mytag="ward", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EAB308", "fontColor": "#EAB308", "weight": 3.5, "fillColor": "#FEF08A", "fillOpacity": 0.70, "dashArray": "4,4"}
+        name="ward",
+        mytag="ward",
+        overlay=True,
+        control=True,
+        show=False,
+        type="node",
+        options={
+            "color": "#2E6FBB",        # Medium blue border
+            "fontColor": "#2E6FBB",
+            "weight": 2.5,
+            "fillColor": "#A9C8F5",    # Pale blue fill
+            "fillOpacity": 0.18,
+            # Solid line
+        },
     ),
+
     "division": dict(
-        name="division", mytag="division", overlay=True, control=True, show=False, type="node",
-        options={"color": "#EC4899", "fontColor": "#EC4899", "weight": 2.5, "fillColor": "#FBCFE8", "fillOpacity": 0.65, "dashArray": "4,4"}
+        name="division",
+        mytag="division",
+        overlay=True,
+        control=True,
+        show=False,
+        type="node",
+        options={
+            "color": "#D95F02",        # Dark orange border
+            "fontColor": "#D95F02",
+            "weight": 2.5,
+            "fillColor": "#F6C28B",    # Pale orange fill
+            "fillOpacity": 0.12,
+            "dashArray": "8,5",        # Long dash
+        },
     ),
     "walk": dict(
         name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",

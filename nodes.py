@@ -38,6 +38,7 @@ FACEENDING = {
 
 _MASTER_ROOT = None
 
+
 def create_root_node() -> "TreeNode":
     return TreeNode(
         value="UNITED_KINGDOM",
@@ -536,7 +537,7 @@ def safe_json_load(path, default):
 
 
 
-def restore_from_persist(Treepolys, geo_index):
+def restore_from_persist(Treepolys):
     print(f'____Restore from persist under !{elections.route()} called to restore nodes and polys! ')
 
     safe_pickle_load(TREEPOLY_FILE,Treepolys)
@@ -545,13 +546,13 @@ def restore_from_persist(Treepolys, geo_index):
     load_nodes(TREKNODE_FILE)
 
     # Load from file
-    safe_json_load(GEO_INDEX_FILE, geo_index)
+    safe_json_load(GEO_INDEX_FILE, state.Geo_index)
     print("AFTER LOAD:")
     return
 
-def persist(Treepolys, geo_index):
+def persist(Treepolys):
     atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
-    atomic_json_dump(geo_index,GEO_INDEX_FILE)
+    atomic_json_dump(state.Geo_index,GEO_INDEX_FILE)
     return
 
 
@@ -791,7 +792,7 @@ class TreeNode:
 
     def available_layers(self,elevels):
         return {
-        "LAYERS": state.LAYERS
+        "MAP_LAYERS": state.MAP_LAYERS
         }
 
     def get_options(self, *, program=None, electionctx=None):
@@ -1177,7 +1178,7 @@ class TreeNode:
 
 
     def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
-        from state import LEVEL_ZOOM_MAP, Geo_index, stepify
+        from state import LEVEL_ZOOM_MAP, stepify
         from flask import session
         from elector import electors
 
@@ -1248,8 +1249,8 @@ class TreeNode:
             # --- 🛡️ PATH VALIDATION ENGINE ---
             is_valid_path = False
             if next_level < 5:
-                is_valid_path = target_path in Geo_index
-                print(f"       🛡️ Checked Geo_index for '{target_path}': Found = {is_valid_path}")
+                is_valid_path = target_path in state.Geo_index
+                print(f"       🛡️ Checked state.Geo_index for '{target_path}': Found = {is_valid_path}")
             else:
                 df_check = electors.elector_for_path(rlevels, target_path)
                 is_valid_path = df_check is not None and not df_check.empty
@@ -1323,7 +1324,7 @@ class TreeNode:
 
             should_expand = False
             if next_level <= 4:
-                should_expand = node.node_path in Geo_index or any(k.startswith(node.node_path + "/") for k in Geo_index)
+                should_expand = node.node_path in state.Geo_index or any(k.startswith(node.node_path + "/") for k in state.Geo_index)
                 print(f"     Expansion index check for level <= 4: {should_expand}")
             else:
                 df_check = electors.elector_for_path(rlevels, node.mapfile())
@@ -1993,7 +1994,7 @@ class TreeNode:
 
     def create_map_branch(self, resolved_levels):
         # Imports (keep them here if they are circular)
-        from state import Treepolys, Geo_index, branchcolours
+        from state import Treepolys, branchcolours
         import pandas as pd
         import state
         import elections
@@ -2024,9 +2025,9 @@ class TreeNode:
         # e.g., "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"
         my_path_key = self.get_absolute_path_string()
 
-        geo_node = Geo_index.get(my_path_key)
+        geo_node = state.Geo_index.get(my_path_key)
         if not geo_node:
-            print(f"⚠️ Warning: Path {my_path_key} not found in Geo_index. Falling back to empty children.")
+            print(f"⚠️ Warning: Path {my_path_key} not found in state.Geo_index. Falling back to empty children.")
             return []
 
         # Get the precise pre-calculated list of child paths from our index
@@ -2043,14 +2044,14 @@ class TreeNode:
                 print(f"⚠️ Spatial table '{electtype}' is empty. Skipping.")
                 continue
 
-            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in Geo_index
+            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in state.Geo_index
             valid_child_fids = set()
             for path in allowed_child_paths:
-                node = Geo_index.get(path)
+                node = state.Geo_index.get(path)
                 if node and node.get("fid") is not None:
                     valid_child_fids.add(node["fid"])
 
-            print(f"🎯 Target FIDs expected from Geo_index: {valid_child_fids}")
+            print(f"🎯 Target FIDs expected from state.Geo_index: {valid_child_fids}")
 
             # Direct, vectorized filtering on the integer column — no string manipulation required
             selected_children = ChildPolylayer[ChildPolylayer['FID'].isin(valid_child_fids)]
@@ -2077,7 +2078,7 @@ class TreeNode:
                     j += 1
                     continue
 
-                baked_roid = Geo_index.get(child_path_key, {}).get("roid")
+                baked_roid = state.Geo_index.get(child_path_key, {}).get("roid")
 
                 if baked_roid:
                     here = tuple(baked_roid)

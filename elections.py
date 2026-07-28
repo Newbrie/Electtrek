@@ -44,7 +44,7 @@ class ProgramContext:
         return {
             "LEVELS": LEVELS,
             "LEVEL_INDEX": LEVEL_INDEX,
-            "LAYERS": state.LAYERS,
+            "MAP_LAYERS": state.MAP_LAYERS,
             "TABLE_TYPES": state.TABLE_TYPES,
             "DEVURLS": config.DEVURLS, #backend urls used on start up
             "VNORM": state.VNORM, #normalised party used everywhere

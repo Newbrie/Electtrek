@@ -38,6 +38,9 @@ branchcolours = [
 ]
 
 
+Geo_index = {}
+
+
 def route():
     if has_request_context():
         return request.endpoint
@@ -201,7 +204,7 @@ def clear_treepolys(from_level=None):
         for k in Treepolys:
             Treepolys[k] = gpd.GeoDataFrame()
     else:
-        for layer in LAYERS[from_level:]:
+        for layer in MAP_LAYERS[from_level:]:
             Treepolys[layer["key"]] = gpd.GeoDataFrame()
 
 def parse_coords(coord_input) -> list[tuple[float, float]]:
@@ -479,7 +482,7 @@ def get_layer_gdf(src):
 
 
 def get_parent_rows(plevels, child_level, parent_rows, roid, boundary_geom):
-    from state import Treepolys, Geo_index
+    from state import Treepolys
     from shapely.geometry import Point
     import logging
     import geopandas as gpd
@@ -615,7 +618,6 @@ def ensure_treepolys_with_index(
 ):
     from nodes import FACEENDING, persist
     from state import (
-        Geo_index,
         Treepolys,
         get_treepoly,
         normalname,
@@ -686,8 +688,8 @@ def ensure_treepolys_with_index(
                 )
                 candidate_paths.add(derived_path)
 
-    LAYERS = globals().get("LAYERS", [])
-    layer_defs = {(l["level"], l["key"]): l for l in LAYERS}
+    MAP_LAYERS = globals().get("MAP_LAYERS", [])
+    layer_defs = {(l["level"], l["key"]): l for l in MAP_LAYERS}
 
     for path in candidate_paths:
         path_steps = stepify(path)
@@ -1066,7 +1068,7 @@ def ensure_treepolys_with_index(
     logging.info(f"SURREY children right before persist: {Geo_index.get('UNITED_KINGDOM/ENGLAND/SURREY', {}).get('children')}")
 
 
-    persist(Treepolys, Geo_index)
+    persist(Treepolys)
 
     return match_full_filepath, Geo_index
 
@@ -1292,9 +1294,9 @@ autofix = {0,1,2,3,4}
 
 # state.py
 Treepolys: dict[str, gpd.GeoDataFrame] = {}
-Geo_index = {}
 
-LAYERS = [
+
+MAP_LAYERS = [
     {
         "key": "country",
         "level": 0,

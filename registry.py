@@ -10,7 +10,7 @@ def clear_treepolys(from_level=None):
             Treepolys[k] = gpd.GeoDataFrame()
             Fullpolys[k] = gpd.GeoDataFrame()
     else:
-        for layer in LAYERS[from_level:]:
+        for layer in MAP_LAYERS[from_level:]:
             Treepolys[layer["key"]] = gpd.GeoDataFrame()
             Fullpolys[layer["key"]] = gpd.GeoDataFrame()
 
