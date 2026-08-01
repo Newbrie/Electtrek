@@ -5,6 +5,7 @@ import logging
 import state
 from config import ELECTOR_FILE
 
+
 # ------------------------
 # Logging Setup
 # ------------------------
@@ -40,8 +41,8 @@ def normalize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def find_node_by_path(basepath: str, debug=False):
-    from nodes import get_trek_root
     import state
+    from nodes import get_trek_root
 
     if debug:
         print(f"[DEBUG] find_node_by_path: {basepath}")

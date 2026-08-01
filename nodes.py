@@ -21,21 +21,6 @@ import re
 
 
 
-
-FACEENDING = {
-    'elector': "-PRINT.html",
-    'street': "-MAP.html",
-    'walkleg': "-MAP.html",
-    'polling_district': "-MAP.html",
-    'walk': "-MAP.html",
-    'ward': "-MAP.html",
-    'division': "-MAP.html",
-    'constituency': "-MAP.html",
-    'county': "-MAP.html",
-    'nation': "-MAP.html",
-    'country': "-MAP.html",
-}
-
 _MASTER_ROOT = None
 
 
@@ -664,7 +649,6 @@ class TreeNode:
 
     def get_grandchild_layers(self):
         from flask import session
-        from nodes import TREK_NODES_BY_ID
 
         accumulated_ids = session.get("accumulated_nodes", [])
 
@@ -673,7 +657,7 @@ class TreeNode:
             grandchildren = []
 
             for nid in accumulated_ids:
-                child_node = TREK_NODES_BY_ID.get(nid)
+                child_node = nodes.TREK_NODES_BY_ID.get(nid)
                 if child_node and hasattr(child_node, 'children'):
                     # The children of the passed wards/divisions are the walks/polling districts (grandchildren)
                     grandchildren.extend(child_node.children)
@@ -1164,18 +1148,21 @@ class TreeNode:
                 node = node.parent
         return node
 
-    def mapfile(self):
+    from pathlib import Path
+
+    def mapfile(self) -> str:
         """Compute map filename dynamically."""
-        # This unpacks the single key-value pair from the dictionary
-        type = self.type
-        suffix = FACEENDING.get(type, "")
-        if self.type in { "street", "walkleg"}:
-            filename = f"{self.parent.value}--{self.value}{suffix}"
+        node_type = self.type
+
+        if node_type in {"street", "walkleg"}:
+            parent_val = getattr(self.parent, "value", self.parent) or ""
+            name = f"{parent_val}--{self.value}"
+            suffix = "-PRINT.html"
         else:
-            filename = f"{self.value}{suffix}"
+            name = self.value
+            suffix = "-MAP.html"
 
-        return f"{self.dir}/{filename}"
-
+        return str(Path(self.dir or "") / f"{name}{suffix}")
 
     def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
         from state import LEVEL_ZOOM_MAP, stepify
@@ -1206,7 +1193,6 @@ class TreeNode:
         # ──────────────────────────────
         # Step 2: Compute Common Ancestor and Move Up
         # ──────────────────────────────
-        from nodes import get_common_prefix_len
         common_len = get_common_prefix_len(self_path, dest_parts)
         print(f"  [2] Common prefix length: {common_len}")
 
@@ -1604,7 +1590,7 @@ class TreeNode:
 #        print ("_____VRstatus:",self.value,self.type,self.VR)
         return
 
-    def updateTurnout(self,elevels):
+    def updateTurnout(self):
         from state import LastResults
 
         sname = self.value
@@ -1627,7 +1613,7 @@ class TreeNode:
         while casnode.parent:
             parent = casnode.parent
 
-            children = parent.childrenoftype(elevels[parent.level])
+            children = parent.childrenoftype(casnode.type)
             values = [c.turnout for c in children if c.turnout is not None]
             parent.turnout = sum(values) / len(values) if values else None
 
@@ -1635,7 +1621,7 @@ class TreeNode:
 
         return
 
-    def updateGOTV(self, gotv_pct, elevels):
+    def updateGOTV(self, gotv_pct):
         """
         Compute absolute GOTV target:
             gotv = 0.5 * votes_cast + (gotv_pct / 100)
@@ -1658,7 +1644,7 @@ class TreeNode:
         # --- Cascade upward (sum children) ---
         while casnode.parent:
             parent = casnode.parent
-            children = parent.childrenoftype(elevels[parent.level])
+            children = parent.childrenoftype(casnode.type)
 
             values = [c.gotv for c in children if c.gotv is not None]
             parent.gotv = sum(values) if values else None
@@ -1704,7 +1690,7 @@ class TreeNode:
         return
 
 
-    def updateCandidates(self,elevels):
+    def updateCandidates(self):
         """Fill self.candidates from the global Candidates dict."""
         from state import Candidates
 
@@ -1715,7 +1701,7 @@ class TreeNode:
 
 
 
-    def updateElectorate(self, elevels):
+    def updateElectorate(self):
         from state import LastResults
         # Guard: Ensure we have exactly one election to unpack
 
@@ -1738,13 +1724,13 @@ class TreeNode:
             if parent.level != 3:
                 parent.electorate = sum(
                     c.electorate if c.electorate is not None else 0
-                    for c in parent.childrenoftype(elevels[parent.level])
+                    for c in parent.childrenoftype(casnode.type)
                 )
             casnode = parent
 
         return
 
-    def updateHouses(self,elevels,pop):
+    def updateHouses(self,pop):
         sname = self.value
         pop = int(pop)
 
@@ -1756,7 +1742,7 @@ class TreeNode:
         for l in range(origin.level):
             sumnode.parent.houses = 0
             i=1
-            for x in sumnode.parent.childrenoftype(elevels[sumnode.level]):
+            for x in sumnode.parent.childrenoftype(sumnode.type):
                 sumnode.parent.houses = sumnode.parent.houses + x.houses
                 print ("_____Houseslevel:",x.level,x.value,x.houses,sumnode.houses)
                 i = i+1
@@ -1850,9 +1836,9 @@ class TreeNode:
                 lat + delta
             ]
 
-            egg.updateTurnout(elevels)
-            egg.updateElectorate(elevels)
-            egg.updateGOTV(gotv_pct, elevels)
+            egg.updateTurnout()
+            egg.updateElectorate()
+            egg.updateGOTV(gotv_pct, )
 
             print('______Data nodes', egg.value, egg.fid,
                   egg.electorate, egg.houses, egg.target, egg.bbox)
@@ -2107,10 +2093,10 @@ class TreeNode:
 
                 try:
                     egg.updateParty()
-                    egg.updateCandidates(elevels)
-                    egg.updateTurnout(elevels)
-                    egg.updateElectorate(elevels)
-                    egg.updateGOTV(gotv_pct, elevels)
+                    egg.updateCandidates()
+                    egg.updateTurnout()
+                    egg.updateElectorate()
+                    egg.updateGOTV(gotv_pct)
 
                     fam_nodes.append(egg)
                     all_created_children.append(egg)

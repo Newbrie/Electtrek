@@ -65,6 +65,7 @@ from nodes import get_layer_table, get_trek_root,restore_from_persist, persist,p
 import layers
 from elections import get_available_elections, get_elections, CurrentElection, ProgramContext, ElectionContext, resolve_ui_context
 from elector import electors
+import nodes
 
 
 locale.setlocale(locale.LC_TIME, 'en_GB.UTF-8')
@@ -582,32 +583,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         territory_path = CElection['territory']
         lastfilepath = CElection['mapfiles'][-1]
 
-        # Path Cleanup & Tokenization
-        clean_territory = territory_path.replace("-DIVS.html", "").replace(".html", "")
-        path_parts = stepify(clean_territory)
-
-        print(f"🔍 DEBUG [1/5] Path Resolution:")
-        print(f"   > Raw Territory: {territory_path}")
-        print(f"   > Cleaned Parts: {path_parts}")
 
         # Unpack the active levels mapping dictionary
         (_, elevels), = resolved_levels.items()
-
-        # Construct schema levels
-        schema_levels = ["Country", "Nation", "County"]
-        max_index = max(max(elevels.keys(), default=0) + 1, len(path_parts))
-
-        for idx in range(3, max_index):
-            if idx in elevels:
-                layer_raw_token = elevels[idx]
-                primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
-                schema_levels.append(primary_layer.capitalize())
-            else:
-                schema_levels.append("Constituency" if idx == 3 else f"Level_{idx}")
-
-        geo_context = {schema_levels[i]: path_parts[i] for i in range(len(path_parts)) if i < len(schema_levels)}
-        print(f"   > Mapped Schema Columns: {schema_levels}")
-        print(f"   > Resolved Geo Context: {geo_context}")
 
         sorted_items = sorted(meta_data.items(), key=lambda x: int(x[1]['order']))
 
@@ -653,10 +631,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             progress.update({"percent": 100, "status": "error", "message": "No valid electoral files"})
             return
 
-
-
         # =========================================================================
-        # --- Stage 2.1: Pre-Flight Spatial Discovery Pass (1 Point Per PD) ---
+        # --- Stage 2.1: Pre-Flight Spatial Discovery Pass ---
         # =========================================================================
         preflight_df = pd.concat(all_new, ignore_index=True)
         preflight_df['latitude'] = pd.to_numeric(preflight_df.get('latitude', preflight_df.get('Lat')), errors='coerce')
@@ -665,75 +641,131 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # Filter valid coordinates
         valid_coords_df = preflight_df[preflight_df['latitude'].notna() & preflight_df['longitude'].notna()].copy()
 
-        # Map to GeoDataFrame to compute 1 centroid per PD
-        # Replace 'pd_id' with your actual Planning District column name (e.g., 'pd_code', 'district_id')
-        pd_column = 'pd_id'
+        pd_column = 'PD'
+        hull_geometry = None
+        unique_anchors = []
 
-        if pd_column in valid_coords_df.columns:
+        if not valid_coords_df.empty:
             gdf = gpd.GeoDataFrame(
                 valid_coords_df,
-                geometry=gpd.points_from_xy(valid_coords_df['longitude'], valid_coords_df['latitude'])
+                geometry=gpd.points_from_xy(valid_coords_df['longitude'], valid_coords_df['latitude']),
+                crs="EPSG:4326"
             )
 
-            # Group by PD and calculate the true geometric centroid of all points in each district
-            centroids_per_pd = gdf.groupby(pd_column).geometry.apply(lambda g: g.unary_union.centroid)
+            if pd_column in gdf.columns:
+                centroids_per_pd = gdf.groupby(pd_column).geometry.apply(lambda g: g.unary_union.centroid)
+                centroid_union = centroids_per_pd.unary_union
+            else:
+                centroid_union = gdf.geometry.unary_union
 
-            # Extract [[latitude, longitude]] format for hydration
-            unique_anchors = [[point.y, point.x] for point in centroids_per_pd]
-        else:
-            # Fallback to deduplicated anchors if pd_column is missing
-            unique_anchors = valid_coords_df[['latitude', 'longitude']].drop_duplicates().values.tolist()
+            hull_geometry = centroid_union.convex_hull
 
-        print(f"📡 PRE-FLIGHT: Reduced to {len(unique_anchors)} distinct spatial anchor points (1 per PD).")
+            if hull_geometry.geom_type == 'Polygon':
+                unique_anchors = [[y, x] for x, y in hull_geometry.exterior.coords]
+            elif hull_geometry.geom_type == 'LineString':
+                unique_anchors = [[y, x] for x, y in hull_geometry.coords]
+            elif hull_geometry.geom_type == 'Point':
+                unique_anchors = [[hull_geometry.y, hull_geometry.x]]
 
+        def prepare_here_parameter(hull_geometry):
+            if hull_geometry is None or hull_geometry.is_empty:
+                return None
+            centroid = hull_geometry.centroid
+            return (centroid.y, centroid.x)
+
+        here_loc = prepare_here_parameter(hull_geometry)
 
         # =========================================================================
         # --- Stage 2.2: Pre-Flight Treepolys Hydration Pass ---
         # =========================================================================
+        print(f"📡 PRE-FLIGHT: Computed PD-centroid Convex Hull ({here_loc}) ")
 
         lastfilepath, state.Geo_index = ensure_treepolys_with_index(
-            territory=territory_path,
-            sourcepath=lastfilepath,
-            here=unique_anchors,
+            territory=None,
+            sourcepath=None,
+            here=here_loc,
             resolved_levels=resolved_levels,
             parent_levels=parent_levels
         )
 
+        print(f"📡 PRE-FLIGHT: completed ({lastfilepath}) ")
+
+        current_node = nodes.MapRoot.ping_node(resolved_levels, lastfilepath, create=True, accumulate=False)
         new_df = preflight_df.copy()
+        persist(Treepolys)
 
+        from pathlib import Path
+
+        # 1. Execute preflight / tree resolution first
+        # lastfilepath, treepolys = ensure_treepolys(territory_path)
+
+        # 2. Extract path components from the validated lastfilepath
+        geo_parts = stepify(lastfilepath)
+
+        # 3. Construct schema levels dynamically
+        schema_levels = ["Country", "Nation", "County"]
+        max_index = max(max(elevels.keys(), default=0) + 1, len(geo_parts))
+
+        for idx in range(3, max_index):
+            if idx in elevels:
+                layer_raw_token = elevels[idx]
+                primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
+                canonical = shapecolumn.get(primary_layer.lower(), primary_layer.capitalize())
+                schema_levels.append(canonical)
+            else:
+                schema_levels.append("Constituency" if idx == 3 else f"Level_{idx}")
+
+        # 4. Build static geo_context from guaranteed directory parts
+        geo_context = {
+            schema_levels[i]: geo_parts[i]
+            for i in range(len(geo_parts))
+            if i < len(schema_levels)
+        }
+
+        print(f"🔍 DEBUG [1/5] Path Resolution:")
+        print(f"   > Cleaned Geo Directory Parts: {geo_parts}")
+        print(f"   > Mapped Schema Columns: {schema_levels}")
+        print(f"   > Resolved Geo Context: {geo_context}")
 
         # =========================================================================
-        # --- Stage 2.5: Dynamic Vectorized Spatial Join Assignment Engine ---
+        # --- Stage 2.5: Vectorized Spatial Join & Hierarchy Assignment ---
         # =========================================================================
-        print("🌐 SPATIAL ENGINE: Commencing point-in-polygon vector analysis...")
+        print("\n🌐 [STAGE 2.5] SPATIAL ENGINE: Commencing point-in-polygon vector analysis...")
 
-        # 1. Resolve canonical spatial levels using shapecolumn
-        spatial_levels = []
-        for depth_key, lvl_str in elevels.items():
-            for sub_lvl in str(lvl_str).split('/'):
-                cleaned_token = sub_lvl.strip().lower()
-                mapped_name = shapecolumn.get(cleaned_token, sub_lvl.strip().capitalize())
-                if mapped_name and mapped_name not in spatial_levels:
-                    spatial_levels.append(mapped_name)
+        # 1. Inject static top-level geo context
+        print("📌 DEBUG [2.5.1] Injecting static top-level geo context...")
+        for col_name, val_str in geo_context.items():
+            if col_name not in new_df.columns:
+                new_df[col_name] = val_str
+                print(f"   + Added column '{col_name}' with value '{val_str}'")
+            else:
+                new_df[col_name] = new_df[col_name].replace("", None).fillna(val_str)
+                print(f"   ~ Filled column '{col_name}' defaults with '{val_str}'")
 
-        # 2. Guarantee target columns exist in new_df (initialized to "" if missing)
-        for lvl in spatial_levels:
-            if lvl not in new_df.columns:
-                new_df[lvl] = ""
-
-        # 3. Direct column assignment via shapecolumn targets
-        pd_col    = shapecolumn.get('polling_district', 'PD')
-        ward_col  = shapecolumn.get('ward', 'Ward')
-        div_col   = shapecolumn.get('division', 'Division')
-        const_col = shapecolumn.get('constituency', 'Constituency')
-
+        # 2. Build spatial boundary records using tree traversal truth
+        print("\n🌲 DEBUG [2.5.2] Processing Treepolys dictionary...")
         poly_records = []
+        skipped_nodes_count = 0
+        skipped_geoms_count = 0
+        total_tree_entries = 0
+
         for level_key, polys_dict in Treepolys.items():
             if not isinstance(polys_dict, dict):
+                print(f"   ⚠️ Skipping non-dict level_key in Treepolys: {level_key}")
                 continue
 
+            print(f"   ► Processing level_key '{level_key}' ({len(polys_dict)} potential shapes)")
+            total_tree_entries += len(polys_dict)
+
             for unique_path, geom_obj in polys_dict.items():
-                path_tokens = [t for t in unique_path.split('/') if t and t != 'ROOT']
+                # 🌲 Resolve exact node structural truth
+                target_node = find_node_by_path(unique_path)
+                if not target_node:
+                    skipped_nodes_count += 1
+                    print(f"     ❌ Node resolution failed for path: {unique_path}")
+                    continue
+
+                # Parse spatial geometry
                 actual_geom = None
                 try:
                     if isinstance(geom_obj, gpd.GeoDataFrame):
@@ -748,25 +780,61 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                         actual_geom = geom_obj
 
                     if actual_geom is None or getattr(actual_geom, "is_empty", True):
+                        skipped_geoms_count += 1
+                        print(f"     ⚠️ Empty or null geometry skipped: {unique_path}")
                         continue
                 except Exception as e:
-                    print(f"⚠️ Spatial engine skipped invalid shape for {unique_path}: {e}")
+                    skipped_geoms_count += 1
+                    print(f"     ⚠️ Exception parsing shape for {unique_path}: {e}")
                     continue
 
+                # Build record starting with geometry
                 record = {"_full_path": unique_path, "geometry": actual_geom}
-                for i, token in enumerate(path_tokens):
-                    if i < len(spatial_levels):
-                        record[spatial_levels[i]] = token
+
+                # Walk up the tree lineage to populate EXACT column targets dynamically
+                cur = target_node
+                lineage_mapped = []
+                while cur:
+                    col = shapecolumn.get(cur.type, cur.type.capitalize())
+                    record[col] = cur.value
+                    lineage_mapped.append(f"{col}={cur.value}")
+                    cur = cur.parent
+
                 poly_records.append(record)
 
-        if poly_records:
+        print(f"   📊 Treepolys Summary: Total Entries={total_tree_entries} | Missing Nodes={skipped_nodes_count} | Invalid Geoms={skipped_geoms_count} | Valid Boundaries={len(poly_records)}")
+
+        # 3. Perform Spatial Join & Fill DataFrame
+        print("\n🗺️ DEBUG [2.5.3] Executing Spatial Join...")
+        if not poly_records:
+            print("   ⚠️ CRITICAL: No valid polygon records were extracted! Spatial join will be skipped.")
+        else:
             boundaries_gdf = gpd.GeoDataFrame(poly_records, geometry="geometry", crs="EPSG:4326")
+            print(f"   ► Created Boundaries GeoDataFrame: Shape={boundaries_gdf.shape}")
+
+            # Collect all target hierarchy columns present in the spatial records
+            target_cols = [c for c in boundaries_gdf.columns if c not in ["_full_path", "geometry"]]
+            print(f"   ► Spatial Target Hierarchy Columns: {target_cols}")
+
+            for col in target_cols:
+                if col not in new_df.columns:
+                    new_df[col] = ""
+                    print(f"   + Initialized missing target column in DataFrame: '{col}'")
+
             lat_col = next((c for c in ['latitude', 'Lat', 'LAT'] if c in new_df.columns), None)
             lon_col = next((c for c in ['longitude', 'Long', 'LONG'] if c in new_df.columns), None)
+            print(f"   ► Coordinate Columns Detected: Latitude='{lat_col}' | Longitude='{lon_col}'")
 
-            if lat_col and lon_col:
+            if not lat_col or not lon_col:
+                print("   ❌ CRITICAL: Could not identify latitude and longitude columns in DataFrame!")
+            else:
                 spatial_valid_mask = new_df[lat_col].notna() & new_df[lon_col].notna()
-                if spatial_valid_mask.any():
+                valid_coords_count = spatial_valid_mask.sum()
+                print(f"   ► Valid Coordinate Rows: {valid_coords_count} of {len(new_df)}")
+
+                if valid_coords_count == 0:
+                    print("   ⚠️ No valid coordinates found in DataFrame for spatial join.")
+                else:
                     points_gdf = gpd.GeoDataFrame(
                         new_df[spatial_valid_mask].copy(),
                         geometry=gpd.points_from_xy(
@@ -776,20 +844,43 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                         crs="EPSG:4326"
                     )
 
-                    joined = gpd.sjoin(points_gdf, boundaries_gdf, how="left", predicate="within")
+                    print(f"   ► Performing `gpd.sjoin` (predicate='within')...")
+                    joined = gpd.sjoin(
+                        points_gdf,
+                        boundaries_gdf,
+                        how="left",
+                        predicate="within",
+                        lsuffix="left",
+                        rsuffix="right"
+                    )
+                    print(f"   ► Spatial Join Result Shape: {joined.shape}")
 
-                    for lvl in spatial_levels:
-                        if lvl in joined.columns:
-                            new_df.loc[spatial_valid_mask, lvl] = joined[lvl].fillna(new_df.loc[spatial_valid_mask, lvl])
+                    # Map matched spatial boundary values back to new_df
+                    for col in target_cols:
+                        match_col = f"{col}_right" if f"{col}_right" in joined.columns else col
+                        if match_col in joined.columns:
+                            pre_fill_matched = joined[match_col].notna().sum()
 
-                    print("🎯 SPATIAL ENGINE COMPLETE: Spatial join mapping finished.")
+                            new_df.loc[spatial_valid_mask, col] = (
+                                joined[match_col]
+                                .fillna(new_df.loc[spatial_valid_mask, col])
+                            )
+                            print(f"     ✓ Column '{col}': Successfully mapped {pre_fill_matched} matches from spatial layer '{match_col}'")
+                        else:
+                            print(f"     ⚠️ Column '{col}': Match column '{match_col}' missing from join result!")
 
+                    print("🎯 SPATIAL ENGINE COMPLETE: Vector join finished successfully.")
         # --- Safe Vectorized Fallback PD Assignment ---
+        pd_col = shapecolumn.get('polling_district', 'PD')
+        ward_col = shapecolumn.get('ward', 'Ward')
+        div_col = shapecolumn.get('division', 'Division')
+        const_col = shapecolumn.get('constituency', 'Constituency')
+
         unassigned_mask = (
             new_df[ward_col].astype(str).str.strip().eq("") |
             new_df[ward_col].astype(str).str.strip().eq("OUTSIDE") |
             new_df[ward_col].isna()
-        )
+        ) if ward_col in new_df.columns else pd.Series(False, index=new_df.index)
 
         if unassigned_mask.any() and pd_col in new_df.columns:
             valid_assigned = new_df[~unassigned_mask & new_df[pd_col].notna() & (new_df[pd_col].astype(str).str.strip() != "")]
@@ -802,8 +893,13 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                     mapped_vals = new_df.loc[unassigned_mask, pd_col].map(pd_lookup[col]).fillna("OUTSIDE")
                     new_df.loc[unassigned_mask, col] = mapped_vals
 
-        # Default remaining unassigned rows to OUTSIDE
-        new_df[ward_col] = new_df[ward_col].replace("", "OUTSIDE").fillna("OUTSIDE")
+        if ward_col in new_df.columns:
+            new_df[ward_col] = new_df[ward_col].replace("", "OUTSIDE").fillna("OUTSIDE")
+
+        # Clean up any residual duplicate lowercase columns if present
+        duplicate_cols = [c for c in new_df.columns if c.islower() and c.capitalize() in new_df.columns]
+        if duplicate_cols:
+            new_df.drop(columns=duplicate_cols, inplace=True)
 
         # =========================================================================
         # --- Stage 3: Tag Injection (AVI & Pledge) ---
@@ -849,12 +945,9 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         combined = pd.concat([existing_all, new_df], ignore_index=True)
 
         if 'ENOP' in combined.columns:
-            # Separate records with valid ENOPs from records with empty ENOPs to prevent wiping out unindexed rows
             has_enop = combined['ENOP'].astype(str).str.strip().ne("") & combined['ENOP'].notna()
-
             df_with_enop = combined[has_enop].drop_duplicates(subset='ENOP', keep='last')
             df_without_enop = combined[~has_enop]
-
             combined = pd.concat([df_with_enop, df_without_enop], ignore_index=True)
 
         # =========================================================================
@@ -1270,8 +1363,7 @@ def delete_node():
 @login_required
 def reassign_parent():
     from elector import electors
-    from nodes import TreeNode
-    from elector import electors
+
 
     if not request.is_json:
         return jsonify(status="error", message="JSON required"), 415
@@ -2931,7 +3023,6 @@ def downbut(path):
 @login_required
 def downbulk():
     from state import Treepolys
-    from nodes import TREK_NODES_BY_ID
     from flask import request, session, jsonify
     from pathlib import Path
     import config
@@ -2960,7 +3051,7 @@ def downbulk():
     nodelist = []
     missing_nids = []
     for nid in nids:
-        node = TREK_NODES_BY_ID.get(nid)
+        node = nodes.TREK_NODES_BY_ID.get(nid)
         if node:
             nodelist.append(node)
         else:
@@ -3796,10 +3887,6 @@ def upbut(path):
     formdata['electiondate'] = "DD-MMM-YY"
     formdata['importfile'] = ""
 
-#    FACEENDING = {'street' : "-PRINT.html",'walkleg' : "-PRINT.html",'walk' : "-PRINT.html", 'polling_district' : "-PDS.html", 'walk' :"-WALKS.html",'ward' : "-WARDS.html", 'division' :"-DIVS.html", 'constituency' :"-MAP.html", 'county' : "-MAP.html", 'nation' : "-MAP.html", 'country' : "-MAP.html" }
-#    face_file = subending(trimmed_path,FACEENDING[previous_node.type])
-#    print(f" previous: {previous_node.value} type: {previous_node.type} current {current_node.value} type: {current_node.type} FACEFILE:{FACEENDING[previous_node.type]}")
-
 
     if not os.path.exists(os.path.join(config.workdirectories['workdir'],current_node.mapfile())):
 
@@ -4187,7 +4274,6 @@ def get_progress():
 @app.route('/deactivate_election/<election_name>', methods=['POST'])
 @login_required
 def deactivate_election(election_name):
-    from nodes import save_nodes
     from elections import CurrentElection
     from elector import electors
     from state import Treepolys
