@@ -369,6 +369,22 @@ class ElectorManager:
                     if walk_mask.any():
                         mask = walk_mask
 
+            # Level 6: Street Filtering
+            if len(clean_segments) >= 7:
+                target_street = clean_segments[6]
+                street_cols = [col for col in ["Street", "StreetName", "Street_Name", "STREET"] if col in df.columns]
+
+                level_6_filtered = False
+                for s_col in street_cols:
+                    street_mask = mask & (df[s_col].astype(str).str.strip().str.upper() == target_street)
+                    if street_mask.any():
+                        mask = street_mask
+                        level_6_filtered = True
+                        break
+
+                if not level_6_filtered:
+                    logger.warning(f"⚠️ Street filter for '{target_street}' matched 0 electors under PD/Walk '{clean_segments[5]}'.")
+
             filtered_df = df[mask]
             if filtered_df.empty:
                 logger.error("❌ Deep hierarchy filter broke. 0 rows returned.")

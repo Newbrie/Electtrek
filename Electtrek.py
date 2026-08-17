@@ -2267,7 +2267,8 @@ def election_report():
 @app.route("/set-election", methods=['GET', 'POST'])
 @login_required
 def set_election():
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from state import MAP_LAYERS
+    from layers import ExtendedFeatureGroup
     from state import Treepolys, ensure_treepolys_with_index
     from flask import session
 
@@ -2442,7 +2443,8 @@ def get_constants():
 @app.route("/set-constant", methods=["POST"])
 @login_required
 def set_constant():
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from state import MAP_LAYERS
+    from layers import ExtendedFeatureGroup
     from state import Treepolys
     from elections import CurrentElection
 
@@ -2970,7 +2972,8 @@ def downbut(path):
     from state import Treepolys
     from flask import session
     from elector import electors
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from layers import ExtendedFeatureGroup
+    from state import MAP_LAYERS
     from elections import CurrentElection
     global layeritems
     global constants
@@ -3132,7 +3135,8 @@ def transfer(path):
     from state import Treepolys
     from flask import session
     from elector import electors
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from layers import ExtendedFeatureGroup
+    from state import MAP_LAYERS
     from elections import CurrentElection
     global layeritems
     global constants
@@ -3163,10 +3167,10 @@ def transfer(path):
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
 @login_required
 def downMWbut(path):
-    from state import Treepolys
+    from state import Treepolys, ensure_treepolys_with_index, MAP_LAYERS
     from flask import session
     from elector import electors
-    from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+    from layers import ExtendedFeatureGroup
     from elections import CurrentElection
     global layeritems
     global constants
@@ -3195,6 +3199,18 @@ def downMWbut(path):
     print (f"_________ROUTE/downMWbut CE {current_election} from: {previous_node.value} to {current_node.value} mapfile: {current_node.mapfile()}")
     flash ("_________ROUTE/downMWbut ")
 
+    plevels = CElection.parent_levels
+    territory = CElection['territory']
+    breadcrumb = current_node.mapfile()
+
+    # 3. Index & Boundary sync
+    filepath, state.Geo_index = ensure_treepolys_with_index(
+        territory=territory,
+        sourcepath=breadcrumb,
+        here=None,
+        resolved_levels=rlevels,
+        parent_levels=plevels
+    )
     if current_node.level > 4 and len(areaelectors)  == 0:
         flash("Can't find any elector data for this Area.")
         print(f"Can't find elector data at {current_node.value} for election {current_election}" )
@@ -3368,10 +3384,10 @@ def STupdate(path):
 
 
 
-@app.route('/PDdownST/<path:path>', methods=['GET','POST'])
+@app.route('/walkdownST/<path:path>', methods=['GET','POST'])
 @login_required
-def PDdownST(path):
-    from state import Treepolys
+def walkdownST(path):
+    from state import Treepolys, ensure_treepolys_with_index
     from flask import session
     from elector import electors
     global environment
@@ -3387,41 +3403,57 @@ def PDdownST(path):
     rlevels = CElection.resolved_levels
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-    areaelectors = electors.elector_for_path(rlevels,path)
     current_node = nodes.MapRoot.ping_node(rlevels,path, create=True, accumulate=session.get("accumulate", False))
 
-    PD_node = current_node
+    walk_node = current_node
 
 # now pointing at the STREETS.html node containing a map of street markers
 
     areaelectors = electors.elector_for_path(rlevels,current_node.mapfile())
-    print(f"__PDdownST- lenPD {len(areaelectors)}")
-    streetnodelist = PD_node.childrenoftype('street')
+    print(f"__walkdownST- lenwalk {len(areaelectors)}")
+    streetnodelist = walk_node.childrenoftype('street')
 
+
+    plevels = CElection.parent_levels
+    territory = CElection['territory']
+    breadcrumb = current_node.mapfile()
+
+    print(f"🔍 [walkdownST] current_node.value = '{current_node.value}' | current_node.level = {current_node.level}")
+    print(f"🔍 [walkdownST] breadcrumb = '{breadcrumb}'")
+    print(f"🔍 [walkdownST] streetnodelist count = {len(streetnodelist)}")
+
+    # 3. Index & Boundary sync
+    filepath, state.Geo_index = ensure_treepolys_with_index(
+        territory=territory,
+        sourcepath=breadcrumb,
+        here=None,
+        resolved_levels=rlevels,
+        parent_levels=plevels
+    )
     if len(areaelectors) == 0 :
-        flash("Can't find any elector data for this Polling District.")
-        print("Can't find any elector data for this Polling District.",len(streetnodelist))
+        flash("Can't find any elector data for this Walk.")
+        print("Can't find any elector data for this Walk.",len(streetnodelist))
         if os.path.exists(current_node.mapfile()):
             os.remove(current_node.mapfile())
     else:
-        flash(f"________in {PD_node.value} there are {len(streetnodelist)} streetnode and markers added")
-        print(f"________in {PD_node.value} there are {len(streetnodelist)} streetnode and markers added")
+        flash(f"________in {walk_node.value} there are {len(streetnodelist)} streetnode and markers added")
+        print(f"________in {walk_node.value} there are {len(streetnodelist)} streetnode and markers added")
 
-    for street_node in streetnodelist:
-        mask3 = areaelectors['StreetName'] == street_node.value
-        streetelectors = areaelectors[mask3]
-        print("____Street node value",street_node.value)
-        print(f"Streetelectors PDelectors {len(areaelectors)} streetnodes{len(streetnodelist)} and data {len(streetelectors)} ")
-        street_node.create_streetsheet(current_election,rlevels,streetelectors)
+#    for street_node in streetnodelist:
+#        mask3 = areaelectors['StreetName'] == street_node.value
+#        streetelectors = areaelectors[mask3]
+#        print("____Street node value",street_node.value)
+#        print(f"Streetelectors Walk electors {len(areaelectors)} streetnodes{len(streetnodelist)} and data {len(streetelectors)} ")
+#        street_node.create_streetsheet(current_election,rlevels,streetelectors)
 
 #           only create a map if the branch does not already exist
 
-    print ("________Heading for the Streets in PD :  ",PD_node.value, PD_node.mapfile())
+    print ("________Heading for the Streets in Walk :  ",filepath, walk_node.mapfile())
 
 
-    print(f"__PDdownST- {current_node.mapfile()}-l4area {current_node.value}, len area {len(areaelectors)}")
+    print(f"__walkdownST- {current_node.mapfile()} - Walk {current_node.value}, len walk {len(areaelectors)}")
 
-    print ("_________ROUTE/PDdownST/",path, request.method)
+    print ("_________ROUTE/walkdownST/",path, request.method)
 
 # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
     if current_node.level > 4 and len(areaelectors)  == 0:
@@ -3435,15 +3467,15 @@ def PDdownST(path):
         created, totalleaf = current_node.endpoint_created(rlevels,current_node.mapfile(),static=False)
         if created:
             if not fullpath.exists():
-                abort(404, f" Route/PDdownST at level {current_node.level} File not found: {fullpath}")
-            print (f"_________ROUTE/PDdownST at {current_node.value} display file created:{fullpath}")
+                abort(404, f" Route/walkdownST at level {current_node.level} File not found: {fullpath}")
+            print (f"_________ROUTE/walkdownST at {current_node.value} display file created:{fullpath}")
 
         if not CElection.visit_node(current_node):
             flash("That street is outside of the election Territory")
             print("That street node is outside of the election Territory:")
         persist(Treepolys)
 
-        print (f"_________ROUTE/PDdownST at sendinf file:{fullpath}")
+        print (f"_________ROUTE/walkdownST at sendinf file:{fullpath}")
         return send_file(fullpath, as_attachment=False)
 
 @app.route('/LGdownST/<path:path>', methods=['GET','POST'])

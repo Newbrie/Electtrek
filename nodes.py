@@ -9,7 +9,8 @@ import geopandas as gpd
 import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context, render_template, current_app
-from layers import FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+from layers import  ExtendedFeatureGroup
+from state import MAP_LAYERS
 import elections
 from folium import Map, Element
 import folium
@@ -330,7 +331,7 @@ def get_layer_table(nodelist,title,elevels):
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/PDdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/walkdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
             elif x.type == 'walk':
                 dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
             else:
@@ -1537,8 +1538,8 @@ class TreeNode:
                         selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
                     )
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
-                case "street" | "walkleg" | "result" | "target" | "data" :
-                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
+                case "street" :
+                    layer.add_linestrings(rlevels, nodes_to_render[0].parent.parent, nodes_to_render, static, counters=counters)
 
 
                              # ⚠️ Catch-All Fallback Engine
@@ -2114,8 +2115,8 @@ class TreeNode:
         global SERVER_PASSWORD
 
         from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
-        from state import LEVEL_ZOOM_MAP, Treepolys
-        from layers import make_counters, FEATURE_LAYER_SPECS, ExtendedFeatureGroup
+        from state import LEVEL_ZOOM_MAP, Treepolys, MAP_LAYERS
+        from layers import make_counters, ExtendedFeatureGroup
 
         import hashlib
         import re

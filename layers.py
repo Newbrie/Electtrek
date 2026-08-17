@@ -6,6 +6,7 @@ from folium import GeoJson, Tooltip, Popup
 from shapely.geometry import Point, Polygon, MultiPoint
 from shapely import crosses, contains,covers, union, envelope, intersection
 from shapely.ops import nearest_points
+from shapely import count_coordinates
 from geovoronoi import voronoi_regions_from_coords
 import numpy as np
 import folium
@@ -17,12 +18,35 @@ import html
 import pandas as pd
 import re
 import math
-
 import colorsys
+import state
 from matplotlib.colors import to_hex, to_rgb
 
 
 
+def normalize_osm_name(val):
+    """
+    Safely normalizes a string or list of strings from OSM's 'name' column.
+    Converts underscores to spaces and uses state.normalname for consistent formatting.
+    """
+    if pd.isna(val) or val is None:
+        return ""
+
+    # Handle cases where OSM returns a list of street names for a single segment
+    if isinstance(val, list):
+        return [state.normalname(str(item).replace('_', ' ')) for item in val]
+
+    return state.normalname(str(val).replace('_', ' '))
+
+
+def matches_target_street(osm_name, target_norm):
+    """
+    Checks if target normalized name matches a single string or any item in an OSM name list.
+    """
+    norm_val = normalize_osm_name(osm_name)
+    if isinstance(norm_val, list):
+        return target_norm in norm_val
+    return norm_val == target_norm
 
 
 def Hconcat(house_list):
@@ -564,6 +588,153 @@ def get_children_within(parent_geom, children_gdf, threshold=0.5):
     return children_gdf.loc[selected_idx].copy()
 
 
+
+import numpy as np
+from scipy.spatial import KDTree
+# Ensure project_to_bng and project_to_wgs84 are imported if located in another module
+
+def snap_houses_to_uprns(children, kdtree=None, coords=None, uprn_ids=None, max_distance_meters=25.0):
+    """
+    Strategy B Implementation:
+    1. Unpacks spatial index inputs (kdtree, coords, uprn_ids) or handles dictionary payloads.
+    2. Extracts known anchor nodes from children (e.g., nodes with explicit house numbers & coords).
+    3. Interpolates candidate metrics along the trajectory.
+    4. Uses KDTree to snap estimated positions to nearest unallocated UPRN point.
+
+    :param children: List of child nodes representing properties/houses.
+    :param kdtree: Pre-built cKDTree instance (or dict payload from legacy calls).
+    :param coords: NumPy array or list of [lat, lon] coordinates matching KDTree indices.
+    :param uprn_ids: List of UPRN string identifiers corresponding to coords.
+    :param max_distance_meters: Dynamic distance buffer for snapping threshold.
+    :return: Dict of {child_node_id: [lat, lon]}
+    """
+    mapped_coords = {}
+
+    # Handle legacy dictionary invocation: snap_houses_to_uprns(children, street_uprn_coords)
+    if isinstance(kdtree, dict) and coords is None:
+        street_uprn_coords = kdtree
+        uprn_ids = list(street_uprn_coords.keys())
+        coords = [street_uprn_coords[uid] for uid in uprn_ids]
+        kdtree = None  # Will rebuild BNG KDTree below
+
+    # Guard: Return original latlongroids if no spatial data is available
+    if (kdtree is None and (coords is None or len(coords) == 0)) or not children:
+        for c in children:
+            if hasattr(c, "latlongroid") and c.latlongroid:
+                mapped_coords[c.value] = [float(c.latlongroid[0]), float(c.latlongroid[1])]
+        return mapped_coords
+
+    # Extract coordinates array if passed as list
+    if coords is not None and not isinstance(coords, np.ndarray):
+        coords = np.array(coords)
+
+    # Convert UPRN coordinates to British National Grid (BNG) meters for isotropic calculations
+    uprn_bng = []
+    for lat, lon in coords:
+        x, y = project_to_bng(float(lon), float(lat))
+        uprn_bng.append([x, y])
+
+    uprn_bng = np.array(uprn_bng)
+    tree = KDTree(uprn_bng)
+
+    # Extract anchors (children with valid numerical tags & non-zero latlongroid)
+    anchors = {}
+    for c in children:
+        try:
+            num = int(c.tagno)
+            lat, lon = float(c.latlongroid[0]), float(c.latlongroid[1])
+            if lat != 0.0 and lon != 0.0:
+                x, y = project_to_bng(lon, lat)
+                anchors[num] = (x, y)
+        except (ValueError, TypeError, AttributeError):
+            continue
+
+    used_uprn_indices = set()
+    num_uprns = len(coords)
+
+    # Case 1: We have at least 2 anchors -> Calculate dynamic vector step
+    if len(anchors) >= 2:
+        sorted_anchor_nums = sorted(anchors.keys())
+        n1, n2 = sorted_anchor_nums[0], sorted_anchor_nums[-1]
+        p1 = np.array(anchors[n1])
+        p2 = np.array(anchors[n2])
+
+        unit_step = (p2 - p1) / (n2 - n1) if n2 != n1 else np.array([5.0, 0.0])
+
+        for c in children:
+            try:
+                num = int(c.tagno)
+                estimated_bng = p1 + unit_step * (num - n1)
+            except (ValueError, TypeError, AttributeError):
+                # Fallback to centroid if tagno isn't an integer
+                try:
+                    x, y = project_to_bng(float(c.latlongroid[1]), float(c.latlongroid[0]))
+                    estimated_bng = np.array([x, y])
+                except (ValueError, TypeError, AttributeError, IndexError):
+                    continue
+
+            # Query nearest UPRNs from BNG KDTree
+            k_query = min(num_uprns, 10)  # Search up to 10 nearest neighbors
+            distances, indices = tree.query(estimated_bng, k=k_query)
+
+            if isinstance(indices, (int, np.integer)):
+                indices = [indices]
+                distances = [distances]
+
+            # Pick closest unallocated UPRN within maximum distance buffer
+            snapped_idx = None
+            for dist, idx in zip(distances, indices):
+                if idx not in used_uprn_indices and dist <= max_distance_meters:
+                    snapped_idx = idx
+                    used_uprn_indices.add(idx)
+                    break
+
+            if snapped_idx is not None:
+                snapped_bng = uprn_bng[snapped_idx]
+                lon, lat = project_to_wgs84(snapped_bng[0], snapped_bng[1])
+                mapped_coords[c.value] = [lat, lon]
+
+                # Attach metadata to child node
+                if uprn_ids is not None and snapped_idx < len(uprn_ids):
+                    c.snapped_uprn = uprn_ids[snapped_idx]
+                c.snapped_by = "Strategy_B_VectorInterpolation"
+            else:
+                mapped_coords[c.value] = [float(c.latlongroid[0]), float(c.latlongroid[1])]
+
+    # Case 2: Fallback when < 2 anchors are available -> Simple Nearest Neighbor from centroid
+    else:
+        for c in children:
+            try:
+                cx, cy = project_to_bng(float(c.latlongroid[1]), float(c.latlongroid[0]))
+            except (ValueError, TypeError, AttributeError, IndexError):
+                continue
+
+            k_query = min(num_uprns, 10)
+            distances, indices = tree.query([cx, cy], k=k_query)
+
+            if isinstance(indices, (int, np.integer)):
+                indices = [indices]
+                distances = [distances]
+
+            snapped = False
+            for dist, idx in zip(distances, indices):
+                if idx not in used_uprn_indices and dist <= max_distance_meters:
+                    used_uprn_indices.add(idx)
+                    snapped_bng = uprn_bng[idx]
+                    lon, lat = project_to_wgs84(snapped_bng[0], snapped_bng[1])
+                    mapped_coords[c.value] = [lat, lon]
+
+                    if uprn_ids is not None and idx < len(uprn_ids):
+                        c.snapped_uprn = uprn_ids[idx]
+                    c.snapped_by = "Strategy_B_NearestNeighbor"
+                    snapped = True
+                    break
+
+            if not snapped:
+                mapped_coords[c.value] = [float(c.latlongroid[0]), float(c.latlongroid[1])]
+
+    return mapped_coords
+
 class ExtendedFeatureGroup(FeatureGroup):
     def __init__(self, name=None, overlay=True, control=True, show=True):
         super().__init__(
@@ -910,7 +1081,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                 if not static:
-                    showmessageST = f"showMore('/PDdownST/{child.mapfile()}','{child.value}')"
+                    showmessageST = f"showMore('/walkdownST/{child.mapfile()}','{child.value}')"
                     street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                     nav_html = f"""
                     <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
@@ -1018,6 +1189,497 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"\n🚀 GLOBAL VORONOI SUMMARY: Total map elements rendered across all groups: {grand_total_polygons_added}")
 
+    def add_linestrings(self, rlevels, herenode, nodes_list, static, counters):
+        from state import Treepolys, Candidates, LastResults
+        from flask import session, flash
+        import folium
+        global levelcolours
+        global Con_Results_data
+        global OPTIONS
+
+        print("\n" + "=" * 80)
+        print("▶️ ENTERING add_linestrings")
+        print("=" * 80)
+
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # Clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+
+        # 🎯 SELF-AWARE PROPERTIES
+        layer_type = getattr(self, "mytag", "street")
+
+        raw_opts = getattr(self, "options", {}) or {}
+        layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
+        print(f"DEBUG: self class: {self.__class__.__name__}")
+        print(f"DEBUG: self.mytag evaluated to: '{layer_type}'")
+        print(f"DEBUG: herenode details -> value: '{herenode.value}', type: '{herenode.type}', level: {herenode.level}")
+
+        # Read from explicit decouple nodes list
+        childlist = nodes_list
+        allchildlist = herenode.children if herenode else []
+
+        # Safe execution of helper function if exists
+        try:
+            nodeshtml = build_nodemap_list_html(herenode) if herenode else ""
+        except NameError:
+            nodeshtml = ""
+
+        details = [c.value for c in childlist]
+        self.areashtml[herenode.value] = {
+            "code": herenode.value,
+            "details": details,
+            "tooltip_html": nodeshtml,
+        }
+
+        print(f"_________Linestring: at {herenode.value} we have {len(childlist)} features to map of type:{layer_type}")
+
+        if len(childlist) == 0:
+            print(f"❌ WARNING: childlist is EMPTY for type '{layer_type}'. Line processing skipped!")
+
+        # Reset counters of child type so that child tag = this node's childno
+        accumulate = session.get("accumulate", False)
+        if not accumulate:
+            counters[layer_type] = counters.get(layer_type, 0)
+            print(f"DEBUG: Reset counters['{layer_type}'] to 0")
+
+        loop_counter = 0
+        for c in childlist:
+            loop_counter += 1
+            print(f"\n--- Processing Linestring Feature #{loop_counter}: '{getattr(c, 'node_path', c.value)}' (c.fid={c.fid}) ---")
+
+            if layer_type not in Treepolys:
+                print(f"❌ ERROR: '{layer_type}' key missing from state.Treepolys dictionary!")
+                continue
+
+            pfile = Treepolys[layer_type]
+            # 🔍 DEBUG: Check size, index, and columns of the loaded GeoDataFrame
+            print(f"DEBUG [{layer_type}]: DataFrame row count (len): {len(pfile)}")
+            print(f"DEBUG [{layer_type}]: Columns available: {list(pfile.columns)}")
+            print(f"DEBUG [{layer_type}]: Index type/values sample: {list(pfile.index[:5])}")
+
+            if not pfile.empty and len(pfile) > 0:
+                print(f"DEBUG [{layer_type}]: First row preview:\n{pfile.iloc[0]}")
+
+            # ------------------------------------------------------------------
+            # ✅ FID MATCHING USING c.fid
+            # ------------------------------------------------------------------
+            id_col = next((col for col in ["FID", "identifier", "OBJECTID"] if col in pfile.columns), None)
+            target_fid = str(c.fid)
+
+            print(f"DEBUG [{layer_type}]: Querying c.fid='{target_fid}' against id_col='{id_col}'")
+
+            # 1. Direct match check
+            if id_col is not None:
+                mask = pfile[id_col].astype(str) == target_fid
+            else:
+                mask = pfile.index.astype(str) == target_fid
+
+            limbX = pfile[mask].copy()
+
+            # 2. Fallbacks: Off-by-one offsets (e.g. 0-based c.fid vs 1-based GPKG FID) or iloc
+            if len(limbX) == 0 and target_fid.isdigit():
+                target_int = int(target_fid)
+                offset_fid = str(target_int + 1)
+                print(f"DEBUG [{layer_type}]: Direct match 0 rows. Retrying with +1 offset FID='{offset_fid}'")
+
+                if id_col is not None:
+                    mask = pfile[id_col].astype(str) == offset_fid
+                else:
+                    mask = pfile.index.astype(str) == offset_fid
+
+                limbX = pfile[mask].copy()
+
+                # Positional fallback if FID lookup fails
+                if len(limbX) == 0 and 0 <= target_int < len(pfile):
+                    print(f"DEBUG [{layer_type}]: Offset match 0 rows. Falling back to positional iloc[[{target_int}]]")
+                    limbX = pfile.iloc[[target_int]].copy()
+
+            # ------------------------------------------------------------------
+            # FEATURE RENDER & POPUP GENERATION
+            # ------------------------------------------------------------------
+            if len(limbX) > 0:
+                # Deduplicate multiple spatial slices to 1 row
+                if len(limbX) > 1:
+                    print(f"DEBUG [{layer_type}]: Multiple matches ({len(limbX)}) found for c.fid '{target_fid}'. Slicing first row.")
+                    limbX = limbX.iloc[[0]].copy()
+
+                target_idx = limbX.index[0]
+                font_style = "style='font-size: 12pt;'"
+                c_path = f"{c.mapfile()}"
+                here_path = f"{herenode.mapfile()}"
+                c_val = c.value
+                here_val = herenode.value
+
+                # LEVEL ROUTING RULES (Street & Walkleg Buttons)
+                up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
+                up_tag = f"<button type='button' id='btn_up_l6' onclick=\"{up_js}\" {font_style}>UP</button>"
+
+                if layer_type == "street":
+                    walkleg_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+                    elector_js = f"moveDown('/electorreport/{c_path}', '{c_val}')"
+                    leg_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{walkleg_js}\">Walk legs</button>"
+                    elec_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{elector_js}\">Electors</button>"
+                    limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}<br>{leg_btn} {elec_btn}" if not static else f"<br>{c_val}<br>"
+                    mapfile = f"/transfer/{c.mapfile()}"
+
+                elif layer_type == "walkleg":
+                    elector_js = f"moveDown('/electorreport/{c_path}', '{c_val}')"
+                    elec_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{elector_js}\">Electors</button>"
+                    limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}<br>{elec_btn}" if not static else f"<br>{c_val}<br>"
+                    mapfile = f"/transfer/{c.mapfile()}"
+
+                else:
+                    limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}" if not static else f"<br>{c_val}<br>"
+                    mapfile = f"/transfer/{c.mapfile()}"
+
+                counters[c.type] = counters.get(c.type, 0) + 1
+                num = str(counters[c.type])
+                tag = str(c.value)
+
+                # Position marker using centroid coordinate
+                here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
+
+                tcol_node = layer_style.get("fontColor", "#2563EB")
+                fcol_node = layer_style.get("fillColor", "#3B82F6")
+
+                marker_link = mapfile if not static else ""
+                htmlhalo = f"""
+                <a href="{marker_link}" data-name="{tag}">
+                  <div style="color: {tcol_node}; font-size: 8pt; font-weight: bold; text-align: center; padding: 2px; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;">
+                    <span style="background: {fcol_node}; color: #ffffff; padding: 1px 4px; border-radius: 4px; border: 1.5px solid black;">{num}</span>
+                    {tag}
+                  </div>
+                </a>
+                """.strip()
+
+                html_popup_content = str(limbX.at[target_idx, "UPDOWN"])
+                click_popup = folium.Popup(html_popup_content, max_width=300)
+
+                # Render LineString GeoJSON
+                folium.GeoJson(
+                    limbX,
+                    style_function=lambda feature: {
+                        "color": layer_style.get("color", "#2563EB"),
+                        "weight": layer_style.get("weight", 4.0),
+                        "opacity": layer_style.get("opacity", 0.85),
+                        "fill": False,
+                        "dashArray": layer_style.get("dashArray", "0"),
+                    },
+                    highlight_function=lambda feature: {
+                        "weight": layer_style.get("weight", 4.0) + 3,
+                        "color": layer_style.get("highlightColor", "#1D4ED8"),
+                        "opacity": 1.0,
+                    },
+                    tooltip=folium.Tooltip(htmlhalo),
+                    popup=click_popup,
+                ).add_to(self)
+
+                self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalo)))
+            else:
+                print(f"❌ WARNING: limbX contains 0 matching linestring rows for c.fid '{c.fid}'")
+
+        print(f"\n🏁 LEAVING add_linestrings. Processed {loop_counter} linestrings.")
+        print("=" * 80 + "\n")
+        return self._children
+
+
+    def lookup_linestrings(self, rlevels, parent_node, nodes_list, static=False):
+        import hashlib
+        from collections import defaultdict
+
+        import folium
+        import osmnx as ox
+
+        from shapely import count_coordinates
+        from shapely.geometry import LineString, MultiLineString
+        from state import Treepolys, stepify, pathify
+        from elector import electors
+        from layers import preprocess_streets
+        from elections import CurrentElection
+
+        # Guard: Ensure single election context
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        if not nodes_list:
+            print("⚠️ No sub-units provided in nodes_list for LineString calculation.")
+            return
+
+        # Unpack current election context
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+        CE = CurrentElection.load(c_election)
+        task_tags, outcome_tags, all_tags = CE.get_tags()
+
+        # Helper: Enhanced street name matcher handling tokens & variations
+        def matches_target_street(osm_name, target_norm, raw_target):
+            if not osm_name:
+                return False
+
+            names_to_check = osm_name if isinstance(osm_name, list) else [osm_name]
+            clean_target = raw_target.replace('_', ' ').strip().upper()
+            target_tokens = set(clean_target.split())
+
+            for name in names_to_check:
+                clean_osm = str(name).replace('_', ' ').strip().upper()
+                norm_osm = state.normalname(clean_osm)
+
+                # 1. Exact normalized or raw string match
+                if clean_osm == clean_target or norm_osm == target_norm:
+                    return True
+
+                # 2. Substring matching
+                if clean_target in clean_osm or clean_osm in clean_target:
+                    return True
+
+                # 3. Token set matching (e.g. "RAILWAY COTTAGES" in "1-4 RAILWAY COTTAGES")
+                osm_tokens = set(clean_osm.split())
+                if len(target_tokens) > 1 and target_tokens.issubset(osm_tokens):
+                    return True
+
+            return False
+
+        # -------------------------------------------------
+        # 📦 STEP 1: Group street nodes by parent container
+        # -------------------------------------------------
+        grouped_by_parent = defaultdict(list)
+        parent_registry = {}
+
+        for child in nodes_list:
+            if not child.parent:
+                print(f"⚠️ Skipping node {child.value}; it lacks a parent relation.")
+                continue
+
+            parent_key = (child.parent.type, child.parent.value, child.parent.fid)
+            grouped_by_parent[parent_key].append(child)
+            if parent_key not in parent_registry:
+                parent_registry[parent_key] = child.parent
+
+        grand_total_linestrings_added = 0
+
+        # -------------------------------------------------
+        # 🔁 STEP 2: Process each street group
+        # -------------------------------------------------
+        for parent_key, sub_nodes in grouped_by_parent.items():
+            grp_parent_node = parent_registry[parent_key]
+            p_type, p_value, p_fid = parent_key
+
+            print(f"\n--- Fetching OSM LineStrings for Group Parent: {p_value} ({p_type}) | Streets: {len(sub_nodes)} ---")
+
+            total_electorate = 0
+            total_houses = 0
+
+            # Retrieve Ward Geometry accurately using parent references
+            sample_child = sub_nodes[0]
+            ward_node = sample_child.parent.parent if (sample_child.parent and sample_child.parent.parent) else grp_parent_node
+            ward_fid = ward_node.fid if ward_node and hasattr(ward_node, 'fid') else None
+            ward_polygon = Treepolys['ward'].get(ward_fid) if (Treepolys and 'ward' in Treepolys and ward_fid is not None) else None
+
+            # Fetch all highway geometries in the Ward bounding polygon via OSMnx features API
+            gdf_ward_highways = None
+            if ward_polygon is not None and not ward_polygon.is_empty:
+                try:
+                    print(f"🌐 Querying OSM highway features via Ward Polygon (FID: {ward_fid})...")
+                    gdf_ward_highways = ox.features_from_polygon(ward_polygon, tags={"highway": True})
+                    if not gdf_ward_highways.empty:
+                        gdf_ward_highways = gdf_ward_highways[
+                            gdf_ward_highways.geometry.type.isin(['LineString', 'MultiLineString'])
+                        ]
+                        # 🔍 DEBUG PRINT 1: Check what OSM streets were returned in the Ward
+                        if 'name' in gdf_ward_highways.columns:
+                            osm_names = gdf_ward_highways['name'].dropna().unique().tolist()
+                            print(f"  [DEBUG OSM Polygon] Found {len(gdf_ward_highways)} lines. Sample OSM names in Ward: {osm_names[:15]}")
+                        else:
+                            print("  [DEBUG OSM Polygon] Highways returned but NO 'name' column present in GeoDataFrame.")
+                    else:
+                        print("  [DEBUG OSM Polygon] Query succeeded but returned 0 highway features.")
+                except Exception as e:
+                    print(f"⚠️ OSM highway query failed for Ward FID {ward_fid}: {e}")
+            else:
+                print(f"  [DEBUG OSM Polygon] Ward polygon for FID {ward_fid} is None or Empty!")
+
+            # -------------------------------------------------
+            # 🚗 STEP 3: Match & Retrieve individual street geometries
+            # -------------------------------------------------
+            for child in sub_nodes:
+                elector_path = pathify(stepify(child.mapfile()))
+
+                raw_street_name = str(child.value).strip() if child.type == 'street' else str(child.parent.value).strip() if child.parent else str(child.value).strip()
+
+                # Clean and normalize target street name
+                clean_street_str = raw_street_name.replace('_', ' ')
+                target_norm = state.normalname(clean_street_str)
+
+                # Dynamic hierarchy parsing
+                pd_node = child.parent if child.type == 'street' else (child.parent.parent if child.parent else None)
+                ward_node = pd_node.parent if pd_node else None
+                constituency_node = ward_node.parent if ward_node else None
+
+                pd_raw = str(pd_node.value) if pd_node else ""
+                polling_district = pd_raw.split('_')[0].strip() if '_' in pd_raw else pd_raw
+                ward_name = str(ward_node.value) if ward_node else ""
+                constituency_name = str(constituency_node.value) if constituency_node else ""
+
+                # Load electors
+                street_electors = electors.elector_for_path(rlevels, elector_path)
+                street_stats, house_count = preprocess_streets(street_electors, task_tags)
+
+                child.electorate = len(street_electors)
+                child.houses = house_count
+                total_electorate += len(street_electors)
+                total_houses += house_count
+
+                street_geom = None
+
+                # Strategy A: Filter Ward highways GeoDataFrame by street name match
+                if gdf_ward_highways is not None and not gdf_ward_highways.empty and 'name' in gdf_ward_highways.columns:
+                    matched = gdf_ward_highways[
+                        gdf_ward_highways['name'].apply(lambda val: matches_target_street(val, target_norm, raw_street_name))
+                    ]
+                    if not matched.empty:
+                        street_geom = matched.geometry.union_all()
+
+                # Strategy B: Centroid point radius search fallback if polygon lookup failed to find street
+                if (street_geom is None or street_geom.is_empty) and hasattr(child, 'latlongroid') and child.latlongroid:
+                    try:
+                        lat, lon = child.latlongroid[0], child.latlongroid[1]
+                        gdf_dist = ox.features_from_point((lat, lon), tags={"highway": True}, dist=500)
+                        if not gdf_dist.empty and 'name' in gdf_dist.columns:
+                            lines = gdf_dist[gdf_dist.geometry.type.isin(['LineString', 'MultiLineString'])]
+                            matched = lines[lines['name'].apply(lambda val: matches_target_street(val, target_norm, raw_street_name))]
+                            if not matched.empty:
+                                street_geom = matched.geometry.union_all()
+                    except Exception as e:
+                        pass
+
+                # Strategy C: Centroid Stub Fallback if all OSM queries return no geometry match
+                if (street_geom is None or street_geom.is_empty) and hasattr(child, 'latlongroid') and child.latlongroid and len(child.latlongroid) == 2:
+                    lat, lon = child.latlongroid[0], child.latlongroid[1]
+                    street_geom = LineString([(lon - 0.0005, lat), (lon + 0.0005, lat)])
+                    print(f"⚠️ Created stub fallback line for {raw_street_name}")
+
+                if street_geom is None or street_geom.is_empty:
+                    print(f"❌ Failed to retrieve OSM LineString for street: {raw_street_name}")
+                    continue
+
+                point_count = count_coordinates(street_geom)
+                print(f"Street: {raw_street_name} | Geometry points found: {point_count}")
+
+                # -------------------------------------------------
+                # 🎨 STEP 4: Color Styling & Navigation Links
+                # -------------------------------------------------
+                pd_code = polling_district.upper()
+                if not hasattr(self, '_pd_color_cache'):
+                    self._pd_color_cache = {}
+
+                if pd_code not in self._pd_color_cache:
+                    hash_bytes = hashlib.md5(pd_code.encode('utf-8')).digest()
+                    r = (hash_bytes[0] % 180) + 50
+                    g = (hash_bytes[1] % 180) + 50
+                    b = (hash_bytes[2] % 180) + 50
+                    self._pd_color_cache[pd_code] = f"#{r:02x}{g:02x}{b:02x}"
+
+                line_color = self._pd_color_cache[pd_code]
+
+                has_parent = child.parent is not None
+                parent_mapfile = child.parent.mapfile() if has_parent else grp_parent_node.mapfile()
+                parent_val = child.parent.value if has_parent else grp_parent_node.value
+
+                upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_val}')"
+                up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
+
+                if not static:
+                    showmessageST = f"showMore('/walkdownST/{child.mapfile()}','{child.value}')"
+                    street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
+                    nav_html = f"""
+                    <div style="margin-bottom:8px; padding-left:10px; line-height:1.6;">
+                    {street_link}<br>
+                    {up_link}
+                    </div>
+                    """
+                else:
+                    nav_html = f"""
+                    <div style="margin-bottom:8px; padding-left:10px; line-height:1.6;">
+                    {up_link}
+                    </div>
+                    """
+
+                # -------------------------------------------------
+                # 💬 STEP 5: Construct Popup & Tooltip HTML
+                # -------------------------------------------------
+                popup_html = f"""
+                <div style="font-family: sans-serif; font-size: 13px; min-width: 180px;">
+                    <h4 style="margin: 0 0 6px 0; color: #2c3e50;">{raw_street_name}</h4>
+                    {nav_html}
+                    <hr style="border: none; border-top: 1px solid #ccc; margin: 8px 0;">
+                    <b>Houses:</b> {house_count}<br>
+                    <b>Electors:</b> {len(street_electors)}<br>
+                    <b>Polling District:</b> {polling_district}<br>
+                    <b>Ward:</b> {ward_name}<br>
+                    <b>Constituency:</b> {constituency_name}
+                </div>
+                """
+
+                tooltip_html = f"""
+                <b>Street:</b> {raw_street_name}<br>
+                <b>Houses:</b> {house_count}<br>
+                <b>Electors:</b> {len(street_electors)}<br>
+                <b>PD:</b> {polling_district}
+                """
+
+                style = {
+                    "color": line_color,
+                    "weight": 4,
+                    "opacity": 0.85,
+                }
+
+                # -------------------------------------------------
+                # 🗺️ STEP 6: Add GeoJSON Feature to Folium
+                # -------------------------------------------------
+                try:
+                    geojson_feature = {
+                        "type": "Feature",
+                        "geometry": street_geom.__geo_interface__,
+                        "properties": {
+                            'nid': child.nid,
+                            'street_name': raw_street_name,
+                            'houses': house_count,
+                            'electors': len(street_electors),
+                            'polling_district': polling_district,
+                            'ward': ward_name,
+                            'constituency': constituency_name
+                        }
+                    }
+
+                    gj = folium.GeoJson(
+                        geojson_feature,
+                        style_function=lambda x, s=style: s,
+                        tooltip=folium.Tooltip(
+                            tooltip_html,
+                            sticky=False,
+                            direction="bottom",
+                            offset=(0, 10),
+                            style="background-color: white; color: #333; font-family: sans-serif; border-radius: 4px; padding: 6px; border: 1px solid #ccc;"
+                        )
+                    )
+
+                    folium.Popup(popup_html, max_width=300).add_to(gj)
+                    gj.add_to(self)
+                    grand_total_linestrings_added += 1
+
+                except Exception as e:
+                    print(f"DEBUG ERROR: Failed adding OSM LineString feature for street {child.value} -> {e}")
+
+            # Assign calculated totals back to group parent node
+            grp_parent_node.electorate = total_electorate
+            grp_parent_node.houses = total_houses
+
+        print(f"\n🚀 OSM LINESTRING SUMMARY: Retrieved and added {grand_total_linestrings_added} dynamic street features directly to the map layer.")
+
+
+
     def add_shapenodes (self,rlevels,herenode,stype):
         global allelectors
 # add a convex hull for all zonal children nodes , using all street centroids contained in each zone
@@ -1111,7 +1773,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         limbX['col'] = herenode.col
 
         if type == 'polling_district':
-            showmessageST = "showMore(&#39;/PDdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
+            showmessageST = "showMore(&#39;/walkdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
             upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value)
 #            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
             downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageST,"STREETS",12)
@@ -1593,6 +2255,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         print("="*80 + "\n")
         return self._children
 
+
     def add_nodemarks(self, rlevels, herenode, static, intention_type):
         global levelcolours
 
@@ -1750,83 +2413,130 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self._children
 
 
+    def add_houses(self, rlevels, herenode, static, intention_type):
+        global levelcolours
+        from state import Treepolys
+
+        # Guard: Ensure we have exactly one election to unpack
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+        print(f"DEBUG: Unpacked election: {c_election}")
+
+        # 🎯 SELF-AWARE PROPERTY STRIPPING
+        raw_opts = getattr(self, "options", {}) or {}
+        layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
+
+        childlist = herenode.childrenoftype(intention_type)
+        nodeshtml = build_nodemap_list_html(herenode)
+
+        details = [c.value for c in childlist]
+        self.areashtml[herenode.value] = {
+            "code": herenode.value,
+            "details": details,
+            "tooltip_html": nodeshtml
+        }
+        num = len(childlist)
+        print(f"___creating {num} add_houses of type {intention_type} for {herenode.value} at level {herenode.level}")
+
+        children = herenode.childrenoftype(intention_type)
+
+        # ------------------------------------------------------------------
+        # 🎯 STRATEGY B: Fetch dual Treepolys['street'] & Snap via KDTree
+        # ------------------------------------------------------------------
+        # 1. Fetch street layer directly from imported state
+        street_data = Treepolys.get("street")
+
+        # 2. Unpack pre-compiled spatial components from dual dictionary structure
+        if isinstance(street_data, dict):
+            kdtree = street_data.get("index")
+            coords = street_data.get("coords")
+            uprn_ids = street_data.get("ids")
+        else:
+            # Fallback if Treepolys['street'] was loaded solely as a raw GeoDataFrame
+            kdtree, coords, uprn_ids = None, None, None
+
+        # 3. Read dynamic snapping threshold from layer_style or default to 25m
+        buffer_meters = layer_style.get("bufferMeters", 25.0)
+
+        # 4. Execute KDTree spatial query against house children
+        snapped_positions = snap_houses_to_uprns(
+            children=children,
+            kdtree=kdtree,
+            coords=coords,
+            uprn_ids=uprn_ids,
+            max_distance_meters=buffer_meters
+        )
+
+        for i, c in enumerate(children):
+            # Retrieve snapped coordinate or fallback to child centroid
+            here = snapped_positions.get(c.value, [float(c.latlongroid[0]), float(c.latlongroid[1])])
+
+            print('_______MAP Markers')
+
+            numtag = str(c.tagno) + " " + str(c.value)
+            num_str = str(c.tagno)
+            tag = str(c.value)
+            pathref = c.mapfile()
+            mapfile = '/transfer/' + pathref
+
+            print("______Display childrenx:", c.value, c.level, intention_type, c.latlongroid, "-> Snapped:", here)
+
+            # 🎯 layer_style styling
+            bcol = layer_style.get("color", "#991B1B")       # boundary
+            tcol = layer_style.get("fontColor", "#EF4444")   # font colour
+            fcol = layer_style.get("fillColor", "#EF4444")   # area colour
+
+            tcol_node = tcol
+            fcol_node = fcol
+
+            html_content = f'''
+            <a href="{mapfile if not static else ''}" data-name="{tag}">
+              <div style="
+                color: {tcol_node};
+                font-size: 8pt;
+                font-weight: bold;
+                text-align: center;
+                padding: 2px;
+                white-space: nowrap;
+
+                /* 🗺️ Cartographic halo */
+                text-shadow:
+                  -1px -1px 0 #fff,
+                   1px -1px 0 #fff,
+                  -1px  1px 0 #fff,
+                   1px  1px 0 #fff,
+                   0px  0px 3px #fff;
+              ">
+                <span style="
+                  background: {fcol_node};
+                  padding: 1px 2px;
+                  border-radius: 5px;
+                  border: 2px solid black;
+                ">{num_str}</span>
+                {numtag}<br>
+                <span style="
+                    font-size: 6pt;
+                    font-weight: normal;
+                ">
+                </span>
+              </div>
+            </a>
+            '''
+
+            self.add_child(
+                folium.Marker(
+                    location=here,
+                    icon=folium.DivIcon(html=html_content)
+                )
+            )
+
+        print("________Layer map points", herenode.value, herenode.level, len(self._children))
+
+        return self._children
 
 
-# -----------------------------
-# Layer specs (cleaned up)
-# -----------------------------
-FEATURE_LAYER_SPECS = {
-    "marker": dict(name="marker", mytag="marker", overlay=True, control=True, show=False, type="marker"),
-
-    "country": dict(
-        name="country", mytag="country", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F172A", "fontColor": "#0F172A", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
-    ),
-    "nation": dict(
-        name="nation", mytag="nation", overlay=True, control=True, show=False, type="node",
-        options={"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
-    ),
-    "county": dict(
-        name="county", mytag="county", overlay=True, control=True, show=False, type="node",
-        options={"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
-    ),
-    "constituency": dict(
-        name="constituency", mytag="constituency", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0369A1", "fontColor": "#0369A1", "weight": 2.0, "fillColor": "#E0F2FE", "fillOpacity": 0.25}
-    ),
-
-    # 🗳️ LEVEL 4 STRATIFICATION
-    "ward": dict(
-        name="ward",
-        mytag="ward",
-        overlay=True,
-        control=True,
-        show=False,
-        type="node",
-        options={
-            "color": "#2E6FBB",        # Medium blue border
-            "fontColor": "#2E6FBB",
-            "weight": 2.5,
-            "fillColor": "#A9C8F5",    # Pale blue fill
-            "fillOpacity": 0.18,
-            # Solid line
-        },
-    ),
-
-    "division": dict(
-        name="division",
-        mytag="division",
-        overlay=True,
-        control=True,
-        show=False,
-        type="node",
-        options={
-            "color": "#D95F02",        # Dark orange border
-            "fontColor": "#D95F02",
-            "weight": 2.5,
-            "fillColor": "#F6C28B",    # Pale orange fill
-            "fillOpacity": 0.12,
-            "dashArray": "8,5",        # Long dash
-        },
-    ),
-    "walk": dict(
-        name="walk", mytag="walk", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
-    ),
-    "walkleg": dict(
-        name="walkleg", mytag="walkleg", overlay=True, control=True, show=False, type="node",
-        options={"color": "#115E59", "fontColor": "#115E59", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5}
-    ),
-    "street": dict(
-        name="street", mytag="street", overlay=True, control=True, show=False, type="node",
-        options={"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.5, "fillColor": "#FBCFE8", "fillOpacity": 0.5}
-    ),
-
-    "elector": dict(name="elector", mytag="elector", overlay=True, control=True, show=False, type="marker"),
-    "result": dict(name="result", mytag="result", overlay=True, control=True, show=False, type="marker"),
-    "target": dict(name="target", mytag="target", overlay=True, control=True, show=False, type="marker"),
-    "data": dict(name="data", mytag="data", overlay=True, control=True, show=False, type="marker"),
-}
 
 # -----------------------------
 # Factory: make fresh layers per map
@@ -1834,31 +2544,31 @@ FEATURE_LAYER_SPECS = {
 def make_feature_layers():
     """
     Returns a fresh dict of ExtendedFeatureGroup instances for a single map.
-    Each layer has Python-only metadata: .key, .mytag, and .layer_type.
+    Derived dynamically from the unified MAP_LAYERS config dictionary.
+    Each layer has Python-only metadata: .key, .mytag, .layer_type, .level, and .options.
     """
-    # Grab global options context if it exists
     global OPTIONS
     global_options = globals().get("OPTIONS", {})
 
     layers = {}
-    for key, spec in FEATURE_LAYER_SPECS.items():
-        # 1. Initialize with standard, safe folium kwargs
+    for key, spec in state.MAP_LAYERS.items():
+        # 1. Initialize ExtendedFeatureGroup with standard Folium kwargs
         layer = ExtendedFeatureGroup(
-            name=spec["name"],
-            overlay=spec["overlay"],
-            control=spec["control"],
-            show=spec["show"],
+            name=spec.get("name", key),
+            overlay=spec.get("overlay", True),
+            control=spec.get("control", True),
+            show=spec.get("show", False),
         )
 
-        # 2. Assign attributes dynamically on the Python side (Guaranteed safe!)
-        layer.type = spec["type"]
+        # 2. Assign metadata attributes on the Python instance
         layer.key = key
-        layer.mytag = spec["mytag"]
-        layer.layer_type = spec.get("type", "test")
+        layer.mytag = spec.get("mytag", key)
+        layer.type = spec.get("type", "node")
+        layer.layer_type = spec.get("type", "node")
+        layer.level = spec.get("level", None)  # 👈 Exposes hierarchy level (0-7)
 
-        # 🎯 FIX CODE: Look inside the specific layer spec dictionary first,
-        # then drop back to global settings, defaulting to an empty dict.
-        layer.options = spec.get("options", global_options)
+        # 3. Resolve options: Local spec options > Global fallback > Empty dict
+        layer.options = spec.get("options", global_options if global_options else {})
 
         layers[key] = layer
 
@@ -1868,4 +2578,8 @@ def make_feature_layers():
 
 
 def make_counters():
-    return {key: 0 for key in FEATURE_LAYER_SPECS}
+    """
+    Returns a dictionary initialized with zero counts for every layer key
+    defined in MAP_LAYERS.
+    """
+    return {key: 0 for key in state.MAP_LAYERS}

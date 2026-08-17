@@ -9,6 +9,7 @@ from shapely.ops import nearest_points
 
 from shapely.geometry import Polygon
 from shapely.geometry import Point, MultiPoint
+from shapely.geometry.base import BaseGeometry
 
 from collections import defaultdict
 from typing import DefaultDict
@@ -68,7 +69,7 @@ def clean_path_part(part):
         return None
     for suffix in FILE_SUFFIXES:
         if part.endswith(suffix):
-            return part.replace(suffix, "")
+            return None
     return part
 
 def stepify(path_str):
@@ -367,6 +368,167 @@ def filterArea(source, sourcekey, destination, roid=None, name=None, boundary_ge
     return [nodestep, matched, gdf]
 
 
+import numpy as np
+from scipy.spatial import cKDTree
+import geopandas as gpd
+
+def indexSpatialArea(source, field, destination, boundary_geom=None, roid=None):
+    """
+    Slices UPRN points, builds an in-memory cKDTree index, and returns
+    a structured layer dict for Treepolys['street'].
+    """
+    bounds = None
+    if boundary_geom is not None:
+        geom_gdf = boundary_geom if isinstance(boundary_geom, (gpd.GeoSeries, gpd.GeoDataFrame)) else gpd.GeoDataFrame(geometry=[boundary_geom], crs="EPSG:4326")
+        bounds = geom_gdf.to_crs(epsg=27700).total_bounds
+
+    # 1. Read slice from GPKG
+    uprn_gdf = gpd.read_file(source, bbox=bounds)
+
+    if uprn_gdf.crs and uprn_gdf.crs.to_epsg() != 4326:
+        uprn_gdf = uprn_gdf.to_crs(epsg=4326)
+
+    # 2. Export GeoJSON to disk for pipeline compatibility
+    uprn_gdf.to_file(destination, driver="GeoJSON")
+
+    # 3. Extract coordinate matrix (Lat, Lon) for KDTree
+    coords = np.column_stack((uprn_gdf.geometry.y, uprn_gdf.geometry.x))
+
+    # 4. Return structured dictionary containing BOTH vector layer and spatial index
+    return {
+        "gdf": uprn_gdf,
+        "index": cKDTree(coords) if len(coords) > 0 else None,
+        "coords": coords,
+        "ids": uprn_gdf[field].values if field in uprn_gdf else np.array([])
+    }
+
+
+from pyogrio import read_dataframe
+
+from pyogrio import read_dataframe, read_info
+from shapely.geometry.base import BaseGeometry
+
+def linestringArea(source, field, destination, boundary_geom=None, roid=None, select_name=None):
+    """
+    Slices pre-downloaded local street LineStrings by spatial bounding box / intersection
+    and optional street name matching.
+    Returns: [selected_name, matched_gdf, full_gdf]
+    """
+    print("\n" + "="*80)
+    print(f"▶️ ENTERING linestringArea for source: {source}")
+    print("="*80)
+
+    # 1. Inspect Boundary Geometry
+    working_geom = None
+    if boundary_geom is not None:
+        working_geom = boundary_geom if isinstance(boundary_geom, BaseGeometry) else get_centroid_or_point(boundary_geom)
+
+    if working_geom is not None:
+        print(f"DEBUG [linestringArea]: working_geom type={type(working_geom)}, is_empty={working_geom.is_empty}, bounds={working_geom.bounds}")
+    else:
+        print("DEBUG [linestringArea]: working_geom is None")
+
+    # 2. Inspect File Metadata (Lightweight check for driver and FID support)
+    info = read_info(source)
+    print("=== FILE INFO ===")
+    print(f"Driver: {info['driver']}")
+    print(f"Feature Count: {info['features']}")
+    print(f"FID Column Name in Source: {info.get('fid_column')}")
+
+    # 3. Read GeoPackage using spatial bbox if available, defaulting to full read
+    bbox = working_geom.bounds if (working_geom is not None and not working_geom.is_empty) else None
+
+    if bbox:
+        print(f"DEBUG [linestringArea]: Attempting pyogrio read with bbox={bbox}")
+        try:
+            gdf_raw = read_dataframe(source, bbox=bbox, fid_as_index=True)
+            print(f"DEBUG [linestringArea]: pyogrio bbox read returned {len(gdf_raw)} rows")
+        except Exception as e:
+            print(f"DEBUG [linestringArea]: pyogrio bbox read failed with error ({e}), falling back to full read...")
+            gdf_raw = read_dataframe(source, fid_as_index=True)
+    else:
+        print(f"DEBUG [linestringArea]: Reading raw source without bbox filter...")
+        gdf_raw = read_dataframe(source, fid_as_index=True)
+
+    print(f"DEBUG [linestringArea]: Raw file read count={len(gdf_raw)}, CRS={gdf_raw.crs}")
+
+    # Standardize CRS to WGS84
+    gdf = ensure_4326(gdf_raw)
+
+    # Preserve / Promote OGR FID from DataFrame index
+    if 'FID' not in gdf.columns:
+        gdf['FID'] = gdf.index.astype(str)
+    else:
+        gdf['FID'] = gdf['FID'].astype(str)
+
+    # Standardize column naming
+    if field in gdf.columns:
+        gdf = gdf.rename(columns={field: 'NAME'})
+    elif 'NAME' not in gdf.columns:
+        gdf['NAME'] = "Unnamed Street"
+
+    # Filter LineStrings
+    geom_types = gdf.geometry.type.unique() if not gdf.empty else []
+    print(f"DEBUG [linestringArea]: Unique geometry types found: {geom_types}")
+
+    gdf = gdf[gdf.geometry.type.isin(['LineString', 'MultiLineString'])].copy()
+    print(f"DEBUG [linestringArea]: Count after LineString filter={len(gdf)}")
+
+    # 4. Spatial Intersection Step
+    if working_geom is not None and not working_geom.is_empty and not gdf.empty:
+        print(f"DEBUG [linestringArea]: Running spatial index intersection...")
+        # sindex returns integer row positions for iloc
+        possible_pos = list(gdf.sindex.intersection(working_geom.bounds))
+        matched = gdf.iloc[possible_pos].copy()
+
+        exact_intersects = matched.geometry.intersects(working_geom)
+        matched = matched[exact_intersects].copy()
+        print(f"DEBUG [linestringArea]: Count after matched.intersects()={len(matched)}")
+    else:
+        print("DEBUG [linestringArea]: Skipping spatial clip (working_geom is None or gdf is empty)")
+        matched = gdf.copy()
+
+    # 5. Target street name filtering
+    nodestep = None
+    if select_name is not None and not matched.empty:
+        target_norm = normalname(select_name)
+        print(f"DEBUG [linestringArea]: Filtering by select_name='{select_name}' (norm='{target_norm}')")
+        name_matched = matched[matched['NAME'].astype(str).apply(normalname) == target_norm]
+        if not name_matched.empty:
+            matched = name_matched
+            nodestep = target_norm
+
+    if nodestep is None and not matched.empty:
+        nodestep = normalname(str(matched['NAME'].iloc[0]))
+
+    print(f"DEBUG [linestringArea]: Final matched count to be saved={len(matched)}")
+
+    # 6. Save sliced subset
+    matched.to_file(destination, driver="GeoJSON")
+    print(f"🏁 LEAVING linestringArea. Saved {len(matched)} linestrings to {destination}")
+    print("="*80 + "\n")
+
+    return [nodestep, matched, gdf]
+
+import logging
+
+import osmnx as ox
+
+# Ensure OSMnx caching is enabled for performance
+ox.settings.use_cache = True
+ox.settings.log_console = False
+
+import logging
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry.base import BaseGeometry
+import osmnx as ox
+
+# Ensure OSMnx caching is enabled for performance
+ox.settings.use_cache = True
+ox.settings.log_console = False
+
+
 def intersectingArea(
     source, sourcekey, parent_levels, child_level, intention_type, destination,
     parent_row, *, select_child_name=None, roid=None, boundary_geom=None
@@ -468,17 +630,72 @@ def select_parent_geoms(*, Treepolys, parent_key, sourcepath=None, here=None):
 
 def load_layer(
     *, layer, level, intention_type, parent_levels, parent_row,
-    select_name=None, roid=None, boundary_geom=None
+    select_name=None, roid=None, boundary_geom=None, **kwargs
 ):
+    """
+    Dynamically routes layer loading to the appropriate spatial operation method:
+    1. Direct Attribute/Name Filtering (Level 0 - 2) -> filterArea
+    2. Point-Based Spatial Index Slicing (Level 4 UPRNs) -> indexSpatialArea
+    3. LineString Geometry Slicing (Level 6 Streets) -> linestringArea
+    4. Polygon Overlap/Intersection (Level 3 - 4 Boundaries) -> intersectingArea
+    """
     src = f"{workdirectories['bounddir']}/{layer['src']}"
     out = f"{workdirectories['bounddir']}/{layer['out']}"
+    method = layer.get("method")
 
-    if layer.get("method") == "filter":
+    # Comprehensive Entry Debug Statement
+    print("\n" + "=" * 80)
+    print(f"▶️ [load_layer] CALL DISPATCH:")
+    print(f"   • Layer Name/Key : {layer.get('name', layer.get('field', 'UNKNOWN'))}")
+    print(f"   • Method Specified: '{method}'")
+    print(f"   • Level          : {level}")
+    print(f"   • Intention Type : {intention_type}")
+    print(f"   • Select Name    : '{select_name}'")
+    print(f"   • ROID           : {roid}")
+    print(f"   • Source Path    : {src}")
+    print(f"   • Destination    : {out}")
+    if boundary_geom is not None:
+        geom_type = getattr(boundary_geom, "geom_type", type(boundary_geom).__name__)
+        is_empty = getattr(boundary_geom, "is_empty", "N/A")
+        bounds = getattr(boundary_geom, "bounds", "N/A")
+        print(f"   • Boundary Geom  : Type={geom_type}, is_empty={is_empty}, bounds={bounds}")
+    else:
+        print(f"   • Boundary Geom  : None")
+    print("=" * 80)
+
+    # 1. Direct Attribute/Name Filtering (Level 0 - 2)
+    if method == "filter":
+        print(f"🔀 [load_layer] Routing to -> filterArea()")
         return filterArea(
             src, layer["field"], out,
             roid=roid, name=select_name, boundary_geom=boundary_geom
         )
 
+    # 2. Point-Based Spatial Index Slicing (Level 4 UPRNs)
+    if method == "index":
+        print(f"🔀 [load_layer] Routing to -> indexSpatialArea()")
+        return indexSpatialArea(
+            source=src,
+            field=layer["field"],
+            destination=out,
+            boundary_geom=boundary_geom,
+            roid=roid
+        )
+
+    # 3. Local LineString Spatial Slicing (Level 6 Streets)
+    if method == "linestringArea":
+        print(f"🔀 [load_layer] Routing to -> linestringArea()")
+        return linestringArea(
+            source=src,
+            field=layer["field"],
+            destination=out,
+            boundary_geom=boundary_geom,
+            roid=roid,
+            select_name=select_name
+        )
+
+    # 4. Polygon Intersection Operations (Level 3 - 4 Boundaries / Fallback)
+    print(f"🔀 [load_layer] Routing to -> intersectingArea() (method='{method}')")
     return intersectingArea(
         source=src,
         sourcekey=layer["field"],
@@ -677,7 +894,6 @@ def ensure_treepolys_with_index(
     resolved_levels: dict[str, dict[int, str]],
     parent_levels: dict[int, str],
 ):
-
     logging.info("==================================================")
     logging.info("🚀 [DEBUG START] ensure_treepolys_with_index")
     logging.info(f"   ↳ Initial Geo_index size: {len(Geo_index)}")
@@ -705,128 +921,78 @@ def ensure_treepolys_with_index(
 
     if boundary_geom is not None:
         boundary_geom = boundary_geom.buffer(0)
-        logging.debug(
-            "   ↳ Applied buffer(0) to boundary_geom to sanitize geometry"
-        )
+        logging.debug("   ↳ Applied buffer(0) to boundary_geom to sanitize geometry")
 
     if not resolved_levels or len(resolved_levels) != 1:
-        logging.error(
-            f"❌ Invalid resolved_levels configuration: {resolved_levels}"
-        )
+        logging.error(f"❌ Invalid resolved_levels configuration: {resolved_levels}")
         raise ValueError("Invalid resolved_levels configuration.")
 
     (_, elevels), = resolved_levels.items()
     sourcepath = sourcepath or territory
 
     # ------------------------------------------------------------------
-    # 🌟 GEOMETRY PRE-LOADER
+    # 🌟 GEOMETRY & POINT PATH RESOLUTION
     # ------------------------------------------------------------------
     candidate_paths = set()
-
     if sourcepath:
         candidate_paths.add(sourcepath)
 
-    coords = parse_coords(here) if "parse_coords" in globals() else []
-    if coords:
+    coords = parse_coords(here) if ("parse_coords" in globals() and here) else []
+    anchor_points = [Point(lon, lat) for lat, lon in coords] if coords else []
+
+    if coords and "classify_record_coords" in globals():
         lat, lon = coords[0]
-        if "classify_record_coords" in globals():
-            classification = classify_record_coords(
-                lat, lon, sourcepath, parent_levels
-            )
-            derived_path = classification.get("_derived_path")
-            if derived_path:
-                logging.info(
-                    f"📍 Derived territory path from point ({lat}, {lon}): {derived_path}"
-                )
-                candidate_paths.add(derived_path)
+        classification = classify_record_coords(lat, lon, sourcepath, parent_levels)
+        derived_path = classification.get("_derived_path")
+        if derived_path:
+            logging.info(f"📍 Derived territory path from point ({lat}, {lon}): {derived_path}")
+            candidate_paths.add(derived_path)
 
-    MAP_LAYERS = globals().get("MAP_LAYERS", [])
-    layer_defs = {(l["level"], l["key"]): l for l in MAP_LAYERS}
+    # Pick best path from candidates if sourcepath was missing/partial
+    effective_sourcepath = sourcepath
+    if not effective_sourcepath and candidate_paths:
+        effective_sourcepath = next(iter(candidate_paths))
 
-    for path in candidate_paths:
-        path_steps = stepify(path)
-        for depth, step_name in enumerate(path_steps):
-            level_key = parent_levels.get(depth)
-            if not level_key:
-                logging.warning(
-                    f"⚠️ [PRE-LOAD] No parent_level key mapped for depth {depth} (step: '{step_name}')"
-                )
-                continue
+    MAP_LAYERS = globals().get("MAP_LAYERS", {})
+    if isinstance(MAP_LAYERS, list):
+        MAP_LAYERS = {l.get("key", idx): l for idx, l in enumerate(MAP_LAYERS)}
 
-            existing_gdf = get_treepoly(level_key)
-            norm_step = normalname(step_name)
+    layer_defs = {l.get("key", k): l for k, l in MAP_LAYERS.items()}
 
-            already_loaded = (
-                existing_gdf is not None
-                and not existing_gdf.empty
-                and "NAME" in existing_gdf.columns
-                and (existing_gdf["NAME"].apply(normalname) == norm_step).any()
-            )
-
-            if not already_loaded:
-                for (lvl, key), l_def in layer_defs.items():
-                    if key == level_key:
-                        src, field = l_def["src"], l_def["field"]
-                        chosen_src = src[0] if isinstance(src, list) else src
-                        chosen_field = (
-                            field[0] if isinstance(field, list) else field
-                        )
-                        out_file = f"{config.workdirectories['bounddir']}/{l_def['out']}"
-
-                        _, step_gdf, _ = filterArea(
-                            source=f"{config.workdirectories['bounddir']}/{chosen_src}",
-                            sourcekey=chosen_field,
-                            destination=out_file,
-                            name=step_name,
-                        )
-
-                        if step_gdf is not None and not step_gdf.empty:
-                            upserted = upsert_geodf(existing_gdf, step_gdf)
-                            set_treepoly(level_key, upserted)
-                            logging.info(
-                                f"✅ Pre-loaded step geometry '{norm_step}' into Treepolys['{level_key}']"
-                            )
-                        else:
-                            logging.warning(
-                                f"⚠️ [PRE-LOAD] filterArea returned empty/None GDF for '{step_name}'"
-                            )
-                        break
-
+    for k, l in MAP_LAYERS.items():
+        layer_key = l.get("key", k)
+        if layer_key not in Treepolys:
+            Treepolys[layer_key] = gpd.GeoDataFrame()
 
     # ------------------------------------------------------------------
     # MAIN PROCESSING ENGINE LOOP
     # ------------------------------------------------------------------
     dynamic_steps = [ROOT]
-    raw_steps = stepify(sourcepath) if sourcepath else []
+    raw_steps = stepify(effective_sourcepath) if effective_sourcepath else []
 
     if raw_steps and normalname(raw_steps[0]) != normalname(ROOT):
         steps = [ROOT] + raw_steps
     else:
         steps = raw_steps if raw_steps else [ROOT]
 
-    coords = parse_coords(here) if ("parse_coords" in globals() and here) else []
+    # Target depth corresponds to the target node level T
+    target_depth = len(steps) - 1 if len(steps) > 1 else max(elevels.keys())
+    # Required traversal max level is Target Depth + 1 (Children level)
+    max_required_level = target_depth + 1
 
-    if here is not None or coords:
-        target_depth = 4
-    elif steps:
-        target_depth = len(steps) - 1
-    else:
-        target_depth = 0
+    logging.info(f"   ↳ Parsed Steps: {steps} | Target Depth (T): {target_depth} | Max Target Fetch Level (T+1): {max_required_level}")
 
-    logging.info(f"   ↳ Parsed Steps: {steps} | Target Depth: {target_depth}")
-
-    active_parent_rows = {}
+    active_parent_rows = {0: [None]}
     fid_to_path = {}
-
-    # 🌟 TRACKER: Explicitly capture the deepest valid path generated during processing
     deepest_path_registered = ROOT
 
-    logging.info("🔎 Scanning cached geometries in state...")
+    for level, compound_layer_type in sorted(elevels.items()):
+        # Stop execution beyond children level (level > T + 1)
+        if level > max_required_level:
+            logging.info(f"🛑 Reached depth boundary (Level {level} > {max_required_level}). Halting tree expansion.")
+            break
 
-    for level, compound_layer_type in elevels.items():
-        sub_layers = [
-            l.strip() for l in compound_layer_type.split("/") if l.strip()
-        ]
+        sub_layers = [l.strip() for l in compound_layer_type.split("/") if l.strip()]
         logging.info(f"🔄 Processing Level {level} with layers: {sub_layers}")
 
         next_level = level + 1
@@ -834,35 +1000,25 @@ def ensure_treepolys_with_index(
             active_parent_rows[next_level] = []
 
         for layer_type in sub_layers:
-            layer = layer_defs.get((level, layer_type))
+            layer = layer_defs.get(layer_type)
             if not layer:
-                logging.warning(
-                    f"⚠️ Layer definition missing for level={level}, key={layer_type}"
-                )
+                logging.warning(f"⚠️ Layer definition missing for key={layer_type}")
                 continue
 
+            # Determine name filter for current level
             select_name = None
-
             if level <= target_depth and level < len(steps):
                 select_name = steps[level]
-                logging.debug(
-                    f"   ↳ Level {level} <= Target Depth {target_depth}. Filtering name: '{select_name}'"
-                )
-            elif level == target_depth + 1:
-                select_name = None
-                logging.debug(
-                    f"   ↳ Level {level} is Target Depth + 1. Fetching all child boundaries for parent..."
-                )
-            elif level > target_depth + 1:
-                logging.debug(
-                    f"   ↳ Level {level} exceeds target depth window (+1). Skipping layer '{layer_type}'."
-                )
-                continue
+                logging.debug(f"   ↳ Level {level} <= Target Depth {target_depth}. Filtering by name: '{select_name}'")
+            else:
+                # Level == target_depth + 1 (Children): Fetch ALL child geometries inside parent
+                logging.debug(f"   ↳ Level {level} is Children Level (T+1). Fetching all children under parent envelope.")
 
             parent_rows = active_parent_rows.get(level, [None])
-            logging.info(
-                f"   ↳ Executing load_layer for level={level}, layer='{layer_type}' across {len(parent_rows)} parent row(s)"
-            )
+            if not parent_rows:
+                parent_rows = [None]
+
+            logging.info(f"   ↳ Executing load_layer for level={level}, layer='{layer_type}' across {len(parent_rows)} parent row(s)")
             all_results = []
 
             for p_idx, parent_row in enumerate(parent_rows):
@@ -872,68 +1028,38 @@ def ensure_treepolys_with_index(
                     expected_type = parent_levels.get(level)
                     actual_type = Geo_index.get(parent_path, {}).get("level")
 
-                    logging.info(
-                        f"🔍 [TREE_DEBUG L{level}] Parent Row Index {p_idx} | FID: {p_fid} | Resolved Parent Path: '{parent_path}' | Actual Geo_index Level: '{actual_type}' (Expected: '{expected_type}')"
-                    )
-
-                    if expected_type != actual_type:
+                    if expected_type and actual_type and expected_type != actual_type:
                         logging.warning(
                             f"❌ [GEO_INDEX SKIP] Skipping parent [{p_idx}] (FID: {p_fid}): "
                             f"Type mismatch! Expected level type '{expected_type}', but Geo_index['{parent_path}'] has level '{actual_type}'."
                         )
                         continue
 
-                src, field = layer["src"], layer["field"]
+                src = layer.get("src")
+                field = layer.get("field")
+
+                # Handle Virtual / Derived layers with no spatial source
+                if not src or not field:
+                    logging.info(f"ℹ️ Layer '{layer_type}' has no 'src'/'field' defined (virtual layer). Forwarding parents to Level {next_level}.")
+                    if parent_row is not None:
+                        active_parent_rows[next_level].append(parent_row)
+                    continue
+
                 chosen_src = src[0] if isinstance(src, list) else src
                 chosen_field = field[0] if isinstance(field, list) else field
 
                 if isinstance(src, list):
-                    is_surrey_context = sourcepath and "surrey" in str(sourcepath).lower()
-                    if is_surrey_context:
-                        chosen_idx = next(
-                            (i for i, f in enumerate(src) if f and "surrey" in str(f).lower()), 0
-                        )
-                    else:
-                        chosen_idx = next(
-                            (i for i, f in enumerate(src) if f and "surrey" not in str(f).lower()), 0
-                        )
+                    is_surrey = effective_sourcepath and "surrey" in str(effective_sourcepath).lower()
+                    chosen_idx = next(
+                        (i for i, f in enumerate(src) if f and ("surrey" in str(f).lower() if is_surrey else "surrey" not in str(f).lower())),
+                        0
+                    )
                     chosen_src = src[chosen_idx]
                     chosen_field = field[chosen_idx] if isinstance(field, list) else field
 
                 layer_local = dict(layer)
                 layer_local["src"], layer_local["field"] = chosen_src, chosen_field
 
-                logger = logging.getLogger(__name__)
-
-                # ==============================================================================
-                # BEFORE LOAD_LAYER
-                # ==============================================================================
-                logger.debug("--- [DEBUG BEFORE load_layer] ---")
-                logger.debug(f"Target Level: {level} | Intention Type: {layer_type}")
-                logger.debug(f"Layer Info: {layer_local}")
-                logger.debug(f"Parent Levels Context: {parent_levels}")
-                logger.debug(f"select_name filter: '{select_name}'")
-
-                if parent_row is not None:
-                    p_geom = getattr(parent_row, 'geometry', None)
-                    logger.debug(f"Parent Row Name/ID: {parent_row.get('name', 'N/A')}")
-                    if p_geom is not None:
-                        logger.debug(f"Parent Geom Bounds: {p_geom.bounds}")
-                else:
-                    logger.debug("Parent Row: None")
-
-                if boundary_geom is not None:
-                    b_crs = getattr(boundary_geom, 'crs', 'Unknown/Raw Shape')
-                    b_bounds = getattr(boundary_geom, 'bounds', 'N/A')
-                    logger.debug(f"Boundary Geom CRS: {b_crs} | Bounds: {b_bounds}")
-                else:
-                    logger.debug("Boundary Geom: None (Spatial clipping disabled)")
-
-                logger.debug(f"ROID / Location Context: {here}")
-
-                # ==============================================================================
-                # EXECUTION
-                # ==============================================================================
                 try:
                     selected_child_name, tree_gdf, raw_gdf = load_layer(
                         layer=layer_local,
@@ -945,45 +1071,17 @@ def ensure_treepolys_with_index(
                         roid=here,
                         boundary_geom=boundary_geom,
                     )
+
                     if selected_child_name:
                         norm_child = normalname(selected_child_name)
                         if norm_child not in [normalname(s) for s in dynamic_steps]:
                             dynamic_steps.append(selected_child_name)
 
-                    logger.debug("--- [DEBUG AFTER load_layer - SUCCESS] ---")
-                    logger.debug(f"Returned selected_child_name: '{selected_child_name}'")
-
-                    if raw_gdf is not None:
-                        logger.debug(f"Raw GDF Row Count: {len(raw_gdf)}")
-                        logger.debug(f"Raw GDF CRS: {raw_gdf.crs}")
-                        if 'name' in raw_gdf.columns:
-                            logger.debug(f"Raw Feature Names: {raw_gdf['name'].tolist()[:10]}")
-                    else:
-                        logger.warning("Raw GDF is None!")
-
-                    if tree_gdf is not None:
-                        logger.debug(f"Tree GDF (Intersected) Row Count: {len(tree_gdf)}")
-                        logger.debug(f"Tree GDF CRS: {tree_gdf.crs}")
-
-                        if not tree_gdf.empty:
-                            if 'name' in tree_gdf.columns:
-                                logger.debug(f"Intersected Feature Names: {tree_gdf['name'].tolist()}")
-                            if 'intersectingArea' in tree_gdf.columns:
-                                logger.debug(f"Intersecting Areas: {tree_gdf['intersectingArea'].tolist()}")
-                        else:
-                            logger.error("!!! Tree GDF is EMPTY — Spatial intersection eliminated all features !!!")
-                    else:
-                        logger.warning("Tree GDF is None!")
-
                 except Exception as e:
-                    logger.error("--- [DEBUG AFTER load_layer - FAILED] ---")
-                    logger.error(f"load_layer raised Exception: {e}", exc_info=True)
+                    logging.error(f"❌ load_layer failed at Level {level}, layer '{layer_type}': {e}", exc_info=True)
+                    continue
 
-                if (
-                    tree_gdf is not None
-                    and hasattr(tree_gdf, "empty")
-                    and not tree_gdf.empty
-                ):
+                if tree_gdf is not None and hasattr(tree_gdf, "empty") and not tree_gdf.empty:
                     tree_gdf = tree_gdf.copy()
 
                     if "FID" not in tree_gdf.columns:
@@ -994,47 +1092,32 @@ def ensure_treepolys_with_index(
                         else:
                             tree_gdf["FID"] = tree_gdf.index.astype(int)
 
-                    coords = parse_coords(here) if "parse_coords" in globals() else []
-                    anchor_points = [Point(lon, lat) for lat, lon in coords]
-
-                    if level < target_depth and anchor_points and select_name is not None:
+                    # Spatial Point fallback filtering when step path is unknown/partial
+                    if level <= target_depth and anchor_points and select_name is None:
                         def matches_any_point(geom):
                             if geom is None or geom.is_empty:
                                 return False
                             return any(geom.contains(pt) for pt in anchor_points)
 
                         spatial_mask = tree_gdf.geometry.apply(matches_any_point)
-                        text_mask = (
-                            tree_gdf["NAME"].apply(normalname) == normalname(steps[level])
-                            if level < len(steps) else False
-                        )
-                        tree_gdf = tree_gdf[spatial_mask | text_mask]
+                        if spatial_mask.any():
+                            tree_gdf = tree_gdf[spatial_mask]
 
-                    if not tree_gdf.empty:
-                        resolved_p_path = (
-                            ROOT if level == 0
-                            else (fid_to_path.get(parent_row["FID"], ROOT) if parent_row is not None else ROOT)
-                        )
-                        tree_gdf["_parent_path"] = resolved_p_path
-                        logging.info(
-                            f"🔍 [TREE_DEBUG L{level}] Assigned _parent_path='{resolved_p_path}' to {len(tree_gdf)} incoming rows for layer '{layer_type}'"
-                        )
-                        all_results.append(tree_gdf)
+                    resolved_p_path = (
+                        ROOT if level == 0
+                        else (fid_to_path.get(parent_row["FID"], ROOT) if parent_row is not None else ROOT)
+                    )
+                    tree_gdf["_parent_path"] = resolved_p_path
+                    all_results.append(tree_gdf)
 
             if not all_results:
-                logging.warning(
-                    f"⚠️ [NO RESULTS] all_results is EMPTY for level={level}, layer_type='{layer_type}'!"
-                )
+                logging.warning(f"⚠️ [NO RESULTS] all_results empty for level={level}, layer_type='{layer_type}'!")
                 continue
 
             tree_gdf = pd.concat(all_results, ignore_index=True)
 
             existing = get_treepoly(layer_type)
-            if (
-                existing is None
-                or "FID" not in existing.columns
-                or "FID" not in tree_gdf.columns
-            ):
+            if existing is None or "FID" not in existing.columns or "FID" not in tree_gdf.columns:
                 new_tree_gdf = tree_gdf
             else:
                 new_tree_gdf = tree_gdf[~tree_gdf["FID"].isin(existing["FID"])]
@@ -1042,20 +1125,13 @@ def ensure_treepolys_with_index(
             upserted_gdf = upsert_geodf(existing, new_tree_gdf)
             set_treepoly(layer_type, upserted_gdf)
 
-            # ------------------------------------------------------------------
-            # 🔍 GEO_INDEX POPULATION & DIAGNOSTIC TRACKING
-            # ------------------------------------------------------------------
+            # Populate Geo_index & map FIDs
             for idx, row in tree_gdf.iterrows():
                 raw_name = row.get("NAME")
                 child_name = f"UNNAMED_{idx}" if (pd.isna(raw_name) or raw_name is None) else normalname(str(raw_name))
 
                 parent_path = row.get("_parent_path", ROOT)
-                if level == 0:
-                    this_path = ROOT if child_name == ROOT else f"{ROOT}/{child_name}"
-                else:
-                    this_path = f"{parent_path}/{child_name}"
-
-                path_already_exists = this_path in Geo_index
+                this_path = ROOT if (level == 0 and child_name == ROOT) else f"{parent_path}/{child_name}"
 
                 roid_coords = None
                 if hasattr(row, "geometry") and row.geometry is not None:
@@ -1067,7 +1143,7 @@ def ensure_treepolys_with_index(
 
                 row_fid = int(row["FID"]) if pd.notna(row.get("FID")) else None
 
-                if not path_already_exists:
+                if this_path not in Geo_index:
                     Geo_index[this_path] = {
                         "level": layer_type,
                         "name": child_name,
@@ -1082,22 +1158,10 @@ def ensure_treepolys_with_index(
                         entry["fid"] = row_fid
                     if entry.get("roid") is None and roid_coords is not None:
                         entry["roid"] = roid_coords
-                    if not entry.get("level"):
-                        entry["level"] = layer_type
 
                 if parent_path in Geo_index:
                     if this_path not in Geo_index[parent_path]["children"]:
                         Geo_index[parent_path]["children"].append(this_path)
-                        logging.info(f"🔗 [LINKED SUCCESS] L{level}: Attached '{this_path}' --> Parent '{parent_path}'")
-                else:
-                    logging.error(
-                        f"❌ [LINK FAILURE] Parent path '{parent_path}' NOT FOUND in Geo_index when attempting to attach child '{this_path}'!"
-                    )
-
-                if row["FID"] in fid_to_path and fid_to_path[row["FID"]] != this_path:
-                    logging.warning(
-                        f"⚠️ [FID OVERWRITE DETECTED] FID {row['FID']} was '{fid_to_path[row['FID']]}', now overwritten with '{this_path}'"
-                    )
 
                 fid_to_path[row["FID"]] = this_path
 
@@ -1111,47 +1175,25 @@ def ensure_treepolys_with_index(
                 if row_copy["FID"] not in existing_fids:
                     active_parent_rows[next_level].append(row_copy)
 
-                # 🌟 UPDATE TRACKER: Record the latest valid path generated (progressively tracks to Level 4)
                 deepest_path_registered = this_path
 
-    # Summary Audit
-    logging.info("==================================================")
-    logging.info("📈 [GEO_INDEX TREE AUDIT]")
-    for key, val in Geo_index.items():
-        logging.info(f" 📍 Node: '{key}' | Level: {val.get('level')} | Direct Children: {len(val.get('children', []))}")
-    logging.info("==================================================")
-
-    # ------------------------------------------------------------------
-    # Path traversal verification
-    # ------------------------------------------------------------------
+    # Path Traversal & Fallback Resolution
     active_steps = steps if len(steps) > 1 else dynamic_steps
-
-    # Step-by-step fallback traversal
     current_path = ""
-    deepest_valid_path = ""
+    deepest_valid_path = ROOT
 
     for step in active_steps:
         normalized_step = normalname(step)
-
-        # Build path incrementally (adjust slash based on how your keys are formatted)
         current_path = f"{current_path}/{normalized_step}" if current_path else normalized_step
-        logging.info(f"🎯 Step {step} Path: {current_path}")
         if current_path in Geo_index:
             deepest_valid_path = current_path
         else:
-            # Stop as soon as the hierarchy breaks
             break
 
-    if deepest_valid_path:
-        final_path = deepest_valid_path
-    else:
-        # Truly fallback only if even the first step failed
-        final_path = "UNITED_KINGDOM"
+    final_path = deepest_valid_path if deepest_valid_path in Geo_index else deepest_path_registered
+    match_full_filepath = final_path.replace("/", "_") + "-MAP.html"
 
-    match_full_filepath = final_path + "-MAP.html"
-    logging.info(f"🎯 Final Map File Path: {match_full_filepath}")
-
-
+    logging.info(f"🎯 Final Resolved Target Path: '{final_path}' | Map File Path: '{match_full_filepath}'")
     return match_full_filepath, Geo_index
 
 def layer_loaded(layer_key):
@@ -1378,57 +1420,79 @@ autofix = {0,1,2,3,4}
 Treepolys: dict[str, gpd.GeoDataFrame] = {}
 
 
-MAP_LAYERS = [
-    {
-        "key": "country",
-        "level": 0,
-        "src": "World_Countries_(Generalized)_9029012925078512962.geojson",
-        "field": "COUNTRY",
-        "out": "Country_Boundaries.geojson",
-        "method": "filter",
-    },
-    {
-        "key": "nation",
-        "level": 1,
-        "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
-        "field": "CTRY21NM",
-        "out": "Nation_Boundaries.geojson",
-        "method": "filter"
-    },
-    {
-        "key": "county",
-        "level": 2,
-        "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
-        "field": "CTYUA24NM",
-        "out": "County_Boundaries.geojson",
-        "method": "filter"
-    },
-    {
-        "key": "constituency",
-        "level": 3,
-        "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
-        "field": "PCON24NM",
-        "out": "Constituency_Boundaries.geojson",
-        "method": "intersect"
-    },
-    {
-        "key": "ward",
-        "level": 4,
-        "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
-        "field": "WD24NM",
-        "out": "Ward_Boundaries.geojson",
-        "method": "intersect"
-    },
-    {
-        "key": "division",
-        "level": 4,
-        "src": ["County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson","Revised_Surrey_Proposed_Divisions.geojson"],
-        "field": ["CED23NM","Division_n"],
-        "out": "Division_Boundaries.geojson",
-        "method": "intersect"
-    },
+# state.py or config.py
 
-]
+MAP_LAYERS = {
+    "marker": {
+        "key": "marker", "mytag": "marker", "overlay": True, "control": True, "show": False, "type": "marker"
+    },
+    "country": {
+        "key": "country", "mytag": "country", "level": 0, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "World_Countries_(Generalized)_9029012925078512962.geojson",
+        "field": "COUNTRY", "out": "Country_Boundaries.geojson", "method": "filter",
+        "options": {"color": "#0F172A", "fontColor": "#0F172A", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+    },
+    "nation": {
+        "key": "nation", "mytag": "nation", "level": 1, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
+        "field": "CTRY21NM", "out": "Nation_Boundaries.geojson", "method": "filter",
+        "options": {"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "none", "fillOpacity": 0.0}
+    },
+    "county": {
+        "key": "county", "mytag": "county", "level": 2, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
+        "field": "CTYUA24NM", "out": "County_Boundaries.geojson", "method": "filter",
+        "options": {"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
+    },
+    "constituency": {
+        "key": "constituency", "mytag": "constituency", "level": 3, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
+        "field": "PCON24NM", "out": "Constituency_Boundaries.geojson", "method": "intersect",
+        "options": {"color": "#0369A1", "fontColor": "#0369A1", "weight": 2.0, "fillColor": "#E0F2FE", "fillOpacity": 0.25}
+    },
+    "ward": {
+        "key": "ward", "mytag": "ward", "level": 4, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
+        "field": "WD24NM", "out": "Ward_Boundaries.geojson", "method": "intersect",
+        "options": {"color": "#2E6FBB", "fontColor": "#2E6FBB", "weight": 2.5, "fillColor": "#A9C8F5", "fillOpacity": 0.18}
+    },
+    "division": {
+        "key": "division", "mytag": "division", "level": 4, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": ["County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson", "Revised_Surrey_Proposed_Divisions.geojson"],
+        "field": ["CED23NM", "Division_n"], "out": "Division_Boundaries.geojson", "method": "intersect",
+        "options": {"color": "#D95F02", "fontColor": "#D95F02", "weight": 2.5, "fillColor": "#F6C28B", "fillOpacity": 0.12, "dashArray": "8,5"}
+    },
+    "walk": {
+        "key": "walk", "mytag": "walk", "level": 5, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
+    },
+    "street": {
+        "key": "street", "mytag": "street", "level": 6, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "src": "UK-ROADS.gpkg",        # Pre-downloaded regional OS linestring network
+        "field": "name1",                       # Attribute field containing street names
+        "out": "Street_Geometries.gpkg",    # Standard output GeoJSON path
+        "method": "linestringArea",                # Triggers linestring spatial slicing
+        "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
+    },
+    "walkleg": {
+        "key": "walkleg", "mytag": "walkleg", "level": 6, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "options": {"color": "#115E59", "fontColor": "#115E59", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5}
+    },
+    "elector": {"key": "elector", "mytag": "elector", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "result": {"key": "result", "mytag": "result", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "target": {"key": "target", "mytag": "target", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "data": {"key": "data", "mytag": "data", "overlay": True, "control": True, "show": False, "type": "marker"},
+}
+
 
 levelcolours = {"C0" :'lightblue',"C1" :'darkred', "C2":'blue', "C3":'indigo', "C4":'red', "C5":'darkblue', "C6":'orange', "C7":'lightblue', "C8":'lightgreen', "C9":'purple', "C10":'pink', "C11":'cadetblue', "C12":'lightred', "C13":'#006064',"C14": 'green', "C15": 'beige',"C16": 'black', "C17":'lightgray', "C18":'darkpurple',"C19": 'darkgreen', "C20": 'orange', "C21":'lightpurple',"C22": 'limegreen', "C23": 'cyan',"C24": 'green', "C25": 'beige',"C26": 'black', "C27":'lightgray', "C28":'darkpurple',"C29": 'darkgreen', "C30": 'orange', "C31":'lightpurple',"C32": 'limegreen', "C33": 'cyan', "C34": 'orange', "C35":'lightpurple',"C36": 'limegreen', "C37": 'cyan' }
 
@@ -1448,7 +1512,7 @@ kanban_options = [
 
 
 # this is for creating a new mapfile when one does not exist.
-TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downbut', 'walk' : 'downbut', 'street' : 'PDdownST', 'walkleg' : 'WKdownST'}
+TypeMaker = { 'nation' : 'downbut','county' : 'downbut', 'constituency' : 'downbut' , 'ward' : 'downbut', 'division' : 'downbut', 'polling_district' : 'downbut', 'walk' : 'downbut', 'street' : 'walkdownST', 'walkleg' : 'WKdownST'}
 
 
 ROOT_LEVEL = {

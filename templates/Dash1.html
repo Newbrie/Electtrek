@@ -53,40 +53,62 @@
 			</div>
   <script>
 
-			    function setActionForm(action){
-			      let form = document.getElementById("normal-file")
-			      if (action === 'normalise') {
-			          form.action = "{{url_for('normalise')}}";
-			          form.method = 'POST';
-			          document.body.style.cursor = 'wait'
-			          form.submit();
-			      } else if (action === 'produce') {
-			          form.action = "{{url_for('walks')}}";
-			          form.method = 'POST';
-			          document.body.style.cursor = 'wait'
-			          form.submit();
-						} else if (action === 'canvass') {
-								form.action = "{{url_for('cards')}}";
-								form.method = 'POST';
-								document.body.style.cursor = 'wait'
-								form.submit();
-						} else if (action === 'layeritems') {
-								form.action = "{{url_for('layeritems')}}";
-								form.method = 'GET';
-								document.body.style.cursor = 'wait'
-								form.submit();
-						} else if (action === 'postcode') {
-									form.action = "{{url_for('postcode')}}";
-									form.method = 'POST';
-									document.body.style.cursor = 'wait'
-									form.submit();
-              } else if (action === 'captains') {
-                    form.action = "{{url_for('captains')}}";
-                    form.method = 'POST';
-                    document.body.style.cursor = 'wait'
-                    form.submit();
-                  };
-			    };
+    window.setActionForm = function(action, parameter) {
+    console.log("setActionForm called with:", action, parameter);
+
+    // Case A: Handlers matching the 2-argument buttons (STREETS / Boundary Maps)
+    if (action === 'filelist') {
+        const fileType = parameter; // 'streets' or 'maps'
+        const mapSelect = document.getElementById("mapfiles");
+
+        if (mapSelect) {
+            document.body.style.cursor = 'wait';
+            fetch(`/api/get-files?type=${encodeURIComponent(fileType)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Populate select dropdown with returned files
+                    mapSelect.innerHTML = '';
+                    data.files.forEach(file => {
+                        const opt = document.createElement('option');
+                        opt.value = file;
+                        opt.textContent = file;
+                        mapSelect.appendChild(opt);
+                    });
+                })
+                .catch(err => console.error("Error fetching file list:", err))
+                .finally(() => {
+                    document.body.style.cursor = 'default';
+                });
+        }
+        return;
+    }
+
+    // Case B: Form posting operations (requires <form id="normal-file"> in your DOM)
+    const form = document.getElementById("normal-file");
+    if (!form) {
+        console.error("Target form with id 'normal-file' not found in document.");
+        return;
+    }
+
+    // Dynamic endpoint mapping table
+    const routeMap = {
+        'normalise':  { url: "{{ url_for('normalise') }}",  method: 'POST' },
+        'produce':    { url: "{{ url_for('walks') }}",      method: 'POST' },
+        'canvass':    { url: "{{ url_for('cards') }}",      method: 'POST' },
+        'layeritems': { url: "{{ url_for('layeritems') }}", method: 'GET'  },
+        'postcode':   { url: "{{ url_for('postcode') }}",   method: 'POST' },
+        'captains':   { url: "{{ url_for('captains') }}",   method: 'POST' }
+    };
+
+    if (routeMap[action]) {
+        form.action = routeMap[action].url;
+        form.method = routeMap[action].method;
+        document.body.style.cursor = 'wait';
+        form.submit();
+    } else {
+        console.warn(`Unrecognized action: ${action}`);
+    }
+};
 </script>
 
 
