@@ -690,7 +690,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         print(f"📡 PRE-FLIGHT: completed ({lastfilepath}) ")
 
-        current_node = nodes.MapRoot.ping_node(resolved_levels, lastfilepath, create=True, accumulate=False)
+#        current_node = nodes.MapRoot.ping_node(resolved_levels, lastfilepath, create=True, accumulate=False)
         new_df = preflight_df.copy()
         persist(Treepolys)
 

@@ -1159,7 +1159,8 @@ def ensure_treepolys_with_index(
                     if entry.get("roid") is None and roid_coords is not None:
                         entry["roid"] = roid_coords
 
-                if parent_path in Geo_index:
+                # FIX: Prevent appending the root node to its own children list
+                if parent_path in Geo_index and this_path != parent_path:
                     if this_path not in Geo_index[parent_path]["children"]:
                         Geo_index[parent_path]["children"].append(this_path)
 
@@ -1191,7 +1192,12 @@ def ensure_treepolys_with_index(
             break
 
     final_path = deepest_valid_path if deepest_valid_path in Geo_index else deepest_path_registered
-    match_full_filepath = final_path.replace("/", "_") + "-MAP.html"
+
+    # Extract the leaf component (e.g., 'THE_BENTLEYS_AND_FRATING')
+    leaf_name = final_path.split("/")[-1]
+
+    # Construct the full nested map file path
+    match_full_filepath = f"{final_path}/{leaf_name}-MAP.html"
 
     logging.info(f"🎯 Final Resolved Target Path: '{final_path}' | Map File Path: '{match_full_filepath}'")
     return match_full_filepath, Geo_index
