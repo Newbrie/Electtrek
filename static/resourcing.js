@@ -590,8 +590,9 @@ function openSlotModal(slotId) {
     const data = calendarData[slotId]; // Reference, not copy
 
     // 🔽 INJECT AREA ACCORDION HERE
-    populateAreaAccordion(window.areas);
-
+//    populateAreaAccordion(window.areas);
+let tree = window.currentAreaTree;
+  window.renderAreaSelector(tree, window.getSelectedAreas());
     // Fill dropdowns
     fillSelect("activitySelect", window.task_tags);
     fillSelect("resourcesSelect", window.resources);

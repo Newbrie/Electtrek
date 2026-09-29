@@ -59,7 +59,9 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
       window.areas = data.areas || {};
 
       // Populate the accordion container
-      populateAreaAccordion(window.areas);
+//      populateAreaAccordion(window.areas);
+let tree = window.currentAreaTree;
+window.renderAreaSelector(tree, window.getSelectedAreas());
 
   } catch (err) {
       console.error("Failed to fetch areas:", err);
@@ -516,6 +518,11 @@ resourcesToggle?.addEventListener("click", () => {
  * --------------------------------------------------------- */
  document.addEventListener("click", async (e) => {
      if (!e.target.classList.contains("election-tab")) return;
+
+     e.preventDefault();   // 👈 ADD THIS LINE — stops default browser navigation
+                            // (e.g. an <a href> or form submit) from firing a
+                            // second, bodyless GET to /set-election alongside
+                            // our real POST below.
 
      const electionName = e.target.dataset.election;
      console.log("📩 Switching to:", electionName);

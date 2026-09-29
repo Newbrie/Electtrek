@@ -1,57 +1,18 @@
 import os
 import json
 from pathlib import Path
-from config import ELECTIONS_FILE, BASEX_FILE, TABLE_FILE, RESOURCE_FILE
+from config import ELECTIONS_FILE, BASEX_FILE, RESOURCE_FILE
 import config
 import state
 import re
 from shapely.geometry import Point
 import logging
-import nodes
-from state import Treepolys, Geo_index, normalname, route, stepify, resolve_here_or_redirect
+from state import route, stepify, resolve_here_or_redirect
+from state import normalname
 
 from pathlib import Path
 from typing import Optional
 
-LEVEL_INDEX = {
-    "country": 0,
-    "nation": 1,
-    "county": 2,
-    "constituency": 3,
-    "ward": 4,
-    "division": 4,
-    "walk": 5,
-    "street": 6,
-    "walkleg": 6,
-    "elector": 7,
-}
-
-LEVELS = {
-    0: "country",
-    1: "nation",
-    2: "county",
-    3: "constituency",
-    4: "ward/division",
-    5: "walk",
-    6: "street/walkleg",
-    7: "elector",
-}
-
-class ProgramContext:
-    def get_options(self):
-        # on startup its possible to define a range of global options
-
-        return {
-            "LEVELS": LEVELS,
-            "LEVEL_INDEX": LEVEL_INDEX,
-            "MAP_LAYERS": state.MAP_LAYERS,
-            "TABLE_TYPES": state.TABLE_TYPES,
-            "DEVURLS": config.DEVURLS, #backend urls used on start up
-            "VNORM": state.VNORM, #normalised party used everywhere
-            "VCO": state.VCO, # party colours used everywhere
-            "streams": get_available_elections(), # currently running elections
-            "stream_table": get_stream_table() # all currently running data pipelines
-        }
 
 class ElectionContext:
     # when an election is chosen, a number of options exist for given selections
@@ -155,40 +116,6 @@ def get_elections():
     return [{"cid": e["cid"], "name": e["name"]} for e in elections]
 
 
-def get_stream_table():
-    stream_table = {}
-    if  os.path.exists(TABLE_FILE) and os.path.getsize(TABLE_FILE) > 0:
-        with open(TABLE_FILE, "r") as f:
-            stream_table = json.load(f)
-    return stream_table
-
-def resolve_ui_context(program, election, node):
-    """
-    Merge program, election, and node options into a single dict,
-    converting any sets to lists so the result is JSON-serializable.
-    """
-    def make_json_serializable(obj):
-        if isinstance(obj, dict):
-            return {k: make_json_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple)):
-            return [make_json_serializable(v) for v in obj]
-        elif isinstance(obj, set):
-            return [make_json_serializable(v) for v in obj]
-        else:
-            return obj
-
-    merged = {
-        **program.get_options(),
-        **election.get_options(),
-        **node.get_options(program=program, electionctx=election),
-    }
-
-    return make_json_serializable(merged)
-
-# This prints a script tag you can paste into your HTML
-
-
-
 class CurrentElection(dict):
     RESOURCE_FILE = RESOURCE_FILE
     BASEX_FILE = BASEX_FILE
@@ -200,24 +127,29 @@ class CurrentElection(dict):
 
 
     @classmethod
-    def getstreamrag(cls, elections_dict, election_manager):
+    def getstreamrag(cls, election_manager=None):
         rag = {}
+        # Fetch all elections automatically using cls.get_all()
+        elections_list = cls.get_all()
 
-        for name, election in elections_dict.items():
+        for election in elections_list:
+            # Assuming each election object has a name or identifier attribute (e.g., election.name or election.id)
+            name = getattr(election, 'name', getattr(election, 'id', 'UNKNOWN'))
+
             # 1. Alive check
             alive = bool(
-                election.stream_processing
+                getattr(election, 'stream_processing', None)
                 and election.stream_processing.get("files")
             )
 
-            # 2. Access the manager's internal election dict
-            # Adjust '_elections' to whatever your ElectorManager uses to store DFs
-            data = getattr(election_manager, '_elections', {}).get(name)
+            # 2. Access the manager's internal election dict safely
+            data = getattr(election_manager, '_elections', {}) if election_manager else {}
+            election_data = data.get(name)
 
             # 3. Accurate Loaded/Count check
-            if data is not None and not data.empty:
+            if election_data is not None and not election_data.empty:
                 loaded = True
-                elect_count = len(data)
+                elect_count = len(election_data)
             else:
                 loaded = False
                 elect_count = 0
@@ -238,7 +170,6 @@ class CurrentElection(dict):
             }
 
         return rag
-
 
     def add_breadcrumb(self, item):
         def is_valid_mapfile_path(path):
@@ -278,113 +209,7 @@ class CurrentElection(dict):
 
 
 
-    def get_last_node(self, *, create=True):
-        """
-        Returns the last node for the current election using 4 sources.
-        first source is election cid, but cid node memory might fail
-        second source is browser GPS location , but this might not fire
-        third source is the stored election sourcepath derived from breadcrumb, but this might be corrupted
-        fourth source is the stored territory, which must ping.
 
-        If `create=False`, do not call ping_node and return root if CID node is unavailable.
-        """
-
-        cid = self.get("cid")
-        cidLat = self.get("cidLat")
-        cidLong = self.get("cidLong")
-        here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
-
-        # --- 1. CID lookup ---
-        if cid and cid in nodes.TREK_NODES_BY_ID:
-            last_node = nodes.TREK_NODES_BY_ID.get(cid,None)
-            print(f"___under route: {route()} return to existing cid: {cid}")
-            return last_node
-
-        print(f"___under route: {route()} no cid looking to GPS:")
-
-        # --- 2. Resolve location or redirect ---
-        here, response = resolve_here_or_redirect(here)
-        if response:
-            return response  # redirect response
-
-
-        # --- 3. Resolve node from sourcepath ---
-        print(f"___No cid or GPS : {cid}  under {route()}")
-
-        sourcepath = self.get("mapfiles", [None])[-1]
-        steps = stepify(sourcepath)
-        if not sourcepath or sourcepath == "" or len(steps)< 6:
-            sourcepath = self.get("territory", "")
-
-        print(f"___ Last node under {route()} for {self.name} sourcepath: {sourcepath} create:{create}")
-        last_node = nodes.MapRoot.ping_node(
-                self.resolved_levels,
-                sourcepath,
-                create=create,
-                accumulate = False
-            )
-
-        # --- 4. Fallback to root ---
-        if not last_node:
-            print(f"⚠️ GAP: {cid in nodes.TREK_NODES_BY_ID} @FALLING BACK TO NEAREST NODE cid:{cid}- sp:{sourcepath}")
-            print(f"⚠️ @NODE INDEX DUMP:{nodes.TREK_NODES_BY_ID} ")
-            last_node = nodes.MapRoot
-
-        print(
-            f"___ RETRIEVED LAST DESTINATION - election: {self.name} "
-            f"NODE {last_node.value} at loc: {here} "
-            f"using source: {sourcepath}"
-        )
-
-        return last_node
-
-
-
-    def visit_node(self, node):
-        from state import Treepolys, Geo_index, stepify, pathify
-        rlevels = self.resolved_levels
-        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-        # The clean unpack
-        (c_election, elevels), = rlevels.items()
-
-        # first check that the node is within the election territory
-        #   the node.nid must exist and be in the node list
-        #   next(iter(rlevels.values()))[level] == node.type
-        #   the territory path node must exist
-        #   the territory node fid must be in Treepoly[node.type]
-        #   the node.fid latlong must be within the Treepoly[node.type] geom
-        try:
-            territory = self.territory
-            steps = stepify(territory)
-            level = len(steps) - 1
-            parent_row = Treepolys[node.type]
-
-            # ----- LOOKUP BY LAT/LON ---------------------------------------
-            latitude = node.latlongroid[0]
-            longitude = node.latlongroid[1]
-            point = Point(longitude, latitude)  # (lon, lat)
-            matched = parent_row[parent_row.contains(point)]
-        except:
-            print(
-                f"___under election {self.name} in a {node.type} at {node.value} territory check exception : "
-            )
-
-        self['cid'] = node.nid
-        self['cidLat'] = node.latlongroid[0]
-        self['cidLong'] = node.latlongroid[1]
-
-        newlist = self.add_breadcrumb(node.mapfile())
-
-        self.save()
-        print(f"=== VISIT NODE === {node.nid}")
-        print(f"current children:{[c.value for c in node.children]}")
-        print(
-            f"___under {self.name} leaving breadcrumb: "
-            f"{self['mapfiles'][-1]}"
-        )
-
-        return True
 
     def resolve_ui_options(program, election_ctx, node):
         options = {}
@@ -415,10 +240,6 @@ class CurrentElection(dict):
     def pd_or_walk(self) -> str:
         return "polling_district" if self.adminmode else "walk"
 
-    @property
-    def street_or_leg(self) -> str:
-        return "street" if self.adminmode else "walkleg"
-
     # ---------- persistence ----------
 
     # ---------- derived flags ----------
@@ -436,6 +257,28 @@ class CurrentElection(dict):
         Lazily compute and cache resolved LEVELS wrapped in the election name.
         Keeps compound names intact for bivalent extraction downstream.
         """
+        LEVEL_INDEX = {
+            "country": 0,
+            "nation": 1,
+            "county": 2,
+            "constituency": 3,
+            "ward": 4,
+            "division": 4,
+            "walk": 5,
+            "street": 6,
+            "elector": 7,
+        }
+
+        LEVELS = {
+            0: "country",
+            1: "nation",
+            2: "county",
+            3: "constituency",
+            4: "ward/division",
+            5: "walk",
+            6: "street",
+            7: "elector",
+        }
         if not hasattr(self, "_resolved_levels"):
             resolved: dict[int, str] = {}
             for level, name in sorted(LEVELS.items(), key=lambda x: x[0]):
@@ -470,9 +313,8 @@ class CurrentElection(dict):
                 raw_parent_name = election_levels.get(parent_level_idx)
 
                 if raw_parent_name:
-                    # If the parent level has a compound name (like 'ward/division'),
-                    # default to the first primary type ('ward') for clean index lookups.
-                    parent_map[level] = raw_parent_name.split('/')[0].strip()
+                    # Keep the full composite name (e.g., 'ward/division')
+                    parent_map[level] = raw_parent_name.strip()
                 else:
                     parent_map[level] = None
 
@@ -568,7 +410,7 @@ class CurrentElection(dict):
 
         path = self._file_for(self.name)
         try:
-            print(f"____Under route {route()} Saving New Election File: {self.election_id} → {path}")
+            print(f"____Under route {state.route()} Saving New Election File: {self.election_id} → {path}")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self, f, indent=2)
             print("✅ Election JSON written safely")
@@ -615,7 +457,7 @@ class CurrentElection(dict):
         # Ensure baseline seeds are accurately tracked inside your master all_tags lookup ledger too
         all_tags.update({**task_tags, **outcome_tags})
 
-        print(f"___Under route {route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
+        print(f"___Under route {state.route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
 
         return task_tags, outcome_tags, all_tags
 

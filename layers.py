@@ -1,3 +1,5 @@
+import config
+from config import workdirectories, DEVURLS, WALK_GEOM_FILE
 from folium import FeatureGroup
 from folium.features import DivIcon
 from folium.utilities import JsCode
@@ -5,8 +7,15 @@ from folium.plugins import MarkerCluster
 from folium import GeoJson, Tooltip, Popup
 from shapely.geometry import Point, Polygon, MultiPoint
 from shapely import crosses, contains,covers, union, envelope, intersection
-from shapely.ops import nearest_points
+from shapely.ops import nearest_points, split, unary_union
 from shapely import count_coordinates
+from shapely.geometry import box, LineString
+from shapely.geometry.base import BaseGeometry
+# Fix invalid geometries dynamically using Shapely/GeoPandas
+from shapely.validation import make_valid
+
+import hashlib
+
 from geovoronoi import voronoi_regions_from_coords
 import numpy as np
 import folium
@@ -20,23 +29,1999 @@ import re
 import math
 import colorsys
 import state
+from state import stepify, pathify, derive_territory, normalname
 from matplotlib.colors import to_hex, to_rgb
+import geopandas as gpd
+# ✅ CORRECT
+
+from collections import defaultdict
+from typing import DefaultDict
+from pathlib import Path
+
+from pyogrio import read_dataframe, read_info
+from scipy.spatial import cKDTree
+
+import osmnx as ox
+
+# Ensure OSMnx caching is enabled for performance
+ox.settings.use_cache = True
+ox.settings.log_console = False
+
+
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# state.py
+Treepolys: dict[str, gpd.GeoDataFrame] = {}
+
+Geo_index = {}
+
+
+ROOT = "UNITED_KINGDOM"
+
+REVISED = "Surrey" # use the Revised Surrey Division_Boundaries
+
+
+# state.py or config.py
+
+MAP_LAYERS = {
+    "marker": {
+        "key": "marker", "mytag": "marker", "overlay": True, "control": True, "show": False, "type": "marker"
+    },
+    "country": {
+        "key": "country", "mytag": "country", "level": 0, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": None,
+        "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "src": "World_Countries_(Generalized)_9029012925078512962.geojson",
+        "field": "COUNTRY", "out": "Country_Boundaries.gpkg", "method": "filter",
+        "options": {"color": "#0F172A", "fontColor": "#0F172A", "weight": 3.0, "fillColor": "#CBD5E1", "fillOpacity": 0.08}
+    },
+    "nation": {
+        "key": "nation", "mytag": "nation", "level": 1, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": None,
+        "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
+        "field": "CTRY21NM", "out": "Nation_Boundaries.gpkg", "method": "filter",
+        "options": {"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "#94A3B8", "fillOpacity": 0.12}
+    },
+    "county": {
+        "key": "county", "mytag": "county", "level": 2, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "nation",
+        "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
+        "field": "CTYUA24NM", "out": "County_Boundaries.gpkg", "method": "filter",
+        "options": {"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
+    },
+    "constituency": {
+        "key": "constituency", "mytag": "constituency", "level": 3, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "county",
+        "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
+        "field": "PCON24NM", "out": "Constituency_Boundaries.gpkg", "method": "intersect",
+        "options": {"color": "#0369A1", "fontColor": "#0369A1", "weight": 2.0, "fillColor": "#E0F2FE", "fillOpacity": 0.25}
+    },
+    "ward": {
+        "key": "ward", "mytag": "ward", "level": 4, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "constituency",
+        "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
+        "field": "WD24NM", "out": "Ward_Boundaries.gpkg", "method": "intersect",
+        "options": {"color": "#2E6FBB", "fontColor": "#2E6FBB", "weight": 2.5, "fillColor": "#A9C8F5", "fillOpacity": 0.18}
+    },
+    "division": {
+        "key": "division", "mytag": "division", "level": 4, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "constituency",
+        "aggregation_mode": "selected_name",
+        "src": ["County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson", "Revised_Surrey_Proposed_Divisions.geojson"],
+        "field": ["CED23NM", "Division_n"], "out": "Division_Boundaries.gpkg", "method": "intersect",
+        "options": {"color": "#D95F02", "fontColor": "#D95F02", "weight": 2.5, "fillColor": "#F6C28B", "fillOpacity": 0.12, "dashArray": "8,5"}
+    },
+    "walk": {
+        "key": "walk", "mytag": "walk", "level": 5, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "ward",
+        "aggregation_mode": "selected_name",
+        "src": "walk_geoms.geojson",
+        "field": "WalkName",
+        "id_field": "FID",
+        "out": "Walk_Boundaries.gpkg",
+        "fan_out_to_all_parents": True,
+        "method": "intersect",
+        "simplify_tolerance": None,
+        "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
+    },
+    "street": {
+        "key": "street", "mytag": "street", "level": 6, "type": "node",
+        "overlay": True, "control": True, "show": False,
+        "parent_layer": "walk",
+        "aggregation_mode": "selected_name",
+        "src": "UK-ROADS.gpkg",
+        "field": "name1",
+        "out": "Street_Geometries.gpkg",
+        "fan_out_to_all_parents": True,
+        "method": "linestringArea",
+        "simplify_tolerance": None,
+        "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
+    },
+    "elector": {"key": "elector", "mytag": "elector", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "result": {"key": "result", "mytag": "result", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "target": {"key": "target", "mytag": "target", "overlay": True, "control": True, "show": False, "type": "marker"},
+    "data": {"key": "data", "mytag": "data", "overlay": True, "control": True, "show": False, "type": "marker"},
+}
+
+OVERLAP_THRESHOLDS = {
+    "country": 0.90,           # High precision: should be almost completely inside
+    "region": 0.75,            # Minor boundary clipping allowed
+    "county": 0.60,            # Forgiving of coastline/river edge mismatches
+    "constituency": 0.50,      # Balanced threshold for parliamentary lines
+    "ward": 0.25,              # Forgiving enough for Windlesham / Heathlands boundary bleed
+    "division": 0.25,          # Similar to wards
+    "polling_district": 0.20,  # Lower threshold: small shapes clipping complex edges
+    "street": 0.15,            # Streets can run right along borders; low threshold prevents exclusion
+    "walk": 0.15
+}
+DEFAULT_THRESHOLD = 0.50       # Fallback safety blanket
+
+
+
+# Cache key includes the REVISED flag state so toggling REVISED reloads correctly
+
+
+LAYER_CACHE = {}
+
+def compute_font_size(days_to, min_size=10, max_size=28, default_size=14):
+    """
+    Computes a dynamic font size based on how many days remain until an event.
+    Closer events get larger text; distant events get smaller text.
+    """
+    try:
+        days = int(days_to)
+    except (TypeError, ValueError):
+        return default_size
+
+    # Handle past events (negative days): keep them small/subdued
+    if days < 0:
+        return min_size
+
+    # Inverse scaling: 0 days away = max_size, scaling down as days increase
+    # Using a logarithmic or inverse decay curve works well so that changes
+    # are dramatic close to zero and flatten out for distant future dates.
+    # Formula: max_size - (days / scaling_factor), bounded between min_size and max_size
+
+    scaling_factor = 10.0  # Adjust this to change how quickly text shrinks with time
+    computed = max_size - (days / scaling_factor)
+
+    return max(min_size, min(max_size, int(round(computed))))
+
+def clear_treepolys(from_level=None):
+    if from_level is None:
+        for k in Treepolys:
+            Treepolys[k] = gpd.GeoDataFrame()
+    else:
+        for layer in MAP_LAYERS[from_level:]:
+            Treepolys[layer["key"]] = gpd.GeoDataFrame()
+
+def empty_gdf():
+    return gpd.GeoDataFrame(
+        columns=["FID", "NAME", "geometry"],
+        geometry="geometry",
+        crs="EPSG:4326"
+    )
+
+def _empty_gdf():
+    return empty_gdf()
+
+def get_treepoly(layer_type: str):
+    return Treepolys.get(layer_type)
+
+def set_treepoly(layer_type: str, gdf: gpd.GeoDataFrame):
+    Treepolys[layer_type] = gdf
+
+def has_treepoly(layer_type: str) -> bool:
+    return layer_type in Treepolys and not Treepolys[layer_type].empty
+
+
+def _get_known_name_candidates():
+    return ["NAME", "name", "Name", "NAME_0", "NAME_1", "NAME_2", "NAME_3", "CTY24NM", "WD24NM", "PCON24NM"]
+
+
+def normalize_column_case(gdf: gpd.GeoDataFrame, canonical_names: list[str]) -> gpd.GeoDataFrame:
+    """
+    For each name in canonical_names, find any column that matches it
+    case-insensitively and rename it to the canonical (exact-case) form.
+
+    GPKG/SQLite treats column names case-insensitively, so "Name" and
+    "NAME" collide at write time even though pandas happily holds both
+    side by side. Renaming in place (rather than add-a-column-then-drop)
+    avoids ever creating that collision to begin with.
+
+    If more than one column matches a given canonical name case-insensitively
+    (e.g. both "Name" and "NAME" already exist as distinct columns with
+    potentially different data), the first match in column order wins and
+    is renamed; the rest are dropped, and a warning is logged since this is
+    a genuine data decision, not just a formatting nit.
+    """
+    gdf = gdf.copy()
+    rename_map = {}
+    drop_cols = []
+
+    for canonical in canonical_names:
+        matches = [c for c in gdf.columns if c.upper() == canonical.upper()]
+        if not matches:
+            continue
+        if canonical in matches:
+            # Exact-case canonical column already exists; drop any other
+            # case-variant duplicates, keeping the canonical one as-is.
+            extras = [c for c in matches if c != canonical]
+            if extras:
+                logging.warning(
+                    f"[SCHEMA] Column '{canonical}' already exists alongside "
+                    f"case-variant duplicate(s) {extras}; dropping duplicate(s)."
+                )
+                drop_cols.extend(extras)
+            continue
+
+        # No exact-case canonical column yet; promote the first case-variant match.
+        keep, *extras = matches
+        rename_map[keep] = canonical
+        if extras:
+            logging.warning(
+                f"[SCHEMA] Multiple case-variant columns matched '{canonical}': "
+                f"{matches}; renaming '{keep}' -> '{canonical}' and dropping {extras}."
+            )
+            drop_cols.extend(extras)
+
+    if drop_cols:
+        gdf = gdf.drop(columns=drop_cols)
+    if rename_map:
+        gdf = gdf.rename(columns=rename_map)
+
+    return gdf
+
+def get_layer_gdf(key: str, node_path=None):
+    """Loads and standardizes a GeoDataFrame for a given layer key from global MAP_LAYERS.
+
+    Uses resolved absolute file paths for cache keying to prevent cache misses caused
+    by node_path structural variances.
+    """
+    global LAYER_CACHE
+    from state import stepify
+
+    if key not in MAP_LAYERS:
+        logger.error(f"❌ Key '{key}' not found in global MAP_LAYERS.")
+        return _empty_gdf()
+
+    layer_cfg = MAP_LAYERS[key]
+    src_val = layer_cfg.get("src")
+    out_val = layer_cfg.get("out")
+
+    if not src_val:
+        logger.warning(f"⚠️ Layer '{key}' has no 'src' specified in MAP_LAYERS.")
+        return _empty_gdf()
+
+    # 1. Determine REVISED setting logic
+    revised_setting = str(globals().get("REVISED", "")).strip().upper()
+    current_county = ""
+    if node_path:
+        steps = stepify(node_path)
+        current_county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
+
+    is_revised = bool(
+        revised_setting and current_county and (revised_setting == current_county)
+    )
+
+    # 2. Resolve source file path before cache key creation
+    src_idx = 1 if (is_revised and isinstance(src_val, list) and len(src_val) > 1) else 0
+    raw_src = src_val[src_idx] if isinstance(src_val, list) else src_val
+    raw_out = out_val
+
+    if not raw_src:
+        logger.warning(f"⚠️ Layer '{key}' has an empty path value in MAP_LAYERS.")
+        return _empty_gdf()
+
+    # --- LEVEL-AWARE REGIONAL SCOPING FOR CACHE ---
+    scoped_out_name = raw_out
+    if key in ["ward", "division", "walk"] and current_county:
+        base_out_name, out_ext = os.path.splitext(raw_out)
+        scoped_out_name = f"{base_out_name}_{current_county}{out_ext}"
+
+    bounddir = workdirectories.get("bounddir", "")
+    if not os.path.isabs(raw_src) and bounddir:
+        src = os.path.abspath(os.path.join(bounddir, raw_src))
+        out = os.path.abspath(os.path.join(bounddir, scoped_out_name))
+    else:
+        src = os.path.abspath(raw_src)
+        out = os.path.abspath(scoped_out_name)
+
+    # --- ROBUST CACHE CHECK ---
+    if os.path.exists(out) and os.path.getsize(out) > 100:
+        logger.info(f"⚡ Using cached/filtered efficiency file for key '{key}': {out}")
+        src = out
+    else:
+        logger.info(f"🐢 Efficiency file missing or empty; falling back to raw source for key '{key}': {src}")
+
+    # 3. Use absolute file path and mtime as the deterministic cache key
+    if not os.path.exists(src):
+        logger.warning(f"⚠️ Layer file missing or does not exist for key '{key}': {src}")
+        return _empty_gdf()
+
+    file_mtime = os.path.getmtime(src)
+    cache_key = (key, src, file_mtime)
+
+    # 4. Check Cache
+    if cache_key in LAYER_CACHE:
+        logger.debug(f"⚡ Cache HIT for layer '{key}' [{cache_key}]")
+        return LAYER_CACHE[cache_key]
+
+    logger.info(f"🐢 Cache MISS for layer '{key}'. Loading from disk: {src}")
+
+    # 5. Disk Read & Standardization
+    try:
+        try:
+            gdf = gpd.read_file(src, engine="pyogrio")
+        except Exception:
+            gdf = gpd.read_file(src)
+
+        if gdf.empty:
+            return _empty_gdf()
+
+        # Standardize CRS
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326")
+        elif gdf.crs.to_string() != "EPSG:4326":
+            gdf = gdf.to_crs("EPSG:4326")
+
+        # ------------------------------------------------------------
+        # Standardize casing for our reserved columns FIRST. GPKG/SQLite
+        # is case-insensitive on column names, so any source column that
+        # is a case-variant of one of these (e.g. "Name", "Fid", "Id")
+        # must be reconciled before we add our own canonically-cased
+        # versions, or we end up creating a collision at write time.
+        # ------------------------------------------------------------
+        gdf = normalize_column_case(gdf, ["FID", "NAME", "TYPEKEY"])
+
+        # Standardize FID (covers "id" / "OBJECTID" -- "fid" case-variants
+        # are already handled by normalize_column_case above)
+        if "FID" not in gdf.columns:
+            for candidate in ["id", "OBJECTID"]:
+                ci_matches = [c for c in gdf.columns if c.upper() == candidate.upper()]
+                if ci_matches:
+                    gdf = gdf.rename(columns={ci_matches[0]: "FID"})
+                    break
+            else:
+                gdf["FID"] = range(1, len(gdf) + 1)
+
+        gdf["FID"] = pd.to_numeric(gdf["FID"], errors="coerce")
+        if gdf["FID"].isnull().any():
+            gdf["FID"] = gdf["FID"].fillna(pd.Series(range(1, len(gdf) + 1), index=gdf.index))
+        gdf["FID"] = gdf["FID"].astype(int)
+
+        # ------------------------------------------------------------
+        # Resolve which column should populate NAME. Matching is done
+        # case-insensitively against gdf's (now-normalized) columns, since
+        # a configured_field like "Name" may have already been renamed to
+        # the canonical "NAME" by normalize_column_case above.
+        # ------------------------------------------------------------
+        configured_field = layer_cfg.get("field")
+        if isinstance(configured_field, list):
+            configured_field = configured_field[min(src_idx, len(configured_field) - 1)]
+
+        matched_col = None
+        if isinstance(configured_field, str):
+            ci_matches = [c for c in gdf.columns if c.upper() == configured_field.upper()]
+            if ci_matches:
+                matched_col = ci_matches[0]
+
+        if not matched_col:
+            known_candidates = _get_known_name_candidates()
+            matched_col = next((c for c in known_candidates if c in gdf.columns), None)
+
+        if not matched_col:
+            pattern = re.compile(r".*(nm|name)$", re.IGNORECASE)
+            matched_col = next((c for c in gdf.columns if pattern.match(c) and c.upper() != "NAME"), None)
+
+        if matched_col:
+            if matched_col.upper() != "NAME":
+                # matched_col is a distinct source field (e.g. "Division_n"),
+                # not a case-variant of NAME -- copy its values in.
+                gdf["NAME"] = gdf[matched_col]
+            # else: matched_col already IS the canonical NAME column
+            # (renamed by normalize_column_case above); nothing to do.
+        elif "NAME" not in gdf.columns:
+            gdf["NAME"] = gdf["FID"].astype(str)
+
+        gdf["TYPEKEY"] = key
+
+        # Pre-build spatial index for spatial filtering performance
+        _ = gdf.sindex
+
+        # --- SAFE SAVE TO EFFICIENCY CACHE FILE ---
+        if out != raw_out and not os.path.exists(out):
+            try:
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                if os.path.exists(out):
+                    os.remove(out)
+                gdf.to_file(out, driver="GPKG" if out.endswith(".gpkg") else "GeoJSON")
+                logger.info(f"💾 Created county efficiency cache file: {out}")
+            except Exception as write_err:
+                logger.warning(f"⚠️ Failed to write efficiency cache file {out}: {write_err}")
+                if os.path.exists(out):
+                    try:
+                        os.remove(out)
+                    except:
+                        pass
+
+        # Store in cache
+        LAYER_CACHE[cache_key] = gdf
+        return LAYER_CACHE[cache_key]
+
+    except Exception as e:
+        logger.error(f"❌ Error loading GeoDataFrame for layer '{key}' from {src}: {e}")
+        return _empty_gdf()
+
+
+def get_centroid_or_point(roid):
+    """
+    Extracts a single representative Shapely Point from 'roid'.
+    Handles Shapely geometries, (lat, lon) tuples/lists, or string paths/coords.
+    Guarantees output in Shapely Point(lon, lat) format.
+    """
+    if roid is None:
+        return None
+
+    # 1. Any Shapely Geometry (Point, Polygon, MultiPolygon, etc.)
+    if hasattr(roid, "geom_type") or hasattr(roid, "centroid"):
+        if getattr(roid, "is_empty", False):
+            return None
+        return roid.centroid
+
+    # 2. Raw (lat, lon) tuple or list of numbers, e.g. (51.248, -0.420)
+    if isinstance(roid, (tuple, list)) and len(roid) >= 2 and isinstance(roid[0], (int, float)):
+        lat, lon = float(roid[0]), float(roid[1])
+        if -90 <= lat <= 90 and -180 <= lon <= 180:
+            return Point(lon, lat)  # Point(x, y) = Point(lon, lat)
+        return Point(lat, lon)
+
+    # 3. Parse coordinate strings or paths
+    coords = parse_coords(roid) if "parse_coords" in globals() else []
+    if not coords:
+        return None
+
+    points = []
+    for c in coords:
+        if len(c) >= 2:
+            c0, c1 = float(c[0]), float(c[1])
+            if -90 <= c0 <= 90 and -180 <= c1 <= 180:
+                points.append(Point(c1, c0))  # lon, lat
+            else:
+                points.append(Point(c0, c1))  # x, y
+
+    if not points:
+        return None
+
+    if len(points) == 1:
+        return points[0]
+
+    return MultiPoint(points).centroid
+
+def parse_coords(coord_input) -> list[tuple[float, float]]:
+    """
+    Normalizes various coordinate representations into a list of (lat, lon) tuples.
+    Handles: (lat, lon), [lat, lon], [[lat, lon]], or None.
+    """
+    if not coord_input:
+        return []
+
+    # Single pair: (lat, lon) or [lat, lon]
+    if isinstance(coord_input, (list, tuple)):
+        if len(coord_input) == 2 and isinstance(coord_input[0], (int, float)):
+            lat, lon = coord_input
+            if lat is not None and lon is not None:
+                return [(float(lat), float(lon))]
+        # Nested list: [[lat, lon], ...]
+        elif len(coord_input) > 0 and isinstance(coord_input[0], (list, tuple)):
+            valid_pairs = []
+            for item in coord_input:
+                if len(item) == 2 and item[0] is not None and item[1] is not None:
+                    valid_pairs.append((float(item[0]), float(item[1])))
+            return valid_pairs
+
+    return []
+
+
+
+# Add the '*' right after typekey
+
+def ensure_4326(gdf):
+    """
+    If data is naive, set the CRS to 4326.
+    If it is already 4326 (or equivalent geographic WGS84), do nothing.
+    Otherwise, transform it safely.
+    """
+    if gdf.crs is None:
+        logging.info("[CRS] Data is naive; setting to EPSG:4326")
+        return gdf.set_crs("EPSG:4326")
+
+    # Use robust CRS comparison to prevent redundant transformation loops
+    target_crs = "EPSG:4326"
+    if gdf.crs.to_epsg() == 4326 or gdf.crs == target_crs:
+        return gdf
+
+    logging.info(f"[CRS] Data is in {gdf.crs}; transforming to EPSG:4326")
+    return gdf.to_crs(target_crs)
+
+
+
+def extract_geometry(parent_row):
+    """Safely extract Shapely geometry from dict or object types."""
+    if parent_row is None:
+        return None
+    if isinstance(parent_row, dict):
+        geom = parent_row.get("geometry")
+    else:
+        geom = getattr(parent_row, "geometry", None)
+
+    if geom is not None and hasattr(geom, "is_empty") and not geom.is_empty:
+        return geom.buffer(0) if isinstance(geom, BaseGeometry) else geom
+    return None
+
+
+def filterArea(
+    gdf: gpd.GeoDataFrame,
+    *,
+    typekey: str = "",
+    roid=None,
+    name=None,
+    parent_row=None,
+):
+    """
+    Lookup polygon(s) in a pre-loaded GeoDataFrame by name, centroid of roid, or parent_row geometry.
+    Returns: [nodestep, matched_gdf, full_gdf]
+    """
+    from state import normalname
+
+    if gdf is None or gdf.empty:
+        return None, _empty_gdf(), _empty_gdf()
+
+    gdf = ensure_4326(gdf)
+
+    layer_cfg = MAP_LAYERS.get(typekey, {})
+    destination = layer_cfg.get("out", f"{typekey}_Boundaries.geojson")
+
+    matched = gdf.iloc[0:0]
+
+    # 1️⃣ Lookup by name
+    if name is not None:
+        target = normalname(name.rsplit("/", 1)[-1])
+        matched = gdf[gdf["NAME"].astype(str).map(normalname) == target]
+
+    # 2️⃣ Lookup by parent_row geometry
+    elif parent_row is not None:
+        geom = extract_geometry(parent_row)
+        if geom:
+            matched = gdf[gdf.intersects(geom)]
+        else:
+            # Fallback: if parent has no geometry (e.g. root node), accept all candidates
+            matched = gdf
+
+    # 3️⃣ Lookup by ROID
+    elif roid is not None:
+        pt = get_centroid_or_point(roid)
+        if pt and not pt.is_empty:
+            matched = gdf[gdf.intersects(pt)]
+            print(
+                f"[filterArea] 📍 Using ROID Centroid ({pt.y:.5f}, {pt.x:.5f}) -> Matched {len(matched)} feature(s)"
+            )
+        else:
+            print(f"[filterArea] ⚠️ Invalid coordinate structure for roid: {roid}")
+            matched = gdf
+    else:
+        # Default fallback if no filters are provided at all
+        matched = gdf
+
+    nodestep = normalname(matched["NAME"].iloc[0]) if not matched.empty else None
+
+    if nodestep:
+        print(f"[filterArea] Found {nodestep} ({len(matched)} feature(s)), saved to {destination}")
+    else:
+        print(f"[filterArea] No matching feature found for name {name} or roid {roid}")
+
+    return [nodestep, matched, gdf]
+
+def indexSpatialArea(
+    gdf: gpd.GeoDataFrame,
+    *,
+    typekey: str = "",
+    roid=None,
+    name=None,
+    parent_row=None,
+):
+    """
+    Slices point/vector features from a pre-loaded GeoDataFrame, builds an in-memory cKDTree
+    spatial index, and saves the output layer GeoJSON.
+    """
+    if gdf is None or gdf.empty:
+        return {
+            "gdf": _empty_gdf(),
+            "index": None,
+            "coords": np.empty((0, 2)),
+            "ids": np.array([]),
+        }
+
+    gdf = ensure_4326(gdf)
+
+    layer_cfg = MAP_LAYERS.get(typekey, {})
+    destination = layer_cfg.get("out", f"{typekey}_Boundaries.geojson")
+
+    working_geom = extract_geometry(parent_row)
+    if working_geom is None and roid is not None:
+        working_geom = get_centroid_or_point(roid)
+
+    if working_geom is not None and not gdf.empty:
+        sliced_gdf = gdf[gdf.geometry.intersects(working_geom)].copy()
+    else:
+        sliced_gdf = gdf.copy()
+
+    sliced_gdf.to_file(destination, driver="GeoJSON")
+
+    if not sliced_gdf.empty:
+        coords = np.column_stack((sliced_gdf.geometry.y, sliced_gdf.geometry.x))
+    else:
+        coords = np.empty((0, 2))
+
+    id_field = layer_cfg.get("id_field", layer_cfg.get("field"))
+    if isinstance(id_field, list):
+        id_field = id_field[0]
+
+    if id_field and id_field in sliced_gdf.columns:
+        ids = sliced_gdf[id_field].values
+    elif "NAME" in sliced_gdf.columns:
+        ids = sliced_gdf["NAME"].values
+    elif "FID" in sliced_gdf.columns:
+        ids = sliced_gdf["FID"].values
+    else:
+        ids = np.array([])
+
+    return {
+        "gdf": sliced_gdf,
+        "index": cKDTree(coords) if len(coords) > 0 else None,
+        "coords": coords,
+        "ids": ids,
+    }
+
+
+def linestringArea(
+    gdf: gpd.GeoDataFrame,
+    *,
+    typekey: str = "",
+    roid=None,
+    name=None,
+    parent_row=None,
+):
+    """
+    Slices pre-loaded LineStrings (e.g., streets) from a GeoDataFrame by spatial boundary
+    and optional street name matching using sindex optimization, with comprehensive debugging.
+    """
+    from state import normalname
+
+    # 1. Inspect input GDF
+    p_name = parent_row.get("NAME") if isinstance(parent_row, dict) else getattr(parent_row, "NAME", "Unknown") if parent_row is not None else "None"
+    logging.info(f"🔍 [linestringArea ENTRY] typekey: {typekey} | parent: {p_name} | input gdf len: {len(gdf) if gdf is not None else 'None'}")
+
+    if gdf is None or gdf.empty:
+        logging.warning(f"⚠️ [linestringArea] Input gdf for typekey '{typekey}' is None or empty.")
+        return None, _empty_gdf(), _empty_gdf()
+
+    gdf = ensure_4326(gdf)
+
+
+    layer_cfg = MAP_LAYERS.get(typekey, {})
+    destination = layer_cfg.get("out", f"{typekey}_Geometries.geojson")
+
+    # 2. Inspect working geometry and bounds
+    working_geom = extract_geometry(parent_row)
+    if working_geom is None and roid is not None:
+        working_geom = get_centroid_or_point(roid)
+
+    if working_geom is not None:
+        logging.info(f"📍 [linestringArea] working_geom type: {type(working_geom)} | Bounds: {working_geom.bounds}")
+    else:
+        logging.warning(f"⚠️ [linestringArea] working_geom is None for parent: {p_name} (roid: {roid})")
+
+    line_gdf = gdf[gdf.geometry.type.isin(["LineString", "MultiLineString"])].copy()
+    logging.info(f"🛤️ [linestringArea] Filtered line_gdf count (LineString/MultiLineString): {len(line_gdf)}")
+
+    # Use sindex optimization
+    matched = _empty_gdf()
+    if working_geom is not None and not line_gdf.empty:
+        bbox = working_geom.bounds
+        try:
+            # --- DEBUG: CRS and Bounding Box Check ---
+            line_crs = line_gdf.crs if hasattr(line_gdf, "crs") else "Unknown"
+            logger.info(f"📐 [CRS DEBUG] line_gdf CRS: {line_crs} | Total features: {len(line_gdf)}")
+            logger.info(f"📐 [CRS DEBUG] working_geom bounds: {bbox}")
+            if not line_gdf.empty:
+                sample_geom = line_gdf.geometry.iloc[0]
+                logger.info(f"📐 [CRS DEBUG] Sample line geometry bounds: {sample_geom.bounds}")
+            # -----------------------------------------
+
+            candidate_indices = list(line_gdf.sindex.intersection(bbox))
+            logging.info(f"📦 [linestringArea] sindex intersection count for bbox {bbox}: {len(candidate_indices)}")
+
+            valid_indices = [idx for idx in candidate_indices if idx < len(line_gdf)]
+
+            if valid_indices:
+                candidate_gdf = line_gdf.iloc[valid_indices]
+                intersects_mask = candidate_gdf.geometry.intersects(working_geom)
+                matched = candidate_gdf[intersects_mask].copy()
+                logging.info(f"🎯 [linestringArea] Final matched count after precise geometry intersection: {len(matched)}")
+            else:
+                logging.warning(f"⚠️ [linestringArea] No valid indices found in sindex intersection for bbox: {bbox}")
+
+        except Exception as e:
+            logging.warning(f"⚠️ sindex intersection failed for linestringArea, falling back to full scan: {e}")
+            matched = line_gdf[line_gdf.geometry.intersects(working_geom)].copy()
+            logging.info(f"🔄 [linestringArea] Fallback scan matched count: {len(matched)}")
+    else:
+        logging.warning(f"⚠️ [linestringArea] Skipping spatial filter because working_geom is None or line_gdf is empty.")
+        matched = line_gdf.copy()
+
+    nodestep = None
+    if name is not None and not matched.empty:
+        target_norm = normalname(name)
+        name_matched = matched[matched["NAME"].astype(str).map(normalname) == target_norm]
+        if not name_matched.empty:
+            matched = name_matched
+            nodestep = target_norm
+            logging.info(f"🏷️ [linestringArea] Matched specific name '{name}' (normalized: {target_norm}), count: {len(matched)}")
+        else:
+            logging.warning(f"⚠️ [linestringArea] Name '{name}' requested, but no matching rows found in matched subset.")
+
+    if nodestep is None and not matched.empty:
+        try:
+            nodestep = normalname(str(matched["NAME"].iloc[0]))
+        except Exception as ex:
+            logging.warning(f"⚠️ [linestringArea] Could not extract nodestep name from matched data: {ex}")
+
+    try:
+        matched.to_file(destination, driver="GeoJSON")
+        logging.info(f"💾 [linestringArea] Saved {len(matched)} geometries to {destination}")
+    except Exception as ex:
+        logging.error(f"❌ [linestringArea] Failed to save GeoJSON to {destination}: {ex}")
+
+    return [nodestep, matched, gdf]
+
+def intersectingArea(
+    gdf: gpd.GeoDataFrame,
+    *,
+    typekey: str = "",
+    roid=None,
+    name=None,
+    parent_row=None,
+):
+    """
+    Finds intersecting child geometries against a parent row feature.
+    """
+    from state import normalname
+
+    if gdf is None or gdf.empty:
+        return None, _empty_gdf(), _empty_gdf()
+
+    gdf = ensure_4326(gdf)
+
+    layer_cfg = MAP_LAYERS.get(typekey, {})
+    child_level = layer_cfg.get("level", "N/A")
+
+    parent_name = "None"
+    if parent_row is not None:
+        if isinstance(parent_row, dict):
+            p_name_val = parent_row.get("NAME", "None")
+        else:
+            p_name_val = getattr(parent_row, "NAME", "None")
+        parent_name = normalname(p_name_val)
+
+    working_geom = extract_geometry(parent_row)
+
+    p_name = parent_row.get("NAME") if isinstance(parent_row, dict) else getattr(parent_row, "NAME", "Unknown")
+    logging.info(f"Checking intersection for parent: {p_name} | Geom type: {type(working_geom)} | Bounds: {working_geom.bounds if working_geom else 'NONE'}")
+    if working_geom is not None:
+        bbox = working_geom.bounds
+        candidate_indices = list(gdf.sindex.intersection(bbox))
+
+        if candidate_indices:
+            # Filter out any indices that might fall outside the current bounds of gdf
+            valid_indices = [idx for idx in candidate_indices if idx < len(gdf)]
+            if valid_indices:
+                candidate_gdf = gdf.iloc[valid_indices]
+                child_polygons_within_parent = filter_gdf_by_overlap(
+                    children_gdf=candidate_gdf,
+                    parent_geometry=working_geom,
+                    layer_type=typekey,
+                    threshold_dict=globals().get("OVERLAP_THRESHOLDS", {}),
+                )
+            else:
+                child_polygons_within_parent = _empty_gdf()
+        else:
+            child_polygons_within_parent = _empty_gdf()
+    else:
+        logging.warning("⚠️ No valid parent geometry in parent_row! Returning empty spatial subset.")
+        child_polygons_within_parent = _empty_gdf()
+
+    selected_child_name = None
+
+    # 1. Try matching via coordinate/centroid (roid)
+    centroid_pt = get_centroid_or_point(roid)
+    if centroid_pt is not None and not child_polygons_within_parent.empty:
+        hit = child_polygons_within_parent[
+            child_polygons_within_parent.geometry.contains(centroid_pt)
+        ]
+        if not hit.empty:
+            selected_child_name = normalname(hit.iloc[0]["NAME"])
+
+    # 2. Try matching via explicit name input
+    if not selected_child_name and name and not child_polygons_within_parent.empty:
+        target = normalname(name)
+        hit = child_polygons_within_parent[
+            child_polygons_within_parent["NAME"].astype(str).map(normalname) == target
+        ]
+        if not hit.empty:
+            selected_child_name = normalname(hit.iloc[0]["NAME"])
+
+    # NOTE: The old fallback block that forced `selected_child_name = iloc[0]`
+    # when name was None has been removed. Now, if name is None and no roid matches,
+    # selected_child_name stays None, leaving all child polygons intact for export.
+
+    return selected_child_name, child_polygons_within_parent, gdf
+
+
+import logging
+
+import geopandas as gpd
+
+
+# UK bounding box in WGS84 degrees, with generous padding. Genuine lon/lat
+# values for anything in this pipeline fall well inside this range;
+# coordinates still in EPSG:27700 (or any other projected/metric CRS) show
+# up as values in the hundreds of thousands and fail this check instantly.
+# This doesn't prove a geometry is correctly EPSG:4326 -- it's a cheap,
+# reliable trip-wire for the specific failure mode of a geometry silently
+# still being in a projected CRS when 4326 is assumed.
+_UK_WGS84_BOUNDS = (-11.0, 49.5, 2.5, 61.5)
+
+
+def _looks_like_wgs84(geom, bounds=_UK_WGS84_BOUNDS):
+    """Sanity-check a geometry's own coordinate values, not its CRS label."""
+    if geom is None or geom.is_empty:
+        return False
+    minx, miny, maxx, maxy = geom.bounds
+    ux_min, uy_min, ux_max, uy_max = bounds
+    return (
+        ux_min <= minx <= ux_max and ux_min <= maxx <= ux_max and
+        uy_min <= miny <= uy_max and uy_min <= maxy <= uy_max
+    )
+
+
+def _resolve_ancestor_geometry(*, node_path, parent_row, ancestor_levels_up=2):
+    """
+    Resolve a stable boundary to pre-clip against.
+
+    Prefers a genuine ancestor a fixed number of hierarchy levels above the
+    immediate parent (looked up via Geo_index -> Treepolys by FID). A
+    broader ancestor is deliberately used instead of the immediate parent:
+    clipping tightly against the immediate parent risks losing valid
+    features that sit right on that parent's edge, if the parent's own
+    boundary has any small misalignment relative to the true source data.
+    Falls back to the immediate parent's own geometry if no such ancestor
+    can be resolved (e.g. we're only a level or two deep in the hierarchy).
+
+    Returns (geometry, crs_or_None). crs_or_None is None when the source
+    of the geometry doesn't carry known CRS metadata (e.g. a dict-based
+    parent_row) — callers should treat that as "assume same CRS as gdf",
+    not as "no reprojection needed". Every geometry returned here has
+    already passed the WGS84 plausibility check; a geometry that fails it
+    is treated as unusable rather than silently trusted.
+    """
+    if node_path and "Geo_index" in globals() and "Treepolys" in globals():
+        path_parts = [p for p in node_path.split("/") if p]
+        if len(path_parts) > ancestor_levels_up:
+            ancestor_path = "/".join(path_parts[:ancestor_levels_up])
+            ancestor_node = Geo_index.get(ancestor_path)
+            if ancestor_node and ancestor_node.get("fid") is not None:
+                level = ancestor_node.get("level")
+                layer_gdf = Treepolys.get(level) if level else None
+                if layer_gdf is not None and not layer_gdf.empty and "FID" in layer_gdf.columns:
+                    match = layer_gdf[layer_gdf["FID"] == int(ancestor_node["fid"])]
+                    if not match.empty:
+                        geom = match.geometry.iloc[0]
+                        if geom is not None and not geom.is_empty:
+                            if not _looks_like_wgs84(geom):
+                                logging.error(
+                                    f"[ANCESTOR CLIP] Ancestor '{ancestor_path}' geometry bounds "
+                                    f"{geom.bounds} don't look like WGS84; refusing to use it."
+                                )
+                            else:
+                                return geom, layer_gdf.crs
+
+    # Fallback: the immediate parent's own geometry.
+    if parent_row is not None:
+        p_geom = extract_geometry(parent_row)
+        if p_geom is not None and not p_geom.is_empty:
+            if not _looks_like_wgs84(p_geom):
+                logging.error(
+                    f"[ANCESTOR CLIP] Parent row geometry bounds {p_geom.bounds} don't look "
+                    f"like WGS84 (likely still in a projected CRS); refusing to use it."
+                )
+                return None, None
+            return p_geom, None
+
+    return None, None
+
+
+def load_layer(
+    *,
+    layer,
+    parent_levels,
+    parent_row,
+    select_name=None,
+    roid=None,
+    node_path=None,
+    **kwargs
+):
+    """
+    Standardized layer-loader entrypoint using the provided parent_row directly.
+    """
+    typekey = layer.get("key")
+    method = layer.get("method")
+
+    gdf = get_layer_gdf(typekey, node_path=node_path)
+    if gdf is None or gdf.empty:
+        return _empty_gdf()
+
+    # ------------------------------------------------------------------
+    # STAGE 1 & STAGE 2 GEOMETRY RESOLUTION (Directly from parent_row)
+    # ------------------------------------------------------------------
+    exact_clip_geom = None
+    clip_crs = getattr(gdf, "crs", None)
+
+    try:
+        # Extract geometry directly from parent_row if available
+        if parent_row is not None:
+            if hasattr(parent_row, "geometry"):
+                exact_clip_geom = parent_row.geometry
+            elif isinstance(parent_row, dict) and "geometry" in parent_row:
+                exact_clip_geom = parent_row["geometry"]
+    except Exception as e:
+        logging.debug(f"[ANCESTOR CLIP] Could not extract geometry directly from parent_row: {e}")
+
+    # Fallback to _resolve_ancestor_geometry if parent_row didn't yield a geometry
+    if exact_clip_geom is None:
+        exact_clip_geom, clip_crs = _resolve_ancestor_geometry(
+            node_path=node_path, parent_row=parent_row, ancestor_levels_up=1,
+        )
+
+    # Build Stage 1 broad filter geometry: double the bounding box of the parent
+    stage1_clip_geom = exact_clip_geom
+    if exact_clip_geom is not None:
+        try:
+            minx, miny, maxx, maxy = exact_clip_geom.bounds
+            width = maxx - minx
+            height = maxy - miny
+
+            # Expand parent bounds outward by 50% on all sides (doubling total footprint)
+            stage1_clip_geom = box(
+                minx - (width * 0.5),
+                miny - (height * 0.5),
+                maxx + (width * 0.5),
+                maxy + (height * 0.5)
+            )
+        except Exception as e:
+            logging.debug(f"[ANCESTOR CLIP] Failed to double parent bbox, falling back to exact bounds: {e}")
+
+    if exact_clip_geom is not None and not gdf.empty:
+        try:
+            if gdf.crs is not None and clip_crs is not None and str(gdf.crs) != str(clip_crs):
+                if stage1_clip_geom is not None:
+                    stage1_clip_geom = gpd.GeoSeries([stage1_clip_geom], crs=clip_crs).to_crs(gdf.crs).iloc[0]
+                exact_clip_geom = gpd.GeoSeries([exact_clip_geom], crs=clip_crs).to_crs(gdf.crs).iloc[0]
+
+            before = len(gdf)
+
+            # STAGE 1: Broad bounding-box-only pre-filter using the doubled parent box
+            active_stage1_geom = stage1_clip_geom if stage1_clip_geom is not None else exact_clip_geom
+            candidate_idx = list(gdf.sindex.query(active_stage1_geom))  # bbox-only pre-filter
+
+            MAX_EXACT_VERIFY = 2000
+            if candidate_idx and len(candidate_idx) <= MAX_EXACT_VERIFY:
+                candidates = gdf.iloc[candidate_idx]
+                # STAGE 2: Exact intersection test against the strict parent geometry
+                exact_mask = candidates.geometry.intersects(exact_clip_geom)
+                gdf = candidates[exact_mask]
+            elif candidate_idx:
+                logging.debug(
+                    f"[ANCESTOR CLIP] '{typekey}': {len(candidate_idx)} candidates exceeds "
+                    f"exact-verify cap ({MAX_EXACT_VERIFY}); using bbox-query result as-is."
+                )
+                gdf = gdf.iloc[candidate_idx]
+            else:
+                gdf = gdf.iloc[0:0]
+
+            logging.debug(
+                f"[ANCESTOR CLIP] '{typekey}': {before} -> {len(gdf)} candidates "
+                f"(Stage 1: doubled parent bbox, Stage 2: strict parent from parent_row)."
+            )
+        except Exception as e:
+            logging.error(f"[ANCESTOR CLIP] Pre-filter failed for '{typekey}': {e}", exc_info=True)
+            return _empty_gdf()
+
+    # ------------------------------------------------------------------
+    # STAGE 2: Route to specific spatial method
+    # ------------------------------------------------------------------
+    if method == "index":
+        return indexSpatialArea(gdf, typekey=typekey, parent_row=parent_row, roid=roid)
+
+    if method == "linestringArea":
+        return linestringArea(gdf, typekey=typekey, parent_row=parent_row, roid=roid, name=select_name)
+
+    if method == "filter":
+        return filterArea(gdf, typekey=typekey, roid=roid, name=select_name, parent_row=parent_row)
+
+    return intersectingArea(gdf, typekey=typekey, parent_row=parent_row, name=select_name, roid=roid)
+
+def _get_known_name_candidates():
+    """Extract all potential 'NAME' field strings from global MAP_LAYERS."""
+    candidates = []
+    for layer in MAP_LAYERS.values():
+        field_val = layer.get("field")
+        if field_val:
+            if isinstance(field_val, list):
+                candidates.extend(field_val)
+            else:
+                candidates.append(field_val)
+
+    # Standard general fallbacks
+    candidates.extend(["NAME", "Name", "name", "County_Nam", "Ward_name", "Division_n"])
+
+    # Unique list while preserving order
+    return list(dict.fromkeys(candidates))
+
+def filter_gdf_by_overlap(children_gdf, parent_geometry, layer_type: str, threshold_dict, default_threshold=0.40):
+    """
+    Pure spatial math function: Takes a child GeoDataFrame and a parent geometry,
+    projects them to EPSG:3857, calculates proportional intersection area,
+    and returns a filtered copy of the children exceeding the configured threshold.
+    """
+
+
+    if children_gdf is None or children_gdf.empty or parent_geometry is None:
+        return gpd.GeoDataFrame(columns=children_gdf.columns) if children_gdf is not None else None
+
+    # 1. Resolve dynamic threshold configuration
+    primary_type = layer_type.split('/')[0].strip()
+    threshold = threshold_dict.get(primary_type, threshold_dict.get(layer_type, default_threshold))
+    print(f"[SPATIAL MATH] Filtering {layer_type} with threshold: {threshold}")
+
+    # 2. Fast Bounding-Box pre-filter to drop completely unrelated features immediately
+    if children_gdf.crs is None:
+        children_gdf = children_gdf.set_crs("EPSG:4326")
+    candidates = children_gdf[children_gdf.geometry.intersects(parent_geometry)].copy()
+
+    if candidates.empty:
+        return candidates
+
+    # 3. Project to Equal-Area/Metric CRS for precise ratio calculations
+    proj_crs = "EPSG:3857"
+    parent_geom_proj = gpd.GeoSeries([parent_geometry], crs="EPSG:4326").to_crs(proj_crs).iloc[0]
+    candidates_proj = candidates.to_crs(proj_crs)
+
+    # 4. Clean up invalid/empty geometries
+    valid_mask = candidates_proj.geometry.notnull() & ~candidates_proj.geometry.is_empty
+    valid_candidates_proj = candidates_proj[valid_mask].copy()
+
+    if valid_candidates_proj.empty:
+        return candidates.iloc[0:0] # Return empty GDF preserving original structure
+
+    # 5. Vectorized Math Operations
+    # In state.py around line 875:
+
+
+# Replace:
+# parent_geom_proj = parent_geom_proj.make_valid()
+
+# With:
+    parent_geom_proj = make_valid(parent_geom_proj)
+
+    valid_candidates_proj = valid_candidates_proj.copy()
+    valid_candidates_proj['geometry'] = valid_candidates_proj.geometry.make_valid()
+
+    # Now run intersection safely
+    overlap_areas = valid_candidates_proj.geometry.intersection(parent_geom_proj).area
+
+    child_areas = valid_candidates_proj.geometry.area.replace(0, 1e-9) # Prevent division-by-zero
+
+    valid_candidates_proj['_overlap_ratio'] = overlap_areas / child_areas
+
+    # 6. Print diagnostics
+    for idx, row in valid_candidates_proj.iterrows():
+        name = row.get("name") or row.get("NAME") or f"Index-{idx}"
+        ov = row['_overlap_ratio']
+        print(f"📐 [{layer_type.upper()}] -> {name}: overlap={ov:.3f} {'✅' if ov >= threshold else '❌'}")
+
+    # 7. Map back to original unprojected indices and return
+    matched_indices = valid_candidates_proj[valid_candidates_proj['_overlap_ratio'] >= threshold].index
+    return candidates.loc[matched_indices].copy()
+
+
+# ==============================================================================
+# 🛠️ HELPER FUNCTIONS & STATE ACCESSORS
+# ==============================================================================
+
+def upsert_geodf(
+    existing: gpd.GeoDataFrame | None,
+    incoming: gpd.GeoDataFrame | None,
+    key: str = "FID"
+) -> gpd.GeoDataFrame:
+    """
+    Upsert incoming spatial features into an existing GeoDataFrame using Version 2 logic:
+    CRS alignment, duplicate resolution keeping newest records, and active geometry preservation.
+    """
+    if existing is None or existing.empty:
+        return incoming.copy() if incoming is not None else gpd.GeoDataFrame()
+    if incoming is None or incoming.empty:
+        return existing.copy()
+
+    # Ensure CRS compatibility
+    if existing.crs is None and incoming.crs is not None:
+        existing = existing.set_crs(incoming.crs)
+    elif (
+        existing.crs is not None
+        and incoming.crs is not None
+        and existing.crs != incoming.crs
+    ):
+        incoming = incoming.to_crs(existing.crs)
+
+    # Combine DataFrames
+    combined = pd.concat([existing, incoming], ignore_index=True)
+
+    # Drop duplicates keeping newest if key column exists
+    if key in combined.columns:
+        combined = combined.drop_duplicates(subset=key, keep="last")
+
+    # Safely rebuild GeoDataFrame ensuring active geometry column is maintained
+    geom_col = (
+        existing.geometry.name
+        if isinstance(existing, gpd.GeoDataFrame) and hasattr(existing, "geometry")
+        else "geometry"
+    )
+    if geom_col not in combined.columns:
+        geom_col = "geometry"
+
+    return gpd.GeoDataFrame(combined, geometry=geom_col, crs=existing.crs)
+
+
+def _generate_walk_geometries(areaelectors):
+    """
+    Build and persist walk-level (Level 5) geometries via Voronoi tessellation,
+    grouped hierarchically by Nation, County, Constituency, Ward, and WalkName.
+    """
+    logger = logging.getLogger(__name__)
+
+    if areaelectors is None or areaelectors.empty:
+        logger.warning("Cannot build walk geoms: areaelectors is missing or empty.")
+        return
+
+    null_coords = areaelectors["Long"].isna() | areaelectors["Lat"].isna()
+    if null_coords.any():
+        logger.warning(f"{null_coords.sum()} electors have missing/NaN coordinates.")
+
+    # -------------------------------------------------------------------------
+    # 1. GROUPING & CENTROID CALCULATION
+    # -------------------------------------------------------------------------
+    group_cols = []
+    for col in ["Nation", "County", "Constituency", "Ward", "WalkName"]:
+        if col in areaelectors.columns:
+            group_cols.append(col)
+        else:
+            logger.warning(f"⚠️ Grouping column '{col}' missing from areaelectors. Proceeding without it.")
+
+    if not group_cols:
+        logger.error("❌ No valid grouping columns found in areaelectors DataFrame.")
+        return
+
+    logger.info(f"📊 Grouping elector data by: {group_cols}")
+
+    centroids_df = areaelectors.groupby(group_cols, as_index=False, dropna=False).agg(
+        centroid_x=("Long", "mean"),
+        centroid_y=("Lat", "mean"),
+        Division=("Division", "first") if "Division" in areaelectors.columns else ("WalkName", "first"),
+        PD=("PD", "first") if "PD" in areaelectors.columns else ("WalkName", "first"),
+        elector_count=("WalkName", "count"),
+    ).dropna(subset=["centroid_x", "centroid_y"])
+
+    if centroids_df.empty:
+        logger.warning("Centroids DataFrame is empty after grouping; skipping Voronoi build.")
+        return
+
+    # -------------------------------------------------------------------------
+    # 2. RUN IMPROVED VORONOI BUILD LOGIC
+    # -------------------------------------------------------------------------
+    walk_gdf = build_walk_geoms_geovoronoi(
+        centroids_df=centroids_df,
+        crs_input="EPSG:4326",
+        crs_proj="EPSG:27700",
+        crs_out="EPSG:4326",
+    )
+
+    if walk_gdf.empty:
+        logger.warning("Voronoi build returned an empty GeoDataFrame.")
+        return
+
+    # -------------------------------------------------------------------------
+    # 3. PERSISTENCE
+    # -------------------------------------------------------------------------
+    if "WALK_GEOM_FILE" in globals():
+        os.makedirs(os.path.dirname(os.path.abspath(WALK_GEOM_FILE)), exist_ok=True)
+        walk_gdf.to_file(WALK_GEOM_FILE, driver="GeoJSON")
+        logger.info(f"Wrote {len(walk_gdf)} walk geoms to '{WALK_GEOM_FILE}'.")
+    else:
+        logger.warning("WALK_GEOM_FILE path variable not found in globals; GeoDataFrame returned but not written.")
+
+    return walk_gdf
+
+
+def build_walk_geoms_geovoronoi(
+    centroids_df,
+    crs_input="EPSG:4326",
+    crs_proj="EPSG:27700",
+    crs_out="EPSG:4326",
+):
+    """
+    Builds Voronoi walk geometries partitioned strictly within parent ward boundaries
+    using convex-hull calculation wrappers followed by exact boundary intersection clipping.
+    """
+    logger = logging.getLogger(__name__)
+    from state import normalname
+    from layers import Treepolys
+
+    logger.info("🚀 [DEBUG] Starting optimized hierarchical build_walk_geoms_geovoronoi")
+
+    empty_gdf = gpd.GeoDataFrame(
+        columns=["FID", "NAME", "TYPEKEY", "geometry"],
+        geometry="geometry",
+        crs=crs_out,
+    )
+
+    if centroids_df is None or centroids_df.empty:
+        return empty_gdf
+
+    df = centroids_df.dropna(subset=["centroid_x", "centroid_y", "WalkName"]).copy().reset_index(drop=True)
+    if df.empty:
+        return empty_gdf
+
+    # Coordinate transformation prep (EPSG:4326 -> EPSG:27700)
+    sample_x = df["centroid_x"].iloc[0]
+    sample_y = df["centroid_y"].iloc[0]
+
+    if abs(sample_x) > 180 or abs(sample_y) > 180:
+        pts_gdf = gpd.GeoDataFrame(
+            df, geometry=gpd.points_from_xy(df["centroid_x"], df["centroid_y"]), crs=crs_proj,
+        )
+    else:
+        if sample_x > 30 and sample_y < 10:
+            x_vals, y_vals = df["centroid_y"], df["centroid_x"]
+        else:
+            x_vals, y_vals = df["centroid_x"], df["centroid_y"]
+
+        pts_gdf = gpd.GeoDataFrame(
+            df, geometry=gpd.points_from_xy(x_vals, y_vals), crs=crs_input
+        ).to_crs(crs_proj)
+
+    min_x, min_y, max_x, max_y = pts_gdf.total_bounds
+    pad = 1000.0
+    fallback_hull = box(min_x - pad, min_y - pad, max_x + pad, max_y + pad)
+
+    ward_groups = pts_gdf.groupby("Ward" if "Ward" in pts_gdf.columns else pts_gdf.columns[0])
+    all_processed_features = []
+
+    for ward_name, group_df in ward_groups:
+        logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
+
+        # Look up exact parent territory boundary
+        parent_boundary = fallback_hull
+        source_used = "fallback_hull"
+
+        if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
+            pfile = Treepolys["ward"]
+            if not pfile.empty and "NAME" in pfile.columns:
+                w_norm = normalname(str(ward_name))
+                logger.debug(f"Normalized ward name search: '{w_norm}' (Original: '{ward_name}')")
+
+                matched_ward = pfile[pfile["NAME"].apply(normalname) == w_norm]
+                if not matched_ward.empty:
+                    parent_boundary = matched_ward.to_crs(crs_proj).union_all()
+                    matched_names = matched_ward["NAME"].tolist()
+                    source_used = f"Treepolys['ward'] (Matched names: {matched_names})"
+                else:
+                    logger.debug(f"No match in Treepolys['ward'] for normalized name '{w_norm}'.")
+            else:
+                logger.debug("Treepolys['ward'] dataframe is empty or missing the 'NAME' column.")
+        else:
+            logger.debug("Treepolys dictionary or 'ward' key is not present in globals.")
+
+        logger.info(f"-> Parent boundary source used: {source_used}")
+
+        if not parent_boundary.is_valid:
+            logger.warning(f"-> Warning: Parent boundary for '{ward_name}' is invalid. Applying .buffer(0) correction.")
+            parent_boundary = parent_boundary.buffer(0)
+
+        # Create a clean calculation bounding hull for geovoronoi outer margins
+        calc_hull = parent_boundary.convex_hull
+
+        # Extract coordinates safely and map to original rows
+        coords_list = []
+        point_to_row_indices = {}
+
+        for idx, row in group_df.iterrows():
+            pt_geom = row.geometry
+            # Ensure point falls safely inside the parent boundary
+            if not parent_boundary.contains(pt_geom):
+                pt_geom = nearest_points(parent_boundary, pt_geom)[0]
+
+            pt_coord = (round(pt_geom.x, 6), round(pt_geom.y, 6))
+            coords_list.append(pt_coord)
+            if pt_coord not in point_to_row_indices:
+                point_to_row_indices[pt_coord] = []
+            point_to_row_indices[pt_coord].append(idx)
+
+        coords = np.array(coords_list)
+        if len(coords) == 0:
+            continue
+
+        # -----------------------------------------------------------------
+        # VORONOI COMPUTATION FOR GROUP (Using Convex Hull wrapper)
+        # -----------------------------------------------------------------
+        region_polys = {}
+        region_pts = {}
+
+        if len(coords) >= 3:
+            try:
+                region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
+            except Exception as err:
+                logger.error(f"❌ geovoronoi calculation failed for ward {ward_name}: {err}. Falling back to fallback hull.")
+                try:
+                    region_polys, region_pts = voronoi_regions_from_coords(coords, fallback_hull)
+                except Exception as inner_err:
+                    logger.error(f"❌ Fallback hull calculation also failed for {ward_name}: {inner_err}")
+                    continue
+        elif len(coords) == 1:
+            region_polys = {0: calc_hull}
+            region_pts = {0: [0]}
+        elif len(coords) == 2:
+            pt1, pt2 = coords[0], coords[1]
+            mid_x, mid_y = (pt1[0] + pt2[0]) / 2.0, (pt1[1] + pt2[1]) / 2.0
+            dx, dy = pt2[0] - pt1[0], pt2[1] - pt1[1]
+            scale = 20.0
+            dividing_line = LineString([
+                (mid_x - (-dy) * scale, mid_y - dx * scale),
+                (mid_x + (-dy) * scale, mid_y + dx * scale)
+            ])
+            split_res = split(calc_hull, dividing_line)
+            geoms = list(split_res.geoms) if hasattr(split_res, "geoms") else [split_res]
+            for r_idx, geom in enumerate(geoms):
+                dist0 = geom.centroid.distance(Point(pt1))
+                dist1 = geom.centroid.distance(Point(pt2))
+                region_polys[r_idx] = geom
+                region_pts[r_idx] = [0 if dist0 < dist1 else 1]
+        elif len(coords) == 3:
+            bx_min, by_min, bx_max, by_max = calc_hull.bounds
+            dummy_point = np.array([[bx_max + 10.0, by_max + 10.0]])
+            extended_coords = np.vstack([coords, dummy_point])
+            ext_polys, ext_pts = voronoi_regions_from_coords(extended_coords, calc_hull)
+            r_idx = 0
+            for k, poly in ext_polys.items():
+                assigned_indices = ext_pts[k]
+                if 3 not in assigned_indices and not poly.is_empty:
+                    region_polys[r_idx] = poly
+                    region_pts[r_idx] = assigned_indices
+                    r_idx += 1
+
+        # -----------------------------------------------------------------
+        # CLEANUP AND EXACT INTERSECTION CLIPPING AGAINST WARD BOUNDARY
+        # -----------------------------------------------------------------
+        for region_id, poly in region_polys.items():
+            # Strict secondary intersection clip against the actual parent boundary shape
+            raw_intersection = poly.intersection(parent_boundary)
+            if raw_intersection.is_empty:
+                continue
+
+            if raw_intersection.geom_type in ["Polygon", "MultiPolygon"]:
+                actual_shape = raw_intersection
+            elif raw_intersection.geom_type == "GeometryCollection":
+                polys = [g for g in raw_intersection.geoms if g.geom_type in ["Polygon", "MultiPolygon"]]
+                actual_shape = unary_union(polys) if polys else None
+            else:
+                continue
+
+            if actual_shape is None or actual_shape.is_empty or not actual_shape.is_valid:
+                continue
+
+            pt_idx = region_pts[region_id]
+            if isinstance(pt_idx, (list, np.ndarray)):
+                pt_idx = pt_idx[0]
+
+            coord = coords[pt_idx]
+            orig_indices = point_to_row_indices.get(tuple(coord), [])
+
+            for orig_idx in orig_indices:
+                row_data = group_df.loc[orig_idx].copy()
+                row_data["geometry"] = actual_shape
+                all_processed_features.append(row_data)
+
+    if not all_processed_features:
+        return empty_gdf
+
+    walk_gdf = gpd.GeoDataFrame(all_processed_features, crs=crs_proj)
+    walk_gdf["geometry"] = walk_gdf["geometry"].make_valid()
+
+    walk_gdf["FID"] = [
+        int(hashlib.sha1(f"{row.get('Ward', '')}|{row['WalkName']}".encode()).hexdigest(), 16) % (2**31 - 1)
+        for _, row in walk_gdf.iterrows()
+    ]
+    walk_gdf["NAME"] = walk_gdf["WalkName"]
+    walk_gdf["TYPEKEY"] = "walk"
+
+    return walk_gdf[["FID", "NAME", "TYPEKEY", "geometry"]].to_crs(crs_out)
+
+# ==============================================================================
+# CORE ENGINE PIPELINE
+# ==============================================================================
+
+# ------------------------------------------------------------------
+# Small helpers extracted from duplicated inline logic
+# ------------------------------------------------------------------
+
+def _union_rows(rows, label):
+    """Combine the geometries of several rows into one aggregated row.
+    Used both for explicit 'union' aggregation mode and as a fallback
+    when several individual parents map to the same layer_type.
+    """
+    geoms = [r["geometry"] for r in rows if r.get("geometry") is not None]
+    if not geoms:
+        return None
+
+    series = gpd.GeoSeries(geoms)
+    combined_geom = series.union_all() if hasattr(series, "union_all") else series.unary_union
+
+    return {
+        "FID": [r.get("FID") for r in rows],
+        "NAME": f"Aggregated_{label}_{len(rows)}_parents",
+        "geometry": combined_geom,
+        "_parent_path": rows[0].get("_parent_path", ROOT),
+    }
+
+
+def _resolve_fid_column(gdf):
+    """Ensure a GeoDataFrame has a usable FID column, renaming/generating as needed."""
+    if "FID" in gdf.columns:
+        return gdf
+    if "OBJECTID" in gdf.columns:
+        return gdf.rename(columns={"OBJECTID": "FID"})
+    if "id" in gdf.columns:
+        return gdf.rename(columns={"id": "FID"})
+    gdf["FID"] = gdf.index.astype(int)
+    return gdf
+
+
+def _spatial_filter(tree_gdf, anchor_points):
+    if tree_gdf.empty or not anchor_points:
+        return tree_gdf
+
+    # Use GeoPandas spatial index for fast bounding-box lookups
+    sindex = tree_gdf.sindex
+    matched_indices = set()
+
+    for point in anchor_points:
+        # Fast candidate retrieval using R-tree bounding box
+        possible_matches_index = list(sindex.query(point, predicate="intersects"))
+        matched_indices.update(possible_matches_index)
+
+    return tree_gdf.iloc[list(matched_indices)].copy()
+
+
+def _derive_child_name(raw_name, idx):
+    """Turn a raw NAME value into a clean, index-safe identifier."""
+    is_valid = pd.notna(raw_name) and raw_name is not None and str(raw_name).strip() != ""
+    if not is_valid:
+        return f"UNNAMED_{idx}"
+
+    raw_str = str(raw_name).strip()
+    cleaned = normalname(raw_str)
+    if cleaned and str(cleaned).strip():
+        return str(cleaned).strip()
+    return raw_str.upper().replace(" ", "_")
+
+
+
+# ------------------------------------------------------------------
+# Main entry point
+# ------------------------------------------------------------------
+def ensure_treepolys_with_index(
+    *,
+    sourcepath: str | None,
+    here=None,
+    resolved_levels: dict[str, dict[int, str]],
+    parent_levels: dict[int, str],
+    areaelectors=None,
+):
+    territory = derive_territory(sourcepath)
+    logging.info(f"[START] ensure_treepolys_with_index | territory={territory} | sourcepath={sourcepath}")
+    logging.debug(f"here={here} | resolved_levels={resolved_levels} | parent_levels={parent_levels} | "
+                  f"initial Geo_index size={len(Geo_index)}")
+
+    if ROOT not in Geo_index:
+        Geo_index[ROOT] = {
+            "level": "country", "name": ROOT, "parent": None,
+            "children": [], "roid": [54.5, -2.5], "fid": 238,
+        }
+        logging.debug(f"[INDEX] Initialized ROOT node '{ROOT}' in Geo_index.")
+
+    if not resolved_levels or len(resolved_levels) != 1:
+        logging.error(f"Invalid resolved_levels configuration: {resolved_levels}")
+        raise ValueError("Invalid resolved_levels configuration.")
+
+    (_, elevels), = resolved_levels.items()
+    sourcepath = sourcepath or territory
+
+    # ------------------------------------------------------------------
+    # Geometry & point path resolution
+    # ------------------------------------------------------------------
+    coords = parse_coords(here) if ("parse_coords" in globals() and here) else []
+    anchor_points = [Point(lon, lat) for lat, lon in coords] if coords else []
+    logging.debug(f"[COORDS] Parsed coords count: {len(coords)} | Anchor points count: {len(anchor_points)}")
+
+    effective_sourcepath = sourcepath
+    if not effective_sourcepath and coords and "classify_record_coords" in globals():
+        lat, lon = coords[0]
+        derived_path = classify_record_coords(lat, lon, sourcepath, parent_levels).get("_derived_path")
+        if derived_path:
+            logging.info(f"Derived territory path from point ({lat}, {lon}): {derived_path}")
+            effective_sourcepath = derived_path
+
+    MAP_LAYERS = globals().get("MAP_LAYERS", {})
+    if isinstance(MAP_LAYERS, list):
+        MAP_LAYERS = {l.get("key", idx): l for idx, l in enumerate(MAP_LAYERS)}
+    layer_defs = {l.get("key", k): l for k, l in MAP_LAYERS.items()}
+
+    for k, l in MAP_LAYERS.items():
+        layer_key = l.get("key", k)
+        Treepolys.setdefault(layer_key, gpd.GeoDataFrame())
+
+    # ------------------------------------------------------------------
+    # Dynamic level deduction (target level + 1, driven by sourcepath)
+    # ------------------------------------------------------------------
+    dynamic_steps = [ROOT]
+    raw_steps = stepify(effective_sourcepath) if effective_sourcepath else []
+    steps = raw_steps if raw_steps else [ROOT]
+
+    # --- FIX: Ensure target_levels AND target_depth are always initialized ---
+    max_available_level = max(elevels.keys()) if elevels else 0
+    target_depth = 0  # Default fallback depth
+
+    if effective_sourcepath and effective_sourcepath != ROOT:
+        raw_steps = stepify(effective_sourcepath)
+        steps = raw_steps if raw_steps else [ROOT]
+        target_depth = max(0, len(steps) - 1)
+        if target_depth > 3:
+            max_processing_level = min(target_depth + 2, max_available_level)
+        else:
+            max_processing_level = min(target_depth + 1, max_available_level)
+        target_levels = list(range(0, max_processing_level + 1))
+        logging.info(f"Processing filtered levels based on sourcepath: {target_levels}")
+    else:
+        # Fallback: Process all available levels when viewing root
+        target_levels = list(range(0, max_available_level + 1))
+        logging.info(f"No specific sourcepath depth; processing all available levels: {target_levels}")
+
+    # Active parent features tracked by explicit layer name
+    active_layer_rows = {ROOT: [{"NAME": ROOT, "_parent_path": None}]}
+    fid_to_path = {}
+    deepest_path_registered = ROOT
+
+    # Tracks, per layer_type, the single row that matched this level's
+    # select_name (i.e. the branch actually being navigated into). Used to
+    # stop descent from fanning out across every sibling registered at a
+    # given level -- registering all siblings is correct (so the UI can
+    # show them), but only ONE of them is the path actually being walked,
+    # and every other sibling triggering its own load_layer call for the
+    # next level down is pure wasted fan-out (e.g. re-loading constituency
+    # data once per English county instead of once for the selected one).
+    selected_row_by_layer = {}
+
+    # ------------------------------------------------------------------
+    # Main processing loop
+    # ------------------------------------------------------------------
+    for level in target_levels:
+        compound_layer_type = elevels.get(level)
+        if not compound_layer_type:
+            logging.warning(f"No layer mapping for Level {level}; skipping.")
+            continue
+
+        sub_layers = [l.strip() for l in compound_layer_type.split("/") if l.strip()]
+        logging.info(f"--- Processing Level {level} with sub_layers: {sub_layers} ---")
+
+        for layer_type in sub_layers:
+            active_layer_rows.setdefault(layer_type, [])
+
+            if layer_type.lower() == "walk" and not os.path.exists(WALK_GEOM_FILE):
+                logging.info(f"Level {level} ('walk') geometry file missing; generating via _generate_walk_geometries.")
+                _generate_walk_geometries(areaelectors)
+
+            layer = layer_defs.get(layer_type)
+            if not layer:
+                logging.warning(f"Layer definition missing for key={layer_type}")
+                continue
+
+            select_name = None
+            if effective_sourcepath and level < len(steps) and (level <= 3 or level < target_depth):
+                select_name = steps[level]
+                logging.debug(f"[SELECT] Target selection name for level {level} ('{layer_type}'): {select_name}")
+
+
+            # --------------------------------------------------------
+            # Parent resolution
+            # --------------------------------------------------------
+            parent_layer_key = layer.get("parent_layer")
+            fan_out_to_all_parents = layer.get("fan_out_to_all_parents", False)
+            logging.debug(
+                f"[PARENT] Layer '{layer_type}' has parent_layer_key='{parent_layer_key}' | "
+                f"fan_out_to_all_parents={fan_out_to_all_parents}"
+            )
+
+            if parent_layer_key is None:
+                # No parent layer configured at all (e.g. 'country', the root
+                # layer) -- a None parent_row is legitimate here.
+                parent_rows = [None]
+            elif not fan_out_to_all_parents and parent_layer_key in selected_row_by_layer:
+                # Single-branch navigation layer (nation/county/constituency/ward):
+                # a specific sibling was selected at the parent level, so only
+                # descend through that one -- not every registered sibling.
+                parent_rows = [selected_row_by_layer[parent_layer_key]]
+                logging.debug(f"[PARENT] Narrowed to selected row for '{parent_layer_key}' (avoiding sibling fan-out).")
+            else:
+                # Either fan_out_to_all_parents is True (walk/street: genuinely
+                # want every sibling processed), or there's no selected-row
+                # narrowing available for this parent yet -- fall back to the
+                # full registered set.
+                parent_rows = active_layer_rows.get(parent_layer_key)
+                if not parent_rows:
+                    logging.error(
+                        f"[PARENT] Layer '{layer_type}' requires parent layer "
+                        f"'{parent_layer_key}', but it has no active rows. "
+                        f"Refusing to fall back to an unclipped parent_row=None "
+                        f"load -- skipping '{layer_type}' for this branch."
+                    )
+                    continue
+                logging.debug(f"[PARENT] Retrieved {len(parent_rows)} active row(s) from parent layer '{parent_layer_key}'")
+
+            src = layer.get("src")
+            field = layer.get("field")
+
+            if not src or not field:
+                logging.debug(f"Virtual layer '{layer_type}' (missing src or field); forwarding parents unchanged.")
+                active_layer_rows[layer_type].extend(p for p in parent_rows if p is not None)
+                continue
+
+            # --------------------------------------------------------
+            # Determine parent processing contexts
+            # --------------------------------------------------------
+            parent_contexts = parent_rows if parent_rows else [None]
+            all_results = []
+            for parent_ctx in parent_contexts:
+                resolved_p_path = ROOT
+                if parent_ctx is not None:
+                    resolved_p_path = (
+                        parent_ctx.get("_parent_path", ROOT) if isinstance(parent_ctx, dict)
+                        else getattr(parent_ctx, "_parent_path", ROOT)
+                    )
+
+                # 🔍 REVEALING DEBUG: Inspect the parent context coming into the loop
+                p_type = type(parent_ctx).__name__
+                p_name = (
+                    parent_ctx.get("NAME") if isinstance(parent_ctx, dict)
+                    else getattr(parent_ctx, "NAME", "N/A")
+                )
+                p_geom = (
+                    parent_ctx.get("geometry") if isinstance(parent_ctx, dict)
+                    else getattr(parent_ctx, "geometry", None)
+                )
+                p_bounds = p_geom.bounds if p_geom is not None and hasattr(p_geom, "bounds") else "NO_GEOM"
+
+                logging.debug(
+                    f"[CONTEXT DEBUG] Loop item -> Type: {p_type} | Name: '{p_name}' | "
+                    f"Resolved Path: '{resolved_p_path}' | Geometry Bounds: {p_bounds}"
+                )
+
+                # --------------------------------------------------------
+                # 🚀 HARDENED EARLY CACHE CHECK (BYPASS RAW LOAD IF ALREADY INDEXED)
+                # --------------------------------------------------------
+                cache_hit = False
+                if resolved_p_path in Geo_index and Geo_index[resolved_p_path].get("children"):
+                    children_paths = Geo_index[resolved_p_path]["children"]
+                    if children_paths and (not select_name or any(select_name.upper() in cp.upper() for cp in children_paths)):
+                        existing_treepoly = get_treepoly(layer_type)
+                        if existing_treepoly is not None and not existing_treepoly.empty:
+                            if "_parent_path" in existing_treepoly.columns:
+                                matched_cached_rows = existing_treepoly[
+                                    existing_treepoly["_parent_path"] == resolved_p_path
+                                ]
+                            else:
+                                logging.debug(f"[CACHE WARNING] '_parent_path' missing in cache for '{layer_type}'; using fallback matching.")
+                                matched_cached_rows = existing_treepoly
+                            if not matched_cached_rows.empty:
+                                existing_fids = {r["FID"] for r in active_layer_rows[layer_type] if r is not None and "FID" in r}
+                                added_count = 0
+                                for _, cached_row in matched_cached_rows.iterrows():
+                                    row_copy = cached_row.copy()
+
+                                    # _parent_path on an active row must mean "this row's own full
+                                    # path" (that's the contract the main registration loop sets up
+                                    # and every downstream level relies on) -- NOT the path we used
+                                    # to look this row up. Resolve it properly against the known
+                                    # children of resolved_p_path rather than reusing resolved_p_path
+                                    # itself, or every level below this one silently drops a segment.
+                                    row_norm_name = normalname(str(cached_row.get("NAME", "")))
+                                    own_full_path = next(
+                                        (cp for cp in children_paths if normalname(cp.split("/")[-1]) == row_norm_name),
+                                        None,
+                                    )
+                                    row_copy["_parent_path"] = own_full_path or resolved_p_path
+
+                                    row_fid = row_copy.get("FID")
+                                    if row_fid not in existing_fids and pd.notna(row_fid):
+                                        active_layer_rows[layer_type].append(row_copy)
+                                        existing_fids.add(row_fid)
+                                        added_count += 1
+
+                                if added_count > 0:
+                                    logging.info(f"⚡ [FAST PATH HIT] Loaded {added_count} cached rows for layer '{layer_type}' under '{resolved_p_path}'. Skipping raw load.")
+                                    cache_hit = True
+
+                if cache_hit:
+                    continue  # Skip standard load_layer entirely for this context!
+
+                logging.debug(f"[RAW LOAD TRIGGER] Cache missed or unavailable for '{resolved_p_path}'. Calling load_layer for '{p_name}'...")
+
+                try:
+                    selected_child_name, tree_gdf, raw_gdf = load_layer(
+                        layer=layer, level=level, intention_type=layer_type,
+                        parent_levels=parent_levels, parent_row=parent_ctx,
+                        select_name=select_name, roid=here, node_path=effective_sourcepath,
+                    )
+                    logging.debug(f"Level {level} '{layer_type}' load result: "
+                                  f"selected_child='{selected_child_name}' | "
+                                  f"raw_gdf count={len(raw_gdf) if raw_gdf is not None else 0} | "
+                                  f"tree_gdf count={len(tree_gdf) if tree_gdf is not None else 0}")
+
+                    if selected_child_name:
+                        norm_child = normalname(selected_child_name)
+                        if norm_child not in [normalname(s) for s in dynamic_steps]:
+                            dynamic_steps.append(selected_child_name)
+                            logging.debug(f"[DYNAMIC STEPS] Added '{selected_child_name}' to dynamic_steps.")
+
+                except Exception as e:
+                    logging.error(f"[ERROR] load_layer failed for parent '{p_name}' at path '{resolved_p_path}' "
+                                  f"(Level {level}, layer '{layer_type}'): {e}", exc_info=True)
+                    continue
+
+                if tree_gdf is None or tree_gdf.empty:
+                    logging.debug(f"[SKIP] tree_gdf is empty or None for layer '{layer_type}' under parent path '{resolved_p_path}'")
+                    continue
+
+                # Simplify high-resolution polygons to speed up spatial math dramatically
+                tol = layer.get("simplify_tolerance", 0.0001)   # default keeps current behaviour
+                if tol and "geometry" in tree_gdf.columns:
+                    tree_gdf["geometry"] = tree_gdf["geometry"].simplify(tolerance=tol, preserve_topology=True)
+                tree_gdf = _resolve_fid_column(tree_gdf.copy())
+
+                if level <= target_depth and anchor_points and select_name is None:
+                    pre_count = len(tree_gdf)
+                    tree_gdf = _spatial_filter(tree_gdf, anchor_points)
+                    logging.debug(f"[SPATIAL FILTER] Filtered tree_gdf for '{layer_type}': {pre_count} -> {len(tree_gdf)} rows remaining.")
+
+                tree_gdf["_parent_path"] = ROOT if level == 0 else resolved_p_path
+                all_results.append(tree_gdf)
+
+            if not all_results:
+                logging.warning(f"No results collected across all contexts for level={level}, layer_type='{layer_type}'.")
+                continue
+
+            tree_gdf = pd.concat(all_results, ignore_index=True)
+            logger.debug(f"[CONCAT] Combined total {len(tree_gdf)} rows for layer '{layer_type}'")
+
+            if "FID" in tree_gdf.columns and tree_gdf["FID"].duplicated().any():
+                dupe_fids = tree_gdf.loc[tree_gdf["FID"].duplicated(keep=False), "FID"].unique().tolist()
+                before = len(tree_gdf)
+
+                # If filter_gdf_by_overlap attaches an overlap score column, prefer the
+                # parent with the strongest overlap as canonical owner. Otherwise fall
+                # back to "first wins" -- but this is a genuine ownership decision, not
+                # just crash-avoidance, so log it loudly rather than silently.
+                sort_col = "overlap_ratio" if "overlap_ratio" in tree_gdf.columns else None
+                if sort_col:
+                    tree_gdf = tree_gdf.sort_values(sort_col, ascending=False)
+
+                tree_gdf = tree_gdf.drop_duplicates(subset="FID", keep="first").reset_index(drop=True)
+                logger.warning(
+                    f"[DEDUP] Layer '{layer_type}': dropped {before - len(tree_gdf)} duplicate-FID rows "
+                    f"(boundary features matched to multiple parents: FIDs {dupe_fids}). "
+                    f"Kept the {'highest-overlap' if sort_col else 'first-seen'} parent as canonical owner."
+                )
+
+            # --- OPTIMIZATION CHECK ---
+            all_children_cached = True
+            for idx, row in tree_gdf.iterrows():
+                child_name = _derive_child_name(row.get("NAME"), idx)
+                parent_path = resolved_p_path
+                test_path = f"{parent_path}/{child_name}"
+
+                if test_path not in Geo_index or not Geo_index[test_path].get("children"):
+                    all_children_cached = False
+                    break
+
+            if all_children_cached and not get_treepoly(layer_type).empty:
+                logger.debug(f"[CACHE HIT] Node '{test_path}' and its children are already fully cached in Geo_index. Skipping upsert and export.")
+                continue
+
+            existing = get_treepoly(layer_type)
+            upserted_gdf = upsert_geodf(existing, tree_gdf, key="FID")
+            set_treepoly(layer_type, upserted_gdf)
+
+            # Export layer to file only if changes/new data occurred
+            if upserted_gdf is not None and not upserted_gdf.empty:
+                destination = MAP_LAYERS.get(layer_type, {}).get("out")
+                if not destination:
+                    out_dir = config.workdirectories["bounddir"]
+                    os.makedirs(out_dir, exist_ok=True)
+                    destination = os.path.join(out_dir, f"{layer_type}_Boundaries.gpkg")
+                else:
+                    base, _ = os.path.splitext(destination)
+                    destination = base + ".gpkg"
+
+                os.makedirs(os.path.dirname(os.path.abspath(destination)), exist_ok=True)
+
+            # Remove old file if it exists to prevent locks
+            if os.path.exists(destination):
+                try:
+                    os.remove(destination)
+                except Exception:
+                    pass
+
+            upserted_gdf = upserted_gdf.reset_index(drop=True)
+
+            # Final guard: GPKG/SQLite is case-insensitive on column names,
+            # so a case-variant collision (e.g. "Name" alongside "NAME")
+            # that slipped in from a merge or a differently-cased source
+            # layer would otherwise only surface as a cryptic sqlite3_exec
+            # failure deep inside pyogrio at write time.
+            upserted_gdf = normalize_column_case(upserted_gdf, ["FID", "NAME", "TYPEKEY"])
+
+            upserted_gdf.to_file(destination, driver="GPKG")
+            logger.info(f"Level {level} [{layer_type}] exported ({len(upserted_gdf)} features) -> {destination}")
+            # --------------------------------------------------------
+            # Index registration & parent propagation
+            # --------------------------------------------------------
+            existing_fids = {r["FID"] for r in active_layer_rows[layer_type] if r is not None and "FID" in r}
+
+            for idx, row in tree_gdf.iterrows():
+                child_name = _derive_child_name(row.get("NAME"), idx)
+                parent_path = row.get("_parent_path", ROOT)
+                this_path = ROOT if (level == 0 and child_name == ROOT) else f"{parent_path}/{child_name}"
+
+                roid_coords = None
+                if getattr(row, "geometry", None) is not None:
+                    try:
+                        centroid = row.geometry.representative_point()
+                        roid_coords = [float(centroid.y), float(centroid.x)]
+                    except Exception as ex:
+                        logging.debug(f"[ROID ERROR] Failed to calculate representative point for '{child_name}': {ex}")
+
+                row_fid = int(row["FID"]) if pd.notna(row.get("FID")) else None
+
+                if this_path not in Geo_index:
+                    Geo_index[this_path] = {
+                        "level": layer_type, "name": child_name,
+                        "parent": parent_path if level > 0 else None,
+                        "children": [], "roid": roid_coords, "fid": row_fid,
+                    }
+                    logging.debug(f"[GEO_INDEX NEW] Registered path: '{this_path}' (FID: {row_fid})")
+                else:
+                    entry = Geo_index[this_path]
+                    if entry.get("fid") is None and row_fid is not None:
+                        entry["fid"] = row_fid
+                    if entry.get("roid") is None and roid_coords is not None:
+                        entry["roid"] = roid_coords
+                    logging.debug(f"[GEO_INDEX UPDATE] Updated existing path: '{this_path}'")
+
+                if parent_path in Geo_index and this_path != parent_path:
+                    siblings = Geo_index[parent_path]["children"]
+                    if this_path not in siblings:
+                        siblings.append(this_path)
+                        logging.debug(f"[GEO_INDEX CHILD] Added '{this_path}' to children of parent '{parent_path}'")
+
+                if row_fid is not None:
+                    fid_to_path[(level, row_fid)] = this_path
+
+                row_copy = row.copy()
+                row_copy["_parent_path"] = this_path
+                if row_copy["FID"] not in existing_fids:
+                    active_layer_rows[layer_type].append(row_copy)
+                    existing_fids.add(row_copy["FID"])
+
+                deepest_path_registered = this_path
+
+            # After registering all sibling rows for this layer_type, note
+            # which one (if any) matches this level's select_name -- that's
+            # the only one subsequent levels should descend through.
+            if select_name:
+                norm_target = normalname(select_name)
+                for r in active_layer_rows[layer_type]:
+                    r_name = r.get("NAME") if isinstance(r, dict) else getattr(r, "NAME", None)
+                    if r_name is not None and normalname(str(r_name)) == norm_target:
+                        selected_row_by_layer[layer_type] = r
+                        break
+
+    # ------------------------------------------------------------------
+    # Path traversal & fallback resolution
+    # ------------------------------------------------------------------
+    active_steps = steps if len(steps) > 1 else dynamic_steps
+    current_path = ""
+    deepest_valid_path = ROOT
+
+    for step in active_steps:
+        normalized_step = normalname(step)
+        current_path = f"{current_path}/{normalized_step}" if current_path else normalized_step
+        if current_path in Geo_index:
+            deepest_valid_path = current_path
+        else:
+            logging.debug(f"[TRAVERSAL BREAK] Step '{step}' (normalized: '{normalized_step}') yielded path '{current_path}', which is missing from Geo_index.")
+            break
+
+    final_path = deepest_valid_path if deepest_valid_path in Geo_index else deepest_path_registered
+    leaf_name = final_path.split("/")[-1]
+    match_full_filepath = f"{final_path}/{leaf_name}-MAP.html"
+
+    logging.info(f"[DONE] Final Resolved Target Path: '{final_path}' | Map File Path: '{match_full_filepath}'")
+    return match_full_filepath, Geo_index
 
 
 
 def normalize_osm_name(val):
     """
     Safely normalizes a string or list of strings from OSM's 'name' column.
-    Converts underscores to spaces and uses state.normalname for consistent formatting.
+    Converts underscores to spaces and uses normalname for consistent formatting.
     """
+    from state import normalname
     if pd.isna(val) or val is None:
         return ""
 
     # Handle cases where OSM returns a list of street names for a single segment
     if isinstance(val, list):
-        return [state.normalname(str(item).replace('_', ' ')) for item in val]
+        return [normalname(str(item).replace('_', ' ')) for item in val]
 
-    return state.normalname(str(val).replace('_', ' '))
+    return normalname(str(val).replace('_', ' '))
 
 
 def matches_target_street(osm_name, target_norm):
@@ -94,9 +2079,6 @@ def readable_text_color(hex_color, threshold=0.55):
     # Always return a DARK tone for consistency
     return "#111111" if luminance > threshold else "#000000"
 
-
-
-import geopandas as gpd
 
 
 def get_text_color(fill_hex):
@@ -178,7 +2160,7 @@ def create_boundary_geom(elector_df, buffer_meters=50):
 def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk"):
     import json
     from state import VID
-    from baked_data import baked_data
+    from baked_data import baked_manager
 
     sorted_task_codes = sorted(task_tags.keys())
     tag_headers_html = "".join([f'<th class="text-center text-info small" style="min-width: 45px; position: sticky; top: 0; z-index: 2; background: #212529;">{code}</th>' for code in sorted_task_codes])
@@ -186,7 +2168,7 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
     vid_json_payload = json.dumps(VID)
 
     # Convert event logs to a list safely
-    events = baked_data if isinstance(baked_data, list) else []
+    events = baked_manager if isinstance(baked_manager, list) else []
 
     # Filter events to only this region
     region_events = [e for e in events if str(e.get('region')) == str(reg_id)]
@@ -402,6 +2384,12 @@ def build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope=
 def preprocess_streets(df, task_tags=None):
     import pandas as pd
     from collections import Counter
+    """
+    Safely preprocesses street data, handling empty DataFrames gracefully.
+    """
+    if df is None or df.empty or len(df.columns) == 0:
+        # Return empty stats and 0 house count if there's no data
+        return {}, 0
 
     df = df.copy()
     task_tags = task_tags or {}
@@ -551,7 +2539,7 @@ def build_nodemap_list_html(herenode):
     return tooltip_html
 
 def get_children_within(parent_geom, children_gdf, threshold=0.5):
-    import geopandas as gpd
+
 
     proj_crs = "EPSG:3857"
 
@@ -852,14 +2840,14 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self
 
 
-    def add_voronoi(self, rlevels, nodes_list, static=False):
+    def add_voronoi(self, CElection,rlevels, nodes_list, static=False):
         from shapely.geometry import Point
         from shapely.ops import nearest_points
         import numpy as np
         from flask import url_for
         from geovoronoi import voronoi_regions_from_coords
-        from state import Treepolys
-        import geopandas as gpd
+        from layers import Treepolys
+
         import pandas as pd
         import folium
         from elector import electors
@@ -876,8 +2864,8 @@ class ExtendedFeatureGroup(FeatureGroup):
         # Clean unpack
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
-        CE = CurrentElection.load(c_election)
-        task_tags, outcome_tags, all_tags = CE.get_tags()
+
+        task_tags, outcome_tags, all_tags = CElection.get_tags()
 
 # -------------------------------------------------
         # 📦 STEP 1: Group by a structurally unique tuple key
@@ -1189,8 +3177,9 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         print(f"\n🚀 GLOBAL VORONOI SUMMARY: Total map elements rendered across all groups: {grand_total_polygons_added}")
 
-    def add_linestrings(self, rlevels, herenode, nodes_list, static, counters):
-        from state import Treepolys, Candidates, LastResults
+    def add_linestrings(self, CE,rlevels, herenode, nodes_list, static, counters):
+        from layers import Treepolys
+        from state import Candidates, LastResults, normalname
         from flask import session, flash
         import folium
         global levelcolours
@@ -1324,13 +3313,6 @@ class ExtendedFeatureGroup(FeatureGroup):
                     elec_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{elector_js}\">Electors</button>"
                     limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}<br>{leg_btn} {elec_btn}" if not static else f"<br>{c_val}<br>"
                     mapfile = f"/transfer/{c.mapfile()}"
-
-                elif layer_type == "walkleg":
-                    elector_js = f"moveDown('/electorreport/{c_path}', '{c_val}')"
-                    elec_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{elector_js}\">Electors</button>"
-                    limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}<br>{elec_btn}" if not static else f"<br>{c_val}<br>"
-                    mapfile = f"/transfer/{c.mapfile()}"
-
                 else:
                     limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}" if not static else f"<br>{c_val}<br>"
                     mapfile = f"/transfer/{c.mapfile()}"
@@ -1386,18 +3368,19 @@ class ExtendedFeatureGroup(FeatureGroup):
         return self._children
 
 
-    def lookup_linestrings(self, rlevels, parent_node, nodes_list, static=False):
+    def lookup_linestrings(self, CElection, rlevels, parent_node, nodes_list, static=False):
         import hashlib
         from collections import defaultdict
+        from state import normalname
 
         import folium
         import osmnx as ox
 
         from shapely import count_coordinates
         from shapely.geometry import LineString, MultiLineString
-        from state import Treepolys, stepify, pathify
+        from layers import Treepolys
+        from state import stepify, pathify
         from elector import electors
-        from layers import preprocess_streets
         from elections import CurrentElection
 
         # Guard: Ensure single election context
@@ -1410,8 +3393,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         # Unpack current election context
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
-        CE = CurrentElection.load(c_election)
-        task_tags, outcome_tags, all_tags = CE.get_tags()
+        task_tags, outcome_tags, all_tags = CElection.get_tags()
 
         # Helper: Enhanced street name matcher handling tokens & variations
         def matches_target_street(osm_name, target_norm, raw_target):
@@ -1424,7 +3406,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
             for name in names_to_check:
                 clean_osm = str(name).replace('_', ' ').strip().upper()
-                norm_osm = state.normalname(clean_osm)
+                norm_osm = normalname(clean_osm)
 
                 # 1. Exact normalized or raw string match
                 if clean_osm == clean_target or norm_osm == target_norm:
@@ -1510,7 +3492,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 # Clean and normalize target street name
                 clean_street_str = raw_street_name.replace('_', ' ')
-                target_norm = state.normalname(clean_street_str)
+                target_norm = normalname(clean_street_str)
 
                 # Dynamic hierarchy parsing
                 pd_node = child.parent if child.type == 'street' else (child.parent.parent if child.parent else None)
@@ -1680,247 +3662,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
 
 
-    def add_shapenodes (self,rlevels,herenode,stype):
-        global allelectors
-# add a convex hull for all zonal children nodes , using all street centroids contained in each zone
-# zonal nodes are added at same time as walk nodes, zone nodes generated from zone grouped means of electors
-# children of zones gnerated by a downZO route similar to downWK
-# zone hull data generated from zone mask of areaelectors.
-        from elector import electors, shapecolumn
-# if there is a selected file , then allelectors will be full of records
-        print(f"____adding_shapenodes in election {c_election} layer {self.id} for {herenode.value} of type {stype}:")
-
-        nodeelectors = electors.electors_at_node(herenode.findnodeat_level(3))
-
-#        mask2 = areaelectors[shapecolumn[stype]] == herenode.value
-#        nodeelectors = areaelectors[mask2]
-        # Step 2: Group by WalkName and compute mean lat/long (already done)
-
-# now produce the shapes - one for each walk in the area
-        shapenodelist = herenode.childrenoftype(stype)
-        for shape_node in shapenodelist:
-            colname = shapecolumn[stype]
-
-            if colname not in nodeelectors.columns:
-                print(f"❌ Column '{colname}' not found in nodeelectors!")
-                print(f"Available columns: {list(nodeelectors.columns)}")
-                continue  # skip to next shape_node
-
-            print(f"🔍 Comparing values in column '{colname}' to shape_node.value = {shape_node.value}")
-            print(f"🔍 Unique values in column '{colname}': {nodeelectors[colname].unique()}")
-
-            # Optional: check for type mismatch
-            print(f"📏 Types — column: {nodeelectors[colname].dtype}, shape_node.value: {type(shape_node.value)}")
-
-            mask2 = nodeelectors[shapecolumn[stype]] == shape_node.value
-            shapeelectors = nodeelectors[mask2]
-        #
-            print (f"______shapenode:{shape_node.value} child type : {stype}  col {shapecolumn[stype]} siblings: {len(shapenodelist)} and election {shape_node.election}")
-            print(f"___Zone type: {shapecolumn[stype]} at {shape_node.value} NodeNo: {len(shapeelectors)} AreaNo: {len(nodeelectors)} AllNo: {len(allelectors)}"  )
-    #even though nodes have been created,the current election view might not match
-            if not shapeelectors.empty and len(shapeelectors.dropna(how="all")) > 0:
-                Streetsdf0 = pd.DataFrame(shapeelectors, columns=['StreetName', 'ENOP','Long', 'Lat', 'Zone','AddressNumber','AddressPrefix' ])
-                Streetsdf1 = Streetsdf0.rename(columns= {'StreetName': 'Name'})
-                g = {'Lat':'mean','Long':'mean', 'ENOP':'count', 'Zone' : 'first', 'AddressNumber': Hconcat , 'AddressPrefix' : Hconcat,}
-                Streetsdf = Streetsdf1.groupby(['Name']).agg(g).reset_index()
-                print ("______Streetsdf:",Streetsdf)
-                self.add_shapenode(rlevels,shape_node, stype,Streetsdf)
-                print("_______new shape node ",shape_node.value,shape_node.col,"|")
-            else:
-                flash("no data exists for this election at this location")
-                print (f"_nodes exist at {herenode.value} but not for this {c_election} election and this {shapecolumn[stype]} column with this value {shape_node.value}")
-
-        return self._children
-
-
-    def add_shapenode (self,rlevels, herenode,type,datablock):
-        global levelcolours
-        # Guard: Ensure we have exactly one election to unpack
-        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
-
-        # The clean unpack
-        (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
-        CE = CurrentElection.load(c_election)
-        task_tags, outcome_tags, all_tags = CE.get_tags()
-
-        points = [Point(lon, lat) for lon, lat in zip(datablock['Long'], datablock['Lat'])]
-        print('_______Walk Shape', herenode.value, herenode.level, len(datablock), points)
-
-        # Create a single MultiPoint geometry that contains all the points
-        multi_point = MultiPoint(points)
-        centroid = multi_point.centroid
-
-        # Access coordinates
-        centroid_lon = centroid.x
-        centroid_lat = centroid.y
-        herenode.latlongroid = (centroid_lat,centroid_lon)
-
-        # Create a new DataFrame for a single row GeoDataFrame
-        gdf = gpd.GeoDataFrame({
-            'NAME': [herenode.value],  # You can modify this name to fit your case
-            'FID': [herenode.fid],  # FID can be a unique value for the row
-            'LAT': [multi_point.centroid.y],  # You can modify this name to fit your case
-            'LONG': [multi_point.centroid.x],  # FID can be a unique value for the row
-            'geometry': [multi_point]  # The geometry field contains the MultiPoint geometry
-        }, crs="EPSG:4326")
-
-
-#            limb = gpd.GeoDataFrame(df, geometry= [convex], crs='EPSG:4326')
-#        limb = gpd.GeoDataFrame(df, geometry= [circle], crs="EPSG:4326")
-        # Generate enclosing shape
-        limbX = create_enclosing_gdf(gdf)
-        limbX['col'] = herenode.col
-
-        if type == 'polling_district':
-            showmessageST = "showMore(&#39;/walkdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value)
-#            showmessageWK = "showMore(&#39;/PDshowWK/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
-            downST = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageST,"STREETS",12)
-#            downWK = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessageWK,"WALKS",12)
-#            upload = "<form action= '/PDshowST/{2}'<input type='file' name='importfile' placeholder={1} style='font-size: {0}pt;' enctype='multipart/form-data'></input><button type='submit'>STREETS</button><button type='submit' formaction='/PDshowWK/{2}'>WALKS</button></form>".format(12,session.get('importfile'), herenode.mapfile())
-            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
-            limbX['UPDOWN'] = uptag1 +"<br>"+ downST
-            print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno, gdf)
-        elif type == 'walk':
-            showmessage = "showMore(&#39;/WKdownST/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.mapfile(), herenode.value)
-            upmessage = "moveUp(&#39;/upbut/{0}&#39;,&#39;{1}&#39;,&#39;{2}&#39;)".format(herenode.parent.mapfile(), herenode.parent.value)
-            downtag = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(showmessage,"STREETS",12)
-            uptag1 = "<button type='button' id='message_button' onclick='{0}' style='font-size: {2}pt;'>{1}</button>".format(upmessage,"UP",12)
-            streetstag = build_street_list_html(herenode.value,datablock, street_stats, task_tags)
-            limbX['UPDOWN'] =  "<div style='white-space: normal'>" + uptag1 +"<br>"+ downtag+"<br>"+ streetstag+"<br></div>"
-            print("_________new convex hull and tagno:  ",herenode.value, herenode.tagno)
-
-
-#        herenode.tagno = len(self._children)+1
-        numtag = str(herenode.tagno)+" "+str(herenode.value)
-        num = str(herenode.tagno)
-        tag = str(herenode.value)
-        typetag = "streets in "+str(herenode.type)+" "+str(herenode.value)
-        here = [float(f"{herenode.latlongroid[0]:.6f}"), float(f"{herenode.latlongroid[1]:.6f}")]
-        pathref = herenode.mapfile()
-        mapfile = '/transfer/'+pathref
-        # Turn into HTML list items
-
-
-        limbX = limbX.to_crs("EPSG:4326")
-        limb = limbX.iloc[[0]].__geo_interface__ # Ensure this returns a GeoJSON dictionary for the row
-
-        # Ensure 'properties' exists in the GeoJSON and add 'col'
-        print("GeoJSON Convex creation:", limb)
-        if 'properties' not in limb:
-            limb['properties'] = {}
-
-        # Add the color to properties — this is **required**
-        limb['properties']['col'] = to_hex(herenode.col)
-
-        # Now you can use limb_geojson as a valid GeoJSON feature
-        print("GeoJSON Convex Hull Feature:", limb)
-        tcol = get_text_color(to_hex(herenode.col))
-        bcol = adjust_boundary_color(to_hex(herenode.col),0.7)
-        fcol = invert_black_white(tcol)
-
-
-        if herenode.type == 'walk':
-            # Extract the only feature from the GeoJSON object
-            feature = limb['features'][0]
-            props = feature['properties']
-
-            # Build custom HTML popup with styling
-            popup_html = f"""
-            <div style='white-space: normal; text-align: center' >
-                <strong> {typetag}:<br></strong> {props.get('UPDOWN', 'N/A')}
-            </div>
-            """
-
-            # Create folium.Popup from the HTML
-            popup = folium.Popup(popup_html, max_width=600)
-
-            # Add the feature to the map
-            folium.GeoJson(
-                data=feature,
-                style_function=lambda x: {
-                    "fillColor": x['properties']['col'],
-                    "color": bcol,
-                    "dashArray": "5, 5",
-                    "weight": 3,
-                    "fillOpacity": 0.5
-                },
-                highlight_function=lambda x: {"fillColor": 'lightgray'},
-                popup=popup
-            ).add_to(self)
-
-            self.add_child(folium.Marker(
-                 location=here,
-                 icon = folium.DivIcon(
-                        html=f'''
-                        <a href='{mapfile}' data-name='{tag}'><div style="
-                            color: {tcol};
-                            font-size: 10pt;
-                            font-weight: 200;
-                            text-align: center;
-                            -webkit-text-stroke: 1px white;
-                            padding: 2px;
-                            white-space: nowrap;">
-                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{tag}</span>
-                            </div></a>
-                            ''',
-                       )
-                       )
-                       )
-        else:
-    # Extract the only feature from the GeoJSON object
-            feature = limb['features'][0]
-            props = feature['properties']
-
-            # Build custom HTML popup content with centered styling
-            popup_html = f"""
-            <div style='white-space: normal;text-align: center;'>
-                <strong> {typetag}:<br></strong> {props.get('UPDOWN', 'N/A')}
-            </div>
-            """.strip()
-
-            # Create a folium.Popup using the HTML string
-            popup = folium.Popup(popup_html, max_width=600)
-
-            # Add the GeoJson feature with the popup to the map
-            folium.GeoJson(
-                data=feature,
-                highlight_function=lambda x: {"fillColor": 'lightgray'},
-                popup=popup,
-                popup_keep_highlighted=False,
-                style_function=lambda x: {
-                    "fillColor": x['properties']['col'],
-                    "color": bcol,
-                    "dashArray": "5, 5",
-                    "weight": 3,
-                    "fillOpacity": 0.9
-                }
-            ).add_to(self)
-
-
-            self.add_child(folium.Marker(
-                 location=here,
-                 icon = folium.DivIcon(
-                        html=f'''
-                        <a href='{mapfile}' data-name='{tag}'><div style="
-                            color: {tcol};
-                            font-size: 10pt;
-                            font-weight: 200;
-                            text-align: center;
-                            -webkit-text-stroke: 1px white;
-                            padding: 2px;
-                            white-space: nowrap;">
-                            <span style="background: {fcol}; padding: 1px 2px; border-radius: 5px;
-                            border: 2px solid black;">{num}</span>
-                            {tag}</div></a>
-                            ''',
-                       )
-                       )
-                       )
-        print("________Layer map polys",herenode.value,herenode.level,self._children)
-        return self._children
 
     def add_tag_layer(self, rlevels, node, tags, operator, layer_name, icon_color, icon_name, header_color, target_cluster=None, static=False):
         """
@@ -2021,9 +3762,9 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return markers_added
 
-    def add_genmarkers(self,rlevels, node, static):
-        eventlist = node.build_eventlist_dataframe(rlevels)
-        print(f" ___GenMarkers: under {elections.route()} eventlist: {eventlist}")
+    def add_genmarkers(self,CElection,rlevels, node, static):
+        eventlist = node.build_eventlist_dataframe(rlevels, CElection)
+        print(f" ___GenMarkers: under {state.route()} eventlist: {eventlist}")
         for _, row in eventlist.iterrows():
 
             for place in row["places"]:
@@ -2055,39 +3796,56 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
-    def add_nodemaps(self, rlevels, herenode, nodes_list, static, counters):
-        from state import Treepolys, Candidates, LastResults
+    def add_nodemaps(self, CElection, rlevels, herenode, nodes_list, static, counters):
+        from state import Candidates, LastResults
         from flask import session, flash
-        import folium  # Make sure folium is imported cleanly
+        from elections import CurrentElection
+        import pandas as pd
+        import folium
+        from elector import electors
+
         global levelcolours
         global Con_Results_data
         global OPTIONS
 
-        print("\n" + "="*80)
-        print("▶️ ENTERING add_nodemaps")
-        print("="*80)
-
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
-        # Clean unpack
         (c_election, elevels), = rlevels.items()
-        print(f"DEBUG: Unpacked election: {c_election}")
-
-        # 🎯 SELF-AWARE PROPERTIES
+        task_tags, outcome_tags, all_tags = CElection.get_tags()
+        # 🎯 SELF-AWARE PROPERTIES (mytag represents the type of nodes being added)
         layer_type = getattr(self, "mytag", "ward")
+        print("\n" + "=" * 80)
+        print(f"▶️ ENTERING add_nodemaps (type: '{layer_type}')")
+        print("=" * 80)
 
         raw_opts = getattr(self, "options", {}) or {}
         layer_style = raw_opts.get("style", raw_opts) if "style" in raw_opts else raw_opts
-        print(f"DEBUG: self class: {self.__class__.__name__}")
-        print(f"DEBUG: self.mytag evaluated to: '{layer_type}'")
-        print(f"DEBUG: herenode details -> value: '{herenode.value}', type: '{herenode.type}', level: {herenode.level}")
 
-        # 🎯 THE SIGNATURE CHANGE REPLACEMENT:
-        # Instead of reading from structural childrenoftype(), use our decoupled explicit list!
         childlist = nodes_list
         allchildlist = herenode.children if herenode else []
-        nodeshtml = build_nodemap_list_html(herenode) if herenode else ""
+
+        print(
+            f"_________Nodemap: at {herenode.value if herenode else 'NONE'} "
+            f"we have {len(childlist)} features to map of type:{layer_type}"
+        )
+
+        if len(childlist) == 0:
+            print(f"❌ WARNING: childlist is EMPTY for type '{layer_type}'. Skipping loops.")
+
+        # ------------------------------------------------------------------
+        # GENERATE HEADER TOOLTIP HTML FOR THE CURRENT NODE
+        # ------------------------------------------------------------------
+        reg_id = getattr(herenode, 'value', 'UNKNOWN')
+        if layer_type == 'street': # ie the children are streets
+            streets_df = electors.elector_for_path(rlevels, herenode.mapfile())
+            if not streets_df.empty:
+                street_stats, _ = preprocess_streets(streets_df, task_tags=task_tags)
+                nodeshtml = build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk")
+            else:
+                nodeshtml = f"<div class='p-2 bg-dark text-white'>No street data for this walk {reg_id}</div>"
+        else:
+            nodeshtml = build_nodemap_list_html(herenode) if herenode else ""
 
         details = [c.value for c in childlist]
         self.areashtml[herenode.value] = {
@@ -2096,33 +3854,33 @@ class ExtendedFeatureGroup(FeatureGroup):
             "tooltip_html": nodeshtml
         }
 
-        print(f"_________Nodemap: at {herenode.value} we have {len(childlist)} features to map of type:{layer_type}")
-
-        if len(childlist) == 0:
-            print(f"❌ WARNING: childlist is EMPTY for type '{layer_type}'. The loops will be skipped!")
-
         # Reset counters of child type so that child tag = this node's childno
         accumulate = session.get("accumulate", False)
+        popup_body = ""
         if not accumulate:
             counters[layer_type] = counters.get(layer_type, 0)
-            print(f"DEBUG: Reset counters['{layer_type}'] to 0")
 
+        # ------------------------------------------------------------------
+        # POLYGON LAYERS RENDERING LOOP
+        # ------------------------------------------------------------------
         loop_counter = 0
         for c in childlist:
             loop_counter += 1
-            print(f"\n--- Processing Feature #{loop_counter}: '{c.node_path}' ---")
 
-            if c.level+1 <= 5:
-                if layer_type not in Treepolys:
-                    print(f"❌ ERROR: '{layer_type}' key missing from state.Treepolys dictionary!")
+            if c.level < 7:
+                # Resolve lookup key fallback for 'walk' -> 'ward' if 'walk' not pre-cached in Treepolys
+                lookup_key = 'walk' if ('walk' in Treepolys and layer_type == 'walk') else ('ward' if layer_type == 'walk' else layer_type)
+
+                if lookup_key not in Treepolys:
+                    print(f"❌ ERROR: '{lookup_key}' key missing from state.Treepolys dictionary!")
                     continue
 
-                pfile = Treepolys[layer_type]
-                mask = pfile['FID']==int(c.fid)
+                pfile = Treepolys[lookup_key]
+                mask = pfile['FID'] == int(c.fid)
                 limbX = pfile[mask].copy()
 
                 if len(limbX) > 0:
-                    # Fix: Force-clean duplicate geographic slice occurrences to 1 clean unique spatial entity row
+                    # Force-clean duplicate geographic slice occurrences to 1 clean unique spatial entity row
                     if len(limbX) > 1:
                         limbX = limbX.iloc[[0]].copy()
 
@@ -2132,79 +3890,125 @@ class ExtendedFeatureGroup(FeatureGroup):
                     here_path = f"{herenode.mapfile()}"
                     c_val = c.value
                     here_val = herenode.value
+                    mapfile = f"/transfer/{c.mapfile()}"
+
+                    # Standard JavaScript Callbacks for Up and Down Navigation
+                    up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
+                    down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
+
+                    # Standardized Up and Down Tag Buttons
+                    up_tag = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{up_js}\" {font_style}>UP</button>"
+                    down_tag = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{down_js}\" {font_style}>DOWN</button>"
 
                     # ------------------------------------------------------------------
-                    # LEVEL ROUTING RULES (Kept exactly intact for map workflows)
+                    # LEVEL ROUTING & POPUP CONTENT GENERATION
                     # ------------------------------------------------------------------
-                    if layer_type == 'nation':
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
-                        up_js = f"moveUp('/upbut/{c_path}', '{c_val}')"
-                        uptag = f"<button type='button' id='btn_up_l0' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        downtag = f"<button type='button' id='btn_down_l0' onclick=\"{down_js}\" {font_style}>{layer_type}</button>"
-                        limbX.at[target_idx, 'UPDOWN'] = f"{uptag}<br>{c_val}<br>{downtag}"
-                        mapfile = f"/transfer/{c.mapfile()}"
+                    # Initialize default polygon tooltip content
+                    polygon_tooltip_content = f"<b>{c_val}</b>"
+                    print(f"\n--- Processing Feature #{loop_counter}: '{getattr(c, 'node_path', c.value)}' ---")
+
+
+                    if layer_type in ['nation', 'constituency', 'ward', 'division']:
+                        popup_body = f"<br><strong>{c_val}</strong><br>{up_tag}<br>{down_tag}"
 
                     elif layer_type == 'county':
                         ward_js = f"moveDown('/wardreport/{c_path}', '{c_val}')"
                         div_js = f"moveDown('/divreport/{c_path}', '{c_val}')"
-                        down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-                        ward_tag = f"<button type='button' id='btn_ward_l1' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
-                        div_tag = f"<button type='button' id='btn_div_l1' onclick=\"{div_js}\" {font_style}>DIV Report</button>"
-                        down_tag = f"<button type='button' id='btn_down_l1' onclick=\"{down_js}\" {font_style}>CONSTITUENCIES</button>"
-                        up_tag = f"<button type='button' id='btn_up_l1' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{ward_tag}{div_tag}<br>{down_tag}"
-                        mapfile = f"/transfer/{c.mapfile()}"
 
-                    elif layer_type == 'constituency':
-                        ward_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
-                        div_down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-                        wardiv_tag = f"<button type='button' id='btn_ward_l2' onclick=\"{ward_down_js}\" {font_style}>WARDS+DIVS</button>"
-                        up_tag = f"<button type='button' id='btn_up_l2' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{wardiv_tag}"
-                        mapfile = f"/transfer/{c.mapfile()}"
+                        ward_tag = f"<button type='button' id='btn_ward_l1' class='guil-button btn btn-norm' onclick=\"{ward_js}\" {font_style}>WARD Report</button>"
+                        div_tag = f"<button type='button' id='btn_div_l1' class='guil-button btn btn-norm' onclick=\"{div_js}\" {font_style}>DIV Report</button>"
 
-                    elif layer_type == 'ward':
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-                        up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        sheet_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downbut/{c_path}', '{c_val}');\">Sheets</button>"
-                        app_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downMWbut/{c_path}', '{c_val}');\">App</button>"
-                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}" if not static else f"<br>{c_val}<br>"
-                        mapfile = f"/transfer/{c.mapfile()}"
+                        popup_body = f"<br><strong>{c_val}</strong><br>{up_tag}<br>{ward_tag}{div_tag}<br>{down_tag}"
 
-                    elif layer_type == 'division':
-                        up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
-                        up_tag = f"<button type='button' id='btn_up_l3' onclick=\"{up_js}\" {font_style}>UP</button>"
-                        sheet_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downbut/{c_path}', '{c_val}');\">Sheets</button>"
-                        app_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"moveDown('/downMWbut/{c_path}', '{c_val}');\">App</button>"
-                        limbX.at[target_idx, 'UPDOWN'] = f"<br>{c_val}<br>{up_tag}<br>{sheet_btn} {app_btn}" if not static else f"<br>{c_val}<br>"
-                        mapfile = f"/transfer/{c.mapfile()}"
+                    elif layer_type == 'walk': # ie children are walks, grandchildren are streets
+                        has_parent = c.parent is not None
+                        parent_mapfile = c.parent.mapfile() if has_parent else herenode.mapfile()
+                        parent_value = c.parent.value if has_parent else herenode.value
 
+                        upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
+                        up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
+
+                        if not static:
+                            showmessageST = f"showMore('/walkdownST/{c.mapfile()}','{c_val}')"
+                            street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
+                            nav_html = f"""
+                            <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                            {street_link}<br>
+                            {up_link}
+                            </div>
+                            """
+                        else:
+                            nav_html = f"""
+                            <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
+                            {up_link}
+                            </div>
+                            """
+
+                        # ✅ RELIABLE ELECTOR FETCH (Matches add_voronoi approach)
+                        try:
+                            child_df = electors.elector_for_path(rlevels, c.mapfile())
+                            print(f"DEBUG: elector_for_path size {len(child_df)}")
+                        except Exception as e:
+                            print(f"DEBUG: elector_for_path failed for {c_val}: {e}")
+                            child_df = pd.DataFrame()
+
+                        street_stats, house_count = preprocess_streets(child_df, task_tags=task_tags)
+                        missing_total = sum(d.get('house_gaps', 0) for d in street_stats.values())
+                        electorate_count = len(child_df)
+
+                        # Build the rich metric tooltip HTML string for walk regions
+                        polygon_tooltip_content = f"""
+                        <b>{c_val}</b><br>
+                        Electors: {electorate_count}<br>
+                        Houses: {house_count}<br>
+                        Elector/house: {round(electorate_count/house_count, 2) if house_count else 0}<br>
+                        House gaps: {missing_total}
+                        """
+
+                        if not child_df.empty:
+                            street_table_html = build_street_list_html(c_val, child_df, street_stats, task_tags, uiScope="walk")
+                        else:
+                            street_table_html = f"<div class='p-2 text-warning'>No street metrics for {c_val}</div>"
+
+                        street_html = nav_html + "<hr>" + street_table_html
+                        popup_body = street_html
+                    else:
+                        popup_body = f"<br><strong>{c_val}</strong><br>{up_tag}<br>{down_tag}"
+
+                    # Assign UPDOWN safely to avoiding pandas indexing key issues
+
+
+                    limbX['UPDOWN'] = popup_body
+
+                    # ------------------------------------------------------------------
+                    # MARKER / LABEL HOOKS
+                    # ------------------------------------------------------------------
                     party_val = getattr(c, 'party', '')
                     party = f"({party_val})" if party_val else "X"
                     counters[c.type] = counters.get(c.type, 0) + 1
                     num = str(counters[c.type])
                     tag = str(c.value)
-                    numtag = str(c.value)+party
+                    numtag = str(c.value) + party
                     here = [float(f"{c.latlongroid[0]:.6f}"), float(f"{c.latlongroid[1]:.6f}")]
 
                     tcol_node = layer_style.get("fontColor", "#EF4444")
                     fcol_node = layer_style.get("fillColor", "#EF4444")
 
-                    if c.type == 'division' and isinstance(c.candidates, dict):
+                    if c.type == 'division' and isinstance(getattr(c, 'candidates', None), dict):
                         c1 = c.candidates.get('Candidate_1', '')
                         c2 = c.candidates.get('Candidate_2', '')
-                        candidates = f"[{c1},{c2}]"
+                        sub_label = f"[{c1},{c2}]"
+                    elif layer_type == 'walk':
+                        sub_label = f"Houses: {getattr(c, 'house_count', 'N/A')}"
                     else:
-                        candidates = ""
+                        sub_label = ""
 
                     htmlhalo = f'''
                     <a href="{mapfile}" data-name="{tag}">
                       <div style="color: {tcol_node}; font-size: 8pt; font-weight: bold; text-align: center; padding: 2px; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;">
                         <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
-                        <span style="font-size: 6pt; font-weight: normal;">{candidates}</span>
+                        <span style="font-size: 6pt; font-weight: normal;">{sub_label}</span>
                       </div>
                     </a>
                     '''
@@ -2214,49 +4018,99 @@ class ExtendedFeatureGroup(FeatureGroup):
                       <div style="color: {tcol_node}; font-size: 8pt; font-weight: bold; text-align: center; padding: 2px; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0px 0px 3px #fff;">
                         <span style="background: {fcol_node}; padding: 1px 2px; border-radius: 5px; border: 2px solid black;">{num}</span>
                         {numtag}<br>
+                        <span style="font-size: 6pt; font-weight: normal;">{sub_label}</span>
                       </div>
                     </a>
                     '''
 
-                    # Create a robust string extractor that bypasses Pandas series string dumps
-                    html_popup_content = str(limbX.at[target_idx, 'UPDOWN'])
-                    click_popup = folium.Popup(html_popup_content, max_width=300)
+                    # --- DEBUG: Insert inside your feature processing loop ---
+                    print(f"================ [POPUP DEBUG] ================")
+                    print(f"🔍 Feature Name / Code: {c_val}")
+                    print(f"🔍 Feature Path (c_path): {c_path}")
+                    print(f"🔍 Layer Type (layer_type): {layer_type}")
+                    print(f"🔍 Generated up_tag: {repr(up_tag)}")
+                    print(f"🔍 Generated down_tag: {repr(down_tag)}")
+                    print(f"🔍 Generated popup_body: {repr(popup_body)}")
 
-                    folium.GeoJson(
-                        limbX,
-                        style_function=lambda feature: {
-                            "fillColor": layer_style.get("fillColor", "#EF4444"),
-                            "color": layer_style.get("color", "#991B1B"),
-                            "weight": layer_style.get("weight", 2.5),
+                    click_popup = folium.Popup(popup_body, max_width=700 if layer_type == 'walk' else 300)
+
+                    # 1. POLYGON GEOJSON WITH CORRECT TOOLTIP CONTENT
+                    # ------------------------------------------------------------------
+                    # FEATURE PROPERTIES & GEOJSON DICT CONSTRUCTION
+                    # ------------------------------------------------------------------
+                    try:
+                        geom_obj = limbX.geometry.iloc[0]
+
+                        # Base properties for all layers
+                        feature_properties = {
+                            'region_id': c_val,
+                            'type': layer_type,
+                        }
+
+                        # Only add street_html if it's a walk layer
+                        if layer_type == 'walk':
+                            feature_properties['street_html'] = street_html
+
+                        geojson_feature = {
+                            "type": "Feature",
+                            "geometry": geom_obj.__geo_interface__,
+                            "properties": feature_properties
+                        }
+
+                        # Define base arguments for GeoJson (NO popup argument here)
+                        geojson_kwargs = {
+                        "style_function": lambda feature, style=layer_style: {
+                            "fillColor": style.get("fillColor", "#EF4444"),
+                            "color": style.get("color", "#991B1B"),
+                            "weight": style.get("weight", 2.5),
                             "opacity": 1.0,
-                            "fillOpacity": layer_style.get("fillOpacity", 0.15),
+                            "fillOpacity": max(style.get("fillOpacity", 0.15), 0.01),
                             "stroke": True,
                             "fill": True,
-                            "dashArray": layer_style.get("dashArray", "0"),
-                        },
-                        highlight_function=lambda feature: {
-                            "weight": layer_style.get("weight", 2.5) + 2,
-                            "fillOpacity": 0.35,
-                            "opacity": 1.0,
-                        },
-                        tooltip=folium.Tooltip(htmlhalo),
-                        popup=click_popup,
-                    ).add_to(self)
+                            "dashArray": style.get("dashArray", "0"),
+                            },
+                            "highlight_function": lambda feature: {
+                                "weight": layer_style.get("weight", 2.5) + 2,
+                                "fillOpacity": 0.35,
+                                "opacity": 1.0,
+                            },
+                            "tooltip": folium.Tooltip(
+                                polygon_tooltip_content,
+                                sticky=False,
+                                direction="bottom",
+                                offset=(0, 15),
+                                style="background-color: white; color: #333; font-family: sans-serif; border-radius: 4px; padding: 6px; border: 1px solid #ccc; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
+                            )
+                        }
 
+                        gj = folium.GeoJson(geojson_feature, **geojson_kwargs)
 
+                        # 🎯 CONDITIONAL POPUP ATTACHMENT:
+                        # Only create and add native Folium popups for non-walk layers.
+                        # Walk layers skip this entirely, leaving their clicks open for your Bootstrap modal JS.
+                        if layer_type != 'walk':
+                            click_popup = folium.Popup(popup_body, max_width=300)
+                            gj.add_child(click_popup)
+
+                        gj.add_to(self)
+
+                    except Exception as e:
+                        print(f"DEBUG ERROR: Failed adding canvas feature for {c_val} -> {e}")
+
+                    # 2. SEPARATE PERMANENT CENTROID BADGE MARKER
                     if not static:
                         self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalo)))
                     else:
                         self.add_child(folium.Marker(location=here, icon=folium.DivIcon(html=htmlhalostatic)))
+
                 else:
                     print(f"❌ WARNING: limbX contains 0 matching polygon rows for FID {c.fid}")
 
         print(f"\n🏁 LEAVING add_nodemaps. Processed {loop_counter} children.")
-        print("="*80 + "\n")
+        print("=" * 80 + "\n")
         return self._children
 
-
-    def add_nodemarks(self, rlevels, herenode, static, intention_type):
+    def add_nodemarks(self, CElection,rlevels, herenode, static, intention_type):
         global levelcolours
 
         # Guard: Ensure we have exactly one election to unpack
@@ -2415,7 +4269,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_houses(self, rlevels, herenode, static, intention_type):
         global levelcolours
-        from state import Treepolys
+        from layers import Treepolys
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -2551,7 +4405,7 @@ def make_feature_layers():
     global_options = globals().get("OPTIONS", {})
 
     layers = {}
-    for key, spec in state.MAP_LAYERS.items():
+    for key, spec in MAP_LAYERS.items():
         # 1. Initialize ExtendedFeatureGroup with standard Folium kwargs
         layer = ExtendedFeatureGroup(
             name=spec.get("name", key),
@@ -2582,4 +4436,4 @@ def make_counters():
     Returns a dictionary initialized with zero counts for every layer key
     defined in MAP_LAYERS.
     """
-    return {key: 0 for key in state.MAP_LAYERS}
+    return {key: 0 for key in MAP_LAYERS}

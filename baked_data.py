@@ -116,4 +116,4 @@ class BakedDataManager:
         print(f"✅ Saved to disk & sync'd memory: Appended {len(events)} events (Total: {len(existing)})")
 
 # Global instantiation utilized by routes and layout hooks
-baked_data = BakedDataManager()
+baked_manager = BakedDataManager()

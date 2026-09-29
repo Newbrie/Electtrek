@@ -455,60 +455,62 @@ document.addEventListener('click', function (e) {
       });
   }
 
-      // Function to poll progress
-      async function pollProgress() {
+  // Function to poll progress
+  async function pollProgress() {
+      const container = document.querySelector('#progress-container');
+      const progressBar = document.querySelector('#progress-bar');
+      const progressText = document.querySelector('#progress-text');
+      const stageBar = document.querySelector('#stage-bar');
+
       try {
-        const data = await fetch('/progress').then(r => r.json());
+          const response = await fetch('/progress');
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-        const overallPercent = data.percent || 0;
-        const stagePercent = data.stage_progress || 0;
-        const stageName = data.current_stage || data.status || "";
-        const message = data.message || "";
+          const data = await response.json();
 
-        // Show container if hidden
-        qs('#progress-container').style.display = "block";
+          const overallPercent = data.percent || 0;
+          const stagePercent = data.stage_progress || 0;
+          const stageName = data.current_stage || data.status || "";
+          const message = data.message || "";
 
-        // ---------------------------
-        // Overall progress bar
-        qs('#progress-bar').value = overallPercent;
-        qs('#progress-text').innerText = `${overallPercent}% — ${stageName} — ${message}`;
+          // Unhide progress display
+          if (container) container.style.display = "block";
 
-        // ---------------------------
-        // Stage progress bar (if exists)
-        const stageBar = qs('#stage-bar');
-        if (stageBar) {
-          stageBar.value = stagePercent;
-        }
+          // Update overall progress indicators
+          if (progressBar) progressBar.value = overallPercent;
+          if (progressText) progressText.innerText = `${overallPercent}% — ${stageName} — ${message}`;
+          if (stageBar) stageBar.value = stagePercent;
 
-        // ---------------------------
-        // Continue polling if running
-        if (data.status !== "complete" && data.status !== "error") {
-          setTimeout(pollProgress, 500);
-        } else if (data.status === "complete") {
-          qs('#progress-text').innerText = "✅ Complete";
-          if (stageBar) stageBar.value = 100;
-          qs('#progress-bar').value = 100;
+          // Route pipeline state
+          if (data.status === "complete") {
+              if (progressText) progressText.innerText = "✅ Complete";
+              if (stageBar) stageBar.value = 100;
+              if (progressBar) progressBar.value = 100;
 
-          // ---------------------------
-          // Fetch the updated RAG stream after completion
-          try {
-            const ragRes = await fetch('/get_streamrag');
-            const ragData = await ragRes.json();
-            updateRagUI(ragData);  // <-- your function to update the RAG UI
-          } catch (err) {
-            console.error("Failed to fetch RAG data:", err);
+              // Fetch final stream output
+              try {
+                  const ragRes = await fetch('/get_streamrag');
+                  const ragData = await ragRes.json();
+                  if (typeof updateRagUI === 'function') {
+                      updateRagUI(ragData);
+                  }
+              } catch (err) {
+                  console.error("Failed to fetch RAG stream data:", err);
+              }
+
+          } else if (data.status === "error") {
+              if (progressText) progressText.innerText = `❌ Error — ${message}`;
+          } else {
+              // Keep polling while running/idle
+              setTimeout(pollProgress, 500);
           }
 
-        } else if (data.status === "error") {
-          qs('#progress-text').innerText = "❌ Error — " + message;
-        }
-
       } catch (err) {
-        console.error("Error polling progress:", err);
-        // Retry on failure
-        setTimeout(pollProgress, 1000);
+          console.error("Error polling progress:", err);
+          // Backoff retry interval on network failure
+          setTimeout(pollProgress, 2000);
       }
-    }
+  }
 
 
 

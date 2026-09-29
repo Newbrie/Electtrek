@@ -1,18 +1,26 @@
-import pandas as pd
-import threading
 import os
 import logging
+from pathlib import Path
+
+import pandas as pd
+import threading
 import state
-from config import ELECTOR_FILE
+from config import ELECTOR_FILE, LOG_FILE
 
 
 # ------------------------
 # Logging Setup
 # ------------------------
+# Ensure parent directory exists before initializing FileHandler
+Path(LOG_FILE).parent.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    filename=LOG_FILE,
+    force=True  # 👈 Prevents Flask/libraries from ignoring this config
 )
+
 logger = logging.getLogger(__name__)
 
 _lock = threading.RLock()
@@ -20,7 +28,6 @@ _lock = threading.RLock()
 shapecolumn = {
     "elector": "ElectorName",
     "street": "StreetName",
-    "walkleg": "StreetName",
     "polling_district": "PD",
     "walk": "WalkName",
     "ward": "Ward",
@@ -123,7 +130,7 @@ class ElectorManager:
     def __init__(self):
         self._combined = pd.DataFrame()
         self._elections = {}
-        logger.debug("Initializing ElectorManager")
+        logger.info("Initializing ElectorManager")
 
         if os.path.exists(ELECTOR_FILE):
             try:
@@ -145,22 +152,22 @@ class ElectorManager:
 
                 # 2. Build the combined view
                 self.rebuild_combined()
-                logger.debug(f"Elections loaded and baked: {list(self._elections.keys())}")
+                logger.info(f"Elections loaded and baked: {list(self._elections.keys())}")
 
             except Exception as e:
                 logger.exception(f"Could not load {ELECTOR_FILE}: {e}")
 
     def _inject_baked_data(self, specific_ename=None):
-        from baked_data import baked_data
+        from baked_data import baked_manager
 
         try:
-            all_events = baked_data.load()
+            all_events = baked_manager.load()
         except Exception as e:
             print(f"⚠️ [INJECT] Failed to load baked data file from disk: {e}")
             return
 
         if not all_events:
-            print("⚠️ [INJECT] No historical events returned from baked_data.load(). Skipping.")
+            print("⚠️ [INJECT] No historical events returned from baked_manager.load(). Skipping.")
             return
 
         print(f"📦 [DEBUG] Total fresh events loaded from baked_data: {len(all_events)}")
@@ -292,7 +299,7 @@ class ElectorManager:
 
     def refresh_baked_data(self):
         with _lock:
-            logger.debug("Refreshing baked data in memory...")
+            logger.info("Refreshing baked data in memory...")
             self._inject_baked_data()
             self.rebuild_combined()
 
@@ -319,78 +326,72 @@ class ElectorManager:
                 return pd.DataFrame()
 
             # Clean and upper-case segments to match the pre-normalized dataframe structure
-            clean_segments = [str(seg).strip().upper() for seg in state.stepify(raw_path)]
-            logger.debug(f"🔍 START DETERMINISTIC FILTER: Path={clean_segments}")
+            raw_segments = state.stepify(raw_path)
+            clean_segments = [str(seg).strip().upper() for seg in raw_segments]
+            logger.info(f"🔍 START DETERMINISTIC FILTER:")
+            logger.info(f"   - Raw Path: {raw_path}")
+            logger.info(f"   - Clean Segments ({len(clean_segments)}): {clean_segments}")
+            logger.info(f"   - Resolved Levels Mapping: {resolved_levels}")
+            logger.info(f"   - DataFrame Shape: {df.shape}")
 
             # 🛠️ Lightning fast vectorized index masking! No dynamic string formats.
             mask = pd.Series(True, index=df.index)
+            initial_count = len(df)
 
-            # 1. Base geographic hierarchy (Levels 0-3)
-            base_mappings = ["Country", "Nation", "County", "Constituency"]
-            for idx, col_name in enumerate(base_mappings):
-                if idx >= len(clean_segments):
+            # Map standard field lookups dynamically from elevels dictionary and shapecolumn
+            for idx, target_val in enumerate(clean_segments):
+                if idx not in elevels:
+                    logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels mapping.")
                     break
-                if col_name in df.columns:
-                    mask &= (df[col_name] == clean_segments[idx])
 
-            if not mask.any():
-                logger.error("❌ Base geography filter left 0 rows. Path mismatch.")
-                return pd.DataFrame()
+                level_name = elevels[idx]
+                sub_levels = [s.strip().lower() for s in level_name.split("/")]
+                logger.debug(f"--------------------------------------------------")
+                logger.debug(f"👉 Processing Index [{idx}] -> Segment Value: '{target_val}' (Level Type: '{level_name}')")
 
-            # Level 4: Ward vs Division
-            if len(clean_segments) >= 5:
-                target_ward_div = clean_segments[4]
-                level_4_filtered = False
+                level_matched = False
+                for sub_level in sub_levels:
+                    col_name = shapecolumn.get(sub_level)
+                    logger.debug(f"   - Checking sub-level '{sub_level}' mapped to column '{col_name}'")
 
-                if "Ward" in df.columns:
-                    ward_mask = mask & (df["Ward"] == target_ward_div)
-                    if ward_mask.any():
-                        mask = ward_mask
-                        level_4_filtered = True
+                    if col_name is None:
+                        logger.debug(f"     ❌ No column mapping found in shapecolumn for sub_level '{sub_level}'")
+                        continue
 
-                if not level_4_filtered and "Division" in df.columns:
-                    div_mask = mask & (df["Division"] == target_ward_div)
-                    if div_mask.any():
-                        mask = div_mask
+                    if col_name not in df.columns:
+                        logger.debug(f"     ❌ Column '{col_name}' NOT found in DataFrame columns. Available columns: {list(df.columns)}")
+                        continue
 
-            # Level 5: Polling District / Walk Dynamic Fallback
-            if len(clean_segments) >= 6:
-                target_value = clean_segments[5]
-                level_5_filtered = False
+                    # Log unique values preview in this column to catch mismatch issues (e.g., spaces vs underscores)
+                    sample_vals = df[col_name].dropna().astype(str).unique()[:5]
+                    logger.debug(f"     ℹ️ Column '{col_name}' sample values in DF: {list(sample_vals)}")
 
-                if "PD" in df.columns:
-                    pd_mask = mask & (df["PD"] == target_value)
-                    if pd_mask.any():
-                        mask = pd_mask
-                        level_5_filtered = True
+                    sub_mask = mask & (df[col_name].astype(str).str.strip().str.upper() == target_val)
+                    matched_count = sub_mask.sum()
+                    logger.debug(f"     📊 Test match for '{target_val}' on '{col_name}': {matched_count} rows matched.")
 
-                if not level_5_filtered and "WalkName" in df.columns:
-                    walk_mask = mask & (df["WalkName"] == target_value)
-                    if walk_mask.any():
-                        mask = walk_mask
-
-            # Level 6: Street Filtering
-            if len(clean_segments) >= 7:
-                target_street = clean_segments[6]
-                street_cols = [col for col in ["Street", "StreetName", "Street_Name", "STREET"] if col in df.columns]
-
-                level_6_filtered = False
-                for s_col in street_cols:
-                    street_mask = mask & (df[s_col].astype(str).str.strip().str.upper() == target_street)
-                    if street_mask.any():
-                        mask = street_mask
-                        level_6_filtered = True
+                    if matched_count > 0:
+                        mask = sub_mask
+                        level_matched = True
+                        logger.debug(f"     ✅ MATCH SUCCESSFUL at index {idx} using column '{col_name}'")
                         break
 
-                if not level_6_filtered:
-                    logger.warning(f"⚠️ Street filter for '{target_street}' matched 0 electors under PD/Walk '{clean_segments[5]}'.")
+                if not level_matched:
+                    parent_val = clean_segments[idx - 1] if idx - 1 >= 0 else "ROOT"
+                    logger.warning(f"⚠️ Filter for level '{level_name}' (value '{target_val}') matched 0 electors under parent '{parent_val}'.")
 
             filtered_df = df[mask]
-            if filtered_df.empty:
-                logger.error("❌ Deep hierarchy filter broke. 0 rows returned.")
+            final_count = len(filtered_df)
+            logger.info(f"🏁 FILTER COMPLETE: Initial rows={initial_count} -> Final rows={final_count}")
+
+            if final_count == 0:
+                logger.error("❌ Deep hierarchy filter resulted in 0 rows returned.")
                 return pd.DataFrame()
 
-            logger.debug(f"🏁 FILTER COMPLETE: Found {len(filtered_df)} electors.")
+            if final_count == initial_count:
+                logger.error("❌ Deep hierarchy filter left 100% of rows untouched (Filter did nothing!).")
+                return pd.DataFrame()
+
             return filtered_df
 
     def delete_by_election(self, election_id: str) -> int:
@@ -420,7 +421,7 @@ class ElectorManager:
                 self.save()
                 logger.info(f"🗑️ Deactivated '{c_election}': Purged all {deleted_count} elector records.")
             else:
-                logger.debug(f"Deactivated '{c_election}': Election contained 0 records.")
+                logger.info(f"Deactivated '{c_election}': Election contained 0 records.")
 
             return deleted_count
 
@@ -467,7 +468,7 @@ class ElectorManager:
                 self.save()
                 logger.info(f"🗑️ Deleted {deleted_count} electors from '{c_election}' for territory: {node_value}")
             else:
-                logger.debug(f"No electors found to delete for territory: {node_value}")
+                logger.info(f"No electors found to delete for territory: {node_value}")
 
             return deleted_count
 

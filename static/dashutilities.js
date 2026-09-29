@@ -495,7 +495,13 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
 
 
  window.switchElection = async function (electionName) {
-    // 1. UI: Highlight the active tab
+    // Safety check: Prevent firing if electionName is missing or invalid
+    if (!electionName || electionName === "undefined") {
+        console.warn("⚠️ switchElection called without a valid electionName:", electionName);
+        return;
+    }
+
+        // 1. UI: Highlight the active tab
     document.querySelectorAll(".election-tab").forEach(tab =>
         tab.classList.remove("active")
     );
@@ -772,3 +778,116 @@ async function fetchBackendURL() {
 
     iframe.src = url;
   };
+
+  /* ---------- Area selector state ---------- */
+window.currentAreaTree = null;
+window.selectedAreas = new Map();   // nid -> name
+
+/* Accepts {nid,value,children:[]} OR {id:{node:{nid,value},children:[]}} */
+function normalizeAreaTree(tree) {
+    if (!tree) return [];
+    const toNode = n => ({
+        nid: n.nid ?? n.node?.nid,
+        name: n.value ?? n.name ?? n.node?.value,
+        children: (n.children || []).map(toNode)
+    });
+    if (Array.isArray(tree)) return tree.map(toNode);
+    if (tree.children || tree.nid) return (tree.children || []).map(toNode); // root wrapper
+    return Object.values(tree).map(toNode);                                  // dict form
+}
+
+function syncAreaSelect() {
+    const sel = document.getElementById('areaSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    window.selectedAreas.forEach((name, nid) => {
+        const opt = new Option(name, nid, true, true);   // selected
+        sel.appendChild(opt);
+    });
+}
+
+function toggleArea(nid, name, btn) {
+    const on = !window.selectedAreas.has(nid);
+    if (on) window.selectedAreas.set(nid, name);
+    else window.selectedAreas.delete(nid);
+    btn.classList.toggle('active', on);
+    syncAreaSelect();
+}
+
+window.renderAreaSelector = function (tree, preselected = []) {
+    const container = document.getElementById('areaAccordionContainer');
+    if (!container) return;
+
+    window.selectedAreas = new Map(preselected.map(a => [String(a.nid), a.name]));
+    const groups = normalizeAreaTree(tree);
+    container.innerHTML = '';
+
+    if (!groups.length) {
+        container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
+        syncAreaSelect();
+        return;
+    }
+
+    const acc = document.createElement('div');
+    acc.className = 'accordion';
+    acc.id = 'areaSelectAccordion';
+
+    groups.forEach((g, i) => {
+        const cid = `areaCollapse-${i}`;
+        const item = document.createElement('div');
+        item.className = 'accordion-item border-0 mb-1';
+        item.innerHTML = `
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed py-2 shadow-none" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#${cid}">
+              ${g.name}
+            </button>
+          </h2>
+          <div id="${cid}" class="accordion-collapse collapse">
+            <div class="accordion-body p-0"><div class="list-group list-group-flush"></div></div>
+          </div>`;
+        const list = item.querySelector('.list-group');
+
+        // The group itself is selectable, then its children
+        [g, ...g.children].forEach((n, idx) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'list-group-item list-group-item-action small' + (idx ? ' ps-4' : ' fw-semibold');
+            b.textContent = idx ? n.name : `All of ${n.name}`;
+            b.dataset.nid = n.nid;
+            if (window.selectedAreas.has(String(n.nid))) b.classList.add('active');
+            b.addEventListener('click', () => toggleArea(String(n.nid), n.name, b));
+            list.appendChild(b);
+        });
+        acc.appendChild(item);
+    });
+
+    container.appendChild(acc);
+    syncAreaSelect();
+};
+
+window.getSelectedAreas = () =>
+    [...window.selectedAreas].map(([nid, name]) => ({ nid, name }));
+
+/* ---------- Receive tree from the map iframe ---------- */
+window.addEventListener('message', ev => {
+    if (ev.origin !== window.location.origin) return;
+    if (ev.data?.type !== 'areaTree') return;
+    window.currentAreaTree = ev.data.tree;
+    // If the modal is already open, refresh it in place
+    if (document.getElementById('slotModal')?.classList.contains('show')) {
+        window.renderAreaSelector(window.currentAreaTree, window.getSelectedAreas());
+    }
+});
+
+/* ---------- Fallback + refresh whenever the modal opens ---------- */
+document.addEventListener('show.bs.modal', (ev) => {
+    if (ev.target?.id !== 'slotModal') return;
+
+    let tree = window.currentAreaTree;
+    try {
+        tree = document.getElementById('iframe1')?.contentWindow?.areaTree || tree;
+    } catch (e) {}
+
+    window.renderAreaSelector(tree, window.getSelectedAreas());
+});

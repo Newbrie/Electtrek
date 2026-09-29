@@ -313,6 +313,39 @@ var fmap;
      });
  };
 
+ (function () {
+
+    function areaDisplayName(name) {
+        return String(name || "")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function createAreaNode(node, depth = 0) {
+        // your existing recursive renderer
+    }
+
+    window.renderAreaAccordion = function () {
+        // your existing renderer
+    };
+
+    document.addEventListener("DOMContentLoaded", function () {
+        window.renderAreaAccordion();
+    });
+
+    const slotModal = document.getElementById("slotModal");
+
+    if (slotModal) {
+        slotModal.addEventListener(
+            "shown.bs.modal",
+            function () {
+                window.renderAreaAccordion();
+            }
+        );
+    }
+
+})();
+
  window.MAP_READY = false;
  window.__HYDRATED = false;
 

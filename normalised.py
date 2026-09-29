@@ -794,17 +794,28 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
     electors100['Tags'] = electors100['Tags'].fillna("").astype(str)
 
     # =========================================================
-    # STAGE 1: normz  (weight = 0.1)
+    # STAGE 1: normz (weight allocated: 0.0 -> 1.0)
     # =========================================================
 
     update_progress(progress, "normz", 0.0, f"Checking raw fields in {ImportFilename}")
 
-    # --- Raw field check ---
+    # --- 1. Raw field check loop (0.00 -> 0.33) ---
     incols = list(electors100.columns)
-    Outcols = pd.read_excel(GENESYS_FILE).columns
+    Outcols = list(pd.read_excel(GENESYS_FILE).columns)
+    matched_cols = list(set(Outcols) & set(incols))
+    total_matched = len(matched_cols)
 
-    for y in set(Outcols) & set(incols):
-        DQstats.loc[list(Outcols).index(y), 'P0'] = 1
+    for idx, y in enumerate(matched_cols):
+        DQstats.loc[Outcols.index(y), 'P0'] = 1
+
+        # Calculate sub-fraction within range [0.0, 0.33]
+        loop_fraction = 0.33 * ((idx + 1) / max(total_matched, 1))
+        update_progress(
+            progress,
+            "normz",
+            round(loop_fraction, 2),
+            f"Checking raw fields ({idx + 1}/{total_matched})"
+        )
 
     update_progress(progress, "normz", 0.33, "Raw field check complete")
 
@@ -812,7 +823,7 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
         update_progress(progress, "normz", 1.0, "Normz complete")
         return [electors100, DQstats]
 
-    # --- Column renaming ---
+    # --- 2. Column renaming loop (0.33 -> 0.66) ---
     INCOLS = [
         x.upper().replace("ELECTOR","").replace("PROPERTY","")
         .replace("REGISTERED","").replace("QUALIFYING","")
@@ -856,19 +867,32 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
         (incols[INCOLS.index(x)], COLNORM[x])
         for x in set(INCOLS) & set(COLNORM.keys())
     ]
+    total_renames = len(Incolstuple)
 
-    for a, b in Incolstuple:
+    for idx, (a, b) in enumerate(Incolstuple):
         electors100.rename(columns={a: b}, inplace=True)
 
-    update_progress(progress, "normz", 0.66, "Renaming columns")
+        # Calculate sub-fraction within range [0.33, 0.66]
+        loop_fraction = 0.33 + (0.33 * ((idx + 1) / max(total_renames, 1)))
+        update_progress(
+            progress,
+            "normz",
+            round(loop_fraction, 2),
+            f"Renaming column {idx + 1} of {total_renames} ({b})"
+        )
+
+    update_progress(progress, "normz", 0.66, "Renaming columns complete")
 
     if autofix == 1:
         update_progress(progress, "normz", 1.0, "Normz complete")
         return [electors100, DQstats]
 
-    # --- ENO + Name normalisation ---
+    # --- 3. ENO + Name normalisation (0.66 -> 1.00) ---
     print(f"ELECTORS100 COLUMNS2: {electors100.columns}")
+    update_progress(progress, "normz", 0.75, "Normalising ENO values...")
     electors100 = normalise_eno_column(electors100)
+
+    update_progress(progress, "normz", 0.90, "Normalising elector names...")
     electors100 = NormaliseName(electors100)
     electors100.reset_index(drop=True, inplace=True)
 
@@ -878,22 +902,21 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
         return [electors100, DQstats]
 
     # =========================================================
-    # STAGE 2: address_norm (weight = 0.4)
+    # STAGE 2: address_norm (weight allocated: 0.0 -> 1.0)
     # =========================================================
 
     update_progress(progress, "address_norm", 0.0, "Starting address normalisation")
 
     if purpose in ['delta', 'main', 'pledge']:
-
         print(f"ELECTORS100 COLUMNS3: {electors100.columns}")
 
-        # Let NormaliseAddress call update_progress internally
+        # Let NormaliseAddress handle its internal loop updates
         electors2 = NormaliseAddress(
             RunningVals1,
             Lookups,
             ImportFilename,
             electors100,
-            progress  # pass progress only
+            progress
         )
         print(f"ELECTORS2 COLUMNS4: {electors100.columns}")
 
@@ -903,10 +926,10 @@ def normz(progress, RunningVals1, Lookups, stream, ImportFilename, dfx, autofix,
             'Surname','ElectorName','ENOP','ENOT','Suffix','ENO','AV','Ward','Division'
         ])
 
-
     update_progress(progress, "address_norm", 1.0, "Address normalisation complete")
 
     # ---------------------------------------------
+    # Finalize
     electors2['Tags'] = electors2['Tags'].fillna("").astype(str)
 
     return [electors2, DQstats]

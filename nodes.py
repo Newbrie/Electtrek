@@ -1,7 +1,6 @@
 from config import workdirectories, DATA_FILE, LOGO_FILE,TREKNODE_FILE, ELECTOR_FILE, GENESYS_FILE, TREEPOLY_FILE, GEO_INDEX_FILE
 import os
 import state
-import layers
 import json
 import logging
 import pandas as pd
@@ -10,7 +9,7 @@ import pickle
 from flask import session
 from flask import request, redirect, url_for, has_request_context, render_template, current_app
 from layers import  ExtendedFeatureGroup
-from state import MAP_LAYERS
+from layers import MAP_LAYERS
 import elections
 from folium import Map, Element
 import folium
@@ -25,10 +24,45 @@ import re
 _MASTER_ROOT = None
 
 
+def build_area_tree(node_path, geo_index):
+    """
+    Build a nested tree starting at node_path.
+
+    Example:
+        UNITED_KINGDOM/ENGLAND/WINDSOR_AND_MAIDENHEAD
+
+    becomes:
+        {
+            "path": "...",
+            "name": "WINDSOR_AND_MAIDENHEAD",
+            "level": "county",
+            "children": [...]
+        }
+    """
+
+    node = geo_index.get(node_path)
+
+    if not node:
+        return None
+
+    return {
+        "path": node_path,
+        "name": node.get("name", node_path.split("/")[-1]),
+        "level": node.get("level", ""),
+        "fid": node.get("fid"),
+        "children": [
+            child
+            for child_path in node.get("children", [])
+            if (child := build_area_tree(child_path, geo_index)) is not None
+        ]
+    }
+
+
+
 def create_root_node() -> "TreeNode":
     return TreeNode(
         value="UNITED_KINGDOM",
-        fid="238",
+        fid= 238,
         roid=(51.23228, -0.57630),
         origin="DEMO",
         node_type="country"
@@ -101,16 +135,24 @@ def reset_nodes():
 
 
 def save_nodes(path):
-
     print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
     print(f"[DEBUG] registry size in save_nodes: {len(TREK_NODES_BY_ID)}")
     sum_of_all_nodes = len(TREK_NODES_BY_ID)
 
+    seen_paths = set()
+
     for node in TREK_NODES_BY_ID.values():
+        # Safety Check 1: Missing Parent
         if node.parent and node.parent.nid not in TREK_NODES_BY_ID:
             raise RuntimeError(
                 f"Persist invariant violated: {node.value} ({node.nid}) has missing parent {node.parent.nid}"
             )
+
+        # Safety Check 2: Duplicate Node Path collision check
+        curr_path = node.node_path
+        if curr_path in seen_paths:
+            print(f"[WARN] Duplicate node path detected during save: '{curr_path}' (nid: {node.nid})")
+        seen_paths.add(curr_path)
 
         # DEBUG: show candidates before saving
         print(f"💾 [DEBUG] Saving node '{node.value}' ({node.nid}) candidates: {node.candidates}")
@@ -121,11 +163,10 @@ def save_nodes(path):
 
 def load_nodes(path):
     """
-    Load tree nodes from JSON file at `path`, wiring parents/children.
+    Load tree nodes from JSON file at `path`, wiring parents/children,
+    and building O(1) TREK_NODES_BY_PATH index.
     Resilient: missing parents or children are logged but skipped.
     """
-
-
     if not path.exists() or path.stat().st_size == 0:
         print(f"[WARN] Node file missing or empty: {path}")
         return False
@@ -139,7 +180,7 @@ def load_nodes(path):
             print(f"[ERROR] Failed to parse JSON: {e}")
             return False
 
-    # PASS 1: create node objects
+    # PASS 1: Create node objects
     for data in raw_nodes:
         try:
             node = TreeNode.from_dict(data)
@@ -156,7 +197,7 @@ def load_nodes(path):
     print(f"JSON count: {len(raw_nodes)}")
     print(f"Dict count: {len(TREK_NODES_BY_ID)}")
 
-    # PASS 2: wire relationships
+    # PASS 2: Wire relationships
     for data in raw_nodes:
         node = TREK_NODES_BY_ID.get(data["nid"])
         if not node:
@@ -183,9 +224,104 @@ def load_nodes(path):
                 node.children.append(child)
             child.parent = node
 
-    print(f"✅ [DEBUG] Finished wiring {len(TREK_NODES_BY_ID)} nodes")
+    # PASS 3: Build O(1) Path Index now that parent chains are fully linked
+    TREK_NODES_BY_PATH.clear()
+    for node in TREK_NODES_BY_ID.values():
+        TREK_NODES_BY_PATH[node.node_path] = node
+
+    print(f"✅ [DEBUG] Finished wiring {len(TREK_NODES_BY_ID)} nodes across {len(TREK_NODES_BY_PATH)} unique paths")
     return True
 
+
+
+def get_last_node(Celect,geoindex, create=True):
+    """
+    Returns the last node for the current election using 4 sources.
+    1st source: election CID (verified to have loaded children).
+    2nd source: browser GPS location (redirect if triggered).
+    3rd source: stored election sourcepath derived from breadcrumb.
+    4th source: stored territory path, resolved via ping_node.
+
+    If `create=False`, do not call ping_node and return root if CID node is unavailable.
+    """
+
+    cid = Celect.get("cid")
+    cidLat = Celect.get("cidLat")
+    cidLong = Celect.get("cidLong")
+    here = (cidLat, cidLong) if cidLat is not None and cidLong is not None else None
+
+    # Helper function to verify node has children loaded
+    def node_has_children(node):
+        if node is None:
+            return False
+        # Check dictionary, list, or set of children depending on object design
+        children = getattr(node, "children", None)
+        return bool(children)
+
+    # --- 1. CID lookup (Must have children) ---
+    if cid and cid in TREK_NODES_BY_ID:
+        last_node = TREK_NODES_BY_ID.get(cid, None)
+        if node_has_children(last_node):
+            print(f"___under route: {state.route()} return to existing cid: {cid} (children count: {len(last_node.children)})")
+            return last_node
+        else:
+            print(f"⚠️ [CID STALE] Node for cid {cid} has 0 children. Bypassing CID to ping_node...")
+
+    print(f"___under route: {state.route()} no valid CID with children, checking GPS/sourcepath:")
+
+    # --- 2. Resolve location or redirect ---
+    here, response = state.resolve_here_or_redirect(here)
+    if response:
+        return response  # redirect response
+
+    # If create=False is passed, skip ping_node completely as requested in docstring
+    if not create:
+        print(f"___ create=False flag set. Returning MapRoot.")
+        return MapRoot
+
+    # --- 3. Resolve node from sourcepath / territory ---
+    sourcepath = Celect.get("mapfiles", [None])[-1]
+    steps = state.stepify(sourcepath)
+
+    # Fall back to territory path if sourcepath is missing or too shallow
+    if not sourcepath or sourcepath == "" or len(steps) < 6:
+        sourcepath = Celect.get("territory", "")
+
+    print(f"___ Last node under {state.route()} for {Celect.name} sourcepath: {sourcepath} create:{create}")
+
+    last_node = MapRoot.ping_node(
+        Celect.resolved_levels,
+        geoindex,
+        sourcepath,
+        create=create,
+        accumulate=False
+    )
+
+    # If ping_node resolved a node, but it still has 0 children, attempt territory ping
+    territory_path = Celect.get("territory", "")
+    if last_node and not node_has_children(last_node) and sourcepath != territory_path and territory_path:
+        print(f"⚠️ [PING RETRY] Node '{last_node.value}' has 0 children. Re-pinging using territory path: {territory_path}")
+        last_node = MapRoot.ping_node(
+            Celect.resolved_levels,
+            geoindex,
+            territory_path,
+            create=create,
+            accumulate=False
+        )
+
+    # --- 4. Fallback to root if still missing or childless ---
+    if not last_node or not node_has_children(last_node):
+        print(f"⚠️ GAP: cid_in_index={cid in TREK_NODES_BY_ID} @FALLING BACK TO MAPROOT cid:{cid} - sp:{sourcepath}")
+        print(f"⚠️ @NODE INDEX DUMP: {TREK_NODES_BY_ID}")
+        last_node = MapRoot
+
+    print(
+        f"___ RETRIEVED LAST DESTINATION - election: {Celect.name} "
+        f"NODE {getattr(last_node, 'value', 'ROOT')} at loc: {here} "
+        f"using source: {sourcepath}"
+    )
+
+    return last_node
 
 
 
@@ -523,8 +659,8 @@ def safe_json_load(path, default):
 
 
 
-def restore_from_persist(Treepolys):
-    print(f'____Restore from persist under !{elections.route()} called to restore nodes and polys! ')
+def restore_from_persist(Treepolys, geoindex):
+    print(f'____Restore from persist under !{state.route()} called to restore nodes and polys! ')
 
     safe_pickle_load(TREEPOLY_FILE,Treepolys)
 
@@ -532,16 +668,14 @@ def restore_from_persist(Treepolys):
     load_nodes(TREKNODE_FILE)
 
     # Load from file
-    safe_json_load(GEO_INDEX_FILE, state.Geo_index)
+    safe_json_load(GEO_INDEX_FILE, geoindex)
     print("AFTER LOAD:")
     return
 
-def persist(Treepolys):
+def persist(Treepolys, geoindex):
     atomic_pickle_dump(Treepolys,TREEPOLY_FILE)
-    atomic_json_dump(state.Geo_index,GEO_INDEX_FILE)
+    atomic_json_dump(geoindex,GEO_INDEX_FILE)
     return
-
-
 
 
 def get_common_prefix_len(a, b):
@@ -618,6 +752,30 @@ class TreeNode:
         self.VI = state.VIC.copy()
 
 
+    def visit_node(self, c_elect):
+        from state import stepify, pathify
+        from elections import CurrentElection
+        rlevels = c_elect.resolved_levels
+        assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
+
+        # The clean unpack
+        (c_election, elevels), = rlevels.items()
+
+        c_elect['cid'] = self.nid
+        c_elect['cidLat'] = self.latlongroid[0]
+        c_elect['cidLong'] = self.latlongroid[1]
+
+        newlist = c_elect.add_breadcrumb(self.mapfile())
+
+        c_elect.save()
+        print(f"=== VISIT self === {self.nid}")
+        print(f"current children:{[c.value for c in self.children]}")
+        print(
+            f"___under {c_elect.name} leaving breadcrumb: "
+            f"{c_elect['mapfiles'][-1]}"
+        )
+
+        return True
 
     def group_by_type(self, nodes):
         from collections import defaultdict
@@ -654,11 +812,11 @@ class TreeNode:
         accumulated_ids = session.get("accumulated_nodes", [])
 
         if accumulated_ids:
-            print(f"🔮 [GRANDCHILD EXTRACTION] Extracting grandchildren from {len(accumulated_ids)} session-staged child nodes.")
+            print(f"🔮 [GRANDCHILD EXTRACTION] Extracting grandchildren from {len(accumulated_ids)} session-staged child ")
             grandchildren = []
 
             for nid in accumulated_ids:
-                child_node = nodes.TREK_NODES_BY_ID.get(nid)
+                child_node = TREK_NODES_BY_ID.get(nid)
                 if child_node and hasattr(child_node, 'children'):
                     # The children of the passed wards/divisions are the walks/polling districts (grandchildren)
                     grandchildren.extend(child_node.children)
@@ -687,33 +845,40 @@ class TreeNode:
             roid=data["latlongroid"],
             origin=data["origin"],
             node_type=data["node_type"],
-            nid=data["nid"],   # 🔥 THIS is the important change
+            nid=data["nid"],
         )
 
-        node.electorate = data["electorate"]
-        node.turnout = data["turnout"]
-        node.houses = data["houses"]
-        node.target = data["target"]
-        node.party = data["party"]
+        # Hydrate flat properties
+        node.electorate = data.get("electorate")
+        node.turnout = data.get("turnout", 0)
+        node.houses = data.get("houses", 0)
+        node.target = data.get("target", 0)
+        node.party = data.get("party")
         node.candidates = data.get("candidates", {})
-        node.defcol = data["defcol"]
-        node.tagno = data["tagno"]
-        node.bbox = data["bbox"]
+        node.defcol = data.get("defcol")
+        node.tagno = data.get("tagno")
+        node.bbox = data.get("bbox", [])
+
+        # Cache pre-serialized node_path as a fallback
+        node._cached_node_path = data.get("node_path")
+
+        # Store raw parent/child UUID references for the re-linking pass
+        node._parent_nid = data.get("parent")
+        node._children_nids = data.get("children", [])
 
         return node
 
     def to_dict(self):
         return {
             "nid": self.nid,
+            "node_path": self.node_path,  # <--- NEW FIELD
             "value": self.value,
             "fid": self.fid,
             "latlongroid": self.latlongroid,
             "origin": self.origin,
             "node_type": self.type,
-
             "parent": self.parent.nid if self.parent else None,
             "children": [c.nid for c in self.children],
-
             "electorate": self.electorate,
             "turnout": self.turnout,
             "houses": self.houses,
@@ -721,7 +886,6 @@ class TreeNode:
             "party": self.party,
             "candidates": self.candidates,
             "defcol": self.defcol,
-
             "tagno": self.tagno,
             "bbox": self.bbox,
         }
@@ -777,7 +941,7 @@ class TreeNode:
 
     def available_layers(self,elevels):
         return {
-        "MAP_LAYERS": state.MAP_LAYERS
+        "MAP_LAYERS": MAP_LAYERS
         }
 
     def get_options(self, *, program=None, electionctx=None):
@@ -870,14 +1034,37 @@ class TreeNode:
         return f"{self.parent.layer_path}/{self.type}"
 
     @property
-    def node_path(self) -> str:
+    def node_path(self):
+        """Recursively resolves path via parent object, or falls back to cached string."""
+        if self.parent:
+            return f"{self.parent.node_path}/{self.value}"
+        if getattr(self, "_cached_node_path", None):
+            return self._cached_node_path
+        return self.value
+
+    def path_at_level(self, target_level: int) -> str | None:
         """
-        Computes the node name blueprint trail dynamically from root to node.
-        Example: "UNITED_KINGDOM/ENGLAND/SURREY"
+        Truncates the node_path up to the specified level depth (0-indexed).
+
+        Examples (given node_path = "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"):
+            path_at_level(0) -> "UNITED_KINGDOM"
+            path_at_level(1) -> "UNITED_KINGDOM/ENGLAND"
+            path_at_level(2) -> "UNITED_KINGDOM/ENGLAND/SURREY"
+            path_at_level(10) -> "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY" (clamped)
         """
-        if self.parent is None:
-            return self.value
-        return f"{self.parent.node_path}/{self.value}"
+        if target_level < 0:
+            return None
+
+        # Split path into discrete level segments
+        parts = self.node_path.split("/")
+
+        # Slice up to target_level + 1 inclusive
+        sliced_parts = parts[: target_level + 1]
+
+        if not sliced_parts:
+            return None
+
+        return "/".join(sliced_parts)
 
     @property
     def actual_levels(self) -> dict[int, str]:
@@ -902,8 +1089,9 @@ class TreeNode:
 
 
 
-    def endpoint_created(self, rlevels, newpath, static=False):
+    def endpoint_created(self, CElection,geo_index,rlevels, newpath, static=False):
         from flask import session
+        import layers
         """
         Creates a map node (HTML) if it doesn't already exist,
         is stale, or if active node accumulation overrides the cache.
@@ -915,7 +1103,7 @@ class TreeNode:
         (c_election, elevels), = rlevels.items()
         next_level = self.level + 1
 
-        print(f"___under {elections.route()} testing endpoint:", newpath)
+        print(f"___under {state.route()} testing endpoint:", newpath)
         print("endpoint children:", [c.value for c in self.children])
 
         max_level = max(elevels)
@@ -950,7 +1138,7 @@ class TreeNode:
             endpoint_created = True
 
         if next_level <= max_level and endpoint_created:
-            map, totalleaf = self.create_node_map(rlevels, static=static)
+            map, totalleaf = self.create_node_map(CElection,geo_index,rlevels, static=static)
         else:
             # Fallback leaf-count calculation for clean exits
             totalleaf = len([c for c in self.children if c.level == max_level])
@@ -1070,11 +1258,10 @@ class TreeNode:
 
 
 
-    def build_eventlist_dataframe(self, rlevels):
+    def build_eventlist_dataframe(self, rlevels, CElection):
         """
         Produce an eventlist dataframe matching the intent of the JS summary.
         """
-        from elections import CurrentElection
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1083,7 +1270,6 @@ class TreeNode:
         (c_election, elevels), = rlevels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
 
-        CElection = CurrentElection.load(c_election)
         slots = CElection["calendar_plan"]["slots"]
         rows = []
         print("__Building events from slots:",slots)
@@ -1155,7 +1341,7 @@ class TreeNode:
         """Compute map filename dynamically."""
         node_type = self.type
 
-        if node_type in {"street", "walkleg"}:
+        if node_type == "street":
             parent_val = getattr(self.parent, "value", self.parent) or ""
             name = f"{parent_val}--{self.value}"
             suffix = "-PRINT.html"
@@ -1165,7 +1351,8 @@ class TreeNode:
 
         return str(Path(self.dir or "") / f"{name}{suffix}")
 
-    def ping_node(self, rlevels, dest_path, create=True, accumulate=False):
+
+    def ping_node(self, rlevels, geoindex, dest_path, create=True, accumulate=False):
         from state import LEVEL_ZOOM_MAP, stepify
         from flask import session
         from elector import electors
@@ -1174,11 +1361,14 @@ class TreeNode:
         print(f"🔍 [DEBUG PING_NODE START]")
         print(f"  ▪️ Current Node Path: '{self.node_path}' (Level {self.level})")
         print(f"  ▪️ Destination Path:  '{dest_path}'")
-        print(f"  ▪️ Create Flag:       {create}")
+        print(f"  ▪️ Create Flag:        {create}")
         print("="*50)
 
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
+
+        # Base max level from election definition
+
         max_level = max(elevels)
 
         # ──────────────────────────────
@@ -1190,6 +1380,13 @@ class TreeNode:
 
         print(f"  [1] Parsed self_path:  {self_path}")
         print(f"  [1] Parsed dest_parts: {dest_parts}")
+
+        # 🎯 TARGET LEVEL 4 RULE (Ward/Division):
+        # If targeting level 4 (len == 5), extend max_level to 6 so it populates
+        # both walks (level + 1) and streets (level + 2) grandchildren data.
+        if len(dest_parts) == 5:
+            max_level = max(max_level, 6)
+            print(f"  🎯 [CUSTOM RULE] Target level 4 detected (path length 5). Extended max_level to 6 for walks & streets.")
 
         # ──────────────────────────────
         # Step 2: Compute Common Ancestor and Move Up
@@ -1224,63 +1421,63 @@ class TreeNode:
             next_level = node.level + 1
 
             print(f"\n     👉 [ITERATION {idx+1}] Processing part: '{part}'")
-            print(f"       Constructed target_path: '{target_path}'")
-            print(f"       Evaluating next_level:   {next_level}")
+            print(f"        Constructed target_path: '{target_path}'")
+            print(f"        Evaluating next_level:   {next_level}")
 
             if next_level > max_level:
-                print(f"       ⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}. Breaking.")
+                print(f"        ⚠️ [DEBUG] Next level {next_level} exceeds max_level {max_level}. Breaking.")
                 break
 
-            ntype = str(elevels[next_level])
+            ntype = str(elevels[next_level]) if next_level in elevels else "walk"
 
             # --- 🛡️ PATH VALIDATION ENGINE ---
             is_valid_path = False
-            if next_level < 5:
-                is_valid_path = target_path in state.Geo_index
-                print(f"       🛡️ Checked state.Geo_index for '{target_path}': Found = {is_valid_path}")
+            if next_level < 7:
+                is_valid_path = target_path in geoindex
+                print(f"        🛡️ Checked geoindex for '{target_path}': Found = {is_valid_path}")
             else:
                 df_check = electors.elector_for_path(rlevels, target_path)
                 is_valid_path = df_check is not None and not df_check.empty
-                print(f"       🛡️ Checked DB electors for '{target_path}': Found Rows = {is_valid_path}")
+                print(f"        🛡️ Checked DB electors for '{target_path}': Found Rows = {is_valid_path}")
 
             if not is_valid_path:
-                print(f"       🚫 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
+                print(f"        🚫 [PING] Aborting down-step. Path '{target_path}' is invalid in registry sources.")
                 print(f"🔍 [DEBUG PING_NODE ABORT-EXIT] Returning node: '{node.node_path}'\n" + "="*50)
                 return node
 
             # Look for existing child match
             match = next((c for c in node.children if c.node_path == target_path), None)
             if match:
-                print(f"       ✅ Found existing memory-cached child node for: '{target_path}'")
+                print(f"        ✅ Found existing memory-cached child node for: '{target_path}'")
 
             # --- BRANCH CREATION ON MISS ---
             if create and not match:
-                print(f"       ⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
+                print(f"        ⚙️ [PING] Spawning missing branch for Level {next_level}: {target_path}")
                 try:
-                    if next_level <= 4:
-                        node.create_map_branch(rlevels)
+                    if next_level <= 6:
+                        node.create_map_branch(rlevels, geoindex)
                     else:
                         node.create_data_branch(rlevels, target_path)
                 except Exception as e:
-                    print(f"       ⚠️ [PING] Primary creation pass failed: {e}")
+                    print(f"        ⚠️ [PING] Primary creation pass failed: {e}")
 
                 match = next((c for c in node.children if c.node_path == target_path), None)
 
                 # --- BIVALENT FALLBACK ---
                 if not match and "/" in ntype:
-                    print(f"       🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
+                    print(f"        🔄 [PING] Bivalent type '{ntype}' missed primary. Triaging alternative strategy...")
                     try:
-                        if next_level <= 4:
-                            node.create_map_branch(rlevels)
+                        if next_level <= 6:
+                            node.create_map_branch(rlevels, geoindex)
                         else:
                             node.create_data_branch(rlevels, target_path)
                     except Exception as e:
-                        print(f"       ⚠️ [PING] Alternative bivalent strategy failed: {e}")
+                        print(f"        ⚠️ [PING] Alternative bivalent strategy failed: {e}")
 
                     match = next((c for c in node.children if c.node_path == target_path), None)
 
             if not match:
-                print(f"       ❌ [PING] Could not match or create node for path: {target_path}")
+                print(f"        ❌ [PING] Could not match or create node for path: {target_path}")
                 print(f"🔍 [DEBUG PING_NODE FAIL-EXIT] Returning node: '{node.node_path}'\n" + "="*50)
                 return node
 
@@ -1297,52 +1494,49 @@ class TreeNode:
         # ──────────────────────────────
         # Step 5: Exhaustive Bottom-Node Child Expansion
         # ──────────────────────────────
-        # 🎯 OPTION C TRANSFORMATION: Drops straight through into hydration block rather than exiting early.
-        if len(down_path) > 0 and node.node_path == target_path:
-            if next_level > max_level:
-                print(f"🎯 [DEBUG PING_NODE SUCCESS-EXIT] Target matched exactly at max leaf depth. Skipping expansion.")
-                return node
-            print(f"🌊 [AUTOMATIC DEEP HYDRATION] Target matched. Dropping into expansion to unpack nested children layers...")
-
         print(f"\n  [5] Entering exhaustive bottom-node expansion phase for: '{node.node_path}'")
         if node.level <= max_level and create:
             children_type = str(elevels.get(node.level, ""))
             next_level = node.level + 1
 
             should_expand = False
-            if next_level <= 4:
-                should_expand = node.node_path in state.Geo_index or any(k.startswith(node.node_path + "/") for k in state.Geo_index)
-                print(f"     Expansion index check for level <= 4: {should_expand}")
+            if next_level <= 6:
+                should_expand = node.node_path in geoindex or any(k.startswith(node.node_path + "/") for k in geoindex)
             else:
                 df_check = electors.elector_for_path(rlevels, node.mapfile())
                 should_expand = df_check is not None and not df_check.empty
-                print(f"     Expansion database check for level > 4: {should_expand}")
 
             if should_expand:
                 try:
                     print(f"     ⚙️ Triggering bottom-node branch expansion pass for children...")
-                    if next_level <= 4:
-                        node.create_map_branch(rlevels)
+                    if next_level <= 6:
+                        node.create_map_branch(rlevels, geoindex)
                     else:
                         node.create_data_branch(rlevels, node.node_path)
                 except Exception as e:
                     print(f"     ⚠️ [PING] Final node primary expansion failed: {e}")
 
-                if "/" in children_type:
-                    try:
-                        print(f"     🔄 Triggering final node bivalent expansion pass...")
-                        if next_level <= 4:
-                            node.create_map_branch(rlevels)
-                        else:
-                            node.create_data_branch(rlevels, node.node_path)
-                    except Exception as e:
-                        print(f"     ⚠️ [PING] Final node bivalent expansion failed: {e}")
+                # 🎯 TARGET LEVEL 4 RECURSIVE DEEP DIVE:
+                # If we just expanded a Level 4 node into walks (Level 5),
+                # let's immediately force those walks to expand into streets (Level 6)!
+                if node.level == 4:
+                    print(f"     🎯 [CUSTOM RULE] Level 4 expansion detected. Recursively triggering walk-to-street expansion...")
+                    for walk_child in node.children:
+                        walk_next_level = walk_child.level + 1
+                        walk_should_expand = walk_child.node_path in geoindex or any(k.startswith(walk_child.node_path + "/") for k in geoindex)
+                        if walk_should_expand:
+                            try:
+                                walk_child.create_map_branch(rlevels, geoindex)
+                            except Exception as e:
+                                print(f"     ⚠️ [PING] Walk child expansion failed for {walk_child.node_path}: {e}")
+
+
 
         print(f"🔍 [DEBUG PING_NODE SUCCESS-EXIT] Target achieved! Returning node: '{node.node_path}' (Level {node.level})")
         print("="*50 + "\n")
         return node
 
-    def get_feature_layers(self, rlevels, static=False):
+    def get_feature_layers(self,CE=None, rlevels=None, static=False):
         """
         Retrieves map layers for the node's parent, siblings, children, and grandchildren,
         applying a self-consistent visual hierarchy across both administrative boundaries
@@ -1351,7 +1545,7 @@ class TreeNode:
         from flask import session
         from layers import make_feature_layers, ExtendedFeatureGroup
         from elections import CurrentElection
-        from baked_data import baked_data, BakedDataManager
+        from baked_data import baked_manager, BakedDataManager
         import state
         import copy
         from collections import defaultdict
@@ -1442,8 +1636,8 @@ class TreeNode:
         (c_election, elevels), = rlevels.items()
 
         print(f"\n================ [DEBUG START: get_feature_layers] ================")
-        current_election = CurrentElection.load(c_election)
-        task_tags, _, _ = current_election.get_tags()
+
+        task_tags, outcome_tags, all_tags = CE.get_tags()
 
         factory = make_feature_layers()
         selected = []
@@ -1458,7 +1652,7 @@ class TreeNode:
 
         test_node = childnodelist[0] if childnodelist else self
        # Setup infrastructure for task overlays
-        baked_dict = baked_data.load()
+        baked_dict = baked_manager.load()
         active_tags = dict(task_tags)
         active_tags["VI"] = "Voter Intention"
 
@@ -1470,8 +1664,8 @@ class TreeNode:
             nodes_by_type[layer_type] = nodes
             print(f"Surrounding layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
 
-        # Control panel whitelist toggles
-        TEST_LAYERS = {"county", "constituency", "ward", "walk", "division", "marker", "elector", "street", "walkleg"}
+# Control panel whitelist toggles — ADDED 'country' AND 'nation'
+        TEST_LAYERS = {"country", "nation", "county", "constituency", "ward", "walk", "division", "marker","street"}
 
 
         # 🎯 DIRECT STREAM ROUTING LOOP
@@ -1507,45 +1701,69 @@ class TreeNode:
 
                 # 📍 Pins & Global Anchors
                 case "marker":
-                    layer.add_genmarkers(rlevels, test_node, static)
+                    layer.add_genmarkers(CE,rlevels, test_node, static)
 
                 # 🗺️ Polygon Map Layers
                 # 🗺️ Polygon Map Layers
-                case "constituency" | "division" | "ward" | "country" | "nation" | "county":
-                    # 🔥 Call the new signature, feeding it the structured dynamic stream array
-                    print(f"Nodemap layer: {layer_type} count: {len(nodes_by_type[layer_type])}")
+                case "country" | "nation" | "county" | "constituency" | "division" | "ward":
+                    print(f"Nodemap layer: {factory_key} count: {len(nodes_to_render)}")
+
+                    # Top-level nodes (like 'country') have parent = None; fall back to the target node itself
+                    first_node = nodes_to_render[0]
+                    parent_anchor = first_node.parent if first_node.parent is not None else first_node
 
                     layer.add_nodemaps(
+                        CE,
+                        rlevels=rlevels,
+                        herenode=parent_anchor,
+                        nodes_list=nodes_to_render,
+                        static=static,
+                        counters=counters
+                    )
+
+#                # 📐 Spatial Proximity Layers (Voronoi Grids)
+                case "walk":
+                    print(f"Nodemap Walk layer: {factory_key} count: {len(nodes_to_render)}")
+
+                    # 🎯 FIX: Anchor the clipping envelope to the true parent container
+                    # of the specific sub-units being drawn, fall back to self if list is empty.
+                    layer.add_nodemaps(
+                        CE,
                         rlevels=rlevels,
                         herenode=nodes_to_render[0].parent,
                         nodes_list=nodes_to_render,
                         static=static,
                         counters=counters
                     )
-                # 📐 Spatial Proximity Layers (Voronoi Grids)
-                case "walk":
-                    print(f"Voronoi layer: {factory_key} count: {len(nodes_to_render)}")
-
-                    # 🎯 FIX: Anchor the clipping envelope to the true parent container
-                    # of the specific sub-units being drawn, fall back to self if list is empty.
-
-                    layer.add_voronoi(
-                        rlevels=rlevels,
-                        nodes_list=nodes_to_render,
-                        static=static
-                    )
-                    _attach_task_campaign_overlays(
-                        selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
-                    )
+#                    layer.add_voronoi(
+#                        rlevels=rlevels,
+#                        nodes_list=nodes_to_render,
+#                        static=static
+#                    )
+#                    _attach_task_campaign_overlays(
+#                        selected, factory_key, nodes_to_render[0].parent, active_tags, baked_dict
+#                    )
                 # 🥾 Tactical Ground Line Elements & Analytics Fallbacks
                 case "street" :
-                    layer.add_linestrings(rlevels, nodes_to_render[0].parent.parent, nodes_to_render, static, counters=counters)
+                    layer.add_linestrings(
+                        CE,
+                        rlevels,
+                        nodes_to_render[0].parent.parent,
+                        nodes_to_render,
+                        static,
+                        counters=counters)
 
 
                              # ⚠️ Catch-All Fallback Engine
                 case _:
                     print(f"ℹ️ Factory key '{factory_key}' running default node markers routing.")
-                    layer.add_nodemarks(rlevels, nodes_to_render[0].parent, static, factory_key)
+                    layer.add_nodemarks(
+                        CE,
+                        rlevels,
+                        nodes_to_render[0].parent,
+                        static,
+                        factory_key)
+
                     selected.append(layer)
 
             # 📬 Operational Overlay Attachment Trigger
@@ -1557,7 +1775,7 @@ class TreeNode:
             layer.control = True
 
             # Use safe explicit fallbacks for map initialization layers control panel states
-            if factory_key in ["ward", "division", "constituency", "walk"]:
+            if factory_key in ["country", "nation","county","ward", "division", "constituency", "walk", "street"]:
                 layer.show = True
             else:
                 layer.show = False
@@ -1571,7 +1789,7 @@ class TreeNode:
 
     def sumupVI(self,viValue):
         origin = self
-        if self.type == 'street' or self.type == 'walkleg':
+        if self.type == 'street' :
             sumnode = origin
             for x in range(origin.level+1):
                 sumnode.VI[viValue] = sumnode.VI[viValue] + 1
@@ -1583,7 +1801,7 @@ class TreeNode:
 
     def updateVR(self,vrValue):
         origin = self
-        if self.type == 'street' or self.type == 'walkleg':
+        if self.type == 'street' :
             sumnode = origin
             sumnode.VR[vrValue] = sumnode.VR[vrValue] + 1
 #            print ("_____VRnode:",sumnode.value,sumnode.level,sumnode.VR)
@@ -1881,7 +2099,7 @@ class TreeNode:
 
     def create_data_branch(self, resolved_levels, localized_path):
         from elector import electors
-        from state import Treepolys
+        from layers import Treepolys
         import elections
 
         # Guard: Ensure we have exactly one election to unpack
@@ -1957,6 +2175,7 @@ class TreeNode:
                 )
 
                 print(f"📦 Created {len(branch_nodes)} nodes for type '{electtype}'")
+                # ✅ CORRECTED
                 all_created_data_nodes.extend(branch_nodes)
 
         except Exception as e:
@@ -1979,9 +2198,10 @@ class TreeNode:
 
         return all_created_data_nodes
 
-    def create_map_branch(self, resolved_levels):
+    def create_map_branch(self, resolved_levels, geoindex):
         # Imports (keep them here if they are circular)
-        from state import Treepolys, branchcolours
+        from layers import Treepolys
+        from state import branchcolours
         import pandas as pd
         import state
         import elections
@@ -2012,9 +2232,9 @@ class TreeNode:
         # e.g., "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"
         my_path_key = self.get_absolute_path_string()
 
-        geo_node = state.Geo_index.get(my_path_key)
+        geo_node = geoindex.get(my_path_key)
         if not geo_node:
-            print(f"⚠️ Warning: Path {my_path_key} not found in state.Geo_index. Falling back to empty children.")
+            print(f"⚠️ Warning: Path {my_path_key} not found in geoindex. Falling back to empty children.")
             return []
 
         # Get the precise pre-calculated list of child paths from our index
@@ -2031,14 +2251,14 @@ class TreeNode:
                 print(f"⚠️ Spatial table '{electtype}' is empty. Skipping.")
                 continue
 
-            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in state.Geo_index
+            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in geoindex
             valid_child_fids = set()
             for path in allowed_child_paths:
-                node = state.Geo_index.get(path)
+                node = geoindex.get(path)
                 if node and node.get("fid") is not None:
                     valid_child_fids.add(node["fid"])
 
-            print(f"🎯 Target FIDs expected from state.Geo_index: {valid_child_fids}")
+            print(f"🎯 Target FIDs expected from geoindex: {valid_child_fids}")
 
             # Direct, vectorized filtering on the integer column — no string manipulation required
             selected_children = ChildPolylayer[ChildPolylayer['FID'].isin(valid_child_fids)]
@@ -2052,20 +2272,23 @@ class TreeNode:
             j = 0
 
             for _, limb in selected_children.iterrows():
-                newname = state.normalname(limb.NAME)
-
-                # Reconstruct path safely using context
-                if my_path_key == "UNITED_KINGDOM":
-                    child_path_key = f"UNITED_KINGDOM/{newname}"
+                # 1. Use the pre-baked path directly from the GeoDataFrame properties
+                child_path_key = limb.get('_parent_path')
+                if child_path_key:
+                    child_path_key = f"{child_path_key}/{limb['NAME']}"
                 else:
+                    # Fallback safety if property is missing
+                    newname = state.normalname(limb['NAME'])
                     child_path_key = f"{my_path_key}/{newname}"
+
+                newname = state.normalname(limb['NAME'])
 
                 # Ensure uniqueness within this specific sub-layer type block
                 if child_path_key in fam_values:
                     j += 1
                     continue
 
-                baked_roid = state.Geo_index.get(child_path_key, {}).get("roid")
+                baked_roid = geoindex.get(child_path_key, {}).get("roid")
 
                 if baked_roid:
                     here = tuple(baked_roid)
@@ -2073,26 +2296,26 @@ class TreeNode:
                     centroid_point = limb.geometry.representative_point()
                     here = (centroid_point.y, centroid_point.x)
 
-                # Create the TreeNode stamped explicitly with this unique layer type
-                egg = TreeNode(
-                    value=newname,
-                    fid=limb.FID,
-                    roid=here,
-                    origin="ONS_MAPS",
-                    node_type=electtype
-                )
-
-                # Attach node structurally to parent
-                egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
-
-                block = pd.DataFrame()
-                egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, block)
-
-                # Set branch color based on absolute index
-                color_idx = (len(all_created_children) + k) % len(branchcolours)
-                egg.defcol = branchcolours[color_idx]
-
                 try:
+                    # Create the TreeNode stamped explicitly with this unique layer type
+                    egg = TreeNode(
+                        value=newname,
+                        fid=limb.FID,
+                        roid=here,
+                        origin="ONS_MAPS",
+                        node_type=electtype
+                    )
+
+                    # Attach node structurally to parent
+                    egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
+
+                    # ⚠️ FIX HERE: Pass the specific feature geometry/row instead of an empty DataFrame
+                    # Assuming your bounding box function accepts a GeoSeries, geometry, or feature row:
+                    egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, limb.geometry)
+
+                    # Set branch color based on absolute index
+                    color_idx = (len(all_created_children) + k) % len(branchcolours)
+                    egg.defcol = branchcolours[color_idx]
                     egg.updateParty()
                     egg.updateCandidates()
                     egg.updateTurnout()
@@ -2111,11 +2334,12 @@ class TreeNode:
 
             print(f"✅ Layer '{electtype}': Added {k}, skipped duplicate {j}. Total branch size: {len(fam_nodes)}")
 
-    def create_node_map(self, resolved_levels, static=False):
+    def create_node_map(self,CElection, geo_index, resolved_levels, static=False):
         global SERVER_PASSWORD
 
         from folium import IFrame, Element  # 💡 Explicitly ensured Element is present
-        from state import LEVEL_ZOOM_MAP, Treepolys, MAP_LAYERS
+        from state import LEVEL_ZOOM_MAP
+        from layers import Treepolys, MAP_LAYERS
         from layers import make_counters, ExtendedFeatureGroup
 
         import hashlib
@@ -2123,6 +2347,7 @@ class TreeNode:
         from pathlib import Path
 
         import json
+
 
         def generate_map_accordions(specs: list[dict]) -> str:
             """Generates a modular HTML/JS injection string for Folium maps.
@@ -2253,8 +2478,23 @@ class TreeNode:
         # The clean unpack
         (c_election, elevels), = resolved_levels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
+        task_tags, outcome_tags, all_tags = CElection.get_tags()
 
-        # ... imports ...
+        area_root_path = self.node_path
+
+        area_tree = build_area_tree(area_root_path,geo_index)
+        area_tree_json = json.dumps(area_tree or {})
+
+        area_accordion_js = f"""
+            <script>
+            window.areaTree = {area_tree_json};
+            window.addEventListener('load', function () {{
+                try {{
+                    window.parent.postMessage({{ type: 'areaTree', tree: window.areaTree }}, '*');
+                }} catch (e) {{ console.warn('areaTree postMessage failed', e); }}
+            }});
+            </script>
+            """
 
         accumulate = session.get("accumulate", False)
 
@@ -2280,7 +2520,7 @@ class TreeNode:
             width='100%',
             height='800px'
         )
-        print(f"___AFTER map creation: on elections.route {elections.route()} acc: {accumulate} creating file: ", self.mapfile())
+        print(f"___AFTER map creation: on elections.route {state.route()} acc: {accumulate} creating file: ", self.mapfile())
 
         counters = make_counters()
 
@@ -2288,10 +2528,10 @@ class TreeNode:
 
         # 3️⃣ Select which layers to render for this map
         flayers, totalleaf = self.get_feature_layers(
-            rlevels=resolved_levels,
+            CE=CElection,rlevels=resolved_levels,
             static=static
         )
-        print(f"___AFTER layer creation: on elections.route {elections.route()} layercount: {len(flayers)} creating file: ", self.mapfile())
+        print(f"___AFTER layer creation: on elections.route {state.route()} layercount: {len(flayers)} creating file: ", self.mapfile())
 
         # Configure only ghosts for testing
         accordion_configurations = [
@@ -2550,143 +2790,162 @@ class TreeNode:
         # --- Inject map finding , click handling and layer control adding functionality
 
         fmap_tags_js = r"""
-                <script>
-                (function() {
-                    console.log("🗺️ fmap_marker_js loaded (Direct Map Discovery & Modal Binding)");
+            <script>
+            (function() {
+                console.log("🗺️ fmap_marker_js loaded (Direct Map Discovery & Modal Binding)");
 
-                    window.fmap = null;
-                    window.MarkerLayer = null;
+                window.fmap = null;
+                window.MarkerLayer = null;
 
-                    let pollAttempts = 0;
-                    const MAX_ATTEMPTS = 100;
+                let pollAttempts = 0;
+                const MAX_ATTEMPTS = 100;
 
-                    function detectFoliumMap() {
-                        if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
-                            setTimeout(detectFoliumMap, 100);
-                            return;
-                        }
-
-                        for (const key in window) {
-                            if (!window.hasOwnProperty(key)) continue;
-                            const val = window[key];
-
-                            if (key.startsWith("map_") && val instanceof L.Map) {
-                                window.fmap = val;
-                                console.log(`✅ Folium Map discovered: ${key}`);
-
-                                if (typeof window.handleMapClick === 'function') {
-                                    window.fmap.on('click', window.handleMapClick);
-                                }
-
-                                console.log("⚡ Binding Full-Screen Modal Handlers directly to layers...");
-                                let boundCount = 0;
-
-                                window.fmap.eachLayer(function(layer) {
-                                    if (layer.feature && layer.feature.properties && layer.feature.properties.street_html) {
-
-                                        if (layer.unbindPopup) layer.unbindPopup();
-
-                                        // 👇 RIGHT HERE! THIS IS WHERE THE LAYER.ON CODE GOES 👇
-                                        layer.on('click', function(e) {
-                                            if (e.originalEvent) e.originalEvent.stopPropagation();
-                                            L.DomEvent.stopPropagation(e);
-
-
-                                            if (e.target) {
-                                                console.log("Target Found:", e.target);
-                                                console.log("Target Feature:", e.target.feature);
-                                                if (e.target.feature) {
-                                                    console.log("Target Feature Properties:", e.target.feature.properties);
-                                                }
-                                            }
-
-                                            console.log("Layer Found:", layer);
-                                            console.log("Layer Feature:", layer.feature);
-                                            if (layer.feature) {
-                                                console.log("Layer Feature Properties:", layer.feature.properties);
-                                            }
-
-                                            if (e.target && e.target.options) {
-                                                console.log("Target Options:", e.target.options);
-                                            }
-
-                                            const clickedLayer = e.target;
-                                            const feature = clickedLayer.feature || (clickedLayer.options && clickedLayer.options.feature);
-                                            const props = feature ? feature.properties : null;
-
-                                            if (!props || !props.street_html) {
-                                                console.warn("⚠️ No street properties found on this layer.");
-                                                return;
-                                            }
-
-                                            // 🎯 Find the active modal container
-                                            const modalElement = document.getElementById('streetListModal');
-                                            if (!modalElement) {
-                                                console.error("❌ Critical: Could not find modal element with ID 'streetListModal'.");
-                                                return;
-                                            }
-
-                                            // Find the body container strictly inside our target modal
-                                            const modalBody = modalElement.querySelector('.modal-body') || document.getElementById('modal-table-body');
-                                            if (!modalBody) {
-                                                console.error("❌ Critical: Could not find any modal body container.");
-                                                return;
-                                            }
-
-                                            // 🚀 Directly inject the clean HTML string
-                                            modalBody.innerHTML = props.street_html;
-                                            console.log("✨ Successfully wrote content to active DOM element:", modalBody);
-
-                                            if (typeof bootstrap !== 'undefined') {
-
-                                                if (!modalElement.__eventsBound) {
-
-                                                    modalElement.__eventsBound = true;
-
-                                                    modalElement.addEventListener("show.bs.modal", () => {
-                                                        console.log("🟢 show.bs.modal");
-                                                    });
-
-                                                    modalElement.addEventListener("shown.bs.modal", () => {
-                                                        console.log("🟢 shown.bs.modal");
-                                                    });
-
-                                                    modalElement.addEventListener("hide.bs.modal", () => {
-                                                        console.log("🔴 hide.bs.modal");
-                                                    });
-
-                                                    modalElement.addEventListener("hidden.bs.modal", () => {
-                                                        console.log("🔴 hidden.bs.modal");
-                                                        window.syncBackend?.();
-                                                    });
-                                                }
-
-                                                window.streetBsModal = window.streetBsModal ||
-                                                    bootstrap.Modal.getOrCreateInstance(modalElement);
-
-                                                window.streetBsModal.show();
-
-                                                console.log("🚀 Modal display triggered via Bootstrap.");
-
-                                            } else {
-                                                console.error("❌ Bootstrap JS is not loaded.");
-                                            }
-                                        });
-                                        // 👆 END OF THE LAYER.ON CODE 👆
-
-                                        boundCount++;
-                                    }
-                                });
-                                console.log(`✅ Configured ${boundCount} map layers for modal presentations.`);
-
-                                startLayerPolling();
-                                return;
-                            }
-                        }
+                function detectFoliumMap() {
+                    if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
                         setTimeout(detectFoliumMap, 100);
+                        return;
                     }
 
-                    // ... (keep the findTargetLayer and startLayerPolling functions exactly as they were below this)
+                    for (const key in window) {
+                        if (!window.hasOwnProperty(key)) continue;
+                        const val = window[key];
+
+                        if (key.startsWith("map_") && val instanceof L.Map) {
+                            window.fmap = val;
+                            console.log(`✅ Folium Map discovered: ${key}`);
+
+                            if (typeof window.handleMapClick === 'function') {
+                                window.fmap.on('click', window.handleMapClick);
+                            }
+
+                            console.log("⚡ Binding Full-Screen Modal Handlers directly to layers...");
+                            let boundCount = 0;
+                            let popupGuardCount = 0;
+
+                            window.fmap.eachLayer(function(layer) {
+                                if (layer.feature && layer.feature.properties && layer.feature.properties.street_html) {
+
+                                    if (layer.unbindPopup) layer.unbindPopup();
+
+                                    // 👇 RIGHT HERE! THIS IS WHERE THE LAYER.ON CODE GOES 👇
+                                    layer.on('click', function(e) {
+                                        if (e.originalEvent) e.originalEvent.stopPropagation();
+                                        L.DomEvent.stopPropagation(e);
+
+
+                                        if (e.target) {
+                                            console.log("Target Found:", e.target);
+                                            console.log("Target Feature:", e.target.feature);
+                                            if (e.target.feature) {
+                                                console.log("Target Feature Properties:", e.target.feature.properties);
+                                            }
+                                        }
+
+                                        console.log("Layer Found:", layer);
+                                        console.log("Layer Feature:", layer.feature);
+                                        if (layer.feature) {
+                                            console.log("Layer Feature Properties:", layer.feature.properties);
+                                        }
+
+                                        if (e.target && e.target.options) {
+                                            console.log("Target Options:", e.target.options);
+                                        }
+
+                                        const clickedLayer = e.target;
+                                        const feature = clickedLayer.feature || (clickedLayer.options && clickedLayer.options.feature);
+                                        const props = feature ? feature.properties : null;
+
+                                        if (!props || !props.street_html) {
+                                            console.warn("⚠️ No street properties found on this layer.");
+                                            return;
+                                        }
+
+                                        // 🎯 Find the active modal container
+                                        const modalElement = document.getElementById('streetListModal');
+                                        if (!modalElement) {
+                                            console.error("❌ Critical: Could not find modal element with ID 'streetListModal'.");
+                                            return;
+                                        }
+
+                                        // Find the body container strictly inside our target modal
+                                        const modalBody = modalElement.querySelector('.modal-body') || document.getElementById('modal-table-body');
+                                        if (!modalBody) {
+                                            console.error("❌ Critical: Could not find any modal body container.");
+                                            return;
+                                        }
+
+                                        // 🚀 Directly inject the clean HTML string
+                                        modalBody.innerHTML = props.street_html;
+                                        console.log("✨ Successfully wrote content to active DOM element:", modalBody);
+
+                                        if (typeof bootstrap !== 'undefined') {
+
+                                            if (!modalElement.__eventsBound) {
+
+                                                modalElement.__eventsBound = true;
+
+                                                modalElement.addEventListener("show.bs.modal", () => {
+                                                    console.log("🟢 show.bs.modal");
+                                                });
+
+                                                modalElement.addEventListener("shown.bs.modal", () => {
+                                                    console.log("🟢 shown.bs.modal");
+                                                });
+
+                                                modalElement.addEventListener("hide.bs.modal", () => {
+                                                    console.log("🔴 hide.bs.modal");
+                                                });
+
+                                                modalElement.addEventListener("hidden.bs.modal", () => {
+                                                    console.log("🔴 hidden.bs.modal");
+                                                    window.syncBackend?.();
+                                                });
+                                            }
+
+                                            window.streetBsModal = window.streetBsModal ||
+                                                bootstrap.Modal.getOrCreateInstance(modalElement);
+
+                                            window.streetBsModal.show();
+
+                                            console.log("🚀 Modal display triggered via Bootstrap.");
+
+                                        } else {
+                                            console.error("❌ Bootstrap JS is not loaded.");
+                                        }
+                                    });
+                                    // 👆 END OF THE LAYER.ON CODE 👆
+
+                                    boundCount++;
+                                }
+
+                                // ------------------------------------------------------------
+                                // 🛑 POPUP-BUBBLE GUARD
+                                // Any layer with its own bound Folium popup (nation, country,
+                                // county, constituency polygons via popup=click_popup) must not
+                                // ALSO trigger the map-level "add a place here" handler bound
+                                // above via window.fmap.on('click', window.handleMapClick).
+                                // Leaflet path layers bubble click events up to the map by
+                                // default (bubblingMouseEvents: true), so without this guard
+                                // every click on a popup-bearing polygon fires handleMapClick
+                                // too -- which is why popups were never visibly opening.
+                                // ------------------------------------------------------------
+                                if (layer.getPopup && layer.getPopup()) {
+                                    layer.on('click', function(e) {
+                                     if (e.originalEvent) e.originalEvent.stopPropagation();   // ADD THIS LINE
+                                        L.DomEvent.stopPropagation(e);
+                                    });
+                                    popupGuardCount++;
+                                }
+                            });
+                            console.log(`✅ Configured ${boundCount} map layers for modal presentations.`);
+                            console.log(`🛑 Configured ${popupGuardCount} map layers with popup-bubble guards.`);
+
+                            startLayerPolling();
+                            return;
+                        }
+                    }
+                    setTimeout(detectFoliumMap, 100);
+                }
 
                 // ---------------------------------------------------------
                 // 2️⃣ Stage 2: Targeted Polling for Layer Control Dictionary
@@ -2723,7 +2982,6 @@ class TreeNode:
             })();
             </script>
             """
-
 
         # Inject canvas icon JS
         canvas_icon_js = """
@@ -2946,6 +3204,7 @@ class TreeNode:
 
         # Ensure there's only one LayerControl
         FolMap.add_child(folium.LayerControl(collapsed=True))
+        FolMap.get_root().html.add_child(folium.Element(area_accordion_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
 
@@ -3006,7 +3265,7 @@ class TreeNode:
         # 5. SAVE TO THE PARENT'S PATH
         FolMap.save(target)
         save_nodes(TREKNODE_FILE)
-        print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {elections.route()}")
+        print(f"✅ Map Saved to: {target} (Accumulate: {accumulate}) elections.route: {state.route()}")
         return FolMap, totalleaf
 
 
@@ -3020,7 +3279,7 @@ class TreeNode:
       return [Point(latmin,longmin),Point(latmax,longmax)]
 
     def get_bounding_box(self, ntype,block):
-        from state import Treepolys
+        from layers import Treepolys
 
         if self.level < 3:
             pfile = Treepolys[ntype]
@@ -3039,7 +3298,7 @@ class TreeNode:
 
             # Optional: convert centroid back to lat/lon
             roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
-        elif self.level < 5:
+        elif self.level < 7:
             pfile = Treepolys[ntype]
             pb = pfile[pfile['FID'] == int(self.fid)]
             minx, miny, maxx, maxy = pb.geometry.total_bounds
@@ -3052,14 +3311,21 @@ class TreeNode:
             # Optional: convert centroid back to lat/lon
             roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
         else:
-            minx, miny, maxx, maxy = block.geometry.total_bounds
+            # Wrap the raw shapely geometry into a GeoSeries for GIS operations
+            gs = gpd.GeoSeries([block], crs="EPSG:4326")
+
+            minx, miny, maxx, maxy = gs.total_bounds
             swne = [(miny, minx), (maxy, maxx)]
-            pb_proj = block.to_crs(epsg=3857)   # Web Mercator (meters)
 
-            roid = pb_proj.dissolve().centroid.iloc[0]
+            # Reproject the temporary GeoSeries to Web Mercator (meters)
+            gs_proj = gs.to_crs(epsg=3857)
 
-            # Optional: convert centroid back to lat/lon
+            # Get the centroid of the geometry
+            roid = gs_proj.centroid.iloc[0]
+
+            # Convert centroid back to lat/lon (EPSG:4326)
             roid = gpd.GeoSeries([roid], crs=3857).to_crs(epsg=4326).iloc[0]
+
 
         # Always return lat/lon tuple for centroid
         centroid = (roid.y, roid.x)
@@ -3362,10 +3628,13 @@ Outcols = Outcomes.columns.to_list()
 allelectors = pd.DataFrame(Outcomes, columns=Outcols)
 allelectors.drop(allelectors.index, inplace=True)
 
-
-TREK_NODES_BY_ID: Dict[int, "TreeNode"] = {}
-
+TREK_NODES_BY_ID: Dict[str, "TreeNode"] = {}
+TREK_NODES_BY_PATH: Dict[str, "TreeNode"] = {}  # Direct path hash table
 
 MapRoot = get_trek_root()
+
+# Sync both registries
 TREK_NODES_BY_ID[MapRoot.nid] = MapRoot
+TREK_NODES_BY_PATH[MapRoot.node_path] = MapRoot  # <--- Sync root path here
+
 save_nodes(TREKNODE_FILE)
