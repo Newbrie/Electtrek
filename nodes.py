@@ -34,8 +34,8 @@ def build_area_tree(node_path, geo_index, max_depth=3):
         return {}
 
     parts = node_path.split("/")
-    current_depth = len(parts)  # Index 3 means there are 4 parts ([0, 1, 2, 3])
-    target_len = 4  # The 4th step (index = 3)
+    current_depth = len(parts)  # Index 2 means there are 3 parts ([0, 1, 2])
+    target_len = 2  # The 3rd step (index = 2)
 
     # 1. If we are still above the county level, skip adding this node
     # and just look inside its children until we reach index 3.
@@ -47,7 +47,7 @@ def build_area_tree(node_path, geo_index, max_depth=3):
                 children_dict.update(child_tree)
         return children_dict  # Passes through without adding a root key
 
-    # 2. Once we hit index 3 (county level), get its name
+    # 2. Once we hit index 2 (county level), get its name
     name = node.get("name", parts[-1])
 
     # 3. Calculate how deep we've gone relative to the county level
