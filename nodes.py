@@ -24,45 +24,38 @@ import re
 _MASTER_ROOT = None
 
 
-def build_area_tree(node_path, geo_index, max_depth=3):
+def build_area_tree(node_path, geo_index, max_depth=3, current_level=0):
     """
-    Builds an area tree starting at the County level (index 2 / 3 parts total).
-    Hierarchy:
-      0 = country
-      1 = nation
-      2 = county (SURREY) -> Top of tree
-      3 = constituency/district (SURREY_HEATH) -> Child of county
+    Pass the ROOT of your geo_index here (e.g., 'uk' or 'world').
+    It will automatically skip index 0 and 1, and start the dictionary at County (index 2).
     """
     node = geo_index.get(node_path)
     if not node:
         return {}
 
-    parts = node_path.split("/")
-    current_depth = len(parts)
-    target_len = 3  # A path with 3 parts (country/nation/county) puts the county at index 2
+    target_level = 2  # County level is index 2
 
     # 1. If we are above the county level (index 0 or 1),
-    # skip adding a key and dive deeper into children.
-    if current_depth < target_len:
+    # don't create a dictionary key—just dive straight into the children.
+    if current_level < target_level:
         children_dict = {}
         for child_path in node.get("children", []):
-            child_tree = build_area_tree(child_path, geo_index, max_depth)
+            child_tree = build_area_tree(child_path, geo_index, max_depth, current_level + 1)
             if child_tree:
                 children_dict.update(child_tree)
         return children_dict
 
-    # 2. We have reached index 2 (County level, e.g., SURREY)! Get its name.
-    name = node.get("name", parts[-1])
+    # 2. Once we hit index 2 (County level, e.g., SURREY),
+    # start building the dictionary keys!
+    name = node.get("name", node_path.split("/")[-1])
 
-    # 3. Calculate how deep we've gone relative to the county level
-    relative_depth = current_depth - target_len + 1
-    if relative_depth >= max_depth:
+    if max_depth <= 1:
         return {name: {}}
 
-    # 4. Recursively collect children (which will now include SURREY_HEATH and its wards)
+    # 3. Recursively collect all districts/constituencies underneath the county
     children_dict = {}
     for child_path in node.get("children", []):
-        child_tree = build_area_tree(child_path, geo_index, max_depth)
+        child_tree = build_area_tree(child_path, geo_index, max_depth - 1, current_level + 1)
         if child_tree:
             children_dict.update(child_tree)
 
@@ -2495,7 +2488,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3)
+        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3, current_level=0)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
