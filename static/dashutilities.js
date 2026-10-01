@@ -827,7 +827,9 @@ async function fetchBackendURL() {
                      class="accordion-button collapsed py-2 shadow-none"
                      type="button"
                      data-bs-toggle="collapse"
-                     data-bs-target="#${cid}">
+                     data-bs-target="#${cid}"
+                     data-bs-parent="#areaSelectAccordion">
+                     
                      ${parentName}
                  </button>
              </h2>
