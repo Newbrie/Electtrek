@@ -105,83 +105,21 @@ window.toggleAllCheckboxes = function(masterCheckbox) {
  * Populate the area accordion based on your areas dict.
  * @param {Object} areasDict - Structure: { childId: { node, children: [...] } }
  */
- function populateAreaAccordion(areasDict) {
-    console.group("📍 populateAreaAccordion");
-    const container = document.getElementById("areaAccordionContainer");
+ // Drop-in replacement wrapper for populateAreaAccordion
+ // Drop-in replacement wrapper with safety logging
+ window.populateAreaAccordion = function(areasDict) {
+     console.group("📍 populateAreaAccordion (via renderAreaSelector)");
+     console.log("Input areasDict:", areasDict);
 
-    if (!container) {
-        console.warn("❌ areaAccordionContainer not found");
-        console.groupEnd();
-        return;
-    }
+     if (!areasDict) {
+         console.warn("⚠️ areasDict is null or undefined!");
+     }
 
-    container.innerHTML = "";
+     // Safely pass to renderAreaSelector
+     window.renderAreaSelector(areasDict, window.getSelectedAreas());
 
-    // Create the unique ID for the parent accordion
-    const accordionId = "mainAreaAccordion";
-    const accordionWrapper = document.createElement("div");
-    accordionWrapper.className = "accordion";
-    accordionWrapper.id = accordionId;
-
-    const children = Object.values(areasDict || {});
-
-    children.forEach((child, idx) => {
-        if (!child?.node) return;
-
-        const nid = child.node.nid;
-        const val = child.node.value;
-        const collapseId = `collapse-${idx}`;
-        const headerId = `heading-${idx}`;
-
-        // Create Accordion Item
-        const item = document.createElement("div");
-        item.className = "accordion-item border-0 mb-2";
-
-        item.innerHTML = `
-            <h2 class="accordion-header" id="${headerId}">
-                <button class="accordion-button collapsed py-2 shadow-none" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#${collapseId}"
-                        style="background: #f8f9fa; font-weight: 600;">
-                    ${val}
-                </button>
-            </h2>
-            <div id="${collapseId}" class="accordion-collapse collapse"
-                 data-bs-parent="#${accordionId}">
-                <div class="accordion-body p-0">
-                    <div class="list-group list-group-flush" id="list-${idx}">
-                        </div>
-                </div>
-            </div>
-        `;
-
-        accordionWrapper.appendChild(item);
-        const listGroup = item.querySelector(`#list-${idx}`);
-
-        // Add Grandchildren (the sub-areas)
-        if (child.children && child.children.length) {
-            child.children.forEach(grand => {
-                const btn = document.createElement("button");
-                btn.className = "list-group-item list-group-item-action border-0 ps-4 small";
-                btn.dataset.fid = grand.nid;
-                btn.dataset.name = grand.value;
-                btn.textContent = grand.value;
-
-                // Add click event for the sub-area
-                btn.onclick = () => handleAreaSelect(grand.value);
-
-                listGroup.appendChild(btn);
-            });
-        } else {
-            listGroup.innerHTML = `<div class="list-group-item disabled small italic">No sub-areas</div>`;
-        }
-    });
-
-    container.appendChild(accordionWrapper);
-    console.log("✅ Bootstrap Accordion rendered");
-    console.groupEnd();
-}
-
-
+     console.groupEnd();
+ };
 
 
   function handleToggle(el) {
@@ -780,114 +718,261 @@ async function fetchBackendURL() {
   };
 
   /* ---------- Area selector state ---------- */
-window.currentAreaTree = null;
-window.selectedAreas = new Map();   // nid -> name
+  /* ---------- Area selector state ---------- */
 
-/* Accepts {nid,value,children:[]} OR {id:{node:{nid,value},children:[]}} */
-function normalizeAreaTree(tree) {
-    if (!tree) return [];
-    const toNode = n => ({
-        nid: n.nid ?? n.node?.nid,
-        name: n.value ?? n.name ?? n.node?.value,
-        children: (n.children || []).map(toNode)
-    });
-    if (Array.isArray(tree)) return tree.map(toNode);
-    if (tree.children || tree.nid) return (tree.children || []).map(toNode); // root wrapper
-    return Object.values(tree).map(toNode);                                  // dict form
-}
+  // Do NOT initialise areaTree here.
+  // The iframe supplies window.areaTree.
+  window.selectedAreas = new Set();
 
-function syncAreaSelect() {
-    const sel = document.getElementById('areaSelect');
-    if (!sel) return;
-    sel.innerHTML = '';
-    window.selectedAreas.forEach((name, nid) => {
-        const opt = new Option(name, nid, true, true);   // selected
-        sel.appendChild(opt);
-    });
-}
 
-function toggleArea(nid, name, btn) {
-    const on = !window.selectedAreas.has(nid);
-    if (on) window.selectedAreas.set(nid, name);
-    else window.selectedAreas.delete(nid);
-    btn.classList.toggle('active', on);
-    syncAreaSelect();
-}
+  /* ---------- Area selection ---------- */
 
-window.renderAreaSelector = function (tree, preselected = []) {
-    const container = document.getElementById('areaAccordionContainer');
-    if (!container) return;
+  window.toggleArea = function(name, btn) {
 
-    window.selectedAreas = new Map(preselected.map(a => [String(a.nid), a.name]));
-    const groups = normalizeAreaTree(tree);
-    container.innerHTML = '';
+      if (!name) {
+          console.warn('toggleArea called without an area name:', name);
+          return;
+      }
 
-    if (!groups.length) {
-        container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
-        syncAreaSelect();
-        return;
-    }
+      if (window.selectedAreas.has(name)) {
+          window.selectedAreas.delete(name);
+          btn?.classList.remove('active');
 
-    const acc = document.createElement('div');
-    acc.className = 'accordion';
-    acc.id = 'areaSelectAccordion';
+          console.log('Area deselected:', name);
 
-    groups.forEach((g, i) => {
-        const cid = `areaCollapse-${i}`;
-        const item = document.createElement('div');
-        item.className = 'accordion-item border-0 mb-1';
-        item.innerHTML = `
-          <h2 class="accordion-header">
-            <button class="accordion-button collapsed py-2 shadow-none" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#${cid}">
-              ${g.name}
-            </button>
-          </h2>
-          <div id="${cid}" class="accordion-collapse collapse">
-            <div class="accordion-body p-0"><div class="list-group list-group-flush"></div></div>
-          </div>`;
-        const list = item.querySelector('.list-group');
+      } else {
+          window.selectedAreas.add(name);
+          btn?.classList.add('active');
 
-        // The group itself is selectable, then its children
-        [g, ...g.children].forEach((n, idx) => {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'list-group-item list-group-item-action small' + (idx ? ' ps-4' : ' fw-semibold');
-            b.textContent = idx ? n.name : `All of ${n.name}`;
-            b.dataset.nid = n.nid;
-            if (window.selectedAreas.has(String(n.nid))) b.classList.add('active');
-            b.addEventListener('click', () => toggleArea(String(n.nid), n.name, b));
-            list.appendChild(b);
+          console.log('Area selected:', name);
+      }
+
+      syncAreaSelect();
+  };
+
+
+  /* ---------- Sync the multiple select ---------- */
+
+  function syncAreaSelect() {
+
+      const sel = document.getElementById('areaSelect');
+      if (!sel) return;
+
+      sel.innerHTML = '';
+
+      window.selectedAreas.forEach(areaName => {
+
+          if (!areaName) return;
+
+          const option = new Option(
+              areaName,
+              areaName,
+              true,
+              true
+          );
+
+          sel.appendChild(option);
+      });
+  }
+
+
+  /* ---------- Return selected areas ---------- */
+
+  window.getSelectedAreas = function() {
+
+      return [...window.selectedAreas].map(name => ({
+          name: name
+      }));
+  };
+
+  window.renderAreaSelector = function (tree, preselected = []) {
+      const container = document.getElementById('areaAccordionContainer');
+      console.log("renderAreaSelector received tree:", tree); // <-
+      if (!container) return;
+
+      // Store selected area NAMES.
+      window.selectedAreas = new Set(
+          preselected
+              .map(a => typeof a === 'string' ? a : a.name)
+              .filter(Boolean)
+      );
+
+      container.innerHTML = '';
+
+      if (
+          !tree ||
+          typeof tree !== 'object' ||
+          Object.keys(tree).length === 0
+      ) {
+          container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
+
+         syncAreaSelect();
+         return;
+     }
+
+     const acc = document.createElement('div');
+     acc.className = 'accordion';
+     acc.id = 'areaSelectAccordion';
+
+     Object.entries(tree).forEach(([parentName, children], i) => {
+
+         const cid = `areaCollapse-${i}`;
+
+         const item = document.createElement('div');
+         item.className = 'accordion-item border-0 mb-1';
+
+         item.innerHTML = `
+             <h2 class="accordion-header">
+                 <button
+                     class="accordion-button collapsed py-2 shadow-none"
+                     type="button"
+                     data-bs-toggle="collapse"
+                     data-bs-target="#${cid}">
+                     ${parentName}
+                 </button>
+             </h2>
+
+             <div
+                 id="${cid}"
+                 class="accordion-collapse collapse">
+
+                 <div class="accordion-body p-0">
+
+                     <div class="list-group list-group-flush"></div>
+
+                 </div>
+             </div>
+         `;
+
+         const list = item.querySelector('.list-group');
+
+     // 1. Root level itself ("All of [Root Name]")
+     createAreaButton(
+           list,
+           parentName,
+           `All of ${parentName}`,
+           'fw-semibold'
+       );
+
+       // 2. Level 2 & 3: Iterate through dictionary children and grandchildren
+       if (children && typeof children === 'object') {
+           Object.entries(children).forEach(([childName, grandchildObj]) => {
+               // Level 2 Child
+               createAreaButton(
+                   list,
+                   childName,
+                   childName,
+                   'ps-4'
+               );
+
+               // Level 3 Grandchildren
+               if (grandchildObj && typeof grandchildObj === 'object') {
+                   Object.keys(grandchildObj).forEach(grandchildName => {
+                       createAreaButton(
+                           list,
+                           grandchildName,
+                           grandchildName,
+                           'ps-5'
+                       );
+                   });
+               }
+           });
+       }
+
+       acc.appendChild(item);
+   });
+
+  container.appendChild(acc);
+
+  syncAreaSelect();
+  };
+
+  function createAreaButton(list, areaName, displayName, indentClass = '') {
+     const button = document.createElement('button');
+
+     button.type = 'button';
+     button.className = `list-group-item list-group-item-action small ${indentClass}`;
+
+     // Fixed: Uses displayName so "All of [Root]" renders correctly!
+     button.textContent = displayName;
+     button.dataset.name = areaName;
+
+     if (window.selectedAreas.has(areaName)) {
+         button.classList.add('active');
+     }
+
+     button.addEventListener('click', function () {
+         const selected = window.selectedAreas.has(areaName);
+
+         if (selected) {
+             window.selectedAreas.delete(areaName);
+             button.classList.remove('active');
+         } else {
+             window.selectedAreas.add(areaName);
+             button.classList.add('active');
+         }
+
+         syncAreaSelect();
+     });
+
+     list.appendChild(button);
+  }
+
+
+
+
+  /* ---------- Receive tree from map iframe ---------- */
+
+  // 1. Listen for incoming map tree data
+  /* ---------- Receive tree from map iframe ---------- */
+
+  window.addEventListener('message', ev => {
+      // Allow local development mismatch between 127.0.0.1 and localhost
+      const isLocal = (origin) => origin.includes('127.0.0.1') || origin.includes('localhost');
+      if (!isLocal(ev.origin) && ev.origin !== window.location.origin) return;
+
+      if (ev.data?.type !== 'areaTree') return;
+
+      console.log('Successfully captured tree:', ev.data.tree);
+      window.areaTree = ev.data.tree;
+
+      // Render immediately if the modal happens to already be open
+      const modal = document.getElementById('slotModal');
+      if (modal && modal.classList.contains('show')) {
+          window.renderAreaSelector(
+              window.areaTree,
+              typeof window.getSelectedAreas === 'function' ? window.getSelectedAreas() : []
+          );
+      }
+  });
+
+
+  /* ---------- Refresh whenever modal opens (Keep only shown.bs.modal) ---------- */
+
+  const slotModal = document.getElementById('slotModal');
+  if (slotModal) {
+      slotModal.addEventListener('shown.bs.modal', function () {
+          // Fallback: check window.areaTree or grab it from the iframe directly if needed
+          let tree = window.areaTree;
+
+          if (!tree) {
+              try {
+                  tree = document.getElementById('iframe1')?.contentWindow?.areaTree;
+              } catch (e) {
+                  console.warn('Could not read areaTree from iframe:', e);
+              }
+          }
+
+          if (tree) {
+              window.renderAreaSelector(
+                  tree,
+                  typeof window.getSelectedAreas === 'function' ? window.getSelectedAreas() : []
+              );
+          } else {
+              console.warn('Modal opened, but window.areaTree is still empty.');
+              document.getElementById('areaAccordionContainer').innerHTML =
+              'Waiting for map data...';
+              syncAreaSelect();
+        }
         });
-        acc.appendChild(item);
-    });
-
-    container.appendChild(acc);
-    syncAreaSelect();
-};
-
-window.getSelectedAreas = () =>
-    [...window.selectedAreas].map(([nid, name]) => ({ nid, name }));
-
-/* ---------- Receive tree from the map iframe ---------- */
-window.addEventListener('message', ev => {
-    if (ev.origin !== window.location.origin) return;
-    if (ev.data?.type !== 'areaTree') return;
-    window.currentAreaTree = ev.data.tree;
-    // If the modal is already open, refresh it in place
-    if (document.getElementById('slotModal')?.classList.contains('show')) {
-        window.renderAreaSelector(window.currentAreaTree, window.getSelectedAreas());
-    }
-});
-
-/* ---------- Fallback + refresh whenever the modal opens ---------- */
-document.addEventListener('show.bs.modal', (ev) => {
-    if (ev.target?.id !== 'slotModal') return;
-
-    let tree = window.currentAreaTree;
-    try {
-        tree = document.getElementById('iframe1')?.contentWindow?.areaTree || tree;
-    } catch (e) {}
-
-    window.renderAreaSelector(tree, window.getSelectedAreas());
-});
+        }            '

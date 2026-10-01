@@ -28,7 +28,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 
 
 
-
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD
    * --------------------------------------------------------- */
@@ -43,33 +42,7 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
       console.log("📊 Auto-loading table:", table);
       await fetchTableData(table);
   }
-  /* ---------------------------------------------------------
-   * FETCH AREA ACCORDION FOR MODALS
-   * --------------------------------------------------------- */
 
-  try {
-      // Fetch areas from backend API
-      const res = await fetch("/fetch_areas");
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-
-      const data = await res.json();
-      // Expected data: { areas: {...} } or your accordion dict
-
-      // Save globally if needed
-      window.areas = data.areas || {};
-
-      // Populate the accordion container
-//      populateAreaAccordion(window.areas);
-let tree = window.currentAreaTree;
-window.renderAreaSelector(tree, window.getSelectedAreas());
-
-  } catch (err) {
-      console.error("Failed to fetch areas:", err);
-      const container = document.getElementById("areaAccordionContainer");
-      if (container) {
-          container.innerHTML = '<div class="alert alert-danger">Failed to load areas</div>';
-      }
-  }
 
 /* ---------------------------------------------------------
  * CALENDAR LOGIN AND CALENDAR BUILD
@@ -118,31 +91,6 @@ window.renderAreaSelector(tree, window.getSelectedAreas());
    });
  }
 
-
-
-  document.addEventListener("click", function (e) {
-      const btn = e.target.closest(".area-option");
-      if (!btn) return;
-
-      const fid = btn.dataset.fid;
-      const name = btn.dataset.name;
-      const select = document.getElementById("areaSelect");
-
-      // toggle selection
-      let existing = [...select.options].find(o => o.value === fid);
-
-      if (existing) {
-          existing.remove();
-          btn.classList.remove("active");
-      } else {
-          const opt = document.createElement("option");
-          opt.value = fid;
-          opt.textContent = name;
-          opt.selected = true;
-          select.appendChild(opt);
-          btn.classList.add("active");
-      }
-  });
 
 
   /* ---------------------------------------------------------
@@ -357,7 +305,6 @@ document.getElementById("saveNewTag").addEventListener("click", () => {
 
 console.log("🔀 places on DOM relaod :", window.places);
 console.log("🔀 resources on DOM relaod :", window.resources);
-console.log("🔀 areas on DOM relaod :", window.areas);
 console.log("🔀 task_tags on DOM relaod :", window.task_tags);
 
     // Call this function on startup to tell backend which election is active

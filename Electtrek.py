@@ -3867,157 +3867,6 @@ def get_table(table_name):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/fetch_areas', methods=['POST', 'GET'])
-@login_required
-def fetch_areas():
-    from elections import CurrentElection
-    from flask import session
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    try:
-        current_election = CurrentElection.get_lastused()
-        CElection = CurrentElection.load(current_election)
-        current_node = get_last_node(CElection,layers.Geo_index,create=False)
-        accumulate = session.get("accumulate", False)
-
-        if accumulate:
-            node_ids = session.get("accumulated_nodes", [])
-            valid_nodes = []
-
-            for nid in node_ids:
-                node = nodes.TREK_NODES_BY_ID.get(nid)
-                if node and node.parent:   # ensure parent exists
-                    valid_nodes.append(node)
-
-            nodelist = valid_nodes
-
-        else:
-            # Move up to constituency level
-            nodelist = [current_node]
-
-        accordion = current_node.get_areas(nodelist=nodelist)
-
-        print(f"_______ Fetch under {current_election} for {current_node.value} Areas {accordion}")
-
-        json.dumps(accordion)
-    except Exception as e:
-        print("❌ JSON SERIALIZATION ERROR:", e)
-    return jsonify({ "areas": accordion })
-
-
-
-@app.route('/xxdisplayareas', methods=['POST', 'GET'])
-@login_required
-def xxdisplayareas():
-    #calc values in displayed table
-
-    global layeritems
-    global formdata
-
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-    rlevels = CElection.resolved_levels
-    places = CElection['places']
-    print(f"____Route/xxdisplayareas for {current_node.value} in election {current_election} ")
-    if current_election == "DEMO":
-        if len(places) > 0:
-            formdata['tabledetails'] = "Click for details of uploaded markers, markers and events"
-            layeritems = get_layer_table(pd.DataFrame(places) ,formdata['tabledetails'],rlevels)
-            print(f" Number of displayed markframe items - {len(places)} ")
-        else:
-            formdata['tabledetails'] = "No data to display - please upload"
-            layeritems = get_layer_table(pd.DataFrame(places),formdata['tabledetails'],rlevels)
-    else:
-        path = current_node.mapfile()
-        ctype = current_node.child_type(rlevels)
-
-        formdata = current_node.value +current_node.child_type(rlevels)+"s"
-        tablenodes = current_node.childrenoftype(ctype)
-        if len(tablenodes) == 0:
-            if current_node.level > 0:
-                ctype = CElection.node_type(current_node.level)
-                tablenodes = current_node.parent.childrenoftype(ctype)
-            else:
-                return jsonify([[], [], "No data"])
-        layeritems = get_layer_table(tablenodes ,formdata,rlevels)
-        print(f"Display layeritems area {current_node.value} - {ctype} - {len(tablenodes)}")
-
-    if not layeritems or len(layeritems) < 3:
-        return jsonify([[], [], "No data"])
-
-    # --- Handle selected tag from request or session
-    selected_tag = CElection['Tags']
-
-# Unpack layeritems
-    df = layeritems[1].copy()
-
-    # --- 🔥 NEW: Inject NIDs into the DataFrame ---
-    # We map the NID from the original tablenodes list onto the DataFrame
-    if 'tablenodes' in locals() and len(tablenodes) == len(df):
-        df['nid'] = [node.nid for node in tablenodes]
-    # ----------------------------------------------
-
-    column_headers = layeritems[0]
-
-    # --- Ensure 'nid' is in the headers but maybe hidden in UI ---
-    if "nid" not in column_headers:
-        column_headers = list(column_headers) + ["nid"]
-
-    # ... rest of your existing tag logic ...
-
-    column_headers = layeritems[0]
-    print(f"___Displayitems selected tag:{selected_tag} column_headers:{column_headers}" )
-    title = str(layeritems[2])
-
-    # --- Ensure "tags" column exists and is parsed
-    if "tags" not in df.columns:
-        df["tags"] = [[] for _ in range(len(df))]
-
-    def parse_tags(val):
-        if isinstance(val, str):
-            try:
-                return json.loads(val)
-            except json.JSONDecodeError:
-                return []
-        elif isinstance(val, list):
-            return val
-        return []
-
-    df["tags"] = df["tags"].apply(parse_tags)
-
-    # --- Add 'tags','is_tag_set' column
-    column_headers = list(column_headers) + ["tags", "is_tag_set"]
-
-
-    if selected_tag:
-        df["is_tag_set"] = df["tags"].apply(lambda tags: selected_tag in tags)
-    else:
-        df["is_tag_set"] = False
-
-    if "tags" not in column_headers:
-        column_headers.append("tags")
-    if "is_tag_set" not in column_headers:
-        column_headers.append("is_tag_set")
-
-    # --- Update layeritems for return
-    valid_columns = [col for col in column_headers if col in df.columns]
-    data_json = df[valid_columns].to_json(orient='records')
-
-    cols_json = json.dumps(column_headers)
-    title_json = json.dumps(title)
-
-    print("Final df.columns:", list(df.columns))
-    print("Requested column_headers:", column_headers)
-    print("Missing in df:", [col for col in column_headers if col not in df.columns])
-
-    return jsonify([
-        json.loads(json.dumps(valid_columns)),  # headers
-        json.loads(data_json),                  # rows
-        title                                   # simple string
-    ])
-
-#    return render_template("Areas.html", context = { "layeritems" :layeritems, "session" : session, "formdata" : formdata, "areaelectors" : areaelectors , "mapfile" : mapfile})
-
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
 @login_required
 def divreport(path):
@@ -4227,16 +4076,12 @@ def calendar_partial(path):
     print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
 
 
-
-    areas = current_node.get_areas()
-    print(f"caldata for {current_node.value} of length {len(areas)} ")
-
     # share input and outcome tags
     valid_tags = CElection['Tags']
     task_tags, outcome_tags, all_tags = CElection.get_tags()
 
-    print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} areas:{areas}")
-    print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile()} - OPTIONS html {OPTIONS['areas']}")
+    print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} ")
+    print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile()} ")
     BAKED_DATA = baked_manager.load()
 
     return render_template(

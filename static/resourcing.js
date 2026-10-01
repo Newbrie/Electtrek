@@ -486,25 +486,51 @@ function redrawSlot(slotId, data = {}) {
   lozengeContainer.className = "slot-content";
   slotDiv.appendChild(lozengeContainer);
 
-  // Build lozenges from data
+  // 🛡️ Bulletproof area mapping with fallbacks to prevent "undefined"
+  const areaItems = (data.areas || []).map(r => {
+    if (!r) return null;
+
+    let name = "";
+    let id = "";
+
+    if (typeof r === 'object') {
+      name = r.name || r.nid || r.code || "";
+      id = r.nid || r.code || r.name || "";
+    } else {
+      name = r;
+      id = r;
+    }
+
+    // If the name or ID is literally "undefined", blank it out
+    if (!name || name === "undefined" || name === "null") return null;
+    if (!id || id === "undefined" || id === "null") id = name;
+
+    return { type: "area", code: name, id: id };
+  }).filter(l => l && l.code && l.code !== "undefined");
+
   const lozenges = [
     { type: "activity", code: data.activity },
     ...(data.resources || []).map(r => ({ type: "resource", code: r })),
     { type: "place", code: data.place },
-    ...(data.areas || []).map(r => ({ type: "area", code: r })),
-  ].filter(l => l.code);
+    ...areaItems,
+  ].filter(l => {
+    if (!l || !l.code) return false;
+    const strCode = String(l.code).trim();
+    return strCode !== "" && strCode !== "undefined" && strCode !== "null" && strCode !== "[object Object]";
+  });
 
   lozenges.forEach(l => {
     const loz = document.createElement("span");
     loz.className = "lozenge";
     loz.dataset.type = l.type;
-    loz.dataset.code = l.code;
+    loz.dataset.code = l.id || l.code;
     loz.textContent = l.code;
     lozengeContainer.appendChild(loz);
     lozengeContainer.appendChild(document.createTextNode(" "));
   });
 
-  // Store lozenges for summary/report
+  // Store cleaned lozenges back into calendarData
+  if (!calendarData[slotId]) calendarData[slotId] = {};
   calendarData[slotId].lozenges = lozenges;
 }
 
@@ -515,9 +541,26 @@ async function handleSaveSlot() {
 
   const activity = document.getElementById("activitySelect").value;
   const place = document.getElementById("placeSelect").value;
-//  const area = document.getElementById("areaSelect").value;
-  const areas = Array.from(document.getElementById("areaSelect").selectedOptions).map(o => o.value);
-  const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions).map(o => o.value);
+
+  // 🛡️ Grab selected areas, falling back to option text if value is missing/undefined
+  const areaSelectEl = document.getElementById("areaSelect");
+  const areas = areaSelectEl
+    ? Array.from(areaSelectEl.selectedOptions).map(o => {
+        let val = o.value;
+        // If value is missing, empty, or the literal string "undefined", fall back to text content
+        if (!val || val === "undefined" || val === "null") {
+          val = o.textContent.trim();
+        }
+        return {
+          nid: val,
+          name: o.textContent.trim()
+        };
+      }).filter(a => a.nid && a.nid !== "undefined")
+    : [];
+
+  const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions)
+    .map(o => o.value)
+    .filter(val => val && val !== "undefined");
 
   calendarData[currentSlotId] = { activity, place, areas, resources };
 
@@ -590,9 +633,8 @@ function openSlotModal(slotId) {
     const data = calendarData[slotId]; // Reference, not copy
 
     // 🔽 INJECT AREA ACCORDION HERE
-//    populateAreaAccordion(window.areas);
-let tree = window.currentAreaTree;
-  window.renderAreaSelector(tree, window.getSelectedAreas());
+    populateAreaAccordion(window.areaTree);
+
     // Fill dropdowns
     fillSelect("activitySelect", window.task_tags);
     fillSelect("resourcesSelect", window.resources);

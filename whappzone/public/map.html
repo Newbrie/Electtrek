@@ -704,19 +704,26 @@ function redrawSlot(slotId, data = {}) {
   lozengeContainer.className = "slot-content";
   slotDiv.appendChild(lozengeContainer);
 
-  // Build lozenges from data
+  // Build lozenges from data (supporting both old strings and new {nid, name} objects)
+  const areaItems = (data.areas || []).map(r => {
+    if (!r) return null;
+    const name = typeof r === 'object' ? (r.name || r.nid) : r;
+    const id = typeof r === 'object' ? r.nid : r;
+    return { type: "area", code: name, id: id };
+  }).filter(l => l && l.code);
+
   const lozenges = [
     { type: "activity", code: data.activity },
     ...(data.resources || []).map(r => ({ type: "resource", code: r })),
     { type: "place", code: data.place },
-    ...(data.areas || []).map(r => ({ type: "area", code: r })),
-  ].filter(l => l.code);
+    ...areaItems,
+  ].filter(l => l && l.code);
 
   lozenges.forEach(l => {
     const loz = document.createElement("span");
     loz.className = "lozenge";
     loz.dataset.type = l.type;
-    loz.dataset.code = l.code;
+    loz.dataset.code = l.id || l.code;
     loz.textContent = l.code;
     lozengeContainer.appendChild(loz);
     lozengeContainer.appendChild(document.createTextNode(" "));
@@ -783,8 +790,12 @@ async function handleSaveSlot() {
 
   const activity = document.getElementById("activitySelect").value;
   const place = document.getElementById("placeSelect").value;
-//  const area = document.getElementById("areaSelect").value;
-  const areas = Array.from(document.getElementById("areaSelect").selectedOptions).map(o => o.value);
+
+  // Use window.getSelectedAreas() to get the complete {nid, name} objects
+  const areas = typeof window.getSelectedAreas === 'function'
+      ? window.getSelectedAreas()
+      : Array.from(document.getElementById("areaSelect").selectedOptions).map(o => ({ nid: o.value, name: o.text }));
+
   const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions).map(o => o.value);
 
   calendarData[currentSlotId] = { activity, place, areas, resources };

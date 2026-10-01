@@ -24,39 +24,167 @@ import re
 _MASTER_ROOT = None
 
 
-def build_area_tree(node_path, geo_index):
+def build_area_tree(node_path, geo_index, max_depth=3, current_depth=1):
     """
-    Build a nested tree starting at node_path.
+    Build a nested dictionary of area names only, limited to a max depth of 3 levels.
 
-    Example:
-        UNITED_KINGDOM/ENGLAND/WINDSOR_AND_MAIDENHEAD
-
-    becomes:
+    Example output format:
         {
-            "path": "...",
-            "name": "WINDSOR_AND_MAIDENHEAD",
-            "level": "county",
-            "children": [...]
+            "SURREY": {
+                "DORKING_AND_HORLEY": {
+                    "DORKING_RURAL": {},
+                    "DORKING": {}
+                },
+                "SPELTHORNE": {
+                    "ASHFORD": {}
+                },
+                "WOKING": {},
+                "GUILDFORD": {}
+            }
         }
     """
-
     node = geo_index.get(node_path)
-
     if not node:
-        return None
+        return {}
 
-    return {
-        "path": node_path,
-        "name": node.get("name", node_path.split("/")[-1]),
-        "level": node.get("level", ""),
-        "fid": node.get("fid"),
-        "children": [
-            child
-            for child_path in node.get("children", [])
-            if (child := build_area_tree(child_path, geo_index)) is not None
-        ]
-    }
+    # Extract just the name
+    name = node.get("name", node_path.split("/")[-1])
 
+    # If we hit the max depth (3 levels), return an empty dict for its children
+    if current_depth >= max_depth:
+        return {name: {}}
+
+    # Recursively collect children names into a nested dictionary
+    children_dict = {}
+    for child_path in node.get("children", []):
+        child_tree = build_area_tree(child_path, geo_index, max_depth, current_depth + 1)
+        if child_tree:
+            children_dict.update(child_tree)
+
+    return {name: children_dict}
+
+def generate_map_accordions(specs: list[dict]) -> str:
+    """Generates a modular HTML/JS injection string for Folium maps.
+
+    Each spec dict requires:
+        - 'prefix': The layer text string to match and strip (e.g., 'Data Overlay:')
+        - 'title': The visible heading text for the accordion (e.g., '📊 Task
+        Progress')
+    """
+
+    css_content = """
+    <style>
+        .custom-map-accordion {
+            background-color: #ffffff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+        }
+        .custom-map-accordion summary {
+            padding: 6px 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            color: #333;
+            outline: none;
+            list-style: none;
+        }
+        .custom-map-accordion summary::-webkit-details-marker {
+            display: none;
+        }
+        .custom-map-accordion-content {
+            padding: 5px 0 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+        }
+        .custom-map-accordion-content label {
+            display: block;
+            margin: 0;
+            padding: 3px 10px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .custom-map-accordion-content label:hover {
+            background-color: #f4f4f4;
+        }
+    </style>
+    """
+
+    # 1. Cleanly serialize our specs list to a valid JSON string
+    js_specs_json = json.dumps(specs)
+
+    # 2. Keep this as a PURE string (NO f-string prefix).
+    # This prevents Python from getting confused by JavaScript template literals.
+    js_script = """
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // We will replace this placeholder string using Python's .replace()
+        const specs = __ACCORDION_SPECS_PLACEHOLDER__;
+
+        var observer = new MutationObserver(function(mutations, me) {
+            var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
+            if (controlContainer) {
+                specs.forEach(spec => setupAccordion(controlContainer, spec));
+                me.disconnect();
+                return;
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        function setupAccordion(container, spec) {
+            var details = document.createElement('details');
+            details.className = 'custom-map-accordion';
+            details.innerHTML = `<summary>${spec.title}</summary>`;
+
+            var contentDiv = document.createElement('div');
+            contentDiv.className = 'custom-map-accordion-content';
+            details.appendChild(contentDiv);
+
+            var labels = container.querySelectorAll('label');
+            var foundAny = false;
+
+            labels.forEach(function(originalLabel) {
+                if (originalLabel.innerText.includes(spec.prefix)) {
+                    foundAny = true;
+                    originalLabel.style.display = 'none';
+
+                    var proxyLabel = document.createElement('label');
+                    var cleanName = originalLabel.innerText.replace(spec.prefix, '').trim();
+
+                    var realInput = originalLabel.querySelector('input');
+                    var isChecked = realInput ? realInput.checked : false;
+
+                    proxyLabel.innerHTML = `
+                        <input type="checkbox" ${isChecked ? 'checked' : ''}>
+                        <span>${cleanName}</span>
+                    `;
+
+                    var proxyInput = proxyLabel.querySelector('input');
+                    proxyInput.addEventListener('change', function() {
+                        if (realInput) {
+                            realInput.click();
+                        }
+                    });
+
+                    contentDiv.appendChild(proxyLabel);
+                }
+            });
+
+            if (foundAny) {
+                container.appendChild(details);
+            }
+        }
+    });
+    </script>
+    """
+
+    # 3. Inject the config safely using string replacement
+    final_js = js_script.replace("__ACCORDION_SPECS_PLACEHOLDER__", js_specs_json)
+
+    return css_content + final_js
 
 
 def create_root_node() -> "TreeNode":
@@ -2334,6 +2462,8 @@ class TreeNode:
 
             print(f"✅ Layer '{electtype}': Added {k}, skipped duplicate {j}. Total branch size: {len(fam_nodes)}")
 
+
+
     def create_node_map(self,CElection, geo_index, resolved_levels, static=False):
         global SERVER_PASSWORD
 
@@ -2349,128 +2479,6 @@ class TreeNode:
         import json
 
 
-        def generate_map_accordions(specs: list[dict]) -> str:
-            """Generates a modular HTML/JS injection string for Folium maps.
-
-            Each spec dict requires:
-                - 'prefix': The layer text string to match and strip (e.g., 'Data Overlay:')
-                - 'title': The visible heading text for the accordion (e.g., '📊 Task
-                Progress')
-            """
-
-            css_content = """
-            <style>
-                .custom-map-accordion {
-                    background-color: #ffffff;
-                    border: 1px solid #ccc;
-                    border-radius: 4px;
-                    margin-top: 8px;
-                    font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
-                }
-                .custom-map-accordion summary {
-                    padding: 6px 10px;
-                    cursor: pointer;
-                    font-weight: 600;
-                    font-size: 12px;
-                    color: #333;
-                    outline: none;
-                    list-style: none;
-                }
-                .custom-map-accordion summary::-webkit-details-marker {
-                    display: none;
-                }
-                .custom-map-accordion-content {
-                    padding: 5px 0 10px 0;
-                    max-height: 200px;
-                    overflow-y: auto;
-                    border-top: 1px solid #eee;
-                }
-                .custom-map-accordion-content label {
-                    display: block;
-                    margin: 0;
-                    padding: 3px 10px;
-                    font-size: 11px;
-                    cursor: pointer;
-                }
-                .custom-map-accordion-content label:hover {
-                    background-color: #f4f4f4;
-                }
-            </style>
-            """
-
-            # 1. Cleanly serialize our specs list to a valid JSON string
-            js_specs_json = json.dumps(specs)
-
-            # 2. Keep this as a PURE string (NO f-string prefix).
-            # This prevents Python from getting confused by JavaScript template literals.
-            js_script = """
-            <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                // We will replace this placeholder string using Python's .replace()
-                const specs = __ACCORDION_SPECS_PLACEHOLDER__;
-
-                var observer = new MutationObserver(function(mutations, me) {
-                    var controlContainer = document.querySelector('.leaflet-control-layers-overlays');
-                    if (controlContainer) {
-                        specs.forEach(spec => setupAccordion(controlContainer, spec));
-                        me.disconnect();
-                        return;
-                    }
-                });
-
-                observer.observe(document.body, { childList: true, subtree: true });
-
-                function setupAccordion(container, spec) {
-                    var details = document.createElement('details');
-                    details.className = 'custom-map-accordion';
-                    details.innerHTML = `<summary>${spec.title}</summary>`;
-
-                    var contentDiv = document.createElement('div');
-                    contentDiv.className = 'custom-map-accordion-content';
-                    details.appendChild(contentDiv);
-
-                    var labels = container.querySelectorAll('label');
-                    var foundAny = false;
-
-                    labels.forEach(function(originalLabel) {
-                        if (originalLabel.innerText.includes(spec.prefix)) {
-                            foundAny = true;
-                            originalLabel.style.display = 'none';
-
-                            var proxyLabel = document.createElement('label');
-                            var cleanName = originalLabel.innerText.replace(spec.prefix, '').trim();
-
-                            var realInput = originalLabel.querySelector('input');
-                            var isChecked = realInput ? realInput.checked : false;
-
-                            proxyLabel.innerHTML = `
-                                <input type="checkbox" ${isChecked ? 'checked' : ''}>
-                                <span>${cleanName}</span>
-                            `;
-
-                            var proxyInput = proxyLabel.querySelector('input');
-                            proxyInput.addEventListener('change', function() {
-                                if (realInput) {
-                                    realInput.click();
-                                }
-                            });
-
-                            contentDiv.appendChild(proxyLabel);
-                        }
-                    });
-
-                    if (foundAny) {
-                        container.appendChild(details);
-                    }
-                }
-            });
-            </script>
-            """
-
-            # 3. Inject the config safely using string replacement
-            final_js = js_script.replace("__ACCORDION_SPECS_PLACEHOLDER__", js_specs_json)
-
-            return css_content + final_js
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
@@ -2482,19 +2490,30 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = build_area_tree(area_root_path,geo_index)
+        area_tree = build_area_tree(area_root_path, geo_index)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
             <script>
             window.areaTree = {area_tree_json};
+
             window.addEventListener('load', function () {{
                 try {{
-                    window.parent.postMessage({{ type: 'areaTree', tree: window.areaTree }}, '*');
-                }} catch (e) {{ console.warn('areaTree postMessage failed', e); }}
+                    window.parent.postMessage(
+                        {{
+                            type: 'areaTree',
+                            tree: window.areaTree
+                        }},
+                        '*'
+                    );
+                }} catch (e) {{
+                    console.warn('areaTree postMessage failed', e);
+                }}
             }});
             </script>
             """
+
+
 
         accumulate = session.get("accumulate", False)
 
@@ -2566,22 +2585,7 @@ class TreeNode:
             }
             </style>
             """
-        voronoi_labelandtag_css = """
-            <style>
-            .voronoi-label{
-              font-size:10pt;
-              font-weight:500;
-              text-align:center;
-              -webkit-text-stroke:2px white;
-              paint-order:stroke fill;
-            }
-            .voronoi-tag{
-              padding:2px 4px;
-              border-radius:5px;
-              border:2px solid black;
-            }
-            </style>
-            """
+
         tile_override_css = """
             <style>
                 .leaflet-tile-container img {
@@ -2791,6 +2795,7 @@ class TreeNode:
 
         fmap_tags_js = r"""
             <script>
+
             (function() {
                 console.log("🗺️ fmap_marker_js loaded (Direct Map Discovery & Modal Binding)");
 
@@ -2799,7 +2804,31 @@ class TreeNode:
 
                 let pollAttempts = 0;
                 const MAX_ATTEMPTS = 100;
+                 // ---------------------------------------------------------
+                 // 2️⃣ Stage 2: Targeted Polling for Layer Control Dictionary
+                 // ---------------------------------------------------------
+                 function findTargetLayer() {
+                     pollAttempts++;
+                     if (pollAttempts > MAX_ATTEMPTS) {
+                         console.error("❌ Layer Control Dictionary timeout.");
+                         clearInterval(poll_interval_id);
+                         return;
+                     }
 
+                     for (const key in window) {
+                         if (!window.hasOwnProperty(key)) continue;
+                         const val = window[key];
+
+                         if (key.startsWith("layer_control_") && val && val.overlays) {
+                             if (val.overlays.marker) {
+                                 window.MarkerLayer = val.overlays.marker;
+                                 console.log(`🔥 'marker' Layer mapped: ${key}`);
+                                 clearInterval(poll_interval_id);
+                                 return;
+                             }
+                         }
+                     }
+                 }
                 function detectFoliumMap() {
                     if (typeof L === 'undefined' || typeof L.Map === 'undefined') {
                         setTimeout(detectFoliumMap, 100);
@@ -2947,31 +2976,6 @@ class TreeNode:
                     setTimeout(detectFoliumMap, 100);
                 }
 
-                // ---------------------------------------------------------
-                // 2️⃣ Stage 2: Targeted Polling for Layer Control Dictionary
-                // ---------------------------------------------------------
-                function findTargetLayer() {
-                    pollAttempts++;
-                    if (pollAttempts > MAX_ATTEMPTS) {
-                        console.error("❌ Layer Control Dictionary timeout.");
-                        clearInterval(poll_interval_id);
-                        return;
-                    }
-
-                    for (const key in window) {
-                        if (!window.hasOwnProperty(key)) continue;
-                        const val = window[key];
-
-                        if (key.startsWith("layer_control_") && val && val.overlays) {
-                            if (val.overlays.marker) {
-                                window.MarkerLayer = val.overlays.marker;
-                                console.log(`🔥 'marker' Layer mapped: ${key}`);
-                                clearInterval(poll_interval_id);
-                                return;
-                            }
-                        }
-                    }
-                }
 
                 let poll_interval_id;
                 function startLayerPolling() {
@@ -2982,44 +2986,6 @@ class TreeNode:
             })();
             </script>
             """
-
-        # Inject canvas icon JS
-        canvas_icon_js = """
-        <script>
-        window.makePrefixMarkerIcon = function(prefix, color="#007bff") {
-            const size = 40;
-            const radius = 18;
-
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d");
-
-            ctx.beginPath();
-            ctx.arc(size/2, size/2, radius, 0, 2*Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "#000";
-            ctx.stroke();
-
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 16px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(prefix, size/2, size/2);
-
-            console.log("📍 canvas icon:");
-
-            return L.icon({
-                iconUrl: canvas.toDataURL(),
-                iconSize: [size, size],
-                iconAnchor: [size/2, size],
-                popupAnchor: [0, -size/2]
-            });
-        };
-        </script>
-        """
 
 
 
@@ -3212,10 +3178,8 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
         FolMap.get_root().html.add_child(Element(custom_click_js))
-        FolMap.get_root().html.add_child(Element(canvas_icon_js))
         FolMap.get_root().html.add_child(folium.Element(title_html))
         FolMap.get_root().html.add_child(folium.Element(move_close_button_css))
-        FolMap.get_root().html.add_child(folium.Element(voronoi_labelandtag_css))
         FolMap.get_root().html.add_child(folium.Element(street_row_css))
         FolMap.get_root().html.add_child(folium.Element(transparency))
         FolMap.get_root().html.add_child(folium.Element(limit_popup_height_css))
