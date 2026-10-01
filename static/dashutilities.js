@@ -786,139 +786,282 @@ async function fetchBackendURL() {
   };
 
   window.renderAreaSelector = function (tree, preselected = []) {
-      const container = document.getElementById('areaAccordionContainer');
-      console.log("renderAreaSelector received tree:", tree); // <-
-      if (!container) return;
 
-      // Store selected area NAMES.
-      window.selectedAreas = new Set(
-          preselected
-              .map(a => typeof a === 'string' ? a : a.name)
-              .filter(Boolean)
-      );
+    const container =
+        document.getElementById('areaAccordionContainer');
 
-      container.innerHTML = '';
+    console.log(
+        'renderAreaSelector received tree:',
+        tree
+    );
 
-      if (
-          !tree ||
-          typeof tree !== 'object' ||
-          Object.keys(tree).length === 0
-      ) {
-          container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
+    if (!container) return;
 
-         syncAreaSelect();
-         return;
-     }
 
-     const acc = document.createElement('div');
-     acc.className = 'accordion';
-     acc.id = 'areaSelectAccordion';
+    /* --------------------------------
+       Store selected AREA NAMES
+    -------------------------------- */
 
-     Object.entries(tree).forEach(([parentName, children], i) => {
+    window.selectedAreas = new Set(
+        preselected
+            .map(a =>
+                typeof a === 'string'
+                    ? a
+                    : a?.name
+            )
+            .filter(Boolean)
+    );
 
-         const cid = `areaCollapse-${i}`;
 
-         const item = document.createElement('div');
-         item.className = 'accordion-item border-0 mb-1';
+    /* --------------------------------
+       Clear existing accordion
+    -------------------------------- */
 
-         item.innerHTML = `
-             <h2 class="accordion-header">
-                 <button
-                     class="accordion-button collapsed py-2 shadow-none"
-                     type="button"
-                     data-bs-toggle="collapse"
-                     data-bs-target="#${cid}"
-                     data-bs-parent="#areaSelectAccordion">
-                     
-                     ${parentName}
-                 </button>
-             </h2>
+    container.innerHTML = '';
 
-             <div
-                 id="${cid}"
-                 class="accordion-collapse collapse">
 
-                 <div class="accordion-body p-0">
+    /* --------------------------------
+       No tree
+    -------------------------------- */
 
-                     <div class="list-group list-group-flush"></div>
+    if (
+        !tree ||
+        typeof tree !== 'object' ||
+        Object.keys(tree).length === 0
+    ) {
 
-                 </div>
-             </div>
-         `;
+        container.innerHTML =
+            '<div class="small text-muted p-2">' +
+            'No areas available for this map' +
+            '</div>';
 
-         const list = item.querySelector('.list-group');
+        syncAreaSelect();
 
-     // 1. Root level itself ("All of [Root Name]")
-     createAreaButton(
-           list,
-           parentName,
-           `All of ${parentName}`,
-           'fw-semibold'
-       );
+        return;
+    }
 
-       // 2. Level 2 & 3: Iterate through dictionary children and grandchildren
-       if (children && typeof children === 'object') {
-           Object.entries(children).forEach(([childName, grandchildObj]) => {
-               // Level 2 Child
-               createAreaButton(
-                   list,
+
+    /* --------------------------------
+       Accordion
+    -------------------------------- */
+
+    const acc = document.createElement('div');
+
+    acc.className = 'accordion';
+
+    acc.id = 'areaSelectAccordion';
+
+
+    /* --------------------------------
+       Each parent area
+    -------------------------------- */
+
+    Object.entries(tree).forEach(
+        ([parentName, children], i) => {
+
+            const cid =
+                `areaCollapse-${i}`;
+
+
+            /* ---------- Accordion item ---------- */
+
+            const item =
+                document.createElement('div');
+
+            item.className =
+                'accordion-item border-0 mb-1';
+
+
+            /* ---------- Header ---------- */
+
+            const header =
+                document.createElement('h2');
+
+            header.className =
+                'accordion-header';
+
+
+            const toggle =
+                document.createElement('button');
+
+            toggle.type = 'button';
+
+            toggle.className =
+                'accordion-button collapsed py-2 shadow-none';
+
+            toggle.setAttribute(
+                'data-bs-toggle',
+                'collapse'
+            );
+
+            toggle.setAttribute(
+                'data-bs-target',
+                `#${cid}`
+            );
+
+            toggle.setAttribute(
+                'aria-expanded',
+                'false'
+            );
+
+            toggle.textContent =
+                parentName;
+
+
+            header.appendChild(toggle);
+
+
+            /* ---------- Collapse ---------- */
+
+            const collapse =
+                document.createElement('div');
+
+            collapse.id = cid;
+
+            collapse.className =
+                'accordion-collapse collapse';
+
+            collapse.setAttribute(
+                'data-bs-parent',
+                '#areaSelectAccordion'
+            );
+
+
+            /* ---------- Body ---------- */
+
+            const body =
+                document.createElement('div');
+
+            body.className =
+                'accordion-body p-0';
+
+
+            const list =
+                document.createElement('div');
+
+            list.className =
+                'list-group list-group-flush';
+
+
+            /* --------------------------------
+               Parent itself
+            -------------------------------- */
+
+            createAreaButton(
+                list,
+                parentName,
+                'All of ' + parentName,
+                'fw-semibold'
+            );
+
+
+            /* --------------------------------
+               Child areas
+
+               New structure:
+
+               parentName: [
                    childName,
                    childName,
-                   'ps-4'
-               );
+                   ...
+               ]
+            -------------------------------- */
 
-               // Level 3 Grandchildren
-               if (grandchildObj && typeof grandchildObj === 'object') {
-                   Object.keys(grandchildObj).forEach(grandchildName => {
-                       createAreaButton(
-                           list,
-                           grandchildName,
-                           grandchildName,
-                           'ps-5'
-                       );
-                   });
-               }
-           });
-       }
+            if (Array.isArray(children)) {
 
-       acc.appendChild(item);
-   });
+                children.forEach(childName => {
 
-  container.appendChild(acc);
+                    if (!childName) return;
 
-  syncAreaSelect();
-  };
+                    createAreaButton(
+                        list,
+                        childName,
+                        childName,
+                        'ps-4'
+                    );
 
-  function createAreaButton(list, areaName, displayName, indentClass = '') {
-     const button = document.createElement('button');
+                });
 
-     button.type = 'button';
-     button.className = `list-group-item list-group-item-action small ${indentClass}`;
+            }
 
-     // Fixed: Uses displayName so "All of [Root]" renders correctly!
-     button.textContent = displayName;
-     button.dataset.name = areaName;
 
-     if (window.selectedAreas.has(areaName)) {
-         button.classList.add('active');
-     }
+            /* ---------- Assemble ---------- */
 
-     button.addEventListener('click', function () {
-         const selected = window.selectedAreas.has(areaName);
+            body.appendChild(list);
 
-         if (selected) {
-             window.selectedAreas.delete(areaName);
-             button.classList.remove('active');
-         } else {
-             window.selectedAreas.add(areaName);
-             button.classList.add('active');
-         }
+            collapse.appendChild(body);
 
-         syncAreaSelect();
-     });
+            item.appendChild(header);
 
-     list.appendChild(button);
-  }
+            item.appendChild(collapse);
+
+            acc.appendChild(item);
+        }
+    );
+
+
+    /* --------------------------------
+       Add accordion to container
+    -------------------------------- */
+
+    container.appendChild(acc);
+
+
+    /* --------------------------------
+       Sync selected <select>
+    -------------------------------- */
+
+    syncAreaSelect();
+};
+
+function createAreaButton(
+    list,
+    areaName,
+    label = areaName,
+    indentClass = ''
+) {
+
+    const button =
+        document.createElement('button');
+
+    button.type = 'button';
+
+    button.className =
+        `list-group-item list-group-item-action small ${indentClass}`;
+
+    button.textContent =
+        label;
+
+    button.dataset.name =
+        areaName;
+
+
+    /* Restore selected state */
+
+    if (
+        window.selectedAreas.has(areaName)
+    ) {
+        button.classList.add('active');
+    }
+
+
+    /* Toggle selection */
+
+    button.addEventListener(
+        'click',
+        function () {
+
+            window.toggleArea(
+                areaName,
+                button
+            );
+
+        }
+    );
+
+
+    list.appendChild(button);
+}
 
 
 
