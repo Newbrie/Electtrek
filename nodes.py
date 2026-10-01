@@ -24,40 +24,41 @@ import re
 _MASTER_ROOT = None
 
 
-def build_area_tree(node_path, geo_index, max_depth=3, current_depth=1):
+def build_area_tree(node_path, geo_index, max_depth=3):
     """
-    Build a nested dictionary of area names only, limited to a max depth of 3 levels.
-
-    Example output format:
-        {
-            "SURREY": {
-                "DORKING_AND_HORLEY": {
-                    "DORKING_RURAL": {},
-                    "DORKING": {}
-                },
-                "SPELTHORNE": {
-                    "ASHFORD": {}
-                },
-                "WOKING": {},
-                "GUILDFORD": {}
-            }
-        }
+    Builds an area tree starting automatically at the 4th step (index 3)
+    of the node_path, limited to max_depth children below it.
     """
     node = geo_index.get(node_path)
     if not node:
         return {}
 
-    # Extract just the name
-    name = node.get("name", node_path.split("/")[-1])
+    parts = node_path.split("/")
+    current_depth = len(parts)  # Index 3 means there are 4 parts ([0, 1, 2, 3])
+    target_len = 4  # The 4th step (index = 3)
 
-    # If we hit the max depth (3 levels), return an empty dict for its children
-    if current_depth >= max_depth:
+    # 1. If we are still above the county level, skip adding this node
+    # and just look inside its children until we reach index 3.
+    if current_depth < target_len:
+        children_dict = {}
+        for child_path in node.get("children", []):
+            child_tree = build_area_tree(child_path, geo_index, max_depth)
+            if child_tree:
+                children_dict.update(child_tree)
+        return children_dict  # Passes through without adding a root key
+
+    # 2. Once we hit index 3 (county level), get its name
+    name = node.get("name", parts[-1])
+
+    # 3. Calculate how deep we've gone relative to the county level
+    relative_depth = current_depth - target_len + 1
+    if relative_depth >= max_depth:
         return {name: {}}
 
-    # Recursively collect children names into a nested dictionary
+    # 4. Recursively collect children
     children_dict = {}
     for child_path in node.get("children", []):
-        child_tree = build_area_tree(child_path, geo_index, max_depth, current_depth + 1)
+        child_tree = build_area_tree(child_path, geo_index, max_depth)
         if child_tree:
             children_dict.update(child_tree)
 
@@ -2490,7 +2491,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = build_area_tree(area_root_path, geo_index)
+        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
