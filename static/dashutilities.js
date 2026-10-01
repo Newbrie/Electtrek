@@ -975,4 +975,4 @@ async function fetchBackendURL() {
               syncAreaSelect();
         }
         });
-        }            
+        }
