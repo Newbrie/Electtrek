@@ -26,31 +26,31 @@ _MASTER_ROOT = None
 
 def build_area_tree(node_path, geo_index, max_depth=3):
     """
-    Builds an area tree starting automatically at the 4th step (index 3)
-    of the node_path, limited to max_depth children below it.
+    Builds an area tree starting automatically at the 3rd step (index 2 / county level)
+    of the node_path, limited to max_depth levels below it.
     """
     node = geo_index.get(node_path)
     if not node:
         return {}
 
     parts = node_path.split("/")
-    current_depth = len(parts)  # Index 2 means there are 3 parts ([0, 1, 2])
-    target_len = 2  # The 3rd step (index = 2)
+    current_depth = len(parts)  # Number of parts in the path
+    target_len = 3  # County level is index 2, which means 3 parts total ([0, 1, 2])
 
     # 1. If we are still above the county level, skip adding this node
-    # and just look inside its children until we reach index 3.
+    # and dive straight into its children.
     if current_depth < target_len:
         children_dict = {}
         for child_path in node.get("children", []):
             child_tree = build_area_tree(child_path, geo_index, max_depth)
             if child_tree:
                 children_dict.update(child_tree)
-        return children_dict  # Passes through without adding a root key
+        return children_dict
 
     # 2. Once we hit index 2 (county level), get its name
     name = node.get("name", parts[-1])
 
-    # 3. Calculate how deep we've gone relative to the county level
+    # 3. Calculate relative depth from the county level
     relative_depth = current_depth - target_len + 1
     if relative_depth >= max_depth:
         return {name: {}}
