@@ -24,42 +24,41 @@ import re
 _MASTER_ROOT = None
 
 
-def build_area_tree(node_path, geo_index, max_depth=3, current_level=0):
+def build_area_tree(node_path, geo_index, max_depth=3):
     """
-    Pass the ROOT of your geo_index here (e.g., 'uk' or 'world').
-    It will automatically skip index 0 and 1, and start the dictionary at County (index 2).
+    Pass ANY full node_path (even a deep constituency path).
+    It automatically finds the County level and builds the tree from there down.
     """
-    node = geo_index.get(node_path)
-    if not node:
-        return {}
+    parts = node_path.split("/")
 
-    target_level = 2  # County level is index 2
+    # Automatically slice the path to the county level (index 2 / 3 parts: country/nation/county)
+    if len(parts) >= 3:
+        county_path = "/".join(parts[:3])
+    else:
+        county_path = node_path
 
-    # 1. If we are above the county level (index 0 or 1),
-    # don't create a dictionary key—just dive straight into the children.
-    if current_level < target_level:
+    # Helper function to recursively build the tree downward from the county
+    def _recursive_build(path, current_depth):
+        node = geo_index.get(path)
+        if not node:
+            return {}
+
+        name = node.get("name", path.split("/")[-1])
+
+        # Stop if we've reached max depth relative to the county
+        if current_depth >= max_depth:
+            return {name: {}}
+
         children_dict = {}
         for child_path in node.get("children", []):
-            child_tree = build_area_tree(child_path, geo_index, max_depth, current_level + 1)
+            child_tree = _recursive_build(child_path, current_depth + 1)
             if child_tree:
                 children_dict.update(child_tree)
-        return children_dict
 
-    # 2. Once we hit index 2 (County level, e.g., SURREY),
-    # start building the dictionary keys!
-    name = node.get("name", node_path.split("/")[-1])
+        return {name: children_dict}
 
-    if max_depth <= 1:
-        return {name: {}}
-
-    # 3. Recursively collect all districts/constituencies underneath the county
-    children_dict = {}
-    for child_path in node.get("children", []):
-        child_tree = build_area_tree(child_path, geo_index, max_depth - 1, current_level + 1)
-        if child_tree:
-            children_dict.update(child_tree)
-
-    return {name: children_dict}
+    # Kick off the recursion starting at the county path (depth 1)
+    return _recursive_build(county_path, current_depth=1)
 
 def generate_map_accordions(specs: list[dict]) -> str:
     """Generates a modular HTML/JS injection string for Folium maps.
@@ -2488,7 +2487,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3, current_level=0)
+        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
