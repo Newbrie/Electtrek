@@ -787,106 +787,99 @@ async function fetchBackendURL() {
 
   window.renderAreaSelector = function (tree, preselected = []) {
       const container = document.getElementById('areaAccordionContainer');
-      console.log("renderAreaSelector received tree:", tree); // <-
+      console.log("renderAreaSelector received tree:", tree);
       if (!container) return;
-
-      // Store selected area NAMES.
       window.selectedAreas = new Set(
           preselected
               .map(a => typeof a === 'string' ? a : a.name)
               .filter(Boolean)
       );
-
       container.innerHTML = '';
-
       if (
           !tree ||
           typeof tree !== 'object' ||
           Object.keys(tree).length === 0
       ) {
           container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
-
-         syncAreaSelect();
-         return;
-     }
-
-     const acc = document.createElement('div');
-     acc.className = 'accordion';
-     acc.id = 'areaSelectAccordion';
-
-     Object.entries(tree).forEach(([parentName, children], i) => {
-
-         const cid = `areaCollapse-${i}`;
-
-         const item = document.createElement('div');
-         item.className = 'accordion-item border-0 mb-1';
-
-         item.innerHTML = `
-             <h2 class="accordion-header">
-                 <button
-                     class="accordion-button collapsed py-2 shadow-none"
-                     type="button"
-                     data-bs-toggle="collapse"
-                     data-bs-target="#${cid}"
-                     data-bs-parent="#areaSelectAccordion">
-
-                     ${parentName}
-                 </button>
-             </h2>
-
-             <div
-                 id="${cid}"
-                 class="accordion-collapse collapse">
-
-                 <div class="accordion-body p-0">
-
-                     <div class="list-group list-group-flush"></div>
-
-                 </div>
-             </div>
-         `;
-
-         const list = item.querySelector('.list-group');
-
-     // 1. Root level itself ("All of [Root Name]")
-     createAreaButton(
-           list,
-           parentName,
-           `All of ${parentName}`,
-           'fw-semibold'
-       );
-
-       // 2. Level 2 & 3: Iterate through dictionary children and grandchildren
-       if (children && typeof children === 'object') {
-           Object.entries(children).forEach(([childName, grandchildObj]) => {
-               // Level 2 Child
-               createAreaButton(
-                   list,
-                   childName,
-                   childName,
-                   'ps-4'
-               );
-
-               // Level 3 Grandchildren
-               if (grandchildObj && typeof grandchildObj === 'object') {
-                   Object.keys(grandchildObj).forEach(grandchildName => {
-                       createAreaButton(
-                           list,
-                           grandchildName,
-                           grandchildName,
-                           'ps-5'
-                       );
-                   });
-               }
-           });
-       }
-
-       acc.appendChild(item);
-   });
-
-  container.appendChild(acc);
-
-  syncAreaSelect();
+          syncAreaSelect();
+          return;
+      }
+      const acc = document.createElement('div');
+      acc.className = 'accordion';
+      acc.id = 'areaSelectAccordion';
+      Object.entries(tree).forEach(([parentName, children], i) => {
+          const parentCid = `areaCollapse-${i}`;
+          const item = document.createElement('div');
+          item.className = 'accordion-item border-0 mb-1';
+          item.innerHTML = `
+              <h2 class="accordion-header">
+                  <button
+                      class="accordion-button collapsed py-2 shadow-none"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#${parentCid}"
+                      data-bs-parent="#areaSelectAccordion">
+                      ${parentName}
+                  </button>
+              </h2>
+              <div
+                  id="${parentCid}"
+                  class="accordion-collapse collapse">
+                  <div class="accordion-body p-0">
+                      <div class="list-group list-group-flush"></div>
+                  </div>
+              </div>
+          `;
+          const list = item.querySelector('.list-group');
+          createAreaButton(
+              list,
+              parentName,
+              `All of ${parentName}`,
+              'fw-semibold'
+          );
+          if (children && typeof children === 'object') {
+              Object.entries(children).forEach(([childName, grandchildren], childIndex) => {
+                  const childCid = `areaChildCollapse-${i}-${childIndex}`;
+                  const childWrapper = document.createElement('div');
+                  childWrapper.className = 'border-0';
+                  const childHeader = document.createElement('button');
+                  childHeader.type = 'button';
+                  childHeader.className = 'btn btn-sm w-100 text-start ps-4 py-2 shadow-none';
+                  childHeader.setAttribute('data-bs-toggle', 'collapse');
+                  childHeader.setAttribute('data-bs-target', `#${childCid}`);
+                  childHeader.setAttribute('aria-expanded', 'false');
+                  childHeader.textContent = `▸ ${childName}`;
+                  const childCollapse = document.createElement('div');
+                  childCollapse.id = childCid;
+                  childCollapse.className = 'collapse';
+                  const childList = document.createElement('div');
+                  childList.className = 'list-group list-group-flush';
+                  createAreaButton(
+                      childList,
+                      childName,
+                      childName,
+                      'ps-5'
+                  );
+                  if (grandchildren && typeof grandchildren === 'object') {
+                      Object.keys(grandchildren).forEach(grandchildName => {
+                          createAreaButton(
+                              childList,
+                              grandchildName,
+                              grandchildName,
+                              'ps-5'
+                          );
+                      });
+                  }
+                  childCollapse.appendChild(childList);
+                  childWrapper.appendChild(childHeader);
+                  childWrapper.appendChild(childCollapse);
+                  list.appendChild(childWrapper);
+              });
+          }
+          acc.appendChild(item);
+      });
+      container.appendChild(acc);
+      syncAreaSelect();
   };
 
   function createAreaButton(list, areaName, displayName, indentClass = '') {
