@@ -773,7 +773,7 @@ window.renderTreeSelector = function (tree, options = {}) {
                   typeof children === 'object' &&
                   Object.keys(children).length > 0;
 
-              const uniqueId = `\({accordionId}-\){idCounter++}`;
+              const uniqueId = `\(${accordionId}-\)${idCounter++}`;
 
               // Top-level nodes use accordion items.
               if (depth === 0) {
