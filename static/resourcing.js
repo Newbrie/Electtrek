@@ -632,11 +632,8 @@ function openSlotModal(slotId) {
     if (!calendarData[slotId]) calendarData[slotId] = {};
     const data = calendarData[slotId]; // Reference, not copy
 
-    // 🔽 INJECT AREA ACCORDION HERE
-    populateAreaAccordion(window.areaTree);
 
     // Fill dropdowns
-    fillSelect("activitySelect", window.task_tags);
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
     console.log("💾 filled resources:", window.resources);
@@ -646,10 +643,8 @@ function openSlotModal(slotId) {
         const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
         lozenges.forEach(l => {
             switch (l.dataset.type) {
-                case "activity": data.activity = l.dataset.code; break;
                 case "place": data.place = l.dataset.code; break;
-                case "area": data.area = l.dataset.code; break;
-                case "resource": data.resources.push(l.dataset.code); break;
+                  case "resource": data.resources.push(l.dataset.code); break;
             }
         });
     }

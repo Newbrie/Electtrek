@@ -96,35 +96,6 @@ window.selectNode = function(path) {
      }).join('');
  }
 
-window.toggleAllCheckboxes = function(masterCheckbox) {
-    const checkboxes = document.querySelectorAll('.node-checkbox');
-    checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
-};
-
-/**
- * Populate the area accordion based on your areas dict.
- * @param {Object} areasDict - Structure: { childId: { node, children: [...] } }
- */
- // Drop-in replacement wrapper for populateAreaAccordion
- // Drop-in replacement wrapper with safety logging
- window.populateAreaAccordion = function(areasDict) {
-     console.group("📍 populateAreaAccordion (via renderAreaSelector)");
-     console.log("Input areasDict:", areasDict);
-
-     if (!areasDict) {
-         console.warn("⚠️ areasDict is null or undefined!");
-     }
-
-     // Safely pass to renderAreaSelector
-     window.renderAreaSelector(areasDict, window.getSelectedAreas());
-
-     console.groupEnd();
- };
-
-
-  function handleToggle(el) {
-    console.log(`Switch is ${el.checked ? 'ON' : 'OFF'}`);
-  }
 
   // ----------------------------
   // String Utilities
