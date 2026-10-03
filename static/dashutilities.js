@@ -796,77 +796,148 @@ async function fetchBackendURL() {
       }));
   };
 
-  window.renderTreeSelector = function(tree, options = {}) {
-    const {
-        containerId,
-        selectedItems,
-        emptyMessage = 'No items available',
-        accordionId,
-        allLabel = name => `All of ${name}`,
-        createButton
-    } = options;
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    window[selectedItems] = window[selectedItems] || new Set();
-    container.innerHTML = '';
-    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
-        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
-        return;
-    }
-    const acc = document.createElement('div');
-    acc.className = 'accordion';
-    acc.id = accordionId;
-    Object.entries(tree).forEach(([parentName, children], i) => {
-        const parentCid = `${accordionId}-parent-${i}`;
-        const item = document.createElement('div');
-        item.className = 'accordion-item border-0 mb-1';
-        item.innerHTML = `
-            <h2 class="accordion-header">
-                <button class="accordion-button collapsed py-2 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#${parentCid}" data-bs-parent="#${accordionId}">
-                    ${parentName}
-                </button>
-            </h2>
-            <div id="${parentCid}" class="accordion-collapse collapse">
-                <div class="accordion-body p-0">
-                    <div class="list-group list-group-flush"></div>
-                </div>
-            </div>
-        `;
-        const list = item.querySelector('.list-group');
-        createButton(list, parentName, allLabel(parentName), 'fw-semibold');
-        if (children && typeof children === 'object') {
-            Object.entries(children).forEach(([childName, grandchildren], childIndex) => {
-                const childCid = `${accordionId}-child-${i}-${childIndex}`;
-                const childWrapper = document.createElement('div');
-                childWrapper.className = 'border-0';
-                const childHeader = document.createElement('button');
-                childHeader.type = 'button';
-                childHeader.className = 'btn btn-sm w-100 text-start ps-4 py-2 shadow-none';
-                childHeader.setAttribute('data-bs-toggle', 'collapse');
-                childHeader.setAttribute('data-bs-target', `#${childCid}`);
-                childHeader.setAttribute('aria-expanded', 'false');
-                childHeader.textContent = `▸ ${childName}`;
-                const childCollapse = document.createElement('div');
-                childCollapse.id = childCid;
-                childCollapse.className = 'collapse';
-                const childList = document.createElement('div');
-                childList.className = 'list-group list-group-flush';
-                createButton(childList, childName, childName, 'ps-5');
-                if (grandchildren && typeof grandchildren === 'object') {
-                    Object.keys(grandchildren).forEach(grandchildName => {
-                        createButton(childList, grandchildName, grandchildName, 'ps-5');
-                    });
-                }
-                childCollapse.appendChild(childList);
-                childWrapper.appendChild(childHeader);
-                childWrapper.appendChild(childCollapse);
-                list.appendChild(childWrapper);
-            });
-        }
-        acc.appendChild(item);
-    });
-    container.appendChild(acc);
-};
+  ```javascript
+  window.renderTreeSelector = function (tree, options = {}) {
+      const {
+          containerId,
+          selectedItems,
+          emptyMessage = 'No items available',
+          accordionId,
+          allLabel = name => `All of ${name}`,
+          createButton
+      } = options;
+
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      window[selectedItems] = window[selectedItems] || new Set();
+      container.innerHTML = '';
+
+      if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
+          container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+          return;
+      }
+
+      const acc = document.createElement('div');
+      acc.className = 'accordion';
+      acc.id = accordionId;
+
+      let idCounter = 0;
+
+      function renderLevel(node, parentElement, path = [], depth = 0) {
+          if (!node || typeof node !== 'object') return;
+
+          Object.entries(node).forEach(([name, children]) => {
+              const currentPath = [...path, name];
+              const hasChildren =
+                  children &&
+                  typeof children === 'object' &&
+                  Object.keys(children).length > 0;
+
+              const uniqueId = `${accordionId}-${idCounter++}`;
+
+              // Top-level nodes use accordion items.
+              if (depth === 0) {
+                  const item = document.createElement('div');
+                  item.className = 'accordion-item border-0 mb-1';
+
+                  item.innerHTML = `
+                      <h2 class="accordion-header">
+                          <button
+                              class="accordion-button collapsed py-2 shadow-none"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#${uniqueId}"
+                              aria-expanded="false">
+                              ${name}
+                          </button>
+                      </h2>
+                      <div
+                          id="${uniqueId}"
+                          class="accordion-collapse collapse">
+                          <div class="accordion-body p-0"></div>
+                      </div>
+                  `;
+
+                  const body = item.querySelector('.accordion-body');
+
+                  // "All of X" button for this level.
+                  createButton(
+                      body,
+                      name,
+                      allLabel(name),
+                      'fw-semibold'
+                  );
+
+                  if (hasChildren) {
+                      renderLevel(children, body, currentPath, depth + 1);
+                  }
+
+                  parentElement.appendChild(item);
+                  return;
+              }
+
+              // Nested nodes.
+              const wrapper = document.createElement('div');
+              wrapper.className = 'border-0';
+
+              if (hasChildren) {
+                  const header = document.createElement('button');
+                  header.type = 'button';
+                  header.className =
+                      'btn btn-sm w-100 text-start py-2 shadow-none';
+
+                  // Increase indentation with depth.
+                  header.style.paddingLeft = `${1 + depth * 1.25}rem`;
+
+                  header.setAttribute('data-bs-toggle', 'collapse');
+                  header.setAttribute('data-bs-target', `#${uniqueId}`);
+                  header.setAttribute('aria-expanded', 'false');
+                  header.textContent = `▸ ${name}`;
+
+                  const collapse = document.createElement('div');
+                  collapse.id = uniqueId;
+                  collapse.className = 'collapse';
+
+                  const list = document.createElement('div');
+                  list.className = 'list-group list-group-flush';
+
+                  // Allow selecting this entire branch.
+                  createButton(
+                      list,
+                      name,
+                      allLabel(name),
+                      ''
+                  );
+
+                  renderLevel(
+                      children,
+                      list,
+                      currentPath,
+                      depth + 1
+                  );
+
+                  collapse.appendChild(list);
+                  wrapper.appendChild(header);
+                  wrapper.appendChild(collapse);
+              } else {
+                  // Leaf node.
+                  createButton(
+                      wrapper,
+                      name,
+                      name,
+                      ''
+                  );
+              }
+
+              parentElement.appendChild(wrapper);
+          });
+      }
+
+      renderLevel(tree, acc);
+
+      container.appendChild(acc);
+  };
 
   function createAreaButton(list, areaName, displayName, indentClass = '') {
      const button = document.createElement('button');

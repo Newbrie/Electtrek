@@ -2484,8 +2484,15 @@ class TreeNode:
         (c_election, elevels), = resolved_levels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
         task_tags, outcome_tags, all_tags = CElection.get_tags()
-        task_tree = CElection.get("taskTypes",{})
-        task_tree_json = json.dumps(task_tree or {})
+        task_tags, outcome_tags, all_tags = CElection.get_tags()
+        task_tree = CElection.get("taskTypes", {})
+
+        # 1. Wrap the dictionary in Python first
+        wrapped_task_tree = {"TASKS": task_tree or {}}
+
+        # 2. Dump the wrapped dictionary to JSON
+        task_tree_json = json.dumps(wrapped_task_tree)
+
         task_accordion_js = f"""
             <script>
             window.taskTree = {task_tree_json};
