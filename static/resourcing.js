@@ -474,7 +474,10 @@ function redrawSlot(slotId, data = {}) {
 
   // Clear existing content
   slotDiv.innerHTML = "";
-
+  // 🛡️ PRESERVE HIGHLIGHT: If this is the active slot, re-apply the class
+  if (window.activeSlotId === slotId) {
+      slotDiv.classList.add('selected-slot');
+  }
   // Re-add time label
   const timeSpan = document.createElement("span");
   timeSpan.className = "slot-time";
@@ -627,6 +630,18 @@ function openSlotModal(slotId) {
     currentSlotId = slotId;
     const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
 
+    // --- 🔴 HIGHLIGHT LOGIC START ---
+    // 1. Remove the red outline from any previously highlighted slot
+    document.querySelectorAll(".slot.selected-slot").forEach(s => {
+        s.classList.remove("selected-slot");
+    });
+
+    // 2. Set this slot as the active one and apply the red line class
+    if (slotDiv) {
+        window.activeSlotId = slotId;
+        slotDiv.classList.add("selected-slot");
+    }
+    // --- 🔴 HIGHLIGHT LOGIC END ---
 
     // Ensure slot exists in calendarData
     if (!calendarData[slotId]) calendarData[slotId] = {};

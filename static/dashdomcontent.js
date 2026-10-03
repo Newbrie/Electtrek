@@ -693,6 +693,8 @@ function handleBulkAction() {
     });
 }
 
+window.activeSlotId = null;
+
 // Ensure we only attach the listener ONCE
 const bulkBtn = document.getElementById("btnRunGroupAction");
 bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing listeners

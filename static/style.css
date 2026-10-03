@@ -111,7 +111,7 @@ html, body {
           overflow-y: auto !important;
       }
   }
-  
+
   /* ===============================
      Lozenges
      =============================== */
@@ -259,6 +259,13 @@ html, body {
     background-color: #cce5ff;
     cursor: pointer;
   }
+
+  .slot.selected-slot {
+    outline: 2px solid red !important;
+    outline-offset: -2px;
+    z-index: 10;
+    position: relative;
+}
 
   .day-column, .empty-day {
     height: 300px;
@@ -757,6 +764,8 @@ input:checked + .slider:before {
 
 
 /* Calendar styles (unchanged) */
+
+
 
 .slot { position: relative; height: 90px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background-color: #fafafa; box-sizing: border-box; padding: 1px 6px; overflow: hidden; font-size: 0.85em; line-height: 1.2em; }
 .slot-time { font-size: 0.75em; font-weight: 600; color: #666; margin-right: 0.4em; vertical-align: baseline; }

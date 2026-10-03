@@ -592,7 +592,10 @@ function redrawSlot(slotId, data = {}) {
 
   // Clear existing content
   slotDiv.innerHTML = "";
-
+  // 🛡️ PRESERVE HIGHLIGHT: If this is the active slot, re-apply the class
+  if (window.activeSlotId === slotId) {
+      slotDiv.classList.add('selected-slot');
+  }
   // Re-add time label
   const timeSpan = document.createElement("span");
   timeSpan.className = "slot-time";
