@@ -648,15 +648,15 @@ function openSlotModal(slotId) {
     const data = calendarData[slotId]; // Reference, not copy
 
     // Fill dropdowns
-    fillSelect("resourcesSelect", window.resources);
+    // 1. Fill ALL dropdowns first so the options exist in the DOM
+    fillSelect("activitySelect", window.activities); // <--- Add this (or your activity source)
     fillSelect("placeSelect", window.places);
-    console.log("💾 filled resources:", window.resources);
-    // Infer from lozenges if data is empty
-    // Infer from lozenges if data is empty
-    // Ensure data structures exist
+    fillSelect("areaSelect", window.areas);         // <--- Add this (or your area source)
+    fillSelect("resourcesSelect", window.resources);
+
+    // 2. Infer missing fields from DOM lozenges if not already set
     if (!data.resources) data.resources = [];
 
-    // Infer missing fields individually from DOM lozenges if not already set
     const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
     lozenges.forEach(l => {
         const type = l.dataset.type;
@@ -675,10 +675,11 @@ function openSlotModal(slotId) {
         }
     });
 
-    // Pre-select dropdowns
+    // 3. Pre-select dropdowns safely now that options exist
     document.getElementById("activitySelect").value = data.activity || "";
     document.getElementById("placeSelect").value = data.place || "";
     document.getElementById("areaSelect").value = data.area || "";
+
     const resSel = document.getElementById("resourcesSelect");
     Array.from(resSel.options).forEach(opt => {
         opt.selected = data.resources?.includes(opt.value) || false;
