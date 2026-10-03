@@ -737,23 +737,27 @@ sel.value = window.selectedTask;
 
 
   /* ---------- Recursive Tree Selector ---------- */
-window.renderTreeSelector = function (tree, options = {}) {
-    const {
-        containerId,
-        selectedItems, // e.g., 'selectedArea' or 'selectedTask'
-        emptyMessage = 'No items available',
-        accordionId,
-        allLabel = name => `All of ${name}`,
-        createButton
-    } = options;
+  window.renderTreeSelector = function (tree, options = {}) {
+      const {
+          containerId,
+          emptyMessage = 'No items available',
+          accordionId,
+          allLabel = name => `All of ${name}`,
+          createButton
+      } = options;
 
-    const container = document.getElementById(containerId);
-    if (!container) return;
+      const container = document.getElementById(containerId);
+      if (!container) return;
 
-    container.innerHTML = '';
+      container.innerHTML = '';
 
-    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
-        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+      if (
+          !tree ||
+          typeof tree !== 'object' ||
+          Object.keys(tree).length === 0
+      ) {
+          container.innerHTML =
+              `<div class="small text-muted p-2">${emptyMessage}</div>`;
           return;
       }
 
@@ -768,17 +772,22 @@ window.renderTreeSelector = function (tree, options = {}) {
 
           Object.entries(node).forEach(([name, children]) => {
               const currentPath = [...path, name];
+
               const hasChildren =
                   children &&
                   typeof children === 'object' &&
                   Object.keys(children).length > 0;
 
-              const uniqueId = `\(${accordionId}-\)${idCounter++}`;
+              // IMPORTANT: no \(...\)
+              const uniqueId = `${accordionId}-${idCounter++}`;
 
-              // Top-level nodes use accordion items.
+              // -------------------------------------------------
+              // TOP LEVEL
+              // -------------------------------------------------
               if (depth === 0) {
                   const item = document.createElement('div');
-                  item.className = 'accordion-item border-0 mb-1';
+                  item.className =
+                      'accordion-item border-0 mb-1';
 
                   item.innerHTML = `
                       <h2 class="accordion-header">
@@ -791,45 +800,70 @@ window.renderTreeSelector = function (tree, options = {}) {
                               ${name}
                           </button>
                       </h2>
+
                       <div
                           id="${uniqueId}"
                           class="accordion-collapse collapse">
+
                           <div class="accordion-body p-0"></div>
                       </div>
                   `;
 
-                  const body = item.querySelector('.accordion-body');
+                  const body =
+                      item.querySelector('.accordion-body');
 
-                  // "All of X" button for this level.
-                  createButton(
+                  // Select entire top-level branch
+                (
                       body,
                       name,
                       allLabel(name),
-                      'fw-semibold',
-                      selectedItems
+                      'fw-semibold'
                   );
 
                   if (hasChildren) {
-                      renderLevel(children, body, currentPath, depth + 1);
+                      renderLevel(
+                          children,
+                          body,
+                          currentPath,
+                          depth + 1
+                      );
                   }
 
                   parentElement.appendChild(item);
                   return;
               }
 
-              // Nested nodes.
+              // -------------------------------------------------
+              // NESTED LEVEL
+              // -------------------------------------------------
               const wrapper = document.createElement('div');
               wrapper.className = 'border-0';
 
               if (hasChildren) {
                   const header = document.createElement('button');
-                  header.type = 'button';
-                  header.className = 'btn btn-sm w-100 text-start py-2 shadow-none';
-                  header.style.paddingLeft = `${1 + depth * 1.25}rem`;
 
-                  header.setAttribute('data-bs-toggle', 'collapse');
-                  header.setAttribute('data-bs-target', `#${uniqueId}`);
-                  header.setAttribute('aria-expanded', 'false');
+                  header.type = 'button';
+                  header.className =
+                      'btn btn-sm w-100 text-start py-2 shadow-none';
+
+                  header.style.paddingLeft =
+                      `${1 + depth * 1.25}rem`;
+
+                  header.setAttribute(
+                      'data-bs-toggle',
+                      'collapse'
+                  );
+
+                  header.setAttribute(
+                      'data-bs-target',
+                      `#${uniqueId}`
+                  );
+
+                  header.setAttribute(
+                      'aria-expanded',
+                      'false'
+                  );
+
                   header.textContent = `▸ ${name}`;
 
                   const collapse = document.createElement('div');
@@ -837,17 +871,18 @@ window.renderTreeSelector = function (tree, options = {}) {
                   collapse.className = 'collapse';
 
                   const list = document.createElement('div');
-                  list.className = 'list-group list-group-flush';
+                  list.className =
+                      'list-group list-group-flush';
 
-                  // Allow selecting this entire branch.
+                  // Select entire branch
                   createButton(
                       list,
                       name,
                       allLabel(name),
-                      '',
-                      selectedItems
+                      ''
                   );
 
+                  // Recursively render children
                   renderLevel(
                       children,
                       list,
@@ -856,16 +891,19 @@ window.renderTreeSelector = function (tree, options = {}) {
                   );
 
                   collapse.appendChild(list);
+
                   wrapper.appendChild(header);
                   wrapper.appendChild(collapse);
+
               } else {
-                  // Leaf node.
+                  // -------------------------------------------------
+                  // LEAF
+                  // -------------------------------------------------
                   createButton(
                       wrapper,
                       name,
                       name,
-                      '',
-                      selectedItems
+                      ''
                   );
               }
 
@@ -874,67 +912,91 @@ window.renderTreeSelector = function (tree, options = {}) {
       }
 
       renderLevel(tree, acc);
+
       container.appendChild(acc);
   };
 
-  function createAreaButton(list, areaName, displayName, indentClass = '', selectedKey = 'selectedArea') {
+  function createAreaButton(
+    list,
+    areaName,
+    displayName,
+    indentClass = '',
+    selectedKey = 'selectedArea'
+) {
     const button = document.createElement('button');
+
     button.type = 'button';
-    button.className = `list-group-item list-group-item-action small ${indentClass}`; // <--- Fixed with backticks
+    button.className =
+        `list-group-item list-group-item-action small ${indentClass}`;
+
     button.textContent = displayName;
     button.dataset.name = areaName;
 
-    // Check if this is the currently selected area
     if (window[selectedKey] === areaName) {
         button.classList.add('active');
     }
 
     button.addEventListener('click', function () {
-        // Clear active class from all buttons in this accordion container
         const accordion = list.closest('.accordion');
+
         if (accordion) {
-            accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
+            accordion
+                .querySelectorAll('.list-group-item')
+                .forEach(btn => btn.classList.remove('active'));
         }
 
-        // Set single selection
         window[selectedKey] = areaName;
+
         button.classList.add('active');
 
         console.log('Area selected:', areaName);
+
         syncAreaSelect();
     });
 
     list.appendChild(button);
 }
 
-  function createTaskButton(list, taskCode, displayName, indentClass = '', selectedKey = 'selectedTask') {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = `list-group-item list-group-item-action small ${indentClass}`; // <--- Fixed with backticks
-      button.textContent = displayName;
-      button.dataset.code = taskCode;
-      // Check if this is the currently selected task
-      if (window[selectedKey] === taskCode) {
-          button.classList.add('active');
+function createTaskButton(
+  list,
+  taskCode,
+  displayName,
+  indentClass = '',
+  selectedKey = 'selectedTask'
+) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className =
+      `list-group-item list-group-item-action small ${indentClass}`;
+
+  button.textContent = displayName;
+  button.dataset.code = taskCode;
+
+  if (window[selectedKey] === taskCode) {
+      button.classList.add('active');
+  }
+
+  button.addEventListener('click', function () {
+      const accordion = list.closest('.accordion');
+
+      if (accordion) {
+          accordion
+              .querySelectorAll('.list-group-item')
+              .forEach(btn => btn.classList.remove('active'));
       }
 
-      button.addEventListener('click', function () {
-          // Clear active class from all buttons in this accordion container
-          const accordion = list.closest('.accordion');
-          if (accordion) {
-              accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
-          }
+      window[selectedKey] = taskCode;
 
-          // Set single selection
-          window[selectedKey] = taskCode;
-          button.classList.add('active');
+      button.classList.add('active');
 
-          console.log('Task selected:', taskCode);
-          syncTaskSelect();
-      });
+      console.log('Task selected:', taskCode);
 
-      list.appendChild(button);
-  }
+      syncTaskSelect();
+  });
+
+  list.appendChild(button);
+}
 
 
   /* ---------- Receive tree from map iframe ---------- */
@@ -955,7 +1017,7 @@ window.renderTreeSelector = function (tree, options = {}) {
             containerId: 'areaAccordionContainer',
             accordionId: 'areaSelectAccordion',
             emptyMessage: 'No areas available for this map',
-            selectedItems: 'selectedArea',
+            allLabel: name => `All of ${name}`,
             createButton: createAreaButton
         });
     } else if (ev.data?.type === 'taskTree') {
@@ -967,7 +1029,7 @@ window.renderTreeSelector = function (tree, options = {}) {
             containerId: 'taskAccordionContainer',
             accordionId: 'taskSelectAccordion',
             emptyMessage: 'No task types available for this map',
-            selectedItems: 'selectedTask',
+            allLabel: name => `All of ${name}`,
             createButton: createTaskButton
         });
     }
@@ -994,9 +1056,9 @@ if (slotModal) {
             window.areaTree = tree1; // Cache it back locally
             renderTreeSelector(tree1, { // FIXED: passed tree1 instead of window.areaTree
                 containerId: 'areaAccordionContainer',
-                selectedItems: 'selectedAreas',
                 accordionId: 'areaSelectAccordion',
                 emptyMessage: 'No areas available for this map',
+                allLabel: name => `All of ${name}`,
                 createButton: createAreaButton
             });
         } else {
@@ -1019,9 +1081,9 @@ if (slotModal) {
             window.taskTree = tree2; // Cache it back locally
             renderTreeSelector(tree2, { // FIXED: passed tree2 instead of window.taskTree
                 containerId: 'taskAccordionContainer',
-                selectedItems: 'selectedTasks',
                 accordionId: 'taskSelectAccordion',
                 emptyMessage: 'No tasks available for this map',
+                allLabel: name => `All of ${name}`,
                 createButton: createTaskButton
             });
         } else {
