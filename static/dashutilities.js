@@ -796,7 +796,6 @@ async function fetchBackendURL() {
       }));
   };
 
-  ```javascript
   window.renderTreeSelector = function (tree, options = {}) {
       const {
           containerId,
