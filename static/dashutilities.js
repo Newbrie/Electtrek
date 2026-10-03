@@ -945,30 +945,31 @@ window.renderTreeSelector = function (tree, options = {}) {
   window.addEventListener('message', ev => {
     const isLocal = origin => origin.includes('127.0.0.1') || origin.includes('localhost');
     if (!isLocal(ev.origin) && ev.origin !== window.location.origin) return;
+
     if (ev.data?.type === 'areaTree') {
         console.log('Successfully captured area tree:', ev.data.tree);
         window.areaTree = ev.data.tree;
-        const modal = document.getElementById('slotModal');
-        if (modal && modal.classList.contains('show')) {
-            renderTreeSelector(window.areaTree, {
-                containerId: 'areaAccordionContainer',
-                accordionId: 'areaSelectAccordion',
-                emptyMessage: 'No areas available for this map',
-                createButton: createAreaButton
-            });
-        }
+
+        // Always render when data arrives
+        renderTreeSelector(window.areaTree, {
+            containerId: 'areaAccordionContainer',
+            accordionId: 'areaSelectAccordion',
+            emptyMessage: 'No areas available for this map',
+            selectedItems: 'selectedArea',
+            createButton: createAreaButton
+        });
     } else if (ev.data?.type === 'taskTree') {
         console.log('Successfully captured task tree:', ev.data.tree);
         window.taskTree = ev.data.tree;
-        const modal = document.getElementById('slotModal');
-        if (modal && modal.classList.contains('show')) {
-            renderTreeSelector(window.taskTree, {
-                containerId: 'taskAccordionContainer',
-                accordionId: 'taskSelectAccordion',
-                emptyMessage: 'No task types available for this map',
-                createButton: createTaskButton
-            });
-        }
+
+        // Always render when data arrives
+        renderTreeSelector(window.taskTree, {
+            containerId: 'taskAccordionContainer',
+            accordionId: 'taskSelectAccordion',
+            emptyMessage: 'No task types available for this map',
+            selectedItems: 'selectedTask',
+            createButton: createTaskButton
+        });
     }
 });
 
