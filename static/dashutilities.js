@@ -878,39 +878,39 @@ window.renderTreeSelector = function (tree, options = {}) {
   };
 
   function createAreaButton(list, areaName, displayName, indentClass = '', selectedKey = 'selectedArea') {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = list-group-item list-group-item-action small ${indentClass};
-      button.textContent = displayName;
-      button.dataset.name = areaName;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `list-group-item list-group-item-action small ${indentClass}`; // <--- Fixed with backticks
+    button.textContent = displayName;
+    button.dataset.name = areaName;
 
-      // Check if this is the currently selected area
-       if (window[selectedKey] === areaName) {
-           button.classList.add('active');
-       }
+    // Check if this is the currently selected area
+    if (window[selectedKey] === areaName) {
+        button.classList.add('active');
+    }
 
-       button.addEventListener('click', function () {
-           // Clear active class from all buttons in this accordion container
-           const accordion = list.closest('.accordion');
-           if (accordion) {
-               accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
-           }
+    button.addEventListener('click', function () {
+        // Clear active class from all buttons in this accordion container
+        const accordion = list.closest('.accordion');
+        if (accordion) {
+            accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
+        }
 
-           // Set single selection
-           window[selectedKey] = areaName;
-           button.classList.add('active');
+        // Set single selection
+        window[selectedKey] = areaName;
+        button.classList.add('active');
 
-           console.log('Area selected:', areaName);
-           syncAreaSelect();
-       });
+        console.log('Area selected:', areaName);
+        syncAreaSelect();
+    });
 
-       list.appendChild(button);
-  }
+    list.appendChild(button);
+}
 
   function createTaskButton(list, taskCode, displayName, indentClass = '', selectedKey = 'selectedTask') {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = list-group-item list-group-item-action small ${indentClass};
+      button.className = `list-group-item list-group-item-action small ${indentClass}`; // <--- Fixed with backticks
       button.textContent = displayName;
       button.dataset.code = taskCode;
       // Check if this is the currently selected task
