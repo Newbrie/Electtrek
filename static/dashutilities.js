@@ -693,91 +693,30 @@ async function fetchBackendURL() {
 
   // Do NOT initialise areaTree here.
   // The iframe supplies window.areaTree.
-  window.selectedAreas = new Set();
-  window.selectedTasks = new Set();
-
-
-  /* ---------- Area selection ---------- */
-
-  window.toggleArea = function(name, btn) {
-
-      if (!name) {
-          console.warn('toggleArea called without an area name:', name);
-          return;
-      }
-
-      if (window.selectedAreas.has(name)) {
-          window.selectedAreas.delete(name);
-          btn?.classList.remove('active');
-
-          console.log('Area deselected:', name);
-
-      } else {
-          window.selectedAreas.add(name);
-          btn?.classList.add('active');
-
-          console.log('Area selected:', name);
-      }
-
-      syncAreaSelect();
-  };
-
-  window.toggleTask = function(name, btn) {
-
-      if (!name) {
-          console.warn('toggleArea called without an area name:', name);
-          return;
-      }
-
-      if (window.selectedTasks.has(name)) {
-          window.selectedTasks.delete(name);
-          btn?.classList.remove('active');
-
-          console.log('Task deselected:', name);
-
-      } else {
-          window.selectedTasks.add(name);
-          btn?.classList.add('active');
-
-          console.log('Task selected:', name);
-      }
-
-      syncTaskSelect();
-  };
-
 
   /* ---------- Sync the multiple select ---------- */
 
-  function syncSelect(selectId, selectedItemsKey) {
-        const sel = document.getElementById(selectId);
-        if (!sel) return;
+  /* ---------- Sync Helpers for Single Select ---------- */
+window.selectedArea = null;
+window.selectedTask = null;
 
-        sel.innerHTML = '';
+function syncAreaSelect() {
+const sel = document.getElementById('areaSelect');
+if (!sel) return;
+sel.innerHTML = '';
+if (!window.selectedArea) return;
+sel.appendChild(new Option(window.selectedArea, window.selectedArea, true, true));
+sel.value = window.selectedArea;
+}
 
-        const itemsSet = window[selectedItemsKey];
-        if (!itemsSet) return;
-
-        itemsSet.forEach(itemName => {
-            if (!itemName) return;
-
-            const option = new Option(
-                itemName,
-                itemName,
-                true,
-                true
-            );
-
-            sel.appendChild(option);
-        });
-    }
-
-  function syncAreaSelect() {
-      syncSelect('areaSelect', 'selectedAreas');
-  }
-
-  function syncTaskSelect() {
-      syncSelect('activitySelect', 'selectedTasks');
-  }
+function syncTaskSelect() {
+const sel = document.getElementById('activitySelect');
+if (!sel) return;
+sel.innerHTML = '';
+if (!window.selectedTask) return;
+sel.appendChild(new Option(window.selectedTask, window.selectedTask, true, true));
+sel.value = window.selectedTask;
+}
 
 
   /* ---------- Return selected areas ---------- */
@@ -796,24 +735,25 @@ async function fetchBackendURL() {
       }));
   };
 
-  window.renderTreeSelector = function (tree, options = {}) {
-      const {
-          containerId,
-          selectedItems,
-          emptyMessage = 'No items available',
-          accordionId,
-          allLabel = name => `All of ${name}`,
-          createButton
-      } = options;
 
-      const container = document.getElementById(containerId);
-      if (!container) return;
+  /* ---------- Recursive Tree Selector ---------- */
+window.renderTreeSelector = function (tree, options = {}) {
+    const {
+        containerId,
+        selectedItems, // e.g., 'selectedArea' or 'selectedTask'
+        emptyMessage = 'No items available',
+        accordionId,
+        allLabel = name => `All of ${name}`,
+        createButton
+    } = options;
 
-      window[selectedItems] = window[selectedItems] || new Set();
-      container.innerHTML = '';
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-      if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
-          container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+    container.innerHTML = '';
+
+    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
+        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
           return;
       }
 
@@ -833,7 +773,7 @@ async function fetchBackendURL() {
                   typeof children === 'object' &&
                   Object.keys(children).length > 0;
 
-              const uniqueId = `${accordionId}-${idCounter++}`;
+              const uniqueId = `\({accordionId}-\){idCounter++}`;
 
               // Top-level nodes use accordion items.
               if (depth === 0) {
@@ -865,7 +805,8 @@ async function fetchBackendURL() {
                       body,
                       name,
                       allLabel(name),
-                      'fw-semibold'
+                      'fw-semibold',
+                      selectedItems
                   );
 
                   if (hasChildren) {
@@ -883,10 +824,7 @@ async function fetchBackendURL() {
               if (hasChildren) {
                   const header = document.createElement('button');
                   header.type = 'button';
-                  header.className =
-                      'btn btn-sm w-100 text-start py-2 shadow-none';
-
-                  // Increase indentation with depth.
+                  header.className = 'btn btn-sm w-100 text-start py-2 shadow-none';
                   header.style.paddingLeft = `${1 + depth * 1.25}rem`;
 
                   header.setAttribute('data-bs-toggle', 'collapse');
@@ -906,7 +844,8 @@ async function fetchBackendURL() {
                       list,
                       name,
                       allLabel(name),
-                      ''
+                      '',
+                      selectedItems
                   );
 
                   renderLevel(
@@ -925,7 +864,8 @@ async function fetchBackendURL() {
                       wrapper,
                       name,
                       name,
-                      ''
+                      '',
+                      selectedItems
                   );
               }
 
@@ -934,61 +874,65 @@ async function fetchBackendURL() {
       }
 
       renderLevel(tree, acc);
-
       container.appendChild(acc);
   };
 
-  function createAreaButton(list, areaName, displayName, indentClass = '') {
-     const button = document.createElement('button');
-
-     button.type = 'button';
-     button.className = `list-group-item list-group-item-action small ${indentClass}`;
-
-     // Fixed: Uses displayName so "All of [Root]" renders correctly!
-     button.textContent = displayName;
-     button.dataset.name = areaName;
-
-     if (window.selectedAreas.has(areaName)) {
-         button.classList.add('active');
-     }
-
-     button.addEventListener('click', function () {
-         const selected = window.selectedAreas.has(areaName);
-
-         if (selected) {
-             window.selectedAreas.delete(areaName);
-             button.classList.remove('active');
-         } else {
-             window.selectedAreas.add(areaName);
-             button.classList.add('active');
-         }
-
-         syncAreaSelect();
-     });
-
-     list.appendChild(button);
-  }
-
-  function createTaskButton(list, taskCode, displayName, indentClass = '') {
+  function createAreaButton(list, areaName, displayName, indentClass = '', selectedKey = 'selectedArea') {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = `list-group-item list-group-item-action small ${indentClass}`;
+      button.className = list-group-item list-group-item-action small ${indentClass};
+      button.textContent = displayName;
+      button.dataset.name = areaName;
+
+      // Check if this is the currently selected area
+       if (window[selectedKey] === areaName) {
+           button.classList.add('active');
+       }
+
+       button.addEventListener('click', function () {
+           // Clear active class from all buttons in this accordion container
+           const accordion = list.closest('.accordion');
+           if (accordion) {
+               accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
+           }
+
+           // Set single selection
+           window[selectedKey] = areaName;
+           button.classList.add('active');
+
+           console.log('Area selected:', areaName);
+           syncAreaSelect();
+       });
+
+       list.appendChild(button);
+  }
+
+  function createTaskButton(list, taskCode, displayName, indentClass = '', selectedKey = 'selectedTask') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = list-group-item list-group-item-action small ${indentClass};
       button.textContent = displayName;
       button.dataset.code = taskCode;
-      if (window.selectedTasks.has(taskCode)) {
+      // Check if this is the currently selected task
+      if (window[selectedKey] === taskCode) {
           button.classList.add('active');
       }
+
       button.addEventListener('click', function () {
-          const selected = window.selectedTasks.has(taskCode);
-          if (selected) {
-              window.selectedTasks.delete(taskCode);
-              button.classList.remove('active');
-          } else {
-              window.selectedTasks.add(taskCode);
-              button.classList.add('active');
+          // Clear active class from all buttons in this accordion container
+          const accordion = list.closest('.accordion');
+          if (accordion) {
+              accordion.querySelectorAll('.list-group-item').forEach(btn => btn.classList.remove('active'));
           }
+
+          // Set single selection
+          window[selectedKey] = taskCode;
+          button.classList.add('active');
+
+          console.log('Task selected:', taskCode);
           syncTaskSelect();
       });
+
       list.appendChild(button);
   }
 
