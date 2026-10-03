@@ -40,6 +40,18 @@ class ElectionContext:
 
             }
 
+def _collect_leaves(node):
+    """Recursively descend until hitting a dict of {code: description}
+    (i.e. every value is a plain string), then return that dict."""
+    if not isinstance(node, dict):
+        return {}
+    if all(isinstance(v, str) for v in node.values()):
+        return dict(node)
+    leaves = {}
+    for sub_value in node.values():
+        leaves.update(_collect_leaves(sub_value))
+    return leaves
+
 
 
 def list_elections():
@@ -424,12 +436,21 @@ class CurrentElection(dict):
 
     def get_tags(self):
         """
-        Split tags into task_tags and outcome_tags, pre-seeded with mandatory election codes.
+        Walk the nested `taskTypes` structure and split leaf codes into
+        task_tags and outcome_tags, pre-seeded with mandatory baseline codes.
+
+        taskTypes can nest to variable depth before reaching leaf
+        {code: description} pairs -- some categories go
+        category -> subcategory -> {code: description} (e.g. ENGAGEMENT/CAMPAIGNING),
+        others go straight to category -> {code: description} (e.g. MEMBERSHIP).
+        This walks until it finds a dict whose values are all plain strings,
+        and treats that as the leaf level, regardless of how many levels deep
+        it had to go to get there.
         """
-        # 1. Pre-seed with your mandatory baseline task layers
+        # 1. Pre-seed with mandatory baseline task layers
         task_tags = {}
 
-        # 2. Pre-seed with your baseline canvas outcome milestones
+        # 2. Pre-seed with baseline canvas outcome milestones
         outcome_tags = {
             "M1": "Member",
             "M2": "Pledge",
@@ -440,28 +461,28 @@ class CurrentElection(dict):
 
         all_tags = {}
 
-        # 3. Pull dynamic incoming records from your model store
-        raw_tags = self.get("tags") or {}
+        # Categories whose leaf codes are outcome tags rather than task tags.
+        # Everything else under taskTypes is treated as a task category.
+        OUTCOME_CATEGORIES = {"MEMBERSHIP"}
 
-        for tag, description in raw_tags.items():
-            clean_tag = str(tag).strip()
+        raw_task_types = self.get("taskTypes") or {}
 
-            # Route depending on campaign prefix matches
-            if clean_tag.startswith("L") or clean_tag.startswith("V"):
-                task_tags[clean_tag] = description
-            elif clean_tag.startswith("M"):
-                outcome_tags[clean_tag] = description
+        for category, contents in raw_task_types.items():
+            leaf_codes = _collect_leaves(contents)
+            destination = outcome_tags if category.upper() in OUTCOME_CATEGORIES else task_tags
 
-            all_tags[clean_tag] = description
+            for code, description in leaf_codes.items():
+                clean_code = str(code).strip()
+                destination[clean_code] = description
+                all_tags[clean_code] = description
 
-        # Ensure baseline seeds are accurately tracked inside your master all_tags lookup ledger too
+        # Ensure baseline seeds are accurately tracked inside the master
+        # all_tags lookup ledger too
         all_tags.update({**task_tags, **outcome_tags})
 
         print(f"___Under route {state.route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
 
         return task_tags, outcome_tags, all_tags
-
-
 
 
 

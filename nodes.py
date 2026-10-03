@@ -2484,6 +2484,27 @@ class TreeNode:
         (c_election, elevels), = resolved_levels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
         task_tags, outcome_tags, all_tags = CElection.get_tags()
+        task_tree = CElection.get("taskTypes",{})
+        task_tree_json = json.dumps(task_tree or {})
+        task_accordion_js = f"""
+            <script>
+            window.taskTree = {task_tree_json};
+
+            window.addEventListener('load', function () {{
+                try {{
+                    window.parent.postMessage(
+                        {{
+                            type: 'taskTree',
+                            tree: window.taskTree
+                        }},
+                        '*'
+                    );
+                }} catch (e) {{
+                    console.warn('taskTree postMessage failed', e);
+                }}
+            }});
+            </script>
+            """
 
         area_root_path = self.node_path
 
@@ -3168,6 +3189,7 @@ class TreeNode:
         # Ensure there's only one LayerControl
         FolMap.add_child(folium.LayerControl(collapsed=True))
         FolMap.get_root().html.add_child(folium.Element(area_accordion_js))
+        FolMap.get_root().html.add_child(folium.Element(task_accordion_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
 

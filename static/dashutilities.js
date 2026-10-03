@@ -723,6 +723,7 @@ async function fetchBackendURL() {
   // Do NOT initialise areaTree here.
   // The iframe supplies window.areaTree.
   window.selectedAreas = new Set();
+  window.selectedTasks = new Set();
 
 
   /* ---------- Area selection ---------- */
@@ -750,29 +751,61 @@ async function fetchBackendURL() {
       syncAreaSelect();
   };
 
+  window.toggleTask = function(name, btn) {
+
+      if (!name) {
+          console.warn('toggleArea called without an area name:', name);
+          return;
+      }
+
+      if (window.selectedTasks.has(name)) {
+          window.selectedTasks.delete(name);
+          btn?.classList.remove('active');
+
+          console.log('Task deselected:', name);
+
+      } else {
+          window.selectedTasks.add(name);
+          btn?.classList.add('active');
+
+          console.log('Task selected:', name);
+      }
+
+      syncTaskSelect();
+  };
+
 
   /* ---------- Sync the multiple select ---------- */
 
+  function syncSelect(selectId, selectedItemsKey) {
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+
+        sel.innerHTML = '';
+
+        const itemsSet = window[selectedItemsKey];
+        if (!itemsSet) return;
+
+        itemsSet.forEach(itemName => {
+            if (!itemName) return;
+
+            const option = new Option(
+                itemName,
+                itemName,
+                true,
+                true
+            );
+
+            sel.appendChild(option);
+        });
+    }
+
   function syncAreaSelect() {
+      syncSelect('areaSelect', 'selectedAreas');
+  }
 
-      const sel = document.getElementById('areaSelect');
-      if (!sel) return;
-
-      sel.innerHTML = '';
-
-      window.selectedAreas.forEach(areaName => {
-
-          if (!areaName) return;
-
-          const option = new Option(
-              areaName,
-              areaName,
-              true,
-              true
-          );
-
-          sel.appendChild(option);
-      });
+  function syncTaskSelect() {
+      syncSelect('activitySelect', 'selectedTasks');
   }
 
 
@@ -785,102 +818,84 @@ async function fetchBackendURL() {
       }));
   };
 
-  window.renderAreaSelector = function (tree, preselected = []) {
-      const container = document.getElementById('areaAccordionContainer');
-      console.log("renderAreaSelector received tree:", tree);
-      if (!container) return;
-      window.selectedAreas = new Set(
-          preselected
-              .map(a => typeof a === 'string' ? a : a.name)
-              .filter(Boolean)
-      );
-      container.innerHTML = '';
-      if (
-          !tree ||
-          typeof tree !== 'object' ||
-          Object.keys(tree).length === 0
-      ) {
-          container.innerHTML = '<div class="small text-muted p-2">No areas available for this map</div>';
-          syncAreaSelect();
-          return;
-      }
-      const acc = document.createElement('div');
-      acc.className = 'accordion';
-      acc.id = 'areaSelectAccordion';
-      Object.entries(tree).forEach(([parentName, children], i) => {
-          const parentCid = `areaCollapse-${i}`;
-          const item = document.createElement('div');
-          item.className = 'accordion-item border-0 mb-1';
-          item.innerHTML = `
-              <h2 class="accordion-header">
-                  <button
-                      class="accordion-button collapsed py-2 shadow-none"
-                      type="button"
-                      data-bs-toggle="collapse"
-                      data-bs-target="#${parentCid}"
-                      data-bs-parent="#areaSelectAccordion">
-                      ${parentName}
-                  </button>
-              </h2>
-              <div
-                  id="${parentCid}"
-                  class="accordion-collapse collapse">
-                  <div class="accordion-body p-0">
-                      <div class="list-group list-group-flush"></div>
-                  </div>
-              </div>
-          `;
-          const list = item.querySelector('.list-group');
-          createAreaButton(
-              list,
-              parentName,
-              `All of ${parentName}`,
-              'fw-semibold'
-          );
-          if (children && typeof children === 'object') {
-              Object.entries(children).forEach(([childName, grandchildren], childIndex) => {
-                  const childCid = `areaChildCollapse-${i}-${childIndex}`;
-                  const childWrapper = document.createElement('div');
-                  childWrapper.className = 'border-0';
-                  const childHeader = document.createElement('button');
-                  childHeader.type = 'button';
-                  childHeader.className = 'btn btn-sm w-100 text-start ps-4 py-2 shadow-none';
-                  childHeader.setAttribute('data-bs-toggle', 'collapse');
-                  childHeader.setAttribute('data-bs-target', `#${childCid}`);
-                  childHeader.setAttribute('aria-expanded', 'false');
-                  childHeader.textContent = `▸ ${childName}`;
-                  const childCollapse = document.createElement('div');
-                  childCollapse.id = childCid;
-                  childCollapse.className = 'collapse';
-                  const childList = document.createElement('div');
-                  childList.className = 'list-group list-group-flush';
-                  createAreaButton(
-                      childList,
-                      childName,
-                      childName,
-                      'ps-5'
-                  );
-                  if (grandchildren && typeof grandchildren === 'object') {
-                      Object.keys(grandchildren).forEach(grandchildName => {
-                          createAreaButton(
-                              childList,
-                              grandchildName,
-                              grandchildName,
-                              'ps-5'
-                          );
-                      });
-                  }
-                  childCollapse.appendChild(childList);
-                  childWrapper.appendChild(childHeader);
-                  childWrapper.appendChild(childCollapse);
-                  list.appendChild(childWrapper);
-              });
-          }
-          acc.appendChild(item);
-      });
-      container.appendChild(acc);
-      syncAreaSelect();
+  window.getSelectedTasks = function() {
+
+      return [...window.selectedTasks].map(name => ({
+          name: name
+      }));
   };
+
+  window.renderTreeSelector = function(tree, options = {}) {
+    const {
+        containerId,
+        selectedItems,
+        emptyMessage = 'No items available',
+        accordionId,
+        allLabel = name => `All of ${name}`,
+        createButton
+    } = options;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    window[selectedItems] = window[selectedItems] || new Set();
+    container.innerHTML = '';
+    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
+        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+        return;
+    }
+    const acc = document.createElement('div');
+    acc.className = 'accordion';
+    acc.id = accordionId;
+    Object.entries(tree).forEach(([parentName, children], i) => {
+        const parentCid = `${accordionId}-parent-${i}`;
+        const item = document.createElement('div');
+        item.className = 'accordion-item border-0 mb-1';
+        item.innerHTML = `
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed py-2 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#${parentCid}" data-bs-parent="#${accordionId}">
+                    ${parentName}
+                </button>
+            </h2>
+            <div id="${parentCid}" class="accordion-collapse collapse">
+                <div class="accordion-body p-0">
+                    <div class="list-group list-group-flush"></div>
+                </div>
+            </div>
+        `;
+        const list = item.querySelector('.list-group');
+        createButton(list, parentName, allLabel(parentName), 'fw-semibold');
+        if (children && typeof children === 'object') {
+            Object.entries(children).forEach(([childName, grandchildren], childIndex) => {
+                const childCid = `${accordionId}-child-${i}-${childIndex}`;
+                const childWrapper = document.createElement('div');
+                childWrapper.className = 'border-0';
+                const childHeader = document.createElement('button');
+                childHeader.type = 'button';
+                childHeader.className = 'btn btn-sm w-100 text-start ps-4 py-2 shadow-none';
+                childHeader.setAttribute('data-bs-toggle', 'collapse');
+                childHeader.setAttribute('data-bs-target', `#${childCid}`);
+                childHeader.setAttribute('aria-expanded', 'false');
+                childHeader.textContent = `▸ ${childName}`;
+                const childCollapse = document.createElement('div');
+                childCollapse.id = childCid;
+                childCollapse.className = 'collapse';
+                const childList = document.createElement('div');
+                childList.className = 'list-group list-group-flush';
+                createButton(childList, childName, childName, 'ps-5');
+                if (grandchildren && typeof grandchildren === 'object') {
+                    Object.keys(grandchildren).forEach(grandchildName => {
+                        createButton(childList, grandchildName, grandchildName, 'ps-5');
+                    });
+                }
+                childCollapse.appendChild(childList);
+                childWrapper.appendChild(childHeader);
+                childWrapper.appendChild(childCollapse);
+                list.appendChild(childWrapper);
+            });
+        }
+        acc.appendChild(item);
+    });
+    container.appendChild(acc);
+};
 
   function createAreaButton(list, areaName, displayName, indentClass = '') {
      const button = document.createElement('button');
@@ -913,7 +928,28 @@ async function fetchBackendURL() {
      list.appendChild(button);
   }
 
-
+  function createTaskButton(list, taskCode, displayName, indentClass = '') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `list-group-item list-group-item-action small ${indentClass}`;
+      button.textContent = displayName;
+      button.dataset.code = taskCode;
+      if (window.selectedTasks.has(taskCode)) {
+          button.classList.add('active');
+      }
+      button.addEventListener('click', function () {
+          const selected = window.selectedTasks.has(taskCode);
+          if (selected) {
+              window.selectedTasks.delete(taskCode);
+              button.classList.remove('active');
+          } else {
+              window.selectedTasks.add(taskCode);
+              button.classList.add('active');
+          }
+          syncTaskSelect();
+      });
+      list.appendChild(button);
+  }
 
 
   /* ---------- Receive tree from map iframe ---------- */
@@ -922,52 +958,90 @@ async function fetchBackendURL() {
   /* ---------- Receive tree from map iframe ---------- */
 
   window.addEventListener('message', ev => {
-      // Allow local development mismatch between 127.0.0.1 and localhost
-      const isLocal = (origin) => origin.includes('127.0.0.1') || origin.includes('localhost');
-      if (!isLocal(ev.origin) && ev.origin !== window.location.origin) return;
-
-      if (ev.data?.type !== 'areaTree') return;
-
-      console.log('Successfully captured tree:', ev.data.tree);
-      window.areaTree = ev.data.tree;
-
-      // Render immediately if the modal happens to already be open
-      const modal = document.getElementById('slotModal');
-      if (modal && modal.classList.contains('show')) {
-          window.renderAreaSelector(
-              window.areaTree,
-              typeof window.getSelectedAreas === 'function' ? window.getSelectedAreas() : []
-          );
-      }
-  });
+    const isLocal = origin => origin.includes('127.0.0.1') || origin.includes('localhost');
+    if (!isLocal(ev.origin) && ev.origin !== window.location.origin) return;
+    if (ev.data?.type === 'areaTree') {
+        console.log('Successfully captured area tree:', ev.data.tree);
+        window.areaTree = ev.data.tree;
+        const modal = document.getElementById('slotModal');
+        if (modal && modal.classList.contains('show')) {
+            renderTreeSelector(window.areaTree, {
+                containerId: 'areaAccordionContainer',
+                accordionId: 'areaSelectAccordion',
+                emptyMessage: 'No areas available for this map',
+                createButton: createAreaButton
+            });
+        }
+    } else if (ev.data?.type === 'taskTree') {
+        console.log('Successfully captured task tree:', ev.data.tree);
+        window.taskTree = ev.data.tree;
+        const modal = document.getElementById('slotModal');
+        if (modal && modal.classList.contains('show')) {
+            renderTreeSelector(window.taskTree, {
+                containerId: 'taskAccordionContainer',
+                accordionId: 'taskSelectAccordion',
+                emptyMessage: 'No task types available for this map',
+                createButton: createTaskButton
+            });
+        }
+    }
+});
 
 
   /* ---------- Refresh whenever modal opens (Keep only shown.bs.modal) ---------- */
 
   const slotModal = document.getElementById('slotModal');
-  if (slotModal) {
-      slotModal.addEventListener('shown.bs.modal', function () {
-          // Fallback: check window.areaTree or grab it from the iframe directly if needed
-          let tree = window.areaTree;
+if (slotModal) {
+    slotModal.addEventListener('shown.bs.modal', function () {
 
-          if (!tree) {
-              try {
-                  tree = document.getElementById('iframe1')?.contentWindow?.areaTree;
-              } catch (e) {
-                  console.warn('Could not read areaTree from iframe:', e);
-              }
-          }
+        // 1. Area Tree Handling
+        let tree1 = window.areaTree;
+        if (!tree1) {
+            try {
+                tree1 = document.getElementById('iframe1')?.contentWindow?.areaTree;
+            } catch (e) {
+                console.warn('Could not read areaTree from iframe:', e);
+            }
+        }
 
-          if (tree) {
-              window.renderAreaSelector(
-                  tree,
-                  typeof window.getSelectedAreas === 'function' ? window.getSelectedAreas() : []
-              );
-          } else {
-              console.warn('Modal opened, but window.areaTree is still empty.');
-              document.getElementById('areaAccordionContainer').innerHTML =
-              'Waiting for map data...';
-              syncAreaSelect();
+        if (tree1) {
+            window.areaTree = tree1; // Cache it back locally
+            renderTreeSelector(tree1, { // FIXED: passed tree1 instead of window.areaTree
+                containerId: 'areaAccordionContainer',
+                selectedItems: 'selectedAreas',
+                accordionId: 'areaSelectAccordion',
+                emptyMessage: 'No areas available for this map',
+                createButton: createAreaButton
+            });
+        } else {
+            console.warn('Modal opened, but window.areaTree is still empty.');
+            document.getElementById('areaAccordionContainer').innerHTML = 'Waiting for map data...';
+            syncAreaSelect();
         }
-        });
+
+        // 2. Task Tree Handling
+        let tree2 = window.taskTree;
+        if (!tree2) {
+            try {
+                tree2 = document.getElementById('iframe1')?.contentWindow?.taskTree;
+            } catch (e) {
+                console.warn('Could not read taskTree from iframe:', e);
+            }
         }
+
+        if (tree2) {
+            window.taskTree = tree2; // Cache it back locally
+            renderTreeSelector(tree2, { // FIXED: passed tree2 instead of window.taskTree
+                containerId: 'taskAccordionContainer',
+                selectedItems: 'selectedTasks',
+                accordionId: 'taskSelectAccordion',
+                emptyMessage: 'No tasks available for this map',
+                createButton: createTaskButton
+            });
+        } else {
+            console.warn('Modal opened, but window.taskTree is still empty.');
+            document.getElementById('taskAccordionContainer').innerHTML = 'Waiting for map data...';
+            syncTaskSelect();
+        }
+    });
+}
