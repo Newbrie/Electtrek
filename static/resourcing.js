@@ -653,13 +653,24 @@ function openSlotModal(slotId) {
     fillSelect("placeSelect", window.places);
     console.log("💾 filled resources:", window.resources);
     // Infer from lozenges if data is empty
+    // Infer from lozenges if data is empty
     if (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length)) {
         data.resources = [];
         const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
         lozenges.forEach(l => {
             switch (l.dataset.type) {
-                case "place": data.place = l.dataset.code; break;
-                  case "resource": data.resources.push(l.dataset.code); break;
+                case "activity":
+                    data.activity = l.dataset.code;
+                    break;
+                case "place":
+                    data.place = l.dataset.code;
+                    break;
+                case "resource":
+                    data.resources.push(l.dataset.code);
+                    break;
+                case "area":
+                    data.area = l.dataset.code;
+                    break;
             }
         });
     }
