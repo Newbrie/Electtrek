@@ -647,33 +647,33 @@ function openSlotModal(slotId) {
     if (!calendarData[slotId]) calendarData[slotId] = {};
     const data = calendarData[slotId]; // Reference, not copy
 
-
     // Fill dropdowns
     fillSelect("resourcesSelect", window.resources);
     fillSelect("placeSelect", window.places);
     console.log("💾 filled resources:", window.resources);
     // Infer from lozenges if data is empty
     // Infer from lozenges if data is empty
-    if (!data.activity && !data.place && !data.area && (!data.resources || !data.resources.length)) {
-        data.resources = [];
-        const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
-        lozenges.forEach(l => {
-            switch (l.dataset.type) {
-                case "activity":
-                    data.activity = l.dataset.code;
-                    break;
-                case "place":
-                    data.place = l.dataset.code;
-                    break;
-                case "resource":
-                    data.resources.push(l.dataset.code);
-                    break;
-                case "area":
-                    data.area = l.dataset.code;
-                    break;
-            }
-        });
-    }
+    // Ensure data structures exist
+    if (!data.resources) data.resources = [];
+
+    // Infer missing fields individually from DOM lozenges if not already set
+    const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
+    lozenges.forEach(l => {
+        const type = l.dataset.type;
+        const code = l.dataset.code || l.textContent.trim();
+
+        if (!code || code === "undefined" || code === "null") return;
+
+        if (type === "activity" && !data.activity) {
+            data.activity = code;
+        } else if (type === "place" && !data.place) {
+            data.place = code;
+        } else if (type === "area" && !data.area) {
+            data.area = code;
+        } else if (type === "resource" && !data.resources.includes(code)) {
+            data.resources.push(code);
+        }
+    });
 
     // Pre-select dropdowns
     document.getElementById("activitySelect").value = data.activity || "";
