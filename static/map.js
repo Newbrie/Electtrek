@@ -1,7 +1,6 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
 
-// Remove the single quotes around the Jinja expression
 var pack = window.flaskMessages ;
 
 // Now you can loop through them or push them to your array
@@ -13,19 +12,7 @@ if (pack && pack.length > 0) {
     });
 }
 
-
-
-
-
-var iframeEl = document.getElementsByName('iframe1');
-
-function bindEvent( element, eventName, eventHandler) {
- if (element.addEventListener){
-     element.addEventListener(eventName, eventHandler, false);
- } else if (element.attachEvent) {
-     element.attachEvent('on' + eventName, eventHandler);
- };
-};
+window.activeSlotId = null;
 
 // 🌟 UNIFIED INTERCOM GATEWAY (Handles all incoming iframe messages in one place)
 window.addEventListener('message', function (e) {
@@ -93,17 +80,860 @@ var showMore = function (msg,area) {
       /* When the user clicks on the button,
       toggle between hiding and showing the dropdown content */
 
-// --- MOVE THESE TO MAP.JS ---
 
-window.BAKED_DATA =
-    window.BAKED_DATA ||
-    (parent && parent.BAKED_DATA) ||
-    [];
+  function openSlotModal(slotId) {
+      currentSlotId = slotId;
+      const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
 
-/* --- Top of map.js --- */
-/* --- Top of map.js --- */
-// 1. Map Handle
-var fmap;
+      // --- 🔴 HIGHLIGHT LOGIC START ---
+      // 1. Remove the red outline from any previously highlighted slot
+      document.querySelectorAll(".slot.selected-slot").forEach(s => {
+          s.classList.remove("selected-slot");
+      });
+
+      // 2. Set this slot as the active one and apply the red line class
+      if (slotDiv) {
+          window.activeSlotId = slotId;
+          slotDiv.classList.add("selected-slot");
+      }
+      // --- 🔴 HIGHLIGHT LOGIC END ---
+
+      // Ensure slot exists in calendarData
+      if (!calendarData[slotId]) calendarData[slotId] = {};
+      const data = calendarData[slotId]; // Reference, not copy
+
+      // Fill dropdowns
+      fillSelect("resourcesSelect", window.resources);
+      fillSelect("placeSelect", window.places);
+      console.log("💾 filled resources:", window.resources);
+
+      // Ensure data structures exist
+      if (!data.resources) data.resources = [];
+
+      // Infer missing fields individually from DOM lozenges if not already set
+      if (slotDiv) {
+          const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
+          lozenges.forEach(l => {
+              const type = l.dataset.type;
+              const code = l.dataset.code || l.textContent.trim();
+
+              if (!code || code === "undefined" || code === "null") return;
+
+              if (type === "activity" && !data.activity) {
+                  data.activity = code;
+              } else if (type === "place" && !data.place) {
+                  data.place = code;
+              } else if (type === "area" && !data.area) {
+                  data.area = code;
+              } else if (type === "resource" && !data.resources.includes(code)) {
+                  data.resources.push(code);
+              }
+          });
+      }
+
+      // 🌳 Render tree selectors now that the modal DOM / containers exist
+      if (window.areaTree && typeof renderTreeSelector === "function") {
+          renderTreeSelector(window.areaTree, {
+              containerId: 'areaAccordionContainer',
+              accordionId: 'areaSelectAccordion',
+              emptyMessage: 'No areas available for this map',
+              allLabel: name => `All of ${name}`,
+              createButton: createAreaButton
+          });
+      }
+
+      if (window.taskTree && typeof renderTreeSelector === "function") {
+          renderTreeSelector(window.taskTree, {
+              containerId: 'taskAccordionContainer',
+              accordionId: 'taskSelectAccordion',
+              emptyMessage: 'No task types available for this map',
+              allLabel: name => `All of ${name}`,
+              createButton: createTaskButton
+          });
+      }
+
+      // Pre-select dropdowns
+      document.getElementById("activitySelect").value = data.activity || "";
+      document.getElementById("placeSelect").value = data.place || "";
+      document.getElementById("areaSelect").value = data.area || "";
+
+      const resSel = document.getElementById("resourcesSelect");
+      Array.from(resSel.options).forEach(opt => {
+          opt.selected = data.resources?.includes(opt.value) || false;
+      });
+
+      // Show modal
+      const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
+      modalInstance.show();
+  }
+
+// Expose a function inside the iframe that the parent can call directly:
+window.buildAndLoadCalendar = function(plan) {
+    if (typeof buildCalendarGrid === "function") {
+        buildCalendarGrid("calendar-grid", 45);
+    }
+    if (typeof populateDropdowns === "function") {
+        populateDropdowns();
+    }
+    if (typeof loadCalendarPlan === "function" && plan) {
+        loadCalendarPlan(plan);
+    }
+};
+// ------------------------------
+// IN CALENDAR MODAL Add Place button handler
+// ------------------------------
+document.getElementById("addPlaceBtn").addEventListener("click", () => {
+
+    const overlay = document.getElementById("map-overlay");
+    const overlayIframe = document.getElementById("overlay-iframe");
+
+    overlayIframe.src = document.getElementById("iframe1").src;
+    overlay.style.display = "block";
+
+    overlayIframe.onload = () => {
+        console.log("📌 Iframe loaded — sending enableAddPlace");
+        overlayIframe.contentWindow.postMessage(
+            { type: "enableAddPlace" },
+            "*"
+        );
+    };
+});
+
+// ------------------------------
+// IN CALENDAR MODAL Save button handler
+// ------------------------------
+document.getElementById("saveNewPlace").addEventListener("click", () => {
+    const form = document.getElementById("addPlaceForm");
+
+    // Use the currently selected place data
+    const newPlace = selectedPlaceData;
+    if (!newPlace) {
+        console.error("No place data to save!");
+        return;
+    }
+
+    // Ensure places dict exists
+    if (!window.places) window.places = {};
+    window.places[newPlace.prefix] = newPlace;
+
+    // Update dropdown (only prefix)
+    fillSelect("placeSelect", window.places);
+
+    // Add marker permanently to FeatureGroup if available
+    const markerGroup = window.Featurelayers?.['marker'];
+    if (markerGroup && window.pinMarker) {
+        markerGroup.addLayer(window.pinMarker);
+
+        // Optionally track by prefix for later reference
+        if (!window.permanentMarkers) window.permanentMarkers = {};
+        window.permanentMarkers[newPlace.prefix] = window.pinMarker;
+
+        // Clear temporary pointer
+        window.pinMarker = null;
+    }
+
+    console.log("📌 New place saved:", newPlace);
+    console.log("📌 Updated places dict:", window.places);
+
+    // Hide mini-place form and restore overlay/iframe
+    form.classList.add("d-none");
+    const overlayIframe = document.getElementById("overlay-iframe");
+    if (overlayIframe) {
+        overlayIframe.classList.remove("dimmed");
+        overlayIframe.style.visibility = "hidden";
+    }
+
+    // Reset awaitingNewPlace flag
+    window.awaitingNewPlace = false;
+});
+
+// ------------------------------
+// IN CALENDAR MODAL Show add-resource form
+// ------------------------------
+//
+document.getElementById("addResourceBtn").addEventListener("click", () => {
+    document.getElementById("addResourceForm").classList.remove("d-none");
+});
+
+// ------------------------------
+// IN CALENDAR MODAL Show save-resource form
+// ------------------------------
+//
+document.getElementById("saveNewResource").addEventListener("click", () => {
+    const first = newResFirst.value.trim();
+    const last  = newResLast.value.trim();
+    const email = newResEmail.value.trim();
+
+    if (!first || !last) {
+        alert("Firstname and surname required");
+        return;
+    }
+
+    const code = (first[0] + last).toUpperCase();
+
+    const resourceObj = {
+        Firstname: first,
+        Surname: last,
+        campaignMgremail: email
+    };
+
+    // Update global state
+    window.resources[code] = resourceObj;
+
+    // ALSO update latestOptions (otherwise UI resets)
+    window.latestOptions.resources[code] = resourceObj;
+
+    populateDropdowns();
+    updateConstantsUI(window.latestConstants, window.latestOptions);
+    populateAllSelects(window.latestOptions, window.latestConstants);
+
+
+});
+
+// ------------------------------
+// IN CALENDAR MODAL Show add-tasktag form
+// ------------------------------
+//
+document.getElementById("addTaskTagBtn").addEventListener("click", () => {
+    document.getElementById("addTaskTagForm").classList.remove("d-none");
+});
+
+// ------------------------------
+// IN CALENDAR MODAL Show save-tasktag form
+// ------------------------------
+//
+document.getElementById("saveNewTag").addEventListener("click", () => {
+    const code  = newTagCode.value.trim();
+    const label = newTagLabel.value.trim();
+
+    if (!code || !label) {
+        alert("Both code and label required");
+        return;
+    }
+
+    // Update global
+    window.task_tags[code] = label;
+
+    // ALSO update options so updateConstantsUI does not overwrite
+    window.latestOptions.task_tags[code] = label;
+
+    // Refresh UI
+    populateDropdowns();
+    updateConstantsUI(window.latestConstants, window.latestOptions);
+    populateAllSelects(window.latestOptions, window.latestConstants);
+    addTaskTagForm.classList.add("d-none");
+});
+
+/**
+ * 2. List Rendering Helper
+ * Generates HTML with checkboxes (for bulk) and text (for navigation)
+ */
+ function renderNodeList(elementId, nodeObjects) {
+     const container = document.getElementById(elementId);
+     if (!container) return;
+
+     if (!nodeObjects || nodeObjects.length === 0) {
+         container.innerHTML = '<div class="none-found" style="padding:10px; color:#888;">No further divisions</div>';
+         return;
+     }
+
+     container.innerHTML = nodeObjects.map(obj => {
+         const path = obj.path;
+         const nid = obj.nid;
+         const name = obj.name || path.split('/').pop().replace(/_/g, ' ');
+
+         return `
+             <div class="nav-item-wrapper" style="display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #eee;">
+                 <input type="checkbox"
+                        class="selectRow"
+                        value="${nid}"
+                        data-nid="${nid}"
+                        onclick="event.stopPropagation();"
+                        style="margin-right: 12px; width: 18px; height: 18px; cursor: pointer;">
+                 <div class="nav-item"
+                      onclick="selectNode('${path}')"
+                      style="flex-grow: 1; cursor: pointer; font-size: 14px; color: #333;">
+                     ${name}
+                 </div>
+             </div>`;
+     }).join('');
+ }
+
+ function attachModalListener() {
+     const modal = document.getElementById("modalPopup");
+     if (!modal) {
+         // Try again in 50ms until it exists
+         setTimeout(attachModalListener, 50);
+         return;
+     }
+
+     // Only attach once
+     if (!modal.dataset.listenerAttached) {
+         modal.addEventListener("hide.bs.modal", function (e) {
+             if (preventModalClose) {
+                 console.warn("⛔ Prevented modal from closing — add-place mode active");
+                 e.preventDefault();
+             }
+         });
+         modal.dataset.listenerAttached = "true";
+     }
+ }
+
+
+/* ---------------------------------------------------------
+* CALENDAR <-> MAP TOGGLE
+* --------------------------------------------------------- */
+window.toggleView = function () {
+
+
+ const mapVisible = iframeContainer.style.visibility === "visible";
+
+ // Map → Calendar
+ if (mapVisible) {
+
+     // Hide map
+     iframeContainer.style.visibility = "hidden";
+     iframeContainer.style.pointerEvents = "none";
+     iframeContainer.style.zIndex = "1";
+
+     iframe.style.visibility = "hidden";
+     iframe.style.pointerEvents = "none";
+
+     // Show calendar
+     calendar.style.visibility = "visible";
+     calendar.style.opacity = "1";
+     calendar.style.pointerEvents = "auto";
+     calendar.style.zIndex = "200";
+
+     toggleBtn.textContent = "🧭 View Map";
+ }
+
+ // Calendar → Map
+ else {
+
+     // Hide calendar
+     calendar.style.visibility = "hidden";
+     calendar.style.opacity = "0";
+     calendar.style.pointerEvents = "none";
+
+     // Show map
+     iframeContainer.style.visibility = "visible";
+     iframeContainer.style.pointerEvents = "auto";
+     iframeContainer.style.zIndex = "200";
+
+     iframe.style.visibility = "visible";
+     iframe.style.pointerEvents = "auto";
+
+     toggleBtn.textContent = "📅 View Calendar";
+ }
+};
+
+
+ // -----------------------------------------------------
+ // NEW PLACE CREATED
+ // -----------------------------------------------------
+ function fillAddPlaceForm(data) {
+     const mapping = {
+         prefix: "newPlacePrefix",
+         house_number: "newPlaceAddress1",
+         road: "newPlaceAddress1",
+         suburb: "newPlaceAddress2",
+         city: "newPlaceAddress2",
+         postcode: "newPlacePostcode",
+         url: "newPlaceURL"
+     };
+
+     // First, clear form fields
+     Object.values(mapping).forEach(id => {
+         const el = document.getElementById(id);
+         if (el) el.value = "";
+     });
+
+     // Fill fields
+     for (const key in data) {
+         if (!data.hasOwnProperty(key)) continue;
+         const fieldId = mapping[key];
+         if (!fieldId) continue;
+
+         const el = document.getElementById(fieldId);
+         if (!el) continue;
+
+         if (fieldId === "newPlaceAddress1") {
+             // Combine house_number + road
+             el.value = ((data.house_number || "") + " " + (data.road || "")).trim();
+         } else if (fieldId === "newPlaceAddress2") {
+             // Combine suburb + city
+             el.value = ((data.suburb || "") + " " + (data.city || "")).trim();
+         } else {
+             el.value = data[key] || "";
+         }
+     }
+
+     // Save lat/lng in dataset
+     const form = document.getElementById("addPlaceForm");
+     form.dataset.lat = data.lat;
+     form.dataset.lng = data.lng;
+
+     form.classList.remove("d-none");
+ }
+
+ function activateMapForAddPlace() {
+     const iframe = document.getElementById("iframe1");
+     const modal = document.getElementById("slot-modal");
+     const calendarScroll = document.getElementById("calendar-scroll");
+
+     addPlaceActive = true;         // your existing state variable
+     preventModalClose = true;      // stops accidental closing
+
+     iframe.classList.add("map-active");
+
+     // Dim everything else but keep modal visually visible
+     if (modal) {
+         modal.classList.add("dimmed");
+     }
+
+     if (calendarScroll) {
+         calendarScroll.classList.add("dimmed");
+     }
+
+     console.log("🗺️ Map activated for Add Place.");
+ }
+
+
+
+ function deactivateMapAfterPlaceSelected() {
+   const modal = document.getElementById("slot-modal");
+     const calendarScroll = document.getElementById("calendar-scroll");
+
+     iframe.classList.remove("map-active");
+
+     if (modal) {
+         modal.classList.remove("dimmed");
+     }
+
+     if (calendarScroll) {
+         calendarScroll.classList.remove("dimmed");
+     }
+
+     addPlaceActive = false;
+     preventModalClose = false;
+
+     console.log("📅 Map overlay deactivated; modal restored.");
+ }
+
+ function openAddResourceForm() {
+ const id = prompt("Enter new resource code (unique ID like R101):");
+ if (!id) return;
+
+ const Firstname = prompt("Enter first name:");
+ const Surname = prompt("Enter surname:");
+ const campaignMgremail = prompt("Enter campaign manager email (optional):") || "";
+ const addResourceForm = document.getElementById("addResourceForm");
+
+ if (!Firstname || !Surname) return alert("Firstname and Surname are required");
+
+ // Create resource object
+ window.resources[id] = {
+     Firstname,
+     Surname,
+     campaignMgremail
+ };
+
+ addResourceForm.classList.add("d-none");
+
+console.log("Added new resource:", window.resources[id]);
+}
+
+function openAddTaskTagForm() {
+   const tag = prompt("Enter new task tag code (e.g., L5):");
+   if (!tag) return;
+
+   if (window.task_tags[tag]) {
+       return alert("This task tag already exists!");
+   }
+
+   const description = prompt("Enter task tag description:");
+   if (!description) return;
+
+   window.task_tags[tag] = description;
+
+   console.log("Added new task tag:", tag, description);
+
+   updateConstantsUI(window.latestConstants, window.latestOptions);
+   populateAllSelects(window.latestOptions, window.latestConstants);
+   alert("Task tag added!");
+}
+
+
+
+async function getCalendarUpdate(API) {
+    const currentTab = getActiveElectionTab();
+    if (!currentTab) return;
+
+    try {
+        const election = currentTab.dataset.election;
+        console.log("📦 Fetching election:", election);
+
+        const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        console.log("📦 Backend response:", data);
+
+         window.plan = data.calendar_plan;
+
+         updateConstantsUI(data.constants, data.options);
+         populateAllSelects(data.options, data.constants);
+         console.log("📩 update calendar_plan::", plan);
+//               console.log("🔀 update places on DOM relaod :", places);
+//               console.log("🔀 update resources on DOM relaod :", resources);
+//               console.log("🔀 update areas on DOM relaod :", areas);
+//               console.log("🔀 update task_tags on DOM relaod :", task_tags);
+
+       window.plan = data.constants?.calendar_plan;
+        if (!window.plan || !window.plan.slots) {
+            console.warn("⚠️ No slots found in calendar_plan");
+            return;
+        }
+
+        loadCalendarPlan(window.plan);
+        console.log("✅ Calendar plan loaded into UI");
+
+    } catch (err) {
+        console.error("🚨 Error fetching calendar plan:", err);
+    }
+}
+  /* ---------- Sync Helpers for Single Select ---------- */
+window.selectedArea = null;
+window.selectedTask = null;
+
+function syncAreaSelect() {
+const sel = document.getElementById('areaSelect');
+if (!sel) return;
+sel.innerHTML = '';
+if (!window.selectedArea) return;
+sel.appendChild(new Option(window.selectedArea, window.selectedArea, true, true));
+sel.value = window.selectedArea;
+}
+
+function syncTaskSelect() {
+const sel = document.getElementById('activitySelect');
+if (!sel) return;
+sel.innerHTML = '';
+if (!window.selectedTask) return;
+sel.appendChild(new Option(window.selectedTask, window.selectedTask, true, true));
+sel.value = window.selectedTask;
+}
+
+
+  /* ---------- Return selected areas ---------- */
+
+  window.getSelectedAreas = function() {
+
+      return [...window.selectedAreas].map(name => ({
+          name: name
+      }));
+  };
+
+  window.getSelectedTasks = function() {
+
+      return [...window.selectedTasks].map(name => ({
+          name: name
+      }));
+  };
+
+
+  /* ---------- Recursive Tree Selector ---------- */
+  window.renderTreeSelector = function (tree, options = {}) {
+      const {
+          containerId,
+          emptyMessage = 'No items available',
+          accordionId,
+          allLabel = name => `All of ${name}`,
+          createButton
+      } = options;
+
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      if (
+          !tree ||
+          typeof tree !== 'object' ||
+          Object.keys(tree).length === 0
+      ) {
+          container.innerHTML =
+              `<div class="small text-muted p-2">${emptyMessage}</div>`;
+          return;
+      }
+
+      const acc = document.createElement('div');
+      acc.className = 'accordion';
+      acc.id = accordionId;
+
+      let idCounter = 0;
+
+      function renderLevel(node, parentElement, path = [], depth = 0) {
+          if (!node || typeof node !== 'object') return;
+
+          Object.entries(node).forEach(([name, children]) => {
+              const currentPath = [...path, name];
+
+              const hasChildren =
+                  children &&
+                  typeof children === 'object' &&
+                  Object.keys(children).length > 0;
+
+              // IMPORTANT: no \(...\)
+              const uniqueId = `${accordionId}-${idCounter++}`;
+
+              // -------------------------------------------------
+              // TOP LEVEL
+              // -------------------------------------------------
+              if (depth === 0) {
+                  const item = document.createElement('div');
+                  item.className =
+                      'accordion-item border-0 mb-1';
+
+                  item.innerHTML = `
+                      <h2 class="accordion-header">
+                          <button
+                              class="accordion-button collapsed py-2 shadow-none"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#${uniqueId}"
+                              aria-expanded="false">
+                              ${name}
+                          </button>
+                      </h2>
+
+                      <div
+                          id="${uniqueId}"
+                          class="accordion-collapse collapse">
+
+                          <div class="accordion-body p-0"></div>
+                      </div>
+                  `;
+
+                  const body =
+                      item.querySelector('.accordion-body');
+
+                  // Select entire top-level branch
+                (
+                      body,
+                      name,
+                      allLabel(name),
+                      'fw-semibold'
+                  );
+
+                  if (hasChildren) {
+                      renderLevel(
+                          children,
+                          body,
+                          currentPath,
+                          depth + 1
+                      );
+                  }
+
+                  parentElement.appendChild(item);
+                  return;
+              }
+
+              // -------------------------------------------------
+              // NESTED LEVEL
+              // -------------------------------------------------
+              const wrapper = document.createElement('div');
+              wrapper.className = 'border-0';
+
+              if (hasChildren) {
+                  const header = document.createElement('button');
+
+                  header.type = 'button';
+                  header.className =
+                      'btn btn-sm w-100 text-start py-2 shadow-none';
+
+                  header.style.paddingLeft =
+                      `${1 + depth * 1.25}rem`;
+
+                  header.setAttribute(
+                      'data-bs-toggle',
+                      'collapse'
+                  );
+
+                  header.setAttribute(
+                      'data-bs-target',
+                      `#${uniqueId}`
+                  );
+
+                  header.setAttribute(
+                      'aria-expanded',
+                      'false'
+                  );
+
+                  header.textContent = `▸ ${name}`;
+
+                  const collapse = document.createElement('div');
+                  collapse.id = uniqueId;
+                  collapse.className = 'collapse';
+
+                  const list = document.createElement('div');
+                  list.className =
+                      'list-group list-group-flush';
+
+                  // Select entire branch
+                  createButton(
+                      list,
+                      name,
+                      allLabel(name),
+                      ''
+                  );
+
+                  // Recursively render children
+                  renderLevel(
+                      children,
+                      list,
+                      currentPath,
+                      depth + 1
+                  );
+
+                  collapse.appendChild(list);
+
+                  wrapper.appendChild(header);
+                  wrapper.appendChild(collapse);
+
+              } else {
+                  // -------------------------------------------------
+                  // LEAF
+                  // -------------------------------------------------
+                  createButton(
+                      wrapper,
+                      name,
+                      name,
+                      ''
+                  );
+              }
+
+              parentElement.appendChild(wrapper);
+          });
+      }
+
+      renderLevel(tree, acc);
+
+      container.appendChild(acc);
+  };
+
+  function createAreaButton(
+    list,
+    areaName,
+    displayName,
+    indentClass = '',
+    selectedKey = 'selectedArea'
+) {
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.className =
+        `list-group-item list-group-item-action small ${indentClass}`;
+
+    button.textContent = displayName;
+    button.dataset.name = areaName;
+
+    if (window[selectedKey] === areaName) {
+        button.classList.add('active');
+    }
+
+    button.addEventListener('click', function () {
+        const accordion = list.closest('.accordion');
+
+        if (accordion) {
+            accordion
+                .querySelectorAll('.list-group-item')
+                .forEach(btn => btn.classList.remove('active'));
+        }
+
+        window[selectedKey] = areaName;
+
+        button.classList.add('active');
+
+        console.log('Area selected:', areaName);
+
+        syncAreaSelect();
+    });
+
+    list.appendChild(button);
+}
+
+function createTaskButton(
+  list,
+  taskCode,
+  displayName,
+  indentClass = '',
+  selectedKey = 'selectedTask'
+) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className =
+      `list-group-item list-group-item-action small ${indentClass}`;
+
+  button.textContent = displayName;
+  button.dataset.code = taskCode;
+
+  if (window[selectedKey] === taskCode) {
+      button.classList.add('active');
+  }
+
+  button.addEventListener('click', function () {
+      const accordion = list.closest('.accordion');
+
+      if (accordion) {
+          accordion
+              .querySelectorAll('.list-group-item')
+              .forEach(btn => btn.classList.remove('active'));
+      }
+
+      window[selectedKey] = taskCode;
+
+      button.classList.add('active');
+
+      console.log('Task selected:', taskCode);
+
+      syncTaskSelect();
+  });
+
+  list.appendChild(button);
+}
+
+// Example: If clicking a button triggers or displays the area tree
+document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
+    // Assuming window.areaTree is already populated or fetched from your map data
+    if (window.areaTree) {
+        console.log('Rendering area tree...');
+        renderTreeSelector(window.areaTree, {
+            containerId: 'areaAccordionContainer',
+            accordionId: 'areaSelectAccordion',
+            emptyMessage: 'No areas available for this map',
+            allLabel: name => `All of ${name}`,
+            createButton: createAreaButton
+        });
+    }
+});
+
+// Example: Same for the task tree button
+document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
+    if (window.taskTree) {
+        console.log('Rendering task tree...');
+        renderTreeSelector(window.taskTree, {
+            containerId: 'taskAccordionContainer',
+            accordionId: 'taskSelectAccordion',
+            emptyMessage: 'No task types available for this map',
+            allLabel: name => `All of ${name}`,
+            createButton: createTaskButton
+        });
+    }
+});
+
 
 
 
@@ -313,7 +1143,58 @@ var fmap;
      });
  };
 
+ window.iframeSwitchElection = function (electionName, data) {
+     // 1. UI: Update title inside the iframe
+     const title = document.getElementById("calendar-title");
+     if (title) title.textContent = `${electionName} Campaigns Calendar`;
 
+     // 2. Update Iframe Global State & Options
+     window.latestConstants = data.constants;
+     window.latestOptions = data.options;
+
+     if (typeof updateConstantsUI === "function") updateConstantsUI(data.constants, data.options);
+     if (typeof populateAllSelects === "function") populateAllSelects(data.options, data.constants);
+
+     window.plan = data.constants?.calendar_plan;
+     const mapfiles = data.constants?.mapfiles || [];
+     const lastMapFile = mapfiles.slice(-1)[0];
+
+     // 3. Inject context switch event into BAKED_DATA
+     window.BAKED_DATA = window.BAKED_DATA || [];
+     window.BAKED_DATA.push({
+         "type": "context_switch",
+         "election": String(electionName).toUpperCase().trim(),
+         "ts": Date.now()
+     });
+
+     // 4. Load Calendar inside the iframe
+     if (window.plan && window.plan.slots) {
+         if (typeof buildCalendarGrid === "function") buildCalendarGrid("calendar-grid", 45);
+         if (typeof populateDropdowns === "function") populateDropdowns();
+         if (typeof loadCalendarPlan === "function") loadCalendarPlan(window.plan);
+     }
+
+     // 5. Load Map inside the iframe
+     if (lastMapFile) {
+         const correctedPath = lastMapFile.includes('.')
+             ? lastMapFile
+             : `${lastMapFile}.html`;
+
+         // If you have a local iframe map changer or helper, invoke it here:
+         if (typeof changeIframeSrc === "function") {
+             changeIframeSrc(`/thru/${correctedPath}`);
+         } else {
+             window.location.href = `/thru/${correctedPath}`;
+         }
+     }
+ };
+
+ // Optional: Fallback message listener if the parent uses postMessage instead of direct function call
+ window.addEventListener("message", (event) => {
+     if (event.data && event.data.type === "iframeSwitchElection") {
+         window.iframeSwitchElection(event.data.electionName, event.data.data);
+     }
+ });
 
 
  window.MAP_READY = false;
@@ -2263,17 +3144,6 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
      };
 
 
- if (tooltipContent) {
-   tippy(div, {
-     content: tooltipContent,
-     hideOnClick: true,
-     allowHTML: true,
-     trigger: 'click',
-     interactive: true,
-     theme: 'light', // optional
-     appendTo: document.body,
-   });
- }
  div.removeAttribute("title");
  div.removeAttribute("data-info"); // if you're using this anywhere
 
@@ -2296,3 +3166,111 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
 
  return div;
 }
+
+// --- Inside your Iframe Script ---
+
+window.addEventListener("message", (event) => {
+    const data = event.data;
+
+    // Check if the message is instructing us to load a calendar plan
+    if (data && data.type === "loadCalendarPlan") {
+        console.log("📩 Iframe received loadCalendarPlan message:", data.plan);
+
+        if (typeof window.buildAndLoadCalendar === "function") {
+            window.buildAndLoadCalendar(data.plan);
+        } else {
+            console.warn("⚠️ buildAndLoadCalendar function is not defined in the iframe scope.");
+        }
+    }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("🔥 Iframe DOMContentloaded — initializing calendar & modal environment");
+
+    console.log("🔀 places on DOM relaod :", window.places);
+    console.log("🔀 resources on DOM relaod :", window.resources);
+    console.log("🔀 task_tags on DOM relaod :", window.task_tags);
+
+    // Call this function on startup to tell backend which election is active
+
+    console.log("📅 Calendar dropdowns populated…");
+    // Keep track of the active slot ID inside the iframe
+
+    // Call this once after map or modal generation
+    attachModalListener();
+
+    // Buttons (use correct IDs)
+    const switchToMapBtn = document.getElementById("switch-tomap-btn");
+    const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
+    const generateSummaryBtn = document.getElementById("generate-summary-btn");
+    const saveSlotBtn = document.getElementById("saveSlotBtn");
+    const clearSlotBtn = document.getElementById("clearSlotBtn");
+
+    // Attach button event handlers
+    switchToMapBtn.addEventListener("click", window.toggleView);
+    saveCalendarBtn.addEventListener("click", saveCalendarPlan);
+    generateSummaryBtn.addEventListener("click", generateSummaryReport);
+    saveSlotBtn.addEventListener("click", handleSaveSlot);
+    clearSlotBtn.addEventListener("click", handleClearSlot);
+    window.activeSlotId = null;
+
+    // 4. Build calendar UI BEFORE loading calendar data
+    console.log("📅 Building calendar UI…");
+    buildCalendarGrid("calendar-grid", 45);
+    populateDropdowns();
+    console.log("📅 Calendar UI ready.");
+
+    // 5. NOW load plan into fully created calendar
+    await getCalendarUpdate(window.API);
+    console.log("📅 Calendar data loaded.");
+
+
+
+
+    // --- MOVE THESE TO MAP.JS ---
+
+    window.BAKED_DATA =
+        window.BAKED_DATA ||
+        (parent && parent.BAKED_DATA) ||
+        [];
+
+    /* --- Top of map.js --- */
+    var fmap;
+
+    // 1. Build the calendar grid on startup (assuming container #calendar-grid exists inside the iframe)
+    if (typeof buildCalendarGrid === "function") {
+        buildCalendarGrid("calendar-grid", 45);
+        console.log("📅 Iframe calendar grid built.");
+    }
+
+    // 2. Populate any local dropdowns if options are available
+    if (typeof populateDropdowns === "function") {
+        populateDropdowns();
+    }
+
+    // 3. Attach event listeners to calendar elements (e.g., clicking slots)
+    // Example: Delegation listener for slot clicks inside the iframe grid
+    const calendarGrid = document.getElementById("calendar-grid");
+    if (calendarGrid) {
+        calendarGrid.addEventListener("click", (e) => {
+            const slotDiv = e.target.closest(".slot");
+            if (slotDiv) {
+                const slotId = slotDiv.dataset.id;
+                if (slotId && typeof openSlotModal === "function") {
+                    openSlotModal(slotId);
+                }
+            }
+        });
+    }
+
+    // 4. Attach handlers for modal action buttons (Save / Clear slot buttons inside the iframe modal)
+    const saveSlotBtn = document.getElementById("saveSlotBtn");
+    if (saveSlotBtn && typeof handleSaveSlot === "function") {
+        saveSlotBtn.addEventListener("click", handleSaveSlot);
+    }
+
+    const clearSlotBtn = document.getElementById("clearSlotBtn");
+    if (clearSlotBtn && typeof handleClearSlot === "function") {
+        clearSlotBtn.addEventListener("click", handleClearSlot);
+    }
+});

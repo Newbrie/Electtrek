@@ -92,232 +92,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 
 
 
-  /* ---------------------------------------------------------
-   * AWAIT TOGGLEVIEW OR UPDATE TABLE MESSAGES FROM USER
-   * --------------------------------------------------------- */
-
- window.addEventListener("message", async (event) => {
-   const data = event.data;
-
-   if (data?.type === "calendarAction") {
-       console.log("📩 Received calendarAction from map overlay:", data.action);
-       if (data.action === "save") {
-           await saveCalendarPlan();
-       } else if (data.action === "summary") {
-           generateSummaryReport();
-       } else if (data.action === "export") {
-           document.getElementById("export-html-btn")?.click();
-       }
-       return;
-   }
-
-   console.log("📩 Parent received message:", data, "from", event.origin);
-   // -----------------------------------------------------
-   // toggleView
-   // -----------------------------------------------------
-   if (data?.type === "toggleView" || data === "toggleView") {
-       console.log("📩 Received toggleView from iframe");
-       await window.toggleView();
-       return;
-   }
-
-   // -----------------------------------------------------
-   // TABLE UPDATE
-   // -----------------------------------------------------
-   if (data?.type === "update-table" || data === "update-table") {
-     console.log("Message received to update table")
-       await fetchTableData(data.stable);
-       return;
-   }
-
-     if (data?.type === "newPlaceCreated") {
-         document.getElementById("map-overlay").style.display = "none";
-         deactivateMapAfterPlaceSelected();
-
-         selectedPlaceData = data;
-         console.log("📦 message received to store selectedPlaceData:", selectedPlaceData);
-
-         fillAddPlaceForm(selectedPlaceData); // your existing function to fill the modal
-
-         // --- Append new place to window.places ---
-         if (!window.places) window.places = {};
-
-         // Use prefix as key, can be adjusted
-         const key = selectedPlaceData.prefix || `place_${Date.now()}`;
-
-         // Store object with whatever structure fillSelect expects
-         window.places[key] = {
-             name: `${selectedPlaceData.house_number || ""} ${selectedPlaceData.road || ""}, ${selectedPlaceData.suburb || ""} ${selectedPlaceData.city || ""}`.trim(),
-             lat: selectedPlaceData.lat,
-             lng: selectedPlaceData.lng,
-             postcode: selectedPlaceData.postcode
-         };
-
-         // --- Refresh the select dropdown ---
-         fillSelect("placeSelect", window.places);
-
-         window.latestConstants.places[key] = window.places[key];
-
-         updateConstantsUI(window.latestConstants, window.latestOptions);
-         // =====================================================
-         populateAllSelects(window.latestOptions, window.latestConstants);
-
-//         window.iframe.classList.add("dimmed");
-         preventModalClose = false;
-         addPlaceActive = false;
-     }
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Add Place button handler
-// ------------------------------
-document.getElementById("addPlaceBtn").addEventListener("click", () => {
-
-    const overlay = document.getElementById("map-overlay");
-    const overlayIframe = document.getElementById("overlay-iframe");
-
-    overlayIframe.src = document.getElementById("iframe1").src;
-    overlay.style.display = "block";
-
-    overlayIframe.onload = () => {
-        console.log("📌 Iframe loaded — sending enableAddPlace");
-        overlayIframe.contentWindow.postMessage(
-            { type: "enableAddPlace" },
-            "*"
-        );
-    };
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Save button handler
-// ------------------------------
-document.getElementById("saveNewPlace").addEventListener("click", () => {
-    const form = document.getElementById("addPlaceForm");
-
-    // Use the currently selected place data
-    const newPlace = selectedPlaceData;
-    if (!newPlace) {
-        console.error("No place data to save!");
-        return;
-    }
-
-    // Ensure places dict exists
-    if (!window.places) window.places = {};
-    window.places[newPlace.prefix] = newPlace;
-
-    // Update dropdown (only prefix)
-    fillSelect("placeSelect", window.places);
-
-    // Add marker permanently to FeatureGroup if available
-    const markerGroup = window.Featurelayers?.['marker'];
-    if (markerGroup && window.pinMarker) {
-        markerGroup.addLayer(window.pinMarker);
-
-        // Optionally track by prefix for later reference
-        if (!window.permanentMarkers) window.permanentMarkers = {};
-        window.permanentMarkers[newPlace.prefix] = window.pinMarker;
-
-        // Clear temporary pointer
-        window.pinMarker = null;
-    }
-
-    console.log("📌 New place saved:", newPlace);
-    console.log("📌 Updated places dict:", window.places);
-
-    // Hide mini-place form and restore overlay/iframe
-    form.classList.add("d-none");
-    const overlayIframe = document.getElementById("overlay-iframe");
-    if (overlayIframe) {
-        overlayIframe.classList.remove("dimmed");
-        overlayIframe.style.visibility = "hidden";
-    }
-
-    // Reset awaitingNewPlace flag
-    window.awaitingNewPlace = false;
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Show add-resource form
-// ------------------------------
-//
-document.getElementById("addResourceBtn").addEventListener("click", () => {
-    document.getElementById("addResourceForm").classList.remove("d-none");
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Show save-resource form
-// ------------------------------
-//
-document.getElementById("saveNewResource").addEventListener("click", () => {
-    const first = newResFirst.value.trim();
-    const last  = newResLast.value.trim();
-    const email = newResEmail.value.trim();
-
-    if (!first || !last) {
-        alert("Firstname and surname required");
-        return;
-    }
-
-    const code = (first[0] + last).toUpperCase();
-
-    const resourceObj = {
-        Firstname: first,
-        Surname: last,
-        campaignMgremail: email
-    };
-
-    // Update global state
-    window.resources[code] = resourceObj;
-
-    // ALSO update latestOptions (otherwise UI resets)
-    window.latestOptions.resources[code] = resourceObj;
-
-    populateDropdowns();
-    updateConstantsUI(window.latestConstants, window.latestOptions);
-    populateAllSelects(window.latestOptions, window.latestConstants);
-
-
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Show add-tasktag form
-// ------------------------------
-//
-document.getElementById("addTaskTagBtn").addEventListener("click", () => {
-    document.getElementById("addTaskTagForm").classList.remove("d-none");
-});
-
-// ------------------------------
-// IN CALENDAR MODAL Show save-tasktag form
-// ------------------------------
-//
-document.getElementById("saveNewTag").addEventListener("click", () => {
-    const code  = newTagCode.value.trim();
-    const label = newTagLabel.value.trim();
-
-    if (!code || !label) {
-        alert("Both code and label required");
-        return;
-    }
-
-    // Update global
-    window.task_tags[code] = label;
-
-    // ALSO update options so updateConstantsUI does not overwrite
-    window.latestOptions.task_tags[code] = label;
-
-    // Refresh UI
-    populateDropdowns();
-    updateConstantsUI(window.latestConstants, window.latestOptions);
-    populateAllSelects(window.latestOptions, window.latestConstants);
-    addTaskTagForm.classList.add("d-none");
-});
-
-console.log("🔀 places on DOM relaod :", window.places);
-console.log("🔀 resources on DOM relaod :", window.resources);
-console.log("🔀 task_tags on DOM relaod :", window.task_tags);
-
-    // Call this function on startup to tell backend which election is active
 
 
 // ------------------------------
@@ -328,17 +102,6 @@ await ensureTabsReady();
 // 2️⃣ Tell backend which election is active
 await setActiveElectionOnStartup();
 await refreshConstantsUI();
-
-// 4. Build calendar UI BEFORE loading calendar data
-console.log("📅 Building calendar UI…");
-buildCalendarGrid("calendar-grid", 45);
-populateDropdowns();
-console.log("📅 Calendar UI ready.");
-
-// 5. NOW load plan into fully created calendar
-await getCalendarUpdate(window.API);
-console.log("📅 Calendar data loaded.");
-
 
 /* ---------------------------------------------------------
  * Initial state — hide map + calendar, show login unless in dev
@@ -574,22 +337,7 @@ resourcesSelect?.addEventListener("blur", () => {
 
 
 
-  console.log("📅 Calendar dropdowns populated…");
-
-  // Buttons (use correct IDs)
-  const switchToMapBtn = document.getElementById("switch-tomap-btn");
-  const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
-  const generateSummaryBtn = document.getElementById("generate-summary-btn");
-  const saveSlotBtn = document.getElementById("saveSlotBtn");
-  const clearSlotBtn = document.getElementById("clearSlotBtn");
-
-  // Attach button event handlers
-  switchToMapBtn.addEventListener("click", window.toggleView);
-  saveCalendarBtn.addEventListener("click", saveCalendarPlan);
-  generateSummaryBtn.addEventListener("click", generateSummaryReport);
-  saveSlotBtn.addEventListener("click", handleSaveSlot);
-  clearSlotBtn.addEventListener("click", handleClearSlot);
-  // Attach listers to constants
+    // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 
   // 1. Define the reusable helper function
@@ -665,7 +413,7 @@ function handleBulkAction() {
     });
 }
 
-window.activeSlotId = null;
+
 
 // Ensure we only attach the listener ONCE
 const bulkBtn = document.getElementById("btnRunGroupAction");
