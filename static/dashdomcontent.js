@@ -333,73 +333,37 @@ console.log("📅 Calendar data loaded.");
  * Initial state — hide map + calendar, show login unless in dev
  * --------------------------------------------------------- */
 
-if (window.isDev) {
-    console.warn("⚠ DEV MODE: Skipping login screen");
 
-    console.log("Setting initial view: MAP visible");
+  // Normal login behaviour
 
-   // --- Map visible ---
-   iframeContainer.style.visibility = "visible";
-   iframeContainer.style.opacity = "1";
-   iframeContainer.style.pointerEvents = "auto";
-   iframeContainer.style.zIndex = "200";
+  console.log("Setting initial view: MAP visible");
 
-   iframe.style.visibility = "visible";
-   iframe.style.pointerEvents = "auto";
+ // --- Map visible ---
+ iframeContainer.style.visibility = "visible";
+ iframeContainer.style.opacity = "1";
+ iframeContainer.style.pointerEvents = "auto";
+ iframeContainer.style.zIndex = "200";
 
-   // --- Calendar hidden ---
-   calendar.style.visibility = "hidden";
-   calendar.style.opacity = "0";
-   calendar.style.pointerEvents = "none";
-   calendar.style.zIndex = "1";
+ iframe.style.visibility = "visible";
+ iframe.style.pointerEvents = "auto";
 
-   // --- Toggle button should switch TO the calendar ---
-   toggleBtn.textContent = "📅 View Calendar";
+ // --- Calendar hidden ---
+ calendar.style.visibility = "hidden";
+ calendar.style.opacity = "0";
+ calendar.style.pointerEvents = "none";
+ calendar.style.zIndex = "1";
 
-    window.loggedIn = true;
-
-} else {
-    // Normal login behaviour
-
-    console.log("Setting initial view: MAP visible");
-
-   // --- Map visible ---
-   iframeContainer.style.visibility = "visible";
-   iframeContainer.style.opacity = "1";
-   iframeContainer.style.pointerEvents = "auto";
-   iframeContainer.style.zIndex = "200";
-
-   iframe.style.visibility = "visible";
-   iframe.style.pointerEvents = "auto";
-
-   // --- Calendar hidden ---
-   calendar.style.visibility = "hidden";
-   calendar.style.opacity = "0";
-   calendar.style.pointerEvents = "none";
-   calendar.style.zIndex = "1";
-
-   // --- Toggle button should switch TO the calendar ---
-   toggleBtn.textContent = "📅 View Calendar";
+ // --- Toggle button should switch TO the calendar ---
+ toggleBtn.textContent = "📅 View Calendar";
 //    window.loggedIn = false;
-  window.loggedIn = true;
-}
+window.loggedIn = true;
 
 
-/* ---------------------------------------------------------
- * LOGIN state — show hidden map and calendar
- * --------------------------------------------------------- */
-
-passwordInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        loginBtn.click();
-    }
-});
 
 
- toggleBtn.addEventListener("click", async () => {
-       await window.toggleView();
-   });
+toggleBtn.addEventListener("click", async () => {
+     await window.toggleView();
+ });
 
 
 /* ---------------------------------------------------------
