@@ -3221,7 +3221,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("📅 Calendar UI ready.");
 
     // 5. NOW load plan into fully created calendar
-    await getCalendarUpdate(window.API);
+    getCalendarUpdate(window.API);
     console.log("📅 Calendar data loaded.");
 
 
