@@ -14,35 +14,6 @@
     <iframe id="iframe1" src="{{ url_for('thru', path=mapfile) }}"></iframe>
   </div>
 
-    <!-- Calendar Container -->
-    <div id="calendar">
-        <div id="calendar-header" class="container-fluid text-center">
-            <h2 id="calendar-title" class="mb-2">
-                {{ current_election }} Campaigns Calendar
-            </h2>
-
-            <div id="calendar-controls" class="d-flex justify-content-center gap-2 flex-wrap mb-2">
-                <button id="switch-tomap-btn" class="btn btn-tomap">🧭 Map</button>
-                <button id="save-calendar-btn" class="btn btn-primary">💾 Save Calendar</button>
-                <button id="generate-summary-btn" class="btn btn-secondary">📋 Generate Table</button>
-                <button id="export-html-btn" class="btn btn-info">🔐 Export HTML</button>
-            </div>
-        </div>
-
-        <div id="calendar-scroll" class="container-fluid">
-            <div id="calendar-grid" class="calendar-grid mt-4"></div>
-            <div id="summary-report" class="mt-4"></div>
-        </div>
-    </div>
-</div>
-
-
-<div id="map-overlay" class="map-overlay">
-<div id="map-overlay-container" class="map-overlay-container">
-    <iframe id="overlay-iframe" class="overlay-iframe" src=""></iframe>
-    <button id="close-overlay" class="overlay-close-btn">Close Map</button>
-</div>
-</div>
 {% endblock map %}
 
 {% block modals %}

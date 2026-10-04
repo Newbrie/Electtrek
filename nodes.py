@@ -2769,7 +2769,7 @@ class TreeNode:
                 <div id="calendar-header" class="container-fluid text-center">
 
                     <h2 id="calendar-title" class="mb-2">
-                        {current_election} Campaigns Calendar
+                        {c_election} Campaigns Calendar
                     </h2>
 
                     <div id="calendar-controls"
