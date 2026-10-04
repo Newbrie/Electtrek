@@ -202,7 +202,6 @@ window.selectNode = function(path) {
    * --------------------------------------------------------- */
    window.toggleView = function () {
 
-    if (loginScreen.style.visibility === "visible") return;
 
     const mapVisible = iframeContainer.style.visibility === "visible";
 

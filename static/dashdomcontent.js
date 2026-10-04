@@ -20,7 +20,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   window.iframeContainer = document.getElementById("iframe-container");
   window.iframe = document.getElementById("iframe1"); // the actual iframe element
   window.calendar = document.getElementById("calendar");
-  window.loginScreen = document.getElementById("loginScreen");
   window.loginBtn = document.getElementById("loginBtn");
   window.passwordInput = document.getElementById("password");
   window.loginMessage = document.getElementById("loginMessage");
@@ -337,7 +336,6 @@ console.log("📅 Calendar data loaded.");
 if (window.isDev) {
     console.warn("⚠ DEV MODE: Skipping login screen");
 
-    loginScreen.style.visibility = "hidden";
     console.log("Setting initial view: MAP visible");
 
    // --- Map visible ---
@@ -362,8 +360,7 @@ if (window.isDev) {
 
 } else {
     // Normal login behaviour
-//    loginScreen.style.visibility = "visible";
-    loginScreen.style.visibility = "hidden";
+
     console.log("Setting initial view: MAP visible");
 
    // --- Map visible ---
