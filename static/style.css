@@ -681,6 +681,14 @@ input:checked + .slider:before {
     transition: opacity .25s ease;
 }
 
+#calendar-grid {
+      width: 100%;
+  }
+
+  #summary-report {
+        width: 100%;
+    }
+
 
 #calendar-header {
     flex: 0 0 auto; /* fixed height */
@@ -690,6 +698,12 @@ input:checked + .slider:before {
     z-index: 300;
 }
 
+#calendar-controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
 /* Only this scrolls */
 
 #calendar-scroll {
@@ -715,6 +729,9 @@ input:checked + .slider:before {
     pointer-events: none !important;
 }
 /* Login screen on top of everything initially */
+
+
+
 
 #loginScreen {
     visibility: visible;
