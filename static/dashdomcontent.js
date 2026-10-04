@@ -99,6 +99,17 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
  window.addEventListener("message", async (event) => {
    const data = event.data;
 
+   if (data?.type === "calendarAction") {
+       console.log("📩 Received calendarAction from map overlay:", data.action);
+       if (data.action === "save") {
+           await saveCalendarPlan();
+       } else if (data.action === "summary") {
+           generateSummaryReport();
+       } else if (data.action === "export") {
+           document.getElementById("export-html-btn")?.click();
+       }
+       return;
+   }
 
    console.log("📩 Parent received message:", data, "from", event.origin);
    // -----------------------------------------------------

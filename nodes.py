@@ -2740,6 +2740,65 @@ class TreeNode:
             }}
         </style>
         """
+        calendar_overlay_html = f"""
+            <style>
+                #mapCalendarOverlay {{
+                    position: absolute;
+                    top: 10px;
+                    left: 50px;
+                    z-index: 1000;
+                    background: white;
+                    border: 1px solid #ccc;
+                    border-radius: 6px;
+                    padding: 10px 14px;
+                    width: 320px;
+                    max-height: 75vh;
+                    overflow-y: auto;
+                    font-family: sans-serif;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+                    display: none;
+                }}
+                #mapCalendarOverlay.visible {{ display: block; }}
+                #mapCalendarOverlay #calendar-title {{ font-size: 14px; margin-bottom: 8px; }}
+                #mapCalendarOverlay #calendar-controls button {{ font-size: 11px; padding: 4px 8px; }}
+                #mapCalendarOverlay .calendar-grid {{ font-size: 10px; }}
+            </style>
+
+            <div id="mapCalendarOverlay">
+                <div id="calendar-header" class="text-center">
+                    <h2 id="calendar-title" class="mb-2">{c_election} Campaigns Calendar</h2>
+
+                    <div id="calendar-controls" class="d-flex justify-content-center gap-2 flex-wrap mb-2">
+                        <button id="switch-tomap-btn" class="btn btn-tomap"
+                                onclick="toggleMapCalendarOverlay()">🧭 Map</button>
+                        <button id="save-calendar-btn" class="btn btn-primary"
+                                onclick="window.parent.postMessage({{type:'calendarAction', action:'save'}}, '*')">💾 Save</button>
+                        <button id="generate-summary-btn" class="btn btn-secondary"
+                                onclick="window.parent.postMessage({{type:'calendarAction', action:'summary'}}, '*')">📋 Table</button>
+                        <button id="export-html-btn" class="btn btn-info"
+                                onclick="window.parent.postMessage({{type:'calendarAction', action:'export'}}, '*')">🔐 Export</button>
+                    </div>
+                </div>
+
+                <div id="calendar-scroll">
+                    <div id="calendar-grid" class="calendar-grid mt-2"></div>
+                    <div id="summary-report" class="mt-2"></div>
+                </div>
+            </div>
+
+            <script>
+            window.toggleMapCalendarOverlay = function() {{
+                const panel = document.getElementById('mapCalendarOverlay');
+                if (!panel) return;
+                panel.classList.toggle('visible');
+            }};
+
+            // Wire up the existing search-bar "📅 Calendar" button
+            window.handleCalendarClick = function() {{
+                window.toggleMapCalendarOverlay();
+            }};
+            </script>
+            """
 
         # --- Search bar with map detection and one single searchMap() function
         search_bar_html = """
@@ -3202,6 +3261,7 @@ class TreeNode:
 
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
+        FolMap.get_root().html.add_child(folium.Element(calendar_overlay_html))
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
         FolMap.get_root().html.add_child(Element(custom_click_js))
         FolMap.get_root().html.add_child(folium.Element(title_html))
