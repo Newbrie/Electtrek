@@ -3203,14 +3203,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const switchToMapBtn = document.getElementById("switch-tomap-btn");
     const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
     const generateSummaryBtn = document.getElementById("generate-summary-btn");
-    const saveSlotBtn = document.getElementById("saveSlotBtn");
-    const clearSlotBtn = document.getElementById("clearSlotBtn");
+
 
     // Attach button event handlers
     switchToMapBtn.addEventListener("click", window.toggleView);
     saveCalendarBtn.addEventListener("click", saveCalendarPlan);
     generateSummaryBtn.addEventListener("click", generateSummaryReport);
-    saveSlotBtn.addEventListener("click", handleSaveSlot);
+
     clearSlotBtn.addEventListener("click", handleClearSlot);
     window.activeSlotId = null;
 
