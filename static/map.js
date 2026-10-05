@@ -1236,18 +1236,23 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      }
  }
 
+ // Change this:
+ // let toggleSent = false;
+ // window.handleCalendarClick = function() { ... }
 
-// 2. Calendar Toggle Logic
-let toggleSent = false;
+ // To this (bulletproof global state):
+ if (typeof window.toggleSent === 'undefined') {
+     window.toggleSent = false;
+ }
 
-function handleCalendarClick() {
-    if (!toggleSent) {
-        window.parent.postMessage({ type: "toggleView" }, "*");
-        toggleSent = true;
-        setTimeout(() => { toggleSent = false }, 500);
-    }
-}
-
+ window.handleCalendarClick = function() {
+     if (!window.toggleSent) {
+         window.parent.postMessage({ type: "toggleView" }, "*");
+         window.toggleSent = true;
+         setTimeout(() => { window.toggleSent = false; }, 500);
+     }
+ };
+ 
 // Explicitly expose it globally
 window.handleCalendarClick = handleCalendarClick;
 
