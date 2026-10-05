@@ -3203,7 +3203,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const switchToMapBtn = document.getElementById("switch-tomap-btn");
     const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
     const generateSummaryBtn = document.getElementById("generate-summary-btn");
-
+    const saveSlotBtn = document.getElementById("saveSlotBtn");
+    const clearSlotBtn = document.getElementById("clearSlotBtn");
     // 2. Attach event handlers using optional chaining (?.)
     // If the button exists, it binds the event. If it's null, it does nothing safely.
     switchToMapBtn?.addEventListener("click", () => {
@@ -3271,12 +3272,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 4. Attach handlers for modal action buttons (Save / Clear slot buttons inside the iframe modal)
-    const saveSlotBtn = document.getElementById("saveSlotBtn");
+
     if (saveSlotBtn && typeof handleSaveSlot === "function") {
         saveSlotBtn.addEventListener("click", handleSaveSlot);
     }
 
-    const clearSlotBtn = document.getElementById("clearSlotBtn");
+
     if (clearSlotBtn && typeof handleClearSlot === "function") {
         clearSlotBtn.addEventListener("click", handleClearSlot);
     }
