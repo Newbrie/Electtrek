@@ -3204,13 +3204,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
     const generateSummaryBtn = document.getElementById("generate-summary-btn");
 
+    // 2. Attach event handlers using optional chaining (?.)
+    // If the button exists, it binds the event. If it's null, it does nothing safely.
+    switchToMapBtn?.addEventListener("click", () => {
+        if (typeof window.toggleView === "function") {
+            window.toggleView();
+        } else if (window.parent && typeof window.parent.toggleView === "function") {
+            window.parent.toggleView();
+        }
+    });
 
-    // Attach button event handlers
-    switchToMapBtn.addEventListener("click", window.toggleView);
-    saveCalendarBtn.addEventListener("click", saveCalendarPlan);
-    generateSummaryBtn.addEventListener("click", generateSummaryReport);
+    saveCalendarBtn?.addEventListener("click", saveCalendarPlan);
+    generateSummaryBtn?.addEventListener("click", generateSummaryReport);
+    saveSlotBtn?.addEventListener("click", handleSaveSlot);
+    clearSlotBtn?.addEventListener("click", handleClearSlot);
 
-    clearSlotBtn.addEventListener("click", handleClearSlot);
     window.activeSlotId = null;
 
     // 4. Build calendar UI BEFORE loading calendar data
