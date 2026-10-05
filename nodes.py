@@ -3299,6 +3299,7 @@ class TreeNode:
         # Add custom CSS/JS
         FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
         FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
+        FolMap.add_js_link("electtrekresources", "https://newbrie.github.io/Electtrek/static/resources.js")
         FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
 
 
