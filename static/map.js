@@ -1290,17 +1290,11 @@ function openAddTaskTagForm() {
 }
 
 
-function getActiveElectionTab() {
-    return window.currentElectionName || "SH3"; // Fallback to "SH3" if not set yet
-}
-
-
 async function getCalendarUpdate(API) {
-    const currentTab = getActiveElectionTab();
-    if (!currentTab) return;
+    if (!window.currentElectionName) return;
 
     try {
-        const election = currentTab.dataset.election;
+        const election = window.currentElectionName;
         console.log("📦 Fetching election:", election);
 
         const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);

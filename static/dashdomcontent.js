@@ -210,16 +210,20 @@ resourcesToggle?.addEventListener("click", () => {
  });
 
 
-
-
 /* ---------------------------------------------------------
  * ELECTION DATA RESOURCE SELECTION REFRESH
  * --------------------------------------------------------- */
  const resourcesSelect = document.getElementById("resources");
 
+ // 1. Define the reusable helper function
+ window.getActiveElectionName = function() {
+     const activeTab = document.querySelector('#election-tabs .election-tab.active');
+     return activeTab ? activeTab.getAttribute('data-election') : null;
+ };
+
 resourcesSelect?.addEventListener("blur", () => {
     const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
-    const tab = getActiveElectionTab();
+    const tab = getActiveElectionName();
     if (!tab) return;
 
     fetch("/set-constant", {
@@ -335,11 +339,8 @@ resourcesSelect?.addEventListener("blur", () => {
     // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 
-  // 1. Define the reusable helper function
-  window.getActiveElectionName = function() {
-      const activeTab = document.querySelector('#election-tabs .election-tab.active');
-      return activeTab ? activeTab.getAttribute('data-election') : null;
-  };
+
+
 // Listtener for the bulkaction select
 // Use a named function to prevent accidental double-binding
 function handleBulkAction() {
