@@ -3233,12 +3233,13 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("📅 Calendar data loaded.");
 
     // --- Calendar hidden ---
-    calendar?.style.visibility = "hidden";
-    calendar?.style.opacity = "0";
-    calendar?.style.pointerEvents = "none";
-    calendar?.style.zIndex = "1";
-
-
+    const calendar = document.getElementById("calendar");
+    if (calendar) {
+        calendar.style.visibility = "hidden";
+        calendar.style.opacity = "0";
+        calendar.style.pointerEvents = "none";
+        calendar.style.zIndex = "1";
+    }
 
     // --- MOVE THESE TO MAP.JS ---
 
