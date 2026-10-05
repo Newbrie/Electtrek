@@ -1252,7 +1252,7 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
          setTimeout(() => { window.toggleSent = false; }, 500);
      }
  };
- 
+
 // Explicitly expose it globally
 window.handleCalendarClick = handleCalendarClick;
 
@@ -3193,26 +3193,29 @@ window.addEventListener("message", (event) => {
 document.addEventListener("DOMContentLoaded", () => {
     console.log("🔥 Iframe DOMContentloaded — initializing calendar & modal environment");
 
-    console.log("🔀 places on DOM relaod :", window.places);
-    console.log("🔀 resources on DOM relaod :", window.resources);
-    console.log("🔀 task_tags on DOM relaod :", window.task_tags);
+    console.log("🔀 places on DOM reload :", window.places);
+    console.log("🔀 resources on DOM reload :", window.resources);
+    console.log("🔀 task_tags on DOM reload :", window.task_tags);
 
-    // Call this function on startup to tell backend which election is active
+    // 1. Calendar Toggle Button
+    const calendarBtn = document.getElementById("backToCalendarBtn");
+    if (calendarBtn) {
+        calendarBtn.addEventListener("click", () => {
+            if (!window.toggleSent) {
+                window.parent.postMessage({ type: "toggleView" }, "*");
+                window.toggleSent = true;
+                setTimeout(() => { window.toggleSent = false; }, 500);
+            }
+        });
+    }
 
-    console.log("📅 Calendar dropdowns populated…");
-    // Keep track of the active slot ID inside the iframe
-
-    // Call this once after map or modal generation
-    attachModalListener();
-
-    // Buttons (use correct IDs)
+    // 2. Modal & View Switch Buttons
     const switchToMapBtn = document.getElementById("switch-tomap-btn");
-    const saveCalendarBtn = document.getElementById("save-calendar-btn"); // ✅ matches HTML ID
+    const saveCalendarBtn = document.getElementById("save-calendar-btn");
     const generateSummaryBtn = document.getElementById("generate-summary-btn");
     const saveSlotBtn = document.getElementById("saveSlotBtn");
     const clearSlotBtn = document.getElementById("clearSlotBtn");
-    // 2. Attach event handlers using optional chaining (?.)
-    // If the button exists, it binds the event. If it's null, it does nothing safely.
+
     switchToMapBtn?.addEventListener("click", () => {
         if (typeof window.toggleView === "function") {
             window.toggleView();
@@ -3228,48 +3231,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.activeSlotId = null;
 
-    // 4. Build calendar UI BEFORE loading calendar data
-    console.log("📅 Building calendar UI…");
+    // 3. Baked Data Setup
+    window.BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || [];
+    var fmap;
+
+    // 4. Build Calendar UI & Dropdowns ONCE
+    console.log("📅 Building calendar UI & dropdowns...");
     buildCalendarGrid("calendar-grid", 45);
     populateDropdowns();
     console.log("📅 Calendar UI ready.");
 
-    // 5. NOW load plan into fully created calendar
-    getCalendarUpdate(window.API);
-    console.log("📅 Calendar data loaded.");
-
-    // --- Calendar hidden ---
-    const calendar = document.getElementById("calendar");
-    if (calendar) {
-        calendar.style.visibility = "hidden";
-        calendar.style.opacity = "0";
-        calendar.style.pointerEvents = "none";
-        calendar.style.zIndex = "1";
+    // 5. Load Plan Data
+    if (typeof getCalendarUpdate === "function") {
+        getCalendarUpdate(window.API);
+        console.log("📅 Calendar data loaded.");
     }
 
-    // --- MOVE THESE TO MAP.JS ---
-
-    window.BAKED_DATA =
-        window.BAKED_DATA ||
-        (parent && parent.BAKED_DATA) ||
-        [];
-
-    /* --- Top of map.js --- */
-    var fmap;
-
-    // 1. Build the calendar grid on startup (assuming container #calendar-grid exists inside the iframe)
-    if (typeof buildCalendarGrid === "function") {
-        buildCalendarGrid("calendar-grid", 45);
-        console.log("📅 Iframe calendar grid built.");
-    }
-
-    // 2. Populate any local dropdowns if options are available
-    if (typeof populateDropdowns === "function") {
-        populateDropdowns();
-    }
-
-    // 3. Attach event listeners to calendar elements (e.g., clicking slots)
-    // Example: Delegation listener for slot clicks inside the iframe grid
+    // 6. Calendar Grid Delegated Slot Clicks
     const calendarGrid = document.getElementById("calendar-grid");
     if (calendarGrid) {
         calendarGrid.addEventListener("click", (e) => {
@@ -3283,14 +3261,17 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 4. Attach handlers for modal action buttons (Save / Clear slot buttons inside the iframe modal)
-
-    if (saveSlotBtn && typeof handleSaveSlot === "function") {
-        saveSlotBtn.addEventListener("click", handleSaveSlot);
+    // 7. Initial Calendar State (Hidden by default)
+    const calendar = document.getElementById("calendar");
+    if (calendar) {
+        calendar.style.visibility = "hidden";
+        calendar.style.opacity = "0";
+        calendar.style.pointerEvents = "none";
+        calendar.style.zIndex = "1";
     }
 
-
-    if (clearSlotBtn && typeof handleClearSlot === "function") {
-        clearSlotBtn.addEventListener("click", handleClearSlot);
+    // 8. Initialize Modals
+    if (typeof attachModalListener === "function") {
+        attachModalListener();
     }
 });

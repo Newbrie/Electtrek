@@ -2757,7 +2757,7 @@ class TreeNode:
                 <div style="display: flex; gap: 8px;">
                     <input type="text" id="searchInput" placeholder="Search..." />
                     <button onclick="searchMap()">Search</button>
-                    <button id="backToCalendarBtn" onclick="handleCalendarClick()">📅 Calendar</button>
+                    <button id="backToCalendarBtn">📅 Calendar</button>
                 </div>
             </div>
             """
