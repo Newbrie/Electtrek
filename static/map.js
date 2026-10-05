@@ -3866,11 +3866,12 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
       tooltipContent = `${resourceInfo?.Firstname || ''}${resourceInfo?.Surname || ''}`.trim();
       console.log("Resource Tooltips", tooltipContent);
  } else if (loz.type === "place") {
-       const placeInfo = window.places?.[loz.code];
-       tooltipContent = placeInfo?.tooltip;
-       console.log("Place Tooltip ",loz.code,placeInfo);
-       console.log("placeDetails keys:", Object.keys(window.places));
-       console.log("placeDetails values:", window.places);
+     const placeInfo = window.places?.[loz.code];
+     tooltipContent = placeInfo?.tooltip;
+     console.log("Place Tooltip ", loz.code, placeInfo);
+     // Safely guard these debug logs against undefined hydration states
+     console.log("placeDetails keys:", window.places ? Object.keys(window.places) : "Not loaded yet");
+     console.log("placeDetails values:", window.places);
  } else if (loz.type === "tag") {
        const tagInfo = window.task_tags?.[loz.code];
        tooltipContent = tagInfo;
