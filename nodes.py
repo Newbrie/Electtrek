@@ -3297,11 +3297,17 @@ class TreeNode:
 #            FolMap.add_child(folium.LatLngPopup())
 
         # Add custom CSS/JS
-        FolMap.add_css_link("electtrekprint", "https://newbrie.github.io/Electtrek/static/print.css")
-        FolMap.add_css_link("electtrekstyle", "https://newbrie.github.io/Electtrek/static/style.css")
-        FolMap.add_js_link("electtrekresources", "https://newbrie.github.io/Electtrek/static/resources.js")
-        FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js")
+        import time
+        # Option A: Use a timestamp so it changes every time you run it
+        cache_buster = int(time.time())
 
+        FolMap.add_css_link("electtrekprint", f"https://newbrie.github.io/Electtrek/static/print.css?v={cache_buster}")
+        FolMap.add_css_link("electtrekstyle", f"https://newbrie.github.io/Electtrek/static/style.css?v={cache_buster}")
+        FolMap.add_js_link("electtrekresources", f"https://newbrie.github.io/Electtrek/static/resources.js?v={cache_buster}")
+        FolMap.add_js_link("electtrekmap", f"https://newbrie.github.io/Electtrek/static/map.js?v={cache_buster}")
+
+        # OR Option B: Manually increment a version number whenever you push an update
+        # FolMap.add_js_link("electtrekmap", "https://newbrie.github.io/Electtrek/static/map.js?v=1.0.2")
 
         # Fit map to bounding box
         # 4. APPLY BOUNDS (Consolidated)
