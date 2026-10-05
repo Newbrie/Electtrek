@@ -3910,17 +3910,6 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("🔀 resources on DOM reload :", window.resources);
     console.log("🔀 task_tags on DOM reload :", window.task_tags);
 
-    // 1. Calendar Toggle Button
-    const calendarBtn = document.getElementById("backToCalendarBtn");
-    if (calendarBtn) {
-        calendarBtn.addEventListener("click", () => {
-            if (!window.toggleSent) {
-                window.parent.postMessage({ type: "toggleView" }, "*");
-                window.toggleSent = true;
-                setTimeout(() => { window.toggleSent = false; }, 500);
-            }
-        });
-    }
 
     // 2. Modal & View Switch Buttons
     const switchToMapBtn = document.getElementById("switch-tomap-btn");
@@ -3988,6 +3977,17 @@ document.addEventListener("DOMContentLoaded", () => {
         attachModalListener();
     }
    window.loggedIn = true;
+   // 1. Find the button in the DOM first
+    const toggleBtn = document.getElementById("backToCalendarBtn"); // Or whatever your button's actual ID is
+
+    // 2. Safely bind the listener if it exists
+    if (toggleBtn) {
+        toggleBtn.addEventListener("click", async () => {
+            await window.toggleView?.();
+        });
+    } else {
+        console.warn("⚠️ Toggle button not found in the DOM.");
+    }
     // --- Toggle button should switch TO the calendar ---
     toggleBtn.textContent = "📅 View Calendar";
    //    window.loggedIn = false;
