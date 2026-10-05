@@ -4022,33 +4022,29 @@ document.addEventListener("DOMContentLoaded", () => {
         calendar.style.pointerEvents = "none";
         calendar.style.zIndex = "1";
     }
-
     // 8. Initialize Modals
-    if (typeof attachModalListener === "function") {
-        attachModalListener();
-    }
-   window.loggedIn = true;
-   window.calendar = document.getElementById("calendar");
-   window.loginBtn = document.getElementById("loginBtn");
-   window.passwordInput = document.getElementById("password");
-   window.loginMessage = document.getElementById("loginMessage");
+        if (typeof attachModalListener === "function") {
+            attachModalListener();
+        }
 
-   // 1. Find the button in the DOM first
-    window.toggleBtn = document.getElementById("backToCalendarBtn"); // Or whatever your button's actual ID is
+        window.loggedIn = true;
+        window.calendar = document.getElementById("calendar");
+        window.loginBtn = document.getElementById("loginBtn");
+        window.passwordInput = document.getElementById("password");
+        window.loginMessage = document.getElementById("loginMessage");
 
-    // 2. Safely bind the listener if it exists
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", async () => {
-            await window.toggleView?.();
-        });
-    } else {
-        console.warn("⚠️ Toggle button not found in the DOM.");
-    }
-    // --- Toggle button should switch TO the calendar ---
-    toggleBtn.textContent = "📅 View Calendar";
-   //    window.loggedIn = false;
+        // 1. Find the toggle button in the DOM
+        window.toggleBtn = document.getElementById("backToCalendarBtn") || document.getElementById("switch-tomap-btn");
 
-   toggleBtn?.addEventListener("click", async () => {
-    await window.toggleView?.();
-});
-});
+        // 2. Set its initial button text
+        if (toggleBtn) {
+            toggleBtn.textContent = "📅 View Calendar";
+
+            // 3. Bind the click listener EXACTLY ONCE cleanly
+            toggleBtn.addEventListener("click", async () => {
+                await window.toggleView?.();
+            });
+        } else {
+            console.warn("⚠️ Toggle button not found in the DOM.");
+        }
+    });
