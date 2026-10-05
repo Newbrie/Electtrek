@@ -122,17 +122,7 @@ await refreshConstantsUI();
  iframe.style.pointerEvents = "auto";
 
 
- // --- Toggle button should switch TO the calendar ---
- toggleBtn.textContent = "📅 View Calendar";
-//    window.loggedIn = false;
-window.loggedIn = true;
-
-
-
-
-toggleBtn.addEventListener("click", async () => {
-     await window.toggleView();
- });
+ 
 
 
 /* ---------------------------------------------------------

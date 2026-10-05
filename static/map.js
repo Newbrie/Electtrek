@@ -1965,25 +1965,7 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      }
  }
 
- // Change this:
- // let toggleSent = false;
- // window.handleCalendarClick = function() { ... }
 
- // To this (bulletproof global state):
- if (typeof window.toggleSent === 'undefined') {
-     window.toggleSent = false;
- }
-
- window.handleCalendarClick = function() {
-     if (!window.toggleSent) {
-         window.parent.postMessage({ type: "toggleView" }, "*");
-         window.toggleSent = true;
-         setTimeout(() => { window.toggleSent = false; }, 500);
-     }
- };
-
-// Explicitly expose it globally
-window.handleCalendarClick = handleCalendarClick;
 
 
 // 3. Search Logic
@@ -4005,4 +3987,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof attachModalListener === "function") {
         attachModalListener();
     }
+   window.loggedIn = true;
+    // --- Toggle button should switch TO the calendar ---
+    toggleBtn.textContent = "📅 View Calendar";
+   //    window.loggedIn = false;
+
+   toggleBtn?.addEventListener("click", async () => {
+    await window.toggleView?.();
+});
 });
