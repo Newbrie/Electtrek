@@ -8,18 +8,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
     // Call the function to fetch the backend URL used as window.API
   await fetchBackendURL();
 
-  let selectedPlaceData = null; // Store data from the map
-  let preventModalClose = false;
-  let addPlaceActive = false;
-
-  /* ---------------------------------------------------------
-   * CALENDAR LOGIN AND CALENDAR BUILD
-   * --------------------------------------------------------- */
-
-  // elements
-  window.iframeContainer = document.getElementById("iframe-container");
-  window.iframe = document.getElementById("iframe1"); // the actual iframe element
-  window.toggleBtn = document.getElementById("b9");
 
 
 
@@ -37,55 +25,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
       console.log("📊 Auto-loading table:", table);
       await fetchTableData(table);
   }
-
-
-/* ---------------------------------------------------------
- * CALENDAR LOGIN AND CALENDAR BUILD
- * --------------------------------------------------------- */
-  const exportBtn = document.getElementById("export-html-btn");
- if (exportBtn) {
-   console.log("Initial view set: calendar visible, map hidden");
-   exportBtn.addEventListener("click", async () => {
-     await saveCalendarPlan();
-     const btn = document.getElementById("export-html-btn");
-     btn.disabled = true;
-     btn.textContent = "🔄 Exporting...";
-
-     try {
-       // Create a standalone HTML document
-
-       const htmlContent = createStandaloneHTML();
-
-       // Create a Blob and FormData to send as 'file'
-       const blob = new Blob([htmlContent], { type: "text/html" });
-       const formData = new FormData();
-       formData.append("file", blob, "calendar.html");
-
-       // Upload to development backend
-       const response = await fetch("/api/upload-and-protect", {
-         method: "POST",
-         body: formData
-       });
-
-       const result = await response.json();
-
-       if (!response.ok || !result.ok) {
-         throw new Error(result.error || "Upload failed");
-       }
-
-       btn.textContent = "✅ Exported & Protected";
-     } catch (err) {
-       console.error("Export failed:", err);
-       btn.textContent = "❌ Failed";
-     } finally {
-       setTimeout(() => {
-         btn.textContent = "🔐 Export Protected HTML";
-         btn.disabled = false;
-       }, 1500);
-     }
-   });
- }
-
 
 
 
@@ -107,18 +46,6 @@ await refreshConstantsUI();
   // Normal login behaviour
 
   console.log("Setting initial view: MAP visible");
-
- // --- Map visible ---
- iframeContainer.style.visibility = "visible";
- iframeContainer.style.opacity = "1";
- iframeContainer.style.pointerEvents = "auto";
- iframeContainer.style.zIndex = "200";
-
- iframe.style.visibility = "visible";
- iframe.style.pointerEvents = "auto";
-
-
-
 
 
 /* ---------------------------------------------------------
@@ -147,8 +74,6 @@ if (tableSelector) {
         await fetchTableData(e.target.value);
     });
 }
-
-
 
 
 

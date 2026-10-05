@@ -1105,6 +1105,54 @@ document.getElementById("saveNewTag")?.addEventListener("click", () => {
  }
 
 
+ /* ---------------------------------------------------------
+  * CALENDAR LOGIN AND CALENDAR BUILD
+  * --------------------------------------------------------- */
+   const exportBtn = document.getElementById("export-html-btn");
+  if (exportBtn) {
+    console.log("Initial view set: calendar visible, map hidden");
+    exportBtn.addEventListener("click", async () => {
+      await saveCalendarPlan();
+      const btn = document.getElementById("export-html-btn");
+      btn.disabled = true;
+      btn.textContent = "🔄 Exporting...";
+
+      try {
+        // Create a standalone HTML document
+
+        const htmlContent = createStandaloneHTML();
+
+        // Create a Blob and FormData to send as 'file'
+        const blob = new Blob([htmlContent], { type: "text/html" });
+        const formData = new FormData();
+        formData.append("file", blob, "calendar.html");
+
+        // Upload to development backend
+        const response = await fetch("/api/upload-and-protect", {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || "Upload failed");
+        }
+
+        btn.textContent = "✅ Exported & Protected";
+      } catch (err) {
+        console.error("Export failed:", err);
+        btn.textContent = "❌ Failed";
+      } finally {
+        setTimeout(() => {
+          btn.textContent = "🔐 Export Protected HTML";
+          btn.disabled = false;
+        }, 1500);
+      }
+    });
+  }
+
+
 /* ---------------------------------------------------------
 * CALENDAR <-> MAP TOGGLE
 * --------------------------------------------------------- */
@@ -3912,6 +3960,10 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("🔀 places on DOM reload :", window.places);
     console.log("🔀 resources on DOM reload :", window.resources);
     console.log("🔀 task_tags on DOM reload :", window.task_tags);
+
+    let selectedPlaceData = null; // Store data from the map
+    let preventModalClose = false;
+    let addPlaceActive = false;
 
 
     // 2. Modal & View Switch Buttons
