@@ -139,9 +139,6 @@ window.selectNode = function(path) {
   }
 
 
-
-
-
  window.getActiveElectionTab = () => document.querySelector("button.election-tab.active");
 
  /* ---------------------------------------------------------
