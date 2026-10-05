@@ -19,10 +19,6 @@ console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
   // elements
   window.iframeContainer = document.getElementById("iframe-container");
   window.iframe = document.getElementById("iframe1"); // the actual iframe element
-  window.calendar = document.getElementById("calendar");
-  window.loginBtn = document.getElementById("loginBtn");
-  window.passwordInput = document.getElementById("password");
-  window.loginMessage = document.getElementById("loginMessage");
   window.toggleBtn = document.getElementById("b9");
 
 
@@ -122,7 +118,7 @@ await refreshConstantsUI();
  iframe.style.pointerEvents = "auto";
 
 
- 
+
 
 
 /* ---------------------------------------------------------

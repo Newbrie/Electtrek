@@ -1109,50 +1109,59 @@ document.getElementById("saveNewTag")?.addEventListener("click", () => {
 * CALENDAR <-> MAP TOGGLE
 * --------------------------------------------------------- */
 window.toggleView = function () {
+    // 1. Target the local elements in the unified document
+    const mapElement = document.querySelector(".leaflet-container");
+    const calendar = document.getElementById("calendar-grid") || document.getElementById("calendar-container");
+    const toggleBtn = document.getElementById("backToCalendarBtn");
 
+    if (!mapElement || !calendar) {
+        console.warn("⚠️ Map or Calendar container not found for toggleView.");
+        return;
+    }
 
- const mapVisible = iframeContainer.style.visibility === "visible";
+    // Determine current state based on calendar visibility
+    const calendarVisible = calendar.style.visibility === "visible";
 
- // Map → Calendar
- if (mapVisible) {
+    // Map → Calendar
+    if (!calendarVisible) {
+        // Hide map
+        mapElement.style.visibility = "hidden";
+        mapElement.style.opacity = "0";
+        mapElement.style.pointerEvents = "none";
+        mapElement.style.zIndex = "1";
 
-     // Hide map
-     iframeContainer.style.visibility = "hidden";
-     iframeContainer.style.pointerEvents = "none";
-     iframeContainer.style.zIndex = "1";
+        // Show calendar
+        calendar.style.visibility = "visible";
+        calendar.style.opacity = "1";
+        calendar.style.pointerEvents = "auto";
+        calendar.style.zIndex = "200";
 
-     iframe.style.visibility = "hidden";
-     iframe.style.pointerEvents = "none";
+        if (toggleBtn) toggleBtn.textContent = "🧭 View Map";
+        console.log("📅 Switched to Calendar view");
+    }
+    // Calendar → Map
+    else {
+        // Hide calendar
+        calendar.style.visibility = "hidden";
+        calendar.style.opacity = "0";
+        calendar.style.pointerEvents = "none";
 
-     // Show calendar
-     calendar.style.visibility = "visible";
-     calendar.style.opacity = "1";
-     calendar.style.pointerEvents = "auto";
-     calendar.style.zIndex = "200";
+        // Show map
+        mapElement.style.visibility = "visible";
+        mapElement.style.opacity = "1";
+        mapElement.style.pointerEvents = "auto";
+        mapElement.style.zIndex = "200";
 
-     toggleBtn.textContent = "🧭 View Map";
- }
+        // Fix Leaflet tile rendering glitches when unhiding
+        const mapId = mapElement.id;
+        if (mapId && window[mapId] && typeof window[mapId].invalidateSize === "function") {
+            window[mapId].invalidateSize();
+        }
 
- // Calendar → Map
- else {
-
-     // Hide calendar
-     calendar.style.visibility = "hidden";
-     calendar.style.opacity = "0";
-     calendar.style.pointerEvents = "none";
-
-     // Show map
-     iframeContainer.style.visibility = "visible";
-     iframeContainer.style.pointerEvents = "auto";
-     iframeContainer.style.zIndex = "200";
-
-     iframe.style.visibility = "visible";
-     iframe.style.pointerEvents = "auto";
-
-     toggleBtn.textContent = "📅 View Calendar";
- }
+        if (toggleBtn) toggleBtn.textContent = "📅 View Calendar";
+        console.log("🗺️ Switched to Map view");
+    }
 };
-
 
  // -----------------------------------------------------
  // NEW PLACE CREATED
@@ -3919,11 +3928,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearSlotBtn = document.getElementById("clearSlotBtn");
 
     switchToMapBtn?.addEventListener("click", () => {
-        if (typeof window.toggleView === "function") {
-            window.toggleView();
-        } else if (window.parent && typeof window.parent.toggleView === "function") {
-            window.parent.toggleView();
-        }
+        window.toggleView?.();
     });
 
     saveCalendarBtn?.addEventListener("click", saveCalendarPlan);
@@ -3977,8 +3982,13 @@ document.addEventListener("DOMContentLoaded", () => {
         attachModalListener();
     }
    window.loggedIn = true;
+   window.calendar = document.getElementById("calendar");
+   window.loginBtn = document.getElementById("loginBtn");
+   window.passwordInput = document.getElementById("password");
+   window.loginMessage = document.getElementById("loginMessage");
+
    // 1. Find the button in the DOM first
-    const toggleBtn = document.getElementById("backToCalendarBtn"); // Or whatever your button's actual ID is
+    window.toggleBtn = document.getElementById("backToCalendarBtn"); // Or whatever your button's actual ID is
 
     // 2. Safely bind the listener if it exists
     if (toggleBtn) {
