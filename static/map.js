@@ -3861,9 +3861,10 @@ window.createLozengeElement = function createLozengeElement(loz, { selectable = 
    const areaInfo = window.areas?.[loz.code];
    tooltipContent = areaInfo?.tooltip_html || loz.info || null;
  } else if (loz.type === "resource") {
-   const resourceInfo = window.resources?.[loz.code];
-   tooltipContent = resourceInfo?.Firstname; + " " + resourceInfo?.Surname;
-   console.log("Resource Tooltips",tooltipContent);
+      const resourceInfo = window.resources?.[loz.code];
+      // Fixed: corrected to use standard ${} interpolation
+      tooltipContent = `${resourceInfo?.Firstname || ''}${resourceInfo?.Surname || ''}`.trim();
+      console.log("Resource Tooltips", tooltipContent);
  } else if (loz.type === "place") {
        const placeInfo = window.places?.[loz.code];
        tooltipContent = placeInfo?.tooltip;
