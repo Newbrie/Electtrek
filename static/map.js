@@ -1237,18 +1237,19 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
  }
 
 
-
-
 // 2. Calendar Toggle Logic
 let toggleSent = false;
-window.handleCalendarClick = function() {
+
+function handleCalendarClick() {
     if (!toggleSent) {
         window.parent.postMessage({ type: "toggleView" }, "*");
         toggleSent = true;
         setTimeout(() => { toggleSent = false }, 500);
     }
-};
+}
 
+// Explicitly expose it globally
+window.handleCalendarClick = handleCalendarClick;
 
 
 // 3. Search Logic
