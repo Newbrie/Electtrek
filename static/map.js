@@ -182,7 +182,7 @@ window.buildAndLoadCalendar = function(plan) {
 // ------------------------------
 // IN CALENDAR MODAL Add Place button handler
 // ------------------------------
-document.getElementById("addPlaceBtn").addEventListener("click", () => {
+document.getElementById("addPlaceBtn")?.addEventListener("click", () => {
 
     const overlay = document.getElementById("map-overlay");
     const overlayIframe = document.getElementById("overlay-iframe");
@@ -202,7 +202,7 @@ document.getElementById("addPlaceBtn").addEventListener("click", () => {
 // ------------------------------
 // IN CALENDAR MODAL Save button handler
 // ------------------------------
-document.getElementById("saveNewPlace").addEventListener("click", () => {
+document.getElementById("saveNewPlace")?.addEventListener("click", () => {
     const form = document.getElementById("addPlaceForm");
 
     // Use the currently selected place data
@@ -251,7 +251,7 @@ document.getElementById("saveNewPlace").addEventListener("click", () => {
 // IN CALENDAR MODAL Show add-resource form
 // ------------------------------
 //
-document.getElementById("addResourceBtn").addEventListener("click", () => {
+document.getElementById("addResourceBtn")?.addEventListener("click", () => {
     document.getElementById("addResourceForm").classList.remove("d-none");
 });
 
@@ -259,7 +259,7 @@ document.getElementById("addResourceBtn").addEventListener("click", () => {
 // IN CALENDAR MODAL Show save-resource form
 // ------------------------------
 //
-document.getElementById("saveNewResource").addEventListener("click", () => {
+document.getElementById("saveNewResource")?.addEventListener("click", () => {
     const first = newResFirst.value.trim();
     const last  = newResLast.value.trim();
     const email = newResEmail.value.trim();
@@ -294,7 +294,7 @@ document.getElementById("saveNewResource").addEventListener("click", () => {
 // IN CALENDAR MODAL Show add-tasktag form
 // ------------------------------
 //
-document.getElementById("addTaskTagBtn").addEventListener("click", () => {
+document.getElementById("addTaskTagBtn")?.addEventListener("click", () => {
     document.getElementById("addTaskTagForm").classList.remove("d-none");
 });
 
@@ -302,7 +302,7 @@ document.getElementById("addTaskTagBtn").addEventListener("click", () => {
 // IN CALENDAR MODAL Show save-tasktag form
 // ------------------------------
 //
-document.getElementById("saveNewTag").addEventListener("click", () => {
+document.getElementById("saveNewTag")?.addEventListener("click", () => {
     const code  = newTagCode.value.trim();
     const label = newTagLabel.value.trim();
 
