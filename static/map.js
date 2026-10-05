@@ -1118,48 +1118,42 @@ window.toggleView = function () {
         return;
     }
 
-    // Safely check if the calendar is currently shown (checking computed visibility or opacity)
-    const computedStyle = window.getComputedStyle(calendar);
-    const calendarVisible = computedStyle.visibility === "visible" && computedStyle.opacity !== "0";
+    // Explicitly check inline style or use a tracking attribute
+    const isCurrentlyCalendar = calendar.style.visibility === "visible";
 
-    // Map → Calendar (If calendar is currently hidden, show it)
-    if (!calendarVisible) {
-        // Hide map
+    if (!isCurrentlyCalendar) {
+        // --- Switch TO Calendar ---
         mapElement.style.visibility = "hidden";
         mapElement.style.opacity = "0";
         mapElement.style.pointerEvents = "none";
         mapElement.style.zIndex = "1";
 
-        // Show calendar
         calendar.style.visibility = "visible";
         calendar.style.opacity = "1";
         calendar.style.pointerEvents = "auto";
         calendar.style.zIndex = "200";
 
         if (toggleBtn) toggleBtn.textContent = "🧭 View Map";
-        console.log("📅 Successfully switched view to Calendar");
-    }
-    // Calendar → Map (If calendar is currently visible, hide it and show map)
-    else {
-        // Hide calendar
+        console.log("📅 Switched to Calendar view");
+    } else {
+        // --- Switch TO Map ---
         calendar.style.visibility = "hidden";
         calendar.style.opacity = "0";
         calendar.style.pointerEvents = "none";
 
-        // Show map
         mapElement.style.visibility = "visible";
         mapElement.style.opacity = "1";
         mapElement.style.pointerEvents = "auto";
         mapElement.style.zIndex = "200";
 
-        // Fix Leaflet tile rendering glitches
+        // Refresh Leaflet map size
         const mapId = mapElement.id;
         if (mapId && window[mapId] && typeof window[mapId].invalidateSize === "function") {
             window[mapId].invalidateSize();
         }
 
         if (toggleBtn) toggleBtn.textContent = "📅 View Calendar";
-        console.log("🗺️ Successfully switched view to Map");
+        console.log("🗺️ Switched to Map view");
     }
 };
 
