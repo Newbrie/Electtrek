@@ -121,11 +121,6 @@ await refreshConstantsUI();
  iframe.style.visibility = "visible";
  iframe.style.pointerEvents = "auto";
 
- // --- Calendar hidden ---
- calendar.style.visibility = "hidden";
- calendar.style.opacity = "0";
- calendar.style.pointerEvents = "none";
- calendar.style.zIndex = "1";
 
  // --- Toggle button should switch TO the calendar ---
  toggleBtn.textContent = "📅 View Calendar";

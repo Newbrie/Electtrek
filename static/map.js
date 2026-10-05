@@ -3232,6 +3232,11 @@ document.addEventListener("DOMContentLoaded", () => {
     getCalendarUpdate(window.API);
     console.log("📅 Calendar data loaded.");
 
+    // --- Calendar hidden ---
+    calendar?.style.visibility = "hidden";
+    calendar?.style.opacity = "0";
+    calendar?.style.pointerEvents = "none";
+    calendar?.style.zIndex = "1";
 
 
 
