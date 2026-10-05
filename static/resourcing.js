@@ -47,9 +47,17 @@ function createStandaloneHTML() {
     return `${h} ${ampm}`;
   }
 
+
   // Build 45-day x 2-hour grid
   function buildCalendarGrid(containerId, daysToShow = 45) {
     const container = document.getElementById(containerId);
+
+    // 👇 Guard check: Exit safely if the container isn't in the DOM yet
+    if (!container) {
+        console.warn(`⚠️ Calendar container #${containerId} not found in DOM. Skipping grid build.`);
+        return;
+    }
+
     container.innerHTML = "";
 
     const slots = ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM"];
