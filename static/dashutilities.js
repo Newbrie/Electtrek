@@ -139,10 +139,6 @@ window.selectNode = function(path) {
   }
 
 
-  // Put this right at the top of your main script file
- window.getActiveElectionTab = function() {
-     return document.querySelector("button.election-tab.active");
- };
  /* ---------------------------------------------------------
   * expose refreshTableData so iframe can call the parent
   * --------------------------------------------------------- */

@@ -1290,6 +1290,10 @@ function openAddTaskTagForm() {
 }
 
 
+function getActiveElectionTab() {
+    return window.currentElectionName || "SH3"; // Fallback to "SH3" if not set yet
+}
+
 
 async function getCalendarUpdate(API) {
     const currentTab = getActiveElectionTab();
@@ -1914,10 +1918,16 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      }
  };
 
- // Optional: Fallback message listener if the parent uses postMessage instead of direct function call
+ //  message listener when the parent uses postMessage instead of direct function call
  window.addEventListener("message", (event) => {
      if (event.data && event.data.type === "iframeSwitchElection") {
-         window.iframeSwitchElection(event.data.electionName, event.data.data);
+         // 1. Store it globally inside the iframe so it's always accessible
+         window.currentElectionName = event.data.electionName;
+
+         // 2. Pass it to your handler function
+         if (typeof window.iframeSwitchElection === "function") {
+             window.iframeSwitchElection(event.data.electionName, event.data.data);
+         }
      }
  });
 
