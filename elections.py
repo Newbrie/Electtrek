@@ -49,7 +49,7 @@ class ElectionContext:
             "mapfiles": self.ce.mapfiles, #a recent history of nodes navigated
             "DEVURLS": DEVURLS, # backend url options for prod and dev
             "messages":  messages, # flash messages
-            "iframeButtons": iframeButtons, "button urls for functions"
+            "iframeButtons": iframeButtons #button urls for functions
             }
 
 def _collect_leaves(node):
