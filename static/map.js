@@ -3,6 +3,8 @@ toggle between hiding and showing the dropdown content */
 
 var pack = window.flaskMessages ;
 
+let calendarData = {};
+
 // Now you can loop through them or push them to your array
 const pessages = [];
 if (pack && pack.length > 0) {
@@ -803,69 +805,7 @@ var showMore = function (msg,area) {
     }
   }
 
-  function openSlotModal(slotId) {
-      currentSlotId = slotId;
-      const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
 
-      // --- 🔴 HIGHLIGHT LOGIC START ---
-      // 1. Remove the red outline from any previously highlighted slot
-      document.querySelectorAll(".slot.selected-slot").forEach(s => {
-          s.classList.remove("selected-slot");
-      });
-
-      // 2. Set this slot as the active one and apply the red line class
-      if (slotDiv) {
-          window.activeSlotId = slotId;
-          slotDiv.classList.add("selected-slot");
-      }
-      // --- 🔴 HIGHLIGHT LOGIC END ---
-
-      // Ensure slot exists in calendarData
-      if (!calendarData[slotId]) calendarData[slotId] = {};
-      const data = calendarData[slotId]; // Reference, not copy
-
-      // Fill dropdowns
-      // 1. Fill ALL dropdowns first so the options exist in the DOM
-      fillSelect("activitySelect", window.activities); // <--- Add this (or your activity source)
-      fillSelect("placeSelect", window.places);
-      fillSelect("areaSelect", window.areas);         // <--- Add this (or your area source)
-      fillSelect("resourcesSelect", window.resources);
-
-      // 2. Infer missing fields from DOM lozenges if not already set
-      if (!data.resources) data.resources = [];
-
-      const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
-      lozenges.forEach(l => {
-          const type = l.dataset.type;
-          const code = l.dataset.code || l.textContent.trim();
-
-          if (!code || code === "undefined" || code === "null") return;
-
-          if (type === "activity" && !data.activity) {
-              data.activity = code;
-          } else if (type === "place" && !data.place) {
-              data.place = code;
-          } else if (type === "area" && !data.area) {
-              data.area = code;
-          } else if (type === "resource" && !data.resources.includes(code)) {
-              data.resources.push(code);
-          }
-      });
-
-      // 3. Pre-select dropdowns safely now that options exist
-      document.getElementById("activitySelect").value = data.activity || "";
-      document.getElementById("placeSelect").value = data.place || "";
-      document.getElementById("areaSelect").value = data.area || "";
-
-      const resSel = document.getElementById("resourcesSelect");
-      Array.from(resSel.options).forEach(opt => {
-          opt.selected = data.resources?.includes(opt.value) || false;
-      });
-
-      // Show modal
-      const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
-      modalInstance.show();
-  }
 
 
 
@@ -3967,7 +3907,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     // 2. Modal & View Switch Buttons
-    const switchToMapBtn = document.getElementById("switch-tomap-btn");
     const saveCalendarBtn = document.getElementById("save-calendar-btn");
     const generateSummaryBtn = document.getElementById("generate-summary-btn");
     const saveSlotBtn = document.getElementById("saveSlotBtn");
@@ -4034,7 +3973,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.loginMessage = document.getElementById("loginMessage");
 
         // 1. Find the toggle button in the DOM
-        window.toggleBtn = document.getElementById("backToCalendarBtn") || document.getElementById("switch-tomap-btn");
+        window.toggleBtn = document.getElementById("backToCalendarBtn");
 
         // 2. Set its initial button text
         if (toggleBtn) {

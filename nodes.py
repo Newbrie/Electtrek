@@ -2775,11 +2775,6 @@ class TreeNode:
                     <div id="calendar-controls"
                          class="d-flex justify-content-center gap-2 flex-wrap mb-2">
 
-                        <button id="switch-tomap-btn"
-                                class="btn btn-tomap">
-                            🧭 Map
-                        </button>
-
                         <button id="save-calendar-btn"
                                 class="btn btn-primary">
                             💾 Save Calendar
