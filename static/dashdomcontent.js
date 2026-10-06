@@ -4,8 +4,6 @@
 console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 document.addEventListener("DOMContentLoaded", async () => {
 
-  
-
   // -----------------------------------------------------------------
   // 1️⃣ RE-ARCHITECTED TAG DERIVATION PROCESSOR
   // -----------------------------------------------------------------
@@ -35,8 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // 🧱 Safe variable injection
-  {% set _options = options or {} %}
-  {% set _constants = constants or {} %}
+
   window.task_tags = {{ _options.get('task_tags', []) | tojson }};
   const { task_tags, outcome_tags } = deriveTags(window.task_tags);
   window.task_tags = task_tags;
