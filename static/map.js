@@ -3912,9 +3912,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveSlotBtn = document.getElementById("saveSlotBtn");
     const clearSlotBtn = document.getElementById("clearSlotBtn");
 
-    switchToMapBtn?.addEventListener("click", () => {
-        window.toggleView?.();
-    });
 
     saveCalendarBtn?.addEventListener("click", saveCalendarPlan);
     generateSummaryBtn?.addEventListener("click", generateSummaryReport);
