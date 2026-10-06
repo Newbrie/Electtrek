@@ -2,14 +2,98 @@
 // DOM Content Loaded Event XXXXXXXXXXXXXXXXXXXXXXXXXXXX
 // -----------------------------------------------------
 console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
+document.addEventListener("DOMContentLoaded", async () => {
 
-  document.addEventListener("DOMContentLoaded", async () => {
+  
 
-    // Call the function to fetch the backend URL used as window.API
-  await fetchBackendURL();
+  // -----------------------------------------------------------------
+  // 1️⃣ RE-ARCHITECTED TAG DERIVATION PROCESSOR
+  // -----------------------------------------------------------------
+  function deriveTags(tags = {}) {
+      const task_tags = {};
+      const outcome_tags = {
+          "M1": "Member",
+          "M2": "Pledge",
+          "M3": "HouseBoard",
+          "M4": "Postal Voter",
+          "M5": "Marked"
+      };
 
+      Object.entries(tags).forEach(([tag, description]) => {
+          const cleanTag = String(tag).trim();
+          if (cleanTag.startsWith("L") || cleanTag.startsWith("V")) {
+              task_tags[cleanTag] = description;
+          } else if (cleanTag.startsWith("M")) {
+              outcome_tags[cleanTag] = description;
+          }
+      });
 
+      window.task_tags = task_tags;
+      window.outcome_tags = outcome_tags;
+      console.log("🚀 ___Dash Task Tags synchronized:", window.task_tags, "Outcome Tags:", window.outcome_tags);
+      return { task_tags, outcome_tags };
+  }
 
+  // 🧱 Safe variable injection
+  {% set _options = options or {} %}
+  {% set _constants = constants or {} %}
+  window.task_tags = {{ _options.get('task_tags', []) | tojson }};
+  const { task_tags, outcome_tags } = deriveTags(window.task_tags);
+  window.task_tags = task_tags;
+  window.outcome_tags = outcome_tags;
+  window.resources = {{ _options.get('resources', []) | tojson }};
+  window.places = {{ _constants.get('places', []) | tojson }};
+  window.areas = {{ _options.get('areas', []) | tojson }};
+
+  console.log("Injected task_tags:", window.task_tags);
+  console.log("Injected resources:", window.resources);
+  console.log("Injected places:", window.places);
+  console.log("Injected areas:", window.areas);
+
+  window.DEVURLS = {{ _options.get('DEVURLS', {}) | tojson }};
+  window.isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
+  window.API = window.isDev ? window.DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
+
+  if (!window.isDev) {
+      const btn = document.getElementById("export-html-btn");
+      if (btn) {
+          btn.style.display = "none";
+      }
+  }
+
+  const startHour = 9, endHour = 21, slotDuration = 2;
+
+  // ----------------------------
+  // mapfile to parent Flash Message Handling (Now safe because the DOM is loaded)
+  // ----------------------------
+  const messages = {{ get_flashed_messages()|tojson|safe }} || [];
+  const logList = document.querySelector("#logwin .flashes");
+
+  function addMessageToLog(text) {
+      if (!logList) return;
+
+      const li = document.createElement("li");
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      const timestamp = `[${hh}:${mm}:${ss}]`;
+
+      li.textContent = `${timestamp} ${text}`;
+      logList.appendChild(li);
+      logList.scrollTop = logList.scrollHeight;
+  }
+
+  messages.forEach(msg => addMessageToLog(msg));
+
+  // ----------------------------
+  // iframe postMessage handling
+  // ----------------------------
+  if (typeof bindEvent === "function") {
+      bindEvent(window, "message", (e) => {
+          addMessageToLog(e.data?.type || String(e.data));
+      });
+  }
 
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD
@@ -75,7 +159,14 @@ if (tableSelector) {
     });
 }
 
-
+const iframeButtons = {
+    b3: "{{ url_for('stream_input') }}",
+    b4: "{{ url_for('leafletting') }}",
+    b5: "{{ url_for('kanban') }}",
+    b6: "{{ url_for('telling') }}",
+    b7: "{{ url_for('search') }}",
+    b8: "{{ url_for('dashboard') }}"
+};
 
 for (const [id, url] of Object.entries(iframeButtons)) {
     const btn = document.getElementById(id);

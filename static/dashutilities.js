@@ -321,36 +321,7 @@ function syncStreamsSelectWithTabs() {
   streamsSelect.value = document.querySelector('.election-tab.active')?.dataset.election || '';
 }
 
-async function fetchBackendURL() {
-    try {
-        const response = await fetch('/get-backend-url');
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
 
-        const data = await response.json();
-
-        const backendUrl = data.backend_url;
-
-        window.latestConstants  = data.constants;
-        window.latestOptions    = data.options;
-        window.current_election = data.current_election;
-
-        console.log("Backend URL:", backendUrl);
-
-        window.API = backendUrl.replace(/\/$/, "");
-
-        // Safe + correct
-        window.isDev =
-            backendUrl.includes("127.0.0.1") ||
-            backendUrl.includes("localhost");
-
-        console.log("__isDevelopment?", window.isDev);
-
-    } catch (error) {
-        console.error("Error fetching backend URL:", error);
-    }
-}
 
 
 

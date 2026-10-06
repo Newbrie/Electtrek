@@ -3894,12 +3894,46 @@ window.addEventListener("message", (event) => {
     }
 });
 
-document.addEventListener("DOMContentLoaded", () => {
+async function fetchBackendURL() {
+    try {
+        const response = await fetch('/get-backend-url');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const backendUrl = data.backend_url;
+
+        window.latestConstants  = data.constants;
+        window.latestOptions    = data.options;
+        window.current_election = data.current_election;
+
+        console.log("Backend URL:", backendUrl);
+
+        window.API = backendUrl.replace(/\/$/, "");
+
+        // Safe + correct
+        window.isDev =
+            backendUrl.includes("127.0.0.1") ||
+            backendUrl.includes("localhost");
+
+        console.log("__isDevelopment?", window.isDev);
+
+    } catch (error) {
+        console.error("Error fetching backend URL:", error);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
     console.log("🔥 Iframe DOMContentloaded — initializing calendar & modal environment");
 
     console.log("🔀 places on DOM reload :", window.places);
     console.log("🔀 resources on DOM reload :", window.resources);
     console.log("🔀 task_tags on DOM reload :", window.task_tags);
+
+    // Call the function to fetch the backend URL used as window.API
+    await fetchBackendURL();
 
     let selectedPlaceData = null; // Store data from the map
     let preventModalClose = false;
