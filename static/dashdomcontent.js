@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       logList.scrollTop = logList.scrollHeight;
   }
 
-  window.messages.forEach(msg => addMessageToLog(msg));
+  window.messages?.forEach(msg => addMessageToLog(msg));
 
   // ----------------------------
   // iframe postMessage handling
