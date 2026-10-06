@@ -3914,13 +3914,13 @@ async function fetchBackendURL() {
         window.messages = data.messages;
 
 
-        window.task_tags = data.options.get('task_tags', []);
-        window.resources = data.options.get('resources', []);
-        window.places = data.options.get('places', []);
-        window.areas = data.options.get('areas', []);
-        window.DEVURLS = data.options.get('DEVURLS', {});
+        window.task_tags = data.options?.get('task_tags', []);
+        window.resources = data.options?.get('resources', []);
+        window.places = data.options?.get('places', []);
+        window.areas = data.options?.get('areas', []);
+        window.DEVURLS = data.options?.get('DEVURLS', {});
 
-        window.iframeButtons = data.options.get('iframeButtons', {});
+        window.iframeButtons = data.options?.get('iframeButtons', {});
 
 
         console.log("Injected task_tags:", window.task_tags);
