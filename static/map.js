@@ -3894,6 +3894,7 @@ window.addEventListener("message", (event) => {
     }
 });
 
+
 async function fetchBackendURL() {
     try {
         const response = await fetch('/get-backend-url');
@@ -3910,13 +3911,37 @@ async function fetchBackendURL() {
         window.current_election = data.current_election;
 
         console.log("Backend URL:", backendUrl);
+        window.messages = data.messages;
+
+
+        window.task_tags = data.options.get('task_tags', []);
+        window.resources = data.options.get('resources', []);
+        window.places = data.options.get('places', []);
+        window.areas = data.options.get('areas', []);
+        window.DEVURLS = data.options.get('DEVURLS', {});
+
+        window.iframeButtons = data.options.get('iframeButtons', {});
+
+
+        console.log("Injected task_tags:", window.task_tags);
+        console.log("Injected resources:", window.resources);
+        console.log("Injected places:", window.places);
+        console.log("Injected areas:", window.areas);
 
         window.API = backendUrl.replace(/\/$/, "");
+        console.log("Backend API:", window.API);
 
         // Safe + correct
         window.isDev =
             backendUrl.includes("127.0.0.1") ||
             backendUrl.includes("localhost");
+
+        if (!window.isDev) {
+            const btn = document.getElementById("export-html-btn");
+            if (btn) {
+                btn.style.display = "none";
+            }
+        }
 
         console.log("__isDevelopment?", window.isDev);
 
@@ -3924,6 +3949,10 @@ async function fetchBackendURL() {
         console.error("Error fetching backend URL:", error);
     }
 }
+
+
+// 🧱 Safe variable injection
+
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("🔥 Iframe DOMContentloaded — initializing calendar & modal environment");
