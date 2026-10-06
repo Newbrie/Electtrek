@@ -3914,13 +3914,13 @@ async function fetchBackendURL() {
         window.messages = data.messages;
 
 
-        window.task_tags = data.options?.get('task_tags', []);
-        window.resources = data.options?.get('resources', []);
-        window.places = data.options?.get('places', []);
-        window.areas = data.options?.get('areas', []);
-        window.DEVURLS = data.options?.get('DEVURLS', {});
+        const taskTags = data.options?.task_tags || [];
+        const resources = data.options?.resources || [];
+        const places = data.options?.places || [];
+        const areas = data.options?.areas || [];
+        const DEVURLS = data.options?.DEVURLS || [];
 
-        window.iframeButtons = data.options?.get('iframeButtons', {});
+        const iframeButtons = data.options?.iframeButtons || [];
 
 
         console.log("Injected task_tags:", window.task_tags);
@@ -3948,6 +3948,7 @@ async function fetchBackendURL() {
     } catch (error) {
         console.error("Error fetching backend URL:", error);
     }
+
 }
 
 
