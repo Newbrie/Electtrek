@@ -2835,6 +2835,94 @@ class TreeNode:
         }
         </style>
         """
+
+        slotmodal_html = """
+        <div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+
+                    <div id="modalPopup" class="modal-header">
+                        <h5 class="modal-title">Edit Slot</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+
+
+                    <div class="modal-body">
+
+
+                        <form id="slotForm">
+
+                          <div class="mb-2">
+                              <label>Task Type</label>
+                              <select id="activitySelect" class="form-select mb-2" ></select>
+                              <div id="taskAccordionContainer"
+                                   class="border rounded p-2"
+                                   style="max-height: 300px; overflow-y: auto;">
+                              </div>
+                              <button id="addTaskTagBtn" type="button" class="btn btn-sm btn-primary mt-1">➕ Add Task Type</button>
+                          </div>
+
+                          <div id="addTaskTagForm" class="border p-2 mt-2 d-none">
+                              <h6>New Task Type</h6>
+                              <input id="newTagCode" class="form-control mb-1" placeholder="Task type code">
+                              <input id="newTagLabel" class="form-control mb-1" placeholder="Task type label">
+                              <button id="saveNewTag" type="button" class="btn btn-success btn-sm mt-1">Save Task Type</button>
+                          </div>
+
+                          <div class="mb-2">
+                              <label>Resources</label>
+                              <select id="resourcesSelect" class="form-select" multiple></select>
+                              <button id="addResourceBtn" type="button" class="btn btn-sm btn-primary mt-1">➕ Add Resource</button>
+                          </div>
+
+                          <div id="addResourceForm" class="border p-2 mt-2 d-none">
+                              <h6>New Resource</h6>
+                              <input id="newResFirst" class="form-control mb-1" placeholder="First name">
+                              <input id="newResLast" class="form-control mb-1" placeholder="Surname">
+                              <input id="newResEmail" class="form-control mb-1" placeholder="Email">
+                              <button id="saveNewResource" type="button" class="btn btn-success btn-sm mt-1">Save Resource</button>
+                          </div>
+
+                          <div class="mb-2">
+                              <label>Place</label>
+                              <select id="placeSelect" class="form-select"></select>
+                              <button id="addPlaceBtn" type="button" class="btn btn-sm btn-primary mt-1">➕ Add Place</button>
+                          </div>
+
+                          <div id="addPlaceForm" class="border p-2 mt-2 d-none">
+                              <h6>New Place</h6>
+                              <input id="newPlacePrefix" class="form-control mb-1" placeholder="Prefix (e.g., Four Points Hotel)">
+                              <input id="newPlaceAddress1" class="form-control mb-1" placeholder="Address line 1">
+                              <input id="newPlaceAddress2" class="form-control mb-1" placeholder="City / Town">
+                              <input id="newPlacePostcode" class="form-control mb-1" placeholder="Postcode">
+                              <input id="newPlaceURL" class="form-control mb-1" placeholder="Website URL (optional)">
+                              <button id="saveNewPlace" type="button" class="btn btn-success btn-sm mt-1">Save Place</button>
+                          </div>
+
+                          <div class="mb-2">
+                              <label>Area</label>
+                              <select id="areaSelect" class="form-select mb-2" ></select>
+                              <div id="areaAccordionContainer"
+                                   class="border rounded p-2"
+                                   style="max-height: 300px; overflow-y: auto;">
+                              </div>
+                          </div>
+                      </form>
+
+                    </div>
+
+
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-danger" id="clearSlotBtn">Clear Slot</button>
+                        <button class="btn btn-primary" id="saveSlotBtn">Save</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        """
+
 #        FolMap.get_root().html.add_child(Element(css))
 # no need for this if map left of nav buttons
         folium.TileLayer(
@@ -3267,6 +3355,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
         FolMap.get_root().html.add_child(folium.Element(calendar_html))
+        FolMap.get_root().html.add_child(folium.Element(slotmodal_html))
         FolMap.get_root().html.add_child(folium.Element(reverse_geocode_js))
         FolMap.get_root().html.add_child(Element(custom_click_js))
         FolMap.get_root().html.add_child(folium.Element(title_html))
