@@ -1158,7 +1158,7 @@ document.getElementById("saveNewTag")?.addEventListener("click", () => {
 * --------------------------------------------------------- */
 window.toggleView = function () {
     const mapElement = document.querySelector(".leaflet-container");
-    const calendar = document.getElementById("calendar-grid") || document.getElementById("calendar-container");
+    const calendar = document.getElementById("calendar"); // 🎯 Target the main #calendar wrapper
     const toggleBtn = document.getElementById("backToCalendarBtn");
 
     if (!mapElement || !calendar) {
@@ -1166,8 +1166,9 @@ window.toggleView = function () {
         return;
     }
 
-    // Explicitly check inline style or use a tracking attribute
-    const isCurrentlyCalendar = calendar.style.visibility === "visible";
+    // Safely check computed style to see if it's currently visible
+    const computedVisibility = window.getComputedStyle(calendar).visibility;
+    const isCurrentlyCalendar = computedVisibility === "visible";
 
     if (!isCurrentlyCalendar) {
         // --- Switch TO Calendar ---
@@ -1204,7 +1205,6 @@ window.toggleView = function () {
         console.log("🗺️ Switched to Map view");
     }
 };
-
  // -----------------------------------------------------
  // NEW PLACE CREATED
  // -----------------------------------------------------
