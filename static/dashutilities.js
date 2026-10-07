@@ -190,7 +190,7 @@ window.selectNode = function(path) {
     }
 
     // 4. Refresh Parent Data Tables if needed
-    await fetchTableData("nodelist_xref");
+    await contentWindow.fetchTableData("nodelist_xref");
 };
 
 
@@ -206,7 +206,7 @@ window.deleteElection = async function(electionName) {
   const resp = await res.json();
   if (resp.success && resp.electiontabs_html) {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-    await fetchTableData('nodelist_xref');
+    await contentWindow.fetchTableData('nodelist_xref');
     syncStreamsSelectWithTabs();
   } else alert("Could not delete election: " + (resp.error || "Unknown error"));
 };
@@ -225,8 +225,8 @@ window.addElection = async function() {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
     syncStreamsSelectWithTabs();
     updateConstantsUI(resp.constants, resp.options);
-    populateAllSelects(resp.options, resp.constants);
-    await fetchTableData('nodelist_xref');
+    contentWindow.populateAllSelects(resp.options, resp.constants);
+    await contentWindow.fetchTableData('nodelist_xref');
   } else alert("Error adding election: " + resp.error);
 };
 

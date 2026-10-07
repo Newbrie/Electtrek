@@ -228,9 +228,8 @@ window.refreshConstantsUI = function(callback) {
 
             if (callback) callback(data);
             return data.constants;
-        })
-        .catch(err => {
-            console.error("Failed to refresh constants:", err);
-            alert("Failed to load constants. Check server logs.");
-        });
+        }).catch(err => {
+          console.error("Failed to refresh constants:", err);
+          alert(`Failed to load constants: ${err.message}`); // <--- Change this to see the true error
+    });
 }

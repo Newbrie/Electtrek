@@ -47,10 +47,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const params = new URLSearchParams(window.location.search);
   const table = params.get("loadTable");
   console.log("___ Table being reloaded ", table);
-  console.log("___ Is Function ? ", typeof fetchTableData);
-  if (table && typeof fetchTableData === "function") {
+  console.log("___ Is Function ? ", typeof contentWindow.fetchTableData);
+  if (table && typeof contentWindow.fetchTableData === "function") {
       console.log("📊 Auto-loading table:", table);
-      await fetchTableData(table);
+      await contentWindow.fetchTableData(table);
   }
 
 
@@ -94,11 +94,11 @@ const changeIframe = (url) => changeIframeSrc(url);
 * --------------------------------------------------------- */
 if (tableSelector) {
     tableSelector.addEventListener("click", async (e) => {
-        await fetchTableData(e.target.value);
+        await contentWindow.fetchTableData(e.target.value);
     });
 
     tableSelector.addEventListener("change", async (e) => {
-        await fetchTableData(e.target.value);
+        await contentWindow.fetchTableData(e.target.value);
     });
 }
 
@@ -180,7 +180,7 @@ resourcesSelect?.addEventListener("blur", () => {
 
         if (resp.constants) {
             updateConstantsUI(resp.constants, resourcesSelect.options); // ✅ pass defined options
-            populateAllSelects(resourcesSelect.options, resp.constants);
+            contentWindow.populateAllSelects(resourcesSelect.options, resp.constants);
         }
 
         if (!resp.success) {
@@ -235,7 +235,7 @@ resourcesSelect?.addEventListener("blur", () => {
             }
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            await fetchTableData("nodelist_xref");
+            await contentWindow.fetchTableData("nodelist_xref");
         }
 
         // REASSIGN
@@ -260,7 +260,7 @@ resourcesSelect?.addEventListener("blur", () => {
             select.dataset.oldParentNid = newParentNid;
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            await fetchTableData("nodelist_xref");
+            await contentWindow.fetchTableData("nodelist_xref");
         }
 
     } catch (err) {
