@@ -1755,14 +1755,16 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      // Since Folium injects the elements dynamically on click, we intercept
      // the Bootstrap event at the document root level where it always bubbles up.
 
-     document.addEventListener('hidden.bs.modal', async (event) => {
-        if (event.target.id !== 'slotModal')
-            return;
-        console.log("🎯 Modal closed. Syncing...");
-        if (typeof window.syncBackend === "function") {
-            await window.syncBackend();
-        }
-        });
+     const slotModalEl = document.getElementById("slotModal");
+      if (slotModalEl) {
+          slotModalEl.addEventListener('hidden.bs.modal', event => {
+              // Forcefully sweep away any stuck backdrops and body locks every time it closes
+              document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              console.log("🧹 Modal hidden event fired: backdrop and body locks cleared.");
+          });
+      }
 
      // Global console manual test hook
      window.triggerManualDebugClose = () => {
