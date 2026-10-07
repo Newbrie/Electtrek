@@ -397,8 +397,12 @@ bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing 
 document.getElementById("btnRunGroupAction").addEventListener("click", handleBulkAction);
 // 4. Initial Load
 
-const dataPath = document.getElementById('territory');
-selectNode(dataPath);
+// 4. Initial Load - Safely extract the string from the display path span
+const territoryEl = document.getElementById('display-path');
+const dataPath = territoryEl ? (territoryEl.textContent || "SH3") : "SH3";
 
+if (typeof selectNode === "function" && dataPath) {
+    selectNode(dataPath);
+}
 
 });
