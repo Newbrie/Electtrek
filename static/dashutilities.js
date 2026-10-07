@@ -189,9 +189,91 @@ window.selectNode = function(path) {
     }
 
     // 4. Refresh Parent Data Tables if needed
-    await iframeWin.fetchTableData("nodelist_xref");
+    await fetchTableData("nodelist_xref");
 };
 
+async function fetchTableData(tableName) {
+  const old = pessages.pop();
+  const ul = parent.document.getElementById("logwin");
+  const li = parent.document.createElement("li");
+
+  const PARTY_COLORS = {
+    O: "brown", R: "cyan", C: "blue", S: "red",
+    LD: "yellow", G: "limegreen", I: "indigo",
+    PC: "darkred", SD: "orange", Z: "#006064",
+    W: "white", X: "darkgray"
+  };
+   const table = document.getElementById("content-table");
+   const tabTitle = document.getElementById("selectedTitle");
+
+   if (!table || !tabTitle) {
+       console.error("❌ Required DOM elements not found: #content-table or #selectedTitle");
+       return;
+   }
+
+   const tabHead = table.querySelector("thead");
+   const tabBody = table.querySelector("tbody");
+
+   if (!tabHead || !tabBody) {
+       console.error("❌ Table structure invalid: missing <thead> or <tbody>");
+       return;
+   }
+
+   try {
+       const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
+       if (!res.ok) throw new Error(`Server returned ${res.status}`);
+       const data = await res.json();
+
+       if (!Array.isArray(data) || data.length < 3) {
+           console.error("❌ Invalid data format received:", data);
+           return;
+       }
+
+       const [columnHeaders, rows, title] = data;
+//       tabTitle.textContent = title;
+       tabHead.innerHTML = "";
+       tabBody.innerHTML = "";
+
+       // --- 1. Filtered Table header ---
+       const headRow = document.createElement("tr");
+       headRow.innerHTML = `<th>?</th>` +
+           columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in header
+               .map(h => `<th>${h.toUpperCase()}</th>`)
+               .join('');
+       tabHead.appendChild(headRow);
+
+       const selectedParty = document.getElementById("yourparty")?.value;
+
+       // --- 2. Filtered Table body ---
+       rows.forEach(record => {
+           const row = document.createElement("tr");
+
+           // Extract the NID for the checkbox (it exists in 'record' but we won't show it in a cell)
+           const nid = record['nid'] || record['id'] || "";
+
+           row.innerHTML = `<td>
+               <input type="checkbox"
+                      class="selectRow"
+                      value="${nid}"
+                      data-nid="${nid}">
+             </td>` +
+             columnHeaders
+               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in rows
+               .map(h => {
+                   const value = record[h] ?? "";
+                   const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
+                   return `<td style="background-color:${color}">${value}</td>`;
+               }).join('');
+
+           tabBody.appendChild(row);
+       });
+
+       console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
+   } catch (err) {
+       console.error("❌ Error fetching table data:", err);
+   }
+}
 
 
 window.deleteElection = async function(electionName) {
@@ -205,7 +287,7 @@ window.deleteElection = async function(electionName) {
   const resp = await res.json();
   if (resp.success && resp.electiontabs_html) {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-    await iframeWin.fetchTableData('nodelist_xref');
+    await fetchTableData('nodelist_xref');
     syncStreamsSelectWithTabs();
   } else alert("Could not delete election: " + (resp.error || "Unknown error"));
 };
@@ -224,8 +306,8 @@ window.addElection = async function() {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
     syncStreamsSelectWithTabs();
     updateConstantsUI(resp.constants, resp.options);
-    iframeWin.populateAllSelects(resp.options, resp.constants);
-    await iframeWin.fetchTableData('nodelist_xref');
+//    iframeWin.populateAllSelects(resp.options, resp.constants);
+    await fetchTableData('nodelist_xref');
   } else alert("Error adding election: " + resp.error);
 };
 

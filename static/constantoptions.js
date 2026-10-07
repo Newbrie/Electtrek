@@ -225,7 +225,7 @@ window.refreshConstantsUI = function(callback) {
             window.latestOptions = data.options;
 
             window.updateConstantsUI(data.constants, data.options);
-            iframeWin.populateAllSelects(data.options, data.constants);
+//            iframeWin.populateAllSelects(data.options, data.constants);
 
             if (callback) callback(data);
             return data.constants;

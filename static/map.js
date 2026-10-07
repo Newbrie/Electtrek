@@ -950,7 +950,7 @@ document.getElementById("saveNewResource")?.addEventListener("click", () => {
 
     populateDropdowns();
     updateConstantsUI(window.latestConstants, window.latestOptions);
-    populateAllSelects(window.latestOptions, window.latestConstants);
+//    populateAllSelects(window.latestOptions, window.latestConstants);
 
 
 });
@@ -985,7 +985,7 @@ document.getElementById("saveNewTag")?.addEventListener("click", () => {
     // Refresh UI
     populateDropdowns();
     updateConstantsUI(window.latestConstants, window.latestOptions);
-    populateAllSelects(window.latestOptions, window.latestConstants);
+//    populateAllSelects(window.latestOptions, window.latestConstants);
     addTaskTagForm.classList.add("d-none");
 });
 
@@ -1276,7 +1276,7 @@ function openAddTaskTagForm() {
    console.log("Added new task tag:", tag, description);
 
    updateConstantsUI(window.latestConstants, window.latestOptions);
-   populateAllSelects(window.latestOptions, window.latestConstants);
+//   populateAllSelects(window.latestOptions, window.latestConstants);
    alert("Task tag added!");
 }
 
@@ -1297,7 +1297,7 @@ async function getCalendarUpdate(API) {
          window.plan = data.calendar_plan;
 
          updateConstantsUI(data.constants, data.options);
-         populateAllSelects(data.options, data.constants);
+//         populateAllSelects(data.options, data.constants);
          console.log("📩 update calendar_plan::", plan);
 //               console.log("🔀 update places on DOM relaod :", places);
 //               console.log("🔀 update resources on DOM relaod :", resources);
@@ -1867,7 +1867,7 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      window.latestOptions = data.options;
 
      if (typeof updateConstantsUI === "function") updateConstantsUI(data.constants, data.options);
-     if (typeof populateAllSelects === "function") populateAllSelects(data.options, data.constants);
+//     if (typeof populateAllSelects === "function") populateAllSelects(data.options, data.constants);
 
      window.plan = data.constants?.calendar_plan;
      const mapfiles = data.constants?.mapfiles || [];
@@ -3283,89 +3283,6 @@ async function getVIData(path) {
 function displayMap (url) {
 		window.location.href = url;
 	};
-
-async function fetchTableData(tableName) {
-  const old = pessages.pop();
-  const ul = parent.document.getElementById("logwin");
-  const li = parent.document.createElement("li");
-
-  const PARTY_COLORS = {
-    O: "brown", R: "cyan", C: "blue", S: "red",
-    LD: "yellow", G: "limegreen", I: "indigo",
-    PC: "darkred", SD: "orange", Z: "#006064",
-    W: "white", X: "darkgray"
-  };
-   const table = document.getElementById("content-table");
-   const tabTitle = document.getElementById("selectedTitle");
-
-   if (!table || !tabTitle) {
-       console.error("❌ Required DOM elements not found: #content-table or #selectedTitle");
-       return;
-   }
-
-   const tabHead = table.querySelector("thead");
-   const tabBody = table.querySelector("tbody");
-
-   if (!tabHead || !tabBody) {
-       console.error("❌ Table structure invalid: missing <thead> or <tbody>");
-       return;
-   }
-
-   try {
-       const res = await fetch(`/get_table/${tableName}`, { credentials: "same-origin" });
-       if (!res.ok) throw new Error(`Server returned ${res.status}`);
-       const data = await res.json();
-
-       if (!Array.isArray(data) || data.length < 3) {
-           console.error("❌ Invalid data format received:", data);
-           return;
-       }
-
-       const [columnHeaders, rows, title] = data;
-//       tabTitle.textContent = title;
-       tabHead.innerHTML = "";
-       tabBody.innerHTML = "";
-
-       // --- 1. Filtered Table header ---
-       const headRow = document.createElement("tr");
-       headRow.innerHTML = `<th>?</th>` +
-           columnHeaders
-               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in header
-               .map(h => `<th>${h.toUpperCase()}</th>`)
-               .join('');
-       tabHead.appendChild(headRow);
-
-       const selectedParty = document.getElementById("yourparty")?.value;
-
-       // --- 2. Filtered Table body ---
-       rows.forEach(record => {
-           const row = document.createElement("tr");
-
-           // Extract the NID for the checkbox (it exists in 'record' but we won't show it in a cell)
-           const nid = record['nid'] || record['id'] || "";
-
-           row.innerHTML = `<td>
-               <input type="checkbox"
-                      class="selectRow"
-                      value="${nid}"
-                      data-nid="${nid}">
-             </td>` +
-             columnHeaders
-               .filter(h => h.toLowerCase() !== 'nid') // 🎯 Skip NID in rows
-               .map(h => {
-                   const value = record[h] ?? "";
-                   const color = (selectedParty && h === selectedParty) ? (PARTY_COLORS[selectedParty] || 'inherit') : '';
-                   return `<td style="background-color:${color}">${value}</td>`;
-               }).join('');
-
-           tabBody.appendChild(row);
-       });
-
-       console.log(`✅ TABLE "${tableName}" populated with ${rows.length} rows.`);
-   } catch (err) {
-       console.error("❌ Error fetching table data:", err);
-   }
-}
 
 
 
