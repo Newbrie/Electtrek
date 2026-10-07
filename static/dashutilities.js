@@ -109,10 +109,9 @@
         return;
     }
 
-    // 🎯 Always grab it fresh and safe right here, local to this call
     const iframeWin = document.getElementById("iframe1")?.contentWindow;
 
-    // 1. UI: Highlight the active tab on the parent
+    // 1. UI: Highlight active tab
     document.querySelectorAll(".election-tab").forEach(tab =>
         tab.classList.remove("active")
     );
@@ -130,11 +129,17 @@
 
     const data = await res.json();
 
-    // 3. Tell the iframe to handle its internal UI, calendar, and map updates
+    // 3. 🗺️ FIX MAP: Dynamically load the correct mapfile into the iframe src
+    const iframeEl = document.getElementById("iframe1");
+    if (iframeEl && data.mapfile) {
+        // Sets the iframe source to your Flask route handling the map path
+        iframeEl.src = `/thru/${data.mapfile}`;
+    }
+
+    // 4. Tell iframe to handle its internal UI / calendar updates if already loaded
     if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
         iframeWin.iframeSwitchElection(electionName, data);
     } else {
-        // Fallback message passing if direct access is blocked by cross-origin policies
         iframeWin?.postMessage({
             type: "iframeSwitchElection",
             electionName: electionName,
@@ -142,7 +147,14 @@
         }, "*");
     }
 
-    // 4. Refresh Parent Data Tables if needed
+    // 5. 🎯 FIX ACCORDION: Initialize or refresh the sidebar from iframe's areaTree once loaded
+    setTimeout(() => {
+        if (typeof initAccordionFromIframe === "function") {
+            initAccordionFromIframe();
+        }
+    }, 400); // Small buffer to let the iframe document spin up its scripts
+
+    // 6. Refresh Parent Data Tables
     if (typeof fetchTableData === "function") {
         await fetchTableData("nodelist_xref");
     }
