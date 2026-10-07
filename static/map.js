@@ -719,53 +719,38 @@ var showMore = function (msg,area) {
 
   // --- Slot Modal Handlers ---
   async function handleSaveSlot() {
-      if (!currentSlotId) return;
+    if (!currentSlotId) return;
 
-      const activity = document.getElementById("activitySelect").value;
-      const place = document.getElementById("placeSelect").value;
+    const activity = document.getElementById("activitySelect").value;
+    const place = document.getElementById("placeSelect").value;
 
-      // 🛡️ Grab selected areas, falling back to option text if value is missing/undefined
-      const areaSelectEl = document.getElementById("areaSelect");
-      const areas = areaSelectEl
-        ? Array.from(areaSelectEl.selectedOptions).map(o => {
-            let val = o.value;
-            // If value is missing, empty, or the literal string "undefined", fall back to text content
-            if (!val || val === "undefined" || val === "null") {
-              val = o.textContent.trim();
-            }
-            return {
-              nid: val,
-              name: o.textContent.trim()
-            };
-          }).filter(a => a.nid && a.nid !== "undefined")
-        : [];
+    // 🛡️ Grab selected areas, falling back to option text if value is missing/undefined
+    const areaSelectEl = document.getElementById("areaSelect");
+    const areas = areaSelectEl
+      ? Array.from(areaSelectEl.selectedOptions).map(o => {
+          let val = o.value;
+          // If value is missing, empty, or the literal string "undefined", fall back to text content
+          if (!val || val === "undefined" || val === "null") {
+            val = o.textContent.trim();
+          }
+          return {
+            nid: val,
+            name: o.textContent.trim()
+          };
+        }).filter(a => a.nid && a.nid !== "undefined")
+      : [];
 
-      const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions)
-        .map(o => o.value)
-        .filter(val => val && val !== "undefined");
+    const resources = Array.from(document.getElementById("resourcesSelect").selectedOptions)
+      .map(o => o.value)
+      .filter(val => val && val !== "undefined");
 
-      calendarData[currentSlotId] = { activity, place, areas, resources };
+    calendarData[currentSlotId] = { activity, place, areas, resources };
 
-      redrawSlot(currentSlotId, calendarData[currentSlotId]);
-      console.log(`💾 Slot ${currentSlotId} saved.`, calendarData[currentSlotId]);
+    redrawSlot(currentSlotId, calendarData[currentSlotId]);
+    console.log(`💾 Slot ${currentSlotId} saved.`, calendarData[currentSlotId]);
 
-      await saveCalendarPlan();
-
-      // --- MODAL CLEANUP FIX ---
-      const modalEl = document.getElementById("slotModal");
-      const modalInstance = bootstrap.Modal.getInstance(modalEl);
-      if (modalInstance) {
-          modalInstance.hide();
-      } else {
-          // Fallback if instance wasn't tracked cleanly
-          modalEl.classList.remove('show');
-          modalEl.style.display = 'none';
-      }
-
-      // Forcefully clear any stuck Bootstrap backdrops and body locks
-      document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
-      document.body.classList.remove('modal-open');
-      document.body.style.overflow = '';
+    await saveCalendarPlan();
+    bootstrap.Modal.getInstance(document.getElementById("slotModal")).hide();
   }
 
   async function handleClearSlot() {
