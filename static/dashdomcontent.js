@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", async () => {
          iframeWin.iframeSwitchElection(electionName, data);
      } else {
          // Fallback message passing if direct access is blocked by cross-origin policies
-         document.iframeWin.postMessage({
+         iframeWin?.postMessage({
              type: "iframeSwitchElection",
              electionName: electionName,
              data: data
