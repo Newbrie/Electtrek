@@ -13,6 +13,46 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ----------------------------
   const logList = document.querySelector("#logwin .flashes");
 
+  window.switchElection = async function (electionName) {
+     if (!electionName || electionName === "undefined") {
+         console.warn("⚠️ switchElection called without a valid electionName:", electionName);
+         return;
+     }
+
+     // 1. UI: Highlight the active tab on the parent
+     document.querySelectorAll(".election-tab").forEach(tab =>
+         tab.classList.remove("active")
+     );
+     const clickedTab = [...document.querySelectorAll(".election-tab")]
+         .find(tab => tab.dataset.election === electionName);
+     if (clickedTab) clickedTab.classList.add("active");
+
+     // 2. Backend: Set the election session
+     const res = await fetch("/set-election", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         credentials: "same-origin",
+         body: JSON.stringify({ election: electionName })
+     });
+
+     const data = await res.json();
+
+     // 3. Tell the iframe to handle its internal UI, calendar, and map updates
+     if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
+         iframeWin.iframeSwitchElection(electionName, data);
+     } else {
+         // Fallback message passing if direct access is blocked by cross-origin policies
+         document.iframeWin.postMessage({
+             type: "iframeSwitchElection",
+             electionName: electionName,
+             data: data
+         }, "*");
+     }
+
+     // 4. Refresh Parent Data Tables if needed
+     await fetchTableData("nodelist_xref");
+  };
+
   function addMessageToLog(text) {
       if (!logList) return;
 
