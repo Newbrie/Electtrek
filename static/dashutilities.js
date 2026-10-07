@@ -148,9 +148,6 @@
     }
 };
 
-    // 4. Refresh Parent Data Tables if needed
-    await fetchTableData("nodelist_xref");
- };
 
  function addMessageToLog(text) {
      if (!logList) return;
