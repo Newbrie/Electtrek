@@ -345,8 +345,8 @@ const territoryEl = document.getElementById('display-path');
 const initialPath = territoryEl ? (territoryEl.textContent.trim() || "UNITED_KINGDOM") : "UNITED_KINGDOM";
 
 const initAccordionFromIframe = () => {
-    const iframeEl = document.getElementById("iframe1");
-    const iframeWin = iframeEl?.contentWindow;
+  const iframeWin = document.getElementById("iframe1")?.contentWindow;
+
 
     // Check if the iframe's areaTree is available
     if (iframeWin && iframeWin.areaTree) {

@@ -210,6 +210,8 @@ window.updateConstantsUI = function (constants, options) {
 
 window.refreshConstantsUI = function(callback) {
     console.log("📩 refreshing constants");
+    const iframeWin = document.getElementById("iframe1")?.contentWindow;
+
 
     return fetch("/get-constants", { credentials: "same-origin" })
         .then(res => {

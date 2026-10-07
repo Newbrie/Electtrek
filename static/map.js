@@ -1680,54 +1680,50 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
  * @returns {Promise<boolean>} Resolves true if sync is clean or succeeds, false on network errors.
  */
  window.syncBackend = function() {
-     // 1. Safely retrieve the BAKED_DATA array across window contexts
-     var parentWindow = window.parent || window;
-     const iframe = document.getElementById('iframe1');
-     const iframeWin = iframe?.contentWindow;
+    // 1. Grab BAKED_DATA locally from the iframe window (with parent fallback just in case)
+    const parentWindow = window.parent || window;
+    const eventLog = window.BAKED_DATA || parentWindow.BAKED_DATA || [];
 
-     // Fallback order: Iframe data -> Parent/Main window data -> empty array
-     const eventLog = (iframeWin && iframeWin.BAKED_DATA) || parentWindow.BAKED_DATA || window.BAKED_DATA || [];
+    // 2. Filter down strictly to events that are explicitly NOT synced
+    const unsynced = eventLog.filter(e => e.synced !== true);
 
-     // 2. Filter down strictly to events that are explicitly NOT synced
-     // Treating undefined/missing 'synced' properties as un-synced (false)
-     const unsynced = eventLog.filter(e => e.synced !== true);
+    if (unsynced.length === 0) {
+        console.log("ℹ️ No un-synced local changes found.");
+        return Promise.resolve(true);
+    }
 
-     if (unsynced.length === 0) {
-         console.log("ℹ️ No un-synced local changes found.");
-         return Promise.resolve(true);
-     }
+    console.log(`🚀 Batch uploading ${unsynced.length} un-synced changes to server...`);
 
-     console.log(`🚀 Batch uploading ${unsynced.length} un-synced changes to server...`);
+    // 3. POST the unsynced changes to the server
+    return fetch('/upload_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ events: unsynced })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Network collection upload synchronization failed");
 
-     // 3. POST the unsynced changes wrapped in an 'events' object to match the backend expectations
-     return fetch('/upload_data', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ events: unsynced })
-     })
-     .then(res => {
-         if (!res.ok) throw new Error("Network collection upload synchronization failed");
+        // 4. Mark successfully uploaded elements as synced
+        unsynced.forEach(e => {
+            e.synced = true;
+        });
 
-         // 4. Mark successfully uploaded elements as synced in the active memory array
-         unsynced.forEach(e => {
-             e.synced = true;
-         });
+        // 5. Sync state to LocalStorage
+        localStorage.setItem('CANVASS_BAKED_DATA', JSON.stringify(eventLog));
+        console.log("🚀 Sync complete! Remote server updated and local cache synchronized.");
 
-         // 5. Sync state to LocalStorage for safety
-         localStorage.setItem('CANVASS_BAKED_DATA', JSON.stringify(eventLog));
-         console.log("🚀 Sync complete! Remote server updated and local cache synchronized.");
+        // 6. Disable the deploy button on the parent page (since the iframe can reach parentWindow)
+        const deployBtn = parentWindow.document.getElementById('deploy-btn') || document.getElementById('deploy-btn');
+        if (deployBtn) deployBtn.disabled = true;
 
-         // Clear warning indicators or toggle save button elements if present
-         var deployBtn = document.getElementById('deploy-btn') || parentWindow.document.getElementById('deploy-btn');
-         if (deployBtn) deployBtn.disabled = true;
-
-         return true;
-     })
-     .catch(err => {
-         console.error("❌ Failed to push batch payload modifications to database container:", err);
-         return false;
-     });
- };
+        return true;
+    })
+    .catch(err => {
+        console.error("❌ Failed to push batch payload modifications to database container:", err);
+        return false;
+    });
+};
 
  (function startMapCatcher() {
 

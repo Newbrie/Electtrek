@@ -109,6 +109,9 @@
         return;
     }
 
+    // 🎯 Always grab it fresh and safe right here, local to this call
+    const iframeWin = document.getElementById("iframe1")?.contentWindow;
+
     // 1. UI: Highlight the active tab on the parent
     document.querySelectorAll(".election-tab").forEach(tab =>
         tab.classList.remove("active")
@@ -138,6 +141,12 @@
             data: data
         }, "*");
     }
+
+    // 4. Refresh Parent Data Tables if needed
+    if (typeof fetchTableData === "function") {
+        await fetchTableData("nodelist_xref");
+    }
+};
 
     // 4. Refresh Parent Data Tables if needed
     await fetchTableData("nodelist_xref");
