@@ -312,10 +312,6 @@ resourcesSelect?.addEventListener("blur", () => {
     }
 });
 
-
-
-
-
     // Attach listers to constants
   attachListenersToConstantFields(window.latestConstants);
 
