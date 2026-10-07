@@ -4745,17 +4745,17 @@ def normalise():
 def get_territory_data():
     node_path = request.args.get('nodepath', 'UNITED_KINGDOM')
 
-    if node_path not in Geo_index:
+    if node_path not in layers.Geo_index:
         return jsonify({"error": "Node not found"}), 404
 
-    current_node = Geo_index[node_path]
+    current_node = layers.Geo_index[node_path]
     parent_path = current_node['parent']
 
     # Helper to turn a path into a dict with NID and Path
     def get_node_info(path):
         return {
             "path": path,
-            "nid": Geo_index[path].get('nid'),
+            "nid": layers.Geo_index[path].get('nid'),
             "name": path.split('/').pop().replace('_', ' ')
         }
 
@@ -4764,9 +4764,9 @@ def get_territory_data():
 
     # 2. Get Siblings with metadata
     siblings_info = []
-    if parent_path and parent_path in Geo_index:
+    if parent_path and parent_path in layers.Geo_index:
         siblings_info = [
-            get_node_info(s) for s in Geo_index[parent_path]['children']
+            get_node_info(s) for s in layers.Geo_index[parent_path]['children']
             if s != node_path
         ]
 
