@@ -202,14 +202,14 @@ resourcesToggle?.addEventListener("click", () => {
 
 resourcesSelect?.addEventListener("blur", () => {
     const selected = Array.from(resourcesSelect.selectedOptions).map(o => o.value);
-    const tab = getActiveElectionName();
-    if (!tab) return;
+    const tabname = getActiveElectionName();
+    if (!tabname) return;
 
     fetch("/set-constant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            election: tab.dataset.election,
+            election: tabname,
             name: "resources",
             value: selected
         }),
