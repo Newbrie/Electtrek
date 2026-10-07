@@ -153,7 +153,6 @@ window.selectNode = function(path) {
 
 
 async function fetchTableData(tableName) {
-  const old = pessages.pop();
   const ul = parent.document.getElementById("logwin");
   const li = parent.document.createElement("li");
 
