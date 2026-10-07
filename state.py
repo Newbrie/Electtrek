@@ -110,6 +110,29 @@ def extract_path_at_level(node_path: str, target_level: int) -> str | None:
     return "/".join(parts[: target_level + 1])
 
 
+def derive_territory(sourcepath: str) -> str | None:
+    if not sourcepath:
+        return None
+
+    clean = sourcepath.split("-MAP.html")[0].strip("/")
+    parts = [p for p in clean.split("/") if p]
+    if not parts:
+        return None
+
+    depth = len(parts)
+    target_level = 2 if depth >= 3 else (1 if depth == 2 else 0)
+
+    base_path = extract_path_at_level(sourcepath, target_level)
+    if not base_path:
+        return None
+
+    leaf_name = base_path.split("/")[-1]
+    # Check if base_path already ends with leaf_name before building filename
+    return f"{base_path}/{leaf_name}-MAP.html"  # Returns "UNITED_KINGDOM/ENGLAND-MAP.html"
+
+
+
+
 
 
 
