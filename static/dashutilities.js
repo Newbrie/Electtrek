@@ -177,12 +177,11 @@ window.selectNode = function(path) {
     const data = await res.json();
 
     // 3. Tell the iframe to handle its internal UI, calendar, and map updates
-    const iframeWin = document.getElementById("iframe1")?.contentWindow;
     if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
         iframeWin.iframeSwitchElection(electionName, data);
     } else {
         // Fallback message passing if direct access is blocked by cross-origin policies
-        document.getElementById("iframe1")?.contentWindow.postMessage({
+        document.iframeWin.postMessage({
             type: "iframeSwitchElection",
             electionName: electionName,
             data: data
@@ -190,7 +189,7 @@ window.selectNode = function(path) {
     }
 
     // 4. Refresh Parent Data Tables if needed
-    await contentWindow.fetchTableData("nodelist_xref");
+    await iframeWin.fetchTableData("nodelist_xref");
 };
 
 
@@ -206,7 +205,7 @@ window.deleteElection = async function(electionName) {
   const resp = await res.json();
   if (resp.success && resp.electiontabs_html) {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
-    await contentWindow.fetchTableData('nodelist_xref');
+    await iframeWin.fetchTableData('nodelist_xref');
     syncStreamsSelectWithTabs();
   } else alert("Could not delete election: " + (resp.error || "Unknown error"));
 };
@@ -225,8 +224,8 @@ window.addElection = async function() {
     document.getElementById("election-tabs").innerHTML = resp.electiontabs_html;
     syncStreamsSelectWithTabs();
     updateConstantsUI(resp.constants, resp.options);
-    contentWindow.populateAllSelects(resp.options, resp.constants);
-    await contentWindow.fetchTableData('nodelist_xref');
+    iframeWin.populateAllSelects(resp.options, resp.constants);
+    await iframeWin.fetchTableData('nodelist_xref');
   } else alert("Error adding election: " + resp.error);
 };
 

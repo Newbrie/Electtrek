@@ -4,6 +4,7 @@
 console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 document.addEventListener("DOMContentLoaded", async () => {
 
+  const iframeWin = document.getElementById("iframe1")?.contentWindow;
 
   const startHour = 9, endHour = 21, slotDuration = 2;
 
@@ -47,10 +48,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const params = new URLSearchParams(window.location.search);
   const table = params.get("loadTable");
   console.log("___ Table being reloaded ", table);
-  console.log("___ Is Function ? ", typeof contentWindow.fetchTableData);
-  if (table && typeof contentWindow.fetchTableData === "function") {
+  console.log("___ Is Function ? ", typeof iframeWin.fetchTableData);
+  if (table && typeof iframeWin.fetchTableData === "function") {
       console.log("📊 Auto-loading table:", table);
-      await contentWindow.fetchTableData(table);
+      await iframeWin.fetchTableData(table);
   }
 
 
@@ -94,11 +95,11 @@ const changeIframe = (url) => changeIframeSrc(url);
 * --------------------------------------------------------- */
 if (tableSelector) {
     tableSelector.addEventListener("click", async (e) => {
-        await contentWindow.fetchTableData(e.target.value);
+        await iframeWin.fetchTableData(e.target.value);
     });
 
     tableSelector.addEventListener("change", async (e) => {
-        await contentWindow.fetchTableData(e.target.value);
+        await iframeWin.fetchTableData(e.target.value);
     });
 }
 
@@ -180,7 +181,7 @@ resourcesSelect?.addEventListener("blur", () => {
 
         if (resp.constants) {
             updateConstantsUI(resp.constants, resourcesSelect.options); // ✅ pass defined options
-            contentWindow.populateAllSelects(resourcesSelect.options, resp.constants);
+            iframeWin.populateAllSelects(resourcesSelect.options, resp.constants);
         }
 
         if (!resp.success) {
@@ -197,6 +198,7 @@ resourcesSelect?.addEventListener("blur", () => {
  *  PARENT-NODE REASSIGNMENT / DELETE SELECTION
  * --------------------------------------------------------- */
  document.addEventListener("change", async (e) => {
+
     if (!e.target.classList.contains("parent-dropdown")) return;
 
     const select = e.target;
@@ -235,7 +237,7 @@ resourcesSelect?.addEventListener("blur", () => {
             }
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            await contentWindow.fetchTableData("nodelist_xref");
+            await iframeWin.fetchTableData("nodelist_xref");
         }
 
         // REASSIGN
@@ -260,7 +262,7 @@ resourcesSelect?.addEventListener("blur", () => {
             select.dataset.oldParentNid = newParentNid;
 
             if (data.mapfile) changeIframeSrc(data.mapfile);
-            await contentWindow.fetchTableData("nodelist_xref");
+            await iframeWin.fetchTableData("nodelist_xref");
         }
 
     } catch (err) {

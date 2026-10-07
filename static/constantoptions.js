@@ -16,6 +16,7 @@
     return { task_tags, outcome_tags };
 }
 
+
 window.updateConstantsUI = function (constants, options) {
 
     if (window.isUpdatingConstants) return;
@@ -224,7 +225,7 @@ window.refreshConstantsUI = function(callback) {
             window.latestOptions = data.options;
 
             window.updateConstantsUI(data.constants, data.options);
-            populateAllSelects(data.options, data.constants);
+            iframeWin.populateAllSelects(data.options, data.constants);
 
             if (callback) callback(data);
             return data.constants;
