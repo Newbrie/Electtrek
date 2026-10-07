@@ -1756,15 +1756,16 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      // the Bootstrap event at the document root level where it always bubbles up.
 
      const slotModalEl = document.getElementById("slotModal");
-      if (slotModalEl) {
-          slotModalEl.addEventListener('hidden.bs.modal', event => {
-              // Forcefully sweep away any stuck backdrops and body locks every time it closes
-              document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
-              document.body.classList.remove('modal-open');
-              document.body.style.overflow = '';
-              console.log("🧹 Modal hidden event fired: backdrop and body locks cleared.");
-          });
-      }
+     console.log("🔍 Looking for slotModal element:", slotModalEl); // <--- Check if this logs null!
+
+     if (slotModalEl) {
+         slotModalEl.addEventListener('hidden.bs.modal', event => {
+             document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+             document.body.classList.remove('modal-open');
+             document.body.style.overflow = '';
+             console.log("🧹 Modal hidden event fired: backdrop and body locks cleared.");
+         });
+     }
 
      // Global console manual test hook
      window.triggerManualDebugClose = () => {
