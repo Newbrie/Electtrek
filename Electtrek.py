@@ -4740,46 +4740,6 @@ def normalise():
     return jsonify({"message": "Normalization started"})
 
 
-@app.route('/get_territory_data')
-@login_required
-def get_territory_data():
-    node_path = request.args.get('nodepath', 'UNITED_KINGDOM')
-
-    if node_path not in layers.Geo_index:
-        return jsonify({"error": "Node not found"}), 404
-
-    current_node = layers.Geo_index[node_path]
-    parent_path = current_node['parent']
-
-    # Helper to turn a path into a dict with NID and Path
-    def get_node_info(path):
-        return {
-            "path": path,
-            "nid": layers.Geo_index[path].get('nid'),
-            "name": path.split('/').pop().replace('_', ' ')
-        }
-
-    # 1. Get Children with metadata
-    children_info = [get_node_info(c) for c in current_node['children']]
-
-    # 2. Get Siblings with metadata
-    siblings_info = []
-    if parent_path and parent_path in layers.Geo_index:
-        siblings_info = [
-            get_node_info(s) for s in layers.Geo_index[parent_path]['children']
-            if s != node_path
-        ]
-
-
-    created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, lastfilepath, static=False)
-    return jsonify({
-        "current_name": current_node['name'],
-        "current_path": node_path,
-        "parent_path": parent_path,
-        "children": children_info,  # Now a list of dicts
-        "siblings": siblings_info,  # Now a list of dicts
-        "map_url": f"/thru/{node_path}.html"
-    })
 
 @app.route("/get_stream_processing/<ename>")
 @login_required

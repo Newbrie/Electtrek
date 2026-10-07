@@ -4,7 +4,6 @@
 console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 document.addEventListener("DOMContentLoaded", async () => {
 
-  const iframeWin = document.getElementById("iframe1")?.contentWindow;
 
   const startHour = 9, endHour = 21, slotDuration = 2;
 
@@ -391,14 +390,66 @@ function handleBulkAction() {
 const bulkBtn = document.getElementById("btnRunGroupAction");
 bulkBtn.replaceWith(bulkBtn.cloneNode(true)); // This trick clears all existing listeners
 document.getElementById("btnRunGroupAction").addEventListener("click", handleBulkAction);
-// 4. Initial Load
 
-// 4. Initial Load - Safely extract the string from the display path span
+// 4. Initial Load — Populate the accordion and trigger initial selection from the iframe's areaTree
 const territoryEl = document.getElementById('display-path');
-const dataPath = territoryEl ? (territoryEl.textContent || "SH3") : "SH3";
+const initialPath = territoryEl ? (territoryEl.textContent.trim() || "UNITED_KINGDOM") : "UNITED_KINGDOM";
 
-if (typeof selectNode === "function" && dataPath) {
-    selectNode(dataPath);
+const initAccordionFromIframe = () => {
+    const iframeEl = document.getElementById("iframe1");
+    const iframeWin = iframeEl?.contentWindow;
+
+    // Check if the iframe's areaTree is available
+    if (iframeWin && iframeWin.areaTree) {
+        const areaTree = iframeWin.areaTree;
+
+        // Find the node object in the tree matching our initial path
+        // (Assuming areaTree can be queried or traversed by path)
+        const currentNode = areaTree[initialPath] || findDictByPath(areaTree, initialPath);
+
+        if (currentNode) {
+            // A. Update the display title at the top of the dropdown
+            const displayTitle = initialPath.split('/').pop().replace(/_/g, ' ');
+            const displayElement = document.getElementById('display-path');
+            if (displayElement) displayElement.innerText = displayTitle;
+
+            // B. Update Parent / Back Link
+            const pLink = document.getElementById('parent-link');
+            if (currentNode.parent) {
+                const parentName = currentNode.parent.split('/').pop().replace(/_/g, ' ');
+                pLink.style.display = 'block';
+                pLink.onclick = () => selectNode(currentNode.parent);
+                document.getElementById('parent-name').innerText = parentName;
+            } else {
+                pLink.style.display = 'none';
+            }
+
+            // C. Render Children and Sibling Lists
+            if (typeof renderNodeList === "function") {
+                renderNodeList('children-list', currentNode.children || []);
+                renderNodeList('siblings-list', currentNode.siblings || []);
+            }
+        }
+    } else {
+        // Retry shortly if the iframe context hasn't finished loading its map script yet
+        setTimeout(initAccordionFromIframe, 150);
+        return;
+    }
+
+    // Finally, invoke selectNode to sync backend data and map state
+    if (typeof selectNode === "function" && initialPath) {
+        selectNode(initialPath);
+    }
+};
+
+// Helper fallback if areaTree is structured as a nested object rather than a flat path map
+function findDictByPath(tree, targetPath) {
+    // If your tree structure requires recursive traversal, adapt this lookup logic,
+    // otherwise fallback to letting selectNode handle the fetch route if areaTree lookup is unavailable.
+    return tree[targetPath] || null;
 }
+
+// Kick off the initialization
+initAccordionFromIframe();
 
 });

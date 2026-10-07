@@ -15,53 +15,6 @@
       }
   };
 
-  // 2. Define the selection logic
-  /**
- * 1. Navigation Logic
- * Fetches data for a specific node path and updates the UI
- */
-window.selectNode = function(path) {
-    if (!path) return;
-
-    // Immediate UI feedback for the breadcrumb/header
-    const displayTitle = path.split('/').pop().replace(/_/g, ' ');
-    const displayElement = document.getElementById('display-path');
-    if (displayElement) displayElement.innerText = displayTitle;
-
-    fetch(`/get_territory_data?nodepath=${encodeURIComponent(path)}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) {
-                console.error("Server Error:", data.error);
-                return;
-            }
-
-            // Update the Iframe Map
-            const iframe = document.getElementById('iframe1');
-            if (iframe && data.map_url) {
-                iframe.src = data.map_url;
-            }
-
-            // Update Parent/Back Link
-            const pLink = document.getElementById('parent-link');
-            if (data.parent_path) {
-                const parentName = data.parent_path.split('/').pop().replace(/_/g, ' ');
-                pLink.style.display = 'block';
-                // Use an anonymous function to prevent immediate execution
-                pLink.onclick = () => selectNode(data.parent_path);
-                document.getElementById('parent-name').innerText = parentName;
-            } else {
-                pLink.style.display = 'none';
-            }
-
-            // Render Lists (Backend now returns objects: {path, nid, name})
-            renderNodeList('children-list', data.children);
-            renderNodeList('siblings-list', data.siblings);
-        })
-        .catch(err => console.error("Navigation Fetch Error:", err));
-};
-
-
 
   // ----------------------------
   // String Utilities
