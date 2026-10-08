@@ -1082,6 +1082,7 @@ class TreeNode:
                 # identity
                 "node_id": self.nid,
                 "node_name": self.value,
+                "nodepath" : self.node_path,
                 "level": self.level,
                 "ACC": {True,False}, # accumulate boundaries during navigation
 

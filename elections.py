@@ -23,14 +23,7 @@ class ElectionContext:
     def get_options(self):
         task_tags, outcome_tags, all_tags = self.ce.get_tags()
         messages = get_flashed_messages()
-        iframeButtons = {
-            'b3': url_for('stream_input'),
-            'b4': url_for('leafletting'),
-            'b5': url_for('kanban'),
-            'b6': url_for('telling'),
-            'b7': url_for('search'),
-            'b8': url_for('dashboard')
-        }
+
 
         return {
             "territories": state.ElectionTypes, # all possible types of election used in elections
@@ -47,9 +40,7 @@ class ElectionContext:
             "chair": self.ce.resources, # the designated chair resource
             "campaignMgr": self.ce.resources, # the designated campaign manager
             "mapfiles": self.ce.mapfiles, #a recent history of nodes navigated
-            "DEVURLS": DEVURLS, # backend url options for prod and dev
-            "messages":  messages, # flash messages
-            "iframeButtons": iframeButtons #button urls for functions
+            "messages":  messages
             }
 
 def _collect_leaves(node):

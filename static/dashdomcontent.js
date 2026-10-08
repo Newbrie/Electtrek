@@ -344,32 +344,35 @@ document.getElementById("btnRunGroupAction").addEventListener("click", handleBul
 const territoryEl = document.getElementById('display-path');
 const initialPath = territoryEl ? (territoryEl.textContent.trim() || "UNITED_KINGDOM") : "UNITED_KINGDOM";
 
-const initAccordionFromIframe = () => {
-  const iframeWin = document.getElementById("iframe1")?.contentWindow;
+initAccordionFromIframe = () => {
+    const iframeWin = document.getElementById("iframe1")?.contentWindow;
 
-
-    // Check if the iframe's areaTree is available
     if (iframeWin && iframeWin.areaTree) {
         const areaTree = iframeWin.areaTree;
 
-        // Find the node object in the tree matching our initial path
-        // (Assuming areaTree can be queried or traversed by path)
-        const currentNode = areaTree[initialPath] || findDictByPath(areaTree, initialPath);
+        // 1. Fallback chain for initialPath:
+        // window.initialPath -> first available key in areaTree
+        if (!window.initialPath || !areaTree[window.initialPath]) {
+            window.initialPath = Object.keys(areaTree)[0] || null;
+        }
+
+        const currentNode = areaTree[window.initialPath] || (typeof findDictByPath === "function" ? findDictByPath(areaTree, window.initialPath) : null);
 
         if (currentNode) {
-            // A. Update the display title at the top of the dropdown
-            const displayTitle = initialPath.split('/').pop().replace(/_/g, ' ');
+            // A. Update display title
+            const displayTitle = window.initialPath.split('/').pop().replace(/_/g, ' ');
             const displayElement = document.getElementById('display-path');
             if (displayElement) displayElement.innerText = displayTitle;
 
             // B. Update Parent / Back Link
             const pLink = document.getElementById('parent-link');
-            if (currentNode.parent) {
+            if (currentNode.parent && pLink) {
                 const parentName = currentNode.parent.split('/').pop().replace(/_/g, ' ');
                 pLink.style.display = 'block';
                 pLink.onclick = () => selectNode(currentNode.parent);
-                document.getElementById('parent-name').innerText = parentName;
-            } else {
+                const parentNameEl = document.getElementById('parent-name');
+                if (parentNameEl) parentNameEl.innerText = parentName;
+            } else if (pLink) {
                 pLink.style.display = 'none';
             }
 
@@ -380,14 +383,12 @@ const initAccordionFromIframe = () => {
             }
         }
     } else {
-        // Retry shortly if the iframe context hasn't finished loading its map script yet
         setTimeout(initAccordionFromIframe, 150);
         return;
     }
 
-    // Finally, invoke selectNode to sync backend data and map state
-    if (typeof selectNode === "function" && initialPath) {
-        selectNode(initialPath);
+    if (typeof selectNode === "function" && window.initialPath) {
+        selectNode(window.initialPath);
     }
 };
 

@@ -152,7 +152,14 @@ LEVELS = {
 class ProgramContext:
     def get_options(self):
         # on startup its possible to define a range of global options
-
+        iframeButtons = {
+            'b3': url_for('stream_input'),
+            'b4': url_for('leafletting'),
+            'b5': url_for('kanban'),
+            'b6': url_for('telling'),
+            'b7': url_for('search'),
+            'b8': url_for('dashboard')
+        }
         return {
             "LEVELS": LEVELS,
             "LEVEL_INDEX": LEVEL_INDEX,
@@ -161,6 +168,7 @@ class ProgramContext:
             "DEVURLS": config.DEVURLS, #backend urls used on start up
             "VNORM": state.VNORM, #normalised party used everywhere
             "VCO": state.VCO, # party colours used everywhere
+            "iframeButton": iframeButtons,
             "streams": get_available_elections(), # currently running elections
         }
 

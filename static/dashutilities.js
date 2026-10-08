@@ -128,9 +128,16 @@
     });
 
     const data = await res.json();
+    // Inside window.switchElection
+    const iframeEl = document.getElementById("iframe1");
+
+    // 🎯 Save the backend-provided nodepath globally so your accordion can use it
+    if (iframeEl && data.options && data.options.nodepath) {
+        window.initialPath = data.options.nodepath;
+        console.log("📍 Backend provided initial nodepath:", window.initialPath);
+    }
 
     // 3. 🗺️ FIX MAP: Dynamically load the correct mapfile into the iframe src
-    const iframeEl = document.getElementById("iframe1");
     if (iframeEl && data.mapfile) {
         // Sets the iframe source to your Flask route handling the map path
         iframeEl.src = `/thru/${data.mapfile}`;
