@@ -1,3 +1,265 @@
+window.renderTreeSelector = function (tree, options = {}) {
+    const {
+        containerId,
+        emptyMessage = 'No items available',
+        accordionId,
+        allLabel = name => `All of ${name}`,
+        createButton
+    } = options;
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (
+        !tree ||
+        typeof tree !== 'object' ||
+        Object.keys(tree).length === 0
+    ) {
+        container.innerHTML =
+            `<div class="small text-muted p-2">${emptyMessage}</div>`;
+        return;
+    }
+
+    const acc = document.createElement('div');
+    acc.className = 'accordion';
+    acc.id = accordionId;
+
+    let idCounter = 0;
+
+    function renderLevel(node, parentElement, path = [], depth = 0) {
+        if (!node || typeof node !== 'object') return;
+
+        Object.entries(node).forEach(([name, children]) => {
+            const currentPath = [...path, name];
+
+            const hasChildren =
+                children &&
+                typeof children === 'object' &&
+                Object.keys(children).length > 0;
+
+            // IMPORTANT: no \(...\)
+            const uniqueId = `${accordionId}-${idCounter++}`;
+
+            // -------------------------------------------------
+            // TOP LEVEL
+            // -------------------------------------------------
+            if (depth === 0) {
+                const item = document.createElement('div');
+                item.className =
+                    'accordion-item border-0 mb-1';
+
+                item.innerHTML = `
+                    <h2 class="accordion-header">
+                        <button
+                            class="accordion-button collapsed py-2 shadow-none"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#${uniqueId}"
+                            aria-expanded="false">
+                            ${name}
+                        </button>
+                    </h2>
+
+                    <div
+                        id="${uniqueId}"
+                        class="accordion-collapse collapse">
+
+                        <div class="accordion-body p-0"></div>
+                    </div>
+                `;
+
+                const body =
+                    item.querySelector('.accordion-body');
+
+                // Select entire top-level branch
+              (
+                    body,
+                    name,
+                    allLabel(name),
+                    'fw-semibold'
+                );
+
+                if (hasChildren) {
+                    renderLevel(
+                        children,
+                        body,
+                        currentPath,
+                        depth + 1
+                    );
+                }
+
+                parentElement.appendChild(item);
+                return;
+            }
+
+            // -------------------------------------------------
+            // NESTED LEVEL
+            // -------------------------------------------------
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-0';
+
+            if (hasChildren) {
+                const header = document.createElement('button');
+
+                header.type = 'button';
+                header.className =
+                    'btn btn-sm w-100 text-start py-2 shadow-none';
+
+                header.style.paddingLeft =
+                    `${1 + depth * 1.25}rem`;
+
+                header.setAttribute(
+                    'data-bs-toggle',
+                    'collapse'
+                );
+
+                header.setAttribute(
+                    'data-bs-target',
+                    `#${uniqueId}`
+                );
+
+                header.setAttribute(
+                    'aria-expanded',
+                    'false'
+                );
+
+                header.textContent = `▸ ${name}`;
+
+                const collapse = document.createElement('div');
+                collapse.id = uniqueId;
+                collapse.className = 'collapse';
+
+                const list = document.createElement('div');
+                list.className =
+                    'list-group list-group-flush';
+
+                // Select entire branch
+                createButton(
+                    list,
+                    name,
+                    allLabel(name),
+                    ''
+                );
+
+                // Recursively render children
+                renderLevel(
+                    children,
+                    list,
+                    currentPath,
+                    depth + 1
+                );
+
+                collapse.appendChild(list);
+
+                wrapper.appendChild(header);
+                wrapper.appendChild(collapse);
+
+            } else {
+                // -------------------------------------------------
+                // LEAF
+                // -------------------------------------------------
+                createButton(
+                    wrapper,
+                    name,
+                    name,
+                    ''
+                );
+            }
+
+            parentElement.appendChild(wrapper);
+        });
+    }
+
+    renderLevel(tree, acc);
+
+    container.appendChild(acc);
+};
+
+function createAreaButton(
+  list,
+  areaName,
+  displayName,
+  indentClass = '',
+  selectedKey = 'selectedArea'
+) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className =
+      `list-group-item list-group-item-action small ${indentClass}`;
+
+  button.textContent = displayName;
+  button.dataset.name = areaName;
+
+  if (window[selectedKey] === areaName) {
+      button.classList.add('active');
+  }
+
+  button.addEventListener('click', function () {
+      const accordion = list.closest('.accordion');
+
+      if (accordion) {
+          accordion
+              .querySelectorAll('.list-group-item')
+              .forEach(btn => btn.classList.remove('active'));
+      }
+
+      window[selectedKey] = areaName;
+
+      button.classList.add('active');
+
+      console.log('Area selected:', areaName);
+
+      syncAreaSelect();
+  });
+
+  list.appendChild(button);
+}
+
+function createTaskButton(
+list,
+taskCode,
+displayName,
+indentClass = '',
+selectedKey = 'selectedTask'
+) {
+const button = document.createElement('button');
+
+button.type = 'button';
+button.className =
+    `list-group-item list-group-item-action small ${indentClass}`;
+
+button.textContent = displayName;
+button.dataset.code = taskCode;
+
+if (window[selectedKey] === taskCode) {
+    button.classList.add('active');
+}
+
+button.addEventListener('click', function () {
+    const accordion = list.closest('.accordion');
+
+    if (accordion) {
+        accordion
+            .querySelectorAll('.list-group-item')
+            .forEach(btn => btn.classList.remove('active'));
+    }
+
+    window[selectedKey] = taskCode;
+
+    button.classList.add('active');
+
+    console.log('Task selected:', taskCode);
+
+    syncTaskSelect();
+});
+
+list.appendChild(button);
+}
+
+
 
   function getTagsJson(electionTags) {
     const task_tags = {};
