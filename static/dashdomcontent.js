@@ -4,7 +4,20 @@
 console.log("🔥 dashdomcontent.js loaded, readyState =", document.readyState);
 document.addEventListener("DOMContentLoaded", async () => {
 
-
+  console.log("[IFR] context", {
+      isIframe: window.self !== window.top,
+      own: { places: typeof window.places, task_tags: typeof window.task_tags },
+      parent: (() => {
+          try {
+              return {
+                  places: typeof window.parent.places,
+                  task_tags: typeof window.parent.task_tags,
+                  taskTagKeys: Object.keys(window.parent.task_tags || {}).length
+              };
+          } catch (e) { return "parent not accessible: " + e.message; }
+      })()
+  });
+  
   const startHour = 9, endHour = 21, slotDuration = 2;
 
   // ----------------------------
