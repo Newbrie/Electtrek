@@ -156,8 +156,8 @@
 
     // 5. 🎯 FIX ACCORDION: Initialize or refresh the sidebar from iframe's areaTree once loaded
     setTimeout(() => {
-        if (typeof initAccordionFromIframe === "function") {
-            initAccordionFromIframe();
+        if (typeof initAccordionFromOptions === "function") {
+            initAccordionFromOptions(data.options);
         }
     }, 400); // Small buffer to let the iframe document spin up its scripts
 

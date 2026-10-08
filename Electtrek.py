@@ -168,7 +168,7 @@ class ProgramContext:
             "DEVURLS": config.DEVURLS, #backend urls used on start up
             "VNORM": state.VNORM, #normalised party used everywhere
             "VCO": state.VCO, # party colours used everywhere
-            "iframeButton": iframeButtons,
+            "iframeButtons": iframeButtons,
             "streams": get_available_elections(), # currently running elections
         }
 

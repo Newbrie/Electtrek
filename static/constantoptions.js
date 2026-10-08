@@ -16,12 +16,112 @@
     return { task_tags, outcome_tags };
 }
 
+initAccordionFromOptions = (optionsData) => {
+    console.log("🔍 [Accordion Init] Starting with optionsData:", optionsData);
+
+    const areas = optionsData?.areas || window.currentOptions?.areas;
+    console.log("🔍 [Accordion Init] Resolved areas object:", areas);
+
+    if (areas && typeof areas === 'object') {
+        const districtKey = Object.keys(areas).find(k => k.toUpperCase() === "SURREY_HEATH") || Object.keys(areas)[0];
+        console.log("🔍 [Accordion Init] Found districtKey:", districtKey);
+
+        const targetBranch = districtKey ? { [districtKey]: areas[districtKey] } : areas;
+        console.log("🔍 [Accordion Init] Target branch payload:", targetBranch);
+
+        if (targetBranch) {
+            // A. Update display path title
+            const displayTitle = (window.initialPath ? window.initialPath.split('/').pop() : "Selection").replace(/_/g, ' ');
+            const displayElement = document.getElementById('display-path');
+            if (displayElement) {
+                displayElement.innerText = displayTitle;
+                console.log("✅ [Accordion Init] Updated display-path element to:", displayTitle);
+            } else {
+                console.warn("⚠️ [Accordion Init] #display-path element not found in DOM.");
+            }
+
+            // Check container existence
+            const containerEl = document.getElementById('children-list');
+            console.log("🔍 [Accordion Init] Checking target container #children-list:", containerEl);
+
+            // B. Render using tree selector
+            if (typeof window.renderTreeSelector === "function") {
+                console.log("🚀 [Accordion Init] window.renderTreeSelector found. Invoking...");
+
+                window.renderTreeSelector(targetBranch, {
+                    containerId: 'children-list',
+                    accordionId: 'election-accordion',
+                    emptyMessage: 'No sub-divisions available',
+                    allLabel: (name) => `${name.replace(/_/g, ' ')}`,
+                    createButton: (parentElement, nodeName, labelText, className) => {
+                        console.log("🛠️ [renderTreeSelector] createButton callback triggered for:", nodeName, "with label:", labelText);
+
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
+                        btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            console.log("📍 [Accordion Click] Clicked node:", nodeName);
+                            if (typeof selectNode === "function") {
+                                selectNode(nodeName);
+                            }
+                        };
+                        parentElement.appendChild(btn);
+                    }
+                });
+                console.log("✅ Successfully executed renderTreeSelector.");
+            } else {
+                console.error("❌ [Accordion Init] window.renderTreeSelector is NOT a function!");
+            }
+        } else {
+            console.warn("⚠️ [Accordion Init] targetBranch is empty or null.");
+        }
+    } else {
+        console.log("⏳ [Accordion Init] Areas data not ready yet. Retrying in 150ms...");
+        setTimeout(() => initAccordionFromOptions(optionsData), 150);
+        return;
+    }
+
+    if (typeof selectNode === "function" && window.initialPath) {
+        console.log("🚀 [Accordion Init] Calling initial selectNode with:", window.initialPath);
+        selectNode(window.initialPath);
+    }
+};
+
+window.updateConstantsUI = function (constants, options) {
+    if (window.isUpdatingConstants) {
+        console.warn("[UCUI:0] Skipped: already running (re-entrant call?)", new Error().stack);
+        return;
+    }
+    window.isUpdatingConstants = true;
+    console.log("[UCUI:0] START");
+
+    try {
+        // ...existing code, with these between sections:
+        console.log("[UCUI:0] globals done");
+        console.log("[UCUI:0] resources done");
+        console.log("[UCUI:0] candidate/manager done");
+        console.log("[UCUI:0] mapfiles done");
+        console.log("[UCUI:0] apply loop done");
+        console.log("[UCUI:0] END (reached bottom)");
+    } catch (err) {
+        console.error("[UCUI:0] CRASH", err);
+        throw err;
+    } finally {
+        window.isUpdatingConstants = false;
+    }
+};
 
 window.updateConstantsUI = function (constants, options) {
 
-    if (window.isUpdatingConstants) return;
-
-    window.isUpdatingConstants = true;
+  if (window.isUpdatingConstants) {
+      console.warn("[UCUI:0] Skipped: already running (re-entrant call?)", new Error().stack);
+      return;
+  }
+  window.isUpdatingConstants = true;
+  console.log("[UCUI:0] START");
 
     try {
         if (!constants || !options) {
@@ -42,11 +142,10 @@ window.updateConstantsUI = function (constants, options) {
         window.places    = constants?.places || {};
         window.resources = options?.resources || {};
         window.tags      = constants?.tags || {};
+        window.task_tags    = options.task_tags || {};
+        window.outcome_tags = options.outcome_tags || {};
 
-        const result = getTagsJson(window.tags);
-        window.task_tags    = result.task_tags;
-        window.outcome_tags = result.outcome_tags;
-
+        console.log("[UCUI:0] globals done");
 
         // =====================================================
         // Resources
@@ -61,6 +160,7 @@ window.updateConstantsUI = function (constants, options) {
                 resourcesEl.appendChild(o);
             });
         }
+        console.log("[UCUI:0] resources done");
 
         // =====================================================
         // Candidate / Manager
@@ -85,12 +185,14 @@ window.updateConstantsUI = function (constants, options) {
                 el.appendChild(o);
             });
         });
+        console.log("[UCUI:0] candidate/manager done");
 
         // =====================================================
         // Mapfiles
         // =====================================================
         // =====================================================
         const mapfilesEl = document.getElementById("mapfiles");
+
 
     if (mapfilesEl && Array.isArray(constants.mapfiles) && constants.mapfiles.length > 0) {
         mapfilesEl.innerHTML = "";
@@ -101,6 +203,8 @@ window.updateConstantsUI = function (constants, options) {
             o.textContent = path.split("/").pop();
             mapfilesEl.appendChild(o);
         });
+
+
 
         // Default to the most recent map in the array
         const latestMap = constants.mapfiles[constants.mapfiles.length - 1];
@@ -118,6 +222,7 @@ window.updateConstantsUI = function (constants, options) {
 
             changeIframeSrc(`/thru/${finalPath}`);
         };
+        console.log("[UCUI:0] mapfiles done");
     }
       else {
           // 🔴 DEBUG: Why did the block fail?
@@ -125,7 +230,7 @@ window.updateConstantsUI = function (constants, options) {
           if (!Array.isArray(constants.mapfiles)) console.error("🔴 constants.mapfiles is not an array:", constants.mapfiles);
           if (constants.mapfiles?.length === 0) console.warn("🔴 constants.mapfiles is empty");
       }
-
+      console.log("[UCUI:0] mapfiles section finished");   // runs on either path
         // =====================================================
         // Apply values + bind inputs
         // =====================================================
@@ -184,16 +289,17 @@ window.updateConstantsUI = function (constants, options) {
                     })
                     .then(res => res.json())
                     .then(resp => {
-                        console.log(`✅ Response for "${key}":`, resp);
+                        console.log(`✅ [UCUI:0] Response for "${key}":`, resp);
                     })
                     .catch(err => {
-                        console.error(`💥 Error updating "${key}":`, err);
+                        console.error(`💥 [UCUI:0] Error updating "${key}":`, err);
                     });
                 };
 
                 el.dataset.bound = "true";
             }
         });
+        console.log("[UCUI:0] apply loop done");
 
         if (typeof attachListenersToConstantFields === "function") {
             attachListenersToConstantFields(constants);
@@ -202,10 +308,15 @@ window.updateConstantsUI = function (constants, options) {
         if (typeof populateDropdowns === "function") {
             populateDropdowns();
         }
+          console.log("[UCUI:0] END (reached bottom)");
 
-    } finally {
-        window.isUpdatingConstants = false;
-    }
+      } catch (err) {
+          console.error("[UCUI:0] CRASH", err);
+          throw err;
+      } finally {
+          window.isUpdatingConstants = false;
+      }
+
 };
 
 window.refreshConstantsUI = function(callback) {
@@ -228,6 +339,9 @@ window.refreshConstantsUI = function(callback) {
 
             window.updateConstantsUI(data.constants, data.options);
 //            iframeWin.populateAllSelects(data.options, data.constants);
+            console.log("📩 calling initAccordion");
+            initAccordionFromOptions(data.options);
+
 
             if (callback) callback(data);
             return data.constants;

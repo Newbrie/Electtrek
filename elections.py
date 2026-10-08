@@ -27,8 +27,8 @@ class ElectionContext:
 
         return {
             "territories": state.ElectionTypes, # all possible types of election used in elections
-            "tags": all_tags, # all poss election tasks and outcomes
             "task_tags": task_tags, # all poss tasks
+            "outcome_tags": outcome_tags, # all poss tasks
             "autofix": list(state.autofix), # stages of data quality cleaning
             "yourparty": state.VID, # party of interest
             "previousParty": state.VID, # incumbent party
@@ -439,10 +439,10 @@ class CurrentElection(dict):
 
     def get_tags(self):
         """
-        Walk the nested `taskTypes` structure and split leaf codes into
+        Walk the nested `tagTypes` structure and split leaf codes into
         task_tags and outcome_tags, pre-seeded with mandatory baseline codes.
 
-        taskTypes can nest to variable depth before reaching leaf
+        tagTypes can nest to variable depth before reaching leaf
         {code: description} pairs -- some categories go
         category -> subcategory -> {code: description} (e.g. ENGAGEMENT/CAMPAIGNING),
         others go straight to category -> {code: description} (e.g. MEMBERSHIP).
@@ -465,12 +465,12 @@ class CurrentElection(dict):
         all_tags = {}
 
         # Categories whose leaf codes are outcome tags rather than task tags.
-        # Everything else under taskTypes is treated as a task category.
+        # Everything else under tagTypes is treated as a task category.
         OUTCOME_CATEGORIES = {"MEMBERSHIP"}
 
-        raw_task_types = self.get("taskTypes") or {}
+        raw_tag_types = self.get("tagTypes") or {}
 
-        for category, contents in raw_task_types.items():
+        for category, contents in raw_tag_types.items():
             leaf_codes = _collect_leaves(contents)
             destination = outcome_tags if category.upper() in OUTCOME_CATEGORIES else task_tags
 

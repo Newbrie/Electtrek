@@ -993,36 +993,6 @@ document.getElementById("saveNewTag")?.addEventListener("click", () => {
  * 2. List Rendering Helper
  * Generates HTML with checkboxes (for bulk) and text (for navigation)
  */
- function renderNodeList(elementId, nodeObjects) {
-     const container = document.getElementById(elementId);
-     if (!container) return;
-
-     if (!nodeObjects || nodeObjects.length === 0) {
-         container.innerHTML = '<div class="none-found" style="padding:10px; color:#888;">No further divisions</div>';
-         return;
-     }
-
-     container.innerHTML = nodeObjects.map(obj => {
-         const path = obj.path;
-         const nid = obj.nid;
-         const name = obj.name || path.split('/').pop().replace(/_/g, ' ');
-
-         return `
-             <div class="nav-item-wrapper" style="display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #eee;">
-                 <input type="checkbox"
-                        class="selectRow"
-                        value="${nid}"
-                        data-nid="${nid}"
-                        onclick="event.stopPropagation();"
-                        style="margin-right: 12px; width: 18px; height: 18px; cursor: pointer;">
-                 <div class="nav-item"
-                      onclick="selectNode('${path}')"
-                      style="flex-grow: 1; cursor: pointer; font-size: 14px; color: #333;">
-                     ${name}
-                 </div>
-             </div>`;
-     }).join('');
- }
 
  function attachModalListener() {
      const modal = document.getElementById("modalPopup");

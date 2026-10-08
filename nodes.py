@@ -18,47 +18,13 @@ from pathlib import Path
 import sys
 from datetime import datetime, time
 import re
+import layers
 
 
 
 _MASTER_ROOT = None
 
 
-def build_area_tree(node_path, geo_index, max_depth=3):
-    """
-    Pass ANY full node_path (even a deep constituency path).
-    It automatically finds the County level and builds the tree from there down.
-    """
-    parts = node_path.split("/")
-
-    # Automatically slice the path to the county level (index 2 / 3 parts: country/nation/county)
-    if len(parts) >= 3:
-        county_path = "/".join(parts[:3])
-    else:
-        county_path = node_path
-
-    # Helper function to recursively build the tree downward from the county
-    def _recursive_build(path, current_depth):
-        node = geo_index.get(path)
-        if not node:
-            return {}
-
-        name = node.get("name", path.split("/")[-1])
-
-        # Stop if we've reached max depth relative to the county
-        if current_depth >= max_depth:
-            return {name: {}}
-
-        children_dict = {}
-        for child_path in node.get("children", []):
-            child_tree = _recursive_build(child_path, current_depth + 1)
-            if child_tree:
-                children_dict.update(child_tree)
-
-        return {name: children_dict}
-
-    # Kick off the recursion starting at the county path (depth 1)
-    return _recursive_build(county_path, current_depth=1)
 
 def generate_map_accordions(specs: list[dict]) -> str:
     """Generates a modular HTML/JS injection string for Folium maps.
@@ -1095,7 +1061,7 @@ class TreeNode:
                 # available UI elements
                 "tables_available": self.available_tables(elevels),
                 "layers_available": self.available_layers(elevels),
-                "areas": self.get_areas(),
+                "areas": self.get_areaTree(layers.Geo_index, max_depth=3),
 
                 # relationships
                 "children": [c.value for c in self.children],
@@ -1300,42 +1266,48 @@ class TreeNode:
         return f"<TNode {self.value} L{self.level} {self.origin}>"
 
 
-    def get_areas(self, nodelist=None):
+    def get_areaTree(self, geo_index, max_depth=4):
         """
-        Returns a nested dictionary of areas grouped by their immediate children (regions).
-
-        If nodelist is provided, it merges areas from all nodes in the list.
-
-        Example output:
-        {
-            "North Region": { "A1": "North Area 1", "A2": "North Area 2" },
-            "South Region": { "B1": "South Area 1" }
-        }
+        Automatically slices self.node_path down to the county level
+        and builds the area tree from there down.
         """
-        area_groups = {}
+        parts = self.node_path.split("/")
 
-        # Determine which nodes to process
-        if nodelist is None:
-            nodes_to_process = [self]
+        # Automatically slice the path to the county level (country/nation/county)
+        if len(parts) >= 3:
+            county_path = "/".join(parts[:3])
         else:
-            nodes_to_process = nodelist
+            county_path = self.node_path
 
-        for node in nodes_to_process:
-            if not node.children:
-                continue
+        # Helper function to recursively build the tree downward from the county
+        def _recursive_build(path, current_depth):
+            node = geo_index.get(path)
+            if not node:
+                return {}
 
-            for child in node.children:  # top-level regions
-                areas = {grand.nid: grand.value for grand in child.children} if child.children else {}
+            name = node.get("name", path.split("/")[-1])
 
-                if child.value in area_groups:
-                    # Merge areas if the region already exists (accumulated nodes)
-                    area_groups[child.value].update(areas)
-                else:
-                    area_groups[child.value] = areas
+            # Stop if we've reached max depth relative to the root county
+            if current_depth >= max_depth:
+                # If it has children, we can include them or return empty dict based on limit
+                children_dict = {}
+                for child_path in node.get("children", []):
+                    child_node = geo_index.get(child_path)
+                    if child_node:
+                        child_name = child_node.get("name", child_path.split("/")[-1])
+                        children_dict[child_name] = {}
+                return {name: children_dict}
 
-        return area_groups
+            children_dict = {}
+            for child_path in node.get("children", []):
+                child_tree = _recursive_build(child_path, current_depth + 1)
+                if child_tree:
+                    children_dict.update(child_tree)
 
+            return {name: children_dict}
 
+        # Kick off the recursion starting at the county path (depth 0 relative to root)
+        return _recursive_build(county_path, current_depth=0)
 
     def process_lozenges(self,lozenges, CE):
         """
@@ -1350,7 +1322,7 @@ class TreeNode:
 
         CE_resources = CE.get('resources',{})
         CE_task_tags, CE_outcome_tags, CE_all_tags = CE.get_tags()
-        CE_areas = self.get_areas()
+        CE_areas = self.get_areaTree(layers.Geo_index, max_depth=3)
         CE_places = CE.get("places", {})
         print(f"___Processing lozenges : {len(CE_resources)} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
         for loz in lozenges:
@@ -2485,8 +2457,8 @@ class TreeNode:
         (c_election, elevels), = resolved_levels.items()
         print(f"DEBUG: Unpacked election: {c_election}")
         task_tags, outcome_tags, all_tags = CElection.get_tags()
-        task_tags, outcome_tags, all_tags = CElection.get_tags()
-        task_tree = CElection.get("taskTypes", {})
+
+        task_tree = CElection.get("tagTypes", {})
 
         # 1. Wrap the dictionary in Python first
         wrapped_task_tree = {"TASKS": task_tree or {}}
@@ -2516,7 +2488,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = build_area_tree(area_root_path, geo_index, max_depth=3)
+        area_tree = self.get_areaTree(layers.Geo_index, max_depth=3)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
