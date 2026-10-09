@@ -74,7 +74,7 @@ window.renderTreeSelector = function (tree, options = {}) {
                     item.querySelector('.accordion-body');
 
                 // Select entire top-level branch
-              (
+                createButton(
                     body,
                     name,
                     allLabel(name),
@@ -333,6 +333,17 @@ initAccordionFromOptions = (optionsData) => {
                         parentElement.appendChild(btn);
                     }
                 });
+                // Force reveal the container and its parent accordion collapse panel
+                const container = document.getElementById('children-list');
+                if (container) {
+                    container.style.display = 'block';
+
+                    // Find any parent collapse wrapper and force it open if it's Bootstrap
+                    const parentCollapse = container.closest('.collapse');
+                    if (parentCollapse) {
+                        parentCollapse.classList.add('show');
+                    }
+                }
                 console.log("✅ Successfully executed renderTreeSelector.");
             } else {
                 console.error("❌ [Accordion Init] window.renderTreeSelector is NOT a function!");
@@ -412,6 +423,7 @@ window.updateConstantsUI = function (constants, options) {
         // =====================================================
         // Resources
         // =====================================================
+
         const resourcesEl = document.getElementById("resources");
         if (resourcesEl && options.resources) {
             resourcesEl.innerHTML = "";

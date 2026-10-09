@@ -1322,7 +1322,7 @@ class TreeNode:
 
         CE_resources = CE.get('resources',{})
         CE_task_tags, CE_outcome_tags, CE_all_tags = CE.get_tags()
-        CE_areas = self.get_areaTree(layers.Geo_index, max_depth=3)
+        CE_areas = self.get_areaTree(layers.Geo_index, max_depth=1)
         CE_places = CE.get("places", {})
         print(f"___Processing lozenges : {len(CE_resources)} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
         for loz in lozenges:
@@ -2488,7 +2488,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = self.get_areaTree(layers.Geo_index, max_depth=3)
+        area_tree = self.get_areaTree(layers.Geo_index, max_depth=1)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""

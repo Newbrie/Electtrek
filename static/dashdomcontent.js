@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           } catch (e) { return "parent not accessible: " + e.message; }
       })()
   });
-  
+
   const startHour = 9, endHour = 21, slotDuration = 2;
 
   // ----------------------------
@@ -25,6 +25,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ----------------------------
   const logList = document.querySelector("#logwin .flashes");
 
+
+  const territoryDisplay = document.getElementById("territory-display");
+  const territoryAccordion = document.getElementById("territory-accordion");
+
+  if (territoryDisplay && territoryAccordion) {
+      territoryDisplay.addEventListener("click", (e) => {
+          e.stopPropagation();
+          // Toggle visibility of the custom accordion panel
+          const isVisible = territoryAccordion.style.display === "block";
+          territoryAccordion.style.display = isVisible ? "none" : "block";
+      });
+
+      // Close accordion if clicking outside
+      document.addEventListener("click", (e) => {
+          if (!territoryDisplay.contains(e.target) && !territoryAccordion.contains(e.target)) {
+              territoryAccordion.style.display = "none";
+          }
+      });
+  }
 
 
   window.messages?.forEach(msg => addMessageToLog(msg));
