@@ -279,20 +279,24 @@ list.appendChild(button);
 }
 
 initAccordionFromOptions = (optionsData) => {
+    // 1. Grab the full area tree dynamically
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // Drill down to Surrey Heath specifically
-    let targetBranch = areas.SURREY || areas;
-    const surreyHeathPayload = targetBranch.SURREY_HEATH ? { SURREY_HEATH: targetBranch.SURREY_HEATH } : targetBranch;
+    // 2. Determine the current active node/path dynamically from the app state or window context
+    const currentPath = window.currentNodePath || window.currentPath || "";
+    const pathSegments = currentPath ? currentPath.split('/') : [];
+    const activeNodeName = pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : Object.keys(areas)[0];
 
-    // Update the header display text
+    // Update the header display text dynamically
     const displayElement = document.getElementById('display-path');
-    if (displayElement) displayElement.innerText = "SURREY HEATH";
+    if (displayElement) {
+        displayElement.innerText = activeNodeName.replace(/_/g, ' ');
+    }
 
-    // Render using ONLY the scoped Surrey Heath payload
+    // 3. Pass the entire areaTree directly to renderTreeSelector — no searching or hardcoding required!
     if (typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(surreyHeathPayload, {
+        window.renderTreeSelector(areas, {
             containerId: 'children-list',
             accordionId: 'election-accordion',
             emptyMessage: 'No sub-divisions available',
@@ -312,7 +316,7 @@ initAccordionFromOptions = (optionsData) => {
                 parentElement.appendChild(btn);
             }
         });
-        console.log("✅ Successfully rendered scoped Surrey Heath dropdown!");
+        console.log("✅ Successfully rendered dynamic area tree accordion!");
     }
 };
 
