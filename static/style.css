@@ -204,6 +204,19 @@ html, body {
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
 }
 
+/* Right-justify text for nested sub-divisions/second-level buttons */
+#territory-accordion .nav-list .nav-list button,
+#territory-accordion .nav-list .nav-list .btn {
+    text-align: right !important;
+    direction: ltr; /* Keeps text reading left-to-right, but aligned to the right edge */
+}
+
+/* Optional: If you want secondary indent indicators adjusted for right-alignment */
+#territory-accordion .nav-list .nav-list {
+    padding-left: 0 !important;
+    padding-right: 1rem !important;
+}
+
 
 /* Core 'nav' behavior (Missing Bootstrap logic) */
 .nav {

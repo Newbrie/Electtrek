@@ -279,22 +279,26 @@ list.appendChild(button);
 }
 
 initAccordionFromOptions = (optionsData) => {
-    // 1. Grab the full area tree dynamically
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 2. Determine the current active node/path dynamically from the app state or window context
-    const currentPath = window.currentNodePath || window.currentPath || "";
-    const pathSegments = currentPath ? currentPath.split('/') : [];
-    const activeNodeName = pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : Object.keys(areas)[0];
+    // 1. Retrieve the raw current path from state/window
+    const rawPath = window.currentNodePath || window.currentPath || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH";
 
-    // Update the header display text dynamically
+    // 2. Use state.stepify to break the path into individual steps safely
+    const steps = typeof state !== 'undefined' && typeof state.stepify === 'function'
+        ? state.stepify(rawPath)
+        : rawPath.split('/').filter(Boolean);
+
+    // 3. Extract the last step for the header display text
+    const activeNodeName = steps.length > 0 ? steps[steps.length - 1] : "UNITED_KINGDOM";
+
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    // 3. Pass the entire areaTree directly to renderTreeSelector — no searching or hardcoding required!
+    // 4. Render the ENTIRE areaTree directly — no filtering or subtree searching needed!
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
@@ -316,7 +320,35 @@ initAccordionFromOptions = (optionsData) => {
                 parentElement.appendChild(btn);
             }
         });
-        console.log("✅ Successfully rendered dynamic area tree accordion!");
+        console.log("✅ Successfully rendered full area tree accordion!");
+    }
+};
+
+    const scopedPayload = findSubTree(areas, activeNodeName) || areas;
+
+    // 5. Render using the strictly scoped payload
+    if (typeof window.renderTreeSelector === "function") {
+        window.renderTreeSelector(scopedPayload, {
+            containerId: 'children-list',
+            accordionId: 'election-accordion',
+            emptyMessage: 'No sub-divisions available',
+            allLabel: (name) => `${name.replace(/_/g, ' ')}`,
+            createButton: (parentElement, nodeName, labelText, className) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
+                btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (typeof selectNode === "function") {
+                        selectNode(nodeName);
+                    }
+                };
+                parentElement.appendChild(btn);
+            }
+        });
+        console.log(`✅ Successfully rendered tree for leaf node: ${activeNodeName}`);
     }
 };
 
