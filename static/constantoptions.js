@@ -282,45 +282,51 @@ initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 1. Retrieve the raw current path from state/window
+    // 1. Retrieve current path and tokenize it using state.stepify
     const rawPath = window.currentNodePath || window.currentPath || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH";
-
-    // 2. Use state.stepify to break the path into individual steps safely
-    const steps = typeof state !== 'undefined' && typeof state.stepify === 'function'
+    const currentSteps = typeof state !== 'undefined' && typeof state.stepify === 'function'
         ? state.stepify(rawPath)
         : rawPath.split('/').filter(Boolean);
 
-    // 3. Extract the last step for the header display text
-    const activeNodeName = steps.length > 0 ? steps[steps.length - 1] : "UNITED_KINGDOM";
+    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "UNITED_KINGDOM";
 
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    // 4. Render the ENTIRE areaTree directly — no filtering or subtree searching needed!
+    // 2. Render the tree with buttons linked to /transfer/<node_path>
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
             accordionId: 'election-accordion',
             emptyMessage: 'No sub-divisions available',
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: (parentElement, nodeName, labelText, className) => {
+            createButton: (parentElement, nodeName, labelText, className, nodePathArray) => {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
                 btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
+                // Construct the full path using state.pathify if available, fallback to joining array/string
+                let targetPath = nodeName;
+                if (typeof state !== 'undefined' && typeof state.pathify === 'function') {
+                    // If renderTreeSelector provides an array of ancestor steps, pass them to pathify
+                    // Otherwise, build the step array dynamically
+                    const stepsToPath = Array.isArray(nodePathArray) ? nodePathArray : [...currentSteps.slice(0, -1), nodeName];
+                    targetPath = state.pathify(stepsToPath);
+                }
+
                 btn.onclick = (e) => {
                     e.stopPropagation();
-                    if (typeof selectNode === "function") {
-                        selectNode(nodeName);
-                    }
+                    // Navigate directly to the /transfer route with the path parameter
+                    window.location.href = `/transfer/${targetPath}`;
                 };
+
                 parentElement.appendChild(btn);
             }
         });
-        console.log("✅ Successfully rendered full area tree accordion!");
+        console.log("✅ Successfully wired tree selector buttons to /transfer route!");
     }
 };
 
