@@ -191,16 +191,17 @@ html, body {
 }
 
 #territory-accordion {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    min-width: 260px;
-    z-index: 1050;
-    background: #fff;
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    border-radius: var(--bs-border-radius, 0.375rem);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    padding: 0.5rem;
+    position: absolute !important;
+    top: 100% !important;
+    right: 0 !important;      /* Anchors the right edge to the container's right edge */
+    left: auto !important;     /* Clears any default left positioning */
+    min-width: 260px !important;
+    max-width: 320px !important; /* Optional: adds a boundary cap so it never gets too wide */
+    z-index: 1070 !important;
+    background-color: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    border-radius: 0.375rem !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
 }
 
 
