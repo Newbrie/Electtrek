@@ -177,9 +177,17 @@ html, body {
     z-index: 1000;
 }
 
-territory-container {
+.territory-container {
     position: relative; /* Acts as the anchor anchor for the dropdown */
     display: inline-block;
+}
+
+/* 2. Style the display header so it handles clicks nicely */
+#territory-display {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 #territory-accordion {

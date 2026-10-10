@@ -325,15 +325,10 @@ def load_nodes(path):
 
 
 
-def get_last_node(Celect,geoindex, create=True):
+def get_last_node(Celect, geoindex, create=True):
     """
-    Returns the last node for the current election using 4 sources.
-    1st source: election CID (verified to have loaded children).
-    2nd source: browser GPS location (redirect if triggered).
-    3rd source: stored election sourcepath derived from breadcrumb.
-    4th source: stored territory path, resolved via ping_node.
-
-    If `create=False`, do not call ping_node and return root if CID node is unavailable.
+    Returns the last node for the current election using lookups
+    via TREK_NODES_BY_ID and TREK_NODES_BY_PATH, avoiding ping_node entirely.
     """
 
     cid = Celect.get("cid")
@@ -345,7 +340,6 @@ def get_last_node(Celect,geoindex, create=True):
     def node_has_children(node):
         if node is None:
             return False
-        # Check dictionary, list, or set of children depending on object design
         children = getattr(node, "children", None)
         return bool(children)
 
@@ -356,23 +350,24 @@ def get_last_node(Celect,geoindex, create=True):
             print(f"___under route: {state.route()} return to existing cid: {cid} (children count: {len(last_node.children)})")
             return last_node
         else:
-            print(f"⚠️ [CID STALE] Node for cid {cid} has 0 children. Bypassing CID to ping_node...")
+            print(f"⚠️ [CID STALE] Node for cid {cid} has 0 children. Bypassing CID to path-based lookup...")
 
-    print(f"___under route: {state.route()} no valid CID with children, checking GPS/sourcepath:")
+    print(f"___under route: {state.route()} no valid CID: {cid} with children, checking GPS/sourcepath:")
 
     # --- 2. Resolve location or redirect ---
     here, response = state.resolve_here_or_redirect(here)
     if response:
         return response  # redirect response
 
-    # If create=False is passed, skip ping_node completely as requested in docstring
+    # If create=False is passed, skip path lookups as requested in docstring
     if not create:
         print(f"___ create=False flag set. Returning MapRoot.")
         return MapRoot
 
-    # --- 3. Resolve node from sourcepath / territory ---
-    sourcepath = Celect.get("mapfiles", [None])[-1]
-    steps = state.stepify(sourcepath)
+    # --- 3. Resolve node from sourcepath / territory via TREK_NODES_BY_PATH ---
+    mapfiles = Celect.get("mapfiles")
+    sourcepath = mapfiles[-1] if (mapfiles and isinstance(mapfiles, list) and len(mapfiles) > 0) else None
+    steps = state.stepify(sourcepath) if sourcepath else []
 
     # Fall back to territory path if sourcepath is missing or too shallow
     if not sourcepath or sourcepath == "" or len(steps) < 6:
@@ -380,30 +375,18 @@ def get_last_node(Celect,geoindex, create=True):
 
     print(f"___ Last node under {state.route()} for {Celect.name} sourcepath: {sourcepath} create:{create}")
 
-    last_node = MapRoot.ping_node(
-        Celect.resolved_levels,
-        geoindex,
-        sourcepath,
-        create=create,
-        accumulate=False
-    )
+    # Direct dictionary lookup instead of ping_node
+    last_node = TREK_NODES_BY_PATH.get(sourcepath) if 'TREK_NODES_BY_PATH' in globals() or 'TREK_NODES_BY_PATH' in locals() else None
 
-    # If ping_node resolved a node, but it still has 0 children, attempt territory ping
+    # If resolved node has 0 children, attempt territory path lookup fallback
     territory_path = Celect.get("territory", "")
-    if last_node and not node_has_children(last_node) and sourcepath != territory_path and territory_path:
-        print(f"⚠️ [PING RETRY] Node '{last_node.value}' has 0 children. Re-pinging using territory path: {territory_path}")
-        last_node = MapRoot.ping_node(
-            Celect.resolved_levels,
-            geoindex,
-            territory_path,
-            create=create,
-            accumulate=False
-        )
+    if (not last_node or not node_has_children(last_node)) and sourcepath != territory_path and territory_path:
+        print(f"⚠️ [PATH RETRY] Node for '{sourcepath}' is missing or has 0 children. Re-checking using territory path: {territory_path}")
+        last_node = TREK_NODES_BY_PATH.get(territory_path) if 'TREK_NODES_BY_PATH' in globals() or 'TREK_NODES_BY_PATH' in locals() else None
 
     # --- 4. Fallback to root if still missing or childless ---
     if not last_node or not node_has_children(last_node):
-        print(f"⚠️ GAP: cid_in_index={cid in TREK_NODES_BY_ID} @FALLING BACK TO MAPROOT cid:{cid} - sp:{sourcepath}")
-        print(f"⚠️ @NODE INDEX DUMP: {TREK_NODES_BY_ID}")
+        print(f"⚠️ GAP: cid_in_index={cid in TREK_NODES_BY_ID if cid else False} @FALLING BACK TO MAPROOT cid:{cid} - sp:{sourcepath}")
         last_node = MapRoot
 
     print(

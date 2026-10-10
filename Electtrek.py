@@ -2973,7 +2973,10 @@ def index():
             streamrag=streamrag  # Pass streamrag to the template for rendering
         )
 
+
     # If no session or no username, render the default index page
+    print(f"🧪 Index No session for elections: {ELECTIONS} ")
+
     return render_template("index.html")
 
 #login
@@ -3031,6 +3034,7 @@ def get_location():
     It prompts the user for geolocation and redirects to /firstpage
     with lat/lon as query parameters.
     """
+    print("ROUTE/get_location:",state.route())
     return render_template_string("""
     <!DOCTYPE html>
     <html lang="en">

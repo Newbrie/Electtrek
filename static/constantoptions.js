@@ -279,87 +279,40 @@ list.appendChild(button);
 }
 
 initAccordionFromOptions = (optionsData) => {
-    console.log("🔍 [Accordion Init] Starting with optionsData:", optionsData);
+    const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
+    if (!areas) return;
 
-    const areas = optionsData?.areas || window.currentOptions?.areas;
-    console.log("🔍 [Accordion Init] Resolved areas object:", areas);
+    // Drill down to Surrey Heath specifically
+    let targetBranch = areas.SURREY || areas;
+    const surreyHeathPayload = targetBranch.SURREY_HEATH ? { SURREY_HEATH: targetBranch.SURREY_HEATH } : targetBranch;
 
-    if (areas && typeof areas === 'object') {
-        const districtKey = Object.keys(areas).find(k => k.toUpperCase() === "SURREY_HEATH") || Object.keys(areas)[0];
-        console.log("🔍 [Accordion Init] Found districtKey:", districtKey);
+    // Update the header display text
+    const displayElement = document.getElementById('display-path');
+    if (displayElement) displayElement.innerText = "SURREY HEATH";
 
-        const targetBranch = districtKey ? { [districtKey]: areas[districtKey] } : areas;
-        console.log("🔍 [Accordion Init] Target branch payload:", targetBranch);
+    // Render using ONLY the scoped Surrey Heath payload
+    if (typeof window.renderTreeSelector === "function") {
+        window.renderTreeSelector(surreyHeathPayload, {
+            containerId: 'children-list',
+            accordionId: 'election-accordion',
+            emptyMessage: 'No sub-divisions available',
+            allLabel: (name) => `${name.replace(/_/g, ' ')}`,
+            createButton: (parentElement, nodeName, labelText, className) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
+                btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-        if (targetBranch) {
-            // A. Update display path title
-            const displayTitle = (window.initialPath ? window.initialPath.split('/').pop() : "Selection").replace(/_/g, ' ');
-            const displayElement = document.getElementById('display-path');
-            if (displayElement) {
-                displayElement.innerText = displayTitle;
-                console.log("✅ [Accordion Init] Updated display-path element to:", displayTitle);
-            } else {
-                console.warn("⚠️ [Accordion Init] #display-path element not found in DOM.");
-            }
-
-            // Check container existence
-            const containerEl = document.getElementById('children-list');
-            console.log("🔍 [Accordion Init] Checking target container #children-list:", containerEl);
-
-            // B. Render using tree selector
-            if (typeof window.renderTreeSelector === "function") {
-                console.log("🚀 [Accordion Init] window.renderTreeSelector found. Invoking...");
-
-                window.renderTreeSelector(targetBranch, {
-                    containerId: 'children-list',
-                    accordionId: 'election-accordion',
-                    emptyMessage: 'No sub-divisions available',
-                    allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-                    createButton: (parentElement, nodeName, labelText, className) => {
-                        console.log("🛠️ [renderTreeSelector] createButton callback triggered for:", nodeName, "with label:", labelText);
-
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
-                        btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-
-                        btn.onclick = (e) => {
-                            e.stopPropagation();
-                            console.log("📍 [Accordion Click] Clicked node:", nodeName);
-                            if (typeof selectNode === "function") {
-                                selectNode(nodeName);
-                            }
-                        };
-                        parentElement.appendChild(btn);
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (typeof selectNode === "function") {
+                        selectNode(nodeName);
                     }
-                });
-                // Force reveal the container and its parent accordion collapse panel
-                const container = document.getElementById('children-list');
-                if (container) {
-                    container.style.display = 'block';
-
-                    // Find any parent collapse wrapper and force it open if it's Bootstrap
-                    const parentCollapse = container.closest('.collapse');
-                    if (parentCollapse) {
-                        parentCollapse.classList.add('show');
-                    }
-                }
-                console.log("✅ Successfully executed renderTreeSelector.");
-            } else {
-                console.error("❌ [Accordion Init] window.renderTreeSelector is NOT a function!");
+                };
+                parentElement.appendChild(btn);
             }
-        } else {
-            console.warn("⚠️ [Accordion Init] targetBranch is empty or null.");
-        }
-    } else {
-        console.log("⏳ [Accordion Init] Areas data not ready yet. Retrying in 150ms...");
-        setTimeout(() => initAccordionFromOptions(optionsData), 150);
-        return;
-    }
-
-    if (typeof selectNode === "function" && window.initialPath) {
-        console.log("🚀 [Accordion Init] Calling initial selectNode with:", window.initialPath);
-        selectNode(window.initialPath);
+        });
+        console.log("✅ Successfully rendered scoped Surrey Heath dropdown!");
     }
 };
 
