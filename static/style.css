@@ -177,7 +177,23 @@ html, body {
     z-index: 1000;
 }
 
+territory-container {
+    position: relative; /* Acts as the anchor anchor for the dropdown */
+    display: inline-block;
+}
 
+#territory-accordion {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 260px;
+    z-index: 1050;
+    background: #fff;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: var(--bs-border-radius, 0.375rem);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    padding: 0.5rem;
+}
 
 
 /* Core 'nav' behavior (Missing Bootstrap logic) */

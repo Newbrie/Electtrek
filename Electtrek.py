@@ -2959,7 +2959,7 @@ def index():
         OPTIONS = resolve_ui_context(program, election, current_node)
 
         # Log the current state for debugging
-        print(f"🧪 Index level {current_election} - current_node mapfile:{current_node.mapfile()}")
+        print(f"🧪 Index level {current_election} -options[areas]:{OPTIONS['areas']} current_node mapfile:{current_node.mapfile()}")
 
         return render_template(
             "Dash0.html",
@@ -4578,6 +4578,8 @@ def firstpage():
 
     flash(f"ROUTE /firstpage filepath: {filepath}", "info")
     logger.info(f"ROUTE /firstpage filepath {filepath}")
+
+    print(f"🧪 firstpage level {c_election} -options[areas]:{OPTIONS['areas']} current_node mapfile:{current_node.mapfile()}")
 
     map_obj, totalleaf = current_node.create_node_map(CElection,layers.Geo_index,rlevels, static=False)
 
