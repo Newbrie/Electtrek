@@ -324,33 +324,6 @@ initAccordionFromOptions = (optionsData) => {
     }
 };
 
-    const scopedPayload = findSubTree(areas, activeNodeName) || areas;
-
-    // 5. Render using the strictly scoped payload
-    if (typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(scopedPayload, {
-            containerId: 'children-list',
-            accordionId: 'election-accordion',
-            emptyMessage: 'No sub-divisions available',
-            allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: (parentElement, nodeName, labelText, className) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
-                btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    if (typeof selectNode === "function") {
-                        selectNode(nodeName);
-                    }
-                };
-                parentElement.appendChild(btn);
-            }
-        });
-        console.log(`✅ Successfully rendered tree for leaf node: ${activeNodeName}`);
-    }
-};
 
 window.updateConstantsUI = function (constants, options) {
     if (window.isUpdatingConstants) {
