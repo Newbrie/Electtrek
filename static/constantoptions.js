@@ -282,7 +282,7 @@ initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 1. Retrieve current path and tokenize it using state.stepify
+    # 1. Retrieve current path and tokenize it using state.stepify
     const rawPath = window.currentNodePath || window.currentPath || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH";
     const currentSteps = typeof state !== 'undefined' && typeof state.stepify === 'function'
         ? state.stepify(rawPath)
@@ -295,7 +295,7 @@ initAccordionFromOptions = (optionsData) => {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    // 2. Render the tree with buttons linked to /transfer/<node_path>
+    # 2. Render the tree with buttons bound to update the iframe src
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
@@ -308,25 +308,42 @@ initAccordionFromOptions = (optionsData) => {
                 btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
                 btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-                // Construct the full path using state.pathify if available, fallback to joining array/string
+                # Construct the full path using state.pathify
                 let targetPath = nodeName;
                 if (typeof state !== 'undefined' && typeof state.pathify === 'function') {
-                    // If renderTreeSelector provides an array of ancestor steps, pass them to pathify
-                    // Otherwise, build the step array dynamically
                     const stepsToPath = Array.isArray(nodePathArray) ? nodePathArray : [...currentSteps.slice(0, -1), nodeName];
                     targetPath = state.pathify(stepsToPath);
                 }
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
-                    // Navigate directly to the /transfer route with the path parameter
-                    window.location.href = `/transfer/${targetPath}`;
+
+                    # Derive the map filename based on the clicked node name
+                    const mapFilename = `${nodeName}-MAP.html`;
+                    const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
+
+                    # Find the map iframe and update its src
+                    const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+                    if (mapIframe) {
+                        mapIframe.src = iframeSrc;
+                        console.log(`🗺️ Updated iframe src to: ${iframeSrc}`);
+                    } else {
+                        console.warn("⚠️ Map iframe not found on page.");
+                    }
+
+                    # Keep window state synchronized
+                    window.currentNodePath = targetPath;
+
+                    # Update the header display text immediately to reflect the new selection
+                    if (displayElement) {
+                        displayElement.innerText = nodeName.replace(/_/g, ' ');
+                    }
                 };
 
                 parentElement.appendChild(btn);
             }
         });
-        console.log("✅ Successfully wired tree selector buttons to /transfer route!");
+        console.log("✅ Successfully wired tree buttons to update map iframe src!");
     }
 };
 
