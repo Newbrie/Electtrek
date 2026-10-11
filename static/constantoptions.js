@@ -250,30 +250,25 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         e.stopPropagation();
 
         // 🛡️ Resolve targetPath FRESH at the moment of click
+
         let targetPath = nodeName;
-        if (typeof pathify === 'function' && typeof stepify === 'function') {
-            // 1. Get the current active path steps as our base parent ancestry
-            const parentSteps = stepify(window.mapfile || window.currentNodePath || "UNITED_KINGDOM");
-            parentSteps.pop(); // remove current leaf filename if present
-
-            let rawSteps = [];
-            if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                // nodePathArray represents the full path from the tree structure
-                rawSteps = nodePathArray;
-            } else {
-                // Otherwise extend from parent steps
-                rawSteps = [...parentSteps, nodeName];
-            }
-
-            // 2. Ensure absolute root anchoring and clean deduplication
-            if (rawSteps[0] !== 'UNITED_KINGDOM') {
-                rawSteps.unshift('UNITED_KINGDOM');
-            }
-            const uniqueSteps = rawSteps.filter((step, index, arr) => index === 0 || step !== arr[index - 1]);
-
-            targetPath = pathify(uniqueSteps);
-        }
-      
+                if (typeof pathify === 'function' && typeof stepify === 'function') {
+                    if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
+                        if (nodePathArray[0] === 'UNITED_KINGDOM') {
+                            targetPath = pathify(nodePathArray);
+                        } else {
+                            const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
+                            parentSteps.pop(); // remove filename
+                            parentSteps.pop(); // remove current territory level so it doesn't duplicate with nodePathArray
+                            targetPath = pathify([...parentSteps, ...nodePathArray]);
+                        }
+                    } else if (window.mapfile || window.currentNodePath) {
+                        const cleanSteps = stepify(window.mapfile || window.currentNodePath);
+                        cleanSteps.pop(); // remove filename
+                        cleanSteps.pop(); // remove current territory level
+                        targetPath = pathify([...cleanSteps, nodeName]);
+                    }
+                }
 
         console.log(`🚀 Sending path to backend: ${targetPath}`);
 
