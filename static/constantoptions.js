@@ -1,3 +1,4 @@
+import state
 window.renderTreeSelector = function (tree, options = {}) {
     const {
         containerId,
