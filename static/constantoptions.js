@@ -183,43 +183,68 @@ function createAreaButton(parentElement, nodeName, labelText, className, nodePat
     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
     btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-    // Construct the full path using state.pathify directly from nodePathArray
+    // 1. Resolve targetPath natively using state.pathify and state.stepify
     let targetPath = nodeName;
-    if (typeof state !== 'undefined' && typeof state.pathify === 'function' && Array.isArray(nodePathArray)) {
-        targetPath = state.pathify(nodePathArray);
+    if (typeof state !== 'undefined' && typeof state.pathify === 'function') {
+        if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
+            targetPath = state.pathify(nodePathArray);
+        } else if (window.mapfile && typeof state.stepify === 'function') {
+            // Fallback: clean up window.mapfile by stepifying and pathifying it
+            const cleanSteps = [...state.stepify(window.mapfile), nodeName];
+            targetPath = state.pathify(cleanSteps);
+        }
     }
 
     btn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        // Derive the map filename based on the clicked node name
-        const mapFilename = `${nodeName}-MAP.html`;
-        const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
+        console.log(`🚀 Sending path to backend: ${targetPath}`);
 
-        // Find the map iframe and update its src
-        const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
-        if (mapIframe) {
-            mapIframe.src = iframeSrc;
-            console.log(`🗺️ Updated area iframe src to: ${iframeSrc}`);
-        } else {
-            console.warn("⚠️ Map iframe not found on page.");
-        }
+        // 2. Tell the backend to switch to this path and bake the map file
+        fetch(`/transfer/${targetPath}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Backend transfer failed');
+            return response.text();
+        })
+        .then(() => {
+            // 3. Update the iframe src once the backend has processed it
+            const mapFilename = `${nodeName}-MAP.html`;
+            const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
 
-        // Keep window state synchronized
-        window.currentNodePath = targetPath;
+            const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+            if (mapIframe) {
+                mapIframe.src = iframeSrc;
+                console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
+            } else {
+                console.warn("⚠️ Map iframe not found on page.");
+            }
 
-        // Update the header display text immediately
-        const displayElement = document.getElementById('display-path');
-        if (displayElement) {
-            displayElement.innerText = nodeName.replace(/_/g, ' ');
-        }
+            // 4. Synchronize global window state and mapfile
+            window.currentNodePath = targetPath;
+            window.mapfile = `${targetPath}/${mapFilename}`;
 
-        // Close the accordion dropdown
-        const accordion = document.getElementById('territory-accordion');
-        if (accordion) {
-            accordion.style.display = 'none';
-        }
+            // 5. Update header display text
+            const displayElement = document.getElementById('display-path');
+            if (displayElement) {
+                displayElement.innerText = nodeName.replace(/_/g, ' ');
+            }
+
+            // 6. Close the accordion dropdown
+            const accordion = document.getElementById('territory-accordion');
+            if (accordion) {
+                accordion.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error("❌ Error setting node path on backend:", error);
+            window.location.href = `/transfer/${targetPath}`;
+        });
     };
 
     parentElement.appendChild(btn);
@@ -290,7 +315,7 @@ initAccordionFromOptions = (optionsData) => {
     if (!areas) return;
 
     // 1. Retrieve current path and tokenize it using state.stepify (for the header display)
-    const rawPath = window.currentNodePath || window.currentPath || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH";
+    const rawPath = window.mapfile || "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html";
     const currentSteps = typeof state !== 'undefined' && typeof state.stepify === 'function'
         ? state.stepify(rawPath)
         : rawPath.split('/').filter(Boolean);
