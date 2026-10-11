@@ -421,7 +421,7 @@ list.appendChild(button);
     return { task_tags, outcome_tags };
 }
 
-initAccinitAccordionFromOptions = (optionsData) => {
+initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
