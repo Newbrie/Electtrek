@@ -251,78 +251,77 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
 
         // 🛡️ Resolve targetPath FRESH at the moment of click
 
-        let targetPath = nodeName;
-          if (typeof pathify === 'function' && typeof stepify === 'function') {
-              let steps = [];
-              if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                  if (nodePathArray[0] === 'UNITED_KINGDOM') {
-                      steps = [...nodePathArray];
-                  } else {
-                      const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
-                      console.log(`🚀 ParentSteps: ${parentSteps}`);
-                      parentSteps.pop(); // remove filename
-                      parentSteps.pop(); // remove current territory level so it doesn't duplicate with nodePathArray
-                      steps = [...parentSteps, ...nodePathArray];
-                  }
-              } else if (window.mapfile || window.currentNodePath) {
-                  const cleanSteps = stepify(window.mapfile || window.currentNodePath);
-                  console.log(`🚀 cleanSteps: ${cleanSteps}`);
-                  cleanSteps.pop(); // remove filename
-                  cleanSteps.pop(); // remove current territory level
-                  steps = [...cleanSteps, nodeName];
-              } else {
-                  steps = [nodeName];
-              }
-
-              // 🛡️ Append the required -MAP.html filename as the final directory/step segment for TREK_NODES_BY_PATH
-              const mapFilename = `${nodeName}-MAP.html`;
-              steps.push(mapFilename);
-
-              targetPath = pathify(steps);
-          }
-
-          console.log(`🚀 Sending path to backend: ${targetPath}`);
-        // 2. Tell the backend to switch to this path (ensure route matches your backend, e.g., /downbut/ or /transfer/)
-        fetch(`/transfer/${targetPath}`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
+        // 1. Build your clean targetPath first (no filename yet)
+            let targetPath = nodeName;
+            if (typeof pathify === 'function' && typeof stepify === 'function') {
+                let steps = [];
+                if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
+                    if (nodePathArray[0] === 'UNITED_KINGDOM') {
+                        steps = [...nodePathArray];
+                    } else {
+                        const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
+                        parentSteps.pop(); // remove filename
+                        parentSteps.pop(); // remove current territory level
+                        steps = [...parentSteps, ...nodePathArray];
+                    }
+                } else if (window.mapfile || window.currentNodePath) {
+                    const cleanSteps = stepify(window.mapfile || window.currentNodePath);
+                    cleanSteps.pop(); // remove filename
+                    cleanSteps.pop(); // remove current territory level
+                    steps = [...cleanSteps, nodeName];
+                } else {
+                    steps = [nodeName];
+                }
+                targetPath = pathify(steps);
             }
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('Backend transfer failed');
-            return response.text();
-        })
-        .then(() => {
+
+            // 2. Derive the fully-qualified path with the -MAP.html suffix specifically for the fetch route
             const mapFilename = `${nodeName}-MAP.html`;
-            const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
+            const fetchPath = `${targetPath}/${mapFilename}`;
 
-            const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
-            if (mapIframe) {
-                mapIframe.src = iframeSrc;
-                console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
-            }
+            console.log(`🚀 Sending path to backend: ${fetchPath}`);
 
-            // 3. Synchronize global window state
-            window.currentNodePath = targetPath;
-            window.mapfile = `${targetPath}/${mapFilename}`;
+            // 3. Fetch using the fully qualified path
+            fetch(`/downbut/${fetchPath}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Backend transfer failed');
+                return response.text();
+            })
+            .then(() => {
+                // 4. Use your clean targetPath here for the iframe src and window state
+                const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
 
-            // 4. Update header display text
-            const displayElement = document.getElementById('display-path');
-            if (displayElement) {
-                displayElement.innerText = nodeName.replace(/_/g, ' ');
-            }
+                const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+                if (mapIframe) {
+                    mapIframe.src = iframeSrc;
+                    console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
+                }
 
-            // 5. Close the accordion dropdown
-            const accordion = document.getElementById('territory-accordion');
-            if (accordion) {
-                accordion.style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error("❌ Error setting node path on backend:", error);
-            window.location.href = `/downbut/${targetPath}`;
-        });
+                // 5. Synchronize global window state cleanly
+                window.currentNodePath = targetPath;
+                window.mapfile = `${targetPath}/${mapFilename}`;
+
+                // 6. Update header display text
+                const displayElement = document.getElementById('display-path');
+                if (displayElement) {
+                    displayElement.innerText = nodeName.replace(/_/g, ' ');
+                }
+
+                // 7. Close the accordion dropdown
+                const accordion = document.getElementById('territory-accordion');
+                if (accordion) {
+                    accordion.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error("❌ Error setting node path on backend:", error);
+                window.location.href = `/downbut/${fetchPath}`;
+            });
     };
 
     parentElement.appendChild(btn);
