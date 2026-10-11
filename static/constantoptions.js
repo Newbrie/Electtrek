@@ -240,6 +240,15 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
  };
 
  function createMapButton(parentElement, nodeName, labelText, className, nodePathArray) {
+       // 🔍 SANITY CHECK LOGS
+       console.log("----------------------------------------");
+       console.log("🔍 [DEBUG createMapButton] Clicked nodeName:", nodeName);
+       console.log("🔍 [DEBUG createMapButton] window.mapfile is:", window.mapfile);
+       console.log("🔍 [DEBUG createMapButton] window.currentNodePath is:", window.currentNodePath);
+       console.log("🔍 [DEBUG createMapButton] nodePathArray received:", nodePathArray);
+       console.log("----------------------------------------");
+
+
      const btn = document.createElement('button');
      btn.type = 'button';
      btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
