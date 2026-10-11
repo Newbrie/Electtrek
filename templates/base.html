@@ -47,7 +47,14 @@
     </main>
 
     {% block modals %}{% endblock %}
+    <script>
+        // Authoritative state injection from Jinja backend
+        window.mapfile = "{{ mapfile | default('') }}";
+        window.currentNodePath = "{{ current_path | default('') }}";
 
+        console.log("🌐 [Jinja Injection] window.mapfile:", window.mapfile);
+        console.log("🌐 [Jinja Injection] window.currentNodePath:", window.currentNodePath);
+    </script>
 
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

@@ -2970,7 +2970,8 @@ def index():
             constants=CElection,
             baked_data=BAKED_DATA,
             mapfile=current_node.mapfile(),
-            streamrag=streamrag  # Pass streamrag to the template for rendering
+            streamrag=streamrag,  # Pass streamrag to the template for rendering
+            current_path = current_node.node_path()
         )
 
 
@@ -4104,7 +4105,8 @@ def calendar_partial(path):
         options=OPTIONS,
         constants=CElection,
         baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile()
+        mapfile=current_node.mapfile(),
+        current_path = current_node.node_path()
     )
 
 
@@ -4600,7 +4602,8 @@ def firstpage():
         options=OPTIONS,
         constants=CElection,
         baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile()
+        mapfile=current_node.mapfile(),
+        current_path = current_node.node_path()
     )
 
 @app.route('/cards', methods=['POST','GET'])
