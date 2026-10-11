@@ -314,29 +314,27 @@ initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 1. Retrieve current path and tokenize it using state.stepify (for the header display)
-    const rawPath = window.mapfile || "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html";
-    const currentSteps = typeof state !== 'undefined' && typeof state.stepify === 'function'
-        ? state.stepify(rawPath)
-        : rawPath.split('/').filter(Boolean);
+    // 1. Get current steps directly using state.stepify on mapfile or fallback path
+    const mapfile = window.mapfile || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH-MAP.html";
+    const currentSteps = state.stepify(mapfile);
 
-    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "UNITED_KINGDOM";
+    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY_HEATH";
 
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    // 2. Render the tree simply referencing your standalone createAreaButton function
+    // 2. Render the tree using createAreaButton
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
             accordionId: 'election-accordion',
             emptyMessage: 'No sub-divisions available',
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: createAreaButton // 👈 Just pass the reference here!
+            createButton: createAreaButton
         });
-        console.log("✅ Successfully initialized territory accordion with standalone createAreaButton!");
+        console.log("✅ Successfully initialized territory accordion!");
     }
 };
 
