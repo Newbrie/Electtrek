@@ -2920,7 +2920,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             child_elector_map = {}
 
             for child in sub_nodes:
-                child_elector_map[child] = electors.elector_for_path(rlevels, child.mapfile())
+                child_elector_map[child] = electors.elector_for_path(rlevels, child.mapfile)
                 if child.latlongroid and len(child.latlongroid) == 2:
                     child.centre = Point(child.latlongroid[1], child.latlongroid[0])  # lon, lat
                 else:
@@ -3017,7 +3017,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                             r_idx += 1
 
             # Load electors for this group's parent node envelope
-            nodeelectors = electors.elector_for_path(rlevels, parent_node.mapfile())
+            nodeelectors = electors.elector_for_path(rlevels, parent_node.mapfile)
 
             total_electorate = 0
             total_houses = 0
@@ -3059,14 +3059,14 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 # Navigation UI Links
                 has_parent = child.parent is not None
-                parent_mapfile = child.parent.mapfile() if has_parent else parent_node.mapfile()
+                parent_mapfile = child.parent.mapfile if has_parent else parent_node.mapfile
                 parent_value = child.parent.value if has_parent else parent_node.value
 
                 upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
                 up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                 if not static:
-                    showmessageST = f"showMore('/walkdownST/{child.mapfile()}','{child.value}')"
+                    showmessageST = f"showMore('/walkdownST/{child.mapfile}','{child.value}')"
                     street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                     nav_html = f"""
                     <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
@@ -3294,8 +3294,8 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                 target_idx = limbX.index[0]
                 font_style = "style='font-size: 12pt;'"
-                c_path = f"{c.mapfile()}"
-                here_path = f"{herenode.mapfile()}"
+                c_path = f"{c.mapfile}"
+                here_path = f"{herenode.mapfile}"
                 c_val = c.value
                 here_val = herenode.value
 
@@ -3309,10 +3309,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                     leg_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{walkleg_js}\">Walk legs</button>"
                     elec_btn = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{elector_js}\">Electors</button>"
                     limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}<br>{leg_btn} {elec_btn}" if not static else f"<br>{c_val}<br>"
-                    mapfile = f"/transfer/{c.mapfile()}"
+                    mapfile = f"/transfer/{c.mapfile}"
                 else:
                     limbX.at[target_idx, "UPDOWN"] = f"<br>{c_val}<br>{up_tag}" if not static else f"<br>{c_val}<br>"
-                    mapfile = f"/transfer/{c.mapfile()}"
+                    mapfile = f"/transfer/{c.mapfile}"
 
                 counters[c.type] = counters.get(c.type, 0) + 1
                 num = str(counters[c.type])
@@ -3483,7 +3483,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # 🚗 STEP 3: Match & Retrieve individual street geometries
             # -------------------------------------------------
             for child in sub_nodes:
-                elector_path = pathify(stepify(child.mapfile()))
+                elector_path = pathify(stepify(child.mapfile))
 
                 raw_street_name = str(child.value).strip() if child.type == 'street' else str(child.parent.value).strip() if child.parent else str(child.value).strip()
 
@@ -3563,14 +3563,14 @@ class ExtendedFeatureGroup(FeatureGroup):
                 line_color = self._pd_color_cache[pd_code]
 
                 has_parent = child.parent is not None
-                parent_mapfile = child.parent.mapfile() if has_parent else grp_parent_node.mapfile()
+                parent_mapfile = child.parent.mapfile if has_parent else grp_parent_node.mapfile
                 parent_val = child.parent.value if has_parent else grp_parent_node.value
 
                 upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_val}')"
                 up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                 if not static:
-                    showmessageST = f"showMore('/walkdownST/{child.mapfile()}','{child.value}')"
+                    showmessageST = f"showMore('/walkdownST/{child.mapfile}','{child.value}')"
                     street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                     nav_html = f"""
                     <div style="margin-bottom:8px; padding-left:10px; line-height:1.6;">
@@ -3674,7 +3674,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         logger = logging.getLogger(__name__)
 
         # 🎯 FIX 1: Safely use the passed node to get the file path
-        path = node.mapfile()
+        path = node.mapfile
         node_electors = electors.elector_for_path(rlevels, path)
 
         if node_electors is None or node_electors.empty:
@@ -3835,7 +3835,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         # ------------------------------------------------------------------
         reg_id = getattr(herenode, 'value', 'UNKNOWN')
         if layer_type == 'street': # ie the children are streets
-            streets_df = electors.elector_for_path(rlevels, herenode.mapfile())
+            streets_df = electors.elector_for_path(rlevels, herenode.mapfile)
             if not streets_df.empty:
                 street_stats, _ = preprocess_streets(streets_df, task_tags=task_tags)
                 nodeshtml = build_street_list_html(reg_id, streets_df, street_stats, task_tags, uiScope="walk")
@@ -3883,11 +3883,11 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     target_idx = limbX.index[0]
                     font_style = "style='font-size: 12pt;'"
-                    c_path = f"{c.mapfile()}"
-                    here_path = f"{herenode.mapfile()}"
+                    c_path = f"{c.mapfile}"
+                    here_path = f"{herenode.mapfile}"
                     c_val = c.value
                     here_val = herenode.value
-                    mapfile = f"/transfer/{c.mapfile()}"
+                    mapfile = f"/transfer/{c.mapfile}"
 
                     # Standard JavaScript Callbacks for Up and Down Navigation
                     up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
@@ -3919,14 +3919,14 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     elif layer_type == 'walk': # ie children are walks, grandchildren are streets
                         has_parent = c.parent is not None
-                        parent_mapfile = c.parent.mapfile() if has_parent else herenode.mapfile()
+                        parent_mapfile = c.parent.mapfile if has_parent else herenode.mapfile
                         parent_value = c.parent.value if has_parent else herenode.value
 
                         upmessage = f"moveUp('/upbut/{parent_mapfile}','{parent_value}')"
                         up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                         if not static:
-                            showmessageST = f"showMore('/walkdownST/{c.mapfile()}','{c_val}')"
+                            showmessageST = f"showMore('/walkdownST/{c.mapfile}','{c_val}')"
                             street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                             nav_html = f"""
                             <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
@@ -3943,7 +3943,7 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                         # ✅ RELIABLE ELECTOR FETCH (Matches add_voronoi approach)
                         try:
-                            child_df = electors.elector_for_path(rlevels, c.mapfile())
+                            child_df = electors.elector_for_path(rlevels, c.mapfile)
                             print(f"DEBUG: elector_for_path size {len(child_df)}")
                         except Exception as e:
                             print(f"DEBUG: elector_for_path failed for {c_val}: {e}")
@@ -4156,7 +4156,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             num = str(c.tagno)
             tag = str(c.value)
             fill = herenode.col
-            pathref = c.mapfile()
+            pathref = c.mapfile
             mapfile = '/transfer/'+pathref
 
             print("______Display childrenx:", c.value, c.level, type, c.latlongroid)
@@ -4329,7 +4329,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             numtag = str(c.tagno) + " " + str(c.value)
             num_str = str(c.tagno)
             tag = str(c.value)
-            pathref = c.mapfile()
+            pathref = c.mapfile
             mapfile = '/transfer/' + pathref
 
             print("______Display childrenx:", c.value, c.level, intention_type, c.latlongroid, "-> Snapped:", here)

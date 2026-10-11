@@ -240,94 +240,80 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
  };
 
  function createMapButton(parentElement, nodeName, labelText, className, nodePathArray) {
-       // 🔍 SANITY CHECK LOGS
-       console.log("----------------------------------------");
-       console.log("🔍 [DEBUG createMapButton] Clicked nodeName:", nodeName);
-       console.log("🔍 [DEBUG createMapButton] window.mapfile is:", window.mapfile);
-       console.log("🔍 [DEBUG createMapButton] window.currentNodePath is:", window.currentNodePath);
-       console.log("🔍 [DEBUG createMapButton] nodePathArray received:", nodePathArray);
-       console.log("----------------------------------------");
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
+    btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
+    btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-     const btn = document.createElement('button');
-     btn.type = 'button';
-     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
-     btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        // 🛡️ Resolve targetPath FRESH at the moment of click
+        let targetPath = nodeName;
+        if (typeof pathify === 'function' && typeof stepify === 'function') {
+            if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
+                if (nodePathArray[0] === 'UNITED_KINGDOM') {
+                    targetPath = pathify(nodePathArray);
+                } else {
+                    const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
+                    parentSteps.pop();
+                    targetPath = pathify([...parentSteps, ...nodePathArray]);
+                }
+            } else if (window.mapfile || window.currentNodePath) {
+                const cleanSteps = stepify(window.mapfile || window.currentNodePath);
+                cleanSteps.pop();
+                targetPath = pathify([...cleanSteps, nodeName]);
+            }
+        }
 
-     // 1. Resolve targetPath natively using pathify and stepify (Fixed typeof check!)
-     // 🛡️ BULLETPROOF ABSOLUTE PATH RESOLUTION:
-     let targetPath = nodeName;
-     if (typeof pathify === 'function' && typeof stepify === 'function') {
-         if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-             // Check if nodePathArray already includes top-level ancestry
-             // If it starts with 'UNITED_KINGDOM', use it directly. Otherwise, prepend current mapfile parents.
-             if (nodePathArray[0] === 'UNITED_KINGDOM') {
-                 targetPath = pathify(nodePathArray);
-             } else {
-                 const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
-                 parentSteps.pop(); // remove filename
-                 targetPath = pathify([...parentSteps, ...nodePathArray]);
-             }
-         } else if (window.mapfile || window.currentNodePath) {
-             const cleanSteps = stepify(window.mapfile || window.currentNodePath);
-             cleanSteps.pop(); // remove filename if present
-             targetPath = pathify([...cleanSteps, nodeName]);
-         }
-     }
-     btn.onclick = (e) => {
-         e.preventDefault();
-         e.stopPropagation();
+        console.log(`🚀 Sending path to backend: ${targetPath}`);
 
-         console.log(`🚀 Sending path to backend: ${targetPath}`);
+        // 2. Tell the backend to switch to this path (ensure route matches your backend, e.g., /downbut/ or /transfer/)
+        fetch(`/downbut/${targetPath}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Backend transfer failed');
+            return response.text();
+        })
+        .then(() => {
+            const mapFilename = `${nodeName}-MAP.html`;
+            const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
 
-         // 2. Tell the backend to switch to this path and bake the map file
-         fetch(`/transfer/${targetPath}`, {
-             method: 'GET',
-             headers: {
-                 'X-Requested-With': 'XMLHttpRequest'
-             }
-         })
-         .then(response => {
-             if (!response.ok) throw new Error('Backend transfer failed');
-             return response.text();
-         })
-         .then(() => {
-             // 3. Update the iframe src once the backend has processed it
-             const mapFilename = `${nodeName}-MAP.html`;
-             const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
+            const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+            if (mapIframe) {
+                mapIframe.src = iframeSrc;
+                console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
+            }
 
-             const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
-             if (mapIframe) {
-                 mapIframe.src = iframeSrc;
-                 console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
-             } else {
-                 console.warn("⚠️ Map iframe not found on page.");
-             }
+            // 3. Synchronize global window state
+            window.currentNodePath = targetPath;
+            window.mapfile = `${targetPath}/${mapFilename}`;
 
-             // 4. Synchronize global window state and mapfile
-             window.currentNodePath = targetPath;
-             window.mapfile = `${targetPath}/${mapFilename}`;
+            // 4. Update header display text
+            const displayElement = document.getElementById('display-path');
+            if (displayElement) {
+                displayElement.innerText = nodeName.replace(/_/g, ' ');
+            }
 
-             // 5. Update header display text
-             const displayElement = document.getElementById('display-path');
-             if (displayElement) {
-                 displayElement.innerText = nodeName.replace(/_/g, ' ');
-             }
+            // 5. Close the accordion dropdown
+            const accordion = document.getElementById('territory-accordion');
+            if (accordion) {
+                accordion.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error("❌ Error setting node path on backend:", error);
+            window.location.href = `/downbut/${targetPath}`;
+        });
+    };
 
-             // 6. Close the accordion dropdown
-             const accordion = document.getElementById('territory-accordion');
-             if (accordion) {
-                 accordion.style.display = 'none';
-             }
-         })
-         .catch(error => {
-             console.error("❌ Error setting node path on backend:", error);
-             window.location.href = `/transfer/${targetPath}`;
-         });
-     };
-
-     parentElement.appendChild(btn);
- }
+    parentElement.appendChild(btn);
+}
 
 function createTaskButton(
 list,

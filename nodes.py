@@ -541,11 +541,11 @@ def get_layer_table(nodelist,title,elevels):
             for party in VIoptions:
                 dfy.loc[i,party] = x.VI[party]
             if x.type == 'polling_district':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/walkdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/walkdownST/{x.mapfile}&#39;); return false;">{x.value}</a>'
             elif x.type == 'walk':
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.mapfile()}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/WKdownST/{x.mapfile}&#39;); return false;">{x.value}</a>'
             else:
-                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.mapfile()}&#39;); return false;">{x.value}</a>'
+                dfy.loc[i,x.type]=  f'<a href="#" onclick="changeIframeSrc(&#39;/transfer/{x.mapfile}&#39;); return false;">{x.value}</a>'
             # 1. Identify grandparent
             grandparent = x.parent.parent if x.parent else None
 
@@ -839,7 +839,7 @@ class TreeNode:
         c_elect['cidLat'] = self.latlongroid[0]
         c_elect['cidLong'] = self.latlongroid[1]
 
-        newlist = c_elect.add_breadcrumb(self.mapfile())
+        newlist = c_elect.add_breadcrumb(self.mapfile)
 
         c_elect.save()
         print(f"=== VISIT self === {self.nid}")
@@ -1418,6 +1418,7 @@ class TreeNode:
 
     from pathlib import Path
 
+    @property
     def mapfile(self) -> str:
         """Compute map filename dynamically."""
         node_type = self.type
@@ -1456,7 +1457,7 @@ class TreeNode:
         # Step 1: Clean & Normalize Paths
         # ──────────────────────────────
         full_dest_path = dest_path.strip()
-        self_path = stepify(self.mapfile())
+        self_path = stepify(self.mapfile)
         dest_parts = stepify(full_dest_path)
 
         print(f"  [1] Parsed self_path:  {self_path}")
@@ -1584,7 +1585,7 @@ class TreeNode:
             if next_level <= 6:
                 should_expand = node.node_path in geoindex or any(k.startswith(node.node_path + "/") for k in geoindex)
             else:
-                df_check = electors.elector_for_path(rlevels, node.mapfile())
+                df_check = electors.elector_for_path(rlevels, node.mapfile)
                 should_expand = df_check is not None and not df_check.empty
 
             if should_expand:
@@ -2503,7 +2504,7 @@ class TreeNode:
 
         # 2. SET UP FILE PATHS
         # Use render_node for the filename so child updates overwrite the parent map
-        mapfile_name = self.mapfile().split("/")[-1]
+        mapfile_name = self.mapfile.split("/")[-1]
         target = self.locfilepath(mapfile_name)
 
         # 3. SET UP VISUALS (Title and Bounding Box)
@@ -2520,7 +2521,7 @@ class TreeNode:
             width='100%',
             height='800px'
         )
-        print(f"___AFTER map creation: on elections.route {state.route()} acc: {accumulate} creating file: ", self.mapfile())
+        print(f"___AFTER map creation: on elections.route {state.route()} acc: {accumulate} creating file: ", self.mapfile)
 
         counters = make_counters()
 
@@ -2531,7 +2532,7 @@ class TreeNode:
             CE=CElection,rlevels=resolved_levels,
             static=static
         )
-        print(f"___AFTER layer creation: on elections.route {state.route()} layercount: {len(flayers)} creating file: ", self.mapfile())
+        print(f"___AFTER layer creation: on elections.route {state.route()} layercount: {len(flayers)} creating file: ", self.mapfile)
 
         # Configure only ghosts for testing
         accordion_configurations = [
@@ -3660,7 +3661,7 @@ class TreeNode:
         # File paths
         results_path = self.locfilepath(results_filename)
         datafile = f"/STupdate/{self.dir}/{streetfile_name}-SDATA.csv"
-        mapfile = f"/upbut/{self.parent.mapfile()}"
+        mapfile = f"/upbut/{self.parent.mapfile}"
 
         # Fill missing data to prevent template errors
         electorwalks = electorwalks.fillna("")

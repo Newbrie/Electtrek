@@ -423,8 +423,8 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
           print("Cant find Wardboundary - Lat Long:",maplaty,maplongx)
         else:
           uppdtag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.parent.dir+"/"+ward_node.parent.file,"UP",10)
-          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.mapfile(),"UP",10)
-          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.mapfile(),"DOWN",10)
+          uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.mapfile,"UP",10)
+          downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: gray'>{1}</button></form>".format(ward_node.mapfile,"DOWN",10)
           Wardboundary["Downcon"] =  "<br>"+Ward+"</br>"+ downtag
           Wardboundary["UP"] =  "<br>"+Ward+"</br>"+uptag
           Wardboundary["UPpd"] =  "<br>"+Ward+"</br>"+uppdtag
@@ -573,8 +573,8 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 
 
           for streetcoordinates in CL_unique_list:
-            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.parent.mapfile(),"UP",12)
-            downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.mapfile(),street_node.value,12)
+            uptag = "<form action= '/upbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.parent.mapfile,"UP",12)
+            downtag = "<form action= '/downbut/{0}' ><button type='submit' style='font-size: {2}pt;color: red'>{1}</button></form>".format(street_node.mapfile,street_node.value,12)
 
             # in the Walk map add Street-postcode groups to the walk map with controls to go back up to the PD map or down to the Walk addresses
             popuptext = '<ul style="font-size: {5}pt;color: gray;" >Ward: {0} WalkNo: {1} Postcode: {2} {3} {4}</ul>'.format(Ward,STREET_, Postcode, uptag, downtag,12)
@@ -698,7 +698,7 @@ def prodcards(gapnode,filename, prodstats,TreeBounds, enviro, flayers):
 #    Conmap.add_child(folium.LayerControl())
     gapnode.map.save(target)
     prodstats['status'] = "Street Cards generated"
-    return [allelectors, prodstats,gapnode.mapfile()]
+    return [allelectors, prodstats,gapnode.mapfile]
 
 if __name__ == "__main__":
     # this won't be run when imported
