@@ -263,12 +263,14 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
                         parentSteps.pop(); // remove filename
                         parentSteps.pop(); // remove current territory level
                         steps = [...parentSteps, ...nodePathArray];
+                        console.log(`🚀 parentSteps: ${parentSteps}`);
                     }
                 } else if (window.mapfile || window.currentNodePath) {
                     const cleanSteps = stepify(window.mapfile || window.currentNodePath);
                     cleanSteps.pop(); // remove filename
                     cleanSteps.pop(); // remove current territory level
                     steps = [...cleanSteps, nodeName];
+                    console.log(`🚀 cleanSteps: ${cleanSteps}`);
                 } else {
                     steps = [nodeName];
                 }
@@ -278,8 +280,8 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
             // 2. Derive the fully-qualified path with the -MAP.html suffix specifically for the fetch route
             const mapFilename = `${nodeName}-MAP.html`;
             const fetchPath = `${targetPath}/${mapFilename}`;
-            console.log(`🚀 parentSteps: ${parentSteps}`);
-            console.log(`🚀 cleanSteps: ${cleanSteps}`);
+
+
             console.log(`🚀 NodePathArray: ${nodePathArray}`);
 
             console.log(`🚀 Sending path to backend: ${fetchPath}`);
