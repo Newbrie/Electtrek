@@ -3342,24 +3342,36 @@ def downbulk():
 @app.route('/transfer/<path:path>', methods=['GET','POST'])
 @login_required
 def transfer(path):
+    from layers import ensure_treepolys_with_index
     from flask import session
     from elector import electors
     from layers import ExtendedFeatureGroup
-
     from elections import CurrentElection
+    import nodes
+
     global layeritems
     global constants
+
+    logger.info("=== [DOWNBUT START] Incoming path: '%s' ===", path)
+    print("____Route/downbut:", path)
 
     restore_from_persist(layers.Treepolys, layers.Geo_index)
 
     current_election = CurrentElection.get_lastused()
+    session["current_election"] = current_election
     CElection = CurrentElection.load(current_election)
     rlevels = CElection.resolved_levels
-    prev = nodes.TREK_NODES_BY_ID.get(CElection['cid'])
 
-# transfering to another any other node with siblings listed below
-# use ping to populate the destination node with which to repaint the screen node map and markers
-    current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,path, create=True, accumulate=session.get("accumulate", False))
+    # 1. Use stepify to clean suffixes and ignorable containers (like 'WARDS') automatically
+    steps = stepify(path)
+    target_path = "/".join(steps)
+
+    logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
+
+    # 2. Direct O(1) node lookup using the clean node path
+    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
+    if current_node is None:
+        current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,target_path, create=True, accumulate=session.get("accumulate", False))
 
     created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile,static=False)
 
