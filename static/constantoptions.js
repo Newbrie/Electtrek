@@ -177,45 +177,52 @@ window.renderTreeSelector = function (tree, options = {}) {
     container.appendChild(acc);
 };
 
-function createAreaButton(
-  list,
-  areaName,
-  displayName,
-  indentClass = '',
-  selectedKey = 'selectedArea'
-) {
-  const button = document.createElement('button');
+function createAreaButton(parentElement, nodeName, labelText, className, nodePathArray) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
+    btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-  button.type = 'button';
-  button.className =
-      `list-group-item list-group-item-action small ${indentClass}`;
+    // Construct the full path using state.pathify directly from nodePathArray
+    let targetPath = nodeName;
+    if (typeof state !== 'undefined' && typeof state.pathify === 'function' && Array.isArray(nodePathArray)) {
+        targetPath = state.pathify(nodePathArray);
+    }
 
-  button.textContent = displayName;
-  button.dataset.name = areaName;
+    btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-  if (window[selectedKey] === areaName) {
-      button.classList.add('active');
-  }
+        // Derive the map filename based on the clicked node name
+        const mapFilename = `${nodeName}-MAP.html`;
+        const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
 
-  button.addEventListener('click', function () {
-      const accordion = list.closest('.accordion');
+        // Find the map iframe and update its src
+        const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+        if (mapIframe) {
+            mapIframe.src = iframeSrc;
+            console.log(`🗺️ Updated area iframe src to: ${iframeSrc}`);
+        } else {
+            console.warn("⚠️ Map iframe not found on page.");
+        }
 
-      if (accordion) {
-          accordion
-              .querySelectorAll('.list-group-item')
-              .forEach(btn => btn.classList.remove('active'));
-      }
+        // Keep window state synchronized
+        window.currentNodePath = targetPath;
 
-      window[selectedKey] = areaName;
+        // Update the header display text immediately
+        const displayElement = document.getElementById('display-path');
+        if (displayElement) {
+            displayElement.innerText = nodeName.replace(/_/g, ' ');
+        }
 
-      button.classList.add('active');
+        // Close the accordion dropdown
+        const accordion = document.getElementById('territory-accordion');
+        if (accordion) {
+            accordion.style.display = 'none';
+        }
+    };
 
-      console.log('Area selected:', areaName);
-
-      syncAreaSelect();
-  });
-
-  list.appendChild(button);
+    parentElement.appendChild(btn);
 }
 
 function createTaskButton(
@@ -282,7 +289,7 @@ initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    # 1. Retrieve current path and tokenize it using state.stepify
+    // 1. Retrieve current path and tokenize it using state.stepify (for the header display)
     const rawPath = window.currentNodePath || window.currentPath || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH";
     const currentSteps = typeof state !== 'undefined' && typeof state.stepify === 'function'
         ? state.stepify(rawPath)
@@ -295,58 +302,18 @@ initAccordionFromOptions = (optionsData) => {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    # 2. Render the tree with buttons bound to update the iframe src
+    // 2. Render the tree simply referencing your standalone createAreaButton function
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
             accordionId: 'election-accordion',
             emptyMessage: 'No sub-divisions available',
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: (parentElement, nodeName, labelText, className, nodePathArray) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
-                btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-
-                # Construct the full path using state.pathify
-                let targetPath = nodeName;
-                if (typeof state !== 'undefined' && typeof state.pathify === 'function') {
-                    const stepsToPath = Array.isArray(nodePathArray) ? nodePathArray : [...currentSteps.slice(0, -1), nodeName];
-                    targetPath = state.pathify(stepsToPath);
-                }
-
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-
-                    # Derive the map filename based on the clicked node name
-                    const mapFilename = `${nodeName}-MAP.html`;
-                    const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
-
-                    # Find the map iframe and update its src
-                    const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
-                    if (mapIframe) {
-                        mapIframe.src = iframeSrc;
-                        console.log(`🗺️ Updated iframe src to: ${iframeSrc}`);
-                    } else {
-                        console.warn("⚠️ Map iframe not found on page.");
-                    }
-
-                    # Keep window state synchronized
-                    window.currentNodePath = targetPath;
-
-                    # Update the header display text immediately to reflect the new selection
-                    if (displayElement) {
-                        displayElement.innerText = nodeName.replace(/_/g, ' ');
-                    }
-                };
-
-                parentElement.appendChild(btn);
-            }
+            createButton: createAreaButton // 👈 Just pass the reference here!
         });
-        console.log("✅ Successfully wired tree buttons to update map iframe src!");
+        console.log("✅ Successfully initialized territory accordion with standalone createAreaButton!");
     }
 };
-
 
 window.updateConstantsUI = function (constants, options) {
     if (window.isUpdatingConstants) {

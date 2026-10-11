@@ -1946,20 +1946,17 @@ def ensure_treepolys_with_index(
                         "parent": parent_path if level > 0 else None,
                         "children": [], "roid": roid_coords, "fid": row_fid,
                     }
-                    logging.debug(f"[GEO_INDEX NEW] Registered path: '{this_path}' (FID: {row_fid})")
                 else:
                     entry = Geo_index[this_path]
                     if entry.get("fid") is None and row_fid is not None:
                         entry["fid"] = row_fid
                     if entry.get("roid") is None and roid_coords is not None:
                         entry["roid"] = roid_coords
-                    logging.debug(f"[GEO_INDEX UPDATE] Updated existing path: '{this_path}'")
 
                 if parent_path in Geo_index and this_path != parent_path:
                     siblings = Geo_index[parent_path]["children"]
                     if this_path not in siblings:
                         siblings.append(this_path)
-                        logging.debug(f"[GEO_INDEX CHILD] Added '{this_path}' to children of parent '{parent_path}'")
 
                 if row_fid is not None:
                     fid_to_path[(level, row_fid)] = this_path
