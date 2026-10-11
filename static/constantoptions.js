@@ -246,16 +246,25 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
      btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
      // 1. Resolve targetPath natively using pathify and stepify (Fixed typeof check!)
+     // 🛡️ BULLETPROOF ABSOLUTE PATH RESOLUTION:
      let targetPath = nodeName;
-     if (typeof pathify === 'function') {
+     if (typeof pathify === 'function' && typeof stepify === 'function') {
          if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-             targetPath = pathify(nodePathArray);
-         } else if (window.mapfile && typeof stepify === 'function') {
-             const cleanSteps = [...stepify(window.mapfile), nodeName];
-             targetPath = pathify(cleanSteps);
+             // Check if nodePathArray already includes top-level ancestry
+             // If it starts with 'UNITED_KINGDOM', use it directly. Otherwise, prepend current mapfile parents.
+             if (nodePathArray[0] === 'UNITED_KINGDOM') {
+                 targetPath = pathify(nodePathArray);
+             } else {
+                 const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
+                 parentSteps.pop(); // remove filename
+                 targetPath = pathify([...parentSteps, ...nodePathArray]);
+             }
+         } else if (window.mapfile || window.currentNodePath) {
+             const cleanSteps = stepify(window.mapfile || window.currentNodePath);
+             cleanSteps.pop(); // remove filename if present
+             targetPath = pathify([...cleanSteps, nodeName]);
          }
      }
-
      btn.onclick = (e) => {
          e.preventDefault();
          e.stopPropagation();
@@ -412,11 +421,10 @@ list.appendChild(button);
     return { task_tags, outcome_tags };
 }
 
-initAccordionFromOptions = (optionsData) => {
+initAccinitAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 1. Get current steps directly using stepify on mapfile or fallback path
     const mapfile = window.mapfile || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH-MAP.html";
     const currentSteps = stepify(mapfile);
 
@@ -427,16 +435,15 @@ initAccordionFromOptions = (optionsData) => {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
-    // 2. Render the tree using createMapButton
     if (typeof window.renderTreeSelector === "function") {
         window.renderTreeSelector(areas, {
             containerId: 'children-list',
             accordionId: 'election-accordion',
             emptyMessage: 'No sub-divisions available',
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: createMapButton
+            createButton: createMapButton // 👈 Maps your interactive map button builder here!
         });
-        console.log("✅ Successfully initialized territory accordion!");
+        console.log("✅ Successfully initialized territory accordion with createMapButton!");
     }
 };
 
