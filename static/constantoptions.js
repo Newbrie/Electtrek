@@ -1,4 +1,59 @@
-import state
+// Configuration constants matching backend behavior
+const IGNORABLE_SEGMENTS = new Set(['', '.', 'undefined', 'null']);
+const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
+
+/**
+ * Clean file suffixes, or return null if ignorable/empty.
+ */
+function cleanPathPart(part) {
+    if (!part) return null;
+    const trimmed = part.trim();
+
+    if (IGNORABLE_SEGMENTS.has(trimmed)) {
+        return null;
+    }
+
+    for (const suffix of FILE_SUFFIXES) {
+        if (trimmed.endsWith(suffix)) {
+            return null;
+        }
+    }
+
+    return trimmed;
+}
+
+/**
+ * Split path string, clean each segment, and remove sequential duplicates.
+ */
+function stepify(pathStr) {
+    if (!pathStr || typeof pathStr !== 'string') return [];
+
+    const parts = pathStr.trim().split('/');
+    const cleaned = [];
+
+    for (const part of parts) {
+        const cleanedPart = cleanPathPart(part);
+        if (cleanedPart) {
+            // Only append if it's the first element OR not a duplicate of the previous element
+            if (cleaned.length === 0 || cleaned[cleaned.length - 1] !== cleanedPart) {
+                cleaned.push(cleanedPart);
+            }
+        }
+    }
+
+    return cleaned;
+}
+
+/**
+ * Takes a clean list of geographic parts and builds a node path string.
+ */
+function pathify(parts) {
+    if (!Array.isArray(parts) || parts.length === 0) {
+        return "";
+    }
+
+    return parts.join('/');
+}
 window.renderTreeSelector = function (tree, options = {}) {
     const {
         containerId,
@@ -184,15 +239,15 @@ function createAreaButton(parentElement, nodeName, labelText, className, nodePat
     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
     btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-    // 1. Resolve targetPath natively using state.pathify and state.stepify
+    // 1. Resolve targetPath natively using pathify and stepify
     let targetPath = nodeName;
-    if (typeof state !== 'undefined' && typeof state.pathify === 'function') {
+    if (pathify === 'function') {
         if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-            targetPath = state.pathify(nodePathArray);
-        } else if (window.mapfile && typeof state.stepify === 'function') {
+            targetPath = pathify(nodePathArray);
+        } else if (window.mapfile && typeof stepify === 'function') {
             // Fallback: clean up window.mapfile by stepifying and pathifying it
-            const cleanSteps = [...state.stepify(window.mapfile), nodeName];
-            targetPath = state.pathify(cleanSteps);
+            const cleanSteps = [...stepify(window.mapfile), nodeName];
+            targetPath = pathify(cleanSteps);
         }
     }
 
@@ -315,9 +370,9 @@ initAccordionFromOptions = (optionsData) => {
     const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
     if (!areas) return;
 
-    // 1. Get current steps directly using state.stepify on mapfile or fallback path
+    // 1. Get current steps directly using stepify on mapfile or fallback path
     const mapfile = window.mapfile || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH-MAP.html";
-    const currentSteps = state.stepify(mapfile);
+    const currentSteps = stepify(mapfile);
 
     const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY_HEATH";
 
