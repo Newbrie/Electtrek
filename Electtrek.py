@@ -4473,12 +4473,14 @@ def firstpage():
     (c_election, elevels), = rlevels.items()
     plevels = CElection.parent_levels
 
+    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
+
+
     current_node = get_last_node(CElection,layers.Geo_index,create=True)
 
     if current_node is None:
         current_node = MapRoot.ping_node(rlevels,layers.Geo_index,breadcrumb, create=True, accumulate=session.get("accumulate", False)) # takes to the clicked node in the territory
 
-    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
 
 
     session["current_node_id"] = current_node.nid
