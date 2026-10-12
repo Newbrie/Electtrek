@@ -250,33 +250,34 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         e.stopPropagation();
 
         // 🛡️ Resolve targetPath FRESH at the moment of click
-
         let targetPath = nodeName;
-                if (typeof pathify === 'function' && typeof stepify === 'function') {
-                    if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                        if (nodePathArray[0] === 'UNITED_KINGDOM') {
-                            targetPath = pathify(nodePathArray);
-                        } else {
-                            const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
-                            console.log(`🚀 ParentSteps: ${parentSteps}`);
+        if (typeof pathify === 'function' && typeof stepify === 'function') {
+            if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
+                if (nodePathArray[0] === 'UNITED_KINGDOM') {
+                    targetPath = pathify(nodePathArray);
+                } else {
+                    const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
+                    console.log(`🚀 ParentSteps: ${parentSteps}`);
 
-                            parentSteps.pop(); // remove current territory level so it doesn't duplicate with nodePathArray
-                            targetPath = pathify([...parentSteps, ...nodePathArray]);
-
-                        }
-                    } else if (window.mapfile || window.currentNodePath) {
-                        const cleanSteps = stepify(window.mapfile || window.currentNodePath);
-                        console.log(`🚀 cleanSteps: ${cleanSteps}`);
-
-                        cleanSteps.pop(); // remove current territory level
-                        targetPath = pathify([...cleanSteps, nodeName]);
-                    }
+                    parentSteps.pop(); // remove current territory level/filename
+                    targetPath = pathify([...parentSteps, ...nodePathArray]);
                 }
+            } else if (window.mapfile || window.currentNodePath) {
+                const cleanSteps = stepify(window.mapfile || window.currentNodePath);
+                console.log(`🚀 cleanSteps: ${cleanSteps}`);
 
-        console.log(`🚀 Sending path to backend: ${targetPath}`);
+                cleanSteps.pop(); // remove current territory level/filename
+                targetPath = pathify([...cleanSteps, nodeName]);
+            }
+        }
 
-        // 2. Tell the backend to switch to this path (ensure route matches your backend, e.g., /downbut/ or /transfer/)
-        fetch(`/transfer/${targetPath}`, {
+        const mapFilename = `${nodeName}-MAP.html`;
+        const fetchPath = `${targetPath}/${mapFilename}`;
+
+        console.log(`🚀 Sending path to backend: ${fetchPath}`);
+
+        // 2. Tell the backend to switch to this path (corrected route to /downbut/ or /transfer/)
+        fetch(`/downbut/${fetchPath}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
@@ -287,7 +288,6 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
             return response.text();
         })
         .then(() => {
-            const mapFilename = `${nodeName}-MAP.html`;
             const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
 
             const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
@@ -314,7 +314,7 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         })
         .catch(error => {
             console.error("❌ Error setting node path on backend:", error);
-            window.location.href = `/downbut/${targetPath}`;
+            window.location.href = `/downbut/${fetchPath}`;
         });
     };
 
