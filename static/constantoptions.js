@@ -277,7 +277,7 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         console.log(`🚀 Sending path to backend: ${fetchPath}`);
 
         // 2. Tell the backend to switch to this path (corrected route to /downbut/ or /transfer/)
-        fetch(`/downbut/${fetchPath}`, {
+        fetch(`/transfer/${fetchPath}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
