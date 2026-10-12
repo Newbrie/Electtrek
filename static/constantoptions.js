@@ -259,7 +259,7 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
                         } else {
                             const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
                             console.log(`🚀 ParentSteps: ${parentSteps}`);
-                            parentSteps.pop(); // remove filename
+
                             parentSteps.pop(); // remove current territory level so it doesn't duplicate with nodePathArray
                             targetPath = pathify([...parentSteps, ...nodePathArray]);
 
@@ -267,7 +267,7 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
                     } else if (window.mapfile || window.currentNodePath) {
                         const cleanSteps = stepify(window.mapfile || window.currentNodePath);
                         console.log(`🚀 cleanSteps: ${cleanSteps}`);
-                        cleanSteps.pop(); // remove filename
+
                         cleanSteps.pop(); // remove current territory level
                         targetPath = pathify([...cleanSteps, nodeName]);
                     }
