@@ -3376,12 +3376,14 @@ def transfer(path):
     created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile,static=False)
 
     current_node.visit_node(CElection)
-    base = Path(config.workdirectories['workdir'])  # or wherever files live
-    fullpath = base / current_node.mapfile
+
+    # 🛠️ DEFINE WEB_PATH HERE:
+    web_path = f"/thru/{current_node.mapfile}"
+
     persist(layers.Treepolys, layers.Geo_index)
     print (f"_________ROUTE/transfer via iframe change file:{fullpath}")
-    return jsonify(success=True, map_url=web_path)
 
+    return jsonify(success=True, map_url=web_path)
 
 
 
