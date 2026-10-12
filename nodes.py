@@ -375,9 +375,9 @@ def get_last_node(Celect, geoindex=None, create=None):
     if redirect:
         return redirect
 
-    logger.info("%s: no usable node (cid=%r), falling back to MapRoot",
+    logger.info("%s: no usable node (cid=%r), falling back to None",
                 Celect.name, Celect.get("cid"))
-    return MapRoot
+    return None
 
 
 def parent_level_for(node_type):

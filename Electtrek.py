@@ -3180,7 +3180,8 @@ def downbut(path):
     logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
+    current_node = get_last_node(CElection,layers.Geo_index,create=True)
+
 
     # Guard against missing node
     if current_node is None:
@@ -3369,9 +3370,12 @@ def transfer(path):
     logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
+    current_node = get_last_node(CElection,layers.Geo_index,create=True)
+
     if current_node is None:
         current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,target_path, create=True, accumulate=session.get("accumulate", False))
+
+    areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
 
     created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile,static=False)
 
@@ -3381,7 +3385,7 @@ def transfer(path):
     web_path = f"/thru/{current_node.mapfile}"
 
     persist(layers.Treepolys, layers.Geo_index)
-    print (f"_________ROUTE/transfer via iframe change file:{fullpath}")
+    print (f"_________ROUTE/transfer via iframe change file:{web_path}")
 
     return jsonify(success=True, map_url=web_path)
 
