@@ -20,7 +20,9 @@ from datetime import datetime, time
 import re
 import layers
 
+import logging
 
+logger = logging.getLogger(__name__)
 
 _MASTER_ROOT = None
 

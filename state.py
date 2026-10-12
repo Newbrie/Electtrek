@@ -8,7 +8,9 @@ import re
 from flask import has_request_context, request, redirect
 
 progress = {}
+import logging
 
+logger = logging.getLogger(__name__)
 
 branchcolours = [
     "#006064",  # 0 Darkest Cyan (Cyan 900)
