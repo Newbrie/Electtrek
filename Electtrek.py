@@ -3379,8 +3379,8 @@ def transfer(path):
     base = Path(config.workdirectories['workdir'])  # or wherever files live
     fullpath = base / current_node.mapfile
     persist(layers.Treepolys, layers.Geo_index)
-    print (f"_________ROUTE/transfer at sendinf file:{fullpath}")
-    return send_file(fullpath, as_attachment=False)
+    print (f"_________ROUTE/transfer via iframe change file:{fullpath}")
+    return jsonify(success=True, map_url=web_path)
 
 
 

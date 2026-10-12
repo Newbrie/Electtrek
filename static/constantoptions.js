@@ -277,45 +277,29 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
 
         console.log(`🚀 Sending path to backend: ${fetchPath}`);
 
-        // 2. Tell the backend to switch to this path (corrected route to /downbut/ or /transfer/)
         fetch(`/transfer/${fetchPath}`, {
             method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(response => {
             if (!response.ok) throw new Error('Backend transfer failed');
-            return response.text();
+            return response.json(); // 👈 Expecting JSON now instead of raw text
         })
-        .then(() => {
-            const iframeSrc = `/thru/${targetPath}/${mapFilename}`;
+        .then(data => {
+            if (data.success && data.map_url) {
+                const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+                if (mapIframe) {
+                    mapIframe.src = data.map_url; // 👈 Assign the filepath/URL returned from Python
+                    console.log(`🗺️ Iframe successfully updated to: ${data.map_url}`);
+                }
 
-            const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
-            if (mapIframe) {
-                mapIframe.src = iframeSrc;
-                console.log(`🗺️ Iframe successfully updated to: ${iframeSrc}`);
-            }
-
-            // 3. Synchronize global window state
-            window.currentNodePath = targetPath;
-            window.mapfile = `${targetPath}/${mapFilename}`;
-
-            // 4. Update header display text
-            const displayElement = document.getElementById('display-path');
-            if (displayElement) {
-                displayElement.innerText = nodeName.replace(/_/g, ' ');
-            }
-
-            // 5. Close the accordion dropdown
-            const accordion = document.getElementById('territory-accordion');
-            if (accordion) {
-                accordion.style.display = 'none';
+                // Synchronize global window state
+                window.currentNodePath = targetPath;
+                window.mapfile = `${targetPath}/${mapFilename}`;
             }
         })
         .catch(error => {
             console.error("❌ Error setting node path on backend:", error);
-            window.location.href = `/downbut/${fetchPath}`;
         });
     };
 
