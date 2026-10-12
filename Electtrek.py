@@ -4343,48 +4343,7 @@ def deactivate_election(election_name):
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/walks', methods=['POST','GET'])
-@login_required
-def walks():
 
-    from elector import electors
-    from baked_data import baked_manager
-
-
-    global streamrag
-    global CElection
-    global TABLE_TYPES
-
-
-    global environment
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    resolved_levels = CElection.resolved_levels
-
-    assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-
-    # The clean unpack you like
-    (c_election, elevels), = resolved_levels.items()
-
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-    flash('_______ROUTE/walks',session)
-    BAKED_DATA = baked_manager.load()
-
-    if len(request.form) > 0:
-        formdata = {}
-        formdata['importfile'] = request.files['importfile']
-        formdata['electiondate'] = request.form["electiondate"]
-        electwalks = prodwalks(current_node,formdata['importfile'], formdata,layers.Treepolys, environment)
-        formdata = electwalks[1]
-        print("_________Mapfile",electwalks[2])
-        group = electwalks[0]
-
-#    formdata['username'] = session['username']
-        session['current_node_id'] = current_node.nid
-
-        return render_template('Dash0.html',  formdata=formdata,table_types=TABLE_TYPES, current_election=current_election, baked_data=BAKED_DATA,group=allelectors , streamrag=streamrag ,mapfile=current_node.mapfile)
-    return redirect(url_for('dashboard'))
 
 @app.route('/postcode', methods=['POST','GET'])
 @login_required

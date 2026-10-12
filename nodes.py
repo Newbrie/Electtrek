@@ -356,14 +356,14 @@ def get_last_node(Celect, geoindex=None, create=None):
     # 1. CID
     node = _usable(TREK_NODES_BY_ID.get(Celect.get("cid")))
     if node:
-        log.debug("%s: restored via cid", Celect.name)
+        logger.debug("%s: restored via cid", Celect.name)
         return node
 
     # 2. Stored paths
     for path in _candidate_paths(Celect):
         node = _usable(TREK_NODES_BY_PATH.get(path))
         if node:
-            log.debug("%s: restored via path %r", Celect.name, path)
+            logger.debug("%s: restored via path %r", Celect.name, path)
             return node
 
     # 3. Nothing stored is usable: we need a location to start fresh
@@ -373,7 +373,7 @@ def get_last_node(Celect, geoindex=None, create=None):
     if redirect:
         return redirect
 
-    log.warning("%s: no usable node (cid=%r), falling back to MapRoot",
+    logger.info("%s: no usable node (cid=%r), falling back to MapRoot",
                 Celect.name, Celect.get("cid"))
     return MapRoot
 
