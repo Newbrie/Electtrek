@@ -4510,6 +4510,14 @@ def firstpage():
 
     persist(layers.Treepolys, layers.Geo_index)
 
+# Ensure these reflect the breadcrumb/filepath you successfully resolved on startup:
+    breadcrumb_path = breadcrumb if breadcrumb else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
+    cleaned_steps = stepify(breadcrumb_path)
+    if cleaned_steps and ('-MAP' in cleaned_steps[-1] or cleaned_steps[-1].endswith('.html')):
+        cleaned_steps.pop()
+
+    current_node_path_val = "/".join(cleaned_steps) if cleaned_steps else "UNITED_KINGDOM"
+
     return render_template(
         "Dash0.html",
         table_types=TABLE_TYPES,
@@ -4518,8 +4526,8 @@ def firstpage():
         options=OPTIONS,
         constants=CElection,
         baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile,
-        current_path = current_node.node_path
+        mapfile=breadcrumb_path,          # 👈 Pass the full breadcrumb mapfile
+        current_path=current_node_path_val # 👈 Pass the clean directory path
     )
 
 @app.route('/cards', methods=['POST','GET'])
