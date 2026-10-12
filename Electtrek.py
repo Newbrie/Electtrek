@@ -3180,8 +3180,7 @@ def downbut(path):
     logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes._usable(TREK_NODES_BY_PATH.get(target_path))
-
+    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
 
     # Guard against missing node
     if current_node is None:
@@ -3370,12 +3369,9 @@ def transfer(path):
     logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes._usable(TREK_NODES_BY_PATH.get(path))
-
+    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
     if current_node is None:
         current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,target_path, create=True, accumulate=session.get("accumulate", False))
-
-    areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
 
     created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile,static=False)
 
@@ -4476,11 +4472,14 @@ def firstpage():
     assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
     (c_election, elevels), = rlevels.items()
     plevels = CElection.parent_levels
-    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
 
     current_node = get_last_node(CElection,layers.Geo_index,create=True)
+
     if current_node is None:
-        current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,breadcrumb, create=False, accumulate=session.get("accumulate", False))
+        current_node = MapRoot.ping_node(rlevels,layers.Geo_index,breadcrumb, create=True, accumulate=session.get("accumulate", False)) # takes to the clicked node in the territory
+
+    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
+
 
     session["current_node_id"] = current_node.nid
 
@@ -4489,8 +4488,6 @@ def firstpage():
     OPTIONS = resolve_ui_context(program, election_ctx, current_node)
 
     areaelectors = electors.elector_for_path(rlevels, current_node.path_at_level(3))
-
-
     lat = CElection.get('cidLat')
     lon = CElection.get('cidLong')
     here = (lat, lon) if (lat is not None and lon is not None) else None
