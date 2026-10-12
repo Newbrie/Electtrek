@@ -350,23 +350,23 @@ def get_last_node(Celect, geoindex=None, create=None):
     """
     Restore the last node for this election.
 
-    Order: stored CID -> stored paths -> (GPS redirect if needed) -> MapRoot.
+    Order: stored paths (breadcrumbs) -> stored CID -> (GPS redirect if needed) -> MapRoot.
     A node only counts if it has children loaded. May return a redirect
     response when GPS is needed and unavailable.
     `geoindex` and `create` are kept only for call-site compatibility.
     """
-    # 1. CID
+    # 1. Stored paths / breadcrumbs FIRST (most reliable user intent)
+    for path in _candidate_paths(Celect):
+        node = _usable(TREK_NODES_BY_PATH.get(path))
+        if node:
+            logger.debug("%s: restored via path/breadcrumb %r", Celect.name, path)
+            return node
+
+    # 2. CID fallback
     node = _usable(TREK_NODES_BY_ID.get(Celect.get("cid")))
     if node:
         logger.debug("%s: restored via cid", Celect.name)
         return node
-
-    # 2. Stored paths
-    for path in _candidate_paths(Celect):
-        node = _usable(TREK_NODES_BY_PATH.get(path))
-        if node:
-            logger.debug("%s: restored via path %r", Celect.name, path)
-            return node
 
     # 3. Nothing stored is usable: we need a location to start fresh
     lat, lng = Celect.get("cidLat"), Celect.get("cidLong")
@@ -378,7 +378,6 @@ def get_last_node(Celect, geoindex=None, create=None):
     logger.info("%s: no usable node (cid=%r), falling back to MapRoot",
                 Celect.name, Celect.get("cid"))
     return MapRoot
-
 
 
 def parent_level_for(node_type):
