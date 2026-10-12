@@ -2235,22 +2235,13 @@ def get_backend_url():
 
     current_election = CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-
-    program = ProgramContext()
-    election = ElectionContext(CElection)
-    options = resolve_ui_context(program, election, current_node)
-    constants = CElection
 
     print(f"__url: {request.host_url}")
-    print(f"__election: {current_election} __current_node: {current_node.value}")
-    print(f"__program opts: {program}")
-    print(f"__election opts: {election}")
+    print(f"__election: {current_election} ")
+)
 
     return jsonify({
     'backend_url': request.host_url,
-    'constants': constants,
-    'options': options,
     'current_election': current_election
     })
 
@@ -3719,8 +3710,7 @@ def LGdownST(path):
 
 # use ping to populate the next level of street nodes with which to repaint the screen with boundaries and markers
 
-
-    current_node = current_node.ping_node(rlevels,layers.Geo_index,path, create=True, accumulate=session.get("accumulate", False))
+    current_node = MapRoot.ping_node(rlevels,layers.Geo_index,path, create=True, accumulate=session.get("accumulate", False))
 
     PD_node = current_node
 # now pointing at the STREETS.html node containing a map of street markers
@@ -4478,7 +4468,7 @@ def firstpage():
 
     current_node = get_last_node(CElection,layers.Geo_index,create=True)
 
-    if current_node is None:
+    if current_node is MapRoot:
         current_node = MapRoot.ping_node(rlevels,layers.Geo_index,breadcrumb, create=True, accumulate=session.get("accumulate", False)) # takes to the clicked node in the territory
 
 
