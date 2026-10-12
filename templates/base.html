@@ -51,10 +51,14 @@
         // Authoritative state injection from Jinja backend
         window.mapfile = "{{ mapfile | default('') }}";
         window.currentNodePath = "{{ current_path | default('') }}";
+        window.constants = "{{ constants | default('') }}";
+        window.options = "{{ options | default('') }}";
 
         console.log("🌐 [Jinja Injection] window.mapfile:", window.mapfile);
         console.log("🌐 [Jinja Injection] window.currentNodePath:", window.currentNodePath);
-    </script>
+        console.log("🌐 [Jinja Injection] window.constants:", window.constants);
+        console.log("🌐 [Jinja Injection] window.options:", window.options);
+      </script>
 
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

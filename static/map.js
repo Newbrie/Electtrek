@@ -3531,19 +3531,19 @@ async function fetchBackendURL() {
 
         const backendUrl = data.backend_url;
 
-        window.latestConstants  = data.constants;
-        window.latestOptions    = data.options;
+        window.latestConstants  = window.constants;
+        window.latestOptions    = window.options;
         window.current_election = data.current_election;
 
         console.log("Backend URL:", backendUrl);
         window.messages = data.messages;
 
 
-        const taskTags = data.options?.task_tags || [];
-        const resources = data.options?.resources || [];
-        const places = data.options?.places || [];
-        const areas = data.options?.areas || [];
-        const DEVURLS = data.options?.DEVURLS || [];
+        const taskTags = window.options?.task_tags || [];
+        const resources = window.options?.resources || [];
+        const places = window.options?.places || [];
+        const areas = window.options?.areas || [];
+        const DEVURLS = window.options?.DEVURLS || [];
 
         const iframeButtons = data.options?.iframeButtons || [];
 
