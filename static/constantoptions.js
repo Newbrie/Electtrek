@@ -251,24 +251,25 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
 
         // 🛡️ Resolve targetPath FRESH at the moment of click
         let targetPath = nodeName;
+
         if (typeof pathify === 'function' && typeof stepify === 'function') {
+            let combinedSteps = [];
+
             if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                if (nodePathArray[0] === 'UNITED_KINGDOM') {
-                    targetPath = pathify(nodePathArray);
-                } else {
-                    const parentSteps = stepify(window.mapfile || window.currentNodePath || "");
-                    console.log(`🚀 ParentSteps: ${parentSteps}`);
-
-                    parentSteps.pop(); // remove current territory level/filename
-                    targetPath = pathify([...parentSteps, ...nodePathArray]);
-                }
-            } else if (window.mapfile || window.currentNodePath) {
-                const cleanSteps = stepify(window.mapfile || window.currentNodePath);
-                console.log(`🚀 cleanSteps: ${cleanSteps}`);
-
-                cleanSteps.pop(); // remove current territory level/filename
-                targetPath = pathify([...cleanSteps, nodeName]);
+                // If we have an explicit nodePathArray, use it as the primary source of truth
+                combinedSteps = stepify(nodePathArray.join('/'));
+            } else {
+                // Otherwise, grab active path and append the new node name
+                const activePath = window.currentNodePath || window.mapfile || "UNITED_KINGDOM";
+                const cleanParentSteps = stepify(activePath);
+                combinedSteps = [...cleanParentSteps, nodeName];
             }
+
+            // 🛡️ THE FIX: Pass the fully combined steps back through stepify(pathify(...))
+            // This guarantees that any duplicate at the boundary seam (e.g. SURREY / SURREY)
+            // is completely eradicated globally across the whole path!
+            const finalCleanSteps = stepify(pathify(combinedSteps));
+            targetPath = pathify(finalCleanSteps);
         }
 
         const mapFilename = `${nodeName}-MAP.html`;
