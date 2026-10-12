@@ -3180,7 +3180,7 @@ def downbut(path):
     logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = get_last_node(CElection,layers.Geo_index,create=True)
+    current_node = nodes._usable(TREK_NODES_BY_PATH.get(target_path))
 
 
     # Guard against missing node
@@ -3370,7 +3370,7 @@ def transfer(path):
     logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
     # 2. Direct O(1) node lookup using the clean node path
-    current_node = get_last_node(CElection,layers.Geo_index,create=True)
+    current_node = nodes._usable(TREK_NODES_BY_PATH.get(path))
 
     if current_node is None:
         current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,target_path, create=True, accumulate=session.get("accumulate", False))
@@ -4476,8 +4476,12 @@ def firstpage():
     assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
     (c_election, elevels), = rlevels.items()
     plevels = CElection.parent_levels
+    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
 
     current_node = get_last_node(CElection,layers.Geo_index,create=True)
+    if current_node is None:
+        current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,breadcrumb, create=False, accumulate=session.get("accumulate", False))
+
     session["current_node_id"] = current_node.nid
 
     program = ProgramContext()
@@ -4486,7 +4490,6 @@ def firstpage():
 
     areaelectors = electors.elector_for_path(rlevels, current_node.path_at_level(3))
 
-    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
 
     lat = CElection.get('cidLat')
     lon = CElection.get('cidLong')
