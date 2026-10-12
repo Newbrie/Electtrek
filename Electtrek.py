@@ -4067,61 +4067,6 @@ def register():
         return redirect(url_for('get_location'))
 
 
-@app.route("/calendar_partial/<path:path>")
-@login_required
-def calendar_partial(path):
-    global places, resources, constants
-    from baked_data import baked_manager
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-
-    ctype = CElection.node_type(current_node.level)
-
-
-    # Track used IDs across both existing and new entries
-#        places = build_place_lozenges(markerframe)
-
-#        restore_from_persist(layers.Treepolys, layers.Geo_index)
-#        current_node = get_current_node(session)
-#        CE = CurrentElection.get_lastused()
-
-    program = ProgramContext()
-    election = ElectionContext(CElection)
-    OPTIONS = resolve_ui_context(program,election,current_node)
-
-    selectedResources = {
-            k: v for k, v in OPTIONS['resources'].items()
-            if k in CElection['resources']
-        }
-
-
-    print(f"___resources in election {current_election}  node: {current_node.value} Resources: {selectedResources} ")
-
-
-    # share input and outcome tags
-    valid_tags = CElection['Tags']
-    task_tags, outcome_tags, all_tags = CElection.get_tags()
-
-    print(f"___ Task Tags {valid_tags} Outcome Tags: {outcome_tags} ")
-    print(f"🧪 calendar partial level {current_election} - current_node mapfile:{current_node.mapfile} ")
-    BAKED_DATA = baked_manager.load()
-
-    return render_template(
-        "Dash0.html",
-        table_types=TABLE_TYPES,
-        ELECTIONS=ELECTIONS,
-        current_election=current_election,
-        options=OPTIONS,
-        constants=CElection,
-        baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile,
-        current_path = current_node.node_path
-    )
-
-
 @app.route('/thru/<path:path>')
 @login_required
 def thru(path):
