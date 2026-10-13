@@ -2434,20 +2434,6 @@ class TreeNode:
         task_accordion_js = f"""
             <script>
             window.taskTree = {task_tree_json};
-
-            window.addEventListener('load', function () {{
-                try {{
-                    window.parent.postMessage(
-                        {{
-                            type: 'taskTree',
-                            tree: window.taskTree
-                        }},
-                        '*'
-                    );
-                }} catch (e) {{
-                    console.warn('taskTree postMessage failed', e);
-                }}
-            }});
             </script>
             """
 
@@ -2459,24 +2445,22 @@ class TreeNode:
         area_accordion_js = f"""
             <script>
             window.areaTree = {area_tree_json};
-
-            window.addEventListener('load', function () {{
-                try {{
-                    window.parent.postMessage(
-                        {{
-                            type: 'areaTree',
-                            tree: window.areaTree
-                        }},
-                        '*'
-                    );
-                }} catch (e) {{
-                    console.warn('areaTree postMessage failed', e);
-                }}
-            }});
             </script>
             """
-
-
+        resources = CElection.resources
+        resources_json = json.dumps(resources or {})
+        resources_list_js = f"""
+            <script>
+            window.resources = {resources_json};
+            </script>
+            """
+        places = CElection.places
+        places_json = json.dumps(places or {})
+        places_list_js = f"""
+            <script>
+            window.places = {places_json};
+            </script>
+            """
 
         accumulate = session.get("accumulate", False)
 
@@ -3285,7 +3269,8 @@ class TreeNode:
 
         # Ensure there's only one LayerControl
         FolMap.add_child(folium.LayerControl(collapsed=True))
-        FolMap.get_root().html.add_child(folium.Element(area_accordion_js))
+        FolMap.get_root().html.add_child(folium.Element(resources_js))
+        FolMap.get_root().html.add_child(folium.Element(places_js))
         FolMap.get_root().html.add_child(folium.Element(task_accordion_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))

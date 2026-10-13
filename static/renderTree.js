@@ -345,7 +345,7 @@ button.addEventListener('click', function () {
 
     console.log('Task selected:', taskCode);
 
-    syncTaskSelect();
+    syncAreaSelect();
 });
 
 list.appendChild(button);
