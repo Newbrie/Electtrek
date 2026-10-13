@@ -27,9 +27,9 @@ class ElectionContext:
 
         return {
             "territories": state.ElectionTypes, # all possible types of election used in elections
-            "tagTypes": allTree, # all poss tags
-            "task_tags": taskTree, # all poss tasks
-            "outcome_tags": outcomeTree, # all poss tasks
+            "allTree": allTree, # all poss tags
+            "taskTree": taskTree, # all poss tasks
+            "outcomeTree": outcomeTree, # all poss tasks
             "autofix": list(state.autofix), # stages of data quality cleaning
             "yourparty": state.VID, # party of interest
             "previousParty": state.VID, # incumbent party
