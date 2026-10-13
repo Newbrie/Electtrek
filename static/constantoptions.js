@@ -1,4 +1,3 @@
-
 window.updateConstantsUI = function (constants, options) {
     if (window.isUpdatingConstants) {
         console.warn("[UCUI:0] Skipped: already running (re-entrant call?)", new Error().stack);
@@ -250,7 +249,7 @@ window.refreshConstantsUI = function(callback) {
             window.updateConstantsUI(data.constants, data.options);
 //            iframeWin.populateAllSelects(data.options, data.constants);
             console.log("📩 calling initAccordion");
-            initAccordionFromOptions(data.options);
+            initAccordionFromOptions(data.options.areas);
 
 
             if (callback) callback(data);

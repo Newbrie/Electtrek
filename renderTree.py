@@ -5,241 +5,171 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
 /**
  * Clean file suffixes, or return null if ignorable/empty.
  */
- function cleanPathPart(part) {
-     if (!part) return null;
-     const trimmed = part.trim();
+function cleanPathPart(part) {
+    if (!part) return null;
+    const trimmed = part.trim();
 
-     if (IGNORABLE_SEGMENTS.has(trimmed)) {
-         return null;
-     }
+    if (IGNORABLE_SEGMENTS.has(trimmed)) {
+        return null;
+    }
 
-     for (const suffix of FILE_SUFFIXES) {
-         if (trimmed.endsWith(suffix)) {
-             return null;
-         }
-     }
+    for (const suffix of FILE_SUFFIXES) {
+        if (trimmed.endsWith(suffix)) {
+            return null;
+        }
+    }
 
-     return trimmed;
- }
+    return trimmed;
+}
 
- /**
-  * Split path string, clean each segment, and remove sequential duplicates.
-  */
- function stepify(pathStr) {
-     if (!pathStr || typeof pathStr !== 'string') return [];
+/**
+ * Split path string, clean each segment, and remove sequential duplicates.
+ */
+function stepify(pathStr) {
+    if (!pathStr || typeof pathStr !== 'string') return [];
 
-     const parts = pathStr.trim().split('/');
-     const cleaned = [];
+    const parts = pathStr.trim().split('/');
+    const cleaned = [];
 
-     for (const part of parts) {
-         const cleanedPart = cleanPathPart(part);
-         if (cleanedPart) {
-             // Only append if it's the first element OR not a duplicate of the previous element
-             if (cleaned.length === 0 || cleaned[cleaned.length - 1] !== cleanedPart) {
-                 cleaned.push(cleanedPart);
-             }
-         }
-     }
+    for (const part of parts) {
+        const cleanedPart = cleanPathPart(part);
+        if (cleanedPart) {
+            if (cleaned.length === 0 || cleaned[cleaned.length - 1] !== cleanedPart) {
+                cleaned.push(cleanedPart);
+            }
+        }
+    }
 
-     return cleaned;
- }
+    return cleaned;
+}
 
- /**
-  * Takes a clean list of geographic parts and builds a node path string.
-  */
- function pathify(parts) {
-     if (!Array.isArray(parts) || parts.length === 0) {
-         return "";
-     }
+/**
+ * Takes a clean list of geographic parts and builds a node path string.
+ */
+function pathify(parts) {
+    if (!Array.isArray(parts) || parts.length === 0) {
+        return "";
+    }
+    return parts.join('/');
+}
 
-     return parts.join('/');
- }
+// Make stepify & pathify available globally
+window.stepify = stepify;
+window.pathify = pathify;
 
- window.renderTreeSelector = function (tree, options = {}) {
-     const {
-         containerId,
-         emptyMessage = 'No items available',
-         accordionId,
-         allLabel = name => `All of ${name}`,
-         createButton
-     } = options;
+window.renderTreeSelector = function (tree, options = {}) {
+    const {
+        containerId,
+        emptyMessage = 'No items available',
+        accordionId,
+        allLabel = name => `All of ${name}`,
+        createButton
+    } = options;
 
-     const container = document.getElementById(containerId);
-     if (!container) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-     container.innerHTML = '';
+    container.innerHTML = '';
 
-     if (
-         !tree ||
-         typeof tree !== 'object' ||
-         Object.keys(tree).length === 0
-     ) {
-         container.innerHTML =
-             `<div class="small text-muted p-2">${emptyMessage}</div>`;
-         return;
-     }
+    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
+        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+        return;
+    }
 
-     const acc = document.createElement('div');
-     acc.className = 'accordion';
-     acc.id = accordionId;
+    const acc = document.createElement('div');
+    acc.className = 'accordion';
+    acc.id = accordionId;
 
-     let idCounter = 0;
+    let idCounter = 0;
 
-     function renderLevel(node, parentElement, path = [], depth = 0) {
-         if (!node || typeof node !== 'object') return;
+    function renderLevel(node, parentElement, path = [], depth = 0) {
+        if (!node || typeof node !== 'object') return;
 
-         Object.entries(node).forEach(([name, children]) => {
-             const currentPath = [...path, name];
+        Object.entries(node).forEach(([name, children]) => {
+            const currentPath = [...path, name];
+            // Replace this line inside renderTreeSelector:
+            // const hasChildren = children && typeof children === 'object' && Object.keys(children).length > 0;
 
-             const hasChildren =
-                 children &&
-                 typeof children === 'object' &&
-                 Object.keys(children).length > 0;
+            // 🛠️ WITH THIS SAFE CHECK:
+            const hasChildren = children &&
+                                typeof children === 'object' &&
+                                !Array.isArray(children) &&
+                                Object.keys(children).length > 0 &&
+                                Object.values(children).some(val => typeof val === 'object');
+                                            const uniqueId = `${accordionId}-${idCounter++}`;
 
-             const uniqueId = `${accordionId}-${idCounter++}`;
+            if (depth === 0) {
+                const item = document.createElement('div');
+                item.className = 'accordion-item border-0 mb-1';
 
-             // -------------------------------------------------
-             // TOP LEVEL
-             // -------------------------------------------------
-             if (depth === 0) {
-                 const item = document.createElement('div');
-                 item.className = 'accordion-item border-0 mb-1';
+                item.innerHTML = `
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2 shadow-none"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#${uniqueId}"
+                                aria-expanded="false">
+                            ${name.replace(/_/g, ' ')}
+                        </button>
+                    </h2>
+                    <div id="${uniqueId}" class="accordion-collapse collapse">
+                        <div class="accordion-body p-0"></div>
+                    </div>
+                `;
 
-                 item.innerHTML = `
-                     <h2 class="accordion-header">
-                         <button
-                             class="accordion-button collapsed py-2 shadow-none"
-                             type="button"
-                             data-bs-toggle="collapse"
-                             data-bs-target="#${uniqueId}"
-                             aria-expanded="false">
-                             ${name}
-                         </button>
-                     </h2>
+                const body = item.querySelector('.accordion-body');
+                createButton(body, name, allLabel(name), 'fw-semibold', currentPath);
 
-                     <div
-                         id="${uniqueId}"
-                         class="accordion-collapse collapse">
+                if (hasChildren) {
+                    renderLevel(children, body, currentPath, depth + 1);
+                }
 
-                         <div class="accordion-body p-0"></div>
-                     </div>
-                 `;
+                parentElement.appendChild(item);
+                return;
+            }
 
-                 const body = item.querySelector('.accordion-body');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-0';
 
-                 // Pass currentPath as 5th argument so createButton knows the full path
-                 createButton(
-                     body,
-                     name,
-                     allLabel(name),
-                     'fw-semibold',
-                     currentPath
-                 );
+            if (hasChildren) {
+                const header = document.createElement('button');
+                header.type = 'button';
+                header.className = 'btn btn-sm w-100 text-start py-2 shadow-none';
+                header.style.paddingLeft = `${1 + depth * 1.25}rem`;
+                header.setAttribute('data-bs-toggle', 'collapse');
+                header.setAttribute('data-bs-target', `#${uniqueId}`);
+                header.setAttribute('aria-expanded', 'false');
+                header.textContent = `▸ ${name.replace(/_/g, ' ')}`;
 
-                 if (hasChildren) {
-                     renderLevel(
-                         children,
-                         body,
-                         currentPath,
-                         depth + 1
-                     );
-                 }
+                const collapse = document.createElement('div');
+                collapse.id = uniqueId;
+                collapse.className = 'collapse';
 
-                 parentElement.appendChild(item);
-                 return;
-             }
+                const list = document.createElement('div');
+                list.className = 'list-group list-group-flush';
 
-             // -------------------------------------------------
-             // NESTED LEVEL
-             // -------------------------------------------------
-             const wrapper = document.createElement('div');
-             wrapper.className = 'border-0';
+                createButton(list, name, allLabel(name), '', currentPath);
+                renderLevel(children, list, currentPath, depth + 1);
 
-             if (hasChildren) {
-                 const header = document.createElement('button');
+                collapse.appendChild(list);
+                wrapper.appendChild(header);
+                wrapper.appendChild(collapse);
+            } else {
+                createButton(wrapper, name, name, '', currentPath);
+            }
 
-                 header.type = 'button';
-                 header.className =
-                     'btn btn-sm w-100 text-start py-2 shadow-none';
+            parentElement.appendChild(wrapper);
+        });
+    }
 
-                 header.style.paddingLeft =
-                     `${1 + depth * 1.25}rem`;
+    const rootSteps = typeof stepify === 'function' ? stepify(window.mapfile || "") : [];
+    rootSteps.pop(); // Remove file extension/leaf if present
 
-                 header.setAttribute(
-                     'data-bs-toggle',
-                     'collapse'
-                 );
+    renderLevel(tree, acc, rootSteps);
+    container.appendChild(acc);
+};
 
-                 header.setAttribute(
-                     'data-bs-target',
-                     `#${uniqueId}`
-                 );
-
-                 header.setAttribute(
-                     'aria-expanded',
-                     'false'
-                 );
-
-                 header.textContent = `▸ ${name}`;
-
-                 const collapse = document.createElement('div');
-                 collapse.id = uniqueId;
-                 collapse.className = 'collapse';
-
-                 const list = document.createElement('div');
-                 list.className =
-                     'list-group list-group-flush';
-
-                 // Pass currentPath as 5th argument
-                 createButton(
-                     list,
-                     name,
-                     allLabel(name),
-                     '',
-                     currentPath
-                 );
-
-                 // Recursively render children
-                 renderLevel(
-                     children,
-                     list,
-                     currentPath,
-                     depth + 1
-                 );
-
-                 collapse.appendChild(list);
-
-                 wrapper.appendChild(header);
-                 wrapper.appendChild(collapse);
-
-             } else {
-                 // -------------------------------------------------
-                 // LEAF
-                 // -------------------------------------------------
-                 // Pass currentPath as 5th argument
-                 createButton(
-                     wrapper,
-                     name,
-                     name,
-                     '',
-                     currentPath
-                 );
-             }
-
-             parentElement.appendChild(wrapper);
-         });
-     }
-
-     // Initialize root path steps from window.mapfile if available, or empty array
-     const rootSteps = typeof stepify === 'function' ? stepify(window.mapfile || "") : [];
-     rootSteps.pop(); // remove current filename leaf if present
-
-     renderLevel(tree, acc, rootSteps);
-
-     container.appendChild(acc);
- };
-
- function createMapButton(parentElement, nodeName, labelText, className, nodePathArray) {
+function createMapButton(parentElement, nodeName, labelText, className, nodePathArray) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
@@ -249,25 +179,19 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         e.preventDefault();
         e.stopPropagation();
 
-        // 🛡️ Resolve targetPath FRESH at the moment of click
         let targetPath = nodeName;
 
         if (typeof pathify === 'function' && typeof stepify === 'function') {
             let combinedSteps = [];
 
             if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                // If we have an explicit nodePathArray, use it as the primary source of truth
                 combinedSteps = stepify(nodePathArray.join('/'));
             } else {
-                // Otherwise, grab active path and append the new node name
                 const activePath = window.currentNodePath || window.mapfile || "UNITED_KINGDOM";
                 const cleanParentSteps = stepify(activePath);
                 combinedSteps = [...cleanParentSteps, nodeName];
             }
 
-            // 🛡️ THE FIX: Pass the fully combined steps back through stepify(pathify(...))
-            // This guarantees that any duplicate at the boundary seam (e.g. SURREY / SURREY)
-            // is completely eradicated globally across the whole path!
             const finalCleanSteps = stepify(pathify(combinedSteps));
             targetPath = pathify(finalCleanSteps);
         }
@@ -283,19 +207,25 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
         })
         .then(response => {
             if (!response.ok) throw new Error('Backend transfer failed');
-            return response.json(); // 👈 Expecting JSON now instead of raw text
+            return response.json();
         })
         .then(data => {
             if (data.success && data.map_url) {
                 const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
                 if (mapIframe) {
-                    mapIframe.src = data.map_url; // 👈 Assign the filepath/URL returned from Python
+                    mapIframe.src = data.map_url;
                     console.log(`🗺️ Iframe successfully updated to: ${data.map_url}`);
                 }
 
-                // Synchronize global window state
+                // Update global state
                 window.currentNodePath = targetPath;
                 window.mapfile = `${targetPath}/${mapFilename}`;
+
+                // Update display path header
+                const displayElement = document.getElementById('display-path');
+                if (displayElement) {
+                    displayElement.innerText = nodeName.replace(/_/g, ' ');
+                }
             }
         })
         .catch(error => {
@@ -306,114 +236,19 @@ const FILE_SUFFIXES = ['-MAP.html', '-PRINT.html', '.html', '.htm'];
     parentElement.appendChild(btn);
 }
 
-function createTaskButton(
-list,
-taskCode,
-displayName,
-indentClass = '',
-selectedKey = 'selectedTask'
-) {
-const button = document.createElement('button');
-
-button.type = 'button';
-button.className =
-    `list-group-item list-group-item-action small ${indentClass}`;
-
-button.textContent = displayName;
-button.dataset.code = taskCode;
-
-if (window[selectedKey] === taskCode) {
-    button.classList.add('active');
-}
-
-button.addEventListener('click', function () {
-    const accordion = list.closest('.accordion');
-
-    if (accordion) {
-        accordion
-            .querySelectorAll('.list-group-item')
-            .forEach(btn => btn.classList.remove('active'));
+window.initAccordionFromOptions = (tree, config = {}) => {
+    if (!tree || typeof tree !== 'object') {
+        console.warn("⚠️ initAccordionFromOptions: No valid tree provided.");
+        return;
     }
 
-    window[selectedKey] = taskCode;
-
-    button.classList.add('active');
-
-    console.log('Task selected:', taskCode);
-
-    syncTaskSelect();
-});
-
-list.appendChild(button);
-}
-
-function createAreaButton(
-list,
-taskCode,
-displayName,
-indentClass = '',
-selectedKey = 'selectedTask'
-) {
-const button = document.createElement('button');
-
-button.type = 'button';
-button.className =
-    `list-group-item list-group-item-action small ${indentClass}`;
-
-button.textContent = displayName;
-button.dataset.code = taskCode;
-
-if (window[selectedKey] === taskCode) {
-    button.classList.add('active');
-}
-
-button.addEventListener('click', function () {
-    const accordion = list.closest('.accordion');
-
-    if (accordion) {
-        accordion
-            .querySelectorAll('.list-group-item')
-            .forEach(btn => btn.classList.remove('active'));
-    }
-
-    window[selectedKey] = taskCode;
-
-    button.classList.add('active');
-
-    console.log('Task selected:', taskCode);
-
-    syncTaskSelect();
-});
-
-list.appendChild(button);
-}
-
-
-
-  function getTagsJson(electionTags) {
-    const task_tags = {};
-    const outcome_tags = {};
-
-    Object.entries(electionTags || {}).forEach(([tag, description]) => {
-        if (tag.startsWith("L")) {
-            task_tags[tag] = description;
-        } else if (tag.startsWith("M")) {
-            outcome_tags[tag] = description;
-        }
-    });
-
-    console.log("___Dash Task Tags", task_tags);
-    console.log( "Outcome Tags:", outcome_tags);
-    return { task_tags, outcome_tags };
-}
-
-initAccordionFromOptions = (optionsData) => {
-    const areas = optionsData?.areas || window.currentOptions?.areas || window.areaTree;
-    if (!areas) return;
+    const containerId = config.containerId || 'children-list';
+    const accordionId = config.accordionId || 'election-accordion';
+    const createButton = config.createButton || window.createMapButton;
+    const emptyMessage = config.emptyMessage || 'No items available';
 
     const mapfile = window.mapfile || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH-MAP.html";
     const currentSteps = stepify(mapfile);
-
     const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY_HEATH";
 
     const displayElement = document.getElementById('display-path');
@@ -422,13 +257,13 @@ initAccordionFromOptions = (optionsData) => {
     }
 
     if (typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(areas, {
-            containerId: 'children-list',
-            accordionId: 'election-accordion',
-            emptyMessage: 'No sub-divisions available',
+        window.renderTreeSelector(tree, {
+            containerId: containerId,
+            accordionId: accordionId,
+            emptyMessage: emptyMessage,
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: createMapButton // 👈 Maps your interactive map button builder here!
+            createButton: createButton
         });
-        console.log("✅ Successfully initialized territory accordion with createMapButton!");
+        console.log(`✅ Successfully initialized accordion for #${containerId}!`);
     }
 };
