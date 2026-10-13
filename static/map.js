@@ -717,19 +717,16 @@ var showMore = function (msg,area) {
   }
 
 
-  // --- Slot Modal Handlers ---
   async function handleSaveSlot() {
     if (!currentSlotId) return;
 
     const activity = document.getElementById("activitySelect").value;
     const place = document.getElementById("placeSelect").value;
 
-    // 🛡️ Grab selected areas, falling back to option text if value is missing/undefined
     const areaSelectEl = document.getElementById("areaSelect");
     const areas = areaSelectEl
       ? Array.from(areaSelectEl.selectedOptions).map(o => {
           let val = o.value;
-          // If value is missing, empty, or the literal string "undefined", fall back to text content
           if (!val || val === "undefined" || val === "null") {
             val = o.textContent.trim();
           }
@@ -750,21 +747,59 @@ var showMore = function (msg,area) {
     console.log(`💾 Slot ${currentSlotId} saved.`, calendarData[currentSlotId]);
 
     await saveCalendarPlan();
-    bootstrap.Modal.getInstance(document.getElementById("slotModal")).hide();
-  }
 
-  async function handleClearSlot() {
+    // Hide Modal & Clean Backdrop
+    const modalEl = document.getElementById("slotModal");
+    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modalInstance.hide();
+
+    // Force backdrop cleanup
+    setTimeout(cleanupModalState, 300);
+}
+
+async function handleClearSlot() {
     if (!currentSlotId) return;
 
-    calendarData[currentSlotId] = {}; // clear memory
+    calendarData[currentSlotId] = {};
     redrawSlot(currentSlotId, {});
     console.log(`🗑️ Slot ${currentSlotId} cleared.`);
 
     await saveCalendarPlan();
-    bootstrap.Modal.getInstance(document.getElementById("slotModal")).hide();
-  }
 
+    // Hide Modal & Clean Backdrop
+    const modalEl = document.getElementById("slotModal");
+    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modalInstance.hide();
 
+    // Force backdrop cleanup
+    setTimeout(cleanupModalState, 300);
+}
+
+// 🛡️ Bind cleanup to Bootstrap's native hidden event (handles ESC and click-away)
+document.addEventListener("DOMContentLoaded", function() {
+    const modalEl = document.getElementById("slotModal");
+    if (modalEl) {
+        modalEl.addEventListener("hidden.bs.modal", function () {
+            cleanupModalState();
+        });
+    }
+});
+function cleanupModalState() {
+    // 1. Remove all lingering Bootstrap backdrop overlays
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+
+    // 2. Restore scrolling and pointer events on body
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+
+    // 3. Optional: If modal overlay exists inside parent window, clean parent as well
+    if (window.parent && window.parent.document) {
+        window.parent.document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        window.parent.document.body.classList.remove('modal-open');
+        window.parent.document.body.style.removeProperty('overflow');
+    }
+}
 
 
 
