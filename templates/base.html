@@ -56,8 +56,10 @@
         // Parse dictionaries directly into JS Objects:
         window.constants = {{ constants | default({}) | tojson }};
         window.options = {{ options | default({}) | tojson }};
-        window.areaTree = window.options.areas
-        window.taskTree = window.constants.task_tags
+
+        // Assign trees directly from their respective backend sources
+        window.areaTree = window.options.areas || {};
+        window.taskTree = window.constants.taskTree || {{ task_tree_json | safe }};
 
         console.log("🌐 [Jinja Injection] window.mapfile:", window.mapfile);
         console.log("🌐 [Jinja Injection] window.currentNodePath:", window.currentNodePath);
@@ -65,7 +67,6 @@
         console.log("🌐 [Jinja Injection] window.options:", window.options);
         console.log("🌐 [Jinja Injection] window.areaTree:", window.areaTree);
         console.log("🌐 [Jinja Injection] window.taskTree:", window.taskTree);
-
     </script>
 
 
