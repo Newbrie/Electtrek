@@ -249,7 +249,7 @@ window.refreshConstantsUI = function(callback) {
             window.updateConstantsUI(data.constants, data.options);
 //            iframeWin.populateAllSelects(data.options, data.constants);
             console.log("📩 calling initAccordion");
-            initAccordionFromOptions(data.options.areas);
+            initAccordionFromOptions(window.areaTree);
 
 
             if (callback) callback(data);
