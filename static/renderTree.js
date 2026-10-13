@@ -267,3 +267,105 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         console.log(`✅ Successfully initialized accordion for #${containerId}!`);
     }
 };
+
+
+function createTaskButton(
+list,
+taskCode,
+displayName,
+indentClass = '',
+selectedKey = 'selectedTask'
+) {
+const button = document.createElement('button');
+
+button.type = 'button';
+button.className =
+    `list-group-item list-group-item-action small ${indentClass}`;
+
+button.textContent = displayName;
+button.dataset.code = taskCode;
+
+if (window[selectedKey] === taskCode) {
+    button.classList.add('active');
+}
+
+button.addEventListener('click', function () {
+    const accordion = list.closest('.accordion');
+
+    if (accordion) {
+        accordion
+            .querySelectorAll('.list-group-item')
+            .forEach(btn => btn.classList.remove('active'));
+    }
+
+    window[selectedKey] = taskCode;
+
+    button.classList.add('active');
+
+    console.log('Task selected:', taskCode);
+
+    syncTaskSelect();
+});
+
+list.appendChild(button);
+}
+
+function createAreaButton(
+list,
+taskCode,
+displayName,
+indentClass = '',
+selectedKey = 'selectedTask'
+) {
+const button = document.createElement('button');
+
+button.type = 'button';
+button.className =
+    `list-group-item list-group-item-action small ${indentClass}`;
+
+button.textContent = displayName;
+button.dataset.code = taskCode;
+
+if (window[selectedKey] === taskCode) {
+    button.classList.add('active');
+}
+
+button.addEventListener('click', function () {
+    const accordion = list.closest('.accordion');
+
+    if (accordion) {
+        accordion
+            .querySelectorAll('.list-group-item')
+            .forEach(btn => btn.classList.remove('active'));
+    }
+
+    window[selectedKey] = taskCode;
+
+    button.classList.add('active');
+
+    console.log('Task selected:', taskCode);
+
+    syncTaskSelect();
+});
+
+list.appendChild(button);
+}
+
+
+
+  function getTagsJson(electionTags) {
+    const task_tags = {};
+    const outcome_tags = {};
+
+    Object.entries(electionTags || {}).forEach(([tag, description]) => {
+        if (tag.startsWith("L")) {
+            task_tags[tag] = description;
+        } else if (tag.startsWith("M")) {
+            outcome_tags[tag] = description;
+        }
+    });
+
+    console.log("___Dash Task Tags", task_tags);
+    console.log( "Outcome Tags:", outcome_tags);
+    return { task_tags, outcome_tags };
+}
