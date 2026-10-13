@@ -57,9 +57,9 @@
         window.constants = {{ constants | default({}) | tojson }};
         window.options = {{ options | default({}) | tojson }};
 
-        // Assign trees directly from their respective backend sources
-        window.areaTree = window.options.areas || {};
-        window.taskTree = window.constants.taskTree || {{ task_tree_json | safe }};
+        // Safely assign trees from options or constants (with empty object fallbacks)
+        window.areaTree = window.options?.areas || {};
+        window.taskTree = window.options?.taskTree || window.constants?.taskTree || {};
 
         console.log("🌐 [Jinja Injection] window.mapfile:", window.mapfile);
         console.log("🌐 [Jinja Injection] window.currentNodePath:", window.currentNodePath);
@@ -68,7 +68,6 @@
         console.log("🌐 [Jinja Injection] window.areaTree:", window.areaTree);
         console.log("🌐 [Jinja Injection] window.taskTree:", window.taskTree);
     </script>
-
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://newbrie.github.io/Electtrek/static/renderTree.js"></script>
