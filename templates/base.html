@@ -59,7 +59,7 @@
 
         // Safely assign trees from options or constants (with empty object fallbacks)
         window.areaTree = window.options?.areas || {};
-        window.taskTree = window.options?.taskTree || window.constants?.taskTree || {};
+        window.taskTree = window.options?.taskTree || {};
 
         console.log("🌐 [Jinja Injection] window.mapfile:", window.mapfile);
         console.log("🌐 [Jinja Injection] window.currentNodePath:", window.currentNodePath);

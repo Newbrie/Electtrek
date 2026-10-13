@@ -21,14 +21,15 @@ class ElectionContext:
         self.ce = celection # all election option selections
 
     def get_options(self):
-        task_tags, outcome_tags, all_tags = self.ce.get_tags()
+        taskTree, outcomeTree, allTree = self.ce.get_tagTrees()
         messages = get_flashed_messages()
 
 
         return {
             "territories": state.ElectionTypes, # all possible types of election used in elections
-            "task_tags": task_tags, # all poss tasks
-            "outcome_tags": outcome_tags, # all poss tasks
+            "tagTypes": allTree, # all poss tags
+            "task_tags": taskTree, # all poss tasks
+            "outcome_tags": outcomeTree, # all poss tasks
             "autofix": list(state.autofix), # stages of data quality cleaning
             "yourparty": state.VID, # party of interest
             "previousParty": state.VID, # incumbent party
@@ -437,55 +438,151 @@ class CurrentElection(dict):
     # ---------- tag helpers ----------
 
 
+
     def get_tags(self):
         """
-        Walk the nested `tagTypes` structure and split leaf codes into
-        task_tags and outcome_tags, pre-seeded with mandatory baseline codes.
+        Extract task_tags, outcome_tags and all_tags from nested tagTypes.
 
-        tagTypes can nest to variable depth before reaching leaf
-        {code: description} pairs -- some categories go
-        category -> subcategory -> {code: description} (e.g. ENGAGEMENT/CAMPAIGNING),
-        others go straight to category -> {code: description} (e.g. MEMBERSHIP).
-        This walks until it finds a dict whose values are all plain strings,
-        and treats that as the leaf level, regardless of how many levels deep
-        it had to go to get there.
+        Categories can nest to arbitrary depth. Leaf dictionaries contain
+        {code: description} pairs.
+
+        OUTCOMES is treated as an outcome category; all other categories
+        are treated as task categories.
         """
-        # 1. Pre-seed with mandatory baseline task layers
+
+        # Mandatory baseline task tags, if any
         task_tags = {}
 
-        # 2. Pre-seed with baseline canvas outcome milestones
+        # Mandatory baseline outcome tags
         outcome_tags = {
             "M1": "Member",
             "M2": "Pledge",
             "M3": "HouseBoard",
             "M4": "Postal Voter",
-            "M5": "Marked"
+            "M5": "Marked",
         }
 
         all_tags = {}
 
-        # Categories whose leaf codes are outcome tags rather than task tags.
-        # Everything else under tagTypes is treated as a task category.
-        OUTCOME_CATEGORIES = {"MEMBERSHIP"}
+        OUTCOME_CATEGORIES = {"OUTCOMES"}
+
+        def collect_leaves(node):
+            """Recursively return all {code: description} leaf pairs."""
+            collected = {}
+
+            if not isinstance(node, dict):
+                return collected
+
+            # A leaf dictionary has only string values.
+            if all(isinstance(value, str) for value in node.values()):
+                return node.copy()
+
+            for child in node.values():
+                if isinstance(child, dict):
+                    collected.update(collect_leaves(child))
+
+            return collected
 
         raw_tag_types = self.get("tagTypes") or {}
 
         for category, contents in raw_tag_types.items():
-            leaf_codes = _collect_leaves(contents)
-            destination = outcome_tags if category.upper() in OUTCOME_CATEGORIES else task_tags
+            leaf_codes = collect_leaves(contents)
+
+            destination = (
+                outcome_tags
+                if category.upper() in OUTCOME_CATEGORIES
+                else task_tags
+            )
 
             for code, description in leaf_codes.items():
                 clean_code = str(code).strip()
-                destination[clean_code] = description
-                all_tags[clean_code] = description
+                clean_description = description.strip()
 
-        # Ensure baseline seeds are accurately tracked inside the master
-        # all_tags lookup ledger too
-        all_tags.update({**task_tags, **outcome_tags})
+                destination[clean_code] = clean_description
 
-        print(f"___Under route {state.route()} Dash Task Tags: {task_tags} Outcome Tags: {outcome_tags}")
+        # Include baseline and extracted tags in the master lookup.
+        all_tags.update(task_tags)
+        all_tags.update(outcome_tags)
+
+        print(
+            f"___Under route {state.route()} "
+            f"Dash Task Tags: {task_tags} "
+            f"Outcome Tags: {outcome_tags}"
+        )
 
         return task_tags, outcome_tags, all_tags
+
+
+    def get_tagTrees(self):
+        """
+        Preserve the nested tagTypes structure in three tag trees.
+
+        task_tagTree:
+            All branches except OUTCOMES.
+
+        outcome_tagTree:
+            The OUTCOMES branch, including mandatory baseline outcomes.
+
+        all_tagTree:
+            The complete original tree, including all branches and leaves
+            and baseline outcome codes.
+        """
+
+        outcome_baseline = {
+            "M1": "Member",
+            "M2": "Pledge",
+            "M3": "HouseBoard",
+            "M4": "Postal Voter",
+            "M5": "Marked",
+        }
+
+        OUTCOME_CATEGORIES = {"OUTCOMES"}
+
+        raw_tag_types = self.get("tagTypes") or {}
+
+        def copy_tree(node):
+            """Recursively copy a tree, preserving all branch names."""
+            if not isinstance(node, dict):
+                return node
+
+            return {
+                key: copy_tree(value)
+                for key, value in node.items()
+            }
+
+        # Complete tree
+        all_tagTree = copy_tree(raw_tag_types)
+
+        # Task tree: everything except outcome branches
+        task_tagTree = {
+            category: copy_tree(contents)
+            for category, contents in raw_tag_types.items()
+            if category.upper() not in OUTCOME_CATEGORIES
+        }
+
+        # Outcome tree: only outcome branches
+        outcome_tagTree = {
+            category: copy_tree(contents)
+            for category, contents in raw_tag_types.items()
+            if category.upper() in OUTCOME_CATEGORIES
+        }
+
+        # Add mandatory baseline outcomes without overwriting existing values
+        outcome_branch = outcome_tagTree.setdefault("OUTCOMES", {})
+
+        for code, description in outcome_baseline.items():
+            outcome_branch.setdefault(code, description)
+
+        # Ensure the complete tree also includes baseline outcomes
+        all_tagTree.setdefault("OUTCOMES", {}).update(outcome_branch)
+
+        print(
+            f"___Under route {state.route()} "
+            f"Task Tag Tree: {task_tagTree} "
+            f"Outcome Tag Tree: {outcome_tagTree}"
+        )
+
+        return task_tagTree, outcome_tagTree, all_tagTree
 
 
 
