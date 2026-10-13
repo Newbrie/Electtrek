@@ -2238,7 +2238,6 @@ def get_backend_url():
 
     print(f"__url: {request.host_url}")
     print(f"__election: {current_election} ")
-)
 
     return jsonify({
     'backend_url': request.host_url,

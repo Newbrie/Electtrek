@@ -3325,6 +3325,7 @@ class TreeNode:
 
         FolMap.add_css_link("electtrekprint", f"https://newbrie.github.io/Electtrek/static/print.css?v={cache_buster}")
         FolMap.add_css_link("electtrekstyle", f"https://newbrie.github.io/Electtrek/static/style.css?v={cache_buster}")
+        FolMap.add_js_link("electtrekconstantoptions", f"https://newbrie.github.io/Electtrek/static/constantoptions.js?v={cache_buster}")
         FolMap.add_js_link("electtrekmap", f"https://newbrie.github.io/Electtrek/static/map.js?v={cache_buster}")
 
         # OR Option B: Manually increment a version number whenever you push an update
