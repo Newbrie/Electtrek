@@ -134,8 +134,8 @@ var showMore = function (msg,area) {
       }
 
       // 🌳 Render tree selectors now that the modal DOM / containers exist
-      if (window.areaTree && typeof window.parent.renderTreeSelector === "function") {
-          window.parent.renderTreeSelector(window.areaTree, {
+      if (window.areaTree && typeof window.renderTreeSelector === "function") {
+          window.renderTreeSelector(window.areaTree, {
               containerId: 'areaAccordionContainer',
               accordionId: 'areaSelectAccordion',
               emptyMessage: 'No areas available for this map',
@@ -144,8 +144,8 @@ var showMore = function (msg,area) {
           });
       }
 
-      if (window.taskTree && typeof window.parent.renderTreeSelector === "function") {
-          window.parent.renderTreeSelector(window.taskTree, {
+      if (window.taskTree && typeof window.renderTreeSelector === "function") {
+          window.renderTreeSelector(window.taskTree, {
               containerId: 'taskAccordionContainer',
               accordionId: 'taskSelectAccordion',
               emptyMessage: 'No task types available for this map',
@@ -1333,7 +1333,7 @@ document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
     // Assuming window.areaTree is already populated or fetched from your map data
     if (window.areaTree) {
         console.log('Rendering area tree...');
-        window.parent.renderTreeSelector(window.areaTree, {
+        window.renderTreeSelector(window.areaTree, {
             containerId: 'areaAccordionContainer',
             accordionId: 'areaSelectAccordion',
             emptyMessage: 'No areas available for this map',
@@ -1347,7 +1347,7 @@ document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
 document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
     if (window.taskTree) {
         console.log('Rendering task tree...');
-        window.parent.renderTreeSelector(window.taskTree, {
+        window.renderTreeSelector(window.taskTree, {
             containerId: 'taskAccordionContainer',
             accordionId: 'taskSelectAccordion',
             emptyMessage: 'No task types available for this map',
