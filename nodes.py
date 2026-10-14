@@ -3159,6 +3159,7 @@ class TreeNode:
             }
             </style>
             """
+
         popupclosure_injection_js = """
             <script>
             // ------------------------------------------------------------------
@@ -3180,19 +3181,25 @@ class TreeNode:
                 function initializeListeners() {
                     console.log("🔧 [IFRAME MAP] Setting up interaction intercepts...");
 
-                    // 1. BACKDROP INTERCEPT
+                    // 1. BACKDROP INTERCEPT (Resilient Auto-Discovery / Creation)
                     var modalOverlay = document.getElementById('modal-overlay');
-                    if (modalOverlay) {
-                        console.log("✅ [IFRAME MAP] Local 'modal-overlay' element discovered inside iframe.");
-                        modalOverlay.addEventListener('click', function(event) {
-                            if (event.target === modalOverlay) {
-                                console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
-                                signalParentToClose();
-                            }
-                        });
+                    if (!modalOverlay) {
+                        // If the template didn't include it statically, create it dynamically so clicks never fail
+                        modalOverlay = document.createElement('div');
+                        modalOverlay.id = 'modal-overlay';
+                        modalOverlay.style.display = 'none'; // Hidden by default, revealed on slot click
+                        document.body.appendChild(modalOverlay);
+                        console.log("🛠️ [IFRAME MAP] Auto-created 'modal-overlay' element inside iframe.");
                     } else {
-                        console.warn("⚠️ [IFRAME MAP] 'modal-overlay' was not found inside this iframe document. (Ignore this if the overlay lives on your parent template page instead)");
+                        console.log("✅ [IFRAME MAP] Local 'modal-overlay' element discovered inside iframe.");
                     }
+
+                    modalOverlay.addEventListener('click', function(event) {
+                        if (event.target === modalOverlay) {
+                            console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
+                            signalParentToClose();
+                        }
+                    });
 
                     // 2. GLOBAL WINDOW KEYDOWN INTERCEPT (CAPTURE PHASE)
                     // Using 'true' at the end forces this listener to trigger on the way down,
@@ -3207,7 +3214,7 @@ class TreeNode:
                             // Let's print out what we see so you know exactly why it passes or fails
                             console.log("🔍 [IFRAME STATE] Popup present:", !!activeLeafletPopup, " | Local Overlay present:", !!overlay);
 
-                            // We intercept unconditionally on Escape to be safe, or you can restore your specific conditions here
+                            // We intercept unconditionally on Escape to be safe
                             console.log("📣 [IFRAME KEYDOWN] Intercepting Escape, forcing parent notify.");
                             event.preventDefault();
                             event.stopPropagation();
@@ -3224,6 +3231,7 @@ class TreeNode:
             })();
             </script>
             """
+
         # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
         # This ties into your existing map detection lifecycle to prevent race conditions.
 # 💡 CORRECTED INJECTION: Property-Aligned Vector Compiler Index
