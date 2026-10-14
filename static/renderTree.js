@@ -242,14 +242,27 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         return;
     }
 
+    // 🌳 Automatically drill down into the tree based on current node path or mapfile
+    let currentTree = tree;
+    const activePath = window.currentNodePath || window.mapfile || "";
+
+    if (typeof stepify === 'function' && activePath) {
+        const steps = stepify(activePath);
+        // Traverse down the tree matching each step (e.g., SURREY -> FARNHAM_AND_BORDON)
+        for (const step of steps) {
+            if (currentTree[step] && typeof currentTree[step] === 'object') {
+                currentTree = currentTree[step];
+            }
+        }
+    }
+
     const containerId = config.containerId || 'children-list';
     const accordionId = config.accordionId || 'election-accordion';
     const createButton = config.createButton || window.createMapButton;
-    const emptyMessage = config.emptyMessage || 'No items available';
+    const emptyMessage = config.emptyMessage || 'No sub-divisions available';
 
-    const mapfile = window.mapfile || "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH-MAP.html";
-    const currentSteps = stepify(mapfile);
-    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY_HEATH";
+    const currentSteps = stepify(activePath);
+    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY";
 
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
@@ -257,17 +270,17 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     }
 
     if (typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(tree, {
+        // Render using the drilled-down sub-tree
+        window.renderTreeSelector(currentTree, {
             containerId: containerId,
             accordionId: accordionId,
             emptyMessage: emptyMessage,
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
             createButton: createButton
         });
-        console.log(`✅ Successfully initialized accordion for #${containerId}!`);
+        console.log(`✅ Successfully initialized accordion for #${containerId} at node "${activeNodeName}"!`);
     }
 };
-
 
 function createTaskButton(
 list,
