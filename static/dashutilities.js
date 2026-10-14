@@ -165,6 +165,7 @@
             await fetchTableData("nodelist_xref");
         }
     }
+  }
 
 
  function addMessageToLog(text) {
@@ -411,4 +412,4 @@ function syncStreamsSelectWithTabs() {
     logWindow.scrollTop = logWindow.scrollHeight;
 
     iframe.src = url;
-  };
+  }
