@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ----------------------------
   // mapfile to parent Flash Message Handling (Now safe because the DOM is loaded)
   // ----------------------------
-  
+
 
   const territoryDisplay = document.getElementById("territory-display");
   const territoryAccordion = document.getElementById("territory-accordion");

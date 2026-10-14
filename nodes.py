@@ -2423,6 +2423,15 @@ class TreeNode:
         print(f"DEBUG: Unpacked election: {c_election}")
         task_tags, outcome_tags, all_tags = CElection.get_tags()
 
+        mapfile_json = json.dumps(self.mapfile)
+        nodepath_json = json.dumps(self.node_path)
+        mapfile_js = f"""
+            <script>
+            window.mapfile = {mapfile_json};
+            window.currentNodePath = {nodepath_json}
+            </script>
+            """
+
         task_tree = CElection.get("tagTypes", {})
 
         # 2. Dump the wrapped dictionary to JSON
@@ -3278,6 +3287,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(places_list_js))
         FolMap.get_root().html.add_child(folium.Element(area_accordion_js))
         FolMap.get_root().html.add_child(folium.Element(task_accordion_js))
+        FolMap.get_root().html.add_child(folium.Element(mapfile_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
 
