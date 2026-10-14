@@ -3161,76 +3161,76 @@ class TreeNode:
             """
 
         popupclosure_injection_js = """
-            <script>
-            // ------------------------------------------------------------------
-            // IFRAME CLIENT SCRIPTS (Injected into Folium Map Document)
-            // ------------------------------------------------------------------
-            (function() {
-                console.log("🚀 [IFRAME MAP] Popup closure injection script executing...");
+        <script>
+        // ------------------------------------------------------------------
+        // IFRAME CLIENT SCRIPTS (Injected into Folium Map Document)
+        // ------------------------------------------------------------------
+        (function() {
+            console.log("🚀 [IFRAME MAP] Popup closure injection script executing...");
 
-                function signalParentToClose() {
-                    console.log("📤 [IFRAME MAP] Dispatching close request upward to parent window...");
-                    try {
-                        window.parent.postMessage('TRIGGER_PARENT_SYNC_CLOSE', '*');
-                    } catch (err) {
-                        console.error("💥 [IFRAME MAP] Failed to transmit postMessage:", err);
-                    }
+            function signalParentToClose() {
+                console.log("📤 [IFRAME MAP] Dispatching close request upward to parent window...");
+                try {
+                    window.parent.postMessage('TRIGGER_PARENT_SYNC_CLOSE', '*');
+                } catch (err) {
+                    console.error("💥 [IFRAME MAP] Failed to transmit postMessage:", err);
                 }
+            }
 
-                // Wrap in an instant checker as well as DOMContentLoaded to ensure we catch the elements
-                function initializeListeners() {
-                    console.log("🔧 [IFRAME MAP] Setting up interaction intercepts...");
+            // Wrap in an instant checker as well as DOMContentLoaded to ensure we catch the elements
+            function initializeListeners() {
+                console.log("🔧 [IFRAME MAP] Setting up interaction intercepts...");
 
-                    // 1. BACKDROP INTERCEPT (Resilient Auto-Discovery / Creation)
-                    var modalOverlay = document.getElementById('modal-overlay');
-                    if (!modalOverlay) {
-                        // If the template didn't include it statically, create it dynamically so clicks never fail
-                        modalOverlay = document.createElement('div');
-                        modalOverlay.id = 'modal-overlay';
-                        modalOverlay.style.display = 'none'; // Hidden by default, revealed on slot click
-                        document.body.appendChild(modalOverlay);
-                        console.log("🛠️ [IFRAME MAP] Auto-created 'modal-overlay' element inside iframe.");
-                    } else {
-                        console.log("✅ [IFRAME MAP] Local 'modal-overlay' element discovered inside iframe.");
-                    }
-
-                    modalOverlay.addEventListener('click', function(event) {
-                        if (event.target === modalOverlay) {
-                            console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
-                            signalParentToClose();
-                        }
-                    });
-
-                    // 2. GLOBAL WINDOW KEYDOWN INTERCEPT (CAPTURE PHASE)
-                    // Using 'true' at the end forces this listener to trigger on the way down,
-                    // preventing Leaflet from consuming the event via stopPropagation().
-                    window.addEventListener('keydown', function(event) {
-                        if (event.key === 'Escape' || event.keyCode === 27) {
-                            console.log("⌨️ [IFRAME WINDOW KEYDOWN] Escape key detected in Capture Phase.");
-
-                            var activeLeafletPopup = document.querySelector('.leaflet-popup');
-                            var overlay = document.getElementById('modal-overlay');
-
-                            // Let's print out what we see so you know exactly why it passes or fails
-                            console.log("🔍 [IFRAME STATE] Popup present:", !!activeLeafletPopup, " | Local Overlay present:", !!overlay);
-
-                            // We intercept unconditionally on Escape to be safe
-                            console.log("📣 [IFRAME KEYDOWN] Intercepting Escape, forcing parent notify.");
-                            event.preventDefault();
-                            event.stopPropagation();
-                            signalParentToClose();
-                        }
-                    }, true); // <-- TRUE activates the high-priority Capture phase!
-                }
-
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', initializeListeners);
+                // 1. BACKDROP INTERCEPT (Resilient Auto-Discovery / Creation)
+                var modalOverlay = document.getElementById('modal-overlay');
+                if (!modalOverlay) {
+                    // If the template didn't include it statically, create it dynamically so clicks never fail
+                    modalOverlay = document.createElement('div');
+                    modalOverlay.id = 'modal-overlay';
+                    modalOverlay.style.display = 'none'; // Hidden by default, revealed on slot click
+                    document.body.appendChild(modalOverlay);
+                    console.log("🛠️ [IFRAME MAP] Auto-created 'modal-overlay' element inside iframe.");
                 } else {
-                    initializeListeners();
+                    console.log("✅ [IFRAME MAP] Local 'modal-overlay' element discovered inside iframe.");
                 }
-            })();
-            </script>
-            """
+
+                modalOverlay.addEventListener('click', function(event) {
+                    if (event.target === modalOverlay) {
+                        console.log("📣 [IFRAME BACKDROP] Overlay surface clicked.");
+                        signalParentToClose();
+                    }
+                });
+
+                // 2. GLOBAL WINDOW KEYDOWN INTERCEPT (CAPTURE PHASE)
+                // Using 'true' at the end forces this listener to trigger on the way down,
+                // preventing Leaflet from consuming the event via stopPropagation().
+                window.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape' || event.keyCode === 27) {
+                        console.log("⌨️ [IFRAME WINDOW KEYDOWN] Escape key detected in Capture Phase.");
+
+                        var activeLeafletPopup = document.querySelector('.leaflet-popup');
+                        var overlay = document.getElementById('modal-overlay');
+
+                        // Let's print out what we see so you know exactly why it passes or fails
+                        console.log("🔍 [IFRAME STATE] Popup present:", !!activeLeafletPopup, " | Local Overlay present:", !!overlay);
+
+                        // We intercept unconditionally on Escape to be safe
+                        console.log("📣 [IFRAME KEYDOWN] Intercepting Escape, forcing parent notify.");
+                        event.preventDefault();
+                        event.stopPropagation();
+                        signalParentToClose();
+                    }
+                }, true); // <-- TRUE activates the high-priority Capture phase!
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initializeListeners);
+            } else {
+                initializeListeners();
+            }
+        })();
+        </script>
+        """
 
         # 💡 NEW INJECTION: Compile-time 0ms Direct Object Lookup Registry Index
         # This ties into your existing map detection lifecycle to prevent race conditions.
