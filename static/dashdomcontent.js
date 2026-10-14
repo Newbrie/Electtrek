@@ -49,13 +49,37 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.messages?.forEach(msg => addMessageToLog(msg));
 
   // ----------------------------
-  // iframe postMessage handling
-  // ----------------------------
-  if (typeof bindEvent === "function") {
-      bindEvent(window, "message", (e) => {
-          addMessageToLog(e.data?.type || String(e.data));
-      });
-  }
+    // iframe postMessage handling
+    // ----------------------------
+    // If you use a custom bindEvent wrapper or standard window.addEventListener:
+    const handleIframeMessage = (e) => {
+        const data = e.data;
+        if (!data) return;
+
+        addMessageToLog(data.type || String(data));
+
+        // 🎯 Catch node/map changes from the iframe and update parent state instantly
+        if (data.type === "updateNodePath" || data.type === "iframeSwitchElection" || data.mapfile || data.currentNodePath) {
+            if (data.currentNodePath) {
+                window.currentNodePath = data.currentNodePath;
+            }
+            if (data.mapfile) {
+                window.mapfile = data.mapfile;
+            }
+
+            // Force parent accordion to re-render for the newly selected area hierarchy
+            if (typeof initAccordionFromOptions === "function" && window.areaTree) {
+                initAccordionFromOptions(window.areaTree);
+                console.log("🌳 [Parent] Accordion refreshed for path:", window.currentNodePath);
+            }
+        }
+    };
+
+    if (typeof bindEvent === "function") {
+        bindEvent(window, "message", handleIframeMessage);
+    } else {
+        window.addEventListener("message", handleIframeMessage);
+    }
 
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD

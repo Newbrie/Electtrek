@@ -775,15 +775,7 @@ async function handleClearSlot() {
     setTimeout(cleanupModalState, 300);
 }
 
-// 🛡️ Bind cleanup to Bootstrap's native hidden event (handles ESC and click-away)
-document.addEventListener("DOMContentLoaded", function() {
-    const modalEl = document.getElementById("slotModal");
-    if (modalEl) {
-        modalEl.addEventListener("hidden.bs.modal", function () {
-            cleanupModalState();
-        });
-    }
-});
+
 function cleanupModalState() {
     // 1. Remove all lingering Bootstrap backdrop overlays
     document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
@@ -3621,6 +3613,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("🔀 places on DOM reload :", window.places);
     console.log("🔀 resources on DOM reload :", window.resources);
     console.log("🔀 task_tags on DOM reload :", window.task_tags);
+
+
+    // Whenever the active node/map changes inside the iframe:
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+            type: "updateNodePath",
+            currentNodePath: window.currentNodePath, // or whatever variable holds the current path inside the iframe
+            mapfile: window.mapfile
+        }, "*");
+    }
+
+    // 🛡️ Bind cleanup to Bootstrap's native hidden event (handles ESC and click-away)
+    const modalEl = document.getElementById("slotModal");
+    if (modalEl) {
+        modalEl.addEventListener("hidden.bs.modal", function () {
+            cleanupModalState();
+        });
+    }
 
     // Call the function to fetch the backend URL used as window.API
     await fetchBackendURL();
