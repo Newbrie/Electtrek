@@ -167,6 +167,7 @@
     }
   }
 
+  const logList = document.querySelector("#logwin .flashes");
 
  function addMessageToLog(text) {
      if (!logList) return;
