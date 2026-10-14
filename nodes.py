@@ -3266,8 +3266,9 @@ class TreeNode:
 
         # Ensure there's only one LayerControl
         FolMap.add_child(folium.LayerControl(collapsed=True))
-        FolMap.get_root().html.add_child(folium.Element(resources_js))
-        FolMap.get_root().html.add_child(folium.Element(places_js))
+        FolMap.get_root().html.add_child(folium.Element(resources_list_js))
+        FolMap.get_root().html.add_child(folium.Element(places_list_js))
+        FolMap.get_root().html.add_child(folium.Element(area_accordion_js))
         FolMap.get_root().html.add_child(folium.Element(task_accordion_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
