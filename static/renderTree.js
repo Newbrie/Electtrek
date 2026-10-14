@@ -242,16 +242,30 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         return;
     }
 
-    // 🌳 Automatically drill down into the tree based on current node path or mapfile
     let currentTree = tree;
     const activePath = window.currentNodePath || window.mapfile || "";
 
     if (typeof stepify === 'function' && activePath) {
-        const steps = stepify(activePath);
-        // Traverse down the tree matching each step (e.g., SURREY -> FARNHAM_AND_BORDON)
+        let steps = stepify(activePath);
+
+        // 🎯 TARGET CHANGE: Stop traversal at "SURREY" (or slice off the last leaf level so parent context remains visible)
+        // If you want to view from Surrey downwards, find where Surrey is and stop there,
+        // or exclude the last 1 or 2 steps (like the specific Woking ward/constituency leaf).
+        const surreyIndex = steps.findIndex(s => s.toUpperCase() === "SURREY");
+        if (surreyIndex !== -1) {
+            // Keep up to Surrey, or keep Surrey + its immediate children container
+            steps = steps.slice(0, surreyIndex + 2); // Includes SURREY and its direct children (constituencies)
+        } else if (steps.length > 1) {
+            // Fallback: Drop just the final leaf node so you see the parent container
+            steps = steps.slice(0, steps.length - 1);
+        }
+
+        // Traverse down the restricted steps
         for (const step of steps) {
-            if (currentTree[step] && typeof currentTree[step] === 'object') {
-                currentTree = currentTree[step];
+            // Case-insensitive key matching
+            const matchedKey = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
+            if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
+                currentTree = currentTree[matchedKey];
             }
         }
     }
@@ -261,7 +275,7 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     const createButton = config.createButton || window.createMapButton;
     const emptyMessage = config.emptyMessage || 'No sub-divisions available';
 
-    const currentSteps = stepify(activePath);
+    const currentSteps = typeof stepify === 'function' && activePath ? stepify(activePath) : [];
     const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY";
 
     const displayElement = document.getElementById('display-path');
@@ -270,7 +284,6 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     }
 
     if (typeof window.renderTreeSelector === "function") {
-        // Render using the drilled-down sub-tree
         window.renderTreeSelector(currentTree, {
             containerId: containerId,
             accordionId: accordionId,
@@ -278,7 +291,7 @@ window.initAccordionFromOptions = (tree, config = {}) => {
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
             createButton: createButton
         });
-        console.log(`✅ Successfully initialized accordion for #${containerId} at node "${activeNodeName}"!`);
+        console.log(`✅ Successfully initialized accordion for #${containerId} rooted at Surrey hierarchy!`);
     }
 };
 

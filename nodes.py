@@ -1025,7 +1025,7 @@ class TreeNode:
                 # available UI elements
                 "tables_available": self.available_tables(elevels),
                 "layers_available": self.available_layers(elevels),
-                "areas": self.get_areaTree(layers.Geo_index, max_depth=3),
+                "areas": self.get_areaTree(layers.Geo_index, max_depth=1),
 
                 # relationships
                 "children": [c.value for c in self.children],

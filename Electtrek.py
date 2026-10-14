@@ -173,7 +173,7 @@ class ProgramContext:
         }
 
 
-def resolve_ui_context(program, election, node):
+def resolve_ui_context(program, election, c_node):
     """
     Merge program, election, and node options into a single dict,
     converting any sets to lists so the result is JSON-serializable.
@@ -191,7 +191,7 @@ def resolve_ui_context(program, election, node):
     merged = {
         **program.get_options(),# program options
         **election.get_options(), # election options
-        **node.get_options(program=program, electionctx=election),
+        **c_node.get_options(program=program, electionctx=election),
     }
 
     return make_json_serializable(merged)
@@ -2497,7 +2497,7 @@ def set_election():
 
         options = resolve_ui_context(ProgramContext(),ElectionContext(CElection), current_node)
         constants = CElection
-        print(f"____Route/set-election- post resolve {current_node.value} Loaded election: {current_election} ")
+        print(f"____Route/set-election- post resolve {current_node.value} options: {options.get('areas')} ")
 
         if not current_node.visit_node(CElection):
             flash("That node is outside of the election Territory")
@@ -2521,12 +2521,12 @@ def set_election():
             'mapfile': lastfilepath,           # 🗺️ Send computed mapfile to frontend
             'currentNodePath': target_path            # 📍 Send computed node path to frontend
         })
-
     except Exception as e:
-        print("____Route/set-election/exception", e)
+        print("____Route/set-election/exception:", repr(e))  # <-- Print representation clearly
         import traceback
         traceback.print_exc()
         return jsonify(success=False, error=str(e)), 500
+
 
 # GET /current-election?election=...
 @app.route('/current-election', methods=['GET'])
@@ -2907,18 +2907,17 @@ def index():
     global TABLE_TYPES
     global constants
     from baked_data import baked_manager
+    from layers import ExtendedFeatureGroup, ensure_treepolys_with_index
+    from elections import CurrentElection
 
-    ELECTIONS = get_available_elections()  # This seems to be a function fetching available elections
+    ELECTIONS = get_available_elections()
 
     if 'username' in session:
         flash("__________Session Alive:" + session['username'])
         print("__________Session Alive:" + session['username'])
-        formdata = {}
 
-        # Fetch the stream processing status using the new method
-        streamrag = CurrentElection.getstreamrag(electors)  # This is your new way of getting stream processing data
-
-        # You may have to handle cases where streamrag is empty or has no valid data
+        # Fetch stream processing status
+        streamrag = CurrentElection.getstreamrag(electors)
         if not streamrag:
             streamrag = {
                 'No Elections': {
@@ -2929,46 +2928,62 @@ def index():
                 }
             }
 
-        # Restore the persisted state (Treepolys)
+        # Restore persisted state
         restore_from_persist(layers.Treepolys, layers.Geo_index)
         BAKED_DATA = baked_manager.load()
-        # Load the current election context
+
+        # Load current election context & breadcrumbs
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
-        resolved_levels = CElection.resolved_levels
 
-        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+        if CElection:
+            rlevels = CElection.resolved_levels
+            plevels = CElection.parent_levels
 
-        # The clean unpack you like
-        (c_election, elevels), = resolved_levels.items()
+            # Get the last saved mapfile breadcrumb
+            mapfiles_list = CElection.get('mapfiles', [])
+            lastfilepath = mapfiles_list[-1] if mapfiles_list else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
 
-        current_node = get_last_node(CElection,layers.Geo_index,create=False)
+            steps = stepify(lastfilepath)
+            target_path = "/".join(steps)
 
-        # Set up the program and election context
-        program = ProgramContext()
-        election = ElectionContext(CElection)
-        OPTIONS = resolve_ui_context(program, election, current_node)
+            # Ensure boundaries and node trees are fully loaded
+            lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
+                sourcepath=lastfilepath,
+                here=None,
+                resolved_levels=rlevels,
+                parent_levels=plevels
+            )
 
-        # Log the current state for debugging
-        print(f"🧪 Index level {current_election} -options[areas]:{OPTIONS['areas']} current_node mapfile:{current_node.mapfile}")
+            current_node = MapRoot.ping_node(rlevels, layers.Geo_index, lastfilepath, create=True, accumulate=False)
+            if current_node:
+                current_node.endpoint_created(CElection, layers.Geo_index, rlevels, lastfilepath, static=False)
+            else:
+                current_node = MapRoot.ping_node(rlevels, layers.Geo_index, "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html", create=True, accumulate=False)
+                target_path = "UNITED_KINGDOM"
+                lastfilepath = "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
 
-        return render_template(
-            "Dash0.html",
-            table_types=TABLE_TYPES,
-            ELECTIONS=ELECTIONS,
-            current_election=current_election,
-            options=OPTIONS,
-            constants=CElection,
-            baked_data=BAKED_DATA,
-            mapfile=current_node.mapfile,
-            streamrag=streamrag,  # Pass streamrag to the template for rendering
-            current_path = current_node.node_path
-        )
+            program = ProgramContext()
+            election = ElectionContext(CElection)
+            OPTIONS = resolve_ui_context(program, election, current_node)
 
+            print(f"🧪 Index level {current_election} - options[areas]: {bool(OPTIONS.get('areas'))} target_path: {target_path}")
 
-    # If no session or no username, render the default index page
+            return render_template(
+                "Dash0.html",
+                table_types=TABLE_TYPES,
+                ELECTIONS=ELECTIONS,
+                current_election=current_election,
+                options=OPTIONS,
+                constants=CElection,
+                baked_data=BAKED_DATA,
+                mapfile=lastfilepath,
+                streamrag=streamrag,
+                current_path=target_path
+            )
+
+    # If no session or username, render fallback index page
     print(f"🧪 Index No session for elections: {ELECTIONS} ")
-
     return render_template("index.html")
 
 #login
