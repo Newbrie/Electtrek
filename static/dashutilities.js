@@ -126,46 +126,45 @@
         credentials: "same-origin",
         body: JSON.stringify({ election: electionName })
     });
-
     const data = await res.json();
-    // Inside window.switchElection
     const iframeEl = document.getElementById("iframe1");
+    if (data.success) {
+        // 🎯 1. Capture backend-driven state instantly using the exact key name
+        if (data.mapfile) window.mapfile = data.mapfile;
+        if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
 
-    // 🎯 Save the backend-provided nodepath globally so your accordion can use it
-    if (iframeEl && data.options && data.options.nodepath) {
-        window.initialPath = data.options.nodepath;
-        console.log("📍 Backend provided initial nodepath:", window.initialPath);
-    }
+        console.log("📍 [switchElection] Server synchronized path:", window.currentNodePath);
+        console.log("🗺️ [switchElection] Server synchronized mapfile:", window.mapfile);
 
-    // 3. 🗺️ FIX MAP: Dynamically load the correct mapfile into the iframe src
-    if (iframeEl && data.mapfile) {
-        // Sets the iframe source to your Flask route handling the map path
-        iframeEl.src = `/thru/${data.mapfile}`;
-    }
-
-    // 4. Tell iframe to handle its internal UI / calendar updates if already loaded
-    if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
-        iframeWin.iframeSwitchElection(electionName, data);
-    } else {
-        iframeWin?.postMessage({
-            type: "iframeSwitchElection",
-            electionName: electionName,
-            data: data
-        }, "*");
-    }
-
-    // 5. 🎯 FIX ACCORDION: Initialize or refresh the sidebar from iframe's areaTree once loaded
-    setTimeout(() => {
-        if (typeof initAccordionFromOptions === "function") {
-            initAccordionFromOptions(window.areaTree);
+        // 2. 🗺️ Load the correct map into the iframe
+        if (iframeEl && data.mapfile) {
+            iframeEl.src = `/thru/${data.mapfile}`;
         }
-    }, 400); // Small buffer to let the iframe document spin up its scripts
 
-    // 6. Refresh Parent Data Tables
-    if (typeof fetchTableData === "function") {
-        await fetchTableData("nodelist_xref");
+        // 3. Inform iframe if it's already active
+        if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
+            iframeWin.iframeSwitchElection(electionName, data);
+        } else {
+            iframeWin?.postMessage({
+                type: "iframeSwitchElection",
+                electionName: electionName,
+                data: data
+            }, "*");
+        }
+
+        // 4. 🎯 Refresh sidebar accordion using the new server-backed scope
+        setTimeout(() => {
+            const targetTree = window.areaTree || iframeWin?.window?.areaTree || data.options?.areas;
+            if (typeof initAccordionFromOptions === "function" && targetTree) {
+                initAccordionFromOptions(targetTree);
+            }
+        }, 400);
+
+        // 5. Refresh Parent Data Tables
+        if (typeof fetchTableData === "function") {
+            await fetchTableData("nodelist_xref");
+        }
     }
-};
 
 
  function addMessageToLog(text) {

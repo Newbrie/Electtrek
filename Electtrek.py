@@ -2513,12 +2513,14 @@ def set_election():
             # Fallback wrapper if it acts strictly like a dictionary sub-class
             constants_dict = dict(CElection)
 
-        return jsonify({
-            'success': True,
-            'constants': constants_dict, # Now cleanly serializable!
-            'options': options,
-            'current_election': current_election
-        })
+    return jsonify({
+                'success': True,
+                'constants': constants_dict,
+                'options': options,
+                'current_election': current_election,
+                'mapfile': lastfilepath,           # 🗺️ Send computed mapfile to frontend
+                'currentNodePath': target_path            # 📍 Send computed node path to frontend
+            })
 
 
     except Exception as e:
