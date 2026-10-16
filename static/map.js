@@ -580,6 +580,9 @@ var showMore = function (msg,area) {
       if (!calendarData[slotId]) calendarData[slotId] = {};
       const data = calendarData[slotId]; // Reference, not copy
 
+
+      window.selectedTask = data.activity || '';
+      window.selectedArea = data.area || '';
       // Fill dropdowns
       fillSelect("resourcesSelect", window.resources);
       fillSelect("placeSelect", window.places);
@@ -1321,22 +1324,34 @@ async function getCalendarUpdate(API) {
 window.selectedArea = null;
 window.selectedTask = null;
 
-function syncAreaSelect() {
-const sel = document.getElementById('areaSelect');
-if (!sel) return;
-sel.innerHTML = '';
-if (!window.selectedArea) return;
-sel.appendChild(new Option(window.selectedArea, window.selectedArea, true, true));
-sel.value = window.selectedArea;
+function syncTaskSelect() {
+    const sel = document.getElementById('activitySelect');
+    if (!sel) return;
+
+    const code = window.selectedTask;
+    if (!code) {
+        sel.value = '';
+        return;
+    }
+
+    const label = code; // Replace with the task's descriptive label
+    sel.replaceChildren(new Option(label, code, true, true));
+    sel.value = code;
 }
 
-function syncTaskSelect() {
-const sel = document.getElementById('activitySelect');
-if (!sel) return;
-sel.innerHTML = '';
-if (!window.selectedTask) return;
-sel.appendChild(new Option(window.selectedTask, window.selectedTask, true, true));
-sel.value = window.selectedTask;
+function syncAreaSelect() {
+    const sel = document.getElementById('areaSelect');
+    if (!sel) return;
+
+    const code = window.selectedArea;
+    if (!code) {
+        sel.value = '';
+        return;
+    }
+
+    const label = code; // Replace with the area's descriptive label
+    sel.replaceChildren(new Option(label, code, true, true));
+    sel.value = code;
 }
 
 

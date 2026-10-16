@@ -359,17 +359,22 @@ function createAreaButton(
         }
 
         window[selectedKey] = areaCode;
-        button.classList.add('active');
 
+        if (currentSlotId && calendarData[currentSlotId]) {
+            calendarData[currentSlotId].area = areaCode;
+        }
+
+        button.classList.add('active');
         console.log('Area selected:', areaCode, displayName);
 
         syncAreaSelect();
+        
     });
 
     list.appendChild(button);
 }
 
-function createAreaButton(
+function createTaskButton(
 list,
 taskCode,
 displayName,
@@ -400,11 +405,15 @@ button.addEventListener('click', function () {
 
     window[selectedKey] = taskCode;
 
+    if (currentSlotId && calendarData[currentSlotId]) {
+        calendarData[currentSlotId].activity = taskCode;
+    }
+
     button.classList.add('active');
+    syncTaskSelect();
 
     console.log('Task selected:', taskCode);
 
-    syncAreaSelect();
 });
 
 list.appendChild(button);
