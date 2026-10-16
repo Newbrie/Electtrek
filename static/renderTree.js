@@ -57,13 +57,15 @@ function pathify(parts) {
 window.stepify = stepify;
 window.pathify = pathify;
 
+
 window.renderTreeSelector = function (tree, options = {}) {
     const {
         containerId,
         emptyMessage = 'No items available',
         accordionId,
         allLabel = name => `All of ${name}`,
-        createButton
+        createButton,
+        selectedValue = '' // NEW: selected task/activity code
     } = options;
 
     const container = document.getElementById(containerId);
@@ -71,8 +73,10 @@ window.renderTreeSelector = function (tree, options = {}) {
 
     container.innerHTML = '';
 
-    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
-        container.innerHTML = `<div class="small text-muted p-2">${emptyMessage}</div>`;
+    if (!tree || typeof tree !== 'object' ||
+        Object.keys(tree).length === 0) {
+        container.innerHTML =
+            `<div class="small text-muted p-2">${emptyMessage}</div>`;
         return;
     }
 
@@ -87,16 +91,17 @@ window.renderTreeSelector = function (tree, options = {}) {
 
         Object.entries(node).forEach(([name, children]) => {
             const currentPath = [...path, name];
-            // Replace this line inside renderTreeSelector:
-            // const hasChildren = children && typeof children === 'object' && Object.keys(children).length > 0;
 
-            // 🛠️ WITH THIS SAFE CHECK:
-            const hasChildren = children &&
-                                typeof children === 'object' &&
-                                !Array.isArray(children) &&
-                                Object.keys(children).length > 0 &&
-                                Object.values(children).some(val => typeof val === 'object');
-                                            const uniqueId = `${accordionId}-${idCounter++}`;
+            const hasChildren =
+                children &&
+                typeof children === 'object' &&
+                !Array.isArray(children) &&
+                Object.keys(children).length > 0 &&
+                Object.values(children).some(
+                    val => typeof val === 'object' && val !== null
+                );
+
+            const uniqueId = `${accordionId}-${idCounter++}`;
 
             if (depth === 0) {
                 const item = document.createElement('div');
@@ -118,7 +123,11 @@ window.renderTreeSelector = function (tree, options = {}) {
                 `;
 
                 const body = item.querySelector('.accordion-body');
-                createButton(body, name, allLabel(name), 'fw-semibold', currentPath);
+
+                createButton(
+                    body, name, allLabel(name),
+                    'fw-semibold', currentPath
+                );
 
                 if (hasChildren) {
                     renderLevel(children, body, currentPath, depth + 1);
@@ -134,12 +143,15 @@ window.renderTreeSelector = function (tree, options = {}) {
             if (hasChildren) {
                 const header = document.createElement('button');
                 header.type = 'button';
-                header.className = 'btn btn-sm w-100 text-start py-2 shadow-none';
-                header.style.paddingLeft = `${1 + depth * 1.25}rem`;
+                header.className =
+                    'btn btn-sm w-100 text-start py-2 shadow-none';
+                header.style.paddingLeft =
+                    `${1 + depth * 1.25}rem`;
                 header.setAttribute('data-bs-toggle', 'collapse');
                 header.setAttribute('data-bs-target', `#${uniqueId}`);
                 header.setAttribute('aria-expanded', 'false');
-                header.textContent = `▸ ${name.replace(/_/g, ' ')}`;
+                header.textContent =
+                    `▸ ${name.replace(/_/g, ' ')}`;
 
                 const collapse = document.createElement('div');
                 collapse.id = uniqueId;
@@ -148,22 +160,43 @@ window.renderTreeSelector = function (tree, options = {}) {
                 const list = document.createElement('div');
                 list.className = 'list-group list-group-flush';
 
-                createButton(list, name, allLabel(name), '', currentPath);
+                createButton(
+                    list, name, allLabel(name), '', currentPath
+                );
+
                 renderLevel(children, list, currentPath, depth + 1);
 
                 collapse.appendChild(list);
                 wrapper.appendChild(header);
                 wrapper.appendChild(collapse);
             } else {
-                createButton(wrapper, name, name, '', currentPath);
+                // NEW: identify the selected task leaf
+                const isSelected =
+                    String(name) === String(selectedValue);
+
+                const classes = isSelected
+                    ? 'selected-task-type'
+                    : '';
+
+                createButton(
+                    wrapper,
+                    name,
+                    name,
+                    classes,
+                    currentPath
+                );
             }
 
             parentElement.appendChild(wrapper);
         });
     }
 
-    const rootSteps = typeof stepify === 'function' ? stepify(window.mapfile || "") : [];
-    rootSteps.pop(); // Remove file extension/leaf if present
+    const rootSteps =
+        typeof stepify === 'function'
+            ? stepify(window.mapfile || '')
+            : [];
+
+    rootSteps.pop();
 
     renderLevel(tree, acc, rootSteps);
     container.appendChild(acc);
@@ -272,7 +305,7 @@ window.initAccordionFromOptions = (tree, config = {}) => {
 
     const containerId = config.containerId || 'children-list';
     const accordionId = config.accordionId || 'election-accordion';
-    const createButton = config.createButton || window.createMapButton;
+    const createButton =  window.createMapButton;
     const emptyMessage = config.emptyMessage || 'No sub-divisions available';
 
     const currentSteps = typeof stepify === 'function' && activePath ? stepify(activePath) : [];
@@ -295,45 +328,45 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     }
 };
 
-function createTaskButton(
-list,
-taskCode,
-displayName,
-indentClass = '',
-selectedKey = 'selectedTask'
+
+
+function createAreaButton(
+    list,
+    areaCode,
+    displayName,
+    indentClass = '',
+    selectedKey = 'selectedArea'
 ) {
-const button = document.createElement('button');
+    const button = document.createElement('button');
 
-button.type = 'button';
-button.className =
-    `list-group-item list-group-item-action small ${indentClass}`;
+    button.type = 'button';
+    button.className =
+        `list-group-item list-group-item-action small ${indentClass}`;
 
-button.textContent = displayName;
-button.dataset.code = taskCode;
+    button.textContent = displayName;
+    button.dataset.code = areaCode;
 
-if (window[selectedKey] === taskCode) {
-    button.classList.add('active');
-}
-
-button.addEventListener('click', function () {
-    const accordion = list.closest('.accordion');
-
-    if (accordion) {
-        accordion
-            .querySelectorAll('.list-group-item')
-            .forEach(btn => btn.classList.remove('active'));
+    if (window[selectedKey] === areaCode) {
+        button.classList.add('active');
     }
 
-    window[selectedKey] = taskCode;
+    button.addEventListener('click', function () {
+        const accordion = list.closest('.accordion');
 
-    button.classList.add('active');
+        if (accordion) {
+            accordion.querySelectorAll('.list-group-item')
+                .forEach(btn => btn.classList.remove('active'));
+        }
 
-    console.log('Task selected:', taskCode);
+        window[selectedKey] = areaCode;
+        button.classList.add('active');
 
-    syncTaskSelect();
-});
+        console.log('Area selected:', areaCode, displayName);
 
-list.appendChild(button);
+        syncAreaSelect();
+    });
+
+    list.appendChild(button);
 }
 
 function createAreaButton(

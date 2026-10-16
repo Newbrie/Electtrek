@@ -83,92 +83,6 @@ var showMore = function (msg,area) {
       toggle between hiding and showing the dropdown content */
 
 
-  function openSlotModal(slotId) {
-      currentSlotId = slotId;
-      const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
-
-      // --- 🔴 HIGHLIGHT LOGIC START ---
-      // 1. Remove the red outline from any previously highlighted slot
-      document.querySelectorAll(".slot.selected-slot").forEach(s => {
-          s.classList.remove("selected-slot");
-      });
-
-      // 2. Set this slot as the active one and apply the red line class
-      if (slotDiv) {
-          window.activeSlotId = slotId;
-          slotDiv.classList.add("selected-slot");
-      }
-      // --- 🔴 HIGHLIGHT LOGIC END ---
-
-      // Ensure slot exists in calendarData
-      if (!calendarData[slotId]) calendarData[slotId] = {};
-      const data = calendarData[slotId]; // Reference, not copy
-
-      // Fill dropdowns
-      fillSelect("resourcesSelect", window.resources);
-      fillSelect("placeSelect", window.places);
-      console.log("💾 filled resources:", window.resources);
-
-      // Ensure data structures exist
-      if (!data.resources) data.resources = [];
-
-      // Infer missing fields individually from DOM lozenges if not already set
-      if (slotDiv) {
-          const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
-          lozenges.forEach(l => {
-              const type = l.dataset.type;
-              const code = l.dataset.code || l.textContent.trim();
-
-              if (!code || code === "undefined" || code === "null") return;
-
-              if (type === "activity" && !data.activity) {
-                  data.activity = code;
-              } else if (type === "place" && !data.place) {
-                  data.place = code;
-              } else if (type === "area" && !data.area) {
-                  data.area = code;
-              } else if (type === "resource" && !data.resources.includes(code)) {
-                  data.resources.push(code);
-              }
-          });
-      }
-
-      // 🌳 Render tree selectors now that the modal DOM / containers exist
-      if (window.areaTree && typeof window.renderTreeSelector === "function") {
-          window.renderTreeSelector(window.areaTree, {
-              containerId: 'areaAccordionContainer',
-              accordionId: 'areaSelectAccordion',
-              emptyMessage: 'No areas available for this map',
-              allLabel: name => `All of ${name}`,
-              createButton: createAreaButton
-          });
-      }
-
-      if (window.taskTree && typeof window.renderTreeSelector === "function") {
-          window.renderTreeSelector(window.taskTree, {
-              containerId: 'taskAccordionContainer',
-              accordionId: 'taskSelectAccordion',
-              emptyMessage: 'No task types available for this map',
-              allLabel: name => `All of ${name}`,
-              createButton: createTaskButton
-          });
-      }
-
-      // Pre-select dropdowns
-      document.getElementById("activitySelect").value = data.activity || "";
-      document.getElementById("placeSelect").value = data.place || "";
-      document.getElementById("areaSelect").value = data.area || "";
-
-      const resSel = document.getElementById("resourcesSelect");
-      Array.from(resSel.options).forEach(opt => {
-          opt.selected = data.resources?.includes(opt.value) || false;
-      });
-
-      // Show modal
-      const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
-      modalInstance.show();
-  }
-
 
 
 
@@ -645,6 +559,95 @@ var showMore = function (msg,area) {
       console.log("📦 Loaded plan:", calendarGrid);
 
   }
+  function openSlotModal(slotId) {
+      currentSlotId = slotId;
+      const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
+
+      // --- 🔴 HIGHLIGHT LOGIC START ---
+      // 1. Remove the red outline from any previously highlighted slot
+      document.querySelectorAll(".slot.selected-slot").forEach(s => {
+          s.classList.remove("selected-slot");
+      });
+
+      // 2. Set this slot as the active one and apply the red line class
+      if (slotDiv) {
+          window.activeSlotId = slotId;
+          slotDiv.classList.add("selected-slot");
+      }
+      // --- 🔴 HIGHLIGHT LOGIC END ---
+
+      // Ensure slot exists in calendarData
+      if (!calendarData[slotId]) calendarData[slotId] = {};
+      const data = calendarData[slotId]; // Reference, not copy
+
+      // Fill dropdowns
+      fillSelect("resourcesSelect", window.resources);
+      fillSelect("placeSelect", window.places);
+      console.log("💾 filled resources:", window.resources);
+
+      // Ensure data structures exist
+      if (!data.resources) data.resources = [];
+
+      // Infer missing fields individually from DOM lozenges if not already set
+      if (slotDiv) {
+          const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
+          lozenges.forEach(l => {
+              const type = l.dataset.type;
+              const code = l.dataset.code || l.textContent.trim();
+
+              if (!code || code === "undefined" || code === "null") return;
+
+              if (type === "activity" && !data.activity) {
+                  data.activity = code;
+              } else if (type === "place" && !data.place) {
+                  data.place = code;
+              } else if (type === "area" && !data.area) {
+                  data.area = code;
+              } else if (type === "resource" && !data.resources.includes(code)) {
+                  data.resources.push(code);
+              }
+          });
+      }
+
+      // 🌳 Render tree selectors now that the modal DOM / containers exist
+      if (window.taskTree && typeof window.renderTreeSelector === "function") {
+        window.renderTreeSelector(window.taskTree, {
+            containerId: 'taskAccordionContainer',
+            accordionId: 'taskSelectAccordion',
+            emptyMessage: 'No task types available for this map',
+            allLabel: name => `All of ${name}`,
+            createButton: createTaskButton,
+            selectedValue: data.activity || ''
+        });
+      }
+
+      if (window.areaTree && typeof window.renderTreeSelector === "function") {
+        window.renderTreeSelector(window.areaTree, {
+            containerId: 'areaAccordionContainer',
+            accordionId: 'areaSelectAccordion',
+            emptyMessage: 'No areas available for this map',
+            allLabel: name => `All of ${name}`,
+            createButton: createAreaButton,
+            selectedValue: data.area || ''
+        });
+      }
+
+
+      // Pre-select dropdowns
+      document.getElementById("activitySelect").value = data.activity || "";
+      document.getElementById("placeSelect").value = data.place || "";
+      document.getElementById("areaSelect").value = data.area || "";
+
+      const resSel = document.getElementById("resourcesSelect");
+      Array.from(resSel.options).forEach(opt => {
+          opt.selected = data.resources?.includes(opt.value) || false;
+      });
+
+      // Show modal
+      const modalInstance = new bootstrap.Modal(document.getElementById("slotModal"));
+      modalInstance.show();
+  }
+
 
 
   function redrawSlot(slotId, data = {}) {
@@ -1365,7 +1368,8 @@ document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
             accordionId: 'areaSelectAccordion',
             emptyMessage: 'No areas available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createAreaButton
+            createButton: createAreaButton,
+            selectedValue: data.area || ''
         });
     }
 });
@@ -1379,7 +1383,8 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
             accordionId: 'taskSelectAccordion',
             emptyMessage: 'No task types available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createTaskButton
+            createButton: createTaskButton,
+            selectedValue: data.activity || ''
         });
     }
 });

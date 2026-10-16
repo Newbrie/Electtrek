@@ -2977,7 +2977,7 @@ def index():
                 options=OPTIONS,
                 constants=CElection,
                 baked_data=BAKED_DATA,
-                mapfile=lastfilepath,
+                mapfile=current_node.mapfile,
                 streamrag=streamrag,
                 current_path=target_path
             )
@@ -4539,7 +4539,7 @@ def firstpage():
         options=OPTIONS,
         constants=CElection,
         baked_data=BAKED_DATA,
-        mapfile=breadcrumb_path,          # 👈 Pass the full breadcrumb mapfile
+        mapfile=current_node.mapfile,          # 👈 Pass the full breadcrumb mapfile
         current_path=current_node_path_val # 👈 Pass the clean directory path
     )
 
