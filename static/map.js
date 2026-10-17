@@ -1320,39 +1320,7 @@ async function getCalendarUpdate(API) {
         console.error("🚨 Error fetching calendar plan:", err);
     }
 }
-  /* ---------- Sync Helpers for Single Select ---------- */
-window.selectedArea = null;
-window.selectedTask = null;
 
-function syncTaskSelect() {
-    const sel = document.getElementById('activitySelect');
-    if (!sel) return;
-
-    const code = window.selectedTask;
-    if (!code) {
-        sel.value = '';
-        return;
-    }
-
-    const label = code; // Replace with the task's descriptive label
-    sel.replaceChildren(new Option(label, code, true, true));
-    sel.value = code;
-}
-
-function syncAreaSelect() {
-    const sel = document.getElementById('areaSelect');
-    if (!sel) return;
-
-    const code = window.selectedArea;
-    if (!code) {
-        sel.value = '';
-        return;
-    }
-
-    const label = code; // Replace with the area's descriptive label
-    sel.replaceChildren(new Option(label, code, true, true));
-    sel.value = code;
-}
 
 
   /* ---------- Return selected areas ---------- */

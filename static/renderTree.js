@@ -330,94 +330,49 @@ window.initAccordionFromOptions = (tree, config = {}) => {
 
 
 
-function createAreaButton(
-    list,
-    areaCode,
-    displayName,
-    indentClass = '',
-    selectedKey = 'selectedArea'
-) {
-    const button = document.createElement('button');
+function createAreaButton(list, AreaCode, displayName, indentClass = '') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `list-group-item list-group-item-action small ${indentClass}`;
+  button.textContent = displayName;
+  button.dataset.code = AreaCode;
 
-    button.type = 'button';
-    button.className =
-        `list-group-item list-group-item-action small ${indentClass}`;
+  if (window.selectedArea === AreaCode) button.classList.add('active');
 
-    button.textContent = displayName;
-    button.dataset.code = areaCode;
-
-    if (window[selectedKey] === areaCode) {
-        button.classList.add('active');
-    }
-
-    button.addEventListener('click', function () {
-        const accordion = list.closest('.accordion');
-
-        if (accordion) {
-            accordion.querySelectorAll('.list-group-item')
-                .forEach(btn => btn.classList.remove('active'));
-        }
-
-        window[selectedKey] = areaCode;
-
-        if (currentSlotId && calendarData[currentSlotId]) {
-            calendarData[currentSlotId].area = areaCode;
-        }
-
-        button.classList.add('active');
-        console.log('Area selected:', areaCode, displayName);
-
-        syncAreaSelect();
-        
-    });
-
-    list.appendChild(button);
-}
-
-function createTaskButton(
-list,
-taskCode,
-displayName,
-indentClass = '',
-selectedKey = 'selectedTask'
-) {
-const button = document.createElement('button');
-
-button.type = 'button';
-button.className =
-    `list-group-item list-group-item-action small ${indentClass}`;
-
-button.textContent = displayName;
-button.dataset.code = taskCode;
-
-if (window[selectedKey] === taskCode) {
+  button.addEventListener('click', () => {
+    list.closest('.accordion')
+        ?.querySelectorAll('.list-group-item')
+        .forEach(b => b.classList.remove('active'));
+    window.selectedArea = AreaCode;
     button.classList.add('active');
+    syncAreaSelect();
+  });
+
+  list.appendChild(button);
 }
 
-button.addEventListener('click', function () {
-    const accordion = list.closest('.accordion');
 
-    if (accordion) {
-        accordion
-            .querySelectorAll('.list-group-item')
-            .forEach(btn => btn.classList.remove('active'));
-    }
+function createTaskButton(list, taskCode, displayName, indentClass = '') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `list-group-item list-group-item-action small ${indentClass}`;
+  button.textContent = displayName;
+  button.dataset.code = taskCode;
 
-    window[selectedKey] = taskCode;
+  if (window.selectedTask === taskCode) button.classList.add('active');
 
-    if (currentSlotId && calendarData[currentSlotId]) {
-        calendarData[currentSlotId].activity = taskCode;
-    }
-
+  button.addEventListener('click', () => {
+    list.closest('.accordion')
+        ?.querySelectorAll('.list-group-item')
+        .forEach(b => b.classList.remove('active'));
+    window.selectedTask = taskCode;
     button.classList.add('active');
     syncTaskSelect();
+  });
 
-    console.log('Task selected:', taskCode);
-
-});
-
-list.appendChild(button);
+  list.appendChild(button);
 }
+
 
 
 
@@ -436,4 +391,39 @@ list.appendChild(button);
     console.log("___Dash Task Tags", task_tags);
     console.log( "Outcome Tags:", outcome_tags);
     return { task_tags, outcome_tags };
+}
+
+
+/* ---------- Sync Helpers for Single Select ---------- */
+window.selectedArea = null;
+window.selectedTask = null;
+
+function syncTaskSelect() {
+  const sel = document.getElementById('activitySelect');
+  if (!sel) return;
+
+  const code = window.selectedTask;
+  if (!code) {
+      sel.value = '';
+      return;
+  }
+
+  const label = code; // Replace with the task's descriptive label
+  sel.replaceChildren(new Option(label, code, true, true));
+  sel.value = code;
+}
+
+function syncAreaSelect() {
+  const sel = document.getElementById('areaSelect');
+  if (!sel) return;
+
+  const code = window.selectedArea;
+  if (!code) {
+      sel.value = '';
+      return;
+  }
+
+  const label = code; // Replace with the area's descriptive label
+  sel.replaceChildren(new Option(label, code, true, true));
+  sel.value = code;
 }
