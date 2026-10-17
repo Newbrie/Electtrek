@@ -206,21 +206,25 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
         let targetPath = nodeName;
 
         if (typeof pathify === 'function' && typeof stepify === 'function') {
-            let combinedSteps = [];
+            // 🎯 Use window.mapfile or window.currentNodePath as the authoritative baseline
+            const activePath = window.mapfile || window.currentNodePath || "UNITED_KINGDOM";
+            const parentSteps = stepify(activePath);
 
-            if (Array.isArray(nodePathArray) && nodePathArray.length > 0) {
-                combinedSteps = stepify(nodePathArray.join('/'));
-            } else {
-                const activePath = window.currentNodePath || window.mapfile || "UNITED_KINGDOM";
-                const cleanParentSteps = stepify(activePath);
-                combinedSteps = [...cleanParentSteps, nodeName];
+            // Pop off the old leaf mapfile name from the active path to get the clean parent directory sequence
+            if (parentSteps.length > 0 && parentSteps[parentSteps.length - 1].includes('-MAP')) {
+                parentSteps.pop();
             }
 
+            // Combine base directory steps with the clicked nodeName
+            const combinedSteps = [...parentSteps, nodeName];
             const finalCleanSteps = stepify(pathify(combinedSteps));
             targetPath = pathify(finalCleanSteps);
         }
 
-        const mapFilename = `${nodeName}-MAP.html`;
+        // Extract the leaf node name cleanly for the map file suffix
+        const pathSteps = targetPath.split('/');
+        const leafNodeName = pathSteps[pathSteps.length - 1];
+        const mapFilename = `${leafNodeName}-MAP.html`;
         const fetchPath = `${targetPath}/${mapFilename}`;
 
         console.log(`🚀 Sending path to backend: ${fetchPath}`);
@@ -235,20 +239,20 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
         })
         .then(data => {
             if (data.success && data.map_url) {
-                const mapIframe = document.querySelector('iframe') || document.getElementById('map-iframe');
+                const mapIframe = document.getElementById('iframe1') || document.querySelector('iframe');
                 if (mapIframe) {
                     mapIframe.src = data.map_url;
                     console.log(`🗺️ Iframe successfully updated to: ${data.map_url}`);
                 }
 
-                // Update global state
+                // Update global state tracking
                 window.currentNodePath = targetPath;
                 window.mapfile = `${targetPath}/${mapFilename}`;
 
                 // Update display path header
                 const displayElement = document.getElementById('display-path');
                 if (displayElement) {
-                    displayElement.innerText = nodeName.replace(/_/g, ' ');
+                    displayElement.innerText = leafNodeName.replace(/_/g, ' ');
                 }
             }
         })

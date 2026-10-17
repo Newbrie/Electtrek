@@ -1230,48 +1230,38 @@ class TreeNode:
         return f"<TNode {self.value} L{self.level} {self.origin}>"
 
 
-    def get_areaTree(self, geo_index, max_depth=4):
+    def get_areaTree(self, geo_index, max_depth=2):
         """
-        Automatically slices self.node_path down to the county level
-        and builds the area tree from there down.
+        Build an area tree starting at the county level.
+
+        max_depth=1: Surrey and its constituencies
+        max_depth=2: Surrey, constituencies and wards
+        max_depth=3: Surrey, constituencies, wards and their children
         """
-        parts = self.node_path.split("/")
+        parts = self.node_path.strip("/").split("/")
+        county_path = "/".join(parts[:3]) if len(parts) >= 3 else self.node_path
 
-        # Automatically slice the path to the county level (country/nation/county)
-        if len(parts) >= 3:
-            county_path = "/".join(parts[:3])
-        else:
-            county_path = self.node_path
-
-        # Helper function to recursively build the tree downward from the county
-        def _recursive_build(path, current_depth):
+        def _recursive_build(path, depth):
             node = geo_index.get(path)
             if not node:
+                print(f"Missing geo_index path: {path!r}")
                 return {}
 
             name = node.get("name", path.split("/")[-1])
 
-            # Stop if we've reached max depth relative to the root county
-            if current_depth >= max_depth:
-                # If it has children, we can include them or return empty dict based on limit
-                children_dict = {}
-                for child_path in node.get("children", []):
-                    child_node = geo_index.get(child_path)
-                    if child_node:
-                        child_name = child_node.get("name", child_path.split("/")[-1])
-                        children_dict[child_name] = {}
-                return {name: children_dict}
+            # At the requested depth, stop without adding empty placeholder children.
+            if depth >= max_depth:
+                return {name: {}}
 
             children_dict = {}
+
             for child_path in node.get("children", []):
-                child_tree = _recursive_build(child_path, current_depth + 1)
-                if child_tree:
-                    children_dict.update(child_tree)
+                child_tree = _recursive_build(child_path, depth + 1)
+                children_dict.update(child_tree)
 
             return {name: children_dict}
 
-        # Kick off the recursion starting at the county path (depth 0 relative to root)
-        return _recursive_build(county_path, current_depth=0)
+        return _recursive_build(county_path, depth=0)
 
     def process_lozenges(self,lozenges, CE):
         """
