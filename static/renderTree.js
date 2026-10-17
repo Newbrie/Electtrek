@@ -64,9 +64,8 @@ window.renderTreeSelector = function (tree, options = {}) {
         emptyMessage = 'No items available',
         accordionId,
         allLabel = name => `All of ${name}`,
-        createButton,
-        selectedValue = '' // NEW: selected task/activity code
-    } = options;
+        createButton
+        } = options;
 
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -169,23 +168,15 @@ window.renderTreeSelector = function (tree, options = {}) {
                 collapse.appendChild(list);
                 wrapper.appendChild(header);
                 wrapper.appendChild(collapse);
-            } else {
-                // NEW: identify the selected task leaf
-                const isSelected =
-                    String(name) === String(selectedValue);
-
-                const classes = isSelected
-                    ? 'selected-task-type'
-                    : '';
-
-                createButton(
-                    wrapper,
-                    name,
-                    name,
-                    classes,
-                    currentPath
-                );
-            }
+              } else {
+                    createButton(
+                        wrapper,
+                        name,
+                        name,
+                        '',
+                        currentPath
+                    );
+                }
 
             parentElement.appendChild(wrapper);
         });
@@ -404,9 +395,9 @@ function syncTaskSelect() {
 
   const code = window.selectedTask;
   if (!code) {
-      sel.value = '';
-      return;
-  }
+    sel.replaceChildren();
+    return;
+}
 
   const label = code; // Replace with the task's descriptive label
   sel.replaceChildren(new Option(label, code, true, true));
@@ -414,14 +405,15 @@ function syncTaskSelect() {
 }
 
 function syncAreaSelect() {
+
   const sel = document.getElementById('areaSelect');
   if (!sel) return;
 
   const code = window.selectedArea;
   if (!code) {
-      sel.value = '';
-      return;
-  }
+    sel.replaceChildren();
+    return;
+}
 
   const label = code; // Replace with the area's descriptive label
   sel.replaceChildren(new Option(label, code, true, true));

@@ -559,6 +559,7 @@ var showMore = function (msg,area) {
       console.log("📦 Loaded plan:", calendarGrid);
 
   }
+
   function openSlotModal(slotId) {
       currentSlotId = slotId;
       const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
@@ -581,8 +582,10 @@ var showMore = function (msg,area) {
       const data = calendarData[slotId]; // Reference, not copy
 
 
-      window.selectedTask = data.activity || '';
-      window.selectedArea = data.area || '';
+      window.selectedTask = data.activity || null;
+      window.selectedArea = data.areas?.[0]?.nid || null;
+      syncTaskSelect();
+      syncAreaSelect();
       // Fill dropdowns
       fillSelect("resourcesSelect", window.resources);
       fillSelect("placeSelect", window.places);
@@ -592,54 +595,59 @@ var showMore = function (msg,area) {
       if (!data.resources) data.resources = [];
 
       // Infer missing fields individually from DOM lozenges if not already set
+      // Infer missing fields from DOM lozenges
       if (slotDiv) {
           const lozenges = Array.from(slotDiv.querySelectorAll(".lozenge"));
           lozenges.forEach(l => {
               const type = l.dataset.type;
               const code = l.dataset.code || l.textContent.trim();
-
               if (!code || code === "undefined" || code === "null") return;
 
               if (type === "activity" && !data.activity) {
                   data.activity = code;
               } else if (type === "place" && !data.place) {
                   data.place = code;
-              } else if (type === "area" && !data.area) {
-                  data.area = code;
+              } else if (type === "area" && !(data.areas || []).length) {
+                  data.areas = [{ nid: code, name: code }];
               } else if (type === "resource" && !data.resources.includes(code)) {
                   data.resources.push(code);
               }
           });
       }
 
-      // 🌳 Render tree selectors now that the modal DOM / containers exist
+      // Set selection state AFTER inference, then sync the hidden selects
+      window.selectedTask = data.activity || null;
+      window.selectedArea = data.areas?.[0]?.nid || null;
+      syncTaskSelect();
+      syncAreaSelect();
+
+      // Render trees (buttons restore .active from window.selectedTask/Area)
       if (window.taskTree && typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(window.taskTree, {
-            containerId: 'taskAccordionContainer',
-            accordionId: 'taskSelectAccordion',
-            emptyMessage: 'No task types available for this map',
-            allLabel: name => `All of ${name}`,
-            createButton: createTaskButton,
-            selectedValue: data.activity || ''
-        });
+          window.renderTreeSelector(window.taskTree, {
+              containerId: 'taskAccordionContainer',
+              accordionId: 'taskSelectAccordion',
+              emptyMessage: 'No task types available for this map',
+              allLabel: name => `All of ${name}`,
+              createButton: createTaskButton
+          });
       }
 
       if (window.areaTree && typeof window.renderTreeSelector === "function") {
-        window.renderTreeSelector(window.areaTree, {
-            containerId: 'areaAccordionContainer',
-            accordionId: 'areaSelectAccordion',
-            emptyMessage: 'No areas available for this map',
-            allLabel: name => `All of ${name}`,
-            createButton: createAreaButton,
-            selectedValue: data.area || ''
-        });
+          window.renderTreeSelector(window.areaTree, {
+              containerId: 'areaAccordionContainer',
+              accordionId: 'areaSelectAccordion',
+              emptyMessage: 'No areas available for this map',
+              allLabel: name => `All of ${name}`,
+              createButton: createAreaButton
+          });
       }
 
-
-      // Pre-select dropdowns
-      document.getElementById("activitySelect").value = data.activity || "";
+      expandActive('taskAccordionContainer');
+      expandActive('areaAccordionContainer');
+      // Pre-select the remaining dropdowns (activity/area are handled by the sync helpers)
       document.getElementById("placeSelect").value = data.place || "";
-      document.getElementById("areaSelect").value = data.area || "";
+
+
 
       const resSel = document.getElementById("resourcesSelect");
       Array.from(resSel.options).forEach(opt => {
@@ -651,7 +659,18 @@ var showMore = function (msg,area) {
       modalInstance.show();
   }
 
-
+  function expandActive(containerId) {
+    const active = document.querySelector(`#${containerId} .active`);
+    if (!active) return;
+    let el = active.closest('.collapse');
+    while (el) {
+      el.classList.add('show');
+      const toggler = document.querySelector(`[data-bs-target="#${el.id}"]`);
+      toggler?.classList.remove('collapsed');
+      toggler?.setAttribute('aria-expanded', 'true');
+      el = el.parentElement?.closest('.collapse');
+    }
+  }
 
   function redrawSlot(slotId, data = {}) {
     const slotDiv = document.querySelector(`.slot[data-id="${slotId}"]`);
@@ -1351,8 +1370,7 @@ document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
             accordionId: 'areaSelectAccordion',
             emptyMessage: 'No areas available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createAreaButton,
-            selectedValue: data.area || ''
+            createButton: createAreaButton
         });
     }
 });
@@ -1366,8 +1384,7 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
             accordionId: 'taskSelectAccordion',
             emptyMessage: 'No task types available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createTaskButton,
-            selectedValue: data.activity || ''
+            createButton: createTaskButton
         });
     }
 });
