@@ -2910,14 +2910,10 @@ class TreeNode:
                     };
                 }
 
-                // Turn persistence on/off. Turning it off clears everything currently held.
+                // Turn persistence on/off. Turning it off just lets Folium's normal mouseout
+                // reset resume, so held areas clear as you point at and leave them.
                 window.setPersistHighlight = function(on) {
                     window.persistHighlight = !!on;
-                    if (!on && window.fmap) {
-                        window.fmap.eachLayer(function(l) {
-                            if (l instanceof L.GeoJSON) l._origResetStyle();
-                        });
-                    }
                 };
 
                 // Press "H" to flip the persist-highlight flag without touching the mouse
@@ -2944,7 +2940,9 @@ class TreeNode:
                             'color:#fff; font:12px sans-serif; pointer-events:none; transition:opacity 0.3s;';
                         document.body.appendChild(el);
                     }
-                    el.textContent = window.persistHighlight ? 'Keeping highlights (H to stop)' : 'Highlights cleared';
+                    el.textContent = window.persistHighlight
+                        ? 'Keeping highlights (H to stop)'
+                        : 'Highlight hold off (hover to clear)';
                     el.style.opacity = 1;
                     clearTimeout(el._t);
                     el._t = setTimeout(() => { el.style.opacity = 0; }, 1500);
