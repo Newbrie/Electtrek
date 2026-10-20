@@ -271,7 +271,7 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     }
 
     let currentTree = tree;
-    const activePath = window.currentNodePath || window.mapfile || "";
+    const activePath = window.mapfile || "";
 
     if (typeof stepify === 'function' && activePath) {
         let steps = stepify(activePath);

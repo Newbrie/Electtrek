@@ -2476,11 +2476,12 @@ class TreeNode:
         map_bbox = self.bbox
 
         # --- Create the map using the render_node's location ---
+
         FolMap = folium.Map(
             location=map_center,
             zoom_start=map_zoom,
             width='100%',
-            height='800px'
+            height='100%'
         )
         print(f"___AFTER map creation: on elections.route {state.route()} acc: {accumulate} creating file: ", self.mapfile)
 

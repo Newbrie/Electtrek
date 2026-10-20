@@ -414,3 +414,33 @@ function syncStreamsSelectWithTabs() {
 
     iframe.src = url;
   }
+
+  function bindIframeButtons() {
+    // Grab the iframe buttons map from window.options (passed down by Jinja or fetched)
+    const iframeButtons = window.options?.iframeButtons;
+    if (!iframeButtons || typeof iframeButtons !== 'object') return;
+
+    Object.entries(iframeButtons).forEach(([btnId, targetUrl]) => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.onclick = (e) => {
+                e.preventDefault();
+                const iframeEl = document.getElementById("iframe1");
+                if (iframeEl && targetUrl) {
+                    console.log(`🚀 Navigating iframe via button ${btnId} to: ${targetUrl}`);
+                    iframeEl.src = targetUrl;
+                } else {
+                    console.warn(`⚠️ Target URL missing for ${btnId} or iframe1 not found.`);
+                }
+            };
+        }
+    });
+    console.log("✅ Iframe navigation buttons bound successfully.");
+}
+
+// Helper fallback if areaTree is structured as a nested object rather than a flat path map
+function findDictByPath(tree, targetPath) {
+    // If your tree structure requires recursive traversal, adapt this lookup logic,
+    // otherwise fallback to letting selectNode handle the fetch route if areaTree lookup is unavailable.
+    return tree[targetPath] || null;
+}

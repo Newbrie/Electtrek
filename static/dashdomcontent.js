@@ -107,14 +107,9 @@ await ensureTabsReady();
 await setActiveElectionOnStartup();
 await refreshConstantsUI();
 
+bindIframeButtons();
 
 
-// Helper fallback if areaTree is structured as a nested object rather than a flat path map
-function findDictByPath(tree, targetPath) {
-    // If your tree structure requires recursive traversal, adapt this lookup logic,
-    // otherwise fallback to letting selectNode handle the fetch route if areaTree lookup is unavailable.
-    return tree[targetPath] || null;
-}
 
 
 });
