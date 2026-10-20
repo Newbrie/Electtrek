@@ -2720,6 +2720,26 @@ def snap_houses_to_uprns(children, kdtree=None, coords=None, uprn_ids=None, max_
 
     return mapped_coords
 
+# ----------------------------------------------------------------------
+# POLLING DISTRICT COLOUR HELPERS (module level, above add_nodemaps)
+# ----------------------------------------------------------------------
+PD_PALETTE = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#17becf", "#bcbd22", "#7f7f7f",
+    "#393b79", "#e6550d", "#31a354", "#756bb1", "#843c39",
+]
+
+
+def _pd_sort_key(p):
+    p = str(p)
+    return (0, int(p), p) if p.isdigit() else (1, 0, p)
+
+
+def pd_from_walk(walk_name):
+    """Polling district = text before the first underscore, e.g. 'AA_W1' -> 'AA'."""
+    return str(walk_name).split("_", 1)[0]
+
+
 class ExtendedFeatureGroup(FeatureGroup):
     def __init__(self, name=None, overlay=True, control=True, show=True):
         super().__init__(
@@ -3793,6 +3813,8 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         return eventlist
 
+
+
     def add_nodemaps(self, CElection, rlevels, herenode, nodes_list, static, counters):
         from state import Candidates, LastResults
         from flask import session, flash
@@ -3856,6 +3878,20 @@ class ExtendedFeatureGroup(FeatureGroup):
         popup_body = ""
         if not accumulate:
             counters[layer_type] = counters.get(layer_type, 0)
+
+        # ------------------------------------------------------------------
+        # PRE-PASS: PD -> COLOUR MAP FOR THIS WARD
+        # ------------------------------------------------------------------
+        pd_colours = {}
+        if layer_type == 'walk':
+            # Use all of the ward's walks (not just the filtered childlist)
+            # so each PD keeps the same colour however the list is filtered.
+            source = allchildlist or childlist
+            unique_pds = sorted({pd_from_walk(c.value) for c in source}, key=_pd_sort_key)
+            pd_colours = {
+                p: PD_PALETTE[i % len(PD_PALETTE)] for i, p in enumerate(unique_pds)
+            }
+            print(f"PD colour map for {reg_id}: {pd_colours}")
 
         # ------------------------------------------------------------------
         # POLYGON LAYERS RENDERING LOOP
@@ -3953,9 +3989,13 @@ class ExtendedFeatureGroup(FeatureGroup):
                         missing_total = sum(d.get('house_gaps', 0) for d in street_stats.values())
                         electorate_count = len(child_df)
 
+                        # Polling district is the text before the first underscore of the walk name
+                        walk_pd_code = pd_from_walk(c_val)
+
                         # Build the rich metric tooltip HTML string for walk regions
                         polygon_tooltip_content = f"""
                         <b>{c_val}</b><br>
+                        Polling district: {walk_pd_code}<br>
                         Electors: {electorate_count}<br>
                         Houses: {house_count}<br>
                         Elector/house: {round(electorate_count/house_count, 2) if house_count else 0}<br>
@@ -3990,6 +4030,16 @@ class ExtendedFeatureGroup(FeatureGroup):
 
                     tcol_node = layer_style.get("fontColor", "#EF4444")
                     fcol_node = layer_style.get("fillColor", "#EF4444")
+
+                    # Walks take their polling district's colour (polygon, border and badge)
+                    poly_fill = fcol_node
+                    poly_border = layer_style.get("color", "#991B1B")
+                    if layer_type == 'walk':
+                        pd_col = pd_colours.get(pd_from_walk(c_val))
+                        if pd_col:
+                            poly_fill = pd_col
+                            poly_border = pd_col
+                            fcol_node = pd_col   # badge matches too
 
                     if c.type == 'division' and isinstance(getattr(c, 'candidates', None), dict):
                         c1 = c.candidates.get('Candidate_1', '')
@@ -4044,9 +4094,10 @@ class ExtendedFeatureGroup(FeatureGroup):
                             'type': layer_type,
                         }
 
-                        # Only add street_html if it's a walk layer
+                        # Only add street_html (and PD) if it's a walk layer
                         if layer_type == 'walk':
                             feature_properties['street_html'] = street_html
+                            feature_properties['pd'] = pd_from_walk(c_val)
 
                         geojson_feature = {
                             "type": "Feature",
@@ -4054,21 +4105,26 @@ class ExtendedFeatureGroup(FeatureGroup):
                             "properties": feature_properties
                         }
 
-                        # Define base arguments for GeoJson (NO popup argument here)
+                        # Walks get a stronger fill so the PD colours are easy to tell apart
+                        walk_fill_opacity = 0.45 if layer_type == 'walk' else layer_style.get("fillOpacity", 0.15)
+
+                        # Define base arguments for GeoJson (NO popup argument here).
+                        # Colours are bound as default args so each polygon keeps its own colour
+                        # rather than all picking up the last loop value.
                         geojson_kwargs = {
-                        "style_function": lambda feature, style=layer_style: {
-                            "fillColor": style.get("fillColor", "#EF4444"),
-                            "color": style.get("color", "#991B1B"),
-                            "weight": style.get("weight", 2.5),
-                            "opacity": 1.0,
-                            "fillOpacity": max(style.get("fillOpacity", 0.15), 0.01),
-                            "stroke": True,
-                            "fill": True,
-                            "dashArray": style.get("dashArray", "0"),
+                            "style_function": lambda feature, fill=poly_fill, border=poly_border, fo=walk_fill_opacity, style=layer_style: {
+                                "fillColor": fill,
+                                "color": border,
+                                "weight": style.get("weight", 2.5),
+                                "opacity": 1.0,
+                                "fillOpacity": max(fo, 0.01),
+                                "stroke": True,
+                                "fill": True,
+                                "dashArray": style.get("dashArray", "0"),
                             },
                             "highlight_function": lambda feature: {
                                 "weight": layer_style.get("weight", 2.5) + 2,
-                                "fillOpacity": 0.35,
+                                "fillOpacity": 0.65,
                                 "opacity": 1.0,
                             },
                             "tooltip": folium.Tooltip(

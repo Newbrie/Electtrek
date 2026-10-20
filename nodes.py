@@ -2678,6 +2678,9 @@ class TreeNode:
                     <button onclick="searchMap()">Search</button>
                     <button id="backToCalendarBtn">📅 Calendar</button>
                 </div>
+                <label style="font-size:12px;">
+                    <input type="checkbox" onchange="setPersistHighlight(this.checked)"> Keep highlights
+                </label>
             </div>
             """
         # --- Calendar UI injection
@@ -2895,6 +2898,57 @@ class TreeNode:
             (function() {
                 console.log("🗺️ fmap_marker_js loaded (Direct Map Discovery & Modal Binding)");
 
+                // Global flag: when true, hover highlights stay on after the mouse leaves
+                window.persistHighlight = window.persistHighlight || false;
+
+                // Patch resetStyle once, so Folium's mouseout handler is skipped while the flag is on
+                if (!L.GeoJSON.prototype._origResetStyle) {
+                    L.GeoJSON.prototype._origResetStyle = L.GeoJSON.prototype.resetStyle;
+                    L.GeoJSON.prototype.resetStyle = function(layer) {
+                        if (window.persistHighlight) return this;
+                        return this._origResetStyle(layer);
+                    };
+                }
+
+                // Turn persistence on/off. Turning it off clears everything currently held.
+                window.setPersistHighlight = function(on) {
+                    window.persistHighlight = !!on;
+                    if (!on && window.fmap) {
+                        window.fmap.eachLayer(function(l) {
+                            if (l instanceof L.GeoJSON) l._origResetStyle();
+                        });
+                    }
+                };
+
+                // Press "H" to flip the persist-highlight flag without touching the mouse
+                window.addEventListener('keydown', function(e) {
+                    // Ignore while typing in the search box or any other field
+                    const t = e.target;
+                    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+                    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+                    if (e.key === 'h' || e.key === 'H') {
+                        window.setPersistHighlight(!window.persistHighlight);
+                        showHighlightStatus();
+                    }
+                });
+
+                // Small on-screen indicator so you can see which state you're in
+                function showHighlightStatus() {
+                    let el = document.getElementById('persistHighlightStatus');
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.id = 'persistHighlightStatus';
+                        el.style.cssText = 'position:absolute; bottom:80px; left:50%; transform:translateX(-50%);' +
+                            'z-index:1200; padding:4px 10px; border-radius:4px; background:rgba(0,0,0,0.75);' +
+                            'color:#fff; font:12px sans-serif; pointer-events:none; transition:opacity 0.3s;';
+                        document.body.appendChild(el);
+                    }
+                    el.textContent = window.persistHighlight ? 'Keeping highlights (H to stop)' : 'Highlights cleared';
+                    el.style.opacity = 1;
+                    clearTimeout(el._t);
+                    el._t = setTimeout(() => { el.style.opacity = 0; }, 1500);
+                }
                 window.fmap = null;
                 window.MarkerLayer = null;
 
@@ -3281,7 +3335,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(mapfile_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
-
+        FolMap.get_root().html.add_child(folium.Element("<script>window.persistHighlight = true;</script>"))
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
         FolMap.get_root().html.add_child(folium.Element(calendar_html))
