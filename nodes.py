@@ -3333,7 +3333,7 @@ class TreeNode:
         FolMap.get_root().html.add_child(folium.Element(mapfile_js))
         FolMap.get_root().header.add_child(folium.Element(header_html))
         FolMap.get_root().html.add_child(folium.Element(modal_html))
-        FolMap.get_root().html.add_child(folium.Element("<script>window.persistHighlight = true;</script>"))
+        FolMap.get_root().html.add_child(folium.Element("<script>window.persistHighlight = false;</script>"))
         FolMap.get_root().html.add_child(folium.Element(fmap_tags_js))
         FolMap.get_root().html.add_child(folium.Element(search_bar_html))
         FolMap.get_root().html.add_child(folium.Element(calendar_html))
