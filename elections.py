@@ -7,8 +7,7 @@ import state
 import re
 from shapely.geometry import Point
 import logging
-from state import route, stepify, resolve_here_or_redirect
-from state import normalname
+from state import route, resolve_here_or_redirect, normalname
 from flask import Flask, get_flashed_messages, jsonify, url_for
 
 from pathlib import Path

@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import threading
 import state
+import paths
 from config import ELECTOR_FILE, LOG_FILE
 
 
@@ -57,7 +58,7 @@ def find_node_by_path(basepath: str, debug=False):
     if not basepath:
         return None
 
-    parts = state.stepify(basepath)
+    parts = stepify(basepath)
     if not parts:
         return None
 
@@ -326,7 +327,7 @@ class ElectorManager:
                 return pd.DataFrame()
 
             # Clean and upper-case segments to match the pre-normalized dataframe structure
-            raw_segments = state.stepify(raw_path)
+            raw_segments = stepify(raw_path)
             clean_segments = [str(seg).strip().upper() for seg in raw_segments]
             logger.info(f"🔍 START DETERMINISTIC FILTER:")
             logger.info(f"   - Raw Path: {raw_path}")

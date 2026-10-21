@@ -29,7 +29,8 @@ import re
 import math
 import colorsys
 import state
-from state import stepify, pathify, normalname, derive_territory
+from state import normalname
+from paths import derive_territory, stepify, pathify
 from matplotlib.colors import to_hex, to_rgb
 import geopandas as gpd
 # ✅ CORRECT
@@ -299,7 +300,7 @@ def get_layer_gdf(key: str, node_path=None):
     by node_path structural variances.
     """
     global LAYER_CACHE
-    from state import stepify
+    from paths import stepify
 
     if key not in MAP_LAYERS:
         logger.error(f"❌ Key '{key}' not found in global MAP_LAYERS.")
@@ -3396,7 +3397,7 @@ class ExtendedFeatureGroup(FeatureGroup):
         from shapely import count_coordinates
         from shapely.geometry import LineString, MultiLineString
         from layers import Treepolys
-        from state import stepify, pathify
+        from paths import stepify, pathify
         from elector import electors
         from elections import CurrentElection
 

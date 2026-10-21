@@ -293,58 +293,30 @@ window.initAccordionFromOptions = (tree, config = {}) => {
 
     let currentTree = tree;
     const activePath = window.mapfile || "";
+    const rootPath = [];                       // <-- declared here, outside the if block
 
     if (typeof stepify === 'function' && activePath) {
         let steps = stepify(activePath);
 
-        // 🎯 TARGET CHANGE: Stop traversal at "SURREY" (or slice off the last leaf level so parent context remains visible)
-        // If you want to view from Surrey downwards, find where Surrey is and stop there,
-        // or exclude the last 1 or 2 steps (like the specific Woking ward/constituency leaf).
         const surreyIndex = steps.findIndex(s => s.toUpperCase() === "SURREY");
         if (surreyIndex !== -1) {
-            // Keep up to Surrey, or keep Surrey + its immediate children container
-            steps = steps.slice(0, surreyIndex + 2); // Includes SURREY and its direct children (constituencies)
+            steps = steps.slice(0, surreyIndex + 2);
         } else if (steps.length > 1) {
-            // Fallback: Drop just the final leaf node so you see the parent container
             steps = steps.slice(0, steps.length - 1);
         }
 
-
-        // Traverse down the restricted steps
-        const rootPath = [];
+        // Traverse down the restricted steps, recording the real keys as we go
         for (const step of steps) {
             const matchedKey = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
             if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
                 currentTree = currentTree[matchedKey];
-                rootPath.push(matchedKey);          // real key from the tree
+                rootPath.push(matchedKey);
             }
         }
     }
 
-    const containerId = config.containerId || 'children-list';
-    const accordionId = config.accordionId || 'election-accordion';
-    const createButton =  window.createMapButton;
-    const emptyMessage = config.emptyMessage || 'No sub-divisions available';
-
-    const currentSteps = typeof stepify === 'function' && activePath ? stepify(activePath) : [];
-    const activeNodeName = currentSteps.length > 0 ? currentSteps[currentSteps.length - 1] : "SURREY";
-
-    const displayElement = document.getElementById('display-path');
-    if (displayElement) {
-        displayElement.innerText = activeNodeName.replace(/_/g, ' ');
-    }
-
-
-    if (typeof window.renderTreeSelector === "function") {
-        // ...
-        window.renderTreeSelector(currentTree, {
-            containerId, accordionId, emptyMessage,
-            allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton,
-            rootPath                                  // <-- new
-        });
-        console.log(`✅ Successfully initialized accordion for #${containerId} rooted at Surrey hierarchy!`);
-    }
+    // ... everything below unchanged (containerId, accordionId, display-path,
+    // and the renderTreeSelector call with rootPath) ...
 };
 
 

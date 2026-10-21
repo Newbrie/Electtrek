@@ -19,13 +19,13 @@ import sys
 from datetime import datetime, time
 import re
 import layers
+from paths import stepify, pathify, get_areaTree
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 _MASTER_ROOT = None
-
 
 
 def generate_map_accordions(specs: list[dict]) -> str:
@@ -338,7 +338,7 @@ def _candidate_paths(Celect):
     """Stored paths to try, best first: deep-enough sourcepath, then territory."""
     mapfiles = Celect.get("mapfiles")
     sourcepath = mapfiles[-1] if isinstance(mapfiles, list) and mapfiles else None
-    if sourcepath and len(state.stepify(sourcepath)) >= MIN_SOURCEPATH_DEPTH:
+    if sourcepath and len(stepify(sourcepath)) >= MIN_SOURCEPATH_DEPTH:
         yield sourcepath
 
     territory = Celect.get("territory")
@@ -808,7 +808,6 @@ class TreeNode:
 
 
     def visit_node(self, c_elect):
-        from state import stepify, pathify
         from elections import CurrentElection
         rlevels = c_elect.resolved_levels
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
@@ -1025,7 +1024,7 @@ class TreeNode:
                 # available UI elements
                 "tables_available": self.available_tables(elevels),
                 "layers_available": self.available_layers(elevels),
-                "areas": self.get_areaTree(layers.Geo_index, max_depth=2),
+                "areas": get_areaTree(self.node_path,layers.Geo_index, max_depth=2),
 
                 # relationships
                 "children": [c.value for c in self.children],
@@ -1229,54 +1228,7 @@ class TreeNode:
         return f"<TNode {self.value} L{self.level} {self.origin}>"
 
 
-    def get_areaTree(self, geo_index, max_depth=2):
-        """
-        Build an area tree starting at the county level.
 
-        Children of a constituency are grouped by type, because a ward and a
-        division can share a name:
-            EAST_SURREY: {"WARDS": {"GODSTONE": {...}}, "DIVS": {"GODSTONE": {...}}}
-
-        The WARDS/DIVS grouping level is NOT counted towards max_depth.
-        max_depth=1: county and its constituencies
-        max_depth=2: ... and their wards/divisions (grouped)
-        max_depth=3: ... and their children (walks)
-        """
-        # The county sits above the typed segment, so the first three parts are unaffected
-        parts = self.node_path.strip("/").split("/")
-        county_path = "/".join(parts[:3]) if len(parts) >= 3 else self.node_path
-
-        group_names = set(TYPE_SEGMENT.values())          # {"WARDS", "DIVS"}
-
-        def _recursive_build(path, depth):
-            node = geo_index.get(path)
-            if not node:
-                print(f"Missing geo_index path: {path!r}")
-                return {}
-
-            name = node.get("name", path.split("/")[-1])
-
-            # At the requested depth, stop without adding empty placeholder children.
-            if depth >= max_depth:
-                return {name: {}}
-
-            typed_parent = str(node.get("level", "")).lower() in TYPED_PARENT_LEVELS
-            children_dict = {}
-
-            for child_path in node.get("children", []):
-                child_tree = _recursive_build(child_path, depth + 1)
-                if not child_tree:
-                    continue
-
-                group = child_path.split("/")[-2] if typed_parent else None
-                if group in group_names:
-                    children_dict.setdefault(group, {}).update(child_tree)
-                else:
-                    children_dict.update(child_tree)
-
-            return {name: children_dict}
-
-        return _recursive_build(county_path, depth=0)
 
     def process_lozenges(self,lozenges, CE):
         """
@@ -1291,7 +1243,7 @@ class TreeNode:
 
         CE_resources = CE.get('resources',{})
         CE_task_tags, CE_outcome_tags, CE_all_tags = CE.get_tags()
-        CE_areas = self.get_areaTree(layers.Geo_index, max_depth=2)
+        CE_areas = get_areaTree(self.node_path, layers.Geo_index, max_depth=2)
         CE_places = CE.get("places", {})
         print(f"___Processing lozenges : {len(CE_resources)} CE_task_tags : {CE_task_tags} CE_outcome_tags : {CE_outcome_tags} CE_areas : {CE_areas} CE_places : {CE_places}")
         for loz in lozenges:
@@ -1421,7 +1373,7 @@ class TreeNode:
 
 
     def ping_node(self, rlevels, geoindex, dest_path, create=True, accumulate=False):
-        from state import LEVEL_ZOOM_MAP, stepify
+        from state import LEVEL_ZOOM_MAP
         from flask import session
         from elector import electors
 
@@ -2450,7 +2402,7 @@ class TreeNode:
 
         area_root_path = self.node_path
 
-        area_tree = self.get_areaTree(layers.Geo_index, max_depth=2)
+        area_tree = get_areaTree(self.node_path, layers.Geo_index, max_depth=2)
         area_tree_json = json.dumps(area_tree or {})
 
         area_accordion_js = f"""
@@ -3741,8 +3693,8 @@ class TreeNode:
 
     def path_intersect(self, path, elevels):
         # start at the leaf of path 1 and test membership of path 2
-        first = state.stepify(self.dir+"/"+self.mapfile(elevels))
-        second = state.stepify(path)
+        first = stepify(self.dir+"/"+self.mapfile(elevels))
+        second = stepify(path)
         print("intersecting paths ",self.dir+"/"+self.mapfile(elevels), path)
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}

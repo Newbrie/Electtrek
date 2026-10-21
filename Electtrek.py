@@ -113,7 +113,7 @@ from normalised import normz
 import state
 from state import (
     VNORM, TABLE_TYPES, LEVEL_ZOOM_MAP, LastResults, levelcolours, subending,
-    update_progress, normalname, route, stepify, resolve_here_or_redirect
+    update_progress, normalname, route, resolve_here_or_redirect
 )
 import layers
 from layers import MAP_LAYERS
@@ -124,6 +124,7 @@ from nodes import (
 )
 from elections import get_available_elections, get_elections, CurrentElection, ElectionContext
 from elector import electors
+from paths import stepify
 import baked_data
 
 LEVEL_INDEX = {
