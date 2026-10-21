@@ -390,3 +390,71 @@ function syncAreaSelect() {
   sel.replaceChildren(new Option(label, code, true, true));
   sel.value = code;
 }
+
+window.initAccordionFromOptions = (tree, config = {}) => {
+    if (!tree || typeof tree !== 'object') {
+        console.warn("⚠️ initAccordionFromOptions: No valid tree provided.");
+        return;
+    }
+
+    const hasPath = typeof stepify === 'function' && !!window.mapfile;
+    const fullSteps = hasPath ? stepify(window.mapfile) : [];
+
+    let currentTree = tree;
+    const rootPath = [];   // hoisted so it's always defined for renderTreeSelector
+
+    if (fullSteps.length) {
+        let steps = fullSteps;
+
+        // Stop at SURREY plus its direct children, otherwise drop the final leaf
+        // so the parent container stays visible.
+        const surreyIndex = steps.findIndex(s => s.toUpperCase() === "SURREY");
+        if (surreyIndex !== -1) {
+            steps = steps.slice(0, surreyIndex + 2);
+        } else if (steps.length > 1) {
+            steps = steps.slice(0, -1);
+        }
+
+        // Walk down the tree, recording the real keys as we go
+        for (const step of steps) {
+            const matchedKey = Object.keys(currentTree)
+                .find(k => k.toUpperCase() === step.toUpperCase());
+
+            if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
+                currentTree = currentTree[matchedKey];
+                rootPath.push(matchedKey);
+            } else {
+                console.warn(`⚠️ initAccordionFromOptions: "${step}" not found in tree, stopping at "${rootPath.join('/') || 'root'}".`);
+                break;   // don't skip ahead into the wrong subtree
+            }
+        }
+    }
+
+    const containerId  = config.containerId  || 'children-list';
+    const accordionId  = config.accordionId  || 'election-accordion';
+    const emptyMessage = config.emptyMessage || 'No sub-divisions available';
+    const createButton = config.createButton || window.createMapButton;
+
+    const activeNodeName = fullSteps.length ? fullSteps[fullSteps.length - 1] : "SURREY";
+
+    const displayElement = document.getElementById('display-path');
+    if (displayElement) {
+        displayElement.innerText = activeNodeName.replace(/_/g, ' ');
+    }
+
+    if (typeof window.renderTreeSelector !== "function") {
+        console.warn("⚠️ initAccordionFromOptions: window.renderTreeSelector is not available.");
+        return;
+    }
+
+    window.renderTreeSelector(currentTree, {
+        containerId,
+        accordionId,
+        emptyMessage,
+        allLabel: (name) => name.replace(/_/g, ' '),
+        createButton,
+        rootPath
+    });
+
+    console.log(`✅ Initialized accordion for #${containerId} rooted at /${rootPath.join('/')}`);
+};
