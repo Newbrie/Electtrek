@@ -76,20 +76,48 @@ def stepify(path_str):
 
     return cleaned
 
-def pathify(parts):
-    """
-    Takes a clean list of geographic parts and builds a node path.
-    Automatically infers whether it's a MAP or a PRINT view based on array depth.
-    """
+TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
+TYPED_PARENT_LEVELS = {"constituency"}
+
+def is_typed_parent(parent_path):
+    entry = Geo_index.get(parent_path)
+    return bool(entry) and str(entry.get("level", "")).lower() in TYPED_PARENT_LEVELS
+
+def make_child_path(parent_path, layer_type, child_name):
+    """Used when BUILDING the index: add the type segment under a constituency."""
+    seg = TYPE_SEGMENT.get(str(layer_type).lower())
+    if seg and is_typed_parent(parent_path):
+        return f"{parent_path}/{seg}/{child_name}"
+    return f"{parent_path}/{child_name}"
+
+def typed_split(path_str):
+    """Like stepify, but KEEPS the WARDS/DIVS type segments (for index traversal)."""
+    keep = set(TYPE_SEGMENT.values())
+    out = []
+    for part in path_str.strip().split("/"):
+        if not part or any(part.endswith(s) for s in FILE_SUFFIXES):
+            continue
+        if part in IGNORABLE_SEGMENTS and part not in keep:
+            continue
+        out.append(part)
+    return out
+
+def pathify(parts, leaf_type=None, branch="ward"):
+    """Rebuild a typed index path from level-aligned parts (stepify output).
+    leaf_type: type of the last part ('ward' or 'division').
+    branch: type assumed for any intermediate node below a constituency
+            (walks hang off wards, so the default is 'ward')."""
     if not parts:
         return ""
-
-    base_path = "/".join(parts)
-
-    # Inference rules based on hierarchy depth:
-    # Length 1-5: Country, Region, County, Constituency, Ward -> Always MAP overviews
-    # Length 6+: Polling Districts (PDS) or Walks -> Swaps to PRINT sheets
-    return f"{base_path}"
+    path = parts[0]
+    for i, part in enumerate(parts[1:], start=1):
+        is_last = i == len(parts) - 1
+        seg = TYPE_SEGMENT.get(leaf_type if (is_last and leaf_type) else branch)
+        if seg and is_typed_parent(path):
+            path = f"{path}/{seg}/{part}"
+        else:
+            path = f"{path}/{part}"
+    return path
 
 def extract_path_at_level(node_path: str, target_level: int) -> str | None:
     """

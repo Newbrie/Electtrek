@@ -43,20 +43,45 @@ function stepify(pathStr) {
     return cleaned;
 }
 
-/**
- * Takes a clean list of geographic parts and builds a node path string.
- */
-function pathify(parts) {
-    if (!Array.isArray(parts) || parts.length === 0) {
-        return "";
-    }
-    return parts.join('/');
-}
+
+ const TYPE_SEGMENT = { ward: 'WARDS', division: 'DIVS' };
+ const TYPED_CHILD_INDEX = 4;
+
+ /**
+  * parts:     level-aligned steps, e.g. ['UNITED_KINGDOM','ENGLAND','SURREY','EAST_SURREY','GODSTONE']
+  * typedNode: type ('ward' | 'division') of the node at index 4 in this path.
+  */
+ function pathify(parts, typedNode = 'ward') {
+     if (!Array.isArray(parts) || parts.length === 0) {
+         return "";
+     }
+
+     // Already typed? Don't insert a second segment.
+     if (parts.some(p => Object.values(TYPE_SEGMENT).includes(p))) {
+         return parts.join('/');
+     }
+
+     // Too shallow to have a typed child
+     if (parts.length <= TYPED_CHILD_INDEX) {
+         return parts.join('/');
+     }
+
+     const seg = TYPE_SEGMENT[typedNode];
+     return [
+         ...parts.slice(0, TYPED_CHILD_INDEX),
+         ...(seg ? [seg] : []),
+         ...parts.slice(TYPED_CHILD_INDEX),
+     ].join('/');
+ }
 
 // Make stepify & pathify available globally
 window.stepify = stepify;
 window.pathify = pathify;
 
+
+// WARDS / DIVS are grouping segments in the typed area tree: they are shown as
+// headers but have no map of their own, so they never get an "All" map button.
+const TYPE_GROUPS = new Set(['WARDS', 'DIVS']);
 
 window.renderTreeSelector = function (tree, options = {}) {
     const {
@@ -64,7 +89,8 @@ window.renderTreeSelector = function (tree, options = {}) {
         emptyMessage = 'No items available',
         accordionId,
         allLabel = name => `All of ${name}`,
-        createButton
+        createButton,
+        rootPath            // NEW: real keys descended through to reach `tree`
         } = options;
 
     const container = document.getElementById(containerId);
@@ -90,6 +116,7 @@ window.renderTreeSelector = function (tree, options = {}) {
 
         Object.entries(node).forEach(([name, children]) => {
             const currentPath = [...path, name];
+            const isGroup = TYPE_GROUPS.has(name.toUpperCase());
 
             const hasChildren =
                 children &&
@@ -123,10 +150,12 @@ window.renderTreeSelector = function (tree, options = {}) {
 
                 const body = item.querySelector('.accordion-body');
 
-                createButton(
-                    body, name, allLabel(name),
-                    'fw-semibold', currentPath
-                );
+                if (!isGroup) {
+                    createButton(
+                        body, name, allLabel(name),
+                        'fw-semibold', currentPath
+                    );
+                }
 
                 if (hasChildren) {
                     renderLevel(children, body, currentPath, depth + 1);
@@ -159,41 +188,49 @@ window.renderTreeSelector = function (tree, options = {}) {
                 const list = document.createElement('div');
                 list.className = 'list-group list-group-flush';
 
-                createButton(
-                    list, name, allLabel(name), '', currentPath
-                );
+                if (!isGroup) {
+                    createButton(
+                        list, name, allLabel(name), '', currentPath
+                    );
+                }
 
                 renderLevel(children, list, currentPath, depth + 1);
 
                 collapse.appendChild(list);
                 wrapper.appendChild(header);
                 wrapper.appendChild(collapse);
-              } else {
-                    createButton(
-                        wrapper,
-                        name,
-                        name,
-                        '',
-                        currentPath
-                    );
-                }
+            } else if (!isGroup) {
+                createButton(
+                    wrapper,
+                    name,
+                    name,
+                    '',
+                    currentPath
+                );
+            }
 
             parentElement.appendChild(wrapper);
         });
     }
 
-    const rootSteps =
-        typeof stepify === 'function'
+    // Start path: use the keys the caller actually descended through, so the
+    // path and the tree can never drift apart. Fall back to the old
+    // mapfile-based guess only if no rootPath was supplied.
+    let startPath;
+    if (Array.isArray(rootPath)) {
+        startPath = [...rootPath];
+    } else {
+        startPath = typeof stepify === 'function'
             ? stepify(window.mapfile || '')
             : [];
+        startPath.pop();
+    }
 
-    rootSteps.pop();
-
-    renderLevel(tree, acc, rootSteps);
+    renderLevel(tree, acc, startPath);
     container.appendChild(acc);
 };
 
-function createMapButton(parentElement, nodeName, labelText, className, nodePathArray) {
+function createMapButton(parentElement, nodeName, labelText, className, nodePath) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
@@ -203,27 +240,11 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
         e.preventDefault();
         e.stopPropagation();
 
-        let targetPath = nodeName;
+        // nodePath is the node's full Geo_index key, e.g.
+        // UNITED_KINGDOM/ENGLAND/SURREY/EAST_SURREY/WARDS/GODSTONE
+        const targetPath = nodePath;
 
-        if (typeof pathify === 'function' && typeof stepify === 'function') {
-            // 🎯 Use window.mapfile or window.currentNodePath as the authoritative baseline
-            const activePath = window.mapfile || window.currentNodePath || "UNITED_KINGDOM";
-            const parentSteps = stepify(activePath);
-
-            // Pop off the old leaf mapfile name from the active path to get the clean parent directory sequence
-            if (parentSteps.length > 0 && parentSteps[parentSteps.length - 1].includes('-MAP')) {
-                parentSteps.pop();
-            }
-
-            // Combine base directory steps with the clicked nodeName
-            const combinedSteps = [...parentSteps, nodeName];
-            const finalCleanSteps = stepify(pathify(combinedSteps));
-            targetPath = pathify(finalCleanSteps);
-        }
-
-        // Extract the leaf node name cleanly for the map file suffix
-        const pathSteps = targetPath.split('/');
-        const leafNodeName = pathSteps[pathSteps.length - 1];
+        const leafNodeName = targetPath.split('/').pop();
         const mapFilename = `${leafNodeName}-MAP.html`;
         const fetchPath = `${targetPath}/${mapFilename}`;
 
@@ -288,12 +309,14 @@ window.initAccordionFromOptions = (tree, config = {}) => {
             steps = steps.slice(0, steps.length - 1);
         }
 
+
         // Traverse down the restricted steps
+        const rootPath = [];
         for (const step of steps) {
-            // Case-insensitive key matching
             const matchedKey = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
             if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
                 currentTree = currentTree[matchedKey];
+                rootPath.push(matchedKey);          // real key from the tree
             }
         }
     }
@@ -311,13 +334,14 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
     }
 
+
     if (typeof window.renderTreeSelector === "function") {
+        // ...
         window.renderTreeSelector(currentTree, {
-            containerId: containerId,
-            accordionId: accordionId,
-            emptyMessage: emptyMessage,
+            containerId, accordionId, emptyMessage,
             allLabel: (name) => `${name.replace(/_/g, ' ')}`,
-            createButton: createButton
+            createButton,
+            rootPath                                  // <-- new
         });
         console.log(`✅ Successfully initialized accordion for #${containerId} rooted at Surrey hierarchy!`);
     }
@@ -325,20 +349,23 @@ window.initAccordionFromOptions = (tree, config = {}) => {
 
 
 
-function createAreaButton(list, AreaCode, displayName, indentClass = '') {
+function createAreaButton(list, AreaCode, displayName, indentClass = '', nodePath) {
+  // Typed Geo_index path is the unique id; fall back to the bare name if none is supplied
+  const code = Array.isArray(nodePath) ? nodePath.join('/') : (nodePath || AreaCode);
+
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `list-group-item list-group-item-action small ${indentClass}`;
   button.textContent = displayName;
-  button.dataset.code = AreaCode;
+  button.dataset.code = code;
 
-  if (window.selectedArea === AreaCode) button.classList.add('active');
+  if (window.selectedArea === code) button.classList.add('active');
 
   button.addEventListener('click', () => {
     list.closest('.accordion')
         ?.querySelectorAll('.list-group-item')
         .forEach(b => b.classList.remove('active'));
-    window.selectedArea = AreaCode;
+    window.selectedArea = code;
     button.classList.add('active');
     syncAreaSelect();
   });

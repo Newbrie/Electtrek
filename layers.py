@@ -3503,7 +3503,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # 🚗 STEP 3: Match & Retrieve individual street geometries
             # -------------------------------------------------
             for child in sub_nodes:
-                elector_path = pathify(stepify(child.mapfile))
+                elector_path = pathify(stepify(child.mapfile), child.type)
 
                 raw_street_name = str(child.value).strip() if child.type == 'street' else str(child.parent.value).strip() if child.parent else str(child.value).strip()
 

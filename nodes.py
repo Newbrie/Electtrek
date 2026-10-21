@@ -1093,34 +1093,33 @@ class TreeNode:
     def node_path(self):
         """Recursively resolves path via parent object, or falls back to cached string."""
         if self.parent:
+            seg = TYPE_SEGMENT.get(str(getattr(self, "type", "")).lower())
+            parent_is_typed = str(getattr(self.parent, "type", "")).lower() in TYPED_PARENT_LEVELS
+            if seg and parent_is_typed:
+                return f"{self.parent.node_path}/{seg}/{self.value}"
             return f"{self.parent.node_path}/{self.value}"
         if getattr(self, "_cached_node_path", None):
             return self._cached_node_path
         return self.value
 
     def path_at_level(self, target_level: int) -> str | None:
-        """
-        Truncates the node_path up to the specified level depth (0-indexed).
-
-        Examples (given node_path = "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"):
-            path_at_level(0) -> "UNITED_KINGDOM"
-            path_at_level(1) -> "UNITED_KINGDOM/ENGLAND"
-            path_at_level(2) -> "UNITED_KINGDOM/ENGLAND/SURREY"
-            path_at_level(10) -> "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY" (clamped)
-        """
         if target_level < 0:
             return None
 
-        # Split path into discrete level segments
         parts = self.node_path.split("/")
+        type_segments = set(TYPE_SEGMENT.values())     # {"WARDS", "DIVS"}
 
-        # Slice up to target_level + 1 inclusive
-        sliced_parts = parts[: target_level + 1]
-
-        if not sliced_parts:
+        # Index of the last part of each level (type segments are folded into the next part)
+        level_ends = [
+            i for i, part in enumerate(parts)
+            if not (i > 0 and i < len(parts) - 1 and part in type_segments)
+        ]
+        if not level_ends:
             return None
 
-        return "/".join(sliced_parts)
+        end = level_ends[min(target_level, len(level_ends) - 1)]
+        return "/".join(parts[: end + 1])
+
 
     @property
     def actual_levels(self) -> dict[int, str]:
@@ -1234,12 +1233,20 @@ class TreeNode:
         """
         Build an area tree starting at the county level.
 
-        max_depth=1: Surrey and its constituencies
-        max_depth=2: Surrey, constituencies and wards
-        max_depth=3: Surrey, constituencies, wards and their children
+        Children of a constituency are grouped by type, because a ward and a
+        division can share a name:
+            EAST_SURREY: {"WARDS": {"GODSTONE": {...}}, "DIVS": {"GODSTONE": {...}}}
+
+        The WARDS/DIVS grouping level is NOT counted towards max_depth.
+        max_depth=1: county and its constituencies
+        max_depth=2: ... and their wards/divisions (grouped)
+        max_depth=3: ... and their children (walks)
         """
+        # The county sits above the typed segment, so the first three parts are unaffected
         parts = self.node_path.strip("/").split("/")
         county_path = "/".join(parts[:3]) if len(parts) >= 3 else self.node_path
+
+        group_names = set(TYPE_SEGMENT.values())          # {"WARDS", "DIVS"}
 
         def _recursive_build(path, depth):
             node = geo_index.get(path)
@@ -1253,11 +1260,19 @@ class TreeNode:
             if depth >= max_depth:
                 return {name: {}}
 
+            typed_parent = str(node.get("level", "")).lower() in TYPED_PARENT_LEVELS
             children_dict = {}
 
             for child_path in node.get("children", []):
                 child_tree = _recursive_build(child_path, depth + 1)
-                children_dict.update(child_tree)
+                if not child_tree:
+                    continue
+
+                group = child_path.split("/")[-2] if typed_parent else None
+                if group in group_names:
+                    children_dict.setdefault(group, {}).update(child_tree)
+                else:
+                    children_dict.update(child_tree)
 
             return {name: children_dict}
 
