@@ -1,3 +1,5 @@
+import layers
+
 IGNORABLE_SEGMENTS = {"PDS", "WALKS", "DIVS", "WARDS"}
 
 FILE_SUFFIXES = [
@@ -32,7 +34,7 @@ TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
 TYPED_PARENT_LEVELS = {"constituency"}
 
 def is_typed_parent(parent_path):
-    entry = Geo_index.get(parent_path)
+    entry = layers.Geo_index.get(parent_path)
     return bool(entry) and str(entry.get("level", "")).lower() in TYPED_PARENT_LEVELS
 
 def make_child_path(parent_path, layer_type, child_name):
@@ -140,7 +142,7 @@ def get_areaTree(node_path: str, geo_index: dict, max_depth: int = 2) -> dict:
     group_names = set(TYPE_SEGMENT.values())          # {"WARDS", "DIVS"}
 
     def _recursive_build(path, depth):
-        node = geo_index.get(path)
+        node = layers.Geo_index.get(path)
         if not node:
             print(f"Missing geo_index path: {path!r}")
             return {}

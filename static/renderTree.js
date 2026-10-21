@@ -285,39 +285,7 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
     parentElement.appendChild(btn);
 }
 
-window.initAccordionFromOptions = (tree, config = {}) => {
-    if (!tree || typeof tree !== 'object') {
-        console.warn("⚠️ initAccordionFromOptions: No valid tree provided.");
-        return;
-    }
 
-    let currentTree = tree;
-    const activePath = window.mapfile || "";
-    const rootPath = [];                       // <-- declared here, outside the if block
-
-    if (typeof stepify === 'function' && activePath) {
-        let steps = stepify(activePath);
-
-        const surreyIndex = steps.findIndex(s => s.toUpperCase() === "SURREY");
-        if (surreyIndex !== -1) {
-            steps = steps.slice(0, surreyIndex + 2);
-        } else if (steps.length > 1) {
-            steps = steps.slice(0, steps.length - 1);
-        }
-
-        // Traverse down the restricted steps, recording the real keys as we go
-        for (const step of steps) {
-            const matchedKey = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
-            if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
-                currentTree = currentTree[matchedKey];
-                rootPath.push(matchedKey);
-            }
-        }
-    }
-
-    // ... everything below unchanged (containerId, accordionId, display-path,
-    // and the renderTreeSelector call with rootPath) ...
-};
 
 
 

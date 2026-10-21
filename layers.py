@@ -30,7 +30,7 @@ import math
 import colorsys
 import state
 from state import normalname
-from paths import derive_territory, stepify, pathify
+from paths import is_typed_parent,derive_territory, stepify, pathify, typed_split, make_child_path
 from matplotlib.colors import to_hex, to_rgb
 import geopandas as gpd
 # ✅ CORRECT
@@ -64,6 +64,8 @@ Geo_index = {}
 ROOT = "UNITED_KINGDOM"
 
 REVISED = "Surrey" # use the Revised Surrey Division_Boundaries
+TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
+TYPED_PARENT_LEVELS = {"constituency"}
 
 
 # state.py or config.py
