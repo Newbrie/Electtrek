@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 _MASTER_ROOT = None
 
+TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
+TYPED_PARENT_LEVELS = {"constituency"}
 
 def generate_map_accordions(specs: list[dict]) -> str:
     """Generates a modular HTML/JS injection string for Folium maps.

@@ -1616,7 +1616,7 @@ def ensure_treepolys_with_index(
     dynamic_steps = [ROOT]
     raw_steps = stepify(effective_sourcepath) if effective_sourcepath else []
     steps = raw_steps if raw_steps else [ROOT]
-
+    typed_steps = typed_split(effective_sourcepath) if effective_sourcepath else []
     # --- FIX: Ensure target_levels AND target_depth are always initialized ---
     max_available_level = max(elevels.keys()) if elevels else 0
     target_depth = 0  # Default fallback depth
@@ -1763,6 +1763,7 @@ def ensure_treepolys_with_index(
                     children_paths = Geo_index[resolved_p_path]["children"]
                     if children_paths and (not select_name or any(select_name.upper() in cp.upper() for cp in children_paths)):
                         existing_treepoly = get_treepoly(layer_type)
+
                         if existing_treepoly is not None and not existing_treepoly.empty:
                             if "_parent_path" in existing_treepoly.columns:
                                 matched_cached_rows = existing_treepoly[
@@ -1771,21 +1772,21 @@ def ensure_treepolys_with_index(
                             else:
                                 logging.debug(f"[CACHE WARNING] '_parent_path' missing in cache for '{layer_type}'; using fallback matching.")
                                 matched_cached_rows = existing_treepoly
+
                             if not matched_cached_rows.empty:
                                 existing_fids = {r["FID"] for r in active_layer_rows[layer_type] if r is not None and "FID" in r}
                                 added_count = 0
+                                group = TYPE_SEGMENT.get(layer_type.lower())   # WARDS / DIVS / None
                                 for _, cached_row in matched_cached_rows.iterrows():
                                     row_copy = cached_row.copy()
 
-                                    # _parent_path on an active row must mean "this row's own full
-                                    # path" (that's the contract the main registration loop sets up
-                                    # and every downstream level relies on) -- NOT the path we used
-                                    # to look this row up. Resolve it properly against the known
-                                    # children of resolved_p_path rather than reusing resolved_p_path
-                                    # itself, or every level below this one silently drops a segment.
+                                    # (keep your existing comment here)
                                     row_norm_name = normalname(str(cached_row.get("NAME", "")))
                                     own_full_path = next(
-                                        (cp for cp in children_paths if normalname(cp.split("/")[-1]) == row_norm_name),
+                                        (cp for cp in children_paths
+                                         if normalname(cp.split("/")[-1]) == row_norm_name
+                                         and (not group or not is_typed_parent(resolved_p_path)
+                                              or cp.split("/")[-2] == group)),
                                         None,
                                     )
                                     row_copy["_parent_path"] = own_full_path or resolved_p_path
@@ -1875,12 +1876,13 @@ def ensure_treepolys_with_index(
             all_children_cached = True
             for idx, row in tree_gdf.iterrows():
                 child_name = _derive_child_name(row.get("NAME"), idx)
-                parent_path = resolved_p_path
-                test_path = f"{parent_path}/{child_name}"
+                parent_path = row.get("_parent_path", ROOT)
+                test_path = make_child_path(parent_path, layer_type, child_name)
 
                 if test_path not in Geo_index or not Geo_index[test_path].get("children"):
                     all_children_cached = False
                     break
+
 
             if all_children_cached and not get_treepoly(layer_type).empty:
                 logger.debug(f"[CACHE HIT] Node '{test_path}' and its children are already fully cached in Geo_index. Skipping upsert and export.")
@@ -1929,8 +1931,7 @@ def ensure_treepolys_with_index(
             for idx, row in tree_gdf.iterrows():
                 child_name = _derive_child_name(row.get("NAME"), idx)
                 parent_path = row.get("_parent_path", ROOT)
-                this_path = ROOT if (level == 0 and child_name == ROOT) else f"{parent_path}/{child_name}"
-
+                this_path = ROOT if (level == 0 and child_name == ROOT) else make_child_path(parent_path, layer_type, child_name)
                 roid_coords = None
                 if getattr(row, "geometry", None) is not None:
                     try:
@@ -1984,7 +1985,7 @@ def ensure_treepolys_with_index(
     # ------------------------------------------------------------------
     # Path traversal & fallback resolution
     # ------------------------------------------------------------------
-    active_steps = steps if len(steps) > 1 else dynamic_steps
+    active_steps = typed_steps if len(typed_steps) > 1 else dynamic_steps
     current_path = ""
     deepest_valid_path = ROOT
 
