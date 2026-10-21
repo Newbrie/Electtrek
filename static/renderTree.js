@@ -81,6 +81,8 @@ window.pathify = pathify;
 
 // WARDS / DIVS are grouping segments in the typed area tree: they are shown as
 // headers but have no map of their own, so they never get an "All" map button.
+// WARDS / DIVS are grouping segments in the typed area tree: they are shown as
+// headers but have no map of their own, so they never get an "All" map button.
 const TYPE_GROUPS = new Set(['WARDS', 'DIVS']);
 
 window.renderTreeSelector = function (tree, options = {}) {
@@ -90,8 +92,9 @@ window.renderTreeSelector = function (tree, options = {}) {
         accordionId,
         allLabel = name => `All of ${name}`,
         createButton,
-        rootPath            // NEW: real keys descended through to reach `tree`
-        } = options;
+        rootPath,               // real keys descended through to reach `tree`
+        showLeafValues = false  // render scalar/array leaves (e.g. task tags) too
+    } = options;
 
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -105,6 +108,11 @@ window.renderTreeSelector = function (tree, options = {}) {
         return;
     }
 
+    const isPlainObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
     const acc = document.createElement('div');
     acc.className = 'accordion';
     acc.id = accordionId;
@@ -114,21 +122,27 @@ window.renderTreeSelector = function (tree, options = {}) {
     function renderLevel(node, parentElement, path = [], depth = 0) {
         if (!node || typeof node !== 'object') return;
 
-        Object.entries(node).forEach(([name, children]) => {
+        // Arrays of leaves become [name, null] entries so they render as buttons
+        const entries = Array.isArray(node)
+            ? node.map(v => [String(v), null])
+            : Object.entries(node);
+
+        entries.forEach(([name, children]) => {
             const currentPath = [...path, name];
             const isGroup = TYPE_GROUPS.has(name.toUpperCase());
 
-            const hasChildren =
-                children &&
-                typeof children === 'object' &&
-                !Array.isArray(children) &&
-                Object.keys(children).length > 0 &&
-                Object.values(children).some(
-                    val => typeof val === 'object' && val !== null
-                );
+            const hasChildren = showLeafValues
+                ? (isPlainObj(children) && Object.keys(children).length > 0) ||
+                  (Array.isArray(children) && children.length > 0)
+                : isPlainObj(children) &&
+                  Object.keys(children).length > 0 &&
+                  Object.values(children).some(
+                      val => typeof val === 'object' && val !== null
+                  );
 
             const uniqueId = `${accordionId}-${idCounter++}`;
 
+            // ---- Top level: Bootstrap accordion items ----
             if (depth === 0) {
                 const item = document.createElement('div');
                 item.className = 'accordion-item border-0 mb-1';
@@ -140,7 +154,7 @@ window.renderTreeSelector = function (tree, options = {}) {
                                 data-bs-toggle="collapse"
                                 data-bs-target="#${uniqueId}"
                                 aria-expanded="false">
-                            ${name.replace(/_/g, ' ')}
+                            ${escapeHtml(name.replace(/_/g, ' '))}
                         </button>
                     </h2>
                     <div id="${uniqueId}" class="accordion-collapse collapse">
@@ -165,6 +179,7 @@ window.renderTreeSelector = function (tree, options = {}) {
                 return;
             }
 
+            // ---- Nested levels ----
             const wrapper = document.createElement('div');
             wrapper.className = 'border-0';
 
@@ -173,13 +188,11 @@ window.renderTreeSelector = function (tree, options = {}) {
                 header.type = 'button';
                 header.className =
                     'btn btn-sm w-100 text-start py-2 shadow-none';
-                header.style.paddingLeft =
-                    `${1 + depth * 1.25}rem`;
+                header.style.paddingLeft = `${1 + depth * 1.25}rem`;
                 header.setAttribute('data-bs-toggle', 'collapse');
                 header.setAttribute('data-bs-target', `#${uniqueId}`);
                 header.setAttribute('aria-expanded', 'false');
-                header.textContent =
-                    `▸ ${name.replace(/_/g, ' ')}`;
+                header.textContent = `▸ ${name.replace(/_/g, ' ')}`;
 
                 const collapse = document.createElement('div');
                 collapse.id = uniqueId;
@@ -200,13 +213,12 @@ window.renderTreeSelector = function (tree, options = {}) {
                 wrapper.appendChild(header);
                 wrapper.appendChild(collapse);
             } else if (!isGroup) {
-                createButton(
-                    wrapper,
-                    name,
-                    name,
-                    '',
-                    currentPath
-                );
+                // Leaf: show "L1 – Door knocking" when the value is a description
+                const label = showLeafValues && typeof children === 'string' && children
+                    ? `${name} – ${children}`
+                    : name;
+
+                createButton(wrapper, name, label, '', currentPath);
             }
 
             parentElement.appendChild(wrapper);
@@ -376,7 +388,6 @@ function syncTaskSelect() {
 }
 
 function syncAreaSelect() {
-
   const sel = document.getElementById('areaSelect');
   if (!sel) return;
 
@@ -384,10 +395,12 @@ function syncAreaSelect() {
   if (!code) {
     sel.replaceChildren();
     return;
-}
+  }
 
-  const label = code; // Replace with the area's descriptive label
-  sel.replaceChildren(new Option(label, code, true, true));
+  const lastName = code.split('/').pop().replace(/_/g, ' ');   // visible label only
+  const opt = new Option(lastName, code, true, true);          // value stays the full path
+  opt.title = code.replace(/_/g, ' ');                         // optional: full path on hover
+  sel.replaceChildren(opt);
   sel.value = code;
 }
 
@@ -453,7 +466,8 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         emptyMessage,
         allLabel: (name) => name.replace(/_/g, ' '),
         createButton,
-        rootPath
+        rootPath,
+        showLeafValues: false
     });
 
     console.log(`✅ Initialized accordion for #${containerId} rooted at /${rootPath.join('/')}`);

@@ -628,7 +628,8 @@ var showMore = function (msg,area) {
               accordionId: 'taskSelectAccordion',
               emptyMessage: 'No task types available for this map',
               allLabel: name => `All of ${name}`,
-              createButton: createTaskButton
+              createButton: createTaskButton,
+              showLeafValues: true
           });
       }
 
@@ -638,7 +639,8 @@ var showMore = function (msg,area) {
               accordionId: 'areaSelectAccordion',
               emptyMessage: 'No areas available for this map',
               allLabel: name => `All of ${name}`,
-              createButton: createAreaButton
+              createButton: createAreaButton,
+              showLeafValues: false
           });
       }
 
@@ -1370,7 +1372,8 @@ document.getElementById("someAreaButtonId")?.addEventListener("click", () => {
             accordionId: 'areaSelectAccordion',
             emptyMessage: 'No areas available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createAreaButton
+            createButton: createAreaButton,
+            showLeafValues: false
         });
     }
 });
@@ -1384,7 +1387,8 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
             accordionId: 'taskSelectAccordion',
             emptyMessage: 'No task types available for this map',
             allLabel: name => `All of ${name}`,
-            createButton: createTaskButton
+            createButton: createTaskButton,
+            showLeafValues: true
         });
     }
 });
