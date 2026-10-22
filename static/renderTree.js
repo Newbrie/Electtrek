@@ -402,8 +402,13 @@ function syncAreaSelect() {
 }
 
 window.initAccordionFromOptions = (tree, config = {}) => {
-    if (!tree || typeof tree !== 'object') {
-        console.warn("⚠️ initAccordionFromOptions: No valid tree provided.");
+    const containerId  = config.containerId  || 'children-list';
+    const accordionId  = config.accordionId  || 'election-accordion';
+    const emptyMessage = config.emptyMessage || 'No sub-divisions available';
+    const createButton = config.createButton || window.createMapButton;
+
+    if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
+        window.renderTreeSelector?.({}, { containerId, accordionId, emptyMessage, createButton });
         return;
     }
     console.log('initAccordion tree arg:', typeof tree, Array.isArray(tree),
@@ -425,21 +430,24 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     const topKeys = Object.keys(tree);
     const rootIdx = fullSteps.findIndex(s =>
         topKeys.some(k => k.toUpperCase() === s.toUpperCase()));
-    if (rootIdx < 0) {
-        console.error("❌ No step of window.mapfile matches the tree root:", fullSteps, topKeys);
-        return;
-    }
-
-    // Ancestors above the tree root come from mapfile; the root itself is
-    // descended into once, so its children are the top-level accordion items.
-    const rootPath = fullSteps.slice(0, rootIdx);
 
     let currentTree = tree;
-    const rootKey = topKeys.find(k => k.toUpperCase() === fullSteps[rootIdx].toUpperCase());
-    if (rootKey && tree[rootKey] && typeof tree[rootKey] === 'object') {
-        currentTree = tree[rootKey];
-        rootPath.push(rootKey);
+    let rootPath;
+
+    if (rootIdx >= 0) {
+        // Tree is wrapped at an ancestor (e.g. {SURREY: {...}}): descend its root once
+        rootPath = fullSteps.slice(0, rootIdx);
+        const rootKey = topKeys.find(k => k.toUpperCase() === fullSteps[rootIdx].toUpperCase());
+        if (tree[rootKey] && typeof tree[rootKey] === 'object') {
+            currentTree = tree[rootKey];
+            rootPath.push(rootKey);
+        }
+    } else {
+        // Tree is the current node's children: mapfile is the full prefix
+        rootPath = [...fullSteps];
+        console.log('Tree has no key on mapfile path; treating as children of', rootPath.join('/'));
     }
+
 
     console.log('mapfile:', mapfile, '→ rootPath:', rootPath,
                 '| top-level items:', Object.keys(currentTree));

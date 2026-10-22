@@ -1987,6 +1987,11 @@ def ensure_treepolys_with_index(
     # ------------------------------------------------------------------
     # Path traversal & fallback resolution
     # ------------------------------------------------------------------
+    TYPE_GROUPS = {"WARDS", "DIVS"}
+
+    # ------------------------------------------------------------------
+    # Path traversal & fallback resolution
+    # ------------------------------------------------------------------
     active_steps = typed_steps if len(typed_steps) > 1 else dynamic_steps
     current_path = ""
     deepest_valid_path = ROOT
@@ -1994,15 +1999,28 @@ def ensure_treepolys_with_index(
     for step in active_steps:
         normalized_step = normalname(step)
         current_path = f"{current_path}/{normalized_step}" if current_path else normalized_step
+
         if current_path in Geo_index:
             deepest_valid_path = current_path
+        elif normalized_step.upper() in TYPE_GROUPS:
+            # Grouping header: it has no index entry of its own, so keep it in
+            # the path and carry on to the real node beneath it.
+            continue
         else:
-            logging.debug(f"[TRAVERSAL BREAK] Step '{step}' (normalized: '{normalized_step}') yielded path '{current_path}', which is missing from Geo_index.")
+            logging.debug(
+                f"[TRAVERSAL BREAK] Step '{step}' (normalized: '{normalized_step}') "
+                f"yielded path '{current_path}', which is missing from Geo_index."
+            )
             break
 
     final_path = deepest_valid_path if deepest_valid_path in Geo_index else deepest_path_registered
     leaf_name = final_path.split("/")[-1]
     match_full_filepath = f"{final_path}/{leaf_name}-MAP.html"
+
+    # Flag a partial resolve so callers can show an error, not the ancestor's map
+    requested_path = current_path
+    if final_path != requested_path and requested_path.split("/")[-1].upper() not in TYPE_GROUPS:
+        logging.warning(f"[PARTIAL RESOLVE] wanted '{requested_path}' but resolved '{final_path}'")
 
     logging.info(f"[DONE] Final Resolved Target Path: '{final_path}' | Map File Path: '{match_full_filepath}'")
     return match_full_filepath, Geo_index
