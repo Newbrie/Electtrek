@@ -407,22 +407,25 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     const emptyMessage = config.emptyMessage || 'No sub-divisions available';
     const createButton = config.createButton || window.createMapButton;
 
+    const renderEmpty = (msg = emptyMessage) =>
+        window.renderTreeSelector?.({}, { containerId, accordionId, emptyMessage: msg, createButton });
+
     if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
-        window.renderTreeSelector?.({}, { containerId, accordionId, emptyMessage, createButton });
+        renderEmpty();
         return;
     }
-    console.log('initAccordion tree arg:', typeof tree, Array.isArray(tree),
-            Object.keys(tree || {}), JSON.stringify(tree)?.slice(0, 300));
 
     const mapfile = window.mapfile;
     if (!mapfile || typeof stepify !== 'function') {
-        console.error("❌ initAccordionFromOptions: window.mapfile is empty, so paths can't be built. Not rendering.");
+        console.error("❌ initAccordionFromOptions: window.mapfile is empty, so paths can't be built.");
+        renderEmpty('Current area unknown');
         return;
     }
 
     const fullSteps = stepify(mapfile);
     if (fullSteps.length === 0) {
         console.error("❌ window.mapfile gave no path steps:", mapfile);
+        renderEmpty('Current area unknown');
         return;
     }
 
@@ -448,19 +451,12 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         console.log('Tree has no key on mapfile path; treating as children of', rootPath.join('/'));
     }
 
-
     console.log('mapfile:', mapfile, '→ rootPath:', rootPath,
                 '| top-level items:', Object.keys(currentTree));
 
-    const containerId  = config.containerId  || 'children-list';
-    const accordionId  = config.accordionId  || 'election-accordion';
-    const emptyMessage = config.emptyMessage || 'No sub-divisions available';
-    const createButton = config.createButton || window.createMapButton;
-
-    const activeNodeName = fullSteps[fullSteps.length - 1];
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
-        displayElement.innerText = activeNodeName.replace(/_/g, ' ');
+        displayElement.innerText = fullSteps[fullSteps.length - 1].replace(/_/g, ' ');
     }
 
     if (typeof window.renderTreeSelector !== "function") {
