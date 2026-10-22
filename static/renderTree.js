@@ -247,56 +247,56 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
     btn.type = 'button';
     btn.className = `btn btn-sm w-100 text-start py-1 px-3 ${className || ''}`;
     btn.textContent = labelText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        // nodePath is the node's full Geo_index key, e.g.
-        // UNITED_KINGDOM/ENGLAND/SURREY/EAST_SURREY/WARDS/GODSTONE
-        const targetPath = nodePath;
-
+        // nodePath may be an array (from renderTreeSelector) or a string
+        const targetPath = Array.isArray(nodePath) ? nodePath.join('/') : String(nodePath);
         const leafNodeName = targetPath.split('/').pop();
+        const prettyName = leafNodeName.replace(/_/g, ' ');
         const mapFilename = `${leafNodeName}-MAP.html`;
         const fetchPath = `${targetPath}/${mapFilename}`;
 
-        console.log(`🚀 Sending path to backend: ${fetchPath}`);
+        const notLoaded = () => showDataNotLoaded(prettyName);
 
-        fetch(`/transfer/${fetchPath}`, {
-            method: 'GET',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('Backend transfer failed');
-            return response.json();
-        })
-        .then(data => {
-            if (data.success && data.map_url) {
-                const mapIframe = document.getElementById('iframe1') || document.querySelector('iframe');
-                if (mapIframe) {
-                    mapIframe.src = data.map_url;
-                    console.log(`🗺️ Iframe successfully updated to: ${data.map_url}`);
-                }
+        try {
+            // ...rest unchanged
 
-                // Update global state tracking
-                window.currentNodePath = targetPath;
-                window.mapfile = `${targetPath}/${mapFilename}`;
+        try {
+            const response = await fetch(`/transfer/${fetchPath}`, {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!response.ok) return notLoaded();
 
-                // Update display path header
-                const displayElement = document.getElementById('display-path');
-                if (displayElement) {
-                    displayElement.innerText = leafNodeName.replace(/_/g, ' ');
-                }
-            }
-        })
-        .catch(error => {
+            const data = await response.json();
+            if (!data.success || !data.map_url) return notLoaded();
+
+            const mapIframe = document.getElementById('iframe1') || document.querySelector('iframe');
+            if (mapIframe) mapIframe.src = data.map_url;
+
+            window.currentNodePath = targetPath;
+            window.mapfile = fetchPath;
+
+            const displayElement = document.getElementById('display-path');
+            if (displayElement) displayElement.innerText = prettyName;
+        } catch (error) {
             console.error("❌ Error setting node path on backend:", error);
-        });
+            notLoaded();
+        }
     };
 
     parentElement.appendChild(btn);
 }
 
+function showDataNotLoaded(areaName) {
+    alert(
+        `No map is available for ${areaName}.\n\n` +
+        `The elector data for this area hasn't been loaded yet. ` +
+        `Please import the elector data for ${areaName} and try again.`
+    );
+}
 
 
 

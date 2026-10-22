@@ -438,9 +438,35 @@ function syncStreamsSelectWithTabs() {
     console.log("✅ Iframe navigation buttons bound successfully.");
 }
 
+
 // Helper fallback if areaTree is structured as a nested object rather than a flat path map
 function findDictByPath(tree, targetPath) {
     // If your tree structure requires recursive traversal, adapt this lookup logic,
     // otherwise fallback to letting selectNode handle the fetch route if areaTree lookup is unavailable.
     return tree[targetPath] || null;
 }
+
+window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data && e.data.type === 'no-elector-data') {
+        showDataNotLoaded(e.data.area);
+    }
+});
+
+function showDataNotLoaded(areaName) {
+    alert(
+        `No map is available for ${areaName}.\n\n` +
+        `The elector data for this area hasn't been loaded yet. ` +
+        `Please import the elector data for ${areaName} and try again.`
+    );
+}
+
+// Listen for failure pages loaded inside the map iframe
+window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data && e.data.type === 'no-elector-data') {
+        showDataNotLoaded(e.data.area);
+        const f = document.getElementById('iframe1') || document.querySelector('iframe');
+        try { f?.contentWindow.history.back(); } catch (_) {}
+    }
+});

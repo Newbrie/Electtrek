@@ -237,6 +237,32 @@ def make_json_serializable(obj):
     else:
         return str(obj)
 
+def no_data_response(area_name, status=404):
+    pretty = str(area_name).replace('_', ' ')
+    js_name = json.dumps(pretty).replace('<', '\\u003c')   # safe inside <script>
+    html = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>No data</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; display:flex; align-items:center;
+         justify-content:center; height:100vh; margin:0; color:#555; text-align:center; }}
+  div {{ max-width: 28rem; padding: 1rem; }}
+</style></head>
+<body><div>
+  <h3>No map available for {pretty}</h3>
+  <p>The elector data for this area hasn't been loaded yet.<br>
+     Please import the elector data and try again.</p>
+</div>
+<script>
+  // Tell the parent page so it can show its alert (no-op if not in an iframe)
+  if (window.parent !== window) {{
+    window.parent.postMessage({{ type: 'no-elector-data', area: {js_name} }},
+                              window.location.origin);
+  }}
+</script></body></html>"""
+    resp = make_response(html, status)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp
+
 def _purge_registry_recursive(node):
 
     # 1. Recurse first to clean the deep leaves
@@ -3186,14 +3212,21 @@ def downbut(path):
 
     logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
 
-    # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
 
-    # Guard against missing node
+    steps = stepify(path)
+    target_path = "/".join(steps)
+
+    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
     if current_node is None:
-        flash(f"Target node not found for path: {path}")
-        logger.error("❌ [DOWNBUT ERROR] Failed to resolve target node for path: %s", path)
-        abort(404, f"Target node not found for path: {path}")
+        # Registry was reset: rebuild down from the root, same as /transfer
+        current_node = get_trek_root().ping_node(
+            rlevels, layers.Geo_index, target_path,
+            create=True, accumulate=session.get("accumulate", False)
+        )
+
+    if current_node is None:
+        logger.warning("[DOWNBUT] No node for path: %s", path)
+        return no_data_response(steps[-1] if steps else path, reason="no_node")
 
     session["current_node_id"] = current_node.nid
     target_nid = getattr(current_node, "nid", None)
@@ -3218,9 +3251,8 @@ def downbut(path):
     current_node = previous_node.ping_node(rlevels, layers.Geo_index, path, create=True, accumulate=session.get("accumulate", False))
 
     if current_node.level > 4 and len(areaelectors) == 0:
-        flash("Can't find any elector data for this Area.")
-        print(f"Can't find elector data at {current_node.value} for election {current_election}")
-        raise Exception("Can't find any elector data for this Area.")
+        logger.warning("No elector data at %s for election %s", current_node.value, current_election)
+        return no_data_response(current_node.value)
     else:
         base = Path(config.workdirectories['workdir'])
         fullpath = base / current_node.mapfile
@@ -3359,8 +3391,8 @@ def transfer(path):
     global layeritems
     global constants
 
-    logger.info("=== [DOWNBUT START] Incoming path: '%s' ===", path)
-    print("____Route/downbut:", path)
+    logger.info("=== [TRANSFER START] Incoming path: '%s' ===", path)
+    print("____Route/transfer:", path)
 
     restore_from_persist(layers.Treepolys, layers.Geo_index)
 
