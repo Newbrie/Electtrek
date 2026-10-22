@@ -406,6 +406,8 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         console.warn("⚠️ initAccordionFromOptions: No valid tree provided.");
         return;
     }
+    console.log('initAccordion tree arg:', typeof tree, Array.isArray(tree),
+            Object.keys(tree || {}), JSON.stringify(tree)?.slice(0, 300));
 
     const mapfile = window.mapfile;
     if (!mapfile || typeof stepify !== 'function') {
