@@ -428,24 +428,19 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         return;
     }
 
-    // Ancestors above the tree root, plus the root and its direct children
-    const steps = fullSteps.slice(0, rootIdx + 2);
+    // Ancestors above the tree root come from mapfile; the root itself is
+    // descended into once, so its children are the top-level accordion items.
+    const rootPath = fullSteps.slice(0, rootIdx);
 
     let currentTree = tree;
-    const rootPath = fullSteps.slice(0, rootIdx);   // ancestors the tree doesn't contain
-
-    for (const step of steps.slice(rootIdx)) {
-        const key = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
-        if (key && currentTree[key] && typeof currentTree[key] === 'object') {
-            currentTree = currentTree[key];
-            rootPath.push(key);
-        } else {
-            console.warn(`⚠️ "${step}" not found in tree, stopping at "${rootPath.join('/')}"`);
-            break;
-        }
+    const rootKey = topKeys.find(k => k.toUpperCase() === fullSteps[rootIdx].toUpperCase());
+    if (rootKey && tree[rootKey] && typeof tree[rootKey] === 'object') {
+        currentTree = tree[rootKey];
+        rootPath.push(rootKey);
     }
 
-    console.log('mapfile:', mapfile, '→ rootPath:', rootPath);
+    console.log('mapfile:', mapfile, '→ rootPath:', rootPath,
+                '| top-level items:', Object.keys(currentTree));
 
     const containerId  = config.containerId  || 'children-list';
     const accordionId  = config.accordionId  || 'election-accordion';
