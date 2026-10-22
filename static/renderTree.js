@@ -407,46 +407,52 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         return;
     }
 
-    const hasPath = typeof stepify === 'function' && !!window.mapfile;
-    const fullSteps = hasPath ? stepify(window.mapfile) : [];
+    const mapfile = window.mapfile;
+    if (!mapfile || typeof stepify !== 'function') {
+        console.error("❌ initAccordionFromOptions: window.mapfile is empty, so paths can't be built. Not rendering.");
+        return;
+    }
+
+    const fullSteps = stepify(mapfile);
+    if (fullSteps.length === 0) {
+        console.error("❌ window.mapfile gave no path steps:", mapfile);
+        return;
+    }
+
+    // The tree's own top-level key(s) define its root; find where that sits in mapfile
+    const topKeys = Object.keys(tree);
+    const rootIdx = fullSteps.findIndex(s =>
+        topKeys.some(k => k.toUpperCase() === s.toUpperCase()));
+    if (rootIdx < 0) {
+        console.error("❌ No step of window.mapfile matches the tree root:", fullSteps, topKeys);
+        return;
+    }
+
+    // Ancestors above the tree root, plus the root and its direct children
+    const steps = fullSteps.slice(0, rootIdx + 2);
 
     let currentTree = tree;
-    const rootPath = [];   // hoisted so it's always defined for renderTreeSelector
+    const rootPath = fullSteps.slice(0, rootIdx);   // ancestors the tree doesn't contain
 
-    if (fullSteps.length) {
-        let steps = fullSteps;
-
-        // Stop at SURREY plus its direct children, otherwise drop the final leaf
-        // so the parent container stays visible.
-        const surreyIndex = steps.findIndex(s => s.toUpperCase() === "SURREY");
-        if (surreyIndex !== -1) {
-            steps = steps.slice(0, surreyIndex + 2);
-        } else if (steps.length > 1) {
-            steps = steps.slice(0, -1);
-        }
-
-        // Walk down the tree, recording the real keys as we go
-        for (const step of steps) {
-            const matchedKey = Object.keys(currentTree)
-                .find(k => k.toUpperCase() === step.toUpperCase());
-
-            if (matchedKey && currentTree[matchedKey] && typeof currentTree[matchedKey] === 'object') {
-                currentTree = currentTree[matchedKey];
-                rootPath.push(matchedKey);
-            } else {
-                console.warn(`⚠️ initAccordionFromOptions: "${step}" not found in tree, stopping at "${rootPath.join('/') || 'root'}".`);
-                break;   // don't skip ahead into the wrong subtree
-            }
+    for (const step of steps.slice(rootIdx)) {
+        const key = Object.keys(currentTree).find(k => k.toUpperCase() === step.toUpperCase());
+        if (key && currentTree[key] && typeof currentTree[key] === 'object') {
+            currentTree = currentTree[key];
+            rootPath.push(key);
+        } else {
+            console.warn(`⚠️ "${step}" not found in tree, stopping at "${rootPath.join('/')}"`);
+            break;
         }
     }
+
+    console.log('mapfile:', mapfile, '→ rootPath:', rootPath);
 
     const containerId  = config.containerId  || 'children-list';
     const accordionId  = config.accordionId  || 'election-accordion';
     const emptyMessage = config.emptyMessage || 'No sub-divisions available';
     const createButton = config.createButton || window.createMapButton;
 
-    const activeNodeName = fullSteps.length ? fullSteps[fullSteps.length - 1] : "SURREY";
-
+    const activeNodeName = fullSteps[fullSteps.length - 1];
     const displayElement = document.getElementById('display-path');
     if (displayElement) {
         displayElement.innerText = activeNodeName.replace(/_/g, ' ');
@@ -463,8 +469,7 @@ window.initAccordionFromOptions = (tree, config = {}) => {
         emptyMessage,
         allLabel: (name) => name.replace(/_/g, ' '),
         createButton,
-        rootPath,
-        showLeafValues: false
+        rootPath
     });
 
     console.log(`✅ Initialized accordion for #${containerId} rooted at /${rootPath.join('/')}`);
