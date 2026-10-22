@@ -261,9 +261,6 @@ function createMapButton(parentElement, nodeName, labelText, className, nodePath
         const notLoaded = () => showDataNotLoaded(prettyName);
 
         try {
-            // ...rest unchanged
-
-        try {
             const response = await fetch(`/transfer/${fetchPath}`, {
                 method: 'GET',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
