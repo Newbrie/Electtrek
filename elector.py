@@ -49,8 +49,8 @@ def normalize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def find_node_by_path(basepath: str, debug=False):
-    import state
-    from nodes import get_trek_root
+    from nodes import get_trek_root, TYPE_SEGMENT
+    import nodes
 
     if debug:
         print(f"[DEBUG] find_node_by_path: {basepath}")
@@ -58,37 +58,55 @@ def find_node_by_path(basepath: str, debug=False):
     if not basepath:
         return None
 
-    parts = paths.stepify(basepath)
+    # Typed steps: filename and sequential duplicates removed, WARDS/DIVS kept
+    parts = paths.stepify_typed(basepath)
     if not parts:
         return None
 
-    root = get_trek_root()
+    # Fast path: node_path is the typed key, so an exact registry hit needs no walk
+    hit = nodes.TREK_NODES_BY_PATH.get("/".join(parts))
+    if hit is not None:
+        return hit
 
+    root = get_trek_root()
     if root.value != parts[0]:
         if debug:
             print(f"[DEBUG] Root mismatch: expected {root.value}, got {parts[0]}")
         return None
 
     node = root
+    pending_seg = None          # 'WARDS' / 'DIVS' waiting for the node that follows it
+
     for part in parts[1:]:
-        cleaned_part = state.clean_path_part(part)
-
-        if cleaned_part is None:
+        if part.upper() in ("WARDS", "DIVS"):
+            pending_seg = part.upper()
             continue
 
-        if cleaned_part == node.value:
-            continue
+        def is_match(c):
+            if c.value != part:
+                return False
+            if pending_seg:
+                return TYPE_SEGMENT.get(str(c.type).lower(), "").upper() == pending_seg
+            return True
 
-        match = next((c for c in node.children if c.value == cleaned_part), None)
+        candidates = [c for c in node.children if is_match(c)]
 
-        if not match:
+        if not candidates:
             if debug:
-                print(f"[DEBUG] Traversal broke at segment: '{cleaned_part}' (raw: '{part}') under node: '{node.value}'")
-                print(f"[DEBUG] Raw target part bytes: {repr(part)}")
-                print(f"[DEBUG] Available children details: {[(repr(c.value), c.type) for c in node.children]}")
+                print(f"[DEBUG] Traversal broke at '{part}' (segment={pending_seg}) under '{node.node_path}'")
+                print(f"[DEBUG] Available children: {[(repr(c.value), c.type) for c in node.children]}")
             return None
 
-        node = match
+        if len(candidates) > 1 and debug:
+            print(f"[DEBUG] Ambiguous '{part}' under '{node.node_path}': "
+                  f"{[c.type for c in candidates]}. Pass a typed path to disambiguate.")
+
+        node = candidates[0]
+        pending_seg = None
+
+    # A trailing group segment (".../WARDS") names a header, not a node
+    if pending_seg and debug:
+        print(f"[DEBUG] Path ended on group header '{pending_seg}'; returning parent '{node.node_path}'")
 
     return node
 
@@ -315,82 +333,74 @@ class ElectorManager:
 
         self._combined = combined
 
+
     def elector_for_path(self, resolved_levels, raw_path):
-        from elections import CurrentElection
+        _GROUP_TO_SUBLEVEL = {"WARDS": "ward", "DIVS": "division"}
+
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-
             (c_election, elevels), = resolved_levels.items()
+
             df = self._elections.get(c_election)
             if df is None or df.empty:
                 logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            # Clean and upper-case segments to match the pre-normalized dataframe structure
-            raw_segments = paths.stepify(raw_path)
-            clean_segments = [str(seg).strip().upper() for seg in raw_segments]
-            logger.info(f"🔍 START DETERMINISTIC FILTER:")
-            logger.info(f"   - Raw Path: {raw_path}")
-            logger.info(f"   - Clean Segments ({len(clean_segments)}): {clean_segments}")
-            logger.info(f"   - Resolved Levels Mapping: {resolved_levels}")
-            logger.info(f"   - DataFrame Shape: {df.shape}")
+            # Walk the typed path: group headers don't take a level index,
+            # they only say which sub-level the NEXT node belongs to.
+            segments = []          # (value, type_hint) per real node; index == level
+            hint = None
+            for part in paths.stepify_typed(raw_path):
+                grp = _GROUP_TO_SUBLEVEL.get(part.upper())
+                if grp:
+                    hint = grp
+                    continue
+                segments.append((str(part).strip().upper(), hint))
+                hint = None
 
-            # 🛠️ Lightning fast vectorized index masking! No dynamic string formats.
+            logger.info(f"🔍 elector_for_path: {raw_path} -> {segments}")
+
             mask = pd.Series(True, index=df.index)
             initial_count = len(df)
 
-            # Map standard field lookups dynamically from elevels dictionary and shapecolumn
-            for idx, target_val in enumerate(clean_segments):
+            for idx, (target_val, type_hint) in enumerate(segments):
                 if idx not in elevels:
-                    logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels mapping.")
+                    logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels.")
                     break
 
                 level_name = elevels[idx]
-                sub_levels = [s.strip().lower() for s in level_name.split("/")]
-                logger.debug(f"--------------------------------------------------")
-                logger.debug(f"👉 Processing Index [{idx}] -> Segment Value: '{target_val}' (Level Type: '{level_name}')")
+                sub_levels = [s.strip().lower() for s in str(level_name).split("/")]
+                if type_hint and type_hint in sub_levels:
+                    sub_levels = [type_hint]        # typed path decides: no guessing
 
                 level_matched = False
                 for sub_level in sub_levels:
                     col_name = shapecolumn.get(sub_level)
-                    logger.debug(f"   - Checking sub-level '{sub_level}' mapped to column '{col_name}'")
-
-                    if col_name is None:
-                        logger.debug(f"     ❌ No column mapping found in shapecolumn for sub_level '{sub_level}'")
+                    if col_name is None or col_name not in df.columns:
+                        logger.debug(f"   ❌ No usable column for sub_level '{sub_level}'")
                         continue
-
-                    if col_name not in df.columns:
-                        logger.debug(f"     ❌ Column '{col_name}' NOT found in DataFrame columns. Available columns: {list(df.columns)}")
-                        continue
-
-                    # Log unique values preview in this column to catch mismatch issues (e.g., spaces vs underscores)
-                    sample_vals = df[col_name].dropna().astype(str).unique()[:5]
-                    logger.debug(f"     ℹ️ Column '{col_name}' sample values in DF: {list(sample_vals)}")
 
                     sub_mask = mask & (df[col_name].astype(str).str.strip().str.upper() == target_val)
-                    matched_count = sub_mask.sum()
-                    logger.debug(f"     📊 Test match for '{target_val}' on '{col_name}': {matched_count} rows matched.")
-
-                    if matched_count > 0:
+                    if sub_mask.any():
                         mask = sub_mask
                         level_matched = True
-                        logger.debug(f"     ✅ MATCH SUCCESSFUL at index {idx} using column '{col_name}'")
                         break
 
                 if not level_matched:
-                    parent_val = clean_segments[idx - 1] if idx - 1 >= 0 else "ROOT"
-                    logger.warning(f"⚠️ Filter for level '{level_name}' (value '{target_val}') matched 0 electors under parent '{parent_val}'.")
+                    # Fail closed: continuing would return the parent's electors
+                    # and show them under the wrong node.
+                    parent_val = segments[idx - 1][0] if idx > 0 else "ROOT"
+                    logger.warning(f"⚠️ Level '{level_name}' value '{target_val}' matched 0 electors under '{parent_val}'.")
+                    return pd.DataFrame()
 
             filtered_df = df[mask]
             final_count = len(filtered_df)
-            logger.info(f"🏁 FILTER COMPLETE: Initial rows={initial_count} -> Final rows={final_count}")
+            logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
 
             if final_count == 0:
-                logger.error("❌ Deep hierarchy filter resulted in 0 rows returned.")
                 return pd.DataFrame()
-
-            if final_count == initial_count:
-                logger.error("❌ Deep hierarchy filter left 100% of rows untouched (Filter did nothing!).")
+            if final_count == initial_count and len(segments) > 1:
+                logger.error("❌ Filter left 100% of rows untouched (filter did nothing).")
                 return pd.DataFrame()
 
             return filtered_df

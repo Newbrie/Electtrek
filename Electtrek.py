@@ -124,7 +124,7 @@ from nodes import (
 )
 from elections import get_available_elections, get_elections, CurrentElection, ElectionContext
 from elector import electors
-from paths import stepify
+from paths import stepify, stepify_typed
 import baked_data
 
 LEVEL_INDEX = {
@@ -891,22 +891,35 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         # lastfilepath, treepolys = ensure_treepolys(territory_path)
 
         # 2. Extract path components from the validated lastfilepath
-        geo_parts = stepify(lastfilepath)
+        GROUP_TO_LAYER = {"WARDS": "ward", "DIVS": "division"}
 
-        # 3. Construct schema levels dynamically
+        # Untyped parts for indexing, plus a type hint per level
+        geo_parts = []
+        level_hint = {}                      # level index -> 'ward' / 'division'
+        pending = None
+        for part in stepify_typed(lastfilepath):
+            grp = GROUP_TO_LAYER.get(part.upper())
+            if grp:
+                pending = grp
+                continue
+            if pending:
+                level_hint[len(geo_parts)] = pending
+                pending = None
+            geo_parts.append(part)
+
         schema_levels = ["Country", "Nation", "County"]
         max_index = max(max(elevels.keys(), default=0) + 1, len(geo_parts))
 
         for idx in range(3, max_index):
             if idx in elevels:
-                layer_raw_token = elevels[idx]
-                primary_layer = [l.strip() for l in layer_raw_token.split('/') if l.strip()][0]
+                layers = [l.strip() for l in elevels[idx].split('/') if l.strip()]
+                hint = level_hint.get(idx)
+                primary_layer = hint if hint in [l.lower() for l in layers] else layers[0]
                 canonical = shapecolumn.get(primary_layer.lower(), primary_layer.capitalize())
                 schema_levels.append(canonical)
             else:
                 schema_levels.append("Constituency" if idx == 3 else f"Level_{idx}")
 
-        # 4. Build static geo_context from guaranteed directory parts
         geo_context = {
             schema_levels[i]: geo_parts[i]
             for i in range(len(geo_parts))
@@ -2491,7 +2504,7 @@ def set_election():
         lastfilepath = CElection['mapfiles'][-1]
         print(f"____Route/set-election- breadcrumb: {lastfilepath}")
 
-        steps = stepify(lastfilepath)
+        steps = stepify_typed(lastfilepath)
         target_path = "/".join(steps)
 
         logger.info("[SET ELECTION STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
@@ -2971,7 +2984,7 @@ def index():
             mapfiles_list = CElection.get('mapfiles', [])
             lastfilepath = mapfiles_list[-1] if mapfiles_list else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
 
-            steps = stepify(lastfilepath)
+            steps = stepify_typed(lastfilepath)
             target_path = "/".join(steps)
 
             # Ensure boundaries and node trees are fully loaded
@@ -3207,14 +3220,10 @@ def downbut(path):
     rlevels = CElection.resolved_levels
 
     # 1. Use stepify to clean suffixes and ignorable containers (like 'WARDS') automatically
-    steps = stepify(path)
+    steps = stepify_typed(path)
     target_path = "/".join(steps)
 
     logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
-
-
-    steps = stepify(path)
-    target_path = "/".join(steps)
 
     current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
     if current_node is None:
@@ -3402,7 +3411,7 @@ def transfer(path):
     rlevels = CElection.resolved_levels
 
     # 1. Use stepify to clean suffixes and ignorable containers (like 'WARDS') automatically
-    steps = stepify(path)
+    steps = stepify_typed(path)
     target_path = "/".join(steps)
 
     logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
@@ -4000,27 +4009,31 @@ def upbut(path):
 
     # 1. Clean file extension and derive parent path
     clean_path = path.replace("-MAP.html", "").replace(".html", "")
-    steps = stepify(clean_path)
-    parent_steps = steps[:-1]
-    parent_path = clean_path
 
-    logger.info("[UPBUT STEP 1] Parsed steps: %s", steps)
-    logger.info("[UPBUT STEP 1] Derived parent_steps: %s", parent_steps)
+    # 1. Resolve the node we're on, using the typed path (filename stripped, WARDS/DIVS kept)
+    typed_steps = stepify_typed(path)
+    while typed_steps and typed_steps[-1].upper() in ("WARDS", "DIVS"):
+      typed_steps.pop()
+    here_path = "/".join(typed_steps)
+    logger.info("[UPBUT STEP 1] Typed path: '%s'", here_path)
 
-    current_node = None
+    here_node = nodes.TREK_NODES_BY_PATH.get(here_path)
+    if here_node is None:
+        # Registry may have been reset: rebuild down from the root, as /transfer does
+        here_node = nodes.get_trek_root().ping_node(
+            rlevels, layers.Geo_index, here_path,
+            create=True, accumulate=session.get("accumulate", False)
+        )
 
-    if parent_steps:
-        parent_path = "/".join(parent_steps)
-        logger.info("[UPBUT STEP 2] O(1) Lookup for parent_path in TREK_NODES_BY_PATH: '%s'", parent_path)
+    if here_node is None or here_node.node_path != here_path:
+        logger.warning("[UPBUT] Could not resolve %r (got %r)", here_path,
+                       getattr(here_node, "node_path", None))
+        return no_data_response(typed_steps[-1] if typed_steps else path, reason="no_node")
 
-        # Direct O(1) node resolution via path index
-        current_node = nodes.TREK_NODES_BY_PATH.get(parent_path)
-    else:
-        # Default to Root Node (e.g., UNITED_KINGDOM)
-        logger.info("[UPBUT STEP 2] parent_steps is empty. Fetching Root Node.")
-        map_root = nodes.get_trek_root()
-        current_node = nodes.TREK_NODES_BY_PATH.get(map_root.node_path)
-
+    # 2. Up one node: the parent, or stay put at the root
+    current_node = here_node.parent or here_node
+    parent_path = current_node.node_path          # typed, matches Geo_index keys
+    logger.info("[UPBUT STEP 2] %s -> parent %s", here_path, parent_path)
 
     # 2. Guard against missing node
     if current_node is None:
@@ -4558,7 +4571,7 @@ def firstpage():
 
 # Ensure these reflect the breadcrumb/filepath you successfully resolved on startup:
     breadcrumb_path = breadcrumb if breadcrumb else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
-    cleaned_steps = stepify(breadcrumb_path)
+    cleaned_steps = stepify_typed(breadcrumb_path)
     if cleaned_steps and ('-MAP' in cleaned_steps[-1] or cleaned_steps[-1].endswith('.html')):
         cleaned_steps.pop()
 

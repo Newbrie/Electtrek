@@ -30,7 +30,7 @@ import math
 import colorsys
 import state
 from state import normalname
-from paths import is_typed_parent,derive_territory, stepify, pathify, typed_split, make_child_path
+from paths import untyped, is_typed_parent,derive_territory, stepify, pathify, typed_split, make_child_path, stepify_typed
 from matplotlib.colors import to_hex, to_rgb
 import geopandas as gpd
 # ✅ CORRECT
@@ -302,7 +302,6 @@ def get_layer_gdf(key: str, node_path=None):
     by node_path structural variances.
     """
     global LAYER_CACHE
-    from paths import stepify
 
     if key not in MAP_LAYERS:
         logger.error(f"❌ Key '{key}' not found in global MAP_LAYERS.")
@@ -320,7 +319,7 @@ def get_layer_gdf(key: str, node_path=None):
     revised_setting = str(globals().get("REVISED", "")).strip().upper()
     current_county = ""
     if node_path:
-        steps = stepify(node_path)
+        steps = stepify_typed(node_path)
         current_county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
 
     is_revised = bool(
@@ -1615,26 +1614,36 @@ def ensure_treepolys_with_index(
     # ------------------------------------------------------------------
     # Dynamic level deduction (target level + 1, driven by sourcepath)
     # ------------------------------------------------------------------
+    GROUP_TO_SUBLEVEL = {
+        "WARDS": "ward",
+        "DIVS":  "division",
+        "WALKS": "walk",
+        "PDS":   "polling_district",
+    }
+    TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
+
+    # ... inside ensure_treepolys_with_index:
     dynamic_steps = [ROOT]
-    raw_steps = stepify(effective_sourcepath) if effective_sourcepath else []
-    steps = raw_steps if raw_steps else [ROOT]
-    typed_steps = typed_split(effective_sourcepath) if effective_sourcepath else []
-    # --- FIX: Ensure target_levels AND target_depth are always initialized ---
+
+    # Typed steps keep WARDS/DIVS. They are used only to build Geo_index keys (traversal below).
+    typed_steps = stepify_typed(effective_sourcepath) if effective_sourcepath else []
+
+    # Level steps: headers removed AFTER typed de-duplication, so a ward named like its
+    # parent (.../X/WARDS/X) still counts as its own level. Index == level number.
+    steps = untyped(typed_steps) or [ROOT]
+
     max_available_level = max(elevels.keys()) if elevels else 0
-    target_depth = 0  # Default fallback depth
+    target_depth = 0
 
     if effective_sourcepath and effective_sourcepath != ROOT:
-        raw_steps = stepify(effective_sourcepath)
-        steps = raw_steps if raw_steps else [ROOT]
-        target_depth = max(0, len(steps) - 1)
+        target_depth = max(0, len(steps) - 1)          # ward = 4, walk = 5, street = 6
         if target_depth > 3:
             max_processing_level = min(target_depth + 2, max_available_level)
         else:
             max_processing_level = min(target_depth + 1, max_available_level)
         target_levels = list(range(0, max_processing_level + 1))
-        logging.info(f"Processing filtered levels based on sourcepath: {target_levels}")
+        logging.info(f"Processing levels {target_levels} (target_depth={target_depth}, typed={typed_steps})")
     else:
-        # Fallback: Process all available levels when viewing root
         target_levels = list(range(0, max_available_level + 1))
         logging.info(f"No specific sourcepath depth; processing all available levels: {target_levels}")
 
@@ -1987,37 +1996,45 @@ def ensure_treepolys_with_index(
     # ------------------------------------------------------------------
     # Path traversal & fallback resolution
     # ------------------------------------------------------------------
-    TYPE_GROUPS = {"WARDS", "DIVS"}
-
-    # ------------------------------------------------------------------
-    # Path traversal & fallback resolution
-    # ------------------------------------------------------------------
     active_steps = typed_steps if len(typed_steps) > 1 else dynamic_steps
     current_path = ""
     deepest_valid_path = ROOT
+    after_header = False
 
     for step in active_steps:
         normalized_step = normalname(step)
-        current_path = f"{current_path}/{normalized_step}" if current_path else normalized_step
 
-        if current_path in Geo_index:
-            deepest_valid_path = current_path
-        elif normalized_step.upper() in TYPE_GROUPS:
-            # Grouping header: it has no index entry of its own, so keep it in
-            # the path and carry on to the real node beneath it.
+        # Group header: extend the path, never count it as a resolved node
+        if normalized_step.upper() in TYPE_GROUPS:
+            header = normalized_step.upper()
+            current_path = f"{current_path}/{header}" if current_path else header
+            after_header = True
             continue
+
+        candidate = f"{current_path}/{normalized_step}" if current_path else normalized_step
+
+        # Untyped input (e.g. the dynamic_steps fallback): try the typed forms under a typed parent
+        if candidate not in Geo_index and not after_header and current_path and is_typed_parent(current_path):
+            hits = [f"{current_path}/{g}/{normalized_step}" for g in ("WARDS", "DIVS")
+                    if f"{current_path}/{g}/{normalized_step}" in Geo_index]
+            if len(hits) > 1:
+                logging.warning(f"[TYPED] '{normalized_step}' exists as ward and division under "
+                                f"'{current_path}'; pass a typed path. Using {hits[0]}")
+            if hits:
+                candidate = hits[0]
+
+        current_path = candidate
+        if candidate in Geo_index:
+            deepest_valid_path = candidate
+            after_header = False
         else:
-            logging.debug(
-                f"[TRAVERSAL BREAK] Step '{step}' (normalized: '{normalized_step}') "
-                f"yielded path '{current_path}', which is missing from Geo_index."
-            )
+            logging.debug(f"[TRAVERSAL BREAK] Step '{step}' yielded '{candidate}', missing from Geo_index.")
             break
 
     final_path = deepest_valid_path if deepest_valid_path in Geo_index else deepest_path_registered
     leaf_name = final_path.split("/")[-1]
     match_full_filepath = f"{final_path}/{leaf_name}-MAP.html"
 
-    # Flag a partial resolve so callers can show an error, not the ancestor's map
     requested_path = current_path
     if final_path != requested_path and requested_path.split("/")[-1].upper() not in TYPE_GROUPS:
         logging.warning(f"[PARTIAL RESOLVE] wanted '{requested_path}' but resolved '{final_path}'")
@@ -3418,7 +3435,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         from shapely import count_coordinates
         from shapely.geometry import LineString, MultiLineString
         from layers import Treepolys
-        from paths import stepify, pathify
         from elector import electors
         from elections import CurrentElection
 
@@ -3525,7 +3541,7 @@ class ExtendedFeatureGroup(FeatureGroup):
             # 🚗 STEP 3: Match & Retrieve individual street geometries
             # -------------------------------------------------
             for child in sub_nodes:
-                elector_path = pathify(stepify(child.mapfile), child.type)
+                elector_path = pathify(stepify_typed(child.mapfile), child.type)
 
                 raw_street_name = str(child.value).strip() if child.type == 'street' else str(child.parent.value).strip() if child.parent else str(child.value).strip()
 

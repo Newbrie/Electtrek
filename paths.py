@@ -30,6 +30,29 @@ def stepify(path_str):
 
     return cleaned
 
+def _is_filename(part):
+    return part.endswith(tuple(FILE_SUFFIXES)) or part.lower().endswith((".html", ".htm"))
+
+def stepify_typed(path_str, keep=True):
+    """Like stepify, but keeps WARDS/DIVS/etc. Only drops empties, filenames
+    and sequential duplicates."""
+    if not path_str or not isinstance(path_str, str):
+        return []
+    cleaned = []
+    for part in path_str.strip().split("/"):
+        part = part.strip()
+        if not part or _is_filename(part):
+            continue
+        if not keep and part in IGNORABLE_SEGMENTS:
+            continue
+        if not cleaned or cleaned[-1] != part:
+            cleaned.append(part)
+    return cleaned
+
+def untyped(parts):
+    """Same parts with group segments removed, for level counting."""
+    return [p for p in parts if p not in IGNORABLE_SEGMENTS]
+
 TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
 TYPED_PARENT_LEVELS = {"constituency"}
 
@@ -77,7 +100,7 @@ def derive_territory(sourcepath: str) -> str | None:
     if not sourcepath:
         return None
 
-    depth = len(stepify(sourcepath))        # level-aligned: no filename, no type segment
+    depth = len(stepify_typed(sourcepath))        # level-aligned: no filename, no type segment
     if depth == 0:
         return None
 

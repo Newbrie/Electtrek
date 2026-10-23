@@ -22,69 +22,85 @@ function cleanPathPart(part) {
     return trimmed;
 }
 
+const GROUP_SEGMENTS = new Set(['WARDS', 'DIVS']);
+const isGroup = p => GROUP_SEGMENTS.has(String(p).toUpperCase());
+
 /**
- * Split path string, clean each segment, and remove sequential duplicates.
+ * Like stepify, but explicit about keeping WARDS/DIVS.
+ * Drops empties, any .html/.htm filename and sequential duplicates.
  */
-function stepify(pathStr) {
+function stepifyTyped(pathStr) {
     if (!pathStr || typeof pathStr !== 'string') return [];
-
-    const parts = pathStr.trim().split('/');
-    const cleaned = [];
-
-    for (const part of parts) {
-        const cleanedPart = cleanPathPart(part);
-        if (cleanedPart) {
-            if (cleaned.length === 0 || cleaned[cleaned.length - 1] !== cleanedPart) {
-                cleaned.push(cleanedPart);
-            }
-        }
+    const out = [];
+    for (const raw of pathStr.trim().split('/')) {
+        const part = raw.trim();
+        if (!part || IGNORABLE_SEGMENTS.has(part)) continue;
+        if (/\.html?$/i.test(part)) continue;
+        if (out.length === 0 || out[out.length - 1] !== part) out.push(part);
     }
-
-    return cleaned;
+    return out;
 }
 
+/** Remove group headers: use for level counting and display, not for lookups. */
+const untypedSteps = parts => parts.filter(p => !isGroup(p));
 
- const TYPE_SEGMENT = { ward: 'WARDS', division: 'DIVS' };
- const TYPED_CHILD_INDEX = 4;
+/**
+ * Insert WARDS/DIVS at index 4 by looking at the area tree, not guessing.
+ * parts:    untyped steps, e.g. [UNITED_KINGDOM, ENGLAND, SURREY, SURREY_HEATH, BAGSHOT]
+ * tree:     the area tree, e.g. { SURREY: { SURREY_HEATH: { WARDS: {...}, DIVS: {...} } } }
+ * fallback: group to use when the tree can't decide (null leaves the path untyped)
+ */
+function pathifyTyped(parts, tree, fallback = null) {
+    if (!Array.isArray(parts) || parts.length === 0) return "";
+    if (parts.some(isGroup)) return parts.join('/');           // already typed
+    if (parts.length <= TYPED_CHILD_INDEX) return parts.join('/');
 
- /**
-  * parts:     level-aligned steps, e.g. ['UNITED_KINGDOM','ENGLAND','SURREY','EAST_SURREY','GODSTONE']
-  * typedNode: type ('ward' | 'division') of the node at index 4 in this path.
-  */
- function pathify(parts, typedNode = 'ward') {
-     if (!Array.isArray(parts) || parts.length === 0) {
-         return "";
-     }
+    const ci = (obj, key) =>
+        obj && typeof obj === 'object'
+            ? Object.keys(obj).find(k => k.toUpperCase() === String(key).toUpperCase())
+            : undefined;
 
-     // Already typed? Don't insert a second segment.
-     if (parts.some(p => Object.values(TYPE_SEGMENT).includes(p))) {
-         return parts.join('/');
-     }
+    // The tree may start below the true root: begin at the first part it contains
+    let node = tree, i = 0;
+    while (i < parts.length && node && ci(node, parts[i]) === undefined) i++;
 
-     // Too shallow to have a typed child
-     if (parts.length <= TYPED_CHILD_INDEX) {
-         return parts.join('/');
-     }
+    // Descend to the constituency (index TYPED_CHILD_INDEX - 1)
+    for (; i < TYPED_CHILD_INDEX && node; i++) {
+        const k = ci(node, parts[i]);
+        node = k === undefined ? null : node[k];
+    }
 
-     const seg = TYPE_SEGMENT[typedNode];
-     return [
-         ...parts.slice(0, TYPED_CHILD_INDEX),
-         ...(seg ? [seg] : []),
-         ...parts.slice(TYPED_CHILD_INDEX),
-     ].join('/');
- }
+    let seg = fallback;
+    if (node) {
+        const name = parts[TYPED_CHILD_INDEX];
+        const hits = ['WARDS', 'DIVS'].filter(g => {
+            const gk = ci(node, g);
+            return gk !== undefined && ci(node[gk], name) !== undefined;
+        });
+        if (hits.length > 1) console.warn(`pathifyTyped: "${name}" is both a ward and a division; using ${hits[0]}`);
+        if (hits.length) seg = hits[0];
+    }
 
-// Make stepify & pathify available globally
-window.stepify = stepify;
-window.pathify = pathify;
+    return [
+        ...parts.slice(0, TYPED_CHILD_INDEX),
+        ...(seg ? [seg] : []),
+        ...parts.slice(TYPED_CHILD_INDEX),
+    ].join('/');
+}
+
+window.stepifyTyped = stepifyTyped;
+window.untypedSteps = untypedSteps;
+window.pathifyTyped = pathifyTyped;
 
 
 // WARDS / DIVS are grouping segments in the typed area tree: they are shown as
 // headers but have no map of their own, so they never get an "All" map button.
 // WARDS / DIVS are grouping segments in the typed area tree: they are shown as
 // headers but have no map of their own, so they never get an "All" map button.
-const TYPE_GROUPS = new Set(['WARDS', 'DIVS']);
-
+// WARDS / DIVS / WALKS / PDS are grouping segments in the typed area tree:
+// they are shown as headers but have no map of their own.
+const GROUP_SEGMENTS = new Set(['WARDS', 'DIVS', 'WALKS', 'PDS']);
+const TYPE_GROUPS = GROUP_SEGMENTS;
 window.renderTreeSelector = function (tree, options = {}) {
     const {
         containerId,
@@ -232,8 +248,8 @@ window.renderTreeSelector = function (tree, options = {}) {
     if (Array.isArray(rootPath)) {
         startPath = [...rootPath];
     } else {
-        startPath = typeof stepify === 'function'
-            ? stepify(window.mapfile || '')
+        startPath = typeof stepifyTyped === 'function'
+            ? stepifyTyped(window.mapfile || '')
             : [];
         startPath.pop();
     }
@@ -416,13 +432,13 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     }
 
     const mapfile = window.mapfile;
-    if (!mapfile || typeof stepify !== 'function') {
+    if (!mapfile || typeof stepifyTyped !== 'function') {
         console.error("❌ initAccordionFromOptions: window.mapfile is empty, so paths can't be built.");
         renderEmpty('Current area unknown');
         return;
     }
 
-    const fullSteps = stepify(mapfile);
+    const fullSteps = stepifyTyped(mapfile);
     if (fullSteps.length === 0) {
         console.error("❌ window.mapfile gave no path steps:", mapfile);
         renderEmpty('Current area unknown');

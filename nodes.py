@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, time
 import re
 import layers
-from paths import stepify, pathify, get_areaTree
+from paths import untyped, stepify, pathify, get_areaTree, stepify_typed
 
 import logging
 
@@ -340,7 +340,7 @@ def _candidate_paths(Celect):
     """Stored paths to try, best first: deep-enough sourcepath, then territory."""
     mapfiles = Celect.get("mapfiles")
     sourcepath = mapfiles[-1] if isinstance(mapfiles, list) and mapfiles else None
-    if sourcepath and len(stepify(sourcepath)) >= MIN_SOURCEPATH_DEPTH:
+    if sourcepath and len(stepify_typed(sourcepath)) >= MIN_SOURCEPATH_DEPTH:
         yield sourcepath
 
     territory = Celect.get("territory")
@@ -1397,8 +1397,8 @@ class TreeNode:
         # Step 1: Clean & Normalize Paths
         # ──────────────────────────────
         full_dest_path = dest_path.strip()
-        self_path = stepify(self.mapfile)
-        dest_parts = stepify(full_dest_path)
+        self_path = stepify_typed(self.node_path)
+        dest_parts = stepify_typed(full_dest_path)
 
         print(f"  [1] Parsed self_path:  {self_path}")
         print(f"  [1] Parsed dest_parts: {dest_parts}")
@@ -1406,7 +1406,8 @@ class TreeNode:
         # 🎯 TARGET LEVEL 4 RULE (Ward/Division):
         # If targeting level 4 (len == 5), extend max_level to 6 so it populates
         # both walks (level + 1) and streets (level + 2) grandchildren data.
-        if len(dest_parts) == 5:
+
+        if len(untyped(dest_parts)) == 5:
             max_level = max(max_level, 6)
             print(f"  🎯 [CUSTOM RULE] Target level 4 detected (path length 5). Extended max_level to 6 for walks & streets.")
 
@@ -1417,7 +1418,7 @@ class TreeNode:
         print(f"  [2] Common prefix length: {common_len}")
 
         node = self
-        up_steps = len(self_path) - common_len
+        up_steps = len(untyped(self_path[common_len:]))
         if up_steps > 0:
             print(f"  [2] Moving UP {up_steps} levels to common ancestor...")
             for i in range(up_steps):
@@ -1437,8 +1438,22 @@ class TreeNode:
         target_path = node.node_path  # Track target path sequence outside loop safely
         next_level = node.level
 
+        GROUP_TO_SUBLEVEL = {
+            "WARDS": "ward",
+            "DIVS":  "division",
+            "WALKS": "walk",
+            "PDS":   "polling_district",
+        }
+        TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
+
+
         for idx, part in enumerate(down_path):
             current_parts.append(part)
+
+            if part in TYPE_GROUPS:
+                print(f"     ↪ group header '{part}': no node, no level change")
+                continue
+
             target_path = "/".join(current_parts)
             next_level = node.level + 1
 
@@ -1479,7 +1494,7 @@ class TreeNode:
                     if next_level <= 6:
                         node.create_map_branch(rlevels, geoindex)
                     else:
-                        node.create_data_branch(rlevels, target_path)
+                        node.create_data_branch(rlevels, node.node_path)   # was target_path
                 except Exception as e:
                     print(f"        ⚠️ [PING] Primary creation pass failed: {e}")
 
@@ -1492,7 +1507,7 @@ class TreeNode:
                         if next_level <= 6:
                             node.create_map_branch(rlevels, geoindex)
                         else:
-                            node.create_data_branch(rlevels, target_path)
+                            node.create_data_branch(rlevels, node.node_path)   # was target_path
                     except Exception as e:
                         print(f"        ⚠️ [PING] Alternative bivalent strategy failed: {e}")
 
@@ -1523,7 +1538,7 @@ class TreeNode:
 
             should_expand = False
             if next_level <= 6:
-                should_expand = node.node_path in geoindex or any(k.startswith(node.node_path + "/") for k in geoindex)
+                should_expand = node.node_path in geoindex
             else:
                 df_check = electors.elector_for_path(rlevels, node.mapfile)
                 should_expand = df_check is not None and not df_check.empty
@@ -1545,7 +1560,7 @@ class TreeNode:
                     print(f"     🎯 [CUSTOM RULE] Level 4 expansion detected. Recursively triggering walk-to-street expansion...")
                     for walk_child in node.children:
                         walk_next_level = walk_child.level + 1
-                        walk_should_expand = walk_child.node_path in geoindex or any(k.startswith(walk_child.node_path + "/") for k in geoindex)
+                        walk_should_expand = walk_child.node_path in geoindex
                         if walk_should_expand:
                             try:
                                 walk_child.create_map_branch(rlevels, geoindex)
@@ -2015,83 +2030,62 @@ class TreeNode:
         return str(target)
 
 
-    def create_name_nodes(self,resolved_levels,gotv_pct,nodetype,namepoints):
+    def create_name_nodes(self, resolved_levels, gotv_pct, nodetype, namepoints):
+        import state
+        import geopandas as gpd
 
-        # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+        (c_election, _), = resolved_levels.items()
 
-        # The clean unpack you like
-        (c_election, elevels), = resolved_levels.items()
+        # Nothing to build: return what's already there instead of raising
+        if namepoints is None or namepoints.empty:
+            print(f"⚠️ No namepoints at {self.value} for type '{nodetype}'")
+            return self.childrenoftype(nodetype)
 
-
-        fam_nodes = []
-        if namepoints.empty:
-            raise ValueError("No data in namepoints DataFrame.")
-        print(f"____Namepoints nodes: at {self.value} of type:{nodetype} there are {len(namepoints)} ")
-        geometry = gpd.points_from_xy(namepoints.Long.values,namepoints.Lat.values, crs="EPSG:4326")
-        block = gpd.GeoDataFrame(
-            namepoints, geometry=geometry
-            )
-        fam_nodes = self.childrenoftype(nodetype)
-        [self.bbox, self.latlongroid] = self.get_bounding_box(self.type,block)
-
+        namepoints = namepoints.copy()          # avoid SettingWithCopy on filtered frames
         if 'Zone' not in namepoints.columns:
-            print("⚠️ 'Zone' column missing from namepoints. Defaulting all nodes to black.", namepoints.columns)
-            namepoints['Zone'] = 'ZONE_0'  # or whatever default you want
+            print("⚠️ 'Zone' column missing; defaulting to ZONE_0")
+            namepoints['Zone'] = 'ZONE_0'
 
+        print(f"____Namepoints: {len(namepoints)} of type '{nodetype}' at {self.value}")
 
+        geometry = gpd.points_from_xy(namepoints.Long.values, namepoints.Lat.values, crs="EPSG:4326")
+        block = gpd.GeoDataFrame(namepoints, geometry=geometry)
+        if not getattr(self, "bbox", None):
+            self.bbox, self.latlongroid = self.get_bounding_box(self.type, block)
+
+        wanted_type = str(nodetype).lower()
+        by_value = {c.value: c for c in self.children
+                    if str(c.type).lower() == wanted_type}
+
+        delta = 0.0001
         for index, limb in namepoints.iterrows():
-
             newname = state.normalname(limb['Name'])
+            lat, lon = limb['Lat'], limb['Long']
 
-            existing = next(
-                (c for c in self.children
-                 if c.type == nodetype and c.value == newname),
-                None
-            )
-
-            if existing:
-                egg = existing
-                egg.parent = self
-            else:
-                datafid = index
+            egg = by_value.get(newname)
+            if egg is None:
                 newnode = TreeNode(
                     value=newname,
-                    fid=datafid,
-                    roid=(limb['Lat'], limb['Long']),
+                    fid=index,
+                    roid=(lat, lon),
                     origin=c_election,
-                    node_type=nodetype
+                    node_type=nodetype,
                 )
                 egg = self.add_Tchild(child_node=newnode, etype=nodetype, elect=c_election)
+                by_value[newname] = egg
+            else:
+                egg.parent = self
 
-            # 🔥 Always update geometry
-            lon = limb['Long']
-            lat = limb['Lat']
-            delta = 0.0001
-
+            # Always refresh geometry and stats
             egg.latlongroid = (lat, lon)
-            egg.bbox = [
-                lon - delta,
-                lat - delta,
-                lon + delta,
-                lat + delta
-            ]
-
+            egg.bbox = [lon - delta, lat - delta, lon + delta, lat + delta]
             egg.updateTurnout()
             egg.updateElectorate()
-            egg.updateGOTV(gotv_pct, )
+            egg.updateGOTV(gotv_pct)
 
-            print('______Data nodes', egg.value, egg.fid,
-                  egg.electorate, egg.houses, egg.target, egg.bbox)
-
-        # After loop
         fam_nodes = self.childrenoftype(nodetype)
-
-
-    #    self.aggTarget()
-        print('______Create Namepoints :',nodetype,namepoints)
-        print('______Create Nodelist :',nodetype,[(x.value,x.type) for x in fam_nodes])
-
+        print(f"______Nodelist {nodetype}: {len(fam_nodes)} nodes at {self.value}")
         return fam_nodes
 
     def findnodeat_Level(self,target_level):
@@ -2120,242 +2114,219 @@ class TreeNode:
         return None
 
     def create_data_branch(self, resolved_levels, localized_path):
-        from elector import electors
-        from layers import Treepolys
+        from elector import electors, shapecolumn
         import elections
+        import state
 
-        # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-
-        # Clean unpack
         (c_election, elevels), = resolved_levels.items()
 
+        raw_electtype = elevels.get(self.level + 1)
+        if not raw_electtype:
+            print(f"DEBUG: No data level defined for level {self.level + 1} at {self.value}. Exiting.")
+            return []
+
         CE = elections.CurrentElection.load(c_election)
-        raw_electtype = elevels[self.level + 1]
-        print(f"✅ Creating Data branch {raw_electtype}  for election {c_election}")
+        gotv_pct = CE.get('GOTV', 0)
+        print(f"✅ Creating Data branch {raw_electtype} for election {c_election}")
 
-        gotv_pct = CE['GOTV']
-
-        # 🎯 RESOLVE ALL POSSIBLE DATA TARGET LAYERS (e.g., ["walk", "polling_district"])
-        target_layers = []
         if "/" in str(raw_electtype):
-            target_layers = [t.strip() for t in raw_electtype.split("/")]
+            target_layers = [t.strip() for t in str(raw_electtype).split("/")]
             print(f"🔄 Multi-branch data targets detected: {target_layers}")
         else:
-            target_layers = [raw_electtype]
+            target_layers = [str(raw_electtype)]
+
+        # One query for all layers: the records don't change between passes
+        areaelectors = electors.elector_for_path(resolved_levels, localized_path)
+        if areaelectors is None or areaelectors.empty:
+            print(f"⚠️ No data from election {c_election} at node {self.value}")
+            return []
 
         all_created_data_nodes = []
 
-        # -------------------------------
-        # Process each individual data sub-branch
-        # -------------------------------
         try:
-            from elector import shapecolumn
-
-
             for electtype in target_layers:
-
-                # Fetch the isolated electoral records matching this exact layer pass
-                areaelectors = electors.elector_for_path(resolved_levels, localized_path)
-
-                if areaelectors.empty:
-                    print(f"⚠️ No data from election {c_election} at node {self.value} for subtype '{electtype}'")
+                colname = shapecolumn.get(electtype)
+                if not colname:
+                    print(f"⚠️ No shapecolumn mapping for type '{electtype}'. Skipping.")
                     continue
-
-                colname = shapecolumn[electtype]
-                # Ensure the mapped target column actually exists in the elector dataset
                 if colname not in areaelectors.columns:
-                    print(f"⚠️ Column '{colname}' for type '{electtype}' not found in elector records. Skipping branch.")
+                    print(f"⚠️ Column '{colname}' for type '{electtype}' not found in elector records. Skipping.")
                     continue
 
                 print(f"🧭 Processing data branch for sub-type: '{electtype}' using column '{colname}'")
 
-                # Isolate target columns safely
                 select_cols = [colname, 'ENOP', 'Long', 'Lat', 'Zone']
                 existing_cols = [c for c in select_cols if c in areaelectors.columns]
-
                 df = areaelectors[existing_cols].rename(columns={colname: 'Name'})
 
-                # Skip aggregation if there is no name data to group by
                 if df['Name'].dropna().empty:
-                    print(f"⚠️ Data column '{colname}' contains only null values for this node territory. Skipping.")
+                    print(f"⚠️ Column '{colname}' contains only null values for this node. Skipping.")
                     continue
 
-                # Aggregation
                 agg_dict = {'Lat': 'mean', 'Long': 'mean', 'ENOP': 'count'}
                 if 'Zone' in df.columns:
                     agg_dict['Zone'] = 'first'
 
                 nodeelectors = df.groupby(['Name']).agg(agg_dict).reset_index()
 
-                # Node creation for this specific target branch
-                branch_nodes = self.create_name_nodes(
-                    resolved_levels,
-                    gotv_pct,
-                    electtype,  # Stamped clean type context passed through
-                    nodeelectors
-                )
 
+                branch_nodes = self.create_name_nodes(
+                    resolved_levels, gotv_pct, electtype, nodeelectors
+                )
                 print(f"📦 Created {len(branch_nodes)} nodes for type '{electtype}'")
-                # ✅ CORRECTED
                 all_created_data_nodes.extend(branch_nodes)
 
         except Exception as e:
             print("❌ Error during data branch generation:", e)
             import traceback
             traceback.print_exc()
-            return []
+            return all_created_data_nodes   # keep what was created before the failure
 
-        print(
-            f"✅ Completed Multi-Data Branch for Election: {c_election} "
-            f"in area: {self.value} | Total nodes created: {len(all_created_data_nodes)}"
-        )
+        print(f"✅ Completed Data Branch for Election: {c_election} in area: {self.value} "
+              f"| Total nodes created: {len(all_created_data_nodes)}")
 
-        # Ensure global persistence method is clean
-        if 'save_nodes' in globals() or 'save_nodes' in dir(state):
-            try:
-                save_nodes(TREKNODE_FILE)
-            except NameError:
-                pass
+        # Only save when something actually changed
+        if all_created_data_nodes:
+            saver = globals().get('save_nodes') or getattr(state, 'save_nodes', None)
+            file_ = globals().get('TREKNODE_FILE') or getattr(state, 'TREKNODE_FILE', None)
+            if saver and file_:
+                try:
+                    saver(file_)
+                except Exception as e:
+                    print(f"⚠️ save_nodes failed: {e}")
 
         return all_created_data_nodes
 
     def create_map_branch(self, resolved_levels, geoindex):
-        # Imports (keep them here if they are circular)
         from layers import Treepolys
         from state import branchcolours
-        import pandas as pd
         import state
         import elections
 
         print(f"DEBUG: Entering create_map_branch for {self.value} (Level {self.level})")
 
-        # Guard: Ensure we have exactly one election to unpack
         assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-
-        # Clean unpack
         (c_election, elevels), = resolved_levels.items()
-        raw_electtype = elevels.get(self.level + 1)
-        parenttype = self.type
 
+        raw_electtype = elevels.get(self.level + 1)
         if not raw_electtype:
             print(f"DEBUG: No child level found for level {self.level + 1}. Exiting.")
-            return None
+            return []
 
-        # RESOLVE ALL POSSIBLE CHILD LAYERS (Handle single strings or "ward/division")
-        target_layers = []
+        # Handle single strings or "ward/division"
         if "/" in str(raw_electtype):
-            target_layers = [t.strip() for t in raw_electtype.split("/")]
+            target_layers = [t.strip() for t in str(raw_electtype).split("/")]
             print(f"🔄 Multi-branch child target detected: {target_layers}")
         else:
-            target_layers = [raw_electtype]
+            target_layers = [str(raw_electtype)]
 
-        # Build the self-path key to find our entry in the geoindex
-        # e.g., "UNITED_KINGDOM/ENGLAND/SURREY/DORKING_AND_HORLEY"
-        my_path_key = self.get_absolute_path_string()
-
+        # ── Locate this node in the geoindex (typed key, same as node_path) ──
+        my_path_key = self.node_path
         geo_node = geoindex.get(my_path_key)
+        if not geo_node:
+            # fall back to the older helper in case the two ever differ
+            alt_key = self.get_absolute_path_string()
+            geo_node = geoindex.get(alt_key)
+            if geo_node:
+                my_path_key = alt_key
         if not geo_node:
             print(f"⚠️ Warning: Path {my_path_key} not found in geoindex. Falling back to empty children.")
             return []
 
-        # Get the precise pre-calculated list of child paths from our index
         allowed_child_paths = geo_node.get("children", [])
 
         CE = elections.CurrentElection.load(c_election)
         gotv_pct = CE.get('GOTV', 0)
         all_created_children = []
-# 🔄 LOOP OVER EVERY TARGET LAYER (e.g., 'constituency')
+
+        # Existing children by (type, value): keeps wards and divisions apart and
+        # stops repeat calls from adding the same children again.
+        existing = {(str(c.type).lower(), c.value) for c in self.children}
+
         for electtype in target_layers:
             ChildPolylayer = Treepolys.get(electtype)
-
             if ChildPolylayer is None or ChildPolylayer.empty:
                 print(f"⚠️ Spatial table '{electtype}' is empty. Skipping.")
                 continue
 
-            # 🎯 DIRECT FID EXTRACTION: Fetch the unique FIDs explicitly stored in geoindex
-            valid_child_fids = set()
+            # TYPE_SEGMENT is the same mapping node_path uses ('ward' -> 'WARDS', ...)
+            seg = TYPE_SEGMENT.get(str(electtype).lower())   # None for untyped layers
+
+            # FID -> geoindex path, restricted to this layer's type segment.
+            # FIDs are only unique within a layer, so don't pool across layers.
+            fid_to_path = {}
             for path in allowed_child_paths:
+                if seg and f"/{seg}/" not in path:
+                    continue                                  # belongs to the other layer
                 node = geoindex.get(path)
                 if node and node.get("fid") is not None:
-                    valid_child_fids.add(node["fid"])
+                    fid_to_path[node["fid"]] = path
 
-            print(f"🎯 Target FIDs expected from geoindex: {valid_child_fids}")
+            valid_child_fids = set(fid_to_path)
+            print(f"🎯 [{electtype}] FIDs expected from geoindex: {len(valid_child_fids)}")
 
-            # Direct, vectorized filtering on the integer column — no string manipulation required
             selected_children = ChildPolylayer[ChildPolylayer['FID'].isin(valid_child_fids)]
+            print(f"📦 [{electtype}] Found {len(selected_children)} / {len(valid_child_fids)} shapefile matches via FID.")
 
-            print(f"📦 Found {len(selected_children)} / {len(valid_child_fids)} precise shapefile matches via FID alignment.")
-
-            fam_nodes = self.childrenoftype(electtype)
-            fam_values = {x.node_path for x in fam_nodes}
-
-            k = 0
-            j = 0
+            added = 0
+            skipped = 0
 
             for _, limb in selected_children.iterrows():
-                # 1. Use the pre-baked path directly from the GeoDataFrame properties
-                child_path_key = limb.get('_parent_path')
-                if child_path_key:
-                    child_path_key = f"{child_path_key}/{limb['NAME']}"
-                else:
-                    # Fallback safety if property is missing
-                    newname = state.normalname(limb['NAME'])
-                    child_path_key = f"{my_path_key}/{newname}"
-
                 newname = state.normalname(limb['NAME'])
+                key = (str(electtype).lower(), newname)
 
-                # Ensure uniqueness within this specific sub-layer type block
-                if child_path_key in fam_values:
-                    j += 1
+                if key in existing:
+                    skipped += 1
                     continue
 
-                baked_roid = geoindex.get(child_path_key, {}).get("roid")
+                # Take the path from the index itself, so the roid lookup uses the real key
+                child_path_key = fid_to_path.get(limb['FID']) or f"{my_path_key}/{newname}"
 
+                baked_roid = geoindex.get(child_path_key, {}).get("roid")
                 if baked_roid:
                     here = tuple(baked_roid)
                 else:
                     centroid_point = limb.geometry.representative_point()
                     here = (centroid_point.y, centroid_point.x)
 
+                egg = None
                 try:
-                    # Create the TreeNode stamped explicitly with this unique layer type
                     egg = TreeNode(
                         value=newname,
                         fid=limb.FID,
                         roid=here,
                         origin="ONS_MAPS",
-                        node_type=electtype
+                        node_type=electtype,
                     )
-
-                    # Attach node structurally to parent
                     egg = self.add_Tchild(child_node=egg, etype=electtype, elect=c_election)
 
-                    # ⚠️ FIX HERE: Pass the specific feature geometry/row instead of an empty DataFrame
-                    # Assuming your bounding box function accepts a GeoSeries, geometry, or feature row:
                     egg.bbox, egg.latlongroid = egg.get_bounding_box(electtype, limb.geometry)
 
-                    # Set branch color based on absolute index
-                    color_idx = (len(all_created_children) + k) % len(branchcolours)
-                    egg.defcol = branchcolours[color_idx]
+                    egg.defcol = branchcolours[len(all_created_children) % len(branchcolours)]
                     egg.updateParty()
                     egg.updateCandidates()
                     egg.updateTurnout()
                     egg.updateElectorate()
                     egg.updateGOTV(gotv_pct)
 
-                    fam_nodes.append(egg)
                     all_created_children.append(egg)
-                    fam_values.add(child_path_key)
-                    k += 1
+                    existing.add(key)
+                    added += 1
 
                 except Exception as e:
-                    print(f"❌ ERROR during node update for {newname} ({electtype}): {str(e)}")
-                    self.remove_child(egg)
+                    print(f"❌ ERROR during node update for {newname} ({electtype}): {e}")
+                    if egg is not None:
+                        try:
+                            self.remove_child(egg)
+                        except Exception:
+                            pass
                     raise
 
-            print(f"✅ Layer '{electtype}': Added {k}, skipped duplicate {j}. Total branch size: {len(fam_nodes)}")
+            print(f"✅ Layer '{electtype}': added {added}, skipped {skipped} existing. "
+                  f"Children now: {len(self.children)}")
 
+        return all_created_children
 
 
     def create_node_map(self,CElection, geo_index, resolved_levels, static=False):
@@ -3695,8 +3666,8 @@ class TreeNode:
 
     def path_intersect(self, path, elevels):
         # start at the leaf of path 1 and test membership of path 2
-        first = stepify(self.dir+"/"+self.mapfile(elevels))
-        second = stepify(path)
+        first = stepify_typed(self.dir+"/"+self.mapfile(elevels))
+        second = stepify_typed(path)
         print("intersecting paths ",self.dir+"/"+self.mapfile(elevels), path)
         d1 = {element: index for index, element in enumerate(first)}
         d2 = {element: index for index, element in enumerate(second)}
