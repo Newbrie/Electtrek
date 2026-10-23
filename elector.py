@@ -335,8 +335,14 @@ class ElectorManager:
 
 
     def elector_for_path(self, resolved_levels, raw_path):
-        _GROUP_TO_SUBLEVEL = {"WARDS": "ward", "DIVS": "division"}
-
+        # module level, shared by node_path, stepify_typed, untyped, ping_node, elector_for_path
+        GROUP_TO_SUBLEVEL = {
+            "WARDS": "ward",
+            "DIVS":  "division",
+            "WALKS": "walk",
+            "PDS":   "polling_district",
+        }
+        TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
             (c_election, elevels), = resolved_levels.items()
@@ -351,7 +357,7 @@ class ElectorManager:
             segments = []          # (value, type_hint) per real node; index == level
             hint = None
             for part in paths.stepify_typed(raw_path):
-                grp = _GROUP_TO_SUBLEVEL.get(part.upper())
+                grp = GROUP_TO_SUBLEVEL.get(part.upper())
                 if grp:
                     hint = grp
                     continue
