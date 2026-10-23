@@ -99,7 +99,6 @@ window.pathifyTyped = pathifyTyped;
 // headers but have no map of their own, so they never get an "All" map button.
 // WARDS / DIVS / WALKS / PDS are grouping segments in the typed area tree:
 // they are shown as headers but have no map of their own.
-const GROUP_SEGMENTS = new Set(['WARDS', 'DIVS', 'WALKS', 'PDS']);
 const TYPE_GROUPS = GROUP_SEGMENTS;
 window.renderTreeSelector = function (tree, options = {}) {
     const {
