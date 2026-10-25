@@ -109,8 +109,6 @@
         return;
     }
 
-    const iframeWin = document.getElementById("iframe1")?.contentWindow;
-
     // 1. UI: Highlight active tab
     document.querySelectorAll(".election-tab").forEach(tab =>
         tab.classList.remove("active")
@@ -119,53 +117,69 @@
         .find(tab => tab.dataset.election === electionName);
     if (clickedTab) clickedTab.classList.add("active");
 
-    // 2. Backend: Set the election session
-    const res = await fetch("/set-election", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ election: electionName })
-    });
-    const data = await res.json();
-    const iframeEl = document.getElementById("iframe1");
-    if (data.success) {
-        // 🎯 1. Capture backend-driven state instantly using the exact key name
-        if (data.mapfile) window.mapfile = data.mapfile;
-        if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
+    try {
+        // 2. Backend: Set the election session
+        const res = await fetch("/set-election", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ election: electionName })
+        });
 
-        console.log("📍 [switchElection] Server synchronized path:", window.currentNodePath);
-        console.log("🗺️ [switchElection] Server synchronized mapfile:", window.mapfile);
+        if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
 
-        // 2. 🗺️ Load the correct map into the iframe
-        if (iframeEl && data.mapfile) {
-            iframeEl.src = `/thru/${data.mapfile}`;
-        }
+        const data = await res.json();
+        const iframeEl = document.getElementById("iframe1");
 
-        // 3. Inform iframe if it's already active
-        if (iframeWin && typeof iframeWin.iframeSwitchElection === "function") {
-            iframeWin.iframeSwitchElection(electionName, data);
-        } else {
-            iframeWin?.postMessage({
-                type: "iframeSwitchElection",
-                electionName: electionName,
-                data: data
-            }, "*");
-        }
+        if (data.success) {
+            // Capture backend-driven state
+            if (data.mapfile) window.mapfile = data.mapfile;
+            if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
 
-        // 4. 🎯 Refresh sidebar accordion using the new server-backed scope
-        setTimeout(() => {
-            const targetTree = window.areaTree || iframeWin?.window?.areaTree || data.options?.areas;
-            if (typeof initAccordionFromOptions === "function" && targetTree) {
-                initAccordionFromOptions(targetTree);
+            // Update local tree reference
+            const newTree = data.options?.areas;
+            if (newTree && Object.keys(newTree).length) {
+                window.areaTree = newTree;
+            } else {
+                console.warn("set-election returned no areas for", electionName, Object.keys(data.options || {}));
             }
-        }, 400);
 
-        // 5. Refresh Parent Data Tables
-        if (typeof fetchTableData === "function") {
-            await fetchTableData("nodelist_xref");
+            // Refresh the sidebar accordion now that mapfile and areaTree are both current
+            if (window.areaTree && typeof window.initAccordionFromOptions === "function") {
+                window.initAccordionFromOptions(window.areaTree);
+            }
+
+            // Load the correct map into the iframe
+            if (iframeEl && data.mapfile) {
+                const targetUrl = `/thru/${data.mapfile}`;
+
+                // Only reload if the URL has actually changed to prevent unnecessary reloads
+                if (!iframeEl.src.endsWith(targetUrl)) {
+                    iframeEl.src = targetUrl;
+                } else {
+                    // If src didn't change, notify the existing iframe context via postMessage
+                    const iframeWin = iframeEl.contentWindow;
+                    if (iframeWin) {
+                        iframeWin.postMessage({
+                            type: "iframeSwitchElection",
+                            electionName: electionName,
+                            data: data
+                        }, "*");
+                    }
+                }
+            }
+
+            // Refresh table data if configured
+            if (typeof fetchTableData === "function") {
+                await fetchTableData("nodelist_xref");
+            }
+        } else {
+            console.error("❌ Failed to switch election on backend:", data.message || "Unknown error");
         }
+    } catch (error) {
+        console.error("❌ Error during switchElection fetch:", error);
     }
-  }
+};
 
   const logList = document.querySelector("#logwin .flashes");
 

@@ -521,7 +521,7 @@ def prodwalks(gapnode, filename, prodstats, TreeBounds, enviro, flayers):
         c = 0
         prodstats['clusters'] = int(prodstats['clusters']) + clusters
 
-        walksdir = PD_node.dir+"/WALKS/"
+        walksdir = PD_node.dir
 
         PD_node.create_data_branch('walk',clusters)
 

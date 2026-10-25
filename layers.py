@@ -1614,13 +1614,7 @@ def ensure_treepolys_with_index(
     # ------------------------------------------------------------------
     # Dynamic level deduction (target level + 1, driven by sourcepath)
     # ------------------------------------------------------------------
-    GROUP_TO_SUBLEVEL = {
-        "WARDS": "ward",
-        "DIVS":  "division",
-        "WALKS": "walk",
-        "PDS":   "polling_district",
-    }
-    TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
+    TYPE_GROUPS = {"WARDS", "DIVS"}      # module level, defined once
 
     # ... inside ensure_treepolys_with_index:
     dynamic_steps = [ROOT]

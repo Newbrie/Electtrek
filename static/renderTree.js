@@ -416,7 +416,7 @@ function syncAreaSelect() {
   sel.value = code;
 }
 
-window.initAccordionFromOptions = (tree, config = {}) => {
+window.initAccordionFromOptions = function(tree, config = {}) {
     const containerId  = config.containerId  || 'children-list';
     const accordionId  = config.accordionId  || 'election-accordion';
     const emptyMessage = config.emptyMessage || 'No sub-divisions available';
@@ -425,35 +425,31 @@ window.initAccordionFromOptions = (tree, config = {}) => {
     const renderEmpty = (msg = emptyMessage) =>
         window.renderTreeSelector?.({}, { containerId, accordionId, emptyMessage: msg, createButton });
 
+    console.log('initAccordion called:', Object.keys(tree || {}), 'mapfile=', window.mapfile,
+                JSON.stringify(tree)?.slice(0, 200));
+
     if (!tree || typeof tree !== 'object' || Object.keys(tree).length === 0) {
         renderEmpty();
         return;
     }
 
+    const topKeys = Object.keys(tree);
     const mapfile = window.mapfile;
-    if (!mapfile || typeof stepifyTyped !== 'function') {
-        console.error("❌ initAccordionFromOptions: window.mapfile is empty, so paths can't be built.");
-        renderEmpty('Current area unknown');
-        return;
-    }
+    let fullSteps = [];
 
-    const fullSteps = stepifyTyped(mapfile);
-    if (fullSteps.length === 0) {
-        console.error("❌ window.mapfile gave no path steps:", mapfile);
-        renderEmpty('Current area unknown');
-        return;
+    if (mapfile && typeof stepifyTyped === 'function') {
+        fullSteps = stepifyTyped(mapfile);
     }
 
     // The tree's own top-level key(s) define its root; find where that sits in mapfile
-    const topKeys = Object.keys(tree);
     const rootIdx = fullSteps.findIndex(s =>
         topKeys.some(k => k.toUpperCase() === s.toUpperCase()));
 
     let currentTree = tree;
-    let rootPath;
+    let rootPath = [];
 
     if (rootIdx >= 0) {
-        // Tree is wrapped at an ancestor (e.g. {SURREY: {...}}): descend its root once
+        // Tree is wrapped at an ancestor: descend its root once
         rootPath = fullSteps.slice(0, rootIdx);
         const rootKey = topKeys.find(k => k.toUpperCase() === fullSteps[rootIdx].toUpperCase());
         if (tree[rootKey] && typeof tree[rootKey] === 'object') {
@@ -461,17 +457,28 @@ window.initAccordionFromOptions = (tree, config = {}) => {
             rootPath.push(rootKey);
         }
     } else {
-        // Tree is the current node's children: mapfile is the full prefix
-        rootPath = [...fullSteps];
-        console.log('Tree has no key on mapfile path; treating as children of', rootPath.join('/'));
+        // 🎯 FALLBACK: Mismatch detected (e.g., switched elections to a new county/region)
+        console.warn('⚠️ Tree root does not match mapfile. Falling back to new tree root:', topKeys);
+
+        if (topKeys.length > 0) {
+            const fallbackKey = topKeys[0];
+            currentTree = (tree[fallbackKey] && typeof tree[fallbackKey] === 'object') ? tree[fallbackKey] : tree;
+            rootPath = [fallbackKey];
+
+            // Optionally update window.mapfile or currentNodePath to prevent lingering mismatches
+            window.currentNodePath = fallbackKey;
+        } else {
+            renderEmpty('Loading areas…');
+            return;
+        }
     }
 
     console.log('mapfile:', mapfile, '→ rootPath:', rootPath,
                 '| top-level items:', Object.keys(currentTree));
 
     const displayElement = document.getElementById('display-path');
-    if (displayElement) {
-        displayElement.innerText = fullSteps[fullSteps.length - 1].replace(/_/g, ' ');
+    if (displayElement && rootPath.length > 0) {
+        displayElement.innerText = rootPath[rootPath.length - 1].replace(/_/g, ' ');
     }
 
     if (typeof window.renderTreeSelector !== "function") {

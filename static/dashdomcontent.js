@@ -47,38 +47,71 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   window.messages?.forEach(msg => addMessageToLog(msg));
 
-  // ----------------------------
-    // iframe postMessage handling
-    // ----------------------------
-    // If you use a custom bindEvent wrapper or standard window.addEventListener:
-    const handleIframeMessage = (e) => {
-        const data = e.data;
-        if (!data) return;
+// ----------------------------
+// iframe postMessage handling
+// ----------------------------
+let areaTreeRequest = 0;   // guards against out-of-order responses
 
-        addMessageToLog(data.type || String(data));
+async function refreshAreaTree() {
+    const myRequest = ++areaTreeRequest;
+    try {
+        const r = await fetch('/get-constants', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!r.ok) throw new Error(`get-constants ${r.status}`);
+        const payload = await r.json();
 
-        // 🎯 Catch node/map changes from the iframe and update parent state instantly
-        if (data.type === "updateNodePath" || data.type === "iframeSwitchElection" || data.mapfile || data.currentNodePath) {
-            if (data.currentNodePath) {
-                window.currentNodePath = data.currentNodePath;
-            }
-            if (data.mapfile) {
-                window.mapfile = data.mapfile;
-            }
+        // A newer navigation has started since this request: drop this result
+        if (myRequest !== areaTreeRequest) return;
 
-            // Force parent accordion to re-render for the newly selected area hierarchy
-            if (typeof initAccordionFromOptions === "function" && window.areaTree) {
-                initAccordionFromOptions(window.areaTree);
-                console.log("🌳 [Parent] Accordion refreshed for path:", window.currentNodePath);
-            }
+        const tree = payload.options?.areas;      // set_election logs options.get('areas')
+        if (!tree) {
+            console.warn('refreshAreaTree: no options.areas in response', Object.keys(payload.options || {}));
+            return;
         }
-    };
 
-    if (typeof bindEvent === "function") {
-        bindEvent(window, "message", handleIframeMessage);
-    } else {
-        window.addEventListener("message", handleIframeMessage);
+        window.areaTree = tree;
+        if (typeof window.initAccordionFromOptions === 'function') {
+            window.initAccordionFromOptions(tree);
+            console.log('🌳 [Parent] Accordion refreshed for path:', window.currentNodePath);
+        }
+    } catch (err) {
+        console.error('refreshAreaTree failed:', err);
     }
+}
+window.refreshAreaTree = refreshAreaTree;
+
+const handleIframeMessage = (e) => {
+    if (e.origin !== window.location.origin) return;   // ignore foreign frames
+    const data = e.data;
+    if (!data || typeof data !== 'object') {
+        if (data) addMessageToLog(String(data));
+        return;
+    }
+
+    addMessageToLog(data.type || JSON.stringify(data).slice(0, 80));
+
+    const pathChanged =
+        data.type === 'updateNodePath' ||
+        data.type === 'iframeSwitchElection' ||
+        data.type === 'node-changed' ||
+        data.mapfile || data.currentNodePath;
+
+    if (!pathChanged) return;
+
+    if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
+    if (data.mapfile)         window.mapfile = data.mapfile;
+
+    // The tree is depth-limited and election/area specific, so fetch it again
+    // rather than reusing the one injected at page load.
+    refreshAreaTree();
+};
+
+if (typeof bindEvent === 'function') {
+    bindEvent(window, 'message', handleIframeMessage);
+} else {
+    window.addEventListener('message', handleIframeMessage);
+}
 
   /* ---------------------------------------------------------
    * ENSURE TABLE REFRESH ON PAGE LOAD

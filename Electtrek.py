@@ -2644,8 +2644,15 @@ def get_constants():
     print(f"__get constants for election: {current_election}")
     if not current_election:
         return jsonify({'error': 'Invalid election'}), 400
+    if current_node is None:
+        return jsonify({'error': 'Current Node is None'}), 400
 
+    logger.info("get_constants node=%s level=%s children=%d",
+                current_node.node_path, current_node.level, len(current_node.children))
     options = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
+    tree = options.get("areaa")     # use whichever key holds it
+    logger.info("get_constants areaTree keys=%s", list(tree or {})[:5])
+
     constants = CElection
 
     return jsonify({

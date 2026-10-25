@@ -1072,10 +1072,6 @@ class TreeNode:
             return f"{self.parent.dir}/WARDS/{self.value}"
         elif self.type == "division":
             return f"{self.parent.dir}/DIVS/{self.value}"
-        elif self.type == "polling_district":
-            return f"{self.parent.dir}/PDS/{self.value}"
-        elif self.type == "walk":
-            return f"{self.parent.dir}/WALKS/{self.value}"
         else:
             return f"{self.parent.dir}/{self.value}"
 
@@ -1438,14 +1434,7 @@ class TreeNode:
         target_path = node.node_path  # Track target path sequence outside loop safely
         next_level = node.level
 
-        GROUP_TO_SUBLEVEL = {
-            "WARDS": "ward",
-            "DIVS":  "division",
-            "WALKS": "walk",
-            "PDS":   "polling_district",
-        }
-        TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
-
+        TYPE_GROUPS = {"WARDS", "DIVS"}
 
         for idx, part in enumerate(down_path):
             current_parts.append(part)
