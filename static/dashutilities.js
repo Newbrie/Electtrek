@@ -420,14 +420,26 @@ function syncStreamsSelectWithTabs() {
   // Iframe & Toggle
   // ----------------------------
   window.changeIframeSrc = function(url) {
-    const logWindow = document.getElementById("logwin");
-    const li = document.createElement("li");
-    li.textContent = `Retrieving area ${url}`;
-    logWindow.appendChild(li);
-    logWindow.scrollTop = logWindow.scrollHeight;
+    if (!url) return;
 
-    iframe.src = url;
-  }
+    const logWindow = document.getElementById("logwin");
+    if (logWindow) {
+        const li = document.createElement("li");
+        li.textContent = `Retrieving area ${url}`;
+        logWindow.appendChild(li);
+        logWindow.scrollTop = logWindow.scrollHeight;
+    }
+
+    // 🎯 FIX: Ensure url starts with a leading slash '/' so it resolves from the domain root
+    const cleanUrl = url.startsWith('/') || url.startsWith('http') ? url : `/${url}`;
+
+    const iframe = document.getElementById("iframe1"); // ensure reference is safe
+    if (iframe) {
+        iframe.src = cleanUrl;
+    } else if (typeof iframe !== 'undefined' && iframe) {
+        iframe.src = cleanUrl;
+    }
+};
 
   function bindIframeButtons() {
     // Grab the iframe buttons map from window.options (passed down by Jinja or fetched)

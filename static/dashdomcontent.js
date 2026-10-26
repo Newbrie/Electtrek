@@ -92,20 +92,34 @@ const handleIframeMessage = async (e) => {
     addMessageToLog(data.type || JSON.stringify(data).slice(0, 80));
 
     const pathChanged =
-        data.type === 'updateNodePath' ||
+        data.type === 'iframeHydrationPayload' ||
         data.type === 'iframeSwitchElection' ||
         data.type === 'node-changed' ||
         data.mapfile || data.currentNodePath;
 
     if (!pathChanged) return;
 
+    // 🎯 1. Update active path and mapfile globals
     if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
     if (data.mapfile)         window.mapfile = data.mapfile;
 
-    // 🎯 1. Synchronize server-side Flask session with the iframe's new path
-    await fetchBackendURL()
+    // 🎯 2. If payload was pushed from iframe, hydrate parent globals directly (NO double fetch!)
+    if (data.type === 'iframeHydrationPayload') {
+        window.current_election = data.current_election || window.current_election;
+        window.options          = data.options || window.options || {};
+        window.latestConstants  = data.constants || window.constants;
 
-    // 🎯 2. Re-fetch the depth-limited tree for the new path/election context
+        window.task_tags        = window.options.task_tags || [];
+        window.resources        = window.options.resources || [];
+        window.places           = window.options.places || [];
+        window.areas            = window.options.areas || {};
+
+        if (window.task_tags.length > 0) {
+            window.taskTree = window.task_tags;
+        }
+    }
+
+    // 🎯 3. Re-fetch the depth-limited tree for the new path/election context
     if (typeof refreshAreaTree === 'function') {
         refreshAreaTree();
     }
