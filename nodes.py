@@ -224,10 +224,23 @@ def parse_slot_key(slot_key):
         print(f"❌ [PURE PARSER] Failed to parse slot key {slot_key}: {e}")
         return None
 
-def reset_nodes():
-    """Clear all registered nodes (in-place)."""
-    TREK_NODES_BY_ID.clear()
+def reset_nodes(Treep, Geo):
+    """
+    Completely purges all registered spatial nodes, index mappings,
+    and polygon stores across memory and disk for clean election switching.
+    """
+    # 1. Clear in-memory spatial indexes and lookup maps
+    if Geo is not None and hasattr(Geo, 'clear'):
+        Geo.clear()
 
+    TREK_NODES_BY_ID.clear()
+    TREK_NODES_BY_PATH.clear()
+
+    # 2. Reset the Treepolys dictionary/store
+    if isinstance(Treep, dict):
+        Treep.clear()
+
+    print("🧹 [SUCCESS] Completely reset Treepolys, Geo_index, and node registries.")
 
 def save_nodes(path):
     print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
@@ -266,7 +279,7 @@ def load_nodes(path):
         print(f"[WARN] Node file missing or empty: {path}")
         return False
 
-    reset_nodes()
+    reset_nodes(layers.Treepolys, layers.Geo_index)
 
     with open(path) as f:
         try:

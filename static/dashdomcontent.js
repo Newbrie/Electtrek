@@ -81,7 +81,7 @@ async function refreshAreaTree() {
 }
 window.refreshAreaTree = refreshAreaTree;
 
-const handleIframeMessage = (e) => {
+const handleIframeMessage = async (e) => {
     if (e.origin !== window.location.origin) return;   // ignore foreign frames
     const data = e.data;
     if (!data || typeof data !== 'object') {
@@ -102,9 +102,13 @@ const handleIframeMessage = (e) => {
     if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
     if (data.mapfile)         window.mapfile = data.mapfile;
 
-    // The tree is depth-limited and election/area specific, so fetch it again
-    // rather than reusing the one injected at page load.
-    refreshAreaTree();
+    // 🎯 1. Synchronize server-side Flask session with the iframe's new path
+    await fetchBackendURL()
+
+    // 🎯 2. Re-fetch the depth-limited tree for the new path/election context
+    if (typeof refreshAreaTree === 'function') {
+        refreshAreaTree();
+    }
 };
 
 if (typeof bindEvent === 'function') {

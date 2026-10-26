@@ -3558,44 +3558,72 @@ window.addEventListener("message", (event) => {
 
 async function fetchBackendURL() {
     try {
-        const response = await fetch('/get-backend-url');
+        // 🎯 1. Use absolute origin path to prevent nested iframe relative 404s
+        const endpoint = `${window.location.origin}/sync-node`;
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                currentNodePath: window.currentNodePath || '',
+                mapfile: window.mapfile || ''
+            })
+        });
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
 
         const data = await response.json();
-
         const backendUrl = data.backend_url;
 
-        window.latestConstants  = window.constants;
-        window.latestOptions    = window.options;
+        window.latestConstants  = data.constants || window.constants;
         window.current_election = data.current_election;
 
+        // 🎯 2. Sync back updated paths if returned by backend
+        if (data.currentNodePath) window.currentNodePath = data.currentNodePath;
+        if (data.mapfile)         window.mapfile = data.mapfile;
+
+        // 🎯 3. Merge options from response safely, protecting against empty overwrites
+        if (data.options && typeof data.options === 'object') {
+            window.options = data.options;
+            window.latestOptions = data.options;
+
+            if (data.options.areas && Object.keys(data.options.areas).length > 0) {
+                window.areaTree = data.options.areas;
+            }
+        }
+
         console.log("Backend URL:", backendUrl);
-        window.messages = data.messages;
+        window.messages = data.messages || [];
 
+        // 🎯 4. Assign extracted options directly to window properties with fallback to parent
+        window.task_tags     = window.options?.task_tags || data.options?.task_tags || (window.parent && window.parent.task_tags) || [];
+        window.resources     = window.options?.resources || data.options?.resources || (window.parent && window.parent.resources) || [];
+        window.places        = window.options?.places || data.options?.places || (window.parent && window.parent.places) || [];
+        window.areas         = window.options?.areas || data.options?.areas || (window.parent && window.parent.areas) || {};
+        window.DEVURLS       = window.options?.DEVURLS || data.options?.DEVURLS || [];
+        window.iframeButtons = data.options?.iframeButtons || data.iframeButtons || {};
 
-        const taskTags = window.options?.task_tags || [];
-        const resources = window.options?.resources || [];
-        const places = window.options?.places || [];
-        const areas = window.options?.areas || [];
-        const DEVURLS = window.options?.DEVURLS || [];
-
-        const iframeButtons = data.options?.iframeButtons || [];
-
+        // Also ensure window.taskTree stays synced if used elsewhere
+        if (window.task_tags && window.task_tags.length > 0) {
+            window.taskTree = window.task_tags;
+        }
 
         console.log("Injected task_tags:", window.task_tags);
         console.log("Injected resources:", window.resources);
         console.log("Injected places:", window.places);
         console.log("Injected areas:", window.areas);
 
-        window.API = backendUrl.replace(/\/$/, "");
+        window.API = backendUrl ? backendUrl.replace(/\/$/, "") : window.location.origin;
         console.log("Backend API:", window.API);
 
-        // Safe + correct
+        // Safe environment check
         window.isDev =
-            backendUrl.includes("127.0.0.1") ||
-            backendUrl.includes("localhost");
+            window.API.includes("127.0.0.1") ||
+            window.API.includes("localhost");
 
         if (!window.isDev) {
             const btn = document.getElementById("export-html-btn");
@@ -3607,33 +3635,41 @@ async function fetchBackendURL() {
         console.log("__isDevelopment?", window.isDev);
 
     } catch (error) {
-        console.error("Error fetching backend URL:", error);
-    }
+        console.error("Error syncing node and fetching backend URL:", error);
 
+        // 🎯 Fall back gracefully to parent frame context if network sync fails inside iframe
+        if (window.parent && window.parent !== window) {
+            console.log("⚠️ Inheriting context from parent window...");
+            window.options   = window.parent.options || window.options;
+            window.task_tags = window.parent.task_tags || window.task_tags || [];
+            window.resources = window.parent.resources || window.resources || [];
+            window.places    = window.parent.places || window.places || [];
+            window.areas     = window.parent.areas || window.areas || {};
+            window.API       = window.parent.API || window.location.origin;
+        }
+    }
 }
 
-
 // 🧱 Safe variable injection
-
-
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("🔥 Iframe DOMContentloaded — initializing calendar & modal environment");
 
-    console.log("🔀 places on DOM reload :", window.places);
-    console.log("🔀 resources on DOM reload :", window.resources);
-    console.log("🔀 task_tags on DOM reload :", window.task_tags);
-
+    console.log("🔀 MAP places on DOM reload :", window.places);
+    console.log("🔀 MAP resources on DOM reload :", window.resources);
+    console.log("🔀 MAP task_tags on DOM reload :", window.taskTree);
+    console.log("🔀 MAP currentNodePath on DOM reload :", window.currentNodePath);
+    console.log("🔀 MAP mapfile on DOM reload :", window.mapfile);
 
     // Whenever the active node/map changes inside the iframe:
     if (window.parent && window.parent !== window) {
         window.parent.postMessage({
             type: "updateNodePath",
-            currentNodePath: window.currentNodePath, // or whatever variable holds the current path inside the iframe
+            currentNodePath: window.currentNodePath,
             mapfile: window.mapfile
         }, "*");
     }
 
-    // 🛡️ Bind cleanup to Bootstrap's native hidden event (handles ESC and click-away)
+    // 🛡️ Bind cleanup to Bootstrap's native hidden event
     const modalEl = document.getElementById("slotModal");
     if (modalEl) {
         modalEl.addEventListener("hidden.bs.modal", function () {
@@ -3641,8 +3677,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Call the function to fetch the backend URL used as window.API
-    await fetchBackendURL();
+    // Call the updated fetchBackendURL function (POST to /sync-node)
+//    await fetchBackendURL();
+
 
     let selectedPlaceData = null; // Store data from the map
     let preventModalClose = false;

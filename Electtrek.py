@@ -2269,20 +2269,66 @@ def handle_exception(e):
     return jsonify(response), e.code
 
 
-@app.route('/get-backend-url', methods=['GET'])
+@app.route('/sync-node', methods=['POST'])
 @login_required
-def get_backend_url():
+def sync_node():
+    """
+    Synchronizes active mapfile and currentNodePath from the frontend iframe into the
+    Flask session, returning backend_url and current_election context settings.
+    """
+    try:
+        data = request.get_json(force=True) or {}
 
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
+        currentNodePath = data.get("currentNodePath")
+        mapfile = data.get("mapfile")
 
-    print(f"__url: {request.host_url}")
-    print(f"__election: {current_election} ")
+        # 1. Update session path state if provided
+        if currentNodePath:
+            session['currentNodePath'] = currentNodePath
+        if mapfile:
+            session['mapfile'] = mapfile
 
-    return jsonify({
-    'backend_url': request.host_url,
-    'current_election': current_election
-    })
+        # 2. Retrieve active election settings (matching get_backend_url logic)
+        current_election = CurrentElection.get_lastused()
+        CElection = CurrentElection.load(current_election)
+        rlevels = CElection.resolved_levels
+
+        # 3. 🎯 Ping/Register node directly via MapRoot (REMOVED undefined nodes.TREK_NODES_BY_PATH lookup)
+        current_node = MapRoot.ping_node(
+            rlevels,
+            layers.Geo_index,
+            currentNodePath,
+            create=False,
+            accumulate=session.get("accumulate", False)
+        )
+
+        if current_node is None or currentNodePath != current_node.node_path:
+            print(f"__Syn-Node Error: {currentNodePath} vs {current_node.node_path}")
+
+        current_node.visit_node(CElection)
+        program = ProgramContext()
+        election = ElectionContext(CElection)
+        options = resolve_ui_context(program,election, current_node)
+
+        print(f"__sync-node url: {request.host_url}")
+        print(f"__sync-node election: {current_election} | path: {currentNodePath}")
+
+        # 3. Return unified response with host URL and election details
+        return jsonify({
+            'success': True,
+            'backend_url': request.host_url,
+            'constants': CElection,
+            'options': options,
+            'current_election': current_election,
+            'currentNodePath': session.get('currentNodePath', currentNodePath),
+            'mapfile': session.get('mapfile', mapfile)
+        })
+
+    except Exception as e:
+        print("____Route/sync-node/exception:", repr(e))
+        import traceback
+        traceback.print_exc()
+        return jsonify(success=False, error=str(e)), 500
 
 @app.route('/add_tag', methods=['POST'])
 @login_required
@@ -2474,21 +2520,21 @@ def election_report():
 @login_required
 def set_election():
 
-    from layers import ExtendedFeatureGroup
-    from layers import ensure_treepolys_with_index
-    from flask import session
+    from layers import ExtendedFeatureGroup, ensure_treepolys_with_index
+    from flask import session, request, jsonify, flash
     from elections import CurrentElection
-
+    # Ensure MapRoot, TREK_NODES_BY_PATH, and persist are imported properly:
+    from nodes import MapRoot, TREK_NODES_BY_PATH, persist, reset_nodes
 
     try:
-        print("____Route/set-election/top ")
+        print("____Route/set-election/top")
         session.pop("accumulated_nodes", None)
         session["accumulate"] = False
-#        clear_treepolys()  # 🔥 FULL RESET
-        restore_from_persist(layers.Treepolys, layers.Geo_index)
-        data = request.get_json(force=True)  # <-- ensure JSON parsing
-        print(f"____Route/set-election/data {data} ")
 
+        # 1. 🔥 Reset stale spatial nodes
+        reset_nodes(layers.Treepolys, layers.Geo_index)
+
+        data = request.get_json(force=True)
         if not data or "election" not in data:
             return jsonify(success=False, error="No election provided"), 400
 
@@ -2502,71 +2548,63 @@ def set_election():
         plevels = CElection.parent_levels
 
         lastfilepath = CElection['mapfiles'][-1]
-        print(f"____Route/set-election- breadcrumb: {lastfilepath}")
-
         steps = stepify_typed(lastfilepath)
         target_path = "/".join(steps)
 
-        logger.info("[SET ELECTION STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
-
-        # 2. Direct O(1) node lookup using the clean node path
-        current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
-        # make sure we have the map boundaries for the new election:
+        # 2. Build map boundaries & Geo_index
         lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
             sourcepath=lastfilepath,
             here=None,
             resolved_levels=rlevels,
-            parent_levels= plevels
+            parent_levels=plevels
         )
-        # At the start of a different election:
-        print(f"____Route/set-election- path: {lastfilepath},Loaded election: {current_election} CE data: {CElection}")
 
-        # make sure we have the nodes for the last path traversed in the new election:
-
-        current_node = MapRoot.ping_node(rlevels,layers.Geo_index,lastfilepath, create=True, accumulate=session.get("accumulate", False)) # go to the first node
-
-        print(f"____Route/set-election- last node: {current_node.value},Loaded election: {current_election}")
-        CElection['previousParty'] = current_node.party
+        # 3. 🎯 Ping/Register node directly via MapRoot (REMOVED undefined nodes.TREK_NODES_BY_PATH lookup)
+        current_node = MapRoot.ping_node(
+            rlevels,
+            layers.Geo_index,
+            lastfilepath,
+            create=True,
+            accumulate=session.get("accumulate", False)
+        )
 
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
 
-        # make sure we have the mapfile for the last path traversed in the new election:
+        CElection['previousParty'] = getattr(current_node, 'party', '')
 
-        created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, lastfilepath, static=False)
+        # 4. Generate endpoint HTML map
+        created, totalleaf = current_node.endpoint_created(
+            CElection, layers.Geo_index, rlevels, lastfilepath, static=False
+        )
 
-        options = resolve_ui_context(ProgramContext(),ElectionContext(CElection), current_node)
-        constants = CElection
-        print(f"____Route/set-election- post resolve {current_node.value} options: {options.get('areas')} ")
+        # 5. Resolve options tree
+        options = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
 
-        if not current_node.visit_node(CElection):
-            flash("That node is outside of the election Territory")
-            print("That node is outside of the election Territory:")
+        # 6. Save clean spatial nodes for this election
         persist(layers.Treepolys, layers.Geo_index)
-# Convert your custom object into a clean dictionary for JSON parsing
-        # Use whatever serialization method your class provides:
-        if hasattr(CElection, 'to_dict'):
-            constants_dict = CElection.to_dict()
-        elif hasattr(CElection, 'data'):
-            constants_dict = CElection.data
-        else:
-            # Fallback wrapper if it acts strictly like a dictionary sub-class
-            constants_dict = dict(CElection)
 
+        constants_dict = CElection.to_dict() if hasattr(CElection, 'to_dict') else dict(CElection)
+        def tree_depth(t):
+            return 0 if not isinstance(t, dict) or not t else 1 + max(tree_depth(v) for v in t.values())
+
+        logger.info("set_election node=%s level=%s children=%d areas keys=%s depth=%s",
+                    current_node.node_path, current_node.level, len(current_node.children),
+                    list((options.get('areas') or {}))[:3], tree_depth(options.get('areas')))
         return jsonify({
             'success': True,
             'constants': constants_dict,
             'options': options,
             'current_election': current_election,
-            'mapfile': lastfilepath,           # 🗺️ Send computed mapfile to frontend
-            'currentNodePath': target_path            # 📍 Send computed node path to frontend
+            'mapfile': lastfilepath,
+            'currentNodePath': target_path
         })
+
     except Exception as e:
-        print("____Route/set-election/exception:", repr(e))  # <-- Print representation clearly
+        print("____Route/set-election/exception:", repr(e))
         import traceback
         traceback.print_exc()
         return jsonify(success=False, error=str(e)), 500
-
 
 # GET /current-election?election=...
 @app.route('/current-election', methods=['GET'])
@@ -3219,6 +3257,7 @@ def downbut(path):
     logger.info("=== [DOWNBUT START] Incoming path: '%s' ===", path)
     print("____Route/downbut:", path)
 
+
     restore_from_persist(layers.Treepolys, layers.Geo_index)
 
     current_election = CurrentElection.get_lastused()
@@ -3249,6 +3288,7 @@ def downbut(path):
     logger.info("[DOWNBUT STEP 3] SUCCESS! Resolved Node NID: '%s' (value: '%s')", target_nid, getattr(current_node, "value", None))
 
     previous_node = current_node
+
     areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
 
     plevels = CElection.parent_levels
