@@ -52,34 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 // ----------------------------
 let areaTreeRequest = 0;   // guards against out-of-order responses
 
-async function refreshAreaTree() {
-    const myRequest = ++areaTreeRequest;
-    try {
-        const r = await fetch('/get-constants', {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        if (!r.ok) throw new Error(`get-constants ${r.status}`);
-        const payload = await r.json();
 
-        // A newer navigation has started since this request: drop this result
-        if (myRequest !== areaTreeRequest) return;
-
-        const tree = payload.options?.areas;      // set_election logs options.get('areas')
-        if (!tree) {
-            console.warn('refreshAreaTree: no options.areas in response', Object.keys(payload.options || {}));
-            return;
-        }
-
-        window.areaTree = tree;
-        if (typeof window.initAccordionFromOptions === 'function') {
-            window.initAccordionFromOptions(tree);
-            console.log('🌳 [Parent] Accordion refreshed for path:', window.currentNodePath);
-        }
-    } catch (err) {
-        console.error('refreshAreaTree failed:', err);
-    }
-}
-window.refreshAreaTree = refreshAreaTree;
 
 const handleIframeMessage = async (e) => {
     if (e.origin !== window.location.origin) return;   // ignore foreign frames
@@ -104,25 +77,27 @@ const handleIframeMessage = async (e) => {
     if (data.mapfile)         window.mapfile = data.mapfile;
 
     // 🎯 2. If payload was pushed from iframe, hydrate parent globals directly (NO double fetch!)
-    if (data.type === 'iframeHydrationPayload') {
-        window.current_election = data.current_election || window.current_election;
-        window.options          = data.options || window.options || {};
-        window.latestConstants  = data.constants || window.constants;
+    // 🎯 2. If payload was pushed from iframe, hydrate parent globals directly (NO double fetch!)
+      if (data.type === 'iframeHydrationPayload') {
+          window.current_election = data.current_election || window.current_election;
+          window.options           = data.options || window.options || {};
+          window.latestConstants   = data.constants || window.constants;
 
-        window.task_tags        = window.options.task_tags || [];
-        window.resources        = window.options.resources || [];
-        window.places           = window.options.places || [];
-        window.areas            = window.options.areas || {};
+          window.task_tags        = window.options.task_tags || [];
+          window.resources        = window.options.resources || [];
+          window.places           = window.options.places || [];
+          window.areas            = window.options.areas || {};
 
-        if (window.task_tags.length > 0) {
-            window.taskTree = window.task_tags;
-        }
-    }
+          // 🎯 Set areaTree directly from options.areas payload before refreshing DOM
+          if (window.options.areas) {
+              window.areaTree = window.options.areas;
+          }
 
-    // 🎯 3. Re-fetch the depth-limited tree for the new path/election context
-    if (typeof refreshAreaTree === 'function') {
-        refreshAreaTree();
-    }
+          if (window.task_tags.length > 0) {
+              window.taskTree = window.task_tags;
+          }
+      }
+
 };
 
 if (typeof bindEvent === 'function') {

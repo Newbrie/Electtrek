@@ -3557,15 +3557,23 @@ window.addEventListener("message", (event) => {
 
 
 
-
+// Inside map.js (Iframe)
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("🔥 [Iframe] Initializing and syncing with backend...");
 
+    let syncedData = null;
+
     try {
-        const endpoint = `${window.location.origin}/sync-node`;
+        // Build absolute URL using origin or fallback to current host
+        const origin = (window.location.origin && window.location.origin !== "null")
+            ? window.location.origin
+            : "";
+        const endpoint = `${origin}/sync-node`;
+
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', // 🎯 Ensures session cookies are sent from iframe!
             body: JSON.stringify({
                 currentNodePath: window.currentNodePath || '',
                 mapfile: window.mapfile || ''
@@ -3573,35 +3581,51 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        syncedData = await response.json();
 
+    } catch (err) {
+        console.warn("⚠️ [Iframe] Fetch /sync-node failed, inheriting from parent:", err);
+
+        // 🎯 FALLBACK: Inherit options directly from parent window if iframe fetch fails
+        if (window.parent && window.parent !== window && window.parent.options) {
+            syncedData = {
+                current_election: window.parent.current_election,
+                options: window.parent.options,
+                constants: window.parent.constants,
+                backend_url: window.parent.API
+            };
+        }
+    }
+
+    if (syncedData) {
         // 1. Set local iframe globals
-        window.current_election = data.current_election;
-        window.options = data.options || {};
+        window.current_election = syncedData.current_election;
+        window.options = syncedData.options || {};
         window.task_tags = window.options.task_tags || [];
         window.resources = window.options.resources || [];
         window.places = window.options.places || [];
         window.areas = window.options.areas || {};
-        window.API = data.backend_url ? data.backend_url.replace(/\/$/, "") : window.location.origin;
+        window.API = syncedData.backend_url ? syncedData.backend_url.replace(/\/$/, "") : "";
 
-        // 2. 🚀 Bubble payload up to the Parent Window
+        if (window.task_tags.length > 0) {
+            window.taskTree = window.task_tags;
+        }
+
+        // 2. 🚀 Post payload up to Parent Window
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({
                 type: "iframeHydrationPayload",
                 currentNodePath: window.currentNodePath,
                 mapfile: window.mapfile,
-                current_election: data.current_election,
-                options: data.options,
-                constants: data.constants,
-                backend_url: data.backend_url
-            }, window.location.origin);
+                current_election: syncedData.current_election,
+                options: syncedData.options,
+                constants: syncedData.constants,
+                backend_url: syncedData.backend_url
+            }, "*");
         }
-
-    } catch (err) {
-        console.error("❌ [Iframe] Failed to sync node with backend:", err);
     }
 
-    // Modal cleanup binding
+    // Bind Modal Cleanup Event
     const modalEl = document.getElementById("slotModal");
     if (modalEl) {
         modalEl.addEventListener("hidden.bs.modal", () => {

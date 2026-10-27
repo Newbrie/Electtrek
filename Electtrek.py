@@ -89,6 +89,8 @@ from shapely.ops import nearest_points, split, unary_union
 from shapely.validation import make_valid
 from geovoronoi import voronoi_regions_from_coords
 
+
+
 # Flask & Extensions
 from flask import (
     Flask, render_template, request, redirect, session, url_for,
@@ -116,7 +118,7 @@ from state import (
     update_progress, normalname, route, resolve_here_or_redirect
 )
 import layers
-from layers import MAP_LAYERS
+from layers import MAP_LAYERS, ensure_treepolys_with_index
 import nodes
 from nodes import (
     get_last_node, get_layer_table, get_trek_root, restore_from_persist,
@@ -126,6 +128,7 @@ from elections import get_available_elections, get_elections, CurrentElection, E
 from elector import electors
 from paths import stepify, stepify_typed
 import baked_data
+from baked_data import baked_manager
 
 LEVEL_INDEX = {
     "country": 0,
@@ -2297,13 +2300,13 @@ def sync_node():
         current_node = MapRoot.ping_node(
             rlevels,
             layers.Geo_index,
-            currentNodePath,
+            mapfile,
             create=False,
             accumulate=session.get("accumulate", False)
         )
 
-        if current_node is None or currentNodePath != current_node.node_path:
-            print(f"__Syn-Node Error: {currentNodePath} vs {current_node.node_path}")
+        if current_node is None or mapfile != current_node.mapfile:
+            print(f"__Syn-Node Error: {mapfile} vs {current_node.mapfile}")
 
         current_node.visit_node(CElection)
         program = ProgramContext()
@@ -2311,7 +2314,7 @@ def sync_node():
         options = resolve_ui_context(program,election, current_node)
 
         print(f"__sync-node url: {request.host_url}")
-        print(f"__sync-node election: {current_election} | path: {currentNodePath}")
+        print(f"__sync-node election: {current_election} | path: {mapfile}")
 
         # 3. Return unified response with host URL and election details
         return jsonify({
@@ -2320,8 +2323,8 @@ def sync_node():
             'constants': CElection,
             'options': options,
             'current_election': current_election,
-            'currentNodePath': session.get('currentNodePath', currentNodePath),
-            'mapfile': session.get('mapfile', mapfile)
+            'currentNodePath': currentNodePath,
+            'mapfile': mapfile
         })
 
     except Exception as e:
@@ -4540,25 +4543,9 @@ def convert_csv_to_clean_json(csv_path):
 @app.route('/firstpage', methods=['GET', 'POST'])
 @login_required
 def firstpage():
-    from elector import electors
-    from layers import ensure_treepolys_with_index
-    from elections import CurrentElection
-    from baked_data import baked_manager
-    import geopandas as gpd
-    import pandas as pd
-    from shapely.geometry import Point
-
-    # 1. Resource synchronization
-    resource_file = globals().get('RESOURCE_FILE', 'resources.csv')
-    logger.info("▶️ ROUTE/firstpage called")
-    print(f"print ROUTE/firstpage called resource file:{resource_file}")
-    try:
-        convert_csv_to_clean_json(resource_file)
-    except Exception as e:
-        logger.error(f"Failed converting resource CSV to JSON: {e}")
-
-    # 2. State & Election restore
+    # ... setup election & restore ...
     restore_from_persist(layers.Treepolys, layers.Geo_index)
+
     current_election = CurrentElection.get_lastused()
     session["current_election"] = current_election
 
@@ -4567,56 +4554,53 @@ def firstpage():
         return jsonify(success=False, error="Election not found"), 404
 
     rlevels = CElection.resolved_levels
-    assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
     (c_election, elevels), = rlevels.items()
     plevels = CElection.parent_levels
 
     breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
+    areaelectors = electors.elector_for_path(rlevels, "UNITED_KINGDOM")
 
-
-    current_node = get_last_node(CElection,layers.Geo_index,create=True)
-
-    if current_node is MapRoot:
-        current_node = MapRoot.ping_node(rlevels,layers.Geo_index,breadcrumb, create=True, accumulate=session.get("accumulate", False)) # takes to the clicked node in the territory
-
-
-
-    session["current_node_id"] = current_node.nid
-
-    program = ProgramContext()
-    election_ctx = ElectionContext(CElection)
-    OPTIONS = resolve_ui_context(program, election_ctx, current_node)
-
-    areaelectors = electors.elector_for_path(rlevels, current_node.path_at_level(3))
     lat = CElection.get('cidLat')
     lon = CElection.get('cidLong')
     here = (lat, lon) if (lat is not None and lon is not None) else None
 
-    # Determine Walk File Path
-    walk_geom_file = globals().get('WALK_GEOM_FILE', 'walk_geoms.geojson')
-
-    # Step A: Initial call to ensure_treepolys_with_index
+    # 🎯 1. BUILD SPATIAL INDEX FIRST:
+    # Ensure Geo_index is populated with spatial shapes BEFORE ping_node runs!
     filepath, layers.Geo_index = ensure_treepolys_with_index(
-        sourcepath=breadcrumb,
+        sourcepath=breadcrumb or "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html",
         here=here,
         resolved_levels=rlevels,
         parent_levels=plevels,
         areaelectors=areaelectors
     )
 
-    flash(f"ROUTE /firstpage filepath: {filepath}", "info")
-    logger.info(f"ROUTE /firstpage filepath {filepath}")
+    # 🎯 2. NOW RESOLVE AND PING NODE:
+    current_node = get_last_node(CElection, layers.Geo_index, create=True)
 
-    print(f"🧪 firstpage level {c_election} -options[areas]:{OPTIONS['areas']} current_node mapfile:{current_node.mapfile}")
+    if current_node is MapRoot:
+        # ping_node can now find spatial bounds in Geo_index and trigger create_map_branch!
+        current_node = MapRoot.ping_node(
+            rlevels,
+            layers.Geo_index,
+            breadcrumb,
+            create=True,
+            accumulate=session.get("accumulate", False)
+        )
 
-    map_obj, totalleaf = current_node.create_node_map(CElection,layers.Geo_index,rlevels, static=False)
+    session["current_node_id"] = current_node.nid
+
+    # 🎯 3. BUILD UI CONTEXT & CREATE MAP:
+    program = ProgramContext()
+    election_ctx = ElectionContext(CElection)
+    OPTIONS = resolve_ui_context(program, election_ctx, current_node)
+
+    map_obj, totalleaf = current_node.create_node_map(CElection, layers.Geo_index, rlevels, static=False)
 
     ELECTIONS = get_available_elections()
     BAKED_DATA = baked_manager.load()
 
     persist(layers.Treepolys, layers.Geo_index)
 
-# Ensure these reflect the breadcrumb/filepath you successfully resolved on startup:
     breadcrumb_path = breadcrumb if breadcrumb else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
     cleaned_steps = stepify_typed(breadcrumb_path)
     if cleaned_steps and ('-MAP' in cleaned_steps[-1] or cleaned_steps[-1].endswith('.html')):
@@ -4632,8 +4616,8 @@ def firstpage():
         options=OPTIONS,
         constants=CElection,
         baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile,          # 👈 Pass the full breadcrumb mapfile
-        current_path=current_node_path_val # 👈 Pass the clean directory path
+        mapfile=current_node.mapfile,
+        current_path=current_node_path_val
     )
 
 @app.route('/cards', methods=['POST','GET'])

@@ -91,7 +91,7 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
-        "field": "CTRY21NM", "out": "Nation_Boundaries.gpkg", "method": "filter",
+        "field": "CTRY21NM", "out": "Nation_Boundaries.gpkg", "method": "intersect",
         "options": {"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "#94A3B8", "fillOpacity": 0.12}
     },
     "county": {
@@ -606,19 +606,23 @@ def filterArea(
 
     matched = gdf.iloc[0:0]
 
+    # 🎯 FIX: If both name and roid are None, do not filter or auto-advance. Stay put!
+    if name is None and roid is None:
+        print("[filterArea] Both name and roid are None. Staying put.")
+        return None, _empty_gdf(), gdf
+
     # 1️⃣ Lookup by name
     if name is not None:
         target = normalname(name.rsplit("/", 1)[-1])
         matched = gdf[gdf["NAME"].astype(str).map(normalname) == target]
 
-    # 2️⃣ Lookup by parent_row geometry
+    # 2️⃣ Lookup by parent_row geometry (only runs if name/roid criteria are active)
     elif parent_row is not None:
         geom = extract_geometry(parent_row)
         if geom:
             matched = gdf[gdf.intersects(geom)]
         else:
-            # Fallback: if parent has no geometry (e.g. root node), accept all candidates
-            matched = gdf
+            matched = gdf.iloc[0:0]
 
     # 3️⃣ Lookup by ROID
     elif roid is not None:
@@ -630,17 +634,14 @@ def filterArea(
             )
         else:
             print(f"[filterArea] ⚠️ Invalid coordinate structure for roid: {roid}")
-            matched = gdf
-    else:
-        # Default fallback if no filters are provided at all
-        matched = gdf
+            matched = gdf.iloc[0:0]
 
     nodestep = normalname(matched["NAME"].iloc[0]) if not matched.empty else None
 
     if nodestep:
         print(f"[filterArea] Found {nodestep} ({len(matched)} feature(s)), saved to {destination}")
     else:
-        print(f"[filterArea] No matching feature found for name {name} or roid {roid}")
+        print(f"[filterArea] No matching feature found. Staying put.")
 
     return [nodestep, matched, gdf]
 
@@ -1638,6 +1639,7 @@ def ensure_treepolys_with_index(
         target_levels = list(range(0, max_processing_level + 1))
         logging.info(f"Processing levels {target_levels} (target_depth={target_depth}, typed={typed_steps})")
     else:
+        target_depth = 1
         target_levels = list(range(0, max_available_level + 1))
         logging.info(f"No specific sourcepath depth; processing all available levels: {target_levels}")
 
@@ -1689,6 +1691,7 @@ def ensure_treepolys_with_index(
             # --------------------------------------------------------
             # Parent resolution
             # --------------------------------------------------------
+
             parent_layer_key = layer.get("parent_layer")
             fan_out_to_all_parents = layer.get("fan_out_to_all_parents", False)
             logging.debug(
@@ -1697,21 +1700,13 @@ def ensure_treepolys_with_index(
             )
 
             if parent_layer_key is None:
-                # No parent layer configured at all (e.g. 'country', the root
-                # layer) -- a None parent_row is legitimate here.
+                # No parent layer configured at all (e.g. 'country', the root layer)
                 parent_rows = [None]
-            elif not fan_out_to_all_parents and parent_layer_key in selected_row_by_layer:
-                # Single-branch navigation layer (nation/county/constituency/ward):
-                # a specific sibling was selected at the parent level, so only
-                # descend through that one -- not every registered sibling.
-                parent_rows = [selected_row_by_layer[parent_layer_key]]
-                logging.debug(f"[PARENT] Narrowed to selected row for '{parent_layer_key}' (avoiding sibling fan-out).")
-            else:
-                # Either fan_out_to_all_parents is True (walk/street: genuinely
-                # want every sibling processed), or there's no selected-row
-                # narrowing available for this parent yet -- fall back to the
-                # full registered set.
-                parent_rows = active_layer_rows.get(parent_layer_key)
+
+            # 🎯 FIX: When at ROOT (or when select_name wasn't set for parent),
+            # fall back to processing all active rows of parent layer to build full children tree!
+            elif effective_sourcepath == ROOT or fan_out_to_all_parents or parent_layer_key not in selected_row_by_layer:
+                parent_rows = active_layer_rows.get(parent_layer_key, [])
                 if not parent_rows:
                     logging.error(
                         f"[PARENT] Layer '{layer_type}' requires parent layer "
@@ -1720,7 +1715,15 @@ def ensure_treepolys_with_index(
                         f"load -- skipping '{layer_type}' for this branch."
                     )
                     continue
-                logging.debug(f"[PARENT] Retrieved {len(parent_rows)} active row(s) from parent layer '{parent_layer_key}'")
+                logging.debug(f"[PARENT] Retrieved {len(parent_rows)} active row(s) from parent layer '{parent_layer_key}' (Root/Full Fan-out Mode)")
+
+            else:
+                # Single-branch navigation layer (nation/county/constituency/ward):
+                # a specific sibling was selected at the parent level, so only
+                # descend through that one -- not every registered sibling.
+                parent_rows = [selected_row_by_layer[parent_layer_key]]
+                logging.debug(f"[PARENT] Narrowed to selected row for '{parent_layer_key}' (avoiding sibling fan-out).")
+
 
             src = layer.get("src")
             field = layer.get("field")

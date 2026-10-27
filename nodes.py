@@ -26,6 +26,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 _MASTER_ROOT = None
+ROOT = "UNITED_KINGDOM"
 
 TYPE_SEGMENT = {"ward": "WARDS", "division": "DIVS"}
 TYPED_PARENT_LEVELS = {"constituency"}
@@ -155,13 +156,20 @@ def generate_map_accordions(specs: list[dict]) -> str:
 
 
 def create_root_node() -> "TreeNode":
-    return TreeNode(
-        value="UNITED_KINGDOM",
-        fid= 238,
+    root = TreeNode(
+        value=ROOT,
+        fid=238,
         roid=(51.23228, -0.57630),
         origin="DEMO",
         node_type="country"
     )
+
+    # 🎯 Register in global node registry so parent UUID exists for child nodes
+    if hasattr(root, "id"):
+        TREK_NODES_BY_ID[root.id] = root
+    TREK_NODES_BY_PATH[root.node_path] = root  # Keyed by string path as well
+
+    return root
 
 def get_trek_root() -> "TreeNode":
     """Finds the genuine absolute root by its true structural name."""
@@ -1394,6 +1402,10 @@ class TreeNode:
         print(f"  ▪️ Destination Path:  '{dest_path}'")
         print(f"  ▪️ Create Flag:        {create}")
         print("="*50)
+
+        if not get_trek_root():
+            print(f"  [0] Root is not registered:  {self.value}")
+            return self
 
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
         (c_election, elevels), = rlevels.items()
