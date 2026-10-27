@@ -87,7 +87,7 @@ MAP_LAYERS = {
     "nation": {
         "key": "nation", "mytag": "nation", "level": 1, "type": "node",
         "overlay": True, "control": True, "show": False,
-        "parent_layer": None,
+        "parent_layer": "country",
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
@@ -101,7 +101,7 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
-        "field": "CTYUA24NM", "out": "County_Boundaries.gpkg", "method": "filter",
+        "field": "CTYUA24NM", "out": "County_Boundaries.gpkg", "method": "intersect",
         "options": {"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
     },
     "constituency": {

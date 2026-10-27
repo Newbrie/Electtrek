@@ -82,7 +82,7 @@
       const el = document.getElementById(key);
       if (!el) return;
 
-      const listener = () => refreshConstantsUI();
+      const listener = () => updateConstantsUI();
       el.removeEventListener("change", listener);
       el.removeEventListener("input", listener);
 

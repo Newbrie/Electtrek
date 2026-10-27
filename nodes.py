@@ -240,6 +240,11 @@ def reset_nodes(Treep, Geo):
     # 1. Clear in-memory spatial indexes and lookup maps
     if Geo is not None and hasattr(Geo, 'clear'):
         Geo.clear()
+        Geo[ROOT] = {
+            "level": "country", "name": ROOT, "parent": None,
+            "children": [], "roid": [54.5, -2.5], "fid": 238,
+        }
+        logging.debug(f"[INDEX] Initialized ROOT node '{ROOT}' in Geo_index.")
 
     TREK_NODES_BY_ID.clear()
     TREK_NODES_BY_PATH.clear()
@@ -247,7 +252,9 @@ def reset_nodes(Treep, Geo):
     # 2. Reset the Treepolys dictionary/store
     if isinstance(Treep, dict):
         Treep.clear()
-
+    root = create_root_node()
+    TREK_NODES_BY_ID[root.nid] = root
+    TREK_NODES_BY_PATH[root.node_path] = root
     print("🧹 [SUCCESS] Completely reset Treepolys, Geo_index, and node registries.")
 
 def save_nodes(path):
@@ -1162,29 +1169,18 @@ class TreeNode:
 
 
 
-    def endpoint_created(self, CElection,geo_index,rlevels, newpath, static=False):
-        from flask import session
-        import layers
-        """
-        Creates a map node (HTML) if it doesn't already exist,
-        is stale, or if active node accumulation overrides the cache.
-        """
-        totalleaf =  0
+    def endpoint_created(self, CElection, geo_index, rlevels, newpath, static=False):
+
+
+        totalleaf = 0
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
 
-        # The clean unpack
         (c_election, elevels), = rlevels.items()
-        next_level = self.level + 1
-
-        print(f"___under {state.route()} testing endpoint:", newpath)
-        print("endpoint children:", [c.value for c in self.children])
-
         max_level = max(elevels)
 
-        if next_level > max_level:
+        # 🎯 FIX: Allow maps to be created for any level up to and including max_level (e.g. ward)
+        if self.level > max_level:
             return False, 0
-
-        atype = elevels[next_level]
 
         workdir = workdirectories.get('workdir')
         if not workdir:
@@ -1193,9 +1189,8 @@ class TreeNode:
 
         fullpath = Path(workdir) / newpath
 
-        # Determine if the map is stale
+        # Determine if the map file is missing or stale on disk
         endpoint_created = False
-
         if not fullpath.exists():
             endpoint_created = True
         elif hasattr(self, 'last_modified') and self.last_modified:
@@ -1203,17 +1198,15 @@ class TreeNode:
             if self.last_modified > file_mtime:
                 endpoint_created = True
 
-        # 🧠 THE SESSION CHECK: If we have an active accumulation layout,
-        # force the update flag to True to bypass old files on disk.
         accumulated = session.get('accumulated_nodes', [])
         if accumulated:
             print(f"🔄 [ACCUMULATION OVERRIDE] Found {len(accumulated)} target nodes in session. Forcing map refresh.")
             endpoint_created = True
 
-        if next_level <= max_level and endpoint_created:
-            map, totalleaf = self.create_node_map(CElection,geo_index,rlevels, static=static)
+        # 🎯 FIX: Check self.level <= max_level instead of next_level <= max_level
+        if self.level <= max_level and endpoint_created:
+            map, totalleaf = self.create_node_map(CElection, geo_index, rlevels, static=static)
         else:
-            # Fallback leaf-count calculation for clean exits
             totalleaf = len([c for c in self.children if c.level == max_level])
 
         return endpoint_created, totalleaf
@@ -1424,13 +1417,6 @@ class TreeNode:
         print(f"  [1] Parsed self_path:  {self_path}")
         print(f"  [1] Parsed dest_parts: {dest_parts}")
 
-        # 🎯 TARGET LEVEL 4 RULE (Ward/Division):
-        # If targeting level 4 (len == 5), extend max_level to 6 so it populates
-        # both walks (level + 1) and streets (level + 2) grandchildren data.
-
-        if len(untyped(dest_parts)) == 5:
-            max_level = max(max_level, 6)
-            print(f"  🎯 [CUSTOM RULE] Target level 4 detected (path length 5). Extended max_level to 6 for walks & streets.")
 
         # ──────────────────────────────
         # Step 2: Compute Common Ancestor and Move Up

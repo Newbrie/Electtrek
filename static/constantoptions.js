@@ -1,29 +1,7 @@
-window.updateConstantsUI = function (constants, options) {
-    if (window.isUpdatingConstants) {
-        console.warn("[UCUI:0] Skipped: already running (re-entrant call?)", new Error().stack);
-        return;
-    }
-    window.isUpdatingConstants = true;
-    console.log("[UCUI:0] START");
 
-    try {
-        // ...existing code, with these between sections:
-        console.log("[UCUI:0] globals done");
-        console.log("[UCUI:0] resources done");
-        console.log("[UCUI:0] candidate/manager done");
-        console.log("[UCUI:0] mapfiles done");
-        console.log("[UCUI:0] apply loop done");
-        console.log("[UCUI:0] END (reached bottom)");
-    } catch (err) {
-        console.error("[UCUI:0] CRASH", err);
-        throw err;
-    } finally {
-        window.isUpdatingConstants = false;
-    }
-};
 
 window.updateConstantsUI = function (constants, options) {
-
+// updating the backend equivalent in election constants
   if (window.isUpdatingConstants) {
       console.warn("[UCUI:0] Skipped: already running (re-entrant call?)", new Error().stack);
       return;
@@ -229,6 +207,7 @@ window.updateConstantsUI = function (constants, options) {
 };
 
 window.refreshConstantsUI = function(callback) {
+  // retrieve the value of backend constants to the front end (ie repeat syn-node) and then update them in the backend if they change
     console.log("📩 refreshing constants");
     const iframeWin = document.getElementById("iframe1")?.contentWindow;
 

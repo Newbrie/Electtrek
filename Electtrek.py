@@ -2291,32 +2291,43 @@ def sync_node():
         if mapfile:
             session['mapfile'] = mapfile
 
-        # 2. Retrieve active election settings (matching get_backend_url logic)
+        # 2. Retrieve active election settings
         current_election = CurrentElection.get_lastused()
         CElection = CurrentElection.load(current_election)
         rlevels = CElection.resolved_levels
 
-        # 3. 🎯 Ping/Register node directly via MapRoot (REMOVED undefined nodes.TREK_NODES_BY_PATH lookup)
-        current_node = MapRoot.ping_node(
-            rlevels,
-            layers.Geo_index,
-            mapfile,
-            create=False,
-            accumulate=session.get("accumulate", False)
-        )
+        # 3. 🎯 Ping/Register node directly via MapRoot with create=True
+        try:
+            current_node = MapRoot.ping_node(
+                rlevels,
+                layers.Geo_index,
+                mapfile,
+                create=True,
+                accumulate=session.get("accumulate", False)
+            )
+            if current_node is None:
+                logger.warning(f"⚠️ ping_node returned None for mapfile: {mapfile}")
+                return jsonify(success=False, error="Node resolution failed"), 404
+        except Exception as e:
+            logger.error(f"🚨 Exception in sync-node: {e}", exc_info=True)
+            return jsonify(success=False, error=str(e)), 500
+        if mapfile != current_node.mapfile:
+            print(f"⚠️ [sync-node] Path resolution adjusted: requested '{mapfile}' -> resolved '{current_node.mapfile}'")
+            mapfile = current_node.mapfile
+            currentNodePath = current_node.path
+            session['mapfile'] = mapfile
+            session['currentNodePath'] = currentNodePath
+            session['current_node_id'] = current_node.nid
 
-        if current_node is None or mapfile != current_node.mapfile:
-            print(f"__Syn-Node Error: {mapfile} vs {current_node.mapfile}")
-
+        # 5. Visit node and resolve UI context
         current_node.visit_node(CElection)
         program = ProgramContext()
         election = ElectionContext(CElection)
-        options = resolve_ui_context(program,election, current_node)
+        options = resolve_ui_context(program, election, current_node)
 
         print(f"__sync-node url: {request.host_url}")
         print(f"__sync-node election: {current_election} | path: {mapfile}")
 
-        # 3. Return unified response with host URL and election details
         return jsonify({
             'success': True,
             'backend_url': request.host_url,
@@ -2570,6 +2581,7 @@ def set_election():
             create=True,
             accumulate=session.get("accumulate", False)
         )
+        logger.info("set_election treepolys returned lastfilepath=%s ",lastfilepath)
 
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
@@ -3044,13 +3056,10 @@ def index():
             )
 
             current_node = MapRoot.ping_node(rlevels, layers.Geo_index, lastfilepath, create=True, accumulate=False)
-            if current_node:
-                current_node.endpoint_created(CElection, layers.Geo_index, rlevels, lastfilepath, static=False)
-            else:
-                current_node = MapRoot.ping_node(rlevels, layers.Geo_index, "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html", create=True, accumulate=False)
-                target_path = "UNITED_KINGDOM"
-                lastfilepath = "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
-
+            created, leaves = current_node.endpoint_created(CElection, layers.Geo_index, rlevels, lastfilepath, static=False)
+            if not created:
+                logging.warning(f"❌ Endpoint does not exist: {lastfilepath}")
+            
             program = ProgramContext()
             election = ElectionContext(CElection)
             OPTIONS = resolve_ui_context(program, election, current_node)
