@@ -1322,7 +1322,7 @@ async function getCalendarUpdate(API) {
 
          updateConstantsUI(data.constants, data.options);
 //         populateAllSelects(data.options, data.constants);
-         console.log("📩 update calendar_plan::", plan);
+         console.log("📩 update calendar_plan::", window.plan);
 //               console.log("🔀 update places on DOM relaod :", places);
 //               console.log("🔀 update resources on DOM relaod :", resources);
 //               console.log("🔀 update areas on DOM relaod :", areas);

@@ -235,8 +235,10 @@ def parse_slot_key(slot_key):
 def reset_nodes(Treep, Geo):
     """
     Completely purges all registered spatial nodes, index mappings,
-    and polygon stores across memory and disk for clean election switching.
+    and polygon stores across memory and disk for clean election switching,
+    then re-hydrates baseline root boundary structures.
     """
+
     # 1. Clear in-memory spatial indexes and lookup maps
     if Geo is not None and hasattr(Geo, 'clear'):
         Geo.clear()
@@ -249,12 +251,27 @@ def reset_nodes(Treep, Geo):
     TREK_NODES_BY_ID.clear()
     TREK_NODES_BY_PATH.clear()
 
-    # 2. Reset the Treepolys dictionary/store
+    # 2. Reset the Treepolys dictionary
     if isinstance(Treep, dict):
         Treep.clear()
+
+        # 🎯 FIX: Immediately re-hydrate baseline national/county GeoDataFrame structures
+        # so downstream mapping calls (add_nodemaps) never encounter pfile.columns == []
+        try:
+            import layers
+            if hasattr(layers, 'load_layer'):
+                # Load baseline root/nation layer into Treepolys
+                nation_gdf = layers.load_layer('nation', ROOT)
+                if nation_gdf is not None and not nation_gdf.empty:
+                    Treep['nation'] = nation_gdf
+        except Exception as err:
+            logging.warning(f"⚠️ [reset_nodes] Could not auto-hydrate baseline 'nation' layer: {err}")
+
+    # 3. Instantiate fresh Root node in registry
     root = create_root_node()
     TREK_NODES_BY_ID[root.nid] = root
     TREK_NODES_BY_PATH[root.node_path] = root
+
     print("🧹 [SUCCESS] Completely reset Treepolys, Geo_index, and node registries.")
 
 def save_nodes(path):

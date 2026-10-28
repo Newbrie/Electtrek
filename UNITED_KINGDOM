@@ -1,0 +1,25 @@
+[
+  {
+    "nid": "f67dade8-9c4d-4203-8d4d-ddd9d5874e87",
+    "node_path": "UNITED_KINGDOM",
+    "value": "UNITED_KINGDOM",
+    "fid": 238,
+    "latlongroid": [
+      51.23228,
+      -0.5763
+    ],
+    "origin": "DEMO",
+    "node_type": "country",
+    "parent": null,
+    "children": [],
+    "electorate": null,
+    "turnout": 0,
+    "houses": 0,
+    "target": 1,
+    "party": "O",
+    "candidates": {},
+    "defcol": "#006064",
+    "tagno": 1,
+    "bbox": []
+  }
+]

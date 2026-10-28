@@ -2314,7 +2314,7 @@ def sync_node():
         if mapfile != current_node.mapfile:
             print(f"⚠️ [sync-node] Path resolution adjusted: requested '{mapfile}' -> resolved '{current_node.mapfile}'")
             mapfile = current_node.mapfile
-            currentNodePath = current_node.path
+            currentNodePath = current_node.node_path
             session['mapfile'] = mapfile
             session['currentNodePath'] = currentNodePath
             session['current_node_id'] = current_node.nid
@@ -2547,6 +2547,8 @@ def set_election():
 
         # 1. 🔥 Reset stale spatial nodes
         reset_nodes(layers.Treepolys, layers.Geo_index)
+        save_nodes(TREKNODE_FILE)
+        restore_from_persist(layers.Treepolys, layers.Geo_index)
 
         data = request.get_json(force=True)
         if not data or "election" not in data:
@@ -3059,7 +3061,7 @@ def index():
             created, leaves = current_node.endpoint_created(CElection, layers.Geo_index, rlevels, lastfilepath, static=False)
             if not created:
                 logging.warning(f"❌ Endpoint does not exist: {lastfilepath}")
-            
+
             program = ProgramContext()
             election = ElectionContext(CElection)
             OPTIONS = resolve_ui_context(program, election, current_node)

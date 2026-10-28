@@ -81,7 +81,7 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "World_Countries_(Generalized)_9029012925078512962.geojson",
-        "field": "COUNTRY", "out": "Country_Boundaries.gpkg", "method": "filter",
+        "field": "COUNTRY", "out": "Country_Boundaries.gpkg", "method": "intersect",
         "options": {"color": "#0F172A", "fontColor": "#0F172A", "weight": 3.0, "fillColor": "#CBD5E1", "fillOpacity": 0.08}
     },
     "nation": {
@@ -91,7 +91,7 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Countries_December_2021_UK_BGC_2022_-7786782236458806674.geojson",
-        "field": "CTRY21NM", "out": "Nation_Boundaries.gpkg", "method": "intersect",
+        "field": "CTRY21NM", "out": "Nation_Boundaries.gpkg", "method": "filter",
         "options": {"color": "#1E293B", "fontColor": "#1E293B", "weight": 3.0, "fillColor": "#94A3B8", "fillOpacity": 0.12}
     },
     "county": {
@@ -101,7 +101,7 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Counties_and_Unitary_Authorities_December_2024_Boundaries_UK_BGC_-917943173031721243_degrees.geojson",
-        "field": "CTYUA24NM", "out": "County_Boundaries.gpkg", "method": "intersect",
+        "field": "CTYUA24NM", "out": "County_Boundaries.gpkg", "method": "filter",
         "options": {"color": "#475569", "fontColor": "#475569", "weight": 2.5, "fillColor": "#F1F5F9", "fillOpacity": 0.35}
     },
     "constituency": {
@@ -888,6 +888,16 @@ def intersectingArea(
     # when name was None has been removed. Now, if name is None and no roid matches,
     # selected_child_name stays None, leaving all child polygons intact for export.
 
+    # Narrow to the selected child when a name/roid actually matched
+    if selected_child_name and not child_polygons_within_parent.empty:
+        child_polygons_within_parent = child_polygons_within_parent[
+            child_polygons_within_parent["NAME"].astype(str).map(normalname) == selected_child_name
+        ]
+    if (name or roid) and selected_child_name is None:
+        logging.warning(
+            f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
+            f"matched nothing among {len(child_polygons_within_parent)} children under {p_name}"
+        )
     return selected_child_name, child_polygons_within_parent, gdf
 
 
@@ -988,9 +998,16 @@ def load_layer(
     Standardized layer-loader entrypoint using the provided parent_row directly.
     """
     typekey = layer.get("key")
-    method = layer.get("method")
+
+    parent_key = layer.get("parent_layer")
+    parent_layer = MAP_LAYERS.get(parent_key) if parent_key else None
+
+    method = parent_layer.get("method") if parent_layer else layer.get("method")
 
     gdf = get_layer_gdf(typekey, node_path=node_path)
+    if parent_key is None:
+        # Root layer: no parent, no clipping, name selection only
+        return filterArea(gdf, typekey=typekey, roid=roid, name=select_name, parent_row=None)
     if gdf is None or gdf.empty:
         return _empty_gdf()
 
@@ -1015,7 +1032,9 @@ def load_layer(
         exact_clip_geom, clip_crs = _resolve_ancestor_geometry(
             node_path=node_path, parent_row=parent_row, ancestor_levels_up=1,
         )
-
+    if parent_key is not None and exact_clip_geom is None:
+        logging.error(f"[ANCESTOR CLIP] '{typekey}' has parent '{parent_key}' but no clip geometry; refusing unclipped load")
+        return _empty_gdf()
     # Build Stage 1 broad filter geometry: double the bounding box of the parent
     stage1_clip_geom = exact_clip_geom
     if exact_clip_geom is not None:
@@ -3944,6 +3963,9 @@ class ExtendedFeatureGroup(FeatureGroup):
                     continue
 
                 pfile = Treepolys[lookup_key]
+                print(f"DEBUG [add_nodemaps] pfile columns: {pfile.columns.tolist()}")
+                print(f"DEBUG [add_nodemaps] pfile index name: {pfile.index.name}")
+                print(f"DEBUG [add_nodemaps] c.fid value: {getattr(c, 'fid', None)}")
                 mask = pfile['FID'] == int(c.fid)
                 limbX = pfile[mask].copy()
 
