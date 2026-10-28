@@ -236,10 +236,8 @@ def reset_nodes(Treep, Geo):
     """
     Completely purges all registered spatial nodes, index mappings,
     and polygon stores across memory and disk for clean election switching,
-    then re-hydrates baseline root boundary structures.
+    then instantly re-hydrates the root spatial index.
     """
-
-    # 1. Clear in-memory spatial indexes and lookup maps
     if Geo is not None and hasattr(Geo, 'clear'):
         Geo.clear()
         Geo[ROOT] = {
@@ -251,29 +249,29 @@ def reset_nodes(Treep, Geo):
     TREK_NODES_BY_ID.clear()
     TREK_NODES_BY_PATH.clear()
 
-    # 2. Reset the Treepolys dictionary
     if isinstance(Treep, dict):
         Treep.clear()
 
-        # 🎯 FIX: Immediately re-hydrate baseline national/county GeoDataFrame structures
-        # so downstream mapping calls (add_nodemaps) never encounter pfile.columns == []
-        try:
-            import layers
-            if hasattr(layers, 'load_layer'):
-                # Load baseline root/nation layer into Treepolys
-                nation_gdf = layers.load_layer('nation', ROOT)
-                if nation_gdf is not None and not nation_gdf.empty:
-                    Treep['nation'] = nation_gdf
-        except Exception as err:
-            logging.warning(f"⚠️ [reset_nodes] Could not auto-hydrate baseline 'nation' layer: {err}")
+    # 🎯 FIX: Immediately re-hydrate top-level spatial tables so they are never empty!
+    try:
+        import layers
+        # Re-run your application's standard index/boundary loader to populate Treepolys
+        layers.ensure_treepolys_with_index(
+            sourcepath="UNITED_KINGDOM",  # or your root source path
+            here=None,
+            resolved_levels={"UNITED_KINGDOM": "country"},
+            parent_levels={}
+        )
+        print("⚡ [reset_nodes] Successfully re-hydrated spatial boundary tables after reset.")
+    except Exception as e:
+        print(f"⚠️ [reset_nodes] Could not auto-hydrate boundaries: {e}")
 
-    # 3. Instantiate fresh Root node in registry
     root = create_root_node()
     TREK_NODES_BY_ID[root.nid] = root
     TREK_NODES_BY_PATH[root.node_path] = root
 
     print("🧹 [SUCCESS] Completely reset Treepolys, Geo_index, and node registries.")
-
+    
 def save_nodes(path):
     print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
     print(f"[DEBUG] registry size in save_nodes: {len(TREK_NODES_BY_ID)}")
