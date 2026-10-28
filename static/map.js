@@ -1321,7 +1321,7 @@ async function getCalendarUpdate(API) {
 
          updateConstantsUI(data.constants, data.options);
 //         populateAllSelects(data.options, data.constants);
-/               console.log("🔀 update places on DOM relaod :", places);
+//               console.log("🔀 update places on DOM relaod :", places);
 //               console.log("🔀 update resources on DOM relaod :", resources);
 //               console.log("🔀 update areas on DOM relaod :", areas);
 //               console.log("🔀 update task_tags on DOM relaod :", task_tags);
