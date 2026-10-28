@@ -1723,6 +1723,27 @@ class TreeNode:
 
 
         # 🎯 DIRECT STREAM ROUTING LOOP
+        # 🎯 DIRECT STREAM ROUTING LOOP
+        for factory_key, layer in factory.items():
+
+            if factory_key not in TEST_LAYERS:
+                continue
+
+            nodes_to_render = nodes_by_type.get(factory_key, [])
+            if factory_key != "marker" and not nodes_to_render:
+                continue
+
+            # 🛡️ AUTO-REHYDRATE GUARD: Ensure Treepolys has valid data for this layer type
+            if factory_key not in ["marker", "street"]:
+                from layers import Treepolys, load_layer
+                if (factory_key not in Treepolys or
+                    Treepolys[factory_key] is None or
+                    Treepolys[factory_key].empty or
+                    'FID' not in Treepolys[factory_key].columns):
+
+                    print(f"⚡ [AUTO-REHYDRATE] Treepolys missing/empty for layer '{factory_key}' at node '{self.node_path}'. Loading...")
+                    Treepolys[factory_key] = load_layer(factory_key, self.node_path)
+
         for factory_key, layer in factory.items():
 
             if factory_key not in TEST_LAYERS:
