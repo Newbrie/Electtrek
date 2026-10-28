@@ -331,13 +331,21 @@ def get_layer_gdf(key: str, node_path=None):
     raw_src = src_val[src_idx] if isinstance(src_val, list) else src_val
     raw_out = out_val
 
+    if key == "walk":
+        if not current_county:
+            logger.warning("⚠️ Walk layer requested without a county in node_path.")
+            return _empty_gdf()
+        raw_src = walk_geom_path(current_county)
+        raw_out = raw_src
+        src_idx = 0
+
     if not raw_src:
         logger.warning(f"⚠️ Layer '{key}' has an empty path value in MAP_LAYERS.")
         return _empty_gdf()
 
     # --- LEVEL-AWARE REGIONAL SCOPING FOR CACHE ---
     scoped_out_name = raw_out
-    if key in ["ward", "division", "walk"] and current_county:
+    if key in ["ward", "division"] and current_county:
         base_out_name, out_ext = os.path.splitext(raw_out)
         scoped_out_name = f"{base_out_name}_{current_county}{out_ext}"
 
@@ -349,6 +357,8 @@ def get_layer_gdf(key: str, node_path=None):
         src = os.path.abspath(raw_src)
         out = os.path.abspath(scoped_out_name)
 
+    src_raw = src                      # right after src/out are resolved
+
     # --- ROBUST CACHE CHECK ---
     if os.path.exists(out) and os.path.getsize(out) > 100:
         logger.info(f"⚡ Using cached/filtered efficiency file for key '{key}': {out}")
@@ -357,7 +367,8 @@ def get_layer_gdf(key: str, node_path=None):
         logger.info(f"🐢 Efficiency file missing or empty; falling back to raw source for key '{key}': {src}")
 
     # 3. Use absolute file path and mtime as the deterministic cache key
-    if not os.path.exists(src):
+
+    if out != src_raw and not os.path.exists(out):
         logger.warning(f"⚠️ Layer file missing or does not exist for key '{key}': {src}")
         return _empty_gdf()
 
@@ -1233,8 +1244,73 @@ def upsert_geodf(
 
     return gpd.GeoDataFrame(combined, geometry=geom_col, crs=existing.crs)
 
+import hashlib, re
 
-def _generate_walk_geometries(areaelectors):
+WALK_GEOM_DIR = os.path.join(os.path.dirname(os.path.abspath(WALK_GEOM_FILE)), "walk_geoms")
+
+
+def walk_geom_path(areaelectors) -> str:
+    """One walk file per territory covered by areaelectors."""
+    cols = [c for c in ("Nation", "County") if c in areaelectors.columns]
+    terr = sorted(
+        "|".join(map(str, r))
+        for r in areaelectors[cols].dropna().drop_duplicates().itertuples(index=False)
+    ) if cols else []
+
+    # Row count in the hash means a re-imported/changed elector file invalidates the cache
+    sig = hashlib.md5(f"{terr}|{len(areaelectors)}".encode()).hexdigest()[:8]
+    slug = re.sub(r"\W+", "_", terr[0]).strip("_").upper() if len(terr) == 1 else f"MULTI_{len(terr)}"
+    return os.path.join(WALK_GEOM_DIR, f"WALK_{slug}_{sig}.geojson")
+
+import json, re
+
+def county_from_node_path(node_path) -> str:
+    current_county = county_from_node_path(node_path)
+    is_revised = bool(revised_setting and current_county and (revised_setting == current_county))
+    return str(steps[2]).strip().upper() if len(steps) > 2 else ""
+
+def walk_geom_path(county: str) -> str:
+    slug = re.sub(r"\W+", "_", str(county)).strip("_").upper()
+    return os.path.join(WALK_GEOM_DIR, f"WALK_{slug}.geojson")
+
+def ensure_walk_geometries(areaelectors, county: str):
+    """Return the walk file for this county, regenerating it if missing or stale."""
+    from state import normalname
+
+    if not county or areaelectors is None or areaelectors.empty:
+        return None
+
+    target = normalname(county)
+    county_electors = areaelectors[areaelectors["County"].astype(str).map(normalname) == target]
+    if county_electors.empty:
+        logging.warning(f"[WALK] No electors found for county '{county}'; no walk file built.")
+        return None
+
+    path = walk_geom_path(county)
+    meta_path = path + ".meta.json"
+    rows = len(county_electors)
+
+    fresh = False
+    if os.path.exists(path) and os.path.getsize(path) > 100 and os.path.exists(meta_path):
+        try:
+            with open(meta_path) as f:
+                fresh = json.load(f).get("rows") == rows
+        except Exception:
+            fresh = False
+
+    if fresh:
+        logging.info(f"[WALK] Reusing {path}")
+        return path
+
+    logging.info(f"[WALK] Generating walk geometries for '{county}' ({rows} electors) -> {path}")
+    gdf = _generate_walk_geometries(county_electors, path)
+    if gdf is None or gdf.empty:
+        return None
+    with open(meta_path, "w") as f:
+        json.dump({"rows": rows}, f)
+    return path
+
+def _generate_walk_geometries(areaelectors, out_path):
     """
     Build and persist walk-level (Level 5) geometries via Voronoi tessellation,
     grouped hierarchically by Nation, County, Constituency, Ward, and WalkName.
@@ -1294,14 +1370,13 @@ def _generate_walk_geometries(areaelectors):
     # -------------------------------------------------------------------------
     # 3. PERSISTENCE
     # -------------------------------------------------------------------------
-    if "WALK_GEOM_FILE" in globals():
-        os.makedirs(os.path.dirname(os.path.abspath(WALK_GEOM_FILE)), exist_ok=True)
-        walk_gdf.to_file(WALK_GEOM_FILE, driver="GeoJSON")
-        logger.info(f"Wrote {len(walk_gdf)} walk geoms to '{WALK_GEOM_FILE}'.")
-    else:
-        logger.warning("WALK_GEOM_FILE path variable not found in globals; GeoDataFrame returned but not written.")
-
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    walk_gdf.to_file(tmp_path, driver="GeoJSON")
+    os.replace(tmp_path, out_path)
+    logger.info(f"Wrote {len(walk_gdf)} walk geoms to '{out_path}'.")
     return walk_gdf
+
 
 
 def build_walk_geoms_geovoronoi(
@@ -1691,10 +1766,9 @@ def ensure_treepolys_with_index(
 
         for layer_type in sub_layers:
             active_layer_rows.setdefault(layer_type, [])
-
-            if layer_type.lower() == "walk" and not os.path.exists(WALK_GEOM_FILE):
-                logging.info(f"Level {level} ('walk') geometry file missing; generating via _generate_walk_geometries.")
-                _generate_walk_geometries(areaelectors)
+            if layer_type.lower() == "walk":
+                county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
+                ensure_walk_geometries(areaelectors, county)
 
             layer = layer_defs.get(layer_type)
             if not layer:
