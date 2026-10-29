@@ -368,11 +368,12 @@ def get_layer_gdf(key: str, node_path=None):
 
     # 3. Use absolute file path and mtime as the deterministic cache key
 
-    if out != src_raw and not os.path.exists(out):
+    if not os.path.exists(src):
         logger.warning(f"⚠️ Layer file missing or does not exist for key '{key}': {src}")
         return _empty_gdf()
 
     file_mtime = os.path.getmtime(src)
+
     cache_key = (key, src, file_mtime)
 
     # 4. Check Cache
@@ -463,6 +464,11 @@ def get_layer_gdf(key: str, node_path=None):
         _ = gdf.sindex
 
         # --- SAFE SAVE TO EFFICIENCY CACHE FILE ---
+        if not os.path.exists(src):
+            logger.warning(f"⚠️ Layer file missing or does not exist for key '{key}': {src}")
+            return _empty_gdf()
+
+        file_mtime = os.path.getmtime(src)
         if out != raw_out and not os.path.exists(out):
             try:
                 os.makedirs(os.path.dirname(out), exist_ok=True)

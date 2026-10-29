@@ -1412,6 +1412,7 @@ app.config['USE_SESSION_FOR_NEXT'] = False
 
 # 6. Initialize Extensions (CORS, Session, Login)
 CORS(app, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "*"}})
 Session(app)
 
 login_manager = LoginManager()

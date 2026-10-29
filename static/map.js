@@ -1,9 +1,20 @@
 /* When the user clicks on the button,
 toggle between hiding and showing the dropdown content */
+// 🌍 Environment & API Endpoint Configuration
+const DEVURLS = { "dev": "http://127.0.0.1:5000", "prod": "https://electtrek.com" };
+const isDev = location.hostname.includes("localhost") || location.hostname.startsWith("127.");
+const API = isDev ? DEVURLS["dev"] : "__REPLACE_WITH_API_URL__";
+
+if (!isDev) {
+    const btn = document.getElementById("export-html-btn");
+    if (btn) {
+        btn.style.display = "none";
+    }
+}
+const calendarData = {};
 
 var pack = window.flaskMessages ;
 
-let calendarData = {};
 
 // Now you can loop through them or push them to your array
 const pessages = [];
@@ -1311,7 +1322,9 @@ async function getCalendarUpdate(API) {
     try {
         const election = window.currentElectionName;
         console.log("📦 Fetching election:", election);
+        // Instead of `${API}/current-election...` where API is "http://127.0.0.1:5000"
         console.log("page origin:", window.location.origin, "| API:", API);
+        const response = await fetch(`/current-election?election=${encodeURIComponent(election)}`);
         const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
