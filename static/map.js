@@ -1321,18 +1321,20 @@ function openAddTaskTagForm() {
 
 
 async function getCalendarUpdate(API) {
-    if (!window.currentElectionName) return;
+    // 🛡️ Ensure we have a valid election name before attempting fetch
+    let election = window.currentElectionName || window.current_election;
+
+    if (!election || election.trim() === "") {
+        console.warn("⚠️ getCalendarUpdate aborted: currentElectionName is blank or not set yet.");
+        return;
+    }
 
     try {
-        const election = window.currentElectionName;
         console.log("📦 Fetching election:", election);
 
-        // 🛡️ Fallback if API variable is blank/undefined
         const baseUrl = (API && typeof API === "string" && API.trim() !== "")
             ? API.trim()
             : window.location.origin;
-
-        console.log("page origin:", window.location.origin, "| API:", baseUrl);
 
         const response = await fetch(`${baseUrl}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1348,7 +1350,6 @@ async function getCalendarUpdate(API) {
             return;
         }
 
-        // Render plan to DOM
         if (typeof loadCalendarPlan === "function") {
             loadCalendarPlan(window.plan);
             console.log("✅ Calendar plan loaded into UI");

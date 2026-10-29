@@ -80,6 +80,10 @@ const handleIframeMessage = async (e) => {
     // 🎯 2. If payload was pushed from iframe, hydrate parent globals directly (NO double fetch!)
       if (data.type === 'iframeHydrationPayload') {
           window.current_election = data.current_election || window.current_election;
+          // Ensure currentElectionName is set from active tab if missing
+          if (!window.currentElectionName) {
+              window.currentElectionName = window.current_election || "DEMO"; // or read active tab element
+          }
           window.options           = data.options || window.options || {};
           window.latestConstants   = data.constants || window.constants;
 
