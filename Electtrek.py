@@ -2530,60 +2530,45 @@ def election_report():
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
 
 
-@app.route("/set-election", methods=['GET', 'POST'])
+@app.route("/set-election", methods=['POST'])
 @login_required
 def set_election():
-
-    from layers import ExtendedFeatureGroup, ensure_treepolys_with_index
-    from flask import session, request, jsonify, flash
+    from layers import ensure_treepolys_with_index
     from elections import CurrentElection
-    # Ensure MapRoot, TREK_NODES_BY_PATH, and persist are imported properly:
-    from nodes import MapRoot, TREK_NODES_BY_PATH, persist, reset_nodes
+    from nodes import persist, reset_nodes   # drop MapRoot and TREK_NODES_BY_PATH
 
     try:
-        print("____Route/set-election/top")
         session.pop("accumulated_nodes", None)
         session["accumulate"] = False
-
-        # 1. 🔥 Reset stale spatial nodes
-        reset_nodes(layers.Treepolys, layers.Geo_index)
-        save_nodes(TREKNODE_FILE)
-        restore_from_persist(layers.Treepolys, layers.Geo_index)
 
         data = request.get_json(force=True)
         if not data or "election" not in data:
             return jsonify(success=False, error="No election provided"), 400
 
-        current_election = data["election"]
-        session['current_election'] = current_election
-        CElection = CurrentElection.load(current_election)
+        CElection = CurrentElection.load(data["election"])
         if not CElection:
             return jsonify(success=False, error="Election not found"), 404
+        session['current_election'] = data["election"]
 
-        rlevels = CElection.resolved_levels
-        plevels = CElection.parent_levels
+        rlevels, plevels = CElection.resolved_levels, CElection.parent_levels
+        wanted_path = CElection['mapfiles'][-1]
+        target_path = "/".join(stepify_typed(wanted_path))
+        current_election = data["election"]
 
-        lastfilepath = CElection['mapfiles'][-1]
-        steps = stepify_typed(lastfilepath)
-        target_path = "/".join(steps)
+        root = reset_nodes(layers.Treepolys, layers.Geo_index)
 
-        # 2. Build map boundaries & Geo_index
         lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
-            sourcepath=lastfilepath,
-            here=None,
-            resolved_levels=rlevels,
-            parent_levels=plevels
+            sourcepath=wanted_path, here=None,
+            resolved_levels=rlevels, parent_levels=plevels,
         )
+        if stepify_typed(lastfilepath) != stepify_typed(wanted_path):
+            return jsonify(success=False,
+                           error=f"Could not resolve {wanted_path}; got {lastfilepath}"), 500
 
-        # 3. 🎯 Ping/Register node directly via MapRoot (REMOVED undefined nodes.TREK_NODES_BY_PATH lookup)
-        current_node = MapRoot.ping_node(
-            rlevels,
-            layers.Geo_index,
-            lastfilepath,
-            create=True,
-            accumulate=session.get("accumulate", False)
-        )
-        logger.info("set_election treepolys returned lastfilepath=%s ",lastfilepath)
+        current_node = root.ping_node(rlevels, layers.Geo_index, lastfilepath,
+                                      create=True, accumulate=False)
+
+        logger.info("set_election treepolys returned lastfilepath=%s", lastfilepath)
 
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
@@ -2613,7 +2598,7 @@ def set_election():
             'constants': constants_dict,
             'options': options,
             'current_election': current_election,
-            'mapfile': lastfilepath,
+            'mapfile': resolved_path,
             'currentNodePath': target_path
         })
 

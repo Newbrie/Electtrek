@@ -233,44 +233,38 @@ def parse_slot_key(slot_key):
         return None
 
 def reset_nodes(Treep, Geo):
-    """
-    Completely purges all registered spatial nodes, index mappings,
-    and polygon stores across memory and disk for clean election switching,
-    then instantly re-hydrates the root spatial index.
-    """
-    if Geo is not None and hasattr(Geo, 'clear'):
-        Geo.clear()
-        Geo[ROOT] = {
-            "level": "country", "name": ROOT, "parent": None,
-            "children": [], "roid": [54.5, -2.5], "fid": 238,
-        }
-        logging.debug(f"[INDEX] Initialized ROOT node '{ROOT}' in Geo_index.")
+    """Purge child nodes, index and polygon stores; keep the single persistent root instance."""
+    # Capture the root BEFORE clearing registries
+    root = TREK_NODES_BY_PATH.get(ROOT)
+    if root is None:
+        root = next((n for n in TREK_NODES_BY_ID.values()
+                     if getattr(n, "parent", None) is None), None)
 
     TREK_NODES_BY_ID.clear()
     TREK_NODES_BY_PATH.clear()
 
+    if isinstance(Geo, dict):
+        Geo.clear()
+        Geo[ROOT] = {"level": "country", "name": ROOT, "parent": None,
+                     "children": [], "roid": [54.5, -2.5], "fid": 238}
     if isinstance(Treep, dict):
         Treep.clear()
+    elif Treep is not None:
+        logging.warning(f"[reset_nodes] Treep is {type(Treep).__name__}, not dict; not cleared.")
 
-    # 🎯 FIX: Immediately re-hydrate top-level spatial tables so they are never empty!
-    try:
-        import layers
-        # Re-run your application's standard index/boundary loader to populate Treepolys
-        layers.ensure_treepolys_with_index(
-            sourcepath="UNITED_KINGDOM",  # or your root source path
-            here=None,
-            resolved_levels={"UNITED_KINGDOM": "country"},
-            parent_levels={}
-        )
-        print("⚡ [reset_nodes] Successfully re-hydrated spatial boundary tables after reset.")
-    except Exception as e:
-        print(f"⚠️ [reset_nodes] Could not auto-hydrate boundaries: {e}")
+    if root is None:
+        root = create_root_node()
+        logging.info(f"[reset_nodes] Created root (nid: {root.nid}).")
+    else:
+        root.children = []
+        if hasattr(root, "candidates"):
+            root.candidates = {}
+        # reset any other per-election fields here (zoom_level, mapfile, party, ...)
+        logging.info(f"[reset_nodes] Retained root (nid: {root.nid}).")
 
-    root = create_root_node()
     TREK_NODES_BY_ID[root.nid] = root
     TREK_NODES_BY_PATH[root.node_path] = root
-
-    print("🧹 [SUCCESS] Completely reset Treepolys, Geo_index, and node registries.")
+    return root
     
 def save_nodes(path):
     print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
