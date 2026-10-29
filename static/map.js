@@ -1628,7 +1628,7 @@ document.getElementById("someTaskButtonId")?.addEventListener("click", () => {
      window.latestConstants = data.constants;
      window.latestOptions = data.options;
 
-     if (typeof updateConstantsUI === "function") updateConstantsUI(data.constants, data.options);
+     if (typeof updateConstantsUI === "function") window.updateConstantsUI(data.constants, data.options);
 //     if (typeof populateAllSelects === "function") populateAllSelects(data.options, data.constants);
 
      window.plan = data.constants?.calendar_plan;
