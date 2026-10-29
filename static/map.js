@@ -1326,23 +1326,27 @@ async function getCalendarUpdate(API) {
     try {
         const election = window.currentElectionName;
         console.log("📦 Fetching election:", election);
-        // Instead of `${API}/current-election...` where API is "http://127.0.0.1:5000"
-        console.log("page origin:", window.location.origin, "| API:", API);
-        const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
+
+        // 🛡️ Fallback if API variable is blank/undefined
+        const baseUrl = (API && API.trim() !== "") ? API : window.location.origin;
+        console.log("page origin:", window.location.origin, "| API:", baseUrl);
+
+        const response = await fetch(`${baseUrl}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
         console.log("📦 Backend response:", data);
 
+        // 🛡️ Safely call updateConstantsUI if it's available, otherwise fallback to window
+        if (typeof updateConstantsUI === 'function') {
+            updateConstantsUI(data.constants, data.options);
+        } else if (typeof window.updateConstantsUI === 'function') {
+            window.updateConstantsUI(data.constants, data.options);
+        } else {
+            console.warn("⚠️ updateConstantsUI is not yet loaded in scope.");
+        }
 
-         updateConstantsUI(data.constants, data.options);
-//         populateAllSelects(data.options, data.constants);
-//               console.log("🔀 update places on DOM relaod :", places);
-//               console.log("🔀 update resources on DOM relaod :", resources);
-//               console.log("🔀 update areas on DOM relaod :", areas);
-//               console.log("🔀 update task_tags on DOM relaod :", task_tags);
-
-       window.plan = data.constants?.calendar_plan;
+        window.plan = data.constants?.calendar_plan;
         if (!window.plan || !window.plan.slots) {
             console.warn("⚠️ No slots found in calendar_plan");
             return;
