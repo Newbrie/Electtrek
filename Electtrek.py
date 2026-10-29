@@ -2557,18 +2557,18 @@ def set_election():
 
         root = reset_nodes(layers.Treepolys, layers.Geo_index)
 
-        lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
+        resolved_path, layers.Geo_index = ensure_treepolys_with_index(
             sourcepath=wanted_path, here=None,
             resolved_levels=rlevels, parent_levels=plevels,
         )
-        if stepify_typed(lastfilepath) != stepify_typed(wanted_path):
+        if stepify_typed(resolved_path) != stepify_typed(wanted_path):
             return jsonify(success=False,
-                           error=f"Could not resolve {wanted_path}; got {lastfilepath}"), 500
+                           error=f"Could not resolve {wanted_path}; got {resolved_path}"), 500
 
-        current_node = root.ping_node(rlevels, layers.Geo_index, lastfilepath,
+        current_node = root.ping_node(rlevels, layers.Geo_index, wanted_path,
                                       create=True, accumulate=False)
 
-        logger.info("set_election treepolys returned lastfilepath=%s", lastfilepath)
+        logger.info("set_election treepolys returned wanted_path=%s", wanted_path)
 
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
@@ -2577,7 +2577,7 @@ def set_election():
 
         # 4. Generate endpoint HTML map
         created, totalleaf = current_node.endpoint_created(
-            CElection, layers.Geo_index, rlevels, lastfilepath, static=False
+            CElection, layers.Geo_index, rlevels, wanted_path, static=False
         )
 
         # 5. Resolve options tree
@@ -2598,7 +2598,7 @@ def set_election():
             'constants': constants_dict,
             'options': options,
             'current_election': current_election,
-            'mapfile': resolved_path,
+            'mapfile': wanted_path,
             'currentNodePath': target_path
         })
 

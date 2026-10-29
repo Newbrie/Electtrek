@@ -1311,7 +1311,7 @@ async function getCalendarUpdate(API) {
     try {
         const election = window.currentElectionName;
         console.log("📦 Fetching election:", election);
-
+        console.log("page origin:", window.location.origin, "| API:", API);
         const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
