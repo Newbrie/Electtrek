@@ -1328,32 +1328,31 @@ async function getCalendarUpdate(API) {
         console.log("📦 Fetching election:", election);
 
         // 🛡️ Fallback if API variable is blank/undefined
-        const baseUrl = (API && API.trim() !== "") ? API : window.location.origin;
+        const baseUrl = (API && typeof API === "string" && API.trim() !== "")
+            ? API.trim()
+            : window.location.origin;
+
         console.log("page origin:", window.location.origin, "| API:", baseUrl);
 
         const response = await fetch(`${baseUrl}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
-        console.log("📦 Backend response:", data);
+        console.log("📦 Backend response received:", data);
 
-        // 🛡️ Safely call updateConstantsUI if it's available, otherwise fallback to window
-        if (typeof updateConstantsUI === 'function') {
-            updateConstantsUI(data.constants, data.options);
-        } else if (typeof window.updateConstantsUI === 'function') {
-            window.updateConstantsUI(data.constants, data.options);
-        } else {
-            console.warn("⚠️ updateConstantsUI is not yet loaded in scope.");
-        }
+        // Store calendar plan
+        window.plan = data.constants?.calendar_plan || data.calendar_plan;
 
-        window.plan = data.constants?.calendar_plan;
         if (!window.plan || !window.plan.slots) {
             console.warn("⚠️ No slots found in calendar_plan");
             return;
         }
 
-        loadCalendarPlan(window.plan);
-        console.log("✅ Calendar plan loaded into UI");
+        // Render plan to DOM
+        if (typeof loadCalendarPlan === "function") {
+            loadCalendarPlan(window.plan);
+            console.log("✅ Calendar plan loaded into UI");
+        }
 
     } catch (err) {
         console.error("🚨 Error fetching calendar plan:", err);
