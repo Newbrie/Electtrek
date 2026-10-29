@@ -1321,10 +1321,11 @@ function openAddTaskTagForm() {
 
 
 async function getCalendarUpdate(API) {
-    // 🛡️ Ensure we have a valid election name before attempting fetch
+    // 🛡️ Safely grab election name
     let election = window.currentElectionName || window.current_election;
 
-    if (!election || election.trim() === "") {
+    // Guard against undefined/null before calling .trim()
+    if (!election || typeof election !== "string" || election.trim() === "") {
         console.warn("⚠️ getCalendarUpdate aborted: currentElectionName is blank or not set yet.");
         return;
     }
@@ -1336,7 +1337,9 @@ async function getCalendarUpdate(API) {
             ? API.trim()
             : window.location.origin;
 
-        const response = await fetch(`${baseUrl}/current-election?election=${encodeURIComponent(election)}`);
+        const response = await fetch(`${baseUrl}/current-election?election=${encodeURIComponent(election)}`, {
+            credentials: "same-origin"
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
