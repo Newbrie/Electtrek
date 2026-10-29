@@ -1412,7 +1412,14 @@ app.config['USE_SESSION_FOR_NEXT'] = False
 
 # 6. Initialize Extensions (CORS, Session, Login)
 CORS(app, supports_credentials=True)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# 🎯 Extract all URLs from your DEVURLS dictionary as allowed origins
+allowed_origins = list(DEVURLS.values())
+
+# Apply them to your CORS setup with credentials enabled
+CORS(app,
+     supports_credentials=True,
+     origins=allowed_origins)
+
 Session(app)
 
 login_manager = LoginManager()
