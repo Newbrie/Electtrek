@@ -224,10 +224,16 @@ window.refreshConstantsUI = function(callback) {
 
             window.latestConstants = data.constants;
             window.latestOptions = data.options;
+            window.options           = data.options || {};
+            window.latestConstants   = data.constants ;
 
-            window.updateConstantsUI(data.constants, data.options);
+            window.task_tags        = window.options.task_tags || [];
+            window.resources        = window.options.resources || [];
+            window.places           = window.options.places || [];
+            window.areas            = window.options.areas || {};
+            window.calendar_plan = data.constants.calendar_plan || {}
 
-
+//            window.updateConstantsUI(data.constants, data.options);
 
             if (callback) callback(data);
             return data.constants;
