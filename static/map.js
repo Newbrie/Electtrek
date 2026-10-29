@@ -527,7 +527,11 @@ var showMore = function (msg,area) {
     // Clear UI
 
     // Reset calendar data to avoid carrying over entries
-    calendarData = {}; // << reset for new calendar
+    // ❌ Old code:
+    // calendarData = {};
+
+    // ✅ Correct in-place clearance:
+    Object.keys(calendarData).forEach(k => delete calendarData[k]);
 
     console.log("📦 Loading plan:", plan);
     if (plan.calendar_plan) plan = plan.calendar_plan;
