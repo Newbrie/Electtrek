@@ -1324,7 +1324,6 @@ async function getCalendarUpdate(API) {
         console.log("📦 Fetching election:", election);
         // Instead of `${API}/current-election...` where API is "http://127.0.0.1:5000"
         console.log("page origin:", window.location.origin, "| API:", API);
-        const response = await fetch(`/current-election?election=${encodeURIComponent(election)}`);
         const response = await fetch(`${API}/current-election?election=${encodeURIComponent(election)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
