@@ -3582,15 +3582,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             window.current_election = syncedData.current_election;
             window.currentElectionName = syncedData.current_election;
             window.options = syncedData.options || {};
-            window.task_tags = window.options.task_tags || [];
+            window.constants = syncedData.constants || {};
+            window.taskTree = window.constants.tagTypes || [];
             window.resources = window.options.resources || [];
             window.places = window.options.places || [];
-            window.areas = window.options.areas || {};
+            window.areaTree = window.options.areas || {};
             window.API = syncedData.backend_url ? syncedData.backend_url.replace(/\/$/, "") : "";
-            window.areaTree = syncedData.areaTree || syncedData.options?.areaTree || {};
             window.currentNodePath = syncedData.currentNodePath || window.currentNodePath;
             window.mapfile = syncedData.mapfile || window.mapfile;
-            window.plan = syncedData.constants?.calendar_plan || {};
+            window.plan = window.constants?.calendar_plan || {};
 
             // 🚀 Render the accordion instantly using the authoritative backend areaTree
             if (typeof window.initAccordionFromOptions === "function") {
@@ -3600,9 +3600,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     emptyMessage: 'No regions available for this election'
                 });
             }
-            if (window.task_tags.length > 0) {
-                window.taskTree = window.task_tags;
-            }
+
 
             // 2. 🚀 Post payload up to Parent Window
             if (window.parent && window.parent !== window) {
@@ -3610,10 +3608,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     type: "iframeHydrationPayload",
                     currentNodePath: window.currentNodePath,
                     mapfile: window.mapfile,
-                    current_election: syncedData.current_election,
-                    options: syncedData.options,
-                    constants: syncedData.constants,
-                    backend_url: syncedData.backend_url,
+                    current_election: window.current_election,
+                    options: window.options,
+                    constants: window.constants,
+                    backend_url: window.backend_url,
                     plan: window.plan
                 }, "*");
             }
