@@ -231,7 +231,7 @@ window.refreshConstantsUI = function(callback) {
             window.resources        = window.options.resources || [];
             window.places           = window.options.places || [];
             window.areas            = window.options.areas || {};
-            window.calendar_plan = data.constants.calendar_plan || {}
+            window.plan = data.constants.calendar_plan || {}
 
 //            window.updateConstantsUI(data.constants, data.options);
 

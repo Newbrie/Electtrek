@@ -399,7 +399,29 @@ def get_versioned_filename(base_path, base_name, extension):
 
     return new_filepath
 
+def request_context():
+    name = session.get("current_election") or CurrentElection.get_lastused()
+    path = session.get("current_node_path") or ROOT
+    CElection = CurrentElection.load(name)
+    return CElection, path
 
+def ensure_hydrated(CElection, path, here=None, force=False):
+    """Return the resolved mapfile for `path`, rebuilding spatial state if missing or forced."""
+    mapfile = path if path.endswith(".html") else f"{path}/{path.split('/')[-1]}-MAP.html"
+    typed = "/".join(stepify_typed(mapfile))
+
+    if not force and typed in layers.Geo_index and any(
+        not df.empty for df in layers.Treepolys.values() if df is not None
+    ):
+        return mapfile
+
+    rlevels = CElection.resolved_levels
+    resolved, layers.Geo_index = ensure_treepolys_with_index(
+        sourcepath=mapfile, here=here,
+        resolved_levels=rlevels, parent_levels=CElection.parent_levels,
+        areaelectors=electors.elector_for_path(rlevels, "UNITED_KINGDOM"),
+    )
+    return resolved
 
 def get_L4area(nodelist, here):
 
@@ -2538,115 +2560,91 @@ def election_report():
     return render_template("election_report.html", reportdate=reportdate, mapfile=reportfile, report_data=report_data)
 
 
-@app.route("/set-election", methods=['POST'])
+@app.route("/set-election", methods=["POST"])
 @login_required
 def set_election():
-    from layers import ensure_treepolys_with_index
-    from elections import CurrentElection
-    from nodes import persist, reset_nodes   # drop MapRoot and TREK_NODES_BY_PATH
-
+    from nodes import persist, reset_nodes
     try:
-        session.pop("accumulated_nodes", None)
-        session["accumulate"] = False
-
-        data = request.get_json(force=True)
-        if not data or "election" not in data:
+        data = request.get_json(force=True) or {}
+        name = data.get("election")
+        if not name:
             return jsonify(success=False, error="No election provided"), 400
 
-        CElection = CurrentElection.load(data["election"])
+        CElection = CurrentElection.load(name)
         if not CElection:
             return jsonify(success=False, error="Election not found"), 404
-        session['current_election'] = data["election"]
 
-        rlevels, plevels = CElection.resolved_levels, CElection.parent_levels
-        wanted_path = CElection['mapfiles'][-1]
+        wanted_path = CElection["mapfiles"][-1]
         target_path = "/".join(stepify_typed(wanted_path))
-        current_election = data["election"]
 
+        # Writer: new election, so reset and force a rebuild
+        session.pop("accumulated_nodes", None)
+        session["accumulate"] = False
         root = reset_nodes(layers.Treepolys, layers.Geo_index)
 
-        resolved_path, layers.Geo_index = ensure_treepolys_with_index(
-            sourcepath=wanted_path, here=None,
-            resolved_levels=rlevels, parent_levels=plevels,
-        )
-        if stepify_typed(resolved_path) != stepify_typed(wanted_path):
+        resolved = ensure_hydrated(CElection, wanted_path, force=True)
+        if stepify_typed(resolved) != stepify_typed(wanted_path):
             return jsonify(success=False,
-                           error=f"Could not resolve {wanted_path}; got {resolved_path}"), 500
+                           error=f"Could not resolve {wanted_path}; got {resolved}"), 500
 
-        current_node = root.ping_node(rlevels, layers.Geo_index, wanted_path,
-                                      create=True, accumulate=False)
-
-        logger.info("set_election treepolys returned wanted_path=%s", wanted_path)
-
+        current_node = root.ping_node(CElection.resolved_levels, layers.Geo_index,
+                                      resolved, create=True, accumulate=False)
         if not current_node:
             return jsonify(success=False, error="No current node for election"), 500
 
-        CElection['previousParty'] = getattr(current_node, 'party', '')
+        # Only now commit the pointers, so a failed switch leaves the old election intact
+        session["current_election"] = name
+        session["current_node_path"] = current_node.node_path
 
-        # 4. Generate endpoint HTML map
-        created, totalleaf = current_node.endpoint_created(
-            CElection, layers.Geo_index, rlevels, wanted_path, static=False
-        )
-
-        # 5. Resolve options tree
+        CElection["previousParty"] = getattr(current_node, "party", "")
+        current_node.endpoint_created(CElection, layers.Geo_index,
+                                      CElection.resolved_levels, resolved, static=False)
         options = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
-
-        # 6. Save clean spatial nodes for this election
         persist(layers.Treepolys, layers.Geo_index)
 
-        constants_dict = CElection.to_dict() if hasattr(CElection, 'to_dict') else dict(CElection)
-        def tree_depth(t):
-            return 0 if not isinstance(t, dict) or not t else 1 + max(tree_depth(v) for v in t.values())
-
-        logger.info("set_election node=%s level=%s children=%d areas keys=%s depth=%s",
-                    current_node.node_path, current_node.level, len(current_node.children),
-                    list((options.get('areas') or {}))[:3], tree_depth(options.get('areas')))
         return jsonify({
-            'success': True,
-            'constants': constants_dict,
-            'options': options,
-            'current_election': current_election,
-            'mapfile': wanted_path,
-            'currentNodePath': target_path
+            "success": True,
+            "constants": CElection.to_dict() if hasattr(CElection, "to_dict") else dict(CElection),
+            "options": options,
+            "current_election": name,
+            "mapfile": resolved,
+            "currentNodePath": target_path,
         })
-
     except Exception as e:
-        print("____Route/set-election/exception:", repr(e))
-        import traceback
-        traceback.print_exc()
+        logger.exception("set_election failed")
         return jsonify(success=False, error=str(e)), 500
 
 # GET /current-election?election=...
 @app.route('/current-election', methods=['GET'])
 @login_required
 def get_current_election_data():
-    # received a call to return election data constants and options
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = request.args.get("election")
+    # Session is the source of truth; last-used is only a fallback (e.g. after a restart)
+    current_election = session.get("current_election") or CurrentElection.get_lastused()
+    if not current_election:
+        return jsonify(success=False, error="No election selected"), 409
+    session["current_election"] = current_election
 
     CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-    program = ProgramContext()
-    election = ElectionContext(CElection)
-    OPTIONS = resolve_ui_context(program,election, current_node)
+    if not CElection:
+        return jsonify(success=False, error=f"Election '{current_election}' not found"), 404
 
-    resources = OPTIONS['resources']
-    rlevels = CElection.resolved_levels
+    current_node = get_last_node(CElection, layers.Geo_index, create=False)
+    OPTIONS = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
 
     plan = CElection.get("calendar_plan", {})
+    plan = dict(plan) if isinstance(plan, dict) else {}
+    plan.setdefault("slots", {})
 
-    # Ensure it always has slots
-    if not isinstance(plan, dict):
-        plan = {"slots": {}}
-    elif "slots" not in plan:
-        plan["slots"] = {}
+    constants = CElection.to_dict() if hasattr(CElection, "to_dict") else dict(CElection)
 
-    return jsonify({"calendar_plan": plan,
-            'constants': CElection,
-            'options': OPTIONS,
-            'current_election': current_election
-        })
+    resp = jsonify({
+        "calendar_plan": plan,
+        "constants": constants,
+        "options": OPTIONS,
+        "current_election": current_election,
+    })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 # POST /current-election
 @app.route('/current-election', methods=['POST'])
@@ -2996,87 +2994,61 @@ def validate_tags():
         return jsonify(valid=True)
 
 
-@app.route("/", methods=['POST', 'GET'])
+@app.route("/", methods=["GET", "POST"])
 def index():
+    if "username" not in session:           # or: not current_user.is_authenticated
+        return render_template("index.html")
+    return redirect(url_for("firstpage"))
+
+@app.route("/firstpage", methods=["GET", "POST"])
+@login_required
+def firstpage():
     global streamrag
-    global TABLE_TYPES
-    global constants
-    from baked_data import baked_manager
-    from layers import ExtendedFeatureGroup, ensure_treepolys_with_index
-    from elections import CurrentElection
+    current_election = session.get("current_election") or CurrentElection.get_lastused()
+    CElection = CurrentElection.load(current_election)
+    if not CElection:
+        return jsonify(success=False, error="Election not found"), 404
+    session["current_election"] = current_election
 
-    ELECTIONS = get_available_elections()
+    rlevels, plevels = CElection.resolved_levels, CElection.parent_levels
+    breadcrumb = (CElection.get("mapfiles") or [None])[-1] or "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
 
-    if 'username' in session:
-        flash("__________Session Alive:" + session['username'])
-        print("__________Session Alive:" + session['username'])
+    lat, lon = CElection.get("cidLat"), CElection.get("cidLong")
+    here = (lat, lon) if lat is not None and lon is not None else None
+    areaelectors = electors.elector_for_path(rlevels, "UNITED_KINGDOM")
 
-        # Fetch stream processing status
-        streamrag = CurrentElection.getstreamrag(electors)
-        if not streamrag:
-            streamrag = {
-                'No Elections': {
-                    'Alive': False,
-                    'Elect': 0,
-                    'Files': 0,
-                    'RAG': 'white'
-                }
-            }
+    # No restore_from_persist here: rebuild only what's needed
+    _, layers.Geo_index = ensure_treepolys_with_index(
+        sourcepath=breadcrumb, here=here,
+        resolved_levels=rlevels, parent_levels=plevels,
+        areaelectors=areaelectors,
+    )
 
-        # Restore persisted state
-        restore_from_persist(layers.Treepolys, layers.Geo_index)
-        BAKED_DATA = baked_manager.load()
+    root = get_trek_root()
+    current_node = get_last_node(CElection, layers.Geo_index, create=True)
+    if current_node is root:
+        current_node = root.ping_node(rlevels, layers.Geo_index, breadcrumb,
+                                      create=True, accumulate=session.get("accumulate", False))
 
-        # Load current election context & breadcrumbs
-        current_election = CurrentElection.get_lastused()
-        CElection = CurrentElection.load(current_election)
+    session["current_node_path"] = current_node.node_path   # path, not nid
+    OPTIONS = resolve_ui_context(ProgramContext(), ElectionContext(CElection), current_node)
+    current_node.create_node_map(CElection, layers.Geo_index, rlevels, static=False)
 
-        if CElection:
-            rlevels = CElection.resolved_levels
-            plevels = CElection.parent_levels
+    streamrag = CurrentElection.getstreamrag(electors) or {
+        "No Elections": {"Alive": False, "Elect": 0, "Files": 0, "RAG": "white"}
+    }
 
-            # Get the last saved mapfile breadcrumb
-            mapfiles_list = CElection.get('mapfiles', [])
-            lastfilepath = mapfiles_list[-1] if mapfiles_list else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
+    steps = stepify_typed(breadcrumb)
+    if steps and (steps[-1].endswith(".html") or "-MAP" in steps[-1]):
+        steps.pop()
 
-            steps = stepify_typed(lastfilepath)
-            target_path = "/".join(steps)
-
-            # Ensure boundaries and node trees are fully loaded
-            lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
-                sourcepath=lastfilepath,
-                here=None,
-                resolved_levels=rlevels,
-                parent_levels=plevels
-            )
-
-            current_node = MapRoot.ping_node(rlevels, layers.Geo_index, lastfilepath, create=True, accumulate=False)
-            created, leaves = current_node.endpoint_created(CElection, layers.Geo_index, rlevels, lastfilepath, static=False)
-            if not created:
-                logging.warning(f"❌ Endpoint does not exist: {lastfilepath}")
-
-            program = ProgramContext()
-            election = ElectionContext(CElection)
-            OPTIONS = resolve_ui_context(program, election, current_node)
-
-            print(f"🧪 Index level {current_election} - options[areas]: {bool(OPTIONS.get('areas'))} target_path: {target_path}")
-
-            return render_template(
-                "Dash0.html",
-                table_types=TABLE_TYPES,
-                ELECTIONS=ELECTIONS,
-                current_election=current_election,
-                options=OPTIONS,
-                constants=CElection,
-                baked_data=BAKED_DATA,
-                mapfile=current_node.mapfile,
-                streamrag=streamrag,
-                current_path=target_path
-            )
-
-    # If no session or username, render fallback index page
-    print(f"🧪 Index No session for elections: {ELECTIONS} ")
-    return render_template("index.html")
+    return render_template(
+        "Dash0.html",
+        table_types=TABLE_TYPES, ELECTIONS=get_available_elections(),
+        current_election=current_election, options=OPTIONS, constants=CElection,
+        baked_data=baked_manager.load(), mapfile=current_node.mapfile,
+        streamrag=streamrag, current_path="/".join(steps) or "UNITED_KINGDOM",
+    )
 
 #login
 @app.route('/login', methods=['POST', 'GET'])
@@ -4544,85 +4516,6 @@ def convert_csv_to_clean_json(csv_path):
 
 
 
-@app.route('/firstpage', methods=['GET', 'POST'])
-@login_required
-def firstpage():
-    # ... setup election & restore ...
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-
-    current_election = CurrentElection.get_lastused()
-    session["current_election"] = current_election
-
-    CElection = CurrentElection.load(current_election)
-    if not CElection:
-        return jsonify(success=False, error="Election not found"), 404
-
-    rlevels = CElection.resolved_levels
-    (c_election, elevels), = rlevels.items()
-    plevels = CElection.parent_levels
-
-    breadcrumb = CElection['mapfiles'][-1] if CElection.get('mapfiles') else None
-    areaelectors = electors.elector_for_path(rlevels, "UNITED_KINGDOM")
-
-    lat = CElection.get('cidLat')
-    lon = CElection.get('cidLong')
-    here = (lat, lon) if (lat is not None and lon is not None) else None
-
-    # 🎯 1. BUILD SPATIAL INDEX FIRST:
-    # Ensure Geo_index is populated with spatial shapes BEFORE ping_node runs!
-    filepath, layers.Geo_index = ensure_treepolys_with_index(
-        sourcepath=breadcrumb or "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html",
-        here=here,
-        resolved_levels=rlevels,
-        parent_levels=plevels,
-        areaelectors=areaelectors
-    )
-
-    # 🎯 2. NOW RESOLVE AND PING NODE:
-    current_node = get_last_node(CElection, layers.Geo_index, create=True)
-
-    if current_node is MapRoot:
-        # ping_node can now find spatial bounds in Geo_index and trigger create_map_branch!
-        current_node = MapRoot.ping_node(
-            rlevels,
-            layers.Geo_index,
-            breadcrumb,
-            create=True,
-            accumulate=session.get("accumulate", False)
-        )
-
-    session["current_node_id"] = current_node.nid
-
-    # 🎯 3. BUILD UI CONTEXT & CREATE MAP:
-    program = ProgramContext()
-    election_ctx = ElectionContext(CElection)
-    OPTIONS = resolve_ui_context(program, election_ctx, current_node)
-
-    map_obj, totalleaf = current_node.create_node_map(CElection, layers.Geo_index, rlevels, static=False)
-
-    ELECTIONS = get_available_elections()
-    BAKED_DATA = baked_manager.load()
-
-    persist(layers.Treepolys, layers.Geo_index)
-
-    breadcrumb_path = breadcrumb if breadcrumb else "UNITED_KINGDOM/UNITED_KINGDOM-MAP.html"
-    cleaned_steps = stepify_typed(breadcrumb_path)
-    if cleaned_steps and ('-MAP' in cleaned_steps[-1] or cleaned_steps[-1].endswith('.html')):
-        cleaned_steps.pop()
-
-    current_node_path_val = "/".join(cleaned_steps) if cleaned_steps else "UNITED_KINGDOM"
-
-    return render_template(
-        "Dash0.html",
-        table_types=TABLE_TYPES,
-        ELECTIONS=ELECTIONS,
-        current_election=current_election,
-        options=OPTIONS,
-        constants=CElection,
-        baked_data=BAKED_DATA,
-        mapfile=current_node.mapfile,
-        current_path=current_node_path_val
-    )
 
 @app.route('/cards', methods=['POST','GET'])
 @login_required
