@@ -3619,14 +3619,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (syncedData) {
             // 1. Set local iframe globals (and ensure both election aliases match)
             window.current_election = syncedData.current_election;
-            window.currentElectionName = syncedData.current_election; 
+            window.currentElectionName = syncedData.current_election;
             window.options = syncedData.options || {};
             window.task_tags = window.options.task_tags || [];
             window.resources = window.options.resources || [];
             window.places = window.options.places || [];
             window.areas = window.options.areas || {};
             window.API = syncedData.backend_url ? syncedData.backend_url.replace(/\/$/, "") : "";
+            window.areaTree = syncedData.areaTree || syncedData.options?.areaTree || {};
+            window.currentNodePath = syncedData.currentNodePath || window.currentNodePath;
+            window.mapfile = syncedData.mapfile || window.mapfile;
 
+            // 🚀 Render the accordion instantly using the authoritative backend areaTree
+            if (typeof window.initAccordionFromOptions === "function") {
+                window.initAccordionFromOptions(window.areaTree, {
+                    containerId: 'children-list',
+                    accordionId: 'election-accordion',
+                    emptyMessage: 'No regions available for this election'
+                });
+            }
             if (window.task_tags.length > 0) {
                 window.taskTree = window.task_tags;
             }
