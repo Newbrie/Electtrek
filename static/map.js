@@ -1324,6 +1324,7 @@ async function getCalendarUpdate(API) {
     try {
         // Optional override for a different host; otherwise same-origin relative URL
         const base = (typeof API === "string" && API.trim() !== "") ? API.trim() : "";
+        console.log("📦 [GETCAL] base url:", base);
 
         const response = await fetch(`${base}/current-election`, {
             credentials: "same-origin",
@@ -1333,13 +1334,13 @@ async function getCalendarUpdate(API) {
 
         // No election selected yet: not an error, just nothing to show
         if (response.status === 409) {
-            console.info("ℹ️ No election selected yet; calendar left empty.");
+            console.info("ℹ️ [GETCAL] No election selected yet; calendar left empty.");
             return;
         }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
-        console.log("📦 Backend response received:", data);
+        console.log("📦 [GETCAL] Backend response received:", data);
 
         // Store calendar plan
         window.plan = data.constants?.calendar_plan || data.calendar_plan;
@@ -1351,12 +1352,12 @@ async function getCalendarUpdate(API) {
 
         if (typeof loadCalendarPlan === "function") {
             loadCalendarPlan(window.plan);
-            console.log("✅ Calendar plan loaded into UI");
+            console.log("✅ [GETCAL] Calendar plan loaded into UI");
         }
 
     } catch (err) {
         // Put name and message in the string: Safari's console export drops extra arguments
-        console.error(`🚨 Error fetching calendar plan: ${err.name}: ${err.message}`);
+        console.error(`🚨 [GETCAL] Error fetching calendar plan: ${err.name}: ${err.message}`);
     }
 }
 
