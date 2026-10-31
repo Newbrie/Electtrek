@@ -86,11 +86,12 @@ const handleIframeMessage = async (e) => {
           }
           window.options           = data.options || window.options || {};
           window.latestConstants   = data.constants || window.constants;
-
+          window.plan              = data.plan
           window.task_tags        = window.options.task_tags || [];
           window.resources        = window.options.resources || [];
           window.places           = window.options.places || [];
           window.areas            = window.options.areas || {};
+
 
           // 🎯 Set areaTree directly from options.areas payload before refreshing DOM
           if (window.options.areas) {

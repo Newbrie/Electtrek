@@ -902,16 +902,18 @@ function cleanupModalState() {
 
 
 // Expose a function inside the iframe that the parent can call directly:
-window.buildAndLoadCalendar = function(plan) {
-    if (typeof buildCalendarGrid === "function") {
-        buildCalendarGrid("calendar-grid", 45);
-    }
-    if (typeof populateDropdowns === "function") {
-        populateDropdowns();
-    }
-    if (typeof loadCalendarPlan === "function" && plan) {
-        loadCalendarPlan(plan);
-    }
+window.buildAndLoadCalendar = function (plan) {
+    // Normalise so loadCalendarPlan never sees a missing slots object
+    const safePlan = { ...(plan || {}), slots: (plan && plan.slots) || {} };
+    window.plan = safePlan;
+
+    // Rebuild from scratch so a second call (election switch) doesn't stack grids
+    const grid = document.getElementById("calendar-grid");
+    if (grid) grid.innerHTML = "";
+
+    if (typeof buildCalendarGrid === "function") buildCalendarGrid("calendar-grid", 45);
+    if (typeof populateDropdowns === "function") populateDropdowns();
+    if (typeof loadCalendarPlan === "function") loadCalendarPlan(safePlan);
 };
 // ------------------------------
 // IN CALENDAR MODAL Add Place button handler
@@ -1319,47 +1321,6 @@ function openAddTaskTagForm() {
    alert("Task tag added!");
 }
 
-
-async function getCalendarUpdate(API) {
-    try {
-        // Optional override for a different host; otherwise same-origin relative URL
-        const base = (typeof API === "string" && API.trim() !== "") ? API.trim() : "";
-        console.log("📦 [GETCAL] base url:", base);
-
-        const response = await fetch(`${base}/current-election`, {
-            credentials: "same-origin",
-            cache: "no-store",
-            headers: { "Accept": "application/json" },
-        });
-
-        // No election selected yet: not an error, just nothing to show
-        if (response.status === 409) {
-            console.info("ℹ️ [GETCAL] No election selected yet; calendar left empty.");
-            return;
-        }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        console.log("📦 [GETCAL] Backend response received:", data);
-
-        // Store calendar plan
-        window.plan = data.constants?.calendar_plan || data.calendar_plan;
-
-        if (!window.plan || !window.plan.slots) {
-            console.warn("⚠️ No slots found in calendar_plan");
-            return;
-        }
-
-        if (typeof loadCalendarPlan === "function") {
-            loadCalendarPlan(window.plan);
-            console.log("✅ [GETCAL] Calendar plan loaded into UI");
-        }
-
-    } catch (err) {
-        // Put name and message in the string: Safari's console export drops extra arguments
-        console.error(`🚨 [GETCAL] Error fetching calendar plan: ${err.name}: ${err.message}`);
-    }
-}
 
 
 
@@ -3629,6 +3590,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             window.areaTree = syncedData.areaTree || syncedData.options?.areaTree || {};
             window.currentNodePath = syncedData.currentNodePath || window.currentNodePath;
             window.mapfile = syncedData.mapfile || window.mapfile;
+            window.plan = syncedData.constants?.calendar_plan || {};
 
             // 🚀 Render the accordion instantly using the authoritative backend areaTree
             if (typeof window.initAccordionFromOptions === "function") {
@@ -3651,7 +3613,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     current_election: syncedData.current_election,
                     options: syncedData.options,
                     constants: syncedData.constants,
-                    backend_url: syncedData.backend_url
+                    backend_url: syncedData.backend_url,
+                    plan: window.plan
                 }, "*");
             }
         }
@@ -3688,15 +3651,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.BAKED_DATA = window.BAKED_DATA || (parent && parent.BAKED_DATA) || [];
     var fmap;
 
-    // 4. Build Calendar UI & Dropdowns ONCE
-    console.log("📅 Building calendar UI & dropdowns...");
-    buildCalendarGrid("calendar-grid", 45);
-    populateDropdowns();
-    console.log("📅 Calendar UI ready.");
-
     // 5. Load Plan Data
-    if (typeof getCalendarUpdate === "function") {
-        getCalendarUpdate(window.API);
+    if (typeof buildAndLoadCalendar === "function") {
+        buildAndLoadCalendar(window.plan);
         console.log("📅 Calendar data loaded.");
     }
 
