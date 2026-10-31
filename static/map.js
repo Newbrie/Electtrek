@@ -3617,32 +3617,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     if (syncedData) {
-        // 1. Set local iframe globals
-        window.current_election = syncedData.current_election;
-        window.options = syncedData.options || {};
-        window.task_tags = window.options.task_tags || [];
-        window.resources = window.options.resources || [];
-        window.places = window.options.places || [];
-        window.areas = window.options.areas || {};
-        window.API = syncedData.backend_url ? syncedData.backend_url.replace(/\/$/, "") : "";
+            // 1. Set local iframe globals (and ensure both election aliases match)
+            window.current_election = syncedData.current_election;
+            window.currentElectionName = syncedData.current_election; 
+            window.options = syncedData.options || {};
+            window.task_tags = window.options.task_tags || [];
+            window.resources = window.options.resources || [];
+            window.places = window.options.places || [];
+            window.areas = window.options.areas || {};
+            window.API = syncedData.backend_url ? syncedData.backend_url.replace(/\/$/, "") : "";
 
-        if (window.task_tags.length > 0) {
-            window.taskTree = window.task_tags;
-        }
+            if (window.task_tags.length > 0) {
+                window.taskTree = window.task_tags;
+            }
 
-        // 2. 🚀 Post payload up to Parent Window
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({
-                type: "iframeHydrationPayload",
-                currentNodePath: window.currentNodePath,
-                mapfile: window.mapfile,
-                current_election: syncedData.current_election,
-                options: syncedData.options,
-                constants: syncedData.constants,
-                backend_url: syncedData.backend_url
-            }, "*");
+            // 2. 🚀 Post payload up to Parent Window
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: "iframeHydrationPayload",
+                    currentNodePath: window.currentNodePath,
+                    mapfile: window.mapfile,
+                    current_election: syncedData.current_election,
+                    options: syncedData.options,
+                    constants: syncedData.constants,
+                    backend_url: syncedData.backend_url
+                }, "*");
+            }
         }
-    }
 
     // Bind Modal Cleanup Event
     const modalEl = document.getElementById("slotModal");
