@@ -265,7 +265,7 @@ def reset_nodes(Treep, Geo):
     TREK_NODES_BY_ID[root.nid] = root
     TREK_NODES_BY_PATH[root.node_path] = root
     return root
-    
+
 def save_nodes(path):
     print(f"[DEBUG] registry id in save_nodes: {id(TREK_NODES_BY_ID)}")
     print(f"[DEBUG] registry size in save_nodes: {len(TREK_NODES_BY_ID)}")
@@ -1595,6 +1595,7 @@ class TreeNode:
         import state
         import copy
         from collections import defaultdict
+        from layers import Treepolys
 
         # 🔧 Fix 1: Track tags to safely handle duplicate closure assignments
         used_tags = set()
@@ -1726,16 +1727,16 @@ class TreeNode:
                 continue
 
             # 🛡️ AUTO-REHYDRATE GUARD: Ensure Treepolys has valid data for this layer type
-            if factory_key not in ["marker", "street"]:
-                from layers import Treepolys, load_layer
-                if (factory_key not in Treepolys or
-                    Treepolys[factory_key] is None or
-                    Treepolys[factory_key].empty or
-                    'FID' not in Treepolys[factory_key].columns):
+        if factory_key not in ["marker", "street"]:
+            # Check if the requested layer key exists and has valid tabular data
+            if (factory_key not in Treepolys or
+                Treepolys[factory_key] is None or
+                Treepolys[factory_key].empty or
+                'FID' not in Treepolys[factory_key].columns):
 
-                    print(f"⚡ [AUTO-REHYDRATE] Treepolys missing/empty for layer '{factory_key}' at node '{self.node_path}'. Loading...")
-                    Treepolys[factory_key] = load_layer(factory_key, self.node_path)
-
+                # ⚠️ Log warning and ignore missing key gracefully
+                print(f"⚠️ [REHYDRATE SKIP] Layer '{factory_key}' not present in Treepolys for node '{self.node_path}'. Skipping layer processing.")
+                # Do not attempt to call load_layer; continue execution cleanly
         for factory_key, layer in factory.items():
 
             if factory_key not in TEST_LAYERS:

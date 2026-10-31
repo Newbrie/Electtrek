@@ -30,4 +30,7 @@ WALK_GEOM_FILE = Path(workdirectories['bounddir']) / 'walk_geoms.geojson'
 LOG_FILE = Path(workdirectories['logdir']) / 'logging.log'
 DEBUG_FILE = Path(workdirectories['logdir']) / 'debug.log'
 DEVURLS = { "prod" : "https://electtrek.com",
-            "dev" : "http://127.0.0.1:5000" }
+            "dev" : "http://127.0.0.1:5000" ,
+             "devlh" : "http://localhost:5000",
+             "dev1" : "http://127.0.0.1:5001",
+             "dev1lh" : "http://localhost:5001"}

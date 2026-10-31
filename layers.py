@@ -1109,6 +1109,10 @@ def load_layer(
     # ------------------------------------------------------------------
     # STAGE 2: Route to specific spatial method
     # ------------------------------------------------------------------
+    # No name and no point: caller wants all children, so a filter engine can't answer it
+    if method == "filter" and select_name is None and roid is None:
+        method = "intersect"
+
     if method == "index":
         return indexSpatialArea(gdf, typekey=typekey, parent_row=parent_row, roid=roid)
 
@@ -1251,33 +1255,19 @@ def upsert_geodf(
     return gpd.GeoDataFrame(combined, geometry=geom_col, crs=existing.crs)
 
 import hashlib, re
+import json, re
 
 WALK_GEOM_DIR = os.path.join(os.path.dirname(os.path.abspath(WALK_GEOM_FILE)), "walk_geoms")
 
-
-def walk_geom_path(areaelectors) -> str:
-    """One walk file per territory covered by areaelectors."""
-    cols = [c for c in ("Nation", "County") if c in areaelectors.columns]
-    terr = sorted(
-        "|".join(map(str, r))
-        for r in areaelectors[cols].dropna().drop_duplicates().itertuples(index=False)
-    ) if cols else []
-
-    # Row count in the hash means a re-imported/changed elector file invalidates the cache
-    sig = hashlib.md5(f"{terr}|{len(areaelectors)}".encode()).hexdigest()[:8]
-    slug = re.sub(r"\W+", "_", terr[0]).strip("_").upper() if len(terr) == 1 else f"MULTI_{len(terr)}"
-    return os.path.join(WALK_GEOM_DIR, f"WALK_{slug}_{sig}.geojson")
-
-import json, re
-
 def county_from_node_path(node_path) -> str:
-    current_county = county_from_node_path(node_path)
-    is_revised = bool(revised_setting and current_county and (revised_setting == current_county))
+    steps = stepify_typed(node_path) if node_path else []
     return str(steps[2]).strip().upper() if len(steps) > 2 else ""
 
 def walk_geom_path(county: str) -> str:
     slug = re.sub(r"\W+", "_", str(county)).strip("_").upper()
     return os.path.join(WALK_GEOM_DIR, f"WALK_{slug}.geojson")
+
+
 
 def ensure_walk_geometries(areaelectors, county: str):
     """Return the walk file for this county, regenerating it if missing or stale."""
@@ -1774,7 +1764,12 @@ def ensure_treepolys_with_index(
             active_layer_rows.setdefault(layer_type, [])
             if layer_type.lower() == "walk":
                 county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
-                ensure_walk_geometries(areaelectors, county)
+                walk_file_path = ensure_walk_geometries(areaelectors, county)
+
+                # 🛡️ Fail safely if walk geometry generation was skipped or returned None
+                if not walk_file_path:
+                    logging.warning(f"⚠️ Walk geometries could not be ensured for county '{county}'. Skipping walk layer initialization.")
+                    continue
 
             layer = layer_defs.get(layer_type)
             if not layer:

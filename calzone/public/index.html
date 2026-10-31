@@ -808,7 +808,7 @@ async function getCalendarUpdate() {
     const response = await fetch(`${API}/current-election`);
     const data = await response.json();
     console.log("📦 Raw backend response:", data); // 👈 Add this
-
+    console.log(`[CAL] origin=${window.location.origin} API=${API} election=${window.currentElectionName}`);
     const plan = data.calendar_plan || data; // Handles both structures
     console.log("📋 Parsed plan object:", plan); // 👈 Add this too
 
