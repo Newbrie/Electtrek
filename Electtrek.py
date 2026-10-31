@@ -3411,52 +3411,38 @@ def downbulk():
         "map_url": f"/transfer/{map_filename}"
     })
 
-@app.route('/transfer/<path:path>', methods=['GET','POST'])
+@app.route('/transfer/<path:path>', methods=['GET', 'POST'])
 @login_required
 def transfer(path):
-    from layers import ensure_treepolys_with_index
-    from flask import session
-    from elector import electors
-    from layers import ExtendedFeatureGroup
-    from elections import CurrentElection
-    import nodes
-
-    global layeritems
-    global constants
-
-    logger.info("=== [TRANSFER START] Incoming path: '%s' ===", path)
-    print("____Route/transfer:", path)
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-
-    current_election = CurrentElection.get_lastused()
-    session["current_election"] = current_election
-    CElection = CurrentElection.load(current_election)
+    CElection, _ = request_context()           # session first, get_lastused() only as fallback
     rlevels = CElection.resolved_levels
 
-    # 1. Use stepify to clean suffixes and ignorable containers (like 'WARDS') automatically
-    steps = stepify_typed(path)
-    target_path = "/".join(steps)
+    target_path = "/".join(stepify_typed(path))
+    logger.info("[TRANSFER] '%s' -> '%s'", path, target_path)
 
-    logger.info("[TRANSFER STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
+    # Build the spatial layers for the clicked node, so its children exist
+    mapfile = ensure_hydrated(CElection, target_path, force=True)
 
-    # 2. Direct O(1) node lookup using the clean node path
-    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
-    if current_node is None:
-        current_node = get_trek_root().ping_node(rlevels,layers.Geo_index,target_path, create=True, accumulate=session.get("accumulate", False))
+    # Always ping with create=True: a node found in the registry may have no children yet
+    current_node = get_trek_root().ping_node(
+        rlevels, layers.Geo_index, mapfile,
+        create=True, accumulate=session.get("accumulate", False),
+    )
+    if not current_node:
+        return jsonify(success=False, error=f"No node for {target_path}"), 404
 
-    created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile,static=False)
-
+    current_node.endpoint_created(CElection, layers.Geo_index, rlevels,
+                                  current_node.mapfile, static=False)
     current_node.visit_node(CElection)
 
-    # 🛠️ DEFINE WEB_PATH HERE:
-    web_path = f"/thru/{current_node.mapfile}"
+    session["current_election"] = CElection.name if hasattr(CElection, "name") else session.get("current_election")
+    session["current_node_path"] = current_node.node_path
 
-    persist(layers.Treepolys, layers.Geo_index)
-    print (f"_________ROUTE/transfer via iframe change file:{web_path}")
-
-    return jsonify(success=True, map_url=web_path)
-
+    persist(layers.Treepolys, layers.Geo_index)     # optional restart fallback
+    return jsonify(success=True,
+                   map_url=f"/thru/{current_node.mapfile}",
+                   currentNodePath=current_node.node_path,
+                   mapfile=current_node.mapfile)
 
 
 @app.route('/downMWbut/<path:path>', methods=['GET','POST'])
