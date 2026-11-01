@@ -1269,22 +1269,26 @@ def walk_geom_path(county: str) -> str:
 
 
 
-def ensure_walk_geometries(areaelectors, county: str):
-    """Return the walk file for this county, regenerating it if missing or stale."""
+def ensure_walk_geometries(areaelectors, constituency: str):
+    """Return the walk file for this constituency, regenerating it if missing or stale."""
     from state import normalname
 
-    if not county or areaelectors is None or areaelectors.empty:
+    if not constituency or areaelectors is None or areaelectors.empty:
         return None
 
-    target = normalname(county)
-    county_electors = areaelectors[areaelectors["County"].astype(str).map(normalname) == target]
-    if county_electors.empty:
-        logging.warning(f"[WALK] No electors found for county '{county}'; no walk file built.")
+    target = normalname(constituency)
+
+    # Filter by Constituency column instead of County
+    constituency_electors = areaelectors[areaelectors["Constituency"].astype(str).map(normalname) == target]
+
+    if constituency_electors.empty:
+        logging.warning(f"[WALK] No electors found for constituency '{constituency}'; no walk file built.")
         return None
 
-    path = walk_geom_path(county)
+    # Use constituency for the path generator function
+    path = walk_geom_path(constituency)
     meta_path = path + ".meta.json"
-    rows = len(county_electors)
+    rows = len(constituency_electors)
 
     fresh = False
     if os.path.exists(path) and os.path.getsize(path) > 100 and os.path.exists(meta_path):
@@ -1295,15 +1299,18 @@ def ensure_walk_geometries(areaelectors, county: str):
             fresh = False
 
     if fresh:
-        logging.info(f"[WALK] Reusing {path}")
+        logging.info(f"[WALK] Reusing cached walk file: {path}")
         return path
 
-    logging.info(f"[WALK] Generating walk geometries for '{county}' ({rows} electors) -> {path}")
-    gdf = _generate_walk_geometries(county_electors, path)
+    logging.info(f"[WALK] Generating walk geometries for constituency '{constituency}' ({rows} electors) -> {path}")
+    gdf = _generate_walk_geometries(constituency_electors, path)
+
     if gdf is None or gdf.empty:
         return None
+
     with open(meta_path, "w") as f:
         json.dump({"rows": rows}, f)
+
     return path
 
 def _generate_walk_geometries(areaelectors, out_path):
@@ -1763,12 +1770,15 @@ def ensure_treepolys_with_index(
         for layer_type in sub_layers:
             active_layer_rows.setdefault(layer_type, [])
             if layer_type.lower() == "walk":
-                county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
-                walk_file_path = ensure_walk_geometries(areaelectors, county)
+                # Assuming constituency is at a specific step index in your navigation path (e.g., steps[3])
+                # Adjust index depending on your exact path structure: [Country, Nation, County, Constituency, ...]
+                constituency = str(steps[3]).strip().upper() if len(steps) > 3 else (str(steps[2]).strip().upper() if len(steps) > 2 else "")
+
+                walk_file_path = ensure_walk_geometries(areaelectors, constituency)
 
                 # 🛡️ Fail safely if walk geometry generation was skipped or returned None
                 if not walk_file_path:
-                    logging.warning(f"⚠️ Walk geometries could not be ensured for county '{county}'. Skipping walk layer initialization.")
+                    logging.warning(f"⚠️ Walk geometries could not be ensured for constituency '{constituency}'. Skipping walk layer initialization.")
                     continue
 
             layer = layer_defs.get(layer_type)

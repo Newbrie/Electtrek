@@ -884,8 +884,9 @@ class TreeNode:
         return {}
 
     def get_sibling_layers(self):
+        # 🎯 Fallback for root node: If there's no parent, return self as the country layer
         if not self.parent:
-            return {}
+            return {getattr(self, 'type', 'country'): [self]}
 
         sibling_groups = {}
         for child in self.parent.children:
@@ -1723,6 +1724,9 @@ class TreeNode:
 
             if factory_key not in TEST_LAYERS:
                 continue
+
+            if factory_key == "country" and not nodes_to_render:
+                nodes_to_render = [self]
 
             nodes_to_render = nodes_by_type.get(factory_key, [])
             if factory_key != "marker" and not nodes_to_render:
@@ -3501,7 +3505,7 @@ class TreeNode:
 
         except ValueError:
             return False
-            
+
     def add_Tchild(self, child_node, etype, elect):
         orig_type = getattr(child_node, 'type', 'NOT_SET')
         child_node.type = etype
