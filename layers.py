@@ -4060,20 +4060,21 @@ class ExtendedFeatureGroup(FeatureGroup):
                         limbX = limbX.iloc[[0]].copy()
 
                     target_idx = limbX.index[0]
+
                     font_style = "style='font-size: 12pt;'"
                     c_path = f"{c.mapfile}"
-                    here_path = f"{herenode.mapfile}"
                     c_val = c.value
-                    here_val = herenode.value
+                    here_val = herenode.value if herenode else ""
                     mapfile = f"/transfer/{c.mapfile}"
 
-                    # Standard JavaScript Callbacks for Up and Down Navigation
-                    up_js = f"moveUp('/upbut/{here_path}', '{here_val}')"
+                    # 🎯 UP is relative to feature `c`, so we send `c_path` (`c.mapfile` / `c.node_path`)
+                    up_js = f"moveUp('/upbut/{c_path}', '{c_val}')"
                     down_js = f"moveDown('/downbut/{c_path}', '{c_val}')"
 
                     # Standardized Up and Down Tag Buttons
                     up_tag = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{up_js}\" {font_style}>UP</button>"
                     down_tag = f"<button type='button' class='guil-button btn btn-norm' onclick=\"{down_js}\" {font_style}>DOWN</button>"
+
 
                     # ------------------------------------------------------------------
                     # LEVEL ROUTING & POPUP CONTENT GENERATION

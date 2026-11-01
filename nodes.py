@@ -3501,41 +3501,44 @@ class TreeNode:
 
         except ValueError:
             return False
-
-
+            
     def add_Tchild(self, child_node, etype, elect):
-        # 🚨 TRACK INITIAL STATE BEFORE OVERWRITE
         orig_type = getattr(child_node, 'type', 'NOT_SET')
         child_node.type = etype
 
-        registry = TREK_NODES_BY_ID
+        # 🎯 1. ALWAYS BIND PARENT POINTERS FIRST BEFORE COMPUTING PATHS
+        if child_node.parent and child_node.parent is not self:
+            if child_node in child_node.parent.children:
+                child_node.parent.children.remove(child_node)
+
+        child_node.parent = self
+        if hasattr(child_node, 'parent_id'):
+            child_node.parent_id = getattr(self, "nid", None)
+
+        # 🎯 2. CALCULATE STANDARDIZED NODE PATH (Using '/' slashes)
+        parent_path = getattr(self, 'node_path', '')
+        if parent_path:
+            target_path = f"{parent_path}/{child_node.value}"
+        else:
+            target_path = child_node.value
+
+        # Assign target_path if node_path is an attribute rather than a dynamic property
+        if not hasattr(child_node, 'node_path') or not child_node.node_path:
+            child_node.node_path = target_path
+
+        print(f"\n🟢 [DEBUG] add_Tchild called for node '{child_node.value}' ({getattr(child_node, 'nid', 'NO_ID')})")
+        print(f"   - Type: '{etype}' (Original: '{orig_type}')")
+        print(f"   - Parent: '{self.value}' -> Node: '{child_node.value}'")
+        print(f"   - 🧭 Calculated node_path: '{child_node.node_path}'")
+
+        # ---------------------------------------------------------
+        # 1️⃣ Fast O(1) Path Lookup in Registry
+        # ---------------------------------------------------------
+        registry = globals().get("TREK_NODES_BY_ID", {})
         path_registry = globals().get("TREK_NODES_BY_PATH", {})
 
-        parent_path = self.node_path if (self and hasattr(self, 'node_path')) else ""
-        target_path = f"{parent_path} -> {child_node.value}" if parent_path else child_node.value
-
-        print(f"\n🟢 [DEBUG] add_Tchild called for node '{child_node.value}' ({child_node.nid})")
-        print(f"   - Type passed in: '{etype}' (Original node type was: '{orig_type}')")
-        print(f"   - Proposed Parent: {self.value if self else 'None'} (Type: {getattr(self, 'type', 'None')})")
-        print(f"   - Current Node Parent: {child_node.parent.value if child_node.parent else 'None'}")
-        print(f"   - 🧭 Calculated target path for matching: '{target_path}'")
-
-        # ---------------------------------------------------------
-        # 1️⃣ Prevent multiple root country nodes
-        # ---------------------------------------------------------
-        if child_node.parent is None and etype == "country":
-            for existing_node in registry.values():
-                if existing_node.type == "country" and existing_node.parent is None:
-                    raise ValueError(
-                        f"Cannot add another root node of type 'country': {child_node.value}"
-                    )
-
-        # ---------------------------------------------------------
-        # 2️⃣ Fast O(1) Path Lookup & Short-Circuit
-        # ---------------------------------------------------------
-        existing = path_registry.get(target_path)
-        if existing:
-            # Validate matching conditions (type check or ONS map FID check)
+        existing = path_registry.get(child_node.node_path)
+        if existing and existing is not child_node:
             is_ons_map = getattr(child_node, "origin", None) == "ONS_MAPS"
             match_valid = True
             if is_ons_map and hasattr(existing, 'fid') and hasattr(child_node, 'fid'):
@@ -3544,59 +3547,38 @@ class TreeNode:
                 match_valid = (existing.type == etype)
 
             if match_valid:
-                print(f"🔍 [DEBUG] Node matched in registry by path: {existing.node_path} ({existing.nid})")
+                print(f"🔍 [DEBUG] Existing node matched by path: {existing.node_path}")
 
-                # Detach from old parent if changing parents (With Parent Hijack Alarm)
+                # Re-link existing instance to current parent
                 if existing.parent and existing.parent is not self:
-                    print(f"💥 [ALARM] NODE POACHING DETECTED!")
-                    print(f"   - Node '{existing.value}' ({existing.nid}) is being ripped away from old parent!")
-                    print(f"   - Old Parent: '{existing.parent.value}' (Path: {existing.parent.node_path})")
-                    print(f"   - New Parent: '{self.value}' (Path: {self.node_path})")
                     if existing in existing.parent.children:
                         existing.parent.children.remove(existing)
 
-                # Update parent pointers and add to new parent's children
                 existing.parent = self
                 if hasattr(existing, 'parent_id'):
-                    existing.parent_id = self.nid
+                    existing.parent_id = getattr(self, "nid", None)
 
                 if existing not in self.children:
                     self.children.append(existing)
-                    print(f"✅ Linked {existing.value} to {self.value} (children now: {len(self.children)})")
-                else:
-                    print(f"ℹ️ Node '{existing.value}' already present in parent '{self.value}' children array.")
 
                 save_nodes(TREKNODE_FILE)
                 return existing
-            else:
-                print(f"   - ⚠️ [COLLISION] Path '{target_path}' matched, but type/FID mismatch. Creating separate node instance.")
 
         # ---------------------------------------------------------
-        # 3️⃣ Brand New Node Attachment & Registration
+        # 2️⃣ Attach & Register New Node
         # ---------------------------------------------------------
-        if child_node.parent and child_node.parent is not self:
-            if child_node in child_node.parent.children:
-                child_node.parent.children.remove(child_node)
-
-        child_node.parent = self
-        if hasattr(child_node, 'parent_id'):
-            child_node.parent_id = self.nid
-
         if child_node not in self.children:
             self.children.append(child_node)
-            print(f"✅ Linked {child_node.value} to {self.value} (children now: {len(self.children)})")
 
-        # Register in ID and Path registries
-        if child_node.nid not in registry:
+        if hasattr(child_node, 'nid') and child_node.nid not in registry:
             registry[child_node.nid] = child_node
-            print(f"💾 Registered new node {child_node.value} ({child_node.nid}) in ID registry")
 
-        if not hasattr(child_node, 'node_path') or not child_node.node_path:
-            child_node.node_path = target_path
+        # Register in global path registry with intact parent link
         path_registry[child_node.node_path] = child_node
 
         save_nodes(TREKNODE_FILE)
         return child_node
+
 
     def create_streetsheet(self, c_election, rlevels, electorwalks):
         """
