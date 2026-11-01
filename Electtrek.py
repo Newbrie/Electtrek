@@ -3218,92 +3218,53 @@ def dashboard():
     return redirect(url_for('index'))
 
 
-@app.route('/downbut/<path:path>', methods=['GET','POST'])
+@app.route('/downbut/<path:path>', methods=['GET', 'POST'])
 @login_required
 def downbut(path):
-    from layers import ensure_treepolys_with_index
-    from flask import session
-    from elector import electors
-    from layers import ExtendedFeatureGroup
-    from elections import CurrentElection
-    import nodes
-
-    global layeritems
-    global constants
-
-    logger.info("=== [DOWNBUT START] Incoming path: '%s' ===", path)
-    print("____Route/downbut:", path)
-
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-
-    current_election = CurrentElection.get_lastused()
-    session["current_election"] = current_election
-    CElection = CurrentElection.load(current_election)
+    CElection, _ = request_context()            # Session first, reliable fallback context
     rlevels = CElection.resolved_levels
 
-    # 1. Use stepify to clean suffixes and ignorable containers (like 'WARDS') automatically
+    # 1. Stepify and clean incoming path
     steps = stepify_typed(path)
     target_path = "/".join(steps)
+    logger.info("[DOWNBUT] Incoming path: '%s' -> Stepified target path: '%s'", path, target_path)
 
-    logger.info("[DOWNBUT STEP 1] Stepified path: %s -> Target path: '%s'", steps, target_path)
+    # 2. Build spatial layers and ensure hydration down to the target path
+    mapfile = ensure_hydrated(CElection, target_path, force=True)
 
-    current_node = nodes.TREK_NODES_BY_PATH.get(target_path)
-    if current_node is None:
-        # Registry was reset: rebuild down from the root, same as /transfer
-        current_node = get_trek_root().ping_node(
-            rlevels, layers.Geo_index, target_path,
-            create=True, accumulate=session.get("accumulate", False)
-        )
-
-    if current_node is None:
-        logger.warning("[DOWNBUT] No node for path: %s", path)
-        return no_data_response(steps[-1] if steps else path, reason="no_node")
-
-    session["current_node_id"] = current_node.nid
-    target_nid = getattr(current_node, "nid", None)
-    logger.info("[DOWNBUT STEP 3] SUCCESS! Resolved Node NID: '%s' (value: '%s')", target_nid, getattr(current_node, "value", None))
-
-    previous_node = current_node
-
-    areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
-
-    plevels = CElection.parent_levels
-    breadcrumb = path
-
-    # 3. Index & Boundary sync
-    filepath, layers.Geo_index = ensure_treepolys_with_index(
-        sourcepath=breadcrumb,
-        here=None,
-        resolved_levels=rlevels,
-        parent_levels=plevels,
-        areaelectors=areaelectors
+    # 3. Always ping with create=True to populate downstream children & boundaries
+    current_node = nodes.get_trek_root().ping_node(
+        rlevels, layers.Geo_index, mapfile,
+        create=True, accumulate=session.get("accumulate", False),
     )
+    if not current_node:
+        return jsonify(success=False, error=f"No node found for {target_path}"), 404
 
-    # Use ping to populate the next level of nodes for boundary/marker repainting
-    current_node = previous_node.ping_node(rlevels, layers.Geo_index, path, create=True, accumulate=session.get("accumulate", False))
+    # 4. Check elector data constraints for leaf-level nodes (Level > 4)
+    if current_node.level > 4:
+        areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
+        if len(areaelectors) == 0:
+            logger.warning("[DOWNBUT] No elector data at %s for election %s", current_node.value, CElection.name)
+            return no_data_response(current_node.value)
 
-    if current_node.level > 4 and len(areaelectors) == 0:
-        logger.warning("No elector data at %s for election %s", current_node.value, current_election)
-        return no_data_response(current_node.value)
-    else:
-        base = Path(config.workdirectories['workdir'])
-        fullpath = base / current_node.mapfile
-        created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, current_node.mapfile, static=False)
-        if created:
-            if not fullpath.exists():
-                abort(404, f"Route/downbut File not found: {fullpath}")
-            print(f"_________ROUTE/downbut at {current_node.value} display file created:{fullpath}")
+    # 5. Finalize endpoint creation, visit state, and session state
+    current_node.endpoint_created(CElection, layers.Geo_index, rlevels,
+                                  current_node.mapfile, static=False)
+    current_node.visit_node(CElection)
 
-        if not current_node.visit_node(CElection):
-            flash("That node is outside of the election Territory")
-            print("That node is outside of the election Territory:")
+    session["current_election"] = CElection.name if hasattr(CElection, "name") else session.get("current_election")
+    session["current_node_path"] = current_node.node_path
+    session["current_node_id"] = current_node.nid
 
-        persist(layers.Treepolys, layers.Geo_index)
+    persist(layers.Treepolys, layers.Geo_index)
 
-        print(f"_________ROUTE/downbut at sending file:{fullpath}")
-        logger.info("_________ROUTE/downbut sending file: %s", fullpath)
-        return send_file(fullpath, as_attachment=False)
+    # 6. Return JSON response matching transfer/upbut style for clean client-side iframe redirection
+    return jsonify(
+        success=True,
+        map_url=f"/thru/{current_node.mapfile}",
+        currentNodePath=current_node.node_path,
+        mapfile=current_node.mapfile
+    )
 
 @app.route('/downbulk', methods=['POST'])
 @login_required
@@ -4003,99 +3964,60 @@ def divreport(path):
 @app.route('/upbut/<path:path>', methods=['GET', 'POST'])
 @login_required
 def upbut(path):
-    from elector import electors
-    from elections import CurrentElection
-    from layers import ensure_treepolys_with_index
-
-    global environment, layeritems, constants
-
-    logger.info("=== [UPBUT START] Incoming path: '%s' ===", path)
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
+    CElection, _ = request_context()            # Session first, reliable fallback context
     rlevels = CElection.resolved_levels
 
-    # 1. Clean file extension and derive parent path
-    clean_path = path.replace("-MAP.html", "").replace(".html", "")
-
-    # 1. Resolve the node we're on, using the typed path (filename stripped, WARDS/DIVS kept)
+    # 1. Strip file suffixes and obtain typed steps for the current position
     typed_steps = stepify_typed(path)
     while typed_steps and typed_steps[-1].upper() in ("WARDS", "DIVS"):
-      typed_steps.pop()
+        typed_steps.pop()
     here_path = "/".join(typed_steps)
-    logger.info("[UPBUT STEP 1] Typed path: '%s'", here_path)
+    logger.info("[UPBUT] Incoming path: '%s' -> Resolved here_path: '%s'", path, here_path)
 
+    # 2. Locate the current node in the registry or ping it down from root
     here_node = nodes.TREK_NODES_BY_PATH.get(here_path)
     if here_node is None:
-        # Registry may have been reset: rebuild down from the root, as /transfer does
         here_node = nodes.get_trek_root().ping_node(
             rlevels, layers.Geo_index, here_path,
             create=True, accumulate=session.get("accumulate", False)
         )
 
-    if here_node is None or here_node.node_path != here_path:
-        logger.warning("[UPBUT] Could not resolve %r (got %r)", here_path,
-                       getattr(here_node, "node_path", None))
-        return no_data_response(typed_steps[-1] if typed_steps else path, reason="no_node")
+    if not here_node:
+        return jsonify(success=False, error=fno_node_error := f"No node found for path: {here_path}"), 404
 
-    # 2. Up one node: the parent, or stay put at the root
+    # 3. Move up to parent node (or stay put if already at root)
     current_node = here_node.parent or here_node
-    parent_path = current_node.node_path          # typed, matches Geo_index keys
-    logger.info("[UPBUT STEP 2] %s -> parent %s", here_path, parent_path)
+    target_path = current_node.node_path
+    logger.info("[UPBUT STEP] Moving up: '%s' -> Parent: '%s'", here_path, target_path)
 
-    # 2. Guard against missing node
-    if current_node is None:
-        flash(f"Parent node not found for path: {path}")
-        logger.error("❌ [UPBUT ERROR] Failed to resolve parent node for path: %s", path)
-        abort(404, f"Parent node not found for path: {path}")
+    # 4. Build spatial layers and ensure hydration for the parent path
+    mapfile = ensure_hydrated(CElection, target_path, force=True)
 
-    target_nid = getattr(current_node, "nid", None)
-    logger.info("[UPBUT STEP 3] SUCCESS! Resolved Node NID: '%s' (value: '%s')", target_nid, getattr(current_node, "value", None))
-
-    # 3. Mapfile extraction using the resolved node
-    if hasattr(current_node, "mapfile"):
-        map_file = current_node.mapfile
-    else:
-        map_file = f"{getattr(current_node, 'value', 'MAP')}-MAP.html"
-
-
-    areaelectors = electors.elector_for_path(rlevels, current_node.mapfile)
-
-    plevels = CElection.parent_levels
-    breadcrumb = parent_path
-
-    # 3. Index & Boundary sync
-    filepath, layers.Geo_index = ensure_treepolys_with_index(
-        sourcepath=breadcrumb,
-        here=None,
-        resolved_levels=rlevels,
-        parent_levels=plevels,
-        areaelectors=areaelectors
+    # 5. Ensure the target parent node exists and is fully indexed
+    current_node = nodes.get_trek_root().ping_node(
+        rlevels, layers.Geo_index, mapfile,
+        create=True, accumulate=session.get("accumulate", False),
     )
+    if not current_node:
+        return jsonify(success=False, error=f"Failed to initialize parent node for {target_path}"), 404
 
-    logger.info("_______ROUTE/upbut path: %s -> Target Node NID: %s, Mapfile: %s", path, target_nid, map_file)
+    # 6. Finalize endpoint creation, visit state, and session state
+    current_node.endpoint_created(CElection, layers.Geo_index, rlevels,
+                                  current_node.mapfile, static=False)
+    current_node.visit_node(CElection)
 
-    base = Path(config.workdirectories['workdir'])
-    fullpath = base / map_file
-
-    if not fullpath.exists() and hasattr(current_node, "create_node_map"):
-        flash("No data for the selected node available, generating map...")
-        current_node.create_node_map(CElection,layers.Geo_index,rlevels, static=False)
-
-    if hasattr(current_node, "endpoint_created"):
-        created, _ = current_node.endpoint_created(CElection,layers.Geo_index,rlevels, map_file, static=False)
-        if created and not fullpath.exists():
-            abort(404, f"Route/upbut File not found after creation: {fullpath}")
-
-    if hasattr(current_node, "visit_node"):
-        if not current_node.visit_node(CElection):
-            flash("That node is outside of the election Territory")
+    session["current_election"] = CElection.name if hasattr(CElection, "name") else session.get("current_election")
+    session["current_node_path"] = current_node.node_path
 
     persist(layers.Treepolys, layers.Geo_index)
-    logger.info("_________ROUTE/upbut sending file: %s", fullpath)
-    return send_file(fullpath, as_attachment=False)
+
+    # 7. Return JSON response matching transfer style for clean client-side iframe redirection
+    return jsonify(
+        success=True,
+        map_url=f"/thru/{current_node.mapfile}",
+        currentNodePath=current_node.node_path,
+        mapfile=current_node.mapfile
+    )
 
 #Register user
 @app.route('/register', methods=['POST'])
