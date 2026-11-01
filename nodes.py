@@ -1719,34 +1719,23 @@ class TreeNode:
 
 
         # 🎯 DIRECT STREAM ROUTING LOOP
-        # 🎯 DIRECT STREAM ROUTING LOOP
         for factory_key, layer in factory.items():
 
             if factory_key not in TEST_LAYERS:
                 continue
-
-            if factory_key == "country" and not nodes_to_render:
-                nodes_to_render = [self]
 
             nodes_to_render = nodes_by_type.get(factory_key, [])
-            if factory_key != "marker" and not nodes_to_render:
-                continue
 
-            # 🛡️ AUTO-REHYDRATE GUARD: Ensure Treepolys has valid data for this layer type
-        if factory_key not in ["marker", "street"]:
-            # Check if the requested layer key exists and has valid tabular data
-            if (factory_key not in Treepolys or
-                Treepolys[factory_key] is None or
-                Treepolys[factory_key].empty or
-                'FID' not in Treepolys[factory_key].columns):
-
-                # ⚠️ Log warning and ignore missing key gracefully
-                print(f"⚠️ [REHYDRATE SKIP] Layer '{factory_key}' not present in Treepolys for node '{self.node_path}'. Skipping layer processing.")
-                # Do not attempt to call load_layer; continue execution cleanly
-        for factory_key, layer in factory.items():
-
-            if factory_key not in TEST_LAYERS:
-                continue
+                # 🛡️ AUTO-REHYDRATE GUARD: Ensure Treepolys has valid data for this layer type
+            if factory_key not in ["marker", "street"]:
+                # Check if the requested layer key exists and has valid tabular data
+                if (factory_key not in Treepolys or
+                    Treepolys[factory_key] is None or
+                    Treepolys[factory_key].empty or
+                    'FID' not in Treepolys[factory_key].columns):
+                    # ⚠️ Log warning and ignore missing key gracefully
+                    print(f"⚠️ [REHYDRATE SKIP] Layer '{factory_key}' not present in Treepolys for node '{self.node_path}'. Skipping layer processing.")
+                    # Do not attempt to call load_layer; continue execution cleanly
 
             nodes_to_render = nodes_by_type.get(factory_key, [])
             if factory_key != "marker" and not nodes_to_render:
