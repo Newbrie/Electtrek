@@ -1939,6 +1939,15 @@ def ensure_treepolys_with_index(
                 if tol and "geometry" in tree_gdf.columns:
                     tree_gdf["geometry"] = tree_gdf["geometry"].simplify(tolerance=tol, preserve_topology=True)
                 tree_gdf = _resolve_fid_column(tree_gdf.copy())
+                # 🔍 TEMPORARY DIAGNOSTIC CHECK
+                if layer_type.lower() == "country":
+                    print("\n================ [COUNTRY LAYER GEOM CHECK] ================")
+                    for idx, row in tree_gdf.iterrows():
+                        fid = row.get("FID")
+                        name = row.get("NAME")
+                        bounds = row.geometry.bounds if row.geometry else "NO_GEOM"
+                        print(f"   - Row FID: {fid} | Name: {name} | Bounds: {bounds}")
+                    print("============================================================\n")
 
                 if level <= target_depth and anchor_points and select_name is None:
                     pre_count = len(tree_gdf)
