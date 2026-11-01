@@ -3908,17 +3908,17 @@ def divreport(path):
 @app.route('/upbut/<path:path>', methods=['GET', 'POST'])
 @login_required
 def upbut(path):
-    CElection, _ = request_context()            # Session first, reliable fallback context
+    CElection, _ = request_context()
     rlevels = CElection.resolved_levels
 
-    # 1. Strip file suffixes and obtain typed steps for the current position
+    # 1. Strip file suffixes and obtain typed steps for current position
     typed_steps = stepify_typed(path)
     while typed_steps and typed_steps[-1].upper() in ("WARDS", "DIVS"):
         typed_steps.pop()
     here_path = "/".join(typed_steps)
     logger.info("[UPBUT] Incoming path: '%s' -> Resolved here_path: '%s'", path, here_path)
 
-    # 2. Locate the current node in the registry or ping it down from root
+    # 2. Locate the current node in the registry or ping down from root
     here_node = nodes.TREK_NODES_BY_PATH.get(here_path)
     if here_node is None:
         here_node = nodes.get_trek_root().ping_node(
@@ -3927,8 +3927,8 @@ def upbut(path):
         )
 
     if not here_node:
-            fno_node_error = f"No node found for path: {here_path}"
-            return jsonify(success=False, error=fno_node_error), 404
+        fno_node_error = f"No node found for path: {here_path}"
+        return jsonify(success=False, error=fno_node_error), 404
 
     # 3. Move up to parent node (or stay put if already at root)
     current_node = here_node.parent or here_node
@@ -3938,9 +3938,9 @@ def upbut(path):
     # 4. Build spatial layers and ensure hydration for the parent path
     mapfile = ensure_hydrated(CElection, target_path, force=True)
 
-    # 5. Ensure the target parent node exists and is fully indexed
+    # 5. 🎯 FIX: Ping target_path (NOT mapfile) to stay at nation level
     current_node = nodes.get_trek_root().ping_node(
-        rlevels, layers.Geo_index, mapfile,
+        rlevels, layers.Geo_index, target_path,
         create=True, accumulate=session.get("accumulate", False),
     )
     if not current_node:
@@ -3956,14 +3956,13 @@ def upbut(path):
 
     persist(layers.Treepolys, layers.Geo_index)
 
-    # 7. Return JSON response matching transfer style for clean client-side iframe redirection
+    # 7. Return JSON response
     return jsonify(
         success=True,
         map_url=f"/thru/{current_node.mapfile}",
         currentNodePath=current_node.node_path,
         mapfile=current_node.mapfile
     )
-
 #Register user
 @app.route('/register', methods=['POST'])
 def register():
