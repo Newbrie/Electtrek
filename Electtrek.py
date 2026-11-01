@@ -162,7 +162,7 @@ class ProgramContext:
             'b5': url_for('kanban'),
             'b6': url_for('telling'),
             'b7': url_for('search'),
-            'b8': url_for('dashboard')
+            'b8': url_for('firstpage')
         }
         return {
             "LEVELS": LEVELS,

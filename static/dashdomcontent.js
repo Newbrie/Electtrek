@@ -87,10 +87,10 @@ const handleIframeMessage = async (e) => {
           window.options           = data.options || window.options || {};
           window.latestConstants   = data.constants || window.constants;
           window.plan              = data.plan
-          window.task_tags        = window.options.task_tags || [];
-          window.resources        = window.options.resources || [];
-          window.places           = window.options.places || [];
-          window.areas            = window.options.areas || {};
+          window.task_tags        = data.taskTree || [];
+          window.resources        = data.resources || [];
+          window.places           = data.places || [];
+          window.areaTree            = data.areaTree || {};
 
 
           // 🎯 Set areaTree directly from options.areas payload before refreshing DOM
@@ -102,6 +102,20 @@ const handleIframeMessage = async (e) => {
               window.taskTree = window.task_tags;
           }
       }
+
+      // 🚀 INITIALIZE PARENT SIDEBAR ACCORDION SAFELY
+    if (typeof window.initAccordion === "function") {
+        const areaTreeStr = typeof window.areaTree === 'string'
+            ? window.areaTree
+            : JSON.stringify(window.areaTree);
+
+        window.initAccordion(
+            "children-list",             // Target parent DOM container
+            window.mapfile,              // e.g. "UNITED_KINGDOM/ENGLAND/ESSEX/ESSEX-MAP.html"
+            areaTreeStr,                 // Serialized area hierarchy
+            window.currentNodePath       // e.g. "UNITED_KINGDOM/ENGLAND/ESSEX"
+        );
+    }
 
 };
 
