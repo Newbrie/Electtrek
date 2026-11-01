@@ -3216,7 +3216,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                 if not static:
-                    showmessageST = f"showMore('/walkdownST/{child.mapfile}','{child.value}')"
+                    showmessageST = f"moveDown('/walkdownST/{child.mapfile}','{child.value}')"
                     street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                     nav_html = f"""
                     <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">
@@ -3719,7 +3719,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                 up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                 if not static:
-                    showmessageST = f"showMore('/walkdownST/{child.mapfile}','{child.value}')"
+                    showmessageST = f"moveDown('/walkdownST/{child.mapfile}','{child.value}')"
                     street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                     nav_html = f"""
                     <div style="margin-bottom:8px; padding-left:10px; line-height:1.6;">
@@ -4041,6 +4041,16 @@ class ExtendedFeatureGroup(FeatureGroup):
                 print(f"DEBUG [add_nodemaps] pfile columns: {pfile.columns.tolist()}")
                 print(f"DEBUG [add_nodemaps] pfile index name: {pfile.index.name}")
                 print(f"DEBUG [add_nodemaps] c.fid value: {getattr(c, 'fid', None)}")
+
+                # 🛡️ BULLETPROOF GUARD: Ensure 'FID' column always exists in pfile
+                if pfile is not None and not pfile.empty:
+                    if 'FID' not in pfile.columns:
+                        if 'OBJECTID' in pfile.columns:
+                            pfile['FID'] = pfile['OBJECTID']
+                        elif 'id' in pfile.columns:
+                            pfile['FID'] = pfile['id']
+                        else:
+                            pfile['FID'] = range(len(pfile))
                 mask = pfile['FID'] == int(c.fid)
                 limbX = pfile[mask].copy()
 
@@ -4094,7 +4104,7 @@ class ExtendedFeatureGroup(FeatureGroup):
                         up_link = f'<a href="#" onclick="{upmessage}">⬆ Up</a>'
 
                         if not static:
-                            showmessageST = f"showMore('/walkdownST/{c.mapfile}','{c_val}')"
+                            showmessageST = f"moveDown('/walkdownST/{c.mapfile}','{c_val}')"
                             street_link = f'<a href="#" onclick="{showmessageST}">Street view</a>'
                             nav_html = f"""
                             <div style="margin-bottom:8px; padding-left:22px; line-height:1.6;">

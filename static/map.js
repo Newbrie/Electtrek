@@ -63,38 +63,140 @@ window.addEventListener('message', function (e) {
 });
 
 
-var moveDown = function (msg, area) {
-    window.parent.postMessage({ type: `Drilling down to next level within ${area}`}, '*');
+var moveDown = async function (msg, area) {
+    const prettyArea = (area || '').replace(/_/g, ' ');
 
-    const ul = parent.document.getElementById("logwin");
-    if (ul) ul.scrollTop = ul.scrollHeight;
-    window.location.assign(msg);
-//    alert("Submitting to: " + msg);
+    // Post message to parent log window
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: `Drilling down to next level within ${prettyArea}` }, '*');
+        const ul = window.parent.document.getElementById("logwin");
+        if (ul) ul.scrollTop = ul.scrollHeight;
+    }
 
+    try {
+        const response = await fetch(msg, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        if (!response.ok) {
+            console.warn(`⚠️ MoveDown fetch failed with status: ${response.status}`);
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.map_url) {
+            // 1. Target the iframe directly (whether called from inside iframe or parent scope)
+            const mapIframe = document.getElementById('iframe1') ||
+                              parent.document.getElementById('iframe1') ||
+                              document.querySelector('iframe');
+
+            if (mapIframe) {
+                mapIframe.src = data.map_url;
+            } else {
+                // Fallback location change if no iframe container is present
+                window.location.href = data.map_url;
+            }
+
+            // 2. Sync client-side global navigation variables
+            window.currentNodePath = data.currentNodePath;
+            window.mapfile = data.mapfile;
+            if (window.parent) {
+                window.parent.currentNodePath = data.currentNodePath;
+                window.parent.mapfile = data.mapfile;
+            }
+
+            // 3. Update breadcrumb header display
+            const displayElement = document.getElementById('display-path') ||
+                                   parent.document.getElementById('display-path');
+            if (displayElement) {
+                displayElement.innerText = prettyArea;
+            }
+
+            // 4. Keep sidebar selection in sync
+            if (typeof window.syncAreaSelect === 'function') {
+                window.selectedArea = data.currentNodePath;
+                window.syncAreaSelect();
+            }
+        } else {
+            console.error("❌ MoveDown error from server:", data.error);
+        }
+    } catch (err) {
+        console.error("❌ Failed to process moveDown:", err);
+    }
 };
 
 
-var moveUp = function (msg,area) {
-  // Send a message to the parent
-      window.parent.postMessage({ type:"Moving up to "+ area + " level "}, '*');
-      window.location.assign(msg);
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
+var moveUp = async function (msg, area) {
+    const prettyArea = (area || '').replace(/_/g, ' ');
 
-      };
-var showMore = function (msg,area) {
-  // Send a message to the parent
-      window.parent.postMessage({ type: "Showing the level within "+ area}, '*');
-      window.location.assign(msg);
-      var ul = parent.document.getElementById("logwin");
-      ul.scrollTop = ul.scrollHeight;
-      };
+    // 1. Post message to parent log window
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "Moving up to " + prettyArea + " level" }, '*');
+        const ul = window.parent.document.getElementById("logwin");
+        if (ul) ul.scrollTop = ul.scrollHeight;
+    }
 
-      /* When the user clicks on the button,
-      toggle between hiding and showing the dropdown content */
+    try {
+        const response = await fetch(msg, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
 
+        if (!response.ok) {
+            console.warn(`⚠️ moveUp fetch failed with status: ${response.status}`);
+            return;
+        }
 
+        const data = await response.json();
 
+        if (data.success && data.map_url) {
+            // 2. Target the map iframe directly
+            const mapIframe = document.getElementById('iframe1') ||
+                              parent.document.getElementById('iframe1') ||
+                              document.querySelector('iframe');
+
+            if (mapIframe) {
+                mapIframe.src = data.map_url;
+            } else {
+                // Fallback direct navigate if no iframe is present
+                window.location.href = data.map_url;
+            }
+
+            // 3. Keep client-side state synchronized
+            window.currentNodePath = data.currentNodePath;
+            window.mapfile = data.mapfile;
+            if (window.parent) {
+                window.parent.currentNodePath = data.currentNodePath;
+                window.parent.mapfile = data.mapfile;
+            }
+
+            // 4. Update display headers
+            const displayElement = document.getElementById('display-path') ||
+                                   parent.document.getElementById('display-path');
+            if (displayElement) {
+                displayElement.innerText = prettyArea;
+            }
+
+            // 5. Sync accordion selection
+            if (typeof window.syncAreaSelect === 'function') {
+                window.selectedArea = data.currentNodePath;
+                window.syncAreaSelect();
+            }
+        } else {
+            console.error("❌ moveUp error from server:", data.error);
+        }
+    } catch (err) {
+        console.error("❌ Failed to process moveUp:", err);
+    }
+};
 
 
   function createStandaloneHTML() {

@@ -2709,51 +2709,40 @@ def get_constants():
 @app.route("/set-constant", methods=["POST"])
 @login_required
 def set_constant():
-
-    from layers import ExtendedFeatureGroup
-    from elections import CurrentElection
-
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     name = data.get("name")
     value = data.get("value")
-    current_election = data.get("election")
+    if not name:
+        return jsonify(success=False, error="No constant name provided"), 400
 
-    print("____Back End election constants update:",
-          current_election, ":", name, "-", value)
-
-    CElection = CurrentElection.load(current_election)
-
+    CElection, _ = request_context()      # session first, get_lastused() as fallback
     if not CElection:
-        return jsonify(success=False, error="Election not found"), 400
+        return jsonify(success=False, error="Election not found"), 404
 
-    # Special handling
+    # Ignore a client-supplied election that disagrees with the session
+    client_election = data.get("election")
+    if client_election and client_election != session.get("current_election"):
+        logger.warning("[set-constant] client election %r != session %r; using session",
+                       client_election, session.get("current_election"))
+
     if name == "resources":
         if not isinstance(value, list):
             value = [value] if value else []
+        CElection[name] = value
     elif name == "mapfiles":
         CElection.add_breadcrumb(value)
-    elif name == "adminmode":
+    elif name in ("adminmode", "accumulate"):
         value = bool(value)
         CElection[name] = value
-    elif name == "accumulate":
-        value = bool(value)
-        session["accumulate"] = value
-        CElection[name] = value
+        if name == "accumulate":
+            session["accumulate"] = value
     else:
-        # Store in backing dict only
         CElection[name] = value
+
     CElection.save()
 
-    print(f"____Current Election choices saved: "
-          f"{current_election} - {name} = {value}")
-
-    return jsonify({
-        "success": True,
-        "constants": CElection
-    })
-
+    constants = CElection.to_dict() if hasattr(CElection, "to_dict") else dict(CElection)
+    return jsonify(success=True, constants=constants)
 
 
 @app.route("/delete-election", methods=["POST"])
@@ -3170,52 +3159,6 @@ def logout():
     session.clear()
 
     return redirect(url_for('login'))
-
-@app.route('/dashboard', methods=['GET','POST'])
-@login_required
-def dashboard():
-
-    from elector import electors
-    global streamrag
-    global formdata
-    global CElection
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-
-    rlevels = CElection.resolved_levels
-    print ("___Route/Dashboard : ")
-    if 'username' in session:
-        print(f"_______ROUTE/dashboard: {session['username']} is already logged in at {session.get('current_node_id','UNITED_KINGDOM')}")
-
-        path = CElection['mapfiles'][-1]
-        previous_node = current_node
-        print ("____Dashboard CElection: ",path, previous_node.value)
-        # use ping to populate the next level of nodes with which to repaint the screen with boundaries and markers
-
-
-        print ("___Dashboard persisted filename: ",current_node.mapfile)
-        base = Path(config.workdirectories['workdir'])  # or wherever files live
-        fullpath = base / current_node.mapfile
-        created, totalleaf = current_node.endpoint_created(CElection,layers.Geo_index,rlevels,current_node.mapfile,static=False)
-        if created:
-            if not fullpath.exists():
-                abort(404, f" Route/dashboard File not found: {fullpath}")
-            print (f"_________ROUTE/dashboard at {current_node.value} display file created:{fullpath}")
-
-        if not current_node.visit_node(CElection):
-            flash("That node is outside of the election Territory")
-            print("That node is outside of the election Territory:")
-        persist(layers.Treepolys, layers.Geo_index)
-
-        print (f"_________ROUTE/dashboard at sendinf file:{fullpath}")
-        return send_file(fullpath, as_attachment=False)
-
-
-    flash('_______ROUTE/dashboard no login session ')
-
-    return redirect(url_for('index'))
 
 
 @app.route('/downbut/<path:path>', methods=['GET', 'POST'])
@@ -3891,26 +3834,27 @@ def wardreport(path):
 @app.route("/get_table/<table_name>", methods=["GET"])
 @login_required
 def get_table(table_name):
-    from elections import CurrentElection
-    from state import DQstats
-    # Load current election if not provided
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
+    CElection, path = request_context()          # session first, get_lastused() as fallback
+    if not CElection:
+        return jsonify(error="No election selected"), 409
+
     rlevels = CElection.resolved_levels
 
-    # Determine current node
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-
     try:
-        print(f"_______ get table {table_name}")
-        columns, rows, title = fetch_table(rlevels,table_name, current_node)
-        print(f"_______ get table result {columns}* {rows}* {title}")
-        return jsonify([columns, rows, title])
-    except Exception as e:
-        raise ValueError("Table retrieval fails")
-        return jsonify({"error": str(e)}), 500
+        # Lazy: does nothing if this path is already in memory
+        ensure_hydrated(CElection, path)
 
+        current_node = get_last_node(CElection, layers.Geo_index, create=False)
+        if current_node is None:
+            current_node = get_trek_root()
+
+        logger.info("[get_table] %s for node %s", table_name, current_node.node_path)
+        columns, rows, title = fetch_table(rlevels, table_name, current_node)
+        return jsonify([columns, rows, title])
+
+    except Exception as e:
+        logger.exception("get_table failed for %s", table_name)
+        return jsonify(error=str(e)), 500
 
 @app.route('/divreport/<path:path>',methods=['GET','POST'])
 @login_required
@@ -3983,7 +3927,8 @@ def upbut(path):
         )
 
     if not here_node:
-        return jsonify(success=False, error=fno_node_error := f"No node found for path: {here_path}"), 404
+            fno_node_error = f"No node found for path: {here_path}"
+            return jsonify(success=False, error=fno_node_error), 404
 
     # 3. Move up to parent node (or stay put if already at root)
     current_node = here_node.parent or here_node
@@ -4066,24 +4011,6 @@ def thru(path):
     return send_file(fullpath, as_attachment=False)
 
 
-
-@app.route('/showmore/<path:path>', methods=['GET','POST'])
-@login_required
-def showmore(path):
-# is not moving nodes but just changing from wards to div or walks to PD render
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
-    current_election = CurrentElection.get_lastused()
-    CElection = CurrentElection.load(current_election)
-    current_node = get_last_node(CElection,layers.Geo_index,create=False)
-    steps = path.split("/")
-    last = steps.pop().split("--")
-    current_node = selected_childnode(current_node,last[1])
-    flash ("_________ROUTE/showmore"+path)
-    print ("_________showmore",path)
-
-    session['current_node_id'] = current_node.nid
-
-    return current_node.parent.render_face(current_election,CElection,True)
 
 @app.route('/upload_data', methods=['POST'])
 @login_required
