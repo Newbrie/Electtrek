@@ -27,7 +27,7 @@ Path(DEBUG_FILE).parent.mkdir(parents=True, exist_ok=True)
 
 # Configure Root Logger
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 if logger.hasHandlers():
     logger.handlers.clear()

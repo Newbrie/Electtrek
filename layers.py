@@ -925,10 +925,6 @@ def intersectingArea(
     return selected_child_name, child_polygons_within_parent, gdf
 
 
-import logging
-
-import geopandas as gpd
-
 
 # UK bounding box in WGS84 degrees, with generous padding. Genuine lon/lat
 # values for anything in this pipeline fall well inside this range;
@@ -1111,6 +1107,7 @@ def load_layer(
             )
         except Exception as e:
             logging.error(f"[ANCESTOR CLIP] Pre-filter failed for '{typekey}': {e}", exc_info=True)
+
             return _empty_gdf()
 
     # ------------------------------------------------------------------
@@ -1406,7 +1403,7 @@ def build_walk_geoms_geovoronoi(
     logger.info("🚀 [DEBUG] Starting optimized hierarchical build_walk_geoms_geovoronoi")
 
     empty_gdf = gpd.GeoDataFrame(
-        columns=["FID", "NAME", "TYPEKEY", "geometry"],
+        columns=["FID", "NAME", "TYPEKEY", "_parent_path", "geometry"],
         geometry="geometry",
         crs=crs_out,
     )
@@ -1440,11 +1437,9 @@ def build_walk_geoms_geovoronoi(
     pad = 1000.0
     fallback_hull = box(min_x - pad, min_y - pad, max_x + pad, max_y + pad)
 
-# Identify the correct grouping column
+    # Identify the correct grouping column
     ward_col = "Ward" if "Ward" in pts_gdf.columns else pts_gdf.columns[0]
 
-    # Optional: Create a temporary normalized column for grouping,
-    # while keeping the original ward_name intact for logging and matching against Treepolys['ward']
     pts_gdf["_ward_norm"] = pts_gdf[ward_col].astype(str).map(normalname)
     ward_groups = pts_gdf.groupby("_ward_norm")
     all_processed_features = []
@@ -1452,28 +1447,24 @@ def build_walk_geoms_geovoronoi(
     for ward_name, group_df in ward_groups:
         logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
 
-# Look up exact parent territory boundary using path context if available
-# Look up exact parent territory boundary using path context if available
+        # Determine exact parent territory path for this group
+        parent_path_val = group_df["_parent_path"].iloc[0] if "_parent_path" in group_df.columns and pd.notna(group_df["_parent_path"].iloc[0]) else ROOT
+        ward_parent_path = f"{parent_path_val}/WARDS/{normalname(ward_name)}"
+
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
 
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
             if not pfile.empty:
-                # 1. Identify path and name columns dynamically in Treepolys['ward']
                 path_col = next((col for col in ["path", "node_path", "mapfile", "PATH"] if col in pfile.columns), None)
                 name_col = next((col for col in ["NAME", "name", "Ward", "WARD", "Wards"] if col in pfile.columns), None)
 
                 matched_ward = pd.DataFrame()
 
-                # 2. Try Exact Path Matching first (Most Robust)
-                parent_path_val = group_df["_parent_path"].iloc[0] if "_parent_path" in group_df.columns else None
+                # 1. Try Exact Path Matching first (Most Robust)
                 if path_col and parent_path_val:
-                    # Construct expected ward path (e.g., "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/WARDS/MYTCHETT_AND_DEEPCUT")
-                    # Depending on how your paths are structured, normalname or case-insensitive matching helps
-                    target_ward_path = f"{parent_path_val}/{normalname(ward_name)}"
-
-                    # Try matching path columns (normalizing paths for safety)
+                    target_ward_path = f"{parent_path_val}/WARDS/{normalname(ward_name)}"
                     pfile_paths_norm = pfile[path_col].astype(str).apply(lambda p: p.upper().replace(".HTML", ""))
                     target_path_norm = target_ward_path.upper().replace(".HTML", "")
 
@@ -1481,7 +1472,7 @@ def build_walk_geoms_geovoronoi(
                     if not matched_ward.empty:
                         source_used = f"Treepolys['ward'] via exact path match on '{path_col}'"
 
-                # 3. Fallback to Normalized Name Matching if path match didn't trigger
+                # 2. Fallback to Normalized Name Matching
                 if matched_ward.empty and name_col:
                     w_norm = normalname(str(ward_name))
                     temp_norm_series = pfile[name_col].astype(str).apply(normalname)
@@ -1490,7 +1481,7 @@ def build_walk_geoms_geovoronoi(
                         matched_names = matched_ward[name_col].tolist()
                         source_used = f"Treepolys['ward'] via fallback name match on '{name_col}' (Matched: {matched_names})"
 
-                # 4. Extract boundary if match succeeded
+                # 3. Extract boundary if match succeeded
                 if not matched_ward.empty:
                     parent_boundary = matched_ward.to_crs(crs_proj).union_all()
                 else:
@@ -1507,16 +1498,13 @@ def build_walk_geoms_geovoronoi(
             logger.warning(f"-> Warning: Parent boundary for '{ward_name}' is invalid. Applying .buffer(0) correction.")
             parent_boundary = parent_boundary.buffer(0)
 
-        # Create a clean calculation bounding hull for geovoronoi outer margins
         calc_hull = parent_boundary.convex_hull
 
-        # Extract coordinates safely and map to original rows
         coords_list = []
         point_to_row_indices = {}
 
         for idx, row in group_df.iterrows():
             pt_geom = row.geometry
-            # Ensure point falls safely inside the parent boundary
             if not parent_boundary.contains(pt_geom):
                 pt_geom = nearest_points(parent_boundary, pt_geom)[0]
 
@@ -1530,9 +1518,6 @@ def build_walk_geoms_geovoronoi(
         if len(coords) == 0:
             continue
 
-        # -----------------------------------------------------------------
-        # VORONOI COMPUTATION FOR GROUP (Using Convex Hull wrapper)
-        # -----------------------------------------------------------------
         region_polys = {}
         region_pts = {}
 
@@ -1578,11 +1563,7 @@ def build_walk_geoms_geovoronoi(
                     region_pts[r_idx] = assigned_indices
                     r_idx += 1
 
-        # -----------------------------------------------------------------
-        # CLEANUP AND EXACT INTERSECTION CLIPPING AGAINST WARD BOUNDARY
-        # -----------------------------------------------------------------
         for region_id, poly in region_polys.items():
-            # Strict secondary intersection clip against the actual parent boundary shape
             raw_intersection = poly.intersection(parent_boundary)
             if raw_intersection.is_empty:
                 continue
@@ -1599,13 +1580,8 @@ def build_walk_geoms_geovoronoi(
                 continue
 
             pt_idx = region_pts[region_id]
-            if not pt_idx:  # 🛡️ Guard against empty point lists
+            if not pt_idx:
                 continue
-
-            if isinstance(pt_idx, (list, np.ndarray)):
-                pt_idx = pt_idx[0]
-
-                coord = coords[pt_idx]
 
             if isinstance(pt_idx, (list, np.ndarray)):
                 pt_idx = pt_idx[0]
@@ -1616,6 +1592,7 @@ def build_walk_geoms_geovoronoi(
             for orig_idx in orig_indices:
                 row_data = group_df.loc[orig_idx].copy()
                 row_data["geometry"] = actual_shape
+                row_data["_parent_path"] = ward_parent_path  # Stamp correct path per feature
                 all_processed_features.append(row_data)
 
     if not all_processed_features:
@@ -1631,8 +1608,12 @@ def build_walk_geoms_geovoronoi(
     walk_gdf["NAME"] = walk_gdf["WalkName"]
     walk_gdf["TYPEKEY"] = "walk"
 
-    return walk_gdf[["FID", "NAME", "TYPEKEY", "geometry"]].to_crs(crs_out)
+    if "_parent_path" not in walk_gdf.columns:
+        walk_gdf["_parent_path"] = ROOT
 
+    # Return with _parent_path included
+    return walk_gdf[["FID", "NAME", "TYPEKEY", "_parent_path", "geometry"]].to_crs(crs_out)
+    
 # ==============================================================================
 # CORE ENGINE PIPELINE
 # ==============================================================================
