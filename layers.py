@@ -1440,39 +1440,62 @@ def build_walk_geoms_geovoronoi(
     pad = 1000.0
     fallback_hull = box(min_x - pad, min_y - pad, max_x + pad, max_y + pad)
 
-    ward_groups = pts_gdf.groupby("Ward" if "Ward" in pts_gdf.columns else pts_gdf.columns[0])
+# Identify the correct grouping column
+    ward_col = "Ward" if "Ward" in pts_gdf.columns else pts_gdf.columns[0]
+
+    # Optional: Create a temporary normalized column for grouping,
+    # while keeping the original ward_name intact for logging and matching against Treepolys['ward']
+    pts_gdf["_ward_norm"] = pts_gdf[ward_col].astype(str).map(normalname)
+    ward_groups = pts_gdf.groupby("_ward_norm")
     all_processed_features = []
 
     for ward_name, group_df in ward_groups:
         logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
 
-# Look up exact parent territory boundary
+# Look up exact parent territory boundary using path context if available
+# Look up exact parent territory boundary using path context if available
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
 
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
             if not pfile.empty:
-                # Find the correct column name dynamically
+                # 1. Identify path and name columns dynamically in Treepolys['ward']
+                path_col = next((col for col in ["path", "node_path", "mapfile", "PATH"] if col in pfile.columns), None)
                 name_col = next((col for col in ["NAME", "name", "Ward", "WARD", "Wards"] if col in pfile.columns), None)
 
-                if name_col:
-                    w_norm = normalname(str(ward_name))
+                matched_ward = pd.DataFrame()
 
-                    # Create a temporary normalized series for matching
+                # 2. Try Exact Path Matching first (Most Robust)
+                parent_path_val = group_df["_parent_path"].iloc[0] if "_parent_path" in group_df.columns else None
+                if path_col and parent_path_val:
+                    # Construct expected ward path (e.g., "UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/WARDS/MYTCHETT_AND_DEEPCUT")
+                    # Depending on how your paths are structured, normalname or case-insensitive matching helps
+                    target_ward_path = f"{parent_path_val}/{normalname(ward_name)}"
+
+                    # Try matching path columns (normalizing paths for safety)
+                    pfile_paths_norm = pfile[path_col].astype(str).apply(lambda p: p.upper().replace(".HTML", ""))
+                    target_path_norm = target_ward_path.upper().replace(".HTML", "")
+
+                    matched_ward = pfile[pfile_paths_norm == target_path_norm]
+                    if not matched_ward.empty:
+                        source_used = f"Treepolys['ward'] via exact path match on '{path_col}'"
+
+                # 3. Fallback to Normalized Name Matching if path match didn't trigger
+                if matched_ward.empty and name_col:
+                    w_norm = normalname(str(ward_name))
                     temp_norm_series = pfile[name_col].astype(str).apply(normalname)
                     matched_ward = pfile[temp_norm_series == w_norm]
-
                     if not matched_ward.empty:
-                        parent_boundary = matched_ward.to_crs(crs_proj).union_all()
                         matched_names = matched_ward[name_col].tolist()
-                        source_used = f"Treepolys['ward'] using col '{name_col}' (Matched names: {matched_names})"
-                    else:
-                        # 🔍 DIAGNOSTIC LOGGING: Print available names so you can see the mismatch!
-                        available_samples = pfile[name_col].astype(str).tolist()[:10]
-                        logger.warning(f"❌ Ward lookup miss for '{ward_name}' (normalized: '{w_norm}'). Available in Treepolys['ward']: {available_samples}")
+                        source_used = f"Treepolys['ward'] via fallback name match on '{name_col}' (Matched: {matched_names})"
+
+                # 4. Extract boundary if match succeeded
+                if not matched_ward.empty:
+                    parent_boundary = matched_ward.to_crs(crs_proj).union_all()
                 else:
-                    logger.debug(f"Treepolys['ward'] missing standard name columns. Available: {pfile.columns.tolist()}")
+                    available_samples = pfile[name_col].astype(str).tolist()[:10] if name_col else []
+                    logger.warning(f"❌ Ward lookup miss for '{ward_name}' (Path: {parent_path_val}). Available samples: {available_samples}")
             else:
                 logger.debug("Treepolys['ward'] dataframe is empty.")
         else:
@@ -1576,6 +1599,14 @@ def build_walk_geoms_geovoronoi(
                 continue
 
             pt_idx = region_pts[region_id]
+            if not pt_idx:  # 🛡️ Guard against empty point lists
+                continue
+
+            if isinstance(pt_idx, (list, np.ndarray)):
+                pt_idx = pt_idx[0]
+
+                coord = coords[pt_idx]
+
             if isinstance(pt_idx, (list, np.ndarray)):
                 pt_idx = pt_idx[0]
 
