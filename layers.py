@@ -1447,9 +1447,23 @@ def build_walk_geoms_geovoronoi(
     for ward_name, group_df in ward_groups:
         logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
 
-        # Determine exact parent territory path for this group
-        parent_path_val = group_df["_parent_path"].iloc[0] if "_parent_path" in group_df.columns and pd.notna(group_df["_parent_path"].iloc[0]) else ROOT
-        ward_parent_path = f"{parent_path_val}/WARDS/{normalname(ward_name)}"
+        # 🎯 Build full hierarchical parent path using dataframe columns
+        first_row = group_df.iloc[0]
+        nation = str(first_row.get("Nation", "ENGLAND")).strip().upper()
+        county = str(first_row.get("County", "")).strip().upper()
+        constituency = str(first_row.get("Constituency", "")).strip().upper()
+
+        # Construct standard multi-level path: UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/WARDS/WARD_NAME
+        path_parts = [ROOT]
+        if nation and nation != "NONE":
+            path_parts.append(nation)
+        if county and county != "NONE":
+            path_parts.append(county)
+        if constituency and constituency != "NONE":
+            path_parts.append(constituency)
+
+        base_parent_path = "/".join(path_parts)
+        ward_parent_path = f"{base_parent_path}/WARDS/{normalname(ward_name)}"
 
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
@@ -1463,8 +1477,8 @@ def build_walk_geoms_geovoronoi(
                 matched_ward = pd.DataFrame()
 
                 # 1. Try Exact Path Matching first (Most Robust)
-                if path_col and parent_path_val:
-                    target_ward_path = f"{parent_path_val}/WARDS/{normalname(ward_name)}"
+                if path_col:
+                    target_ward_path = ward_parent_path
                     pfile_paths_norm = pfile[path_col].astype(str).apply(lambda p: p.upper().replace(".HTML", ""))
                     target_path_norm = target_ward_path.upper().replace(".HTML", "")
 
@@ -1486,7 +1500,7 @@ def build_walk_geoms_geovoronoi(
                     parent_boundary = matched_ward.to_crs(crs_proj).union_all()
                 else:
                     available_samples = pfile[name_col].astype(str).tolist()[:10] if name_col else []
-                    logger.warning(f"❌ Ward lookup miss for '{ward_name}' (Path: {parent_path_val}). Available samples: {available_samples}")
+                    logger.warning(f"❌ Ward lookup miss for '{ward_name}' (Path: {base_parent_path}). Available samples: {available_samples}")
             else:
                 logger.debug("Treepolys['ward'] dataframe is empty.")
         else:
@@ -1592,7 +1606,7 @@ def build_walk_geoms_geovoronoi(
             for orig_idx in orig_indices:
                 row_data = group_df.loc[orig_idx].copy()
                 row_data["geometry"] = actual_shape
-                row_data["_parent_path"] = ward_parent_path  # Stamp correct path per feature
+                row_data["_parent_path"] = ward_parent_path  # Full path stamped per feature
                 all_processed_features.append(row_data)
 
     if not all_processed_features:
@@ -1611,9 +1625,8 @@ def build_walk_geoms_geovoronoi(
     if "_parent_path" not in walk_gdf.columns:
         walk_gdf["_parent_path"] = ROOT
 
-    # Return with _parent_path included
+    # Return with complete _parent_path included
     return walk_gdf[["FID", "NAME", "TYPEKEY", "_parent_path", "geometry"]].to_crs(crs_out)
-    
 # ==============================================================================
 # CORE ENGINE PIPELINE
 # ==============================================================================
