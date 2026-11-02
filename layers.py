@@ -54,6 +54,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    filename='app.log',                # File where logs will be saved
+    filemode='a',                       # 'a' to append, 'w' to overwrite on start
+    format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.DEBUG                  # Change to logging.DEBUG to capture debug statements
+)
 
 # state.py
 Treepolys: dict[str, gpd.GeoDataFrame] = {}
@@ -1439,25 +1446,35 @@ def build_walk_geoms_geovoronoi(
     for ward_name, group_df in ward_groups:
         logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
 
-        # Look up exact parent territory boundary
+# Look up exact parent territory boundary
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
 
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
-            if not pfile.empty and "NAME" in pfile.columns:
-                w_norm = normalname(str(ward_name))
-                logger.debug(f"Normalized ward name search: '{w_norm}' (Original: '{ward_name}')")
+            if not pfile.empty:
+                # Find the correct column name dynamically
+                name_col = next((col for col in ["NAME", "name", "Ward", "WARD", "Wards"] if col in pfile.columns), None)
 
-                matched_ward = pfile[pfile["NAME"].apply(normalname) == w_norm]
-                if not matched_ward.empty:
-                    parent_boundary = matched_ward.to_crs(crs_proj).union_all()
-                    matched_names = matched_ward["NAME"].tolist()
-                    source_used = f"Treepolys['ward'] (Matched names: {matched_names})"
+                if name_col:
+                    w_norm = normalname(str(ward_name))
+
+                    # Create a temporary normalized series for matching
+                    temp_norm_series = pfile[name_col].astype(str).apply(normalname)
+                    matched_ward = pfile[temp_norm_series == w_norm]
+
+                    if not matched_ward.empty:
+                        parent_boundary = matched_ward.to_crs(crs_proj).union_all()
+                        matched_names = matched_ward[name_col].tolist()
+                        source_used = f"Treepolys['ward'] using col '{name_col}' (Matched names: {matched_names})"
+                    else:
+                        # 🔍 DIAGNOSTIC LOGGING: Print available names so you can see the mismatch!
+                        available_samples = pfile[name_col].astype(str).tolist()[:10]
+                        logger.warning(f"❌ Ward lookup miss for '{ward_name}' (normalized: '{w_norm}'). Available in Treepolys['ward']: {available_samples}")
                 else:
-                    logger.debug(f"No match in Treepolys['ward'] for normalized name '{w_norm}'.")
+                    logger.debug(f"Treepolys['ward'] missing standard name columns. Available: {pfile.columns.tolist()}")
             else:
-                logger.debug("Treepolys['ward'] dataframe is empty or missing the 'NAME' column.")
+                logger.debug("Treepolys['ward'] dataframe is empty.")
         else:
             logger.debug("Treepolys dictionary or 'ward' key is not present in globals.")
 
