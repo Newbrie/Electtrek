@@ -323,11 +323,14 @@ def get_layer_gdf(key: str, node_path=None):
         return _empty_gdf()
 
     # 1. Determine REVISED setting logic
+# 1. Determine REVISED setting and hierarchical context from node_path
     revised_setting = str(globals().get("REVISED", "")).strip().upper()
     current_county = ""
+    current_constituency = ""
     if node_path:
         steps = stepify_typed(node_path)
         current_county = str(steps[2]).strip().upper() if len(steps) > 2 else ""
+        current_constituency = str(steps[3]).strip().upper() if len(steps) > 3 else ""
 
     is_revised = bool(
         revised_setting and current_county and (revised_setting == current_county)
@@ -339,10 +342,10 @@ def get_layer_gdf(key: str, node_path=None):
     raw_out = out_val
 
     if key == "walk":
-        if not current_county:
-            logger.warning("⚠️ Walk layer requested without a county in node_path.")
+        if not current_constituency:
+            logger.warning("⚠️ Walk layer requested without a constituency in node_path.")
             return _empty_gdf()
-        raw_src = walk_geom_path(current_county)
+        raw_src = walk_geom_path(current_constituency)
         raw_out = raw_src
         src_idx = 0
 
@@ -352,9 +355,9 @@ def get_layer_gdf(key: str, node_path=None):
 
     # --- LEVEL-AWARE REGIONAL SCOPING FOR CACHE ---
     scoped_out_name = raw_out
-    if key in ["ward", "division"] and current_county:
+    if key in ["ward", "division"] and current_constituency:
         base_out_name, out_ext = os.path.splitext(raw_out)
-        scoped_out_name = f"{base_out_name}_{current_county}{out_ext}"
+        scoped_out_name = f"{base_out_name}_{current_constituency}{out_ext}"
 
     bounddir = workdirectories.get("bounddir", "")
     if not os.path.isabs(raw_src) and bounddir:
@@ -364,7 +367,7 @@ def get_layer_gdf(key: str, node_path=None):
         src = os.path.abspath(raw_src)
         out = os.path.abspath(scoped_out_name)
 
-    src_raw = src                      # right after src/out are resolved
+    src_raw = src                     # right after src/out are resolved
 
     # --- ROBUST CACHE CHECK ---
     if os.path.exists(out) and os.path.getsize(out) > 100:
@@ -482,7 +485,7 @@ def get_layer_gdf(key: str, node_path=None):
                 if os.path.exists(out):
                     os.remove(out)
                 gdf.to_file(out, driver="GPKG" if out.endswith(".gpkg") else "GeoJSON")
-                logger.info(f"💾 Created county efficiency cache file: {out}")
+                logger.info(f"💾 Created constituency efficiency cache file: {out}")
             except Exception as write_err:
                 logger.warning(f"⚠️ Failed to write efficiency cache file {out}: {write_err}")
                 if os.path.exists(out):
