@@ -149,6 +149,7 @@ MAP_LAYERS = {
         "field": "WalkName",
         "id_field": "FID",
         "out": "Walk_Boundaries.gpkg",
+        "fan_out_to_all_parents": True,
         "method": "intersect",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
@@ -161,6 +162,7 @@ MAP_LAYERS = {
         "src": "UK-ROADS.gpkg",
         "field": "name1",
         "out": "Street_Geometries.gpkg",
+         "fan_out_to_all_parents": True,
         "method": "linestringArea",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
@@ -1842,6 +1844,11 @@ def ensure_treepolys_with_index(
             # --------------------------------------------------------
 
             parent_layer_key = layer.get("parent_layer")
+            fan_out_to_all_parents = layer.get("fan_out_to_all_parents", False)
+            logging.debug(
+                f"[PARENT] Layer '{layer_type}' has parent_layer_key='{parent_layer_key}' | "
+                f"fan_out_to_all_parents={fan_out_to_all_parents}"
+            )
 
             if parent_layer_key is None:
                 # No parent layer configured at all (e.g. 'country', the root layer)
@@ -1849,7 +1856,7 @@ def ensure_treepolys_with_index(
 
             # 🎯 FIX: When at ROOT (or when select_name wasn't set for parent),
             # fall back to processing all active rows of parent layer to build full children tree!
-            elif effective_sourcepath == ROOT or parent_layer_key not in selected_row_by_layer:
+            elif effective_sourcepath == ROOT or fan_out_to_all_parents or parent_layer_key not in selected_row_by_layer:
                 parent_rows = active_layer_rows.get(parent_layer_key, [])
                 if not parent_rows:
                     logging.error(
@@ -1952,6 +1959,16 @@ def ensure_treepolys_with_index(
                                 if added_count > 0:
                                     logging.info(f"⚡ [FAST PATH HIT] Loaded {added_count} cached rows for layer '{layer_type}' under '{resolved_p_path}'. Skipping raw load.")
                                     cache_hit = True
+
+                                if cache_hit:
+                                    # 🎯 FIX: Build tree_gdf from the cached rows and append to all_results
+                                    # so the rest of the pipeline actually receives the data!
+                                    tree_gdf = matched_cached_rows.copy()
+                                    tree_gdf["_parent_path"] = resolved_p_path
+                                    all_results.append(tree_gdf)
+
+                                    continue  # Skip standard load_layer entirely for this context!
+
 
                 if cache_hit:
                     continue  # Skip standard load_layer entirely for this context!
