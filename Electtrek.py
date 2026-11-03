@@ -407,19 +407,26 @@ def request_context():
 
 def ensure_hydrated(CElection, path, here=None, force=False):
     """Return the resolved mapfile for `path`, rebuilding spatial state if missing or forced."""
+    # 1. Build full mapfile path required by ensure_treepolys_with_index
     mapfile = path if path.endswith(".html") else f"{path}/{path.split('/')[-1]}-MAP.html"
-    typed = "/".join(stepify_typed(mapfile))
 
-    if not force and typed in layers.Geo_index and any(
-        not df.empty for df in layers.Treepolys.values() if df is not None
+    # 2. Derive clean directory node path (stepify_typed strips filename automatically)
+    typed_node_path = "/".join(stepify_typed(mapfile)) or "UNITED_KINGDOM"
+
+    # 3. Cache Check
+    if not force and typed_node_path in layers.Geo_index and any(
+        df is not None and not df.empty for df in layers.Treepolys.values()
     ):
         return mapfile
 
+    # 4. Hydrate with properly scoped elector path
     rlevels = CElection.resolved_levels
     resolved, layers.Geo_index = ensure_treepolys_with_index(
-        sourcepath=mapfile, here=here,
-        resolved_levels=rlevels, parent_levels=CElection.parent_levels,
-        areaelectors=electors.elector_for_path(rlevels, "UNITED_KINGDOM"),
+        sourcepath=mapfile,
+        here=here,
+        resolved_levels=rlevels,
+        parent_levels=CElection.parent_levels,
+        areaelectors=electors.elector_for_path(rlevels, typed_node_path),  # 👈 Pass scoped path here!
     )
     return resolved
 
@@ -2174,8 +2181,6 @@ def search_api():
     if allelectors is None or allelectors.empty:
         return jsonify({'columns': [], 'data': []})
 
-    # Optional: ensure we have persistence if data exists
-    restore_from_persist(layers.Treepolys, layers.Geo_index)
 
     query = request.args.get('q', '').strip()
     if not query:

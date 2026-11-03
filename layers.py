@@ -143,13 +143,12 @@ MAP_LAYERS = {
     "walk": {
         "key": "walk", "mytag": "walk", "level": 5, "type": "node",
         "overlay": True, "control": True, "show": False,
-        "parent_layer": "ward",
+        "parent_layer": "constituency",
         "aggregation_mode": "selected_name",
         "src": "walk_geoms.geojson",
         "field": "WalkName",
         "id_field": "FID",
         "out": "Walk_Boundaries.gpkg",
-        "fan_out_to_all_parents": True,
         "method": "intersect",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
@@ -157,12 +156,11 @@ MAP_LAYERS = {
     "street": {
         "key": "street", "mytag": "street", "level": 6, "type": "node",
         "overlay": True, "control": True, "show": False,
-        "parent_layer": "walk",
+        "parent_layer": "constituency",
         "aggregation_mode": "selected_name",
         "src": "UK-ROADS.gpkg",
         "field": "name1",
         "out": "Street_Geometries.gpkg",
-        "fan_out_to_all_parents": True,
         "method": "linestringArea",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
@@ -911,20 +909,23 @@ def intersectingArea(
         if not hit.empty:
             selected_child_name = normalname(hit.iloc[0]["NAME"])
 
-    # NOTE: The old fallback block that forced `selected_child_name = iloc[0]`
-    # when name was None has been removed. Now, if name is None and no roid matches,
-    # selected_child_name stays None, leaving all child polygons intact for export.
 
-    # Narrow to the selected child when a name/roid actually matched
-    if selected_child_name and not child_polygons_within_parent.empty:
+    # ----------------------------------------------------
+    # 🎯 MODIFIED: Only narrow down to the single child if
+    # an explicit spatial point (roid) was clicked/provided.
+    # If roid is None, retain all candidate features!
+    # ----------------------------------------------------
+    if selected_child_name and roid is not None and not child_polygons_within_parent.empty:
         child_polygons_within_parent = child_polygons_within_parent[
             child_polygons_within_parent["NAME"].astype(str).map(normalname) == selected_child_name
         ]
+
     if (name or roid) and selected_child_name is None:
         logging.warning(
             f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
             f"matched nothing among {len(child_polygons_within_parent)} children under {p_name}"
         )
+
     return selected_child_name, child_polygons_within_parent, gdf
 
 
@@ -1401,7 +1402,6 @@ def build_walk_geoms_geovoronoi(
     """
     logger = logging.getLogger(__name__)
     from state import normalname
-    from layers import Treepolys
 
     logger.info("🚀 [DEBUG] Starting optimized hierarchical build_walk_geoms_geovoronoi")
 
@@ -1842,11 +1842,6 @@ def ensure_treepolys_with_index(
             # --------------------------------------------------------
 
             parent_layer_key = layer.get("parent_layer")
-            fan_out_to_all_parents = layer.get("fan_out_to_all_parents", False)
-            logging.debug(
-                f"[PARENT] Layer '{layer_type}' has parent_layer_key='{parent_layer_key}' | "
-                f"fan_out_to_all_parents={fan_out_to_all_parents}"
-            )
 
             if parent_layer_key is None:
                 # No parent layer configured at all (e.g. 'country', the root layer)
@@ -1854,7 +1849,7 @@ def ensure_treepolys_with_index(
 
             # 🎯 FIX: When at ROOT (or when select_name wasn't set for parent),
             # fall back to processing all active rows of parent layer to build full children tree!
-            elif effective_sourcepath == ROOT or fan_out_to_all_parents or parent_layer_key not in selected_row_by_layer:
+            elif effective_sourcepath == ROOT or parent_layer_key not in selected_row_by_layer:
                 parent_rows = active_layer_rows.get(parent_layer_key, [])
                 if not parent_rows:
                     logging.error(
@@ -3057,7 +3052,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         import numpy as np
         from flask import url_for
         from geovoronoi import voronoi_regions_from_coords
-        from layers import Treepolys
 
         import pandas as pd
         import folium
@@ -3389,7 +3383,6 @@ class ExtendedFeatureGroup(FeatureGroup):
         print(f"\n🚀 GLOBAL VORONOI SUMMARY: Total map elements rendered across all groups: {grand_total_polygons_added}")
 
     def add_linestrings(self, CE,rlevels, herenode, nodes_list, static, counters):
-        from layers import Treepolys
         from state import Candidates, LastResults, normalname
         from flask import session, flash
         import folium
@@ -3589,7 +3582,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
         from shapely import count_coordinates
         from shapely.geometry import LineString, MultiLineString
-        from layers import Treepolys
         from elector import electors
         from elections import CurrentElection
 
@@ -4529,7 +4521,6 @@ class ExtendedFeatureGroup(FeatureGroup):
 
     def add_houses(self, rlevels, herenode, static, intention_type):
         global levelcolours
-        from layers import Treepolys
 
         # Guard: Ensure we have exactly one election to unpack
         assert len(rlevels) == 1, f"Expected 1 election, got {len(rlevels)}"
