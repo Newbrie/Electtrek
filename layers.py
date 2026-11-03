@@ -30,7 +30,7 @@ import math
 import colorsys
 import state
 from state import normalname
-from paths import untyped, is_typed_parent,derive_territory, stepify, pathify, typed_split, make_child_path, stepify_typed
+from paths import untyped, is_typed_parent,derive_territory, stepify, pathify, typed_split, make_child_path, stepify_typed, extract_path_at_level
 from matplotlib.colors import to_hex, to_rgb
 import geopandas as gpd
 # ✅ CORRECT
@@ -1279,24 +1279,22 @@ def walk_geom_path(county: str) -> str:
 
 
 
-def ensure_walk_geometries(areaelectors, constituency: str):
+def ensure_walk_geometries(rlevels, constituency_path, constituency_name):
     """Return the walk file for this constituency, regenerating it if missing or stale."""
     from state import normalname
+    from elector import electors
 
-    if not constituency or areaelectors is None or areaelectors.empty:
+    if not constituency_name:
         return None
 
-    target = normalname(constituency)
+    # 🎯 Use path-based elector lookup instead of manual dataframe string filtering
+    constituency_electors = electors.elector_for_path(rlevels, constituency_path)
 
-    # Filter by Constituency column instead of County
-    constituency_electors = areaelectors[areaelectors["Constituency"].astype(str).map(normalname) == target]
-
-    if constituency_electors.empty:
-        logging.warning(f"[WALK] No electors found for constituency '{constituency}'; no walk file built.")
+    if constituency_electors is None or constituency_electors.empty:
+        logging.warning(f"[WALK] No electors found for path '{constituency_path}'; no walk file built.")
         return None
 
-    # Use constituency for the path generator function
-    path = walk_geom_path(constituency)
+    path = walk_geom_path(constituency_name)
     meta_path = path + ".meta.json"
     rows = len(constituency_electors)
 
@@ -1312,7 +1310,7 @@ def ensure_walk_geometries(areaelectors, constituency: str):
         logging.info(f"[WALK] Reusing cached walk file: {path}")
         return path
 
-    logging.info(f"[WALK] Generating walk geometries for constituency '{constituency}' ({rows} electors) -> {path}")
+    logging.info(f"[WALK] Generating walk geometries for constituency '{constituency_name}' ({rows} electors) -> {path}")
     gdf = _generate_walk_geometries(constituency_electors, path)
 
     if gdf is None or gdf.empty:
@@ -1328,6 +1326,7 @@ def _generate_walk_geometries(areaelectors, out_path):
     Build and persist walk-level (Level 5) geometries via Voronoi tessellation,
     grouped hierarchically by Nation, County, Constituency, Ward, and WalkName.
     """
+    from elector import electors
     logger = logging.getLogger(__name__)
 
     if areaelectors is None or areaelectors.empty:
@@ -1817,15 +1816,19 @@ def ensure_treepolys_with_index(
         for layer_type in sub_layers:
             active_layer_rows.setdefault(layer_type, [])
             if layer_type.lower() == "walk":
-                # Assuming constituency is at a specific step index in your navigation path (e.g., steps[3])
-                # Adjust index depending on your exact path structure: [Country, Nation, County, Constituency, ...]
-                constituency = str(steps[3]).strip().upper() if len(steps) > 3 else (str(steps[2]).strip().upper() if len(steps) > 2 else "")
+                # 🎯 Extract the exact Level 3 (constituency) path and constituency name
+                constituency_path = extract_path_at_level(effective_sourcepath, 3)
+                constituency_name = constituency_path.split("/")[-1] if constituency_path else ""
 
-                walk_file_path = ensure_walk_geometries(areaelectors, constituency)
+                # Pass rlevels, constituency_path, and constituency_name into ensure_walk_geometries
+                walk_file_path = ensure_walk_geometries(resolved_levels, constituency_path, constituency_name)
 
                 # 🛡️ Fail safely if walk geometry generation was skipped or returned None
                 if not walk_file_path:
-                    logging.warning(f"⚠️ Walk geometries could not be ensured for constituency '{constituency}'. Skipping walk layer initialization.")
+                    logging.warning(
+                        f"⚠️ Walk geometries could not be ensured for constituency '{constituency_name}' "
+                        f"at path '{constituency_path}'. Skipping walk layer initialization."
+                    )
                     continue
 
             layer = layer_defs.get(layer_type)
