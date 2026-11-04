@@ -1396,6 +1396,7 @@ def build_walk_geoms_geovoronoi(
     crs_input="EPSG:4326",
     crs_proj="EPSG:27700",
     crs_out="EPSG:4326",
+    root_prefix="UNITED_KINGDOM",
 ):
     """
     Builds Voronoi walk geometries partitioned strictly within parent ward boundaries
@@ -1441,8 +1442,17 @@ def build_walk_geoms_geovoronoi(
     pad = 1000.0
     fallback_hull = box(min_x - pad, min_y - pad, max_x + pad, max_y + pad)
 
-    # Identify the correct grouping column
-    ward_col = "Ward" if "Ward" in pts_gdf.columns else pts_gdf.columns[0]
+    # Automatically derive Ward from WalkName if no dedicated Ward column exists
+    ward_candidates = ["Ward", "WARD", "ward", "WardName", "ward_name", "Wards"]
+    ward_col = next((col for col in ward_candidates if col in pts_gdf.columns), None)
+
+    if not ward_col and "WalkName" in pts_gdf.columns:
+        pts_gdf["_derived_ward"] = pts_gdf["WalkName"].astype(str).str.split("_").str[0]
+        ward_col = "_derived_ward"
+        logger.info(f"ℹ️ No dedicated Ward column found. Dynamically derived ward names from 'WalkName' using prefix split.")
+    elif not ward_col:
+        ward_col = pts_gdf.columns[0]
+        logger.warning(f"⚠️ Ward column not found. Falling back to column: '{ward_col}'")
 
     pts_gdf["_ward_norm"] = pts_gdf[ward_col].astype(str).map(normalname)
     ward_groups = pts_gdf.groupby("_ward_norm")
@@ -1451,14 +1461,14 @@ def build_walk_geoms_geovoronoi(
     for ward_name, group_df in ward_groups:
         logger.info(f"\n--- Processing Voronoi Group for Ward: {ward_name} | Sub-nodes: {len(group_df)} ---")
 
-        # 🎯 Build full hierarchical parent path using dataframe columns
         first_row = group_df.iloc[0]
         nation = str(first_row.get("Nation", "ENGLAND")).strip().upper()
         county = str(first_row.get("County", "")).strip().upper()
         constituency = str(first_row.get("Constituency", "")).strip().upper()
 
-        # Construct standard multi-level path: UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/WARDS/WARD_NAME
-        path_parts = [ROOT]
+        root_val = globals().get("ROOT", root_prefix)
+        path_parts = [root_val]
+
         if nation and nation != "NONE":
             path_parts.append(nation)
         if county and county != "NONE":
@@ -1467,7 +1477,14 @@ def build_walk_geoms_geovoronoi(
             path_parts.append(constituency)
 
         base_parent_path = "/".join(path_parts)
-        ward_parent_path = f"{base_parent_path}/WARDS/{normalname(ward_name)}"
+
+        # Robustly determine actual ward name and ensure ward_parent_path includes /WARDS/
+        actual_ward_name = str(first_row.get(ward_col, ward_name)).strip()
+        norm_ward = normalname(actual_ward_name)
+        if not norm_ward or norm_ward.upper() == "NONE":
+            norm_ward = normalname(str(ward_name))
+
+        ward_parent_path = f"{base_parent_path}/WARDS/{norm_ward}"
 
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
@@ -1475,45 +1492,40 @@ def build_walk_geoms_geovoronoi(
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
             if not pfile.empty:
-                path_col = next((col for col in ["path", "node_path", "mapfile", "PATH"] if col in pfile.columns), None)
+                parent_path_col = next((col for col in ["_parent_path", "parent_path", "PARENT_PATH", "parent"] if col in pfile.columns), None)
                 name_col = next((col for col in ["NAME", "name", "Ward", "WARD", "Wards"] if col in pfile.columns), None)
 
                 matched_ward = pd.DataFrame()
 
-                # 1. Try Exact Path Matching first (Most Robust)
-                if path_col:
-                    target_ward_path = ward_parent_path
-                    pfile_paths_norm = pfile[path_col].astype(str).apply(lambda p: p.upper().replace(".HTML", ""))
-                    target_path_norm = target_ward_path.upper().replace(".HTML", "")
+                # Construct ward_path from parent path + NAME and compare to target path
+                if parent_path_col and name_col:
+                    target_ward_path_norm = ward_parent_path.upper().replace(".HTML", "")
 
-                    matched_ward = pfile[pfile_paths_norm == target_path_norm]
+                    pfile_ward_paths_norm = (
+                        pfile[parent_path_col].astype(str).str.rstrip("/") + "/WARDS/" +
+                        pfile[name_col].astype(str).apply(normalname)
+                    ).str.upper().replace(r'\.HTML$', '', regex=True)
+
+                    matched_ward = pfile[pfile_ward_paths_norm == target_ward_path_norm]
                     if not matched_ward.empty:
-                        source_used = f"Treepolys['ward'] via exact path match on '{path_col}'"
+                        source_used = f"Treepolys['ward'] via constructed ward_path match using '{parent_path_col}' and '{name_col}'"
 
-                # 2. Fallback to Normalized Name Matching
+                # Fallback to normalized name matching if constructed path match yields nothing
                 if matched_ward.empty and name_col:
-                    w_norm = normalname(str(ward_name))
+                    w_norm = normalname(str(actual_ward_name))
                     temp_norm_series = pfile[name_col].astype(str).apply(normalname)
                     matched_ward = pfile[temp_norm_series == w_norm]
                     if not matched_ward.empty:
                         matched_names = matched_ward[name_col].tolist()
                         source_used = f"Treepolys['ward'] via fallback name match on '{name_col}' (Matched: {matched_names})"
 
-                # 3. Extract boundary if match succeeded
                 if not matched_ward.empty:
                     parent_boundary = matched_ward.to_crs(crs_proj).union_all()
                 else:
                     available_samples = pfile[name_col].astype(str).tolist()[:10] if name_col else []
-                    logger.warning(f"❌ Ward lookup miss for '{ward_name}' (Path: {base_parent_path}). Available samples: {available_samples}")
-            else:
-                logger.debug("Treepolys['ward'] dataframe is empty.")
-        else:
-            logger.debug("Treepolys dictionary or 'ward' key is not present in globals.")
-
-        logger.info(f"-> Parent boundary source used: {source_used}")
+                    logger.warning(f"❌ Ward lookup miss for '{actual_ward_name}' (Target Path: {ward_parent_path}). Available samples: {available_samples}")
 
         if not parent_boundary.is_valid:
-            logger.warning(f"-> Warning: Parent boundary for '{ward_name}' is invalid. Applying .buffer(0) correction.")
             parent_boundary = parent_boundary.buffer(0)
 
         calc_hull = parent_boundary.convex_hull
@@ -1543,11 +1555,11 @@ def build_walk_geoms_geovoronoi(
             try:
                 region_polys, region_pts = voronoi_regions_from_coords(coords, calc_hull)
             except Exception as err:
-                logger.error(f"❌ geovoronoi calculation failed for ward {ward_name}: {err}. Falling back to fallback hull.")
+                logger.error(f"❌ geovoronoi calculation failed for ward {actual_ward_name}: {err}. Falling back to fallback hull.")
                 try:
                     region_polys, region_pts = voronoi_regions_from_coords(coords, fallback_hull)
                 except Exception as inner_err:
-                    logger.error(f"❌ Fallback hull calculation also failed for {ward_name}: {inner_err}")
+                    logger.error(f"❌ Fallback hull calculation also failed for {actual_ward_name}: {inner_err}")
                     continue
         elif len(coords) == 1:
             region_polys = {0: calc_hull}
@@ -1610,7 +1622,8 @@ def build_walk_geoms_geovoronoi(
             for orig_idx in orig_indices:
                 row_data = group_df.loc[orig_idx].copy()
                 row_data["geometry"] = actual_shape
-                row_data["_parent_path"] = ward_parent_path  # Full path stamped per feature
+                # Explicitly assign the full ward path as the parent path for the walk
+                row_data["_parent_path"] = ward_parent_path
                 all_processed_features.append(row_data)
 
     if not all_processed_features:
@@ -1623,14 +1636,16 @@ def build_walk_geoms_geovoronoi(
         int(hashlib.sha1(f"{row.get('Ward', '')}|{row['WalkName']}".encode()).hexdigest(), 16) % (2**31 - 1)
         for _, row in walk_gdf.iterrows()
     ]
-    walk_gdf["NAME"] = walk_gdf["WalkName"]
+
+    walk_gdf["NAME"] = walk_gdf["WalkName"].astype(str).str.replace(r'(?i)walk', '', regex=True).str.strip()
     walk_gdf["TYPEKEY"] = "walk"
 
+    root_val = globals().get("ROOT", root_prefix)
     if "_parent_path" not in walk_gdf.columns:
-        walk_gdf["_parent_path"] = ROOT
+        walk_gdf["_parent_path"] = root_val
 
-    # Return with complete _parent_path included
     return walk_gdf[["FID", "NAME", "TYPEKEY", "_parent_path", "geometry"]].to_crs(crs_out)
+
 # ==============================================================================
 # CORE ENGINE PIPELINE
 # ==============================================================================
@@ -2095,7 +2110,7 @@ def ensure_treepolys_with_index(
 
                 upserted_gdf.to_file(destination, driver="GPKG")
                 logger.info(f"Level {level} [{layer_type}] exported ({len(upserted_gdf)} total cumulative features) -> {destination}")
-                
+
             # --------------------------------------------------------
             # Index registration & parent propagation
             # --------------------------------------------------------
