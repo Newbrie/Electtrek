@@ -2111,7 +2111,8 @@ def ensure_treepolys_with_index(
                 upserted_gdf.to_file(destination, driver="GPKG")
                 logger.info(f"Level {level} [{layer_type}] exported ({len(upserted_gdf)} total cumulative features) -> {destination}")
 
-            # --------------------------------------------------------
+
+# --------------------------------------------------------
             # Index registration & parent propagation
             # --------------------------------------------------------
             existing_fids = {r["FID"] for r in active_layer_rows[layer_type] if r is not None and "FID" in r}
@@ -2119,7 +2120,17 @@ def ensure_treepolys_with_index(
             for idx, row in tree_gdf.iterrows():
                 child_name = _derive_child_name(row.get("NAME"), idx)
                 parent_path = row.get("_parent_path", ROOT)
-                this_path = ROOT if (level == 0 and child_name == ROOT) else make_child_path(parent_path, layer_type, child_name)
+
+                # 🚀 Clean and concise call—pathify handles TYPE_GROUPS internally now!
+                parent_parts = [p for p in parent_path.split("/") if p]
+                child_parts = parent_parts + [child_name]
+
+                leaf_type_arg = layer_type.lower() if layer_type.lower() in ("ward", "division") else None
+
+                this_path = ROOT if (level == 0 and child_name == ROOT) else pathify(child_parts, leaf_type=leaf_type_arg)
+                if not this_path:
+                    this_path = make_child_path(parent_path, layer_type, child_name) # Fallback
+
                 roid_coords = None
                 if getattr(row, "geometry", None) is not None:
                     try:

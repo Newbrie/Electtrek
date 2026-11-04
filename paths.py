@@ -79,6 +79,8 @@ def typed_split(path_str):
         out.append(part)
     return out
 
+TYPE_GROUPS = {"WARDS", "DIVS"}  # Module level
+
 def pathify(parts, leaf_type=None, branch="ward"):
     """Rebuild a typed index path from level-aligned parts (stepify output).
     leaf_type: type of the last part ('ward' or 'division').
@@ -86,9 +88,15 @@ def pathify(parts, leaf_type=None, branch="ward"):
             (walks hang off wards, so the default is 'ward')."""
     if not parts:
         return ""
-    path = parts[0]
-    for i, part in enumerate(parts[1:], start=1):
-        is_last = i == len(parts) - 1
+
+    # 🎯 Automatically filter out group headers internally
+    cleaned_parts = [p for p in parts if p and p.upper() not in TYPE_GROUPS]
+    if not cleaned_parts:
+        return ""
+
+    path = cleaned_parts[0]
+    for i, part in enumerate(cleaned_parts[1:], start=1):
+        is_last = i == len(cleaned_parts) - 1
         seg = TYPE_SEGMENT.get(leaf_type if (is_last and leaf_type) else branch)
         if seg and is_typed_parent(path):
             path = f"{path}/{seg}/{part}"
