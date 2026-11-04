@@ -128,7 +128,9 @@ MAP_LAYERS = {
         "aggregation_mode": "selected_name",
         "id_field": "FID",
         "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
-        "field": "WD24NM", "out": "Ward_Boundaries.gpkg", "method": "intersect",
+        "field": "WD24NM", "out": "Ward_Boundaries.gpkg",
+        "fan_out_to_all_parents": True,
+         "method": "intersect",
         "options": {"color": "#2E6FBB", "fontColor": "#2E6FBB", "weight": 2.5, "fillColor": "#A9C8F5", "fillOpacity": 0.18}
     },
     "division": {
@@ -1476,18 +1478,21 @@ def build_walk_geoms_geovoronoi(
         if constituency and constituency != "NONE":
             path_parts.append(constituency)
 
-        base_parent_path = "/".join(path_parts)
-
-        # Robustly determine actual ward name and ensure ward_parent_path includes /WARDS/
+        # Robustly determine actual ward name
         actual_ward_name = str(first_row.get(ward_col, ward_name)).strip()
         norm_ward = normalname(actual_ward_name)
         if not norm_ward or norm_ward.upper() == "NONE":
             norm_ward = normalname(str(ward_name))
 
-        ward_parent_path = f"{base_parent_path}/WARDS/{norm_ward}"
+        path_parts.append(norm_ward)
+
+        # 🎯 UTILISE PATHIFY HERE:
+        # Automatically inserts the correct segment (e.g. /WARDS/) for the leaf ward node
+        ward_parent_path = pathify(path_parts, leaf_type="ward")
 
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
+
 
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
