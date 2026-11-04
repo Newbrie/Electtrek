@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import threading
 import state
+from state import normalname
 import paths
 from config import ELECTOR_FILE, LOG_FILE
 
@@ -335,14 +336,6 @@ class ElectorManager:
 
 
     def elector_for_path(self, resolved_levels, raw_path):
-        # module level, shared by node_path, stepify_typed, untyped, ping_node, elector_for_path
-        GROUP_TO_SUBLEVEL = {
-            "WARDS": "ward",
-            "DIVS":  "division",
-            "WALKS": "walk",
-            "PDS":   "polling_district",
-        }
-        TYPE_GROUPS = set(GROUP_TO_SUBLEVEL)
         with _lock:
             assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
             (c_election, elevels), = resolved_levels.items()
@@ -352,62 +345,45 @@ class ElectorManager:
                 logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
                 return pd.DataFrame()
 
-            # Walk the typed path: group headers don't take a level index,
-            # they only say which sub-level the NEXT node belongs to.
-            segments = []          # (value, type_hint) per real node; index == level
-            hint = None
-            for part in paths.stepify_typed(raw_path):
-                grp = GROUP_TO_SUBLEVEL.get(part.upper())
-                if grp:
-                    hint = grp
-                    continue
-                segments.append((str(part).strip().upper(), hint))
-                hint = None
+            # Extract clean, normalized path parts (ignoring group headers like WARDS/DIVS)
+            GROUP_TO_SUBLEVEL = {"WARDS", "DIVS", "WALKS", "PDS"}
+            segments = [
+                str(part).strip()
+                for part in paths.stepify_typed(raw_path)
+                if part.upper() not in GROUP_TO_SUBLEVEL
+            ]
 
             logger.info(f"🔍 elector_for_path: {raw_path} -> {segments}")
 
             mask = pd.Series(True, index=df.index)
             initial_count = len(df)
 
-            for idx, (target_val, type_hint) in enumerate(segments):
+            for idx, target_val in enumerate(segments):
                 if idx not in elevels:
                     logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels.")
                     break
 
-                level_name = elevels[idx]
-                sub_levels = [s.strip().lower() for s in str(level_name).split("/")]
-                if type_hint and type_hint in sub_levels:
-                    sub_levels = [type_hint]        # typed path decides: no guessing
+                level_name = elevels[idx].lower()
 
-                level_matched = False
-                for sub_level in sub_levels:
-                    col_name = shapecolumn.get(sub_level)
-                    if col_name is None or col_name not in df.columns:
-                        logger.debug(f"   ❌ No usable column for sub_level '{sub_level}'")
-                        continue
+                # Directly map the level type to its corresponding DataFrame column
+                col_name = shapecolumn.get(level_name)
+                if col_name is None or col_name not in df.columns:
+                    logger.warning(f"⚠️ No column mapped for level '{level_name}' (index {idx}).")
+                    return pd.DataFrame()
 
-                    sub_mask = mask & (df[col_name].astype(str).str.strip().str.upper() == target_val)
-                    if sub_mask.any():
-                        mask = sub_mask
-                        level_matched = True
-                        break
+                sub_mask = mask & (df[col_name] == target_val)
 
-                if not level_matched:
-                    # Fail closed: continuing would return the parent's electors
-                    # and show them under the wrong node.
-                    parent_val = segments[idx - 1][0] if idx > 0 else "ROOT"
+                if not sub_mask.any():
+                    parent_val = segments[idx - 1] if idx > 0 else "UNITED_KINGDOM"
                     logger.warning(f"⚠️ Level '{level_name}' value '{target_val}' matched 0 electors under '{parent_val}'.")
                     return pd.DataFrame()
+
+                mask = sub_mask
 
             filtered_df = df[mask]
             final_count = len(filtered_df)
             logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
 
-            if final_count == 0:
-                return pd.DataFrame()
-            if final_count == initial_count and len(segments) > 1:
-                logger.error("❌ Filter left 100% of rows untouched (filter did nothing).")
-                return pd.DataFrame()
 
             return filtered_df
 

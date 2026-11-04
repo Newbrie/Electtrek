@@ -1819,6 +1819,7 @@ def ensure_treepolys_with_index(
                 # 🎯 Extract the exact Level 3 (constituency) path and constituency name
                 constituency_path = extract_path_at_level(effective_sourcepath, 3)
                 constituency_name = constituency_path.split("/")[-1] if constituency_path else ""
+                logging.info(f"--- Constituency path {constituency_path} with name: {constituency_name} ---")
 
                 # Pass rlevels, constituency_path, and constituency_name into ensure_walk_geometries
                 walk_file_path = ensure_walk_geometries(resolved_levels, constituency_path, constituency_name)
@@ -2069,11 +2070,11 @@ def ensure_treepolys_with_index(
                 logger.debug(f"[CACHE HIT] Node '{test_path}' and its children are already fully cached in Geo_index. Skipping upsert and export.")
                 continue
 
+
             existing = get_treepoly(layer_type)
             upserted_gdf = upsert_geodf(existing, tree_gdf, key="FID")
             set_treepoly(layer_type, upserted_gdf)
 
-            # Export layer to file only if changes/new data occurred
             if upserted_gdf is not None and not upserted_gdf.empty:
                 destination = MAP_LAYERS.get(layer_type, {}).get("out")
                 if not destination:
@@ -2086,24 +2087,15 @@ def ensure_treepolys_with_index(
 
                 os.makedirs(os.path.dirname(os.path.abspath(destination)), exist_ok=True)
 
-            # Remove old file if it exists to prevent locks
-            if os.path.exists(destination):
-                try:
-                    os.remove(destination)
-                except Exception:
-                    pass
+                # 🎯 FIX: Do NOT remove the file if we want to retain other wards/features!
+                # Upserting onto the full cumulative GeoDataFrame (upserted_gdf) and writing
+                # directly handles full feature persistence across layer queries.
+                upserted_gdf = upserted_gdf.reset_index(drop=True)
+                upserted_gdf = normalize_column_case(upserted_gdf, ["FID", "NAME", "TYPEKEY"])
 
-            upserted_gdf = upserted_gdf.reset_index(drop=True)
-
-            # Final guard: GPKG/SQLite is case-insensitive on column names,
-            # so a case-variant collision (e.g. "Name" alongside "NAME")
-            # that slipped in from a merge or a differently-cased source
-            # layer would otherwise only surface as a cryptic sqlite3_exec
-            # failure deep inside pyogrio at write time.
-            upserted_gdf = normalize_column_case(upserted_gdf, ["FID", "NAME", "TYPEKEY"])
-
-            upserted_gdf.to_file(destination, driver="GPKG")
-            logger.info(f"Level {level} [{layer_type}] exported ({len(upserted_gdf)} features) -> {destination}")
+                upserted_gdf.to_file(destination, driver="GPKG")
+                logger.info(f"Level {level} [{layer_type}] exported ({len(upserted_gdf)} total cumulative features) -> {destination}")
+                
             # --------------------------------------------------------
             # Index registration & parent propagation
             # --------------------------------------------------------
