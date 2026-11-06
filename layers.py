@@ -129,7 +129,6 @@ MAP_LAYERS = {
         "id_field": "FID",
         "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
         "field": "WD24NM", "out": "Ward_Boundaries.gpkg",
-        "fan_out_to_all_parents": True,
          "method": "intersect",
         "options": {"color": "#2E6FBB", "fontColor": "#2E6FBB", "weight": 2.5, "fillColor": "#A9C8F5", "fillOpacity": 0.18}
     },
@@ -145,13 +144,14 @@ MAP_LAYERS = {
     "walk": {
         "key": "walk", "mytag": "walk", "level": 5, "type": "node",
         "overlay": True, "control": True, "show": False,
-        "parent_layer": "constituency",
+        "parent_layer": "ward",
         "aggregation_mode": "selected_name",
         "src": "walk_geoms.geojson",
         "field": "WalkName",
         "id_field": "FID",
         "out": "Walk_Boundaries.gpkg",
         "fan_out_to_all_parents": True,
+        "include_all_results": True,
         "method": "intersect",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 1.0, "fillColor": "#FBCFE8", "fillOpacity": 0.5, "dashArray": "2,4"}
@@ -159,12 +159,13 @@ MAP_LAYERS = {
     "street": {
         "key": "street", "mytag": "street", "level": 6, "type": "node",
         "overlay": True, "control": True, "show": False,
-        "parent_layer": "constituency",
+        "parent_layer": "ward",
         "aggregation_mode": "selected_name",
         "src": "UK-ROADS.gpkg",
         "field": "name1",
         "out": "Street_Geometries.gpkg",
          "fan_out_to_all_parents": True,
+         "include_all_results": True,
         "method": "linestringArea",
         "simplify_tolerance": None,
         "options": {"color": "#0F766E", "fontColor": "#0F766E", "weight": 2.5, "fillColor": "none", "fillOpacity": 0.0}
@@ -857,6 +858,7 @@ def intersectingArea(
 
     layer_cfg = MAP_LAYERS.get(typekey, {})
     child_level = layer_cfg.get("level", "N/A")
+    include_all_results = layer_cfg.get("include_all_results", False)
 
     parent_name = "None"
     if parent_row is not None:
@@ -895,6 +897,14 @@ def intersectingArea(
 
     selected_child_name = None
 
+    if include_all_results:
+        logging.info(
+            f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
+            f"including all results {include_all_results} including {len(child_polygons_within_parent)} results"
+        )
+        return selected_child_name, child_polygons_within_parent, gdf
+
+
     # 1. Try matching via coordinate/centroid (roid)
     centroid_pt = get_centroid_or_point(roid)
     if centroid_pt is not None and not child_polygons_within_parent.empty:
@@ -917,7 +927,7 @@ def intersectingArea(
     # ----------------------------------------------------
     # 🎯 MODIFIED: Only narrow down to the single child if
     # an explicit spatial point (roid) was clicked/provided.
-    # If roid is None, retain all candidate features!
+    # If roid is None,or "include_all_results" is True retain all candidate features!
     # ----------------------------------------------------
     if selected_child_name and roid is not None and not child_polygons_within_parent.empty:
         child_polygons_within_parent = child_polygons_within_parent[
@@ -929,6 +939,7 @@ def intersectingArea(
             f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
             f"matched nothing among {len(child_polygons_within_parent)} children under {p_name}"
         )
+
 
     return selected_child_name, child_polygons_within_parent, gdf
 
@@ -1487,29 +1498,33 @@ def build_walk_geoms_geovoronoi(
         path_parts.append(norm_ward)
 
         # 🎯 UTILISE PATHIFY HERE:
-        # Automatically inserts the correct segment (e.g. /WARDS/) for the leaf ward node
+        # For electors' ward_path - we automatically inserts the correct segment (e.g. /WARDS/) for the leaf ward node
         ward_parent_path = pathify(path_parts, leaf_type="ward")
 
         parent_boundary = fallback_hull
         source_used = "fallback_hull"
 
 
+# treepolys contains the geometry - identified by parent_path and ward_name
         if "Treepolys" in globals() and isinstance(Treepolys, dict) and "ward" in Treepolys:
             pfile = Treepolys["ward"]
             if not pfile.empty:
-                parent_path_col = next((col for col in ["_parent_path", "parent_path", "PARENT_PATH", "parent"] if col in pfile.columns), None)
-                name_col = next((col for col in ["NAME", "name", "Ward", "WARD", "Wards"] if col in pfile.columns), None)
+                parent_path_col = next((col for col in ["_parent_path", "parent_path"] if col in pfile.columns), None)
+                name_col = next((col for col in ["NAME"] if col in pfile.columns), None)
 
                 matched_ward = pd.DataFrame()
 
-                # Construct ward_path from parent path + NAME and compare to target path
+                # Construct treepolys geom ward_path from parent path + NAME and compare to target path
                 if parent_path_col and name_col:
-                    target_ward_path_norm = ward_parent_path.upper().replace(".HTML", "")
-
+                    target_ward_path_norm = ward_parent_path #target=elector ward
                     pfile_ward_paths_norm = (
                         pfile[parent_path_col].astype(str).str.rstrip("/") + "/WARDS/" +
                         pfile[name_col].astype(str).apply(normalname)
-                    ).str.upper().replace(r'\.HTML$', '', regex=True)
+                    )
+
+                    # Convert to list to avoid truncation
+                    paths_list = pfile_ward_paths_norm.tolist()
+                    logger.info(f"❌ lookup ward: '{target_ward_path_norm}' within {paths_list}")
 
                     matched_ward = pfile[pfile_ward_paths_norm == target_ward_path_norm]
                     if not matched_ward.empty:
@@ -1836,14 +1851,31 @@ def ensure_treepolys_with_index(
         for layer_type in sub_layers:
             active_layer_rows.setdefault(layer_type, [])
             if layer_type.lower() == "walk":
-                # 🎯 Extract the exact Level 3 (constituency) path and constituency name
                 constituency_path = extract_path_at_level(effective_sourcepath, 3)
                 constituency_name = constituency_path.split("/")[-1] if constituency_path else ""
-                logging.info(f"--- Constituency path {constituency_path} with name: {constituency_name} ---")
 
-                # Pass rlevels, constituency_path, and constituency_name into ensure_walk_geometries
+                expected_wards = {
+                    normalname(cp.split("/")[-1])
+                    for cp in Geo_index.get(constituency_path, {}).get("children", [])
+                    if cp.split("/")[-2] == "WARDS"
+                }
+
+                ward_tp = Treepolys.get("ward")
+                loaded_wards = set()
+                if ward_tp is not None and not ward_tp.empty:
+                    mine = ward_tp[ward_tp["_parent_path"].astype(str).str.rstrip("/") == constituency_path]
+                    loaded_wards = {normalname(str(n)) for n in mine["NAME"]}
+
+                missing = expected_wards - loaded_wards
+                if not expected_wards or missing:
+                    logging.warning(
+                        f"Ward boundaries incomplete for '{constituency_name}': "
+                        f"{len(expected_wards) - len(missing)}/{len(expected_wards)} loaded; "
+                        f"missing {sorted(missing)}. Skipping walk geometries."
+                    )
+                    continue
+
                 walk_file_path = ensure_walk_geometries(resolved_levels, constituency_path, constituency_name)
-
                 # 🛡️ Fail safely if walk geometry generation was skipped or returned None
                 if not walk_file_path:
                     logging.warning(
