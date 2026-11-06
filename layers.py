@@ -2075,7 +2075,7 @@ def ensure_treepolys_with_index(
                         print(f"   - Row FID: {fid} | Name: {name} | Bounds: {bounds}")
                     print("============================================================\n")
 
-                if level <= target_depth and anchor_points and select_name is None and not not layer.get("include_all_results", False):
+                if level <= target_depth and anchor_points and select_name is None and not layer.get("include_all_results", False):
                     pre_count = len(tree_gdf)
                     tree_gdf = _spatial_filter(tree_gdf, anchor_points)
                     logging.debug(f"[SPATIAL FILTER] Filtered tree_gdf for '{layer_type}': {pre_count} -> {len(tree_gdf)} rows remaining.")
