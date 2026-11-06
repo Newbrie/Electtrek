@@ -336,81 +336,79 @@ class ElectorManager:
 
 
     def elector_for_path(self, resolved_levels, raw_path):
-    with _lock:
-        assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
-        (c_election, elevels), = resolved_levels.items()
+        with _lock:
+            assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+            (c_election, elevels), = resolved_levels.items()
 
-        df = self._elections.get(c_election)
-        if df is None or df.empty:
-            logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
-            return pd.DataFrame()
+            df = self._elections.get(c_election)
+            if df is None or df.empty:
+                logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
+                return pd.DataFrame()
 
-        # 1. Inspect raw_path to determine if we are targeting a WARD or DIVISION context
-        raw_path_upper = str(raw_path).upper()
-        path_context = None
-        if "/WARDS/" in raw_path_upper or raw_path_upper.endswith("/WARDS"):
-            path_context = "ward"
-        elif "/DIVS/" in raw_path_upper or raw_path_upper.endswith("/DIVS"):
-            path_context = "division"
+            # 1. Inspect raw_path for context
+            raw_path_upper = str(raw_path).upper()
+            path_context = None
+            if "/WARDS/" in raw_path_upper or raw_path_upper.endswith("/WARDS"):
+                path_context = "ward"
+            elif "/DIVS/" in raw_path_upper or raw_path_upper.endswith("/DIVS"):
+                path_context = "division"
 
-        # Extract clean, normalized path parts (ignoring group headers like WARDS/DIVS)
-        GROUP_TO_SUBLEVEL = {"WARDS", "DIVS", "WALKS", "PDS"}
-        segments = [
-            str(part).strip()
-            for part in paths.stepify_typed(raw_path)
-            if part.upper() not in GROUP_TO_SUBLEVEL
-        ]
+            # Keep raw stepify parts to preserve index correspondence with elevels
+            raw_parts = [str(part).strip() for part in paths.stepify_typed(raw_path)]
+            logger.info(f"🔍 elector_for_path: {raw_path} -> {raw_parts} (Context: {path_context})")
 
-        logger.info(f"🔍 elector_for_path: {raw_path} -> {segments} (Context: {path_context})")
+            mask = pd.Series(True, index=df.index)
+            initial_count = len(df)
 
-        mask = pd.Series(True, index=df.index)
-        initial_count = len(df)
+            GROUP_TO_SUBLEVEL = {"WARDS", "DIVS", "WALKS", "PDS"}
 
-        for idx, target_val in enumerate(segments):
-            if idx not in elevels:
-                logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels.")
-                break
+            for idx, target_val in enumerate(raw_parts):
+                # Skip structural container keywords so they don't get filtered as geographic names
+                if target_val.upper() in GROUP_TO_SUBLEVEL:
+                    continue
 
-            level_raw = elevels[idx].lower()
-
-            # 2. Split composite types like 'ward/division' into candidate types
-            level_candidates = [l.strip() for l in level_raw.split("/")]
-
-            # Prioritise based on detected path context if it's a composite level
-            if path_context and path_context in level_candidates:
-                level_candidates.remove(path_context)
-                level_candidates.insert(0, path_context)
-
-            # 3. Resolve to the first matching DataFrame column from shapecolumn
-            col_name = None
-            for l_name in level_candidates:
-                candidate_col = shapecolumn.get(l_name)
-                if candidate_col and candidate_col in df.columns:
-                    col_name = candidate_col
+                if idx not in elevels:
+                    logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels.")
                     break
 
-            if col_name is None:
-                logger.warning(
-                    f"⚠️ No column mapped for any component of level '{level_raw}' (index {idx}) in shapecolumn."
-                )
-                return pd.DataFrame()
+                level_raw = elevels[idx].lower()
 
-            sub_mask = mask & (df[col_name] == target_val)
+                # 2. Split composite types like 'ward/division' into candidate types
+                level_candidates = [l.strip() for l in level_raw.split("/")]
 
-            if not sub_mask.any():
-                parent_val = segments[idx - 1] if idx > 0 else "UNITED_KINGDOM"
-                logger.warning(
-                    f"⚠️ Level '{level_raw}' (using col '{col_name}') value '{target_val}' matched 0 electors under '{parent_val}'."
-                )
-                return pd.DataFrame()
+                # Prioritise based on detected path context if it's a composite level
+                if path_context and path_context in level_candidates:
+                    level_candidates.remove(path_context)
+                    level_candidates.insert(0, path_context)
 
-            mask = sub_mask
+                # 3. Resolve to the first matching DataFrame column from shapecolumn
+                col_name = None
+                for l_name in level_candidates:
+                    candidate_col = shapecolumn.get(l_name)
+                    if candidate_col and candidate_col in df.columns:
+                        col_name = candidate_col
+                        break
 
-        filtered_df = df[mask]
-        final_count = len(filtered_df)
-        logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
+                if col_name is None:
+                    # If this level level doesn't map to a column (e.g. structural levels), skip gracefully
+                    continue
 
-        return filtered_df
+                sub_mask = mask & (df[col_name] == target_val)
+
+                if not sub_mask.any():
+                    parent_val = raw_parts[idx - 1] if idx > 0 else "UNITED_KINGDOM"
+                    logger.warning(
+                        f"⚠️ Level '{level_raw}' (using col '{col_name}') value '{target_val}' matched 0 electors under '{parent_val}'."
+                    )
+                    return pd.DataFrame()
+
+                mask = sub_mask
+
+            filtered_df = df[mask]
+            final_count = len(filtered_df)
+            logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
+
+            return filtered_df
 
     def delete_by_election(self, election_id: str) -> int:
         """Completely removes all elector records for a given election ID.
