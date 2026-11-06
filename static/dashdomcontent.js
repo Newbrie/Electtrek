@@ -149,7 +149,7 @@ if (typeof bindEvent === 'function') {
 //
 await ensureTabsReady();
 // 2️⃣ Tell backend which election is active
-await setActiveElectionOnStartup();
+//await setActiveElectionOnStartup();
 await refreshConstantsUI();
 
 bindIframeButtons();

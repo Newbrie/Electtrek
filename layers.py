@@ -127,6 +127,7 @@ MAP_LAYERS = {
         "parent_layer": "constituency",
         "aggregation_mode": "selected_name",
         "id_field": "FID",
+        "include_all_results": True,
         "src": "Wards_May_2024_Boundaries_UK_BGC_-4741142946914166064.geojson",
         "field": "WD24NM", "out": "Ward_Boundaries.gpkg",
          "method": "intersect",
@@ -137,6 +138,8 @@ MAP_LAYERS = {
         "overlay": True, "control": True, "show": False,
         "parent_layer": "constituency",
         "aggregation_mode": "selected_name",
+        "id_field": "FID",
+        "include_all_results": True,
         "src": ["County_Electoral_Division_May_2023_Boundaries_EN_BFC_8030271120597595609.geojson", "Revised_Surrey_Proposed_Divisions.geojson"],
         "field": ["CED23NM", "Division_n"], "out": "Division_Boundaries.gpkg", "method": "intersect",
         "options": {"color": "#D95F02", "fontColor": "#D95F02", "weight": 2.5, "fillColor": "#F6C28B", "fillOpacity": 0.12, "dashArray": "8,5"}
@@ -895,51 +898,51 @@ def intersectingArea(
         logging.warning("⚠️ No valid parent geometry in parent_row! Returning empty spatial subset.")
         child_polygons_within_parent = _empty_gdf()
 
-    selected_child_name = None
 
+    # Normalise names once (also avoids repeating the .map(normalname) three times)
+    selected_child_name = None
+    has_children = child_polygons_within_parent is not None and not child_polygons_within_parent.empty
+    norm_names = (
+        child_polygons_within_parent["NAME"].astype(str).map(normalname)
+        if has_children and "NAME" in child_polygons_within_parent.columns
+        else None
+    )
+
+    if norm_names is not None:
+        # 1. Match via coordinate/centroid (roid)
+        centroid_pt = get_centroid_or_point(roid)
+        if centroid_pt is not None:
+            hit = child_polygons_within_parent[child_polygons_within_parent.geometry.contains(centroid_pt)]
+            if not hit.empty:
+                selected_child_name = normalname(hit.iloc[0]["NAME"])
+
+        # 2. Match via explicit name
+        if not selected_child_name and name:
+            hit_mask = norm_names == normalname(name)
+            if hit_mask.any():
+                selected_child_name = norm_names[hit_mask].iloc[0]
+
+    # 3. Narrow to the single child only when a point was given,
+    #    and never for layers that asked for every result.
+    if (
+        not include_all_results
+        and selected_child_name
+        and roid is not None
+        and norm_names is not None
+    ):
+        child_polygons_within_parent = child_polygons_within_parent[norm_names == selected_child_name]
+
+    # Logging
     if include_all_results:
         logging.info(
-            f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
-            f"including all results {include_all_results} including {len(child_polygons_within_parent)} results"
+            f"⚠️ [intersectingArea] '{typekey}': including all {len(child_polygons_within_parent)} results "
+            f"(selected_child={selected_child_name!r}, name={name!r}, roid={roid!r})"
         )
-        return selected_child_name, child_polygons_within_parent, gdf
-
-
-    # 1. Try matching via coordinate/centroid (roid)
-    centroid_pt = get_centroid_or_point(roid)
-    if centroid_pt is not None and not child_polygons_within_parent.empty:
-        hit = child_polygons_within_parent[
-            child_polygons_within_parent.geometry.contains(centroid_pt)
-        ]
-        if not hit.empty:
-            selected_child_name = normalname(hit.iloc[0]["NAME"])
-
-    # 2. Try matching via explicit name input
-    if not selected_child_name and name and not child_polygons_within_parent.empty:
-        target = normalname(name)
-        hit = child_polygons_within_parent[
-            child_polygons_within_parent["NAME"].astype(str).map(normalname) == target
-        ]
-        if not hit.empty:
-            selected_child_name = normalname(hit.iloc[0]["NAME"])
-
-
-    # ----------------------------------------------------
-    # 🎯 MODIFIED: Only narrow down to the single child if
-    # an explicit spatial point (roid) was clicked/provided.
-    # If roid is None,or "include_all_results" is True retain all candidate features!
-    # ----------------------------------------------------
-    if selected_child_name and roid is not None and not child_polygons_within_parent.empty:
-        child_polygons_within_parent = child_polygons_within_parent[
-            child_polygons_within_parent["NAME"].astype(str).map(normalname) == selected_child_name
-        ]
-
-    if (name or roid) and selected_child_name is None:
+    elif (name or roid) and selected_child_name is None:
         logging.warning(
             f"⚠️ [intersectingArea] '{typekey}': requested name={name!r} roid={roid!r} "
             f"matched nothing among {len(child_polygons_within_parent)} children under {p_name}"
         )
-
 
     return selected_child_name, child_polygons_within_parent, gdf
 
@@ -2072,7 +2075,7 @@ def ensure_treepolys_with_index(
                         print(f"   - Row FID: {fid} | Name: {name} | Bounds: {bounds}")
                     print("============================================================\n")
 
-                if level <= target_depth and anchor_points and select_name is None:
+                if level <= target_depth and anchor_points and select_name is None and not not layer.get("include_all_results", False):
                     pre_count = len(tree_gdf)
                     tree_gdf = _spatial_filter(tree_gdf, anchor_points)
                     logging.debug(f"[SPATIAL FILTER] Filtered tree_gdf for '{layer_type}': {pre_count} -> {len(tree_gdf)} rows remaining.")
