@@ -1304,7 +1304,9 @@ def ensure_walk_geometries(rlevels, constituency_path, constituency_name):
         return None
 
     # 🎯 Use path-based elector lookup instead of manual dataframe string filtering
-    constituency_electors = electors.elector_for_path(rlevels, constituency_path)
+# Pass the path including /WARDS so elector_for_path handles context cleanly
+    wards_path = f"{constituency_path}/WARDS"
+    constituency_electors = electors.elector_for_path(rlevels, wards_path)
 
     if constituency_electors is None or constituency_electors.empty:
         logging.warning(f"[WALK] No electors found for path '{constituency_path}'; no walk file built.")
@@ -1340,7 +1342,7 @@ def ensure_walk_geometries(rlevels, constituency_path, constituency_name):
 def _generate_walk_geometries(areaelectors, out_path):
     """
     Build and persist walk-level (Level 5) geometries via Voronoi tessellation,
-    grouped hierarchically by Nation, County, Constituency, Ward, and WalkName.
+    grouped hierarchically by Nation, County, Constituency, Ward, Division, PD, and WalkName.
     """
     from elector import electors
     logger = logging.getLogger(__name__)
@@ -1356,24 +1358,19 @@ def _generate_walk_geometries(areaelectors, out_path):
     # -------------------------------------------------------------------------
     # 1. GROUPING & CENTROID CALCULATION
     # -------------------------------------------------------------------------
-    group_cols = []
-    for col in ["Nation", "County", "Constituency", "Ward", "WalkName"]:
-        if col in areaelectors.columns:
-            group_cols.append(col)
-        else:
-            logger.warning(f"⚠️ Grouping column '{col}' missing from areaelectors. Proceeding without it.")
+    group_cols = ["Nation", "County", "Constituency", "Ward", "Division", "PD", "WalkName"]
 
-    if not group_cols:
-        logger.error("❌ No valid grouping columns found in areaelectors DataFrame.")
+    # Verify all mandatory columns exist in the dataframe before grouping
+    missing_cols = [col for col in group_cols if col not in areaelectors.columns]
+    if missing_cols:
+        logger.error(f"❌ Missing mandatory grouping columns in areaelectors: {missing_cols}")
         return
 
-    logger.info(f"📊 Grouping elector data by: {group_cols}")
+    logger.info(f"📊 Grouping elector data by mandatory columns: {group_cols}")
 
     centroids_df = areaelectors.groupby(group_cols, as_index=False, dropna=False).agg(
         centroid_x=("Long", "mean"),
         centroid_y=("Lat", "mean"),
-        Division=("Division", "first") if "Division" in areaelectors.columns else ("WalkName", "first"),
-        PD=("PD", "first") if "PD" in areaelectors.columns else ("WalkName", "first"),
         elector_count=("WalkName", "count"),
     ).dropna(subset=["centroid_x", "centroid_y"])
 

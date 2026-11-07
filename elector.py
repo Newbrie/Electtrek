@@ -353,7 +353,6 @@ class ElectorManager:
             elif "/DIVS/" in raw_path_upper or raw_path_upper.endswith("/DIVS"):
                 path_context = "division"
 
-            # Keep raw stepify parts to preserve index correspondence with elevels
             raw_parts = [str(part).strip() for part in paths.stepify_typed(raw_path)]
             logger.info(f"🔍 elector_for_path: {raw_path} -> {raw_parts} (Context: {path_context})")
 
@@ -362,16 +361,20 @@ class ElectorManager:
 
             GROUP_TO_SUBLEVEL = {"WARDS", "DIVS", "WALKS", "PDS"}
 
-            for idx, target_val in enumerate(raw_parts):
+            # Track geographic depth separately from raw_path iteration
+            geo_idx = 0
+
+            for target_val in raw_parts:
                 # Skip structural container keywords so they don't get filtered as geographic names
                 if target_val.upper() in GROUP_TO_SUBLEVEL:
                     continue
 
-                if idx not in elevels:
-                    logger.warning(f"⚠️ Index {idx} ('{target_val}') is out of range for resolved_levels.")
+                if geo_idx not in elevels:
+                    logger.warning(f"⚠️ Geo index {geo_idx} ('{target_val}') is out of range for resolved_levels.")
                     break
 
-                level_raw = elevels[idx].lower()
+                level_raw = elevels[geo_idx].lower()
+                geo_idx += 1  # Increment only when processing a real geographic level
 
                 # 2. Split composite types like 'ward/division' into candidate types
                 level_candidates = [l.strip() for l in level_raw.split("/")]
@@ -390,15 +393,13 @@ class ElectorManager:
                         break
 
                 if col_name is None:
-                    # If this level level doesn't map to a column (e.g. structural levels), skip gracefully
                     continue
 
                 sub_mask = mask & (df[col_name] == target_val)
 
                 if not sub_mask.any():
-                    parent_val = raw_parts[idx - 1] if idx > 0 else "UNITED_KINGDOM"
                     logger.warning(
-                        f"⚠️ Level '{level_raw}' (using col '{col_name}') value '{target_val}' matched 0 electors under '{parent_val}'."
+                        f"⚠️ Level '{level_raw}' (using col '{col_name}') value '{target_val}' matched 0 electors."
                     )
                     return pd.DataFrame()
 
@@ -409,7 +410,7 @@ class ElectorManager:
             logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
 
             return filtered_df
-
+            
     def delete_by_election(self, election_id: str) -> int:
         """Completely removes all elector records for a given election ID.
 

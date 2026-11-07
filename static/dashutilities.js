@@ -377,7 +377,7 @@ async function setActiveElectionOnStartup() {
     const electionName = activeTab.dataset.election || activeTab.textContent.trim();
     console.log("📩 Setting startup active tab::", electionName);
 
-    if (!electionName or electionName == window.current_election) {
+    if (!electionName || electionName === window.current_election) {
         console.error("No election name found for active tab!", activeTab);
         return;
     }
