@@ -118,6 +118,7 @@ from state import (
     update_progress, normalname, route, resolve_here_or_redirect
 )
 import layers
+
 from layers import MAP_LAYERS, ensure_treepolys_with_index
 import nodes
 from nodes import (
@@ -441,7 +442,7 @@ def get_L4area(nodelist, here):
     ttype = nodelist[0].type
 
     # Load correct polygon file for that level
-    pfile = Treepolys[ttype]
+    pfile = layers.Treepolys[ttype]
 
     if pfile.empty:
         print("____No Level 4 boundary found in file")
@@ -491,12 +492,9 @@ def GetHierarchyMapFromPoints(df):
     Builds a hierarchy map by calculating a single representative coordinate per PD
     and intersecting it directly with Ward and Division spatial layers.
     """
-    import geopandas as gpd
-    import pandas as pd
-    from layers import normalname  # 💡 Imported normalname here
 
-    ward_layer = Treepolys.get("ward")
-    div_layer = Treepolys.get("division")
+    ward_layer = layers.Treepolys.get("ward")
+    div_layer = layers.Treepolys.get("division")
 
     is_ward_empty = ward_layer is None or len(ward_layer) == 0
     is_div_empty = div_layer is None or len(div_layer) == 0
@@ -757,7 +755,6 @@ def check_columns_consistency(mainframe, *frames, verbose=True):
 # from standardiser import normalname
 
 
-
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
     """
     Full background normalisation routine with targeted dynamic pre-flight
@@ -769,12 +766,13 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     import re
     import pandas as pd
     import geopandas as gpd
-    from shapely.geometry import Point, Polygon, shape  # Fixed missing shape import
+    from shapely.geometry import Point, Polygon, shape
     from elector import electors, shapecolumn
     from layers import ensure_treepolys_with_index
     from state import progress, DQstats, update_progress
     from elections import CurrentElection
     from layers import create_boundary_geom
+    import layers
 
     logging.basicConfig(
         level=logging.INFO,
@@ -798,7 +796,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         parent_levels = CElection.parent_levels
         territory_path = CElection['territory']
         lastfilepath = CElection['mapfiles'][-1]
-
 
         # Unpack the active levels mapping dictionary
         (_, elevels), = resolved_levels.items()
@@ -913,55 +910,10 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         print(f"📡 PRE-FLIGHT: completed ({lastfilepath}) ")
         update_progress(progress, "spatial_discovery", 1, "Commencing point-in-polygon vector analysis ...", status="complete")
 
-#         current_node = nodes.MapRoot.ping_node(resolved_levels, lastfilepath, create=True, accumulate=False)
         new_df = preflight_df.copy()
         persist(layers.Treepolys, layers.Geo_index)
 
         from pathlib import Path
-
-        # 1. Execute preflight / tree resolution first
-        # lastfilepath, treepolys = ensure_treepolys(territory_path)
-
-        # 2. Extract path components from the validated lastfilepath
-        GROUP_TO_LAYER = {"WARDS": "ward", "DIVS": "division"}
-
-        # Untyped parts for indexing, plus a type hint per level
-        geo_parts = []
-        level_hint = {}                      # level index -> 'ward' / 'division'
-        pending = None
-        for part in stepify_typed(lastfilepath):
-            grp = GROUP_TO_LAYER.get(part.upper())
-            if grp:
-                pending = grp
-                continue
-            if pending:
-                level_hint[len(geo_parts)] = pending
-                pending = None
-            geo_parts.append(part)
-
-        schema_levels = ["Country", "Nation", "County"]
-        max_index = max(max(elevels.keys(), default=0) + 1, len(geo_parts))
-
-        for idx in range(3, max_index):
-            if idx in elevels:
-                layers = [l.strip() for l in elevels[idx].split('/') if l.strip()]
-                hint = level_hint.get(idx)
-                primary_layer = hint if hint in [l.lower() for l in layers] else layers[0]
-                canonical = shapecolumn.get(primary_layer.lower(), primary_layer.capitalize())
-                schema_levels.append(canonical)
-            else:
-                schema_levels.append("Constituency" if idx == 3 else f"Level_{idx}")
-
-        geo_context = {
-            schema_levels[i]: geo_parts[i]
-            for i in range(len(geo_parts))
-            if i < len(schema_levels)
-        }
-
-        print(f"🔍 DEBUG [1/5] Path Resolution:")
-        print(f"   > Cleaned Geo Directory Parts: {geo_parts}")
-        print(f"   > Mapped Schema Columns: {schema_levels}")
-        print(f"   > Resolved Geo Context: {geo_context}")
 
         # =========================================================================
         # --- Stage 2.5: Vectorized Spatial Join & Hierarchy Assignment ---
@@ -969,24 +921,14 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         update_progress(progress, "spatial_join", 0.2, "Commencing point-in-polygon vector analysis...")
         print("\n🌐 [STAGE 2.5] SPATIAL ENGINE: Commencing point-in-polygon vector analysis...")
 
-        # 1. Inject static top-level geo context
-        print("📌 DEBUG [2.5.1] Injecting static top-level geo context...")
-        for col_name, val_str in geo_context.items():
-            if col_name not in new_df.columns:
-                new_df[col_name] = val_str
-                print(f"   + Added column '{col_name}' with value '{val_str}'")
-            else:
-                new_df[col_name] = new_df[col_name].replace("", None).fillna(val_str)
-                print(f"   ~ Filled column '{col_name}' defaults with '{val_str}'")
-
-        # 2. Build spatial boundary records using tree traversal truth
+        # 1. Build spatial boundary records using tree traversal truth
         print("\n🌲 DEBUG [2.5.2] Processing Treepolys dictionary...")
         poly_records = []
         skipped_nodes_count = 0
         skipped_geoms_count = 0
         total_tree_entries = 0
 
-        for level_key, polys_dict in Treepolys.items():
+        for level_key, polys_dict in layers.Treepolys.items():
             if not isinstance(polys_dict, dict):
                 print(f"   ⚠️ Skipping non-dict level_key in Treepolys: {level_key}")
                 continue
@@ -999,7 +941,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                 target_node = find_node_by_path(unique_path)
                 if not target_node:
                     skipped_nodes_count += 1
-                    print(f"     ❌ Node resolution failed for path: {unique_path}")
+                    print(f"      ❌ Node resolution failed for path: {unique_path}")
                     continue
 
                 # Parse spatial geometry
@@ -1018,11 +960,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
                     if actual_geom is None or getattr(actual_geom, "is_empty", True):
                         skipped_geoms_count += 1
-                        print(f"     ⚠️ Empty or null geometry skipped: {unique_path}")
+                        print(f"      ⚠️ Empty or null geometry skipped: {unique_path}")
                         continue
                 except Exception as e:
                     skipped_geoms_count += 1
-                    print(f"     ⚠️ Exception parsing shape for {unique_path}: {e}")
+                    print(f"      ⚠️ Exception parsing shape for {unique_path}: {e}")
                     continue
 
                 # Build record starting with geometry
@@ -1030,18 +972,16 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
                 # Walk up the tree lineage to populate EXACT column targets dynamically
                 cur = target_node
-                lineage_mapped = []
                 while cur:
                     col = shapecolumn.get(cur.type, cur.type.capitalize())
                     record[col] = cur.value
-                    lineage_mapped.append(f"{col}={cur.value}")
                     cur = cur.parent
 
                 poly_records.append(record)
 
         print(f"   📊 Treepolys Summary: Total Entries={total_tree_entries} | Missing Nodes={skipped_nodes_count} | Invalid Geoms={skipped_geoms_count} | Valid Boundaries={len(poly_records)}")
 
-        # 3. Perform Spatial Join & Fill DataFrame
+        # 2. Perform Spatial Join & Overwrite DataFrame Fields Dynamically
         print("\n🗺️ DEBUG [2.5.3] Executing Spatial Join...")
         update_progress(progress, "spatial_join", 0.5, "Executing Spatial Join ...")
 
@@ -1058,7 +998,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             for col in target_cols:
                 if col not in new_df.columns:
                     new_df[col] = ""
-                    print(f"   + Initialized missing target column in DataFrame: '{col}'")
 
             lat_col = next((c for c in ['latitude', 'Lat', 'LAT'] if c in new_df.columns), None)
             lon_col = next((c for c in ['longitude', 'Long', 'LONG'] if c in new_df.columns), None)
@@ -1099,12 +1038,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
                         match_col = f"{col}_right" if f"{col}_right" in joined.columns else col
                         if match_col in joined.columns:
                             pre_fill_matched = joined[match_col].notna().sum()
-
-                            new_df.loc[spatial_valid_mask, col] = (
-                                joined[match_col]
-                                .fillna(new_df.loc[spatial_valid_mask, col])
-                            )
-                            print(f"     ✓ Column '{col}': Successfully mapped {pre_fill_matched} matches from spatial layer '{match_col}'")
+                            new_df.loc[spatial_valid_mask, col] = joined[match_col].values
+                            print(f"     ✓ Column '{col}': Derived {pre_fill_matched} values strictly from spatial join vector mapping.")
                         else:
                             print(f"     ⚠️ Column '{col}': Match column '{match_col}' missing from join result!")
 
@@ -1116,6 +1051,11 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         ward_col = shapecolumn.get('ward', 'Ward')
         div_col = shapecolumn.get('division', 'Division')
         const_col = shapecolumn.get('constituency', 'Constituency')
+        county_col = shapecolumn.get('county', 'County')
+        nation_col = shapecolumn.get('nation', 'Nation')
+        country_col = shapecolumn.get('country', 'Country')
+
+        hierarchy_cols = [c for c in [country_col, nation_col, county_col, const_col, div_col, ward_col] if c]
 
         unassigned_mask = (
             new_df[ward_col].astype(str).str.strip().eq("") |
@@ -1127,12 +1067,13 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             valid_assigned = new_df[~unassigned_mask & new_df[pd_col].notna() & (new_df[pd_col].astype(str).str.strip() != "")]
 
             if not valid_assigned.empty:
-                lookup_cols = [c for c in [ward_col, div_col, const_col] if c in valid_assigned.columns]
+                lookup_cols = [c for c in hierarchy_cols if c in valid_assigned.columns]
                 pd_lookup = valid_assigned.groupby(pd_col)[lookup_cols].first()
 
                 for col in lookup_cols:
-                    mapped_vals = new_df.loc[unassigned_mask, pd_col].map(pd_lookup[col]).fillna("OUTSIDE")
-                    new_df.loc[unassigned_mask, col] = mapped_vals
+                    if col in pd_lookup.columns:
+                        mapped_vals = new_df.loc[unassigned_mask, pd_col].map(pd_lookup[col]).fillna("OUTSIDE" if col == ward_col else "")
+                        new_df.loc[unassigned_mask, col] = mapped_vals
 
         if ward_col in new_df.columns:
             new_df[ward_col] = new_df[ward_col].replace("", "OUTSIDE").fillna("OUTSIDE")
@@ -1141,7 +1082,8 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         duplicate_cols = [c for c in new_df.columns if c.islower() and c.capitalize() in new_df.columns]
         if duplicate_cols:
             new_df.drop(columns=duplicate_cols, inplace=True)
-        update_progress(progress, "spatial_join", 1.0, "Injecting AVI and Pledge tags ...",status="complete")
+        update_progress(progress, "spatial_join", 1.0, "Injecting AVI and Pledge tags ...", status="complete")
+
         # =========================================================================
         # --- Stage 3: Tag Injection (AVI & Pledge) ---
         # =========================================================================
@@ -1217,7 +1159,6 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             cluster_by_col='PD',
             progress=progress
         )
-
 
         electors.add_or_update(current_election, assigned_df)
         electors.save()
@@ -2570,6 +2511,7 @@ def set_election():
     try:
         data = request.get_json(force=True) or {}
         name = data.get("election")
+
         if not name:
             return jsonify(success=False, error="No election provided"), 400
 
@@ -2653,7 +2595,7 @@ def get_current_election_data():
 @app.route('/current-election', methods=['POST'])
 @login_required
 def update_current_election():
-    current_election = CurrentElection.get_lastused()
+    current_election = session.get("current_election") or CurrentElection.get_lastused()
     CElection = CurrentElection.load(current_election)
 
     try:
@@ -4231,13 +4173,14 @@ def deactivate_election(election_name):
         # Resolve the territory node for subtree pruning
         territory_node = MapRoot.ping_node(
             rlevels,
+            layers.Geo_index,
             territory_path,
             create=False,
             accumulate=session.get("accumulate", False)
         )
         print(f" Deactivate : {election_name} node: {territory_node.mapfile}")
 
-        # ✅ FIXED: Purge electors directly by election name (bypasses broken spatial columns/OUTSIDE records)
+        # Purge electors directly by election name
         deleted_count = electors.delete_by_election(election_name)
         print(f" Deactivate PURGED: {deleted_count} elector records for '{election_name}'")
 
@@ -4246,6 +4189,10 @@ def deactivate_election(election_name):
 
         save_nodes(TREKNODE_FILE)
         persist(layers.Treepolys, layers.Geo_index)
+
+        # ✅ Clear session current election if it matches the one being deactivated
+        if session.get('current_election') == election_name:
+            session.pop('current_election', None)
 
         return jsonify({
             "success": True,
@@ -4258,7 +4205,6 @@ def deactivate_election(election_name):
         print(f"❌ Error deactivating election {election_name}: {str(e)}")
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 
 @app.route('/postcode', methods=['POST','GET'])

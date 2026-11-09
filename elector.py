@@ -337,13 +337,22 @@ class ElectorManager:
 
     def elector_for_path(self, resolved_levels, raw_path):
         with _lock:
-            assert len(resolved_levels) == 1, f"Expected 1 election, got {len(resolved_levels)}"
+            if not resolved_levels:
+                logger.error("❌ elector_for_path received empty resolved_levels.")
+                return pd.DataFrame()
+
+            # Extract election key safely
             (c_election, elevels), = resolved_levels.items()
 
             df = self._elections.get(c_election)
             if df is None or df.empty:
-                logger.error(f"❌ Election '{c_election}' NOT FOUND in memory.")
-                return pd.DataFrame()
+                # 🛡️ Fallback: If requested election is missing, use any available baked election in memory
+                if self._elections:
+                    c_election, df = next(iter(self._elections.items()))
+                    logger.warning(f"⚠️ Requested election not found; falling back to active memory election '{c_election}'.")
+                else:
+                    logger.error(f"❌ Election '{c_election}' NOT FOUND in memory and no elections are loaded.")
+                    return pd.DataFrame()
 
             # 1. Inspect raw_path for context
             raw_path_upper = str(raw_path).upper()
@@ -358,59 +367,40 @@ class ElectorManager:
 
             mask = pd.Series(True, index=df.index)
             initial_count = len(df)
-
             GROUP_TO_SUBLEVEL = {"WARDS", "DIVS", "WALKS", "PDS"}
 
-            # Track geographic depth separately from raw_path iteration
             geo_idx = 0
-
             for target_val in raw_parts:
-                # Skip structural container keywords so they don't get filtered as geographic names
                 if target_val.upper() in GROUP_TO_SUBLEVEL:
                     continue
 
                 if geo_idx not in elevels:
-                    logger.warning(f"⚠️ Geo index {geo_idx} ('{target_val}') is out of range for resolved_levels.")
                     break
 
                 level_raw = elevels[geo_idx].lower()
-                geo_idx += 1  # Increment only when processing a real geographic level
+                geo_idx += 1
 
-                # 2. Split composite types like 'ward/division' into candidate types
                 level_candidates = [l.strip() for l in level_raw.split("/")]
-
-                # Prioritise based on detected path context if it's a composite level
                 if path_context and path_context in level_candidates:
                     level_candidates.remove(path_context)
                     level_candidates.insert(0, path_context)
 
-                # 3. Resolve to the first matching DataFrame column from shapecolumn
-                col_name = None
-                for l_name in level_candidates:
-                    candidate_col = shapecolumn.get(l_name)
-                    if candidate_col and candidate_col in df.columns:
-                        col_name = candidate_col
-                        break
-
-                if col_name is None:
+                # Resolve to first matching DataFrame column
+                col_name = next((shapecolumn.get(l) for l in level_candidates if shapecolumn.get(l) in df.columns), None)
+                if not col_name:
                     continue
 
                 sub_mask = mask & (df[col_name] == target_val)
-
                 if not sub_mask.any():
-                    logger.warning(
-                        f"⚠️ Level '{level_raw}' (using col '{col_name}') value '{target_val}' matched 0 electors."
-                    )
+                    logger.warning(f"⚠️ Level '{level_raw}' (col '{col_name}') value '{target_val}' matched 0 electors.")
                     return pd.DataFrame()
 
                 mask = sub_mask
 
             filtered_df = df[mask]
-            final_count = len(filtered_df)
-            logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {final_count} rows")
-
+            logger.info(f"🏁 FILTER COMPLETE: {initial_count} -> {len(filtered_df)} rows")
             return filtered_df
-            
+
     def delete_by_election(self, election_id: str) -> int:
         """Completely removes all elector records for a given election ID.
 
