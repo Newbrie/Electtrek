@@ -117,6 +117,7 @@ MAP_LAYERS = {
         "parent_layer": "county",
         "aggregation_mode": "selected_name",
         "id_field": "FID",
+        "include_all_results": True,
         "src": "Westminster_Parliamentary_Constituencies_July_2024_Boundaries_UK_BFC_5018004800687358456.geojson",
         "field": "PCON24NM", "out": "Constituency_Boundaries.gpkg", "method": "intersect",
         "options": {"color": "#0369A1", "fontColor": "#0369A1", "weight": 2.0, "fillColor": "#E0F2FE", "fillOpacity": 0.25}
@@ -1817,9 +1818,10 @@ def ensure_treepolys_with_index(
         target_levels = list(range(0, max_processing_level + 1))
         logging.info(f"Processing levels {target_levels} (target_depth={target_depth}, typed={typed_steps})")
     else:
+        max_available_level = 3
         target_depth = 1
         target_levels = list(range(0, max_available_level + 1))
-        logging.info(f"No specific sourcepath depth; processing all available levels: {target_levels}")
+        logging.info(f"No specific sourcepath depth; processing all available map levels: {target_levels}")
 
     # Active parent features tracked by explicit layer name
     active_layer_rows = {ROOT: [{"NAME": ROOT, "_parent_path": None}]}

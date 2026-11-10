@@ -70,9 +70,7 @@ def find_node_by_path(basepath: str, debug=False):
         return hit
 
     root = get_trek_root()
-    if root.value != parts[0]:
-        if debug:
-            print(f"[DEBUG] Root mismatch: expected {root.value}, got {parts[0]}")
+    if root is None or root.value != parts[0]:
         return None
 
     node = root
