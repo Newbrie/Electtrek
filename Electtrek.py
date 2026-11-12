@@ -790,6 +790,7 @@ def lineage_from_path(typed_path, fallback_level=None):
     UNITED_KINGDOM/ENGLAND/SURREY/SURREY_HEATH/WARDS/ST_MICHAELS
       -> Country, Nation, County, Constituency, Ward
     """
+    from elector import shapecolumn
     steps = stepify_typed(typed_path)          # drops filenames, empties, repeats; keeps WARDS/DIVS
     out, leaf, pos, pending = {}, None, 0, None
 
@@ -814,6 +815,12 @@ def lineage_from_path(typed_path, fallback_level=None):
         pos += 1
         pending = None
 
+    # 🔍 DEBUG: Log path breakdown & flag lineage mismatches
+    _dbg("🔍 [LINEAGE DEBUG] Input: '%s' -> Extracted Hierarchy: %s", typed_path, out)
+
+    if out.get("Constituency") == "SURREY_HEATH" and out.get("County") != "SURREY":
+        print(f"⚠️ [LINEAGE MISMATCH] Path '{typed_path}' resolved Constituency 'SURREY_HEATH' under County '{out.get('County')}' (Expected: 'SURREY')")
+
     return out, leaf
 
 def background_normalise(request_form, request_files, session_data, RunningVals, Lookups, meta_data, streams, stream_table):
@@ -829,7 +836,7 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
     import geopandas as gpd
     from shapely.geometry import Point, Polygon, shape
     from elector import electors, shapecolumn
-    from layers import ensure_treepolys_with_index
+    from layers import create_boundary_geom
     from state import progress, DQstats, update_progress
     from elections import CurrentElection
     from layers import create_boundary_geom
@@ -955,25 +962,25 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
 
         here_loc = prepare_here_parameter(hull_geometry)
 
+# =========================================================================
+        # --- Stage 2.2: Pre-Flight Treepolys Map Hydration Pass ---
         # =========================================================================
-        # --- Stage 2.2: Pre-Flight Treepolys Map Hydration Pass --- down to ward / division to categorise data import
-        # =========================================================================
-        print(f"📡 PRE-FLIGHT:  Convex Hull ({hull_geometry}) ")
-        print(f"📡 PRE-FLIGHT: Computed PD-centroid Convex Hull ({here_loc}) ")
+        print(f"📡 PRE-FLIGHT: Convex Hull ({hull_geometry})")
+        print(f"📡 PRE-FLIGHT: Computed PD-centroid Convex Hull ({here_loc})")
 
-        update_progress(progress, "spatial_discovery", 0.5, "Uploading data centric geometries  ...")
+        update_progress(progress, "spatial_discovery", 0.5, "Uploading data-centric geometries...")
 
-        lastfilepath, layers.Geo_index = ensure_treepolys_with_index(
-            sourcepath=None,
+        # Scope boundary hydration explicitly to the election territory path
+        lastfilepath, layers.Geo_index = ensure_hydrated(
+            sourcepath=territory_path,
             here=hull_geometry,
             resolved_levels=resolved_levels,
             parent_levels=parent_levels,
             areaelectors=preflight_df
         )
 
-
-        print(f"📡 PRE-FLIGHT: completed ({lastfilepath}) ")
-        update_progress(progress, "spatial_discovery", 1, "Commencing point-in-polygon vector analysis ...", status="complete")
+        print(f"📡 PRE-FLIGHT: Hydration completed ({lastfilepath})")
+        update_progress(progress, "spatial_discovery", 1.0, "Commencing point-in-polygon vector analysis...", status="complete")
 
         new_df = preflight_df.copy()
         persist(layers.Treepolys, layers.Geo_index)
@@ -992,64 +999,44 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
         _dbg("Geo_index size=%d | shapecolumn=%s", len(layers.Geo_index), shapecolumn)
 
         # ---- 1. Build boundary records from the dict-form Treepolys ----
+
         poly_records = []
-        skipped_nodes, skipped_geoms, total_entries = 0, 0, 0
+        gdf = layers.Treepolys.get("ward")
 
-        for level_key, polys_dict in layers.Treepolys.items():
-            if not isinstance(polys_dict, dict):
-                _dbg("Skipping non-dict level %r (%s)", level_key, type(polys_dict).__name__)
-                continue
+        if gdf is None or gdf.empty:
+            _dbg("level=ward EMPTY in Treepolys")
+        elif "_parent_path" not in gdf.columns:
+            _dbg("level=ward has no _parent_path; columns=%s", list(gdf.columns))
+        else:
+            g = gdf
+            if g.crs is not None and str(g.crs) != "EPSG:4326":
+                g = g.to_crs("EPSG:4326")
 
-            total_entries += len(polys_dict)
-
-            for unique_path, geom_obj in polys_dict.items():
-                cols, lvl = lineage_from_path(unique_path, fallback_level=str(level_key).lower())
-                if not cols:
-                    skipped_nodes += 1
-                    if skipped_nodes <= 5:
-                        _dbg("No Geo_index lineage for: %s", unique_path)
+            # Parse each distinct _parent_path once, not once per row
+            lineage_cache = {}
+            for _, row in g.iterrows():
+                geom = row.geometry
+                if geom is None or geom.is_empty:
                     continue
+                pp = str(row["_parent_path"])
+                if pp not in lineage_cache:
+                    lineage_cache[pp], _ = lineage_from_path(pp)    # Country..Constituency
+                cols = dict(lineage_cache[pp])
+                cols[shapecolumn["ward"]] = normalname(row["NAME"])  # Ward
+                poly_records.append({"geometry": geom, **cols})
 
-                try:
-                    if isinstance(geom_obj, (gpd.GeoDataFrame, gpd.GeoSeries)):
-                        actual_geom = geom_obj.union_all()   # geopandas >= 1.0; use unary_union on older
-                    elif isinstance(geom_obj, pd.Series) and "geometry" in geom_obj:
-                        actual_geom = geom_obj["geometry"]
-                    elif isinstance(geom_obj, dict):
-                        actual_geom = shape(geom_obj)
-                    else:
-                        actual_geom = geom_obj
-                    if actual_geom is None or getattr(actual_geom, "is_empty", True):
-                        skipped_geoms += 1
-                        continue
-                except Exception as e:
-                    skipped_geoms += 1
-                    _dbg("Geometry parse failed for %s: %s", unique_path, e)
-                    continue
+            _dbg("ward records=%d | distinct parent paths=%d | sample=%s",
+                 len(poly_records), len(lineage_cache),
+                 {k: v for k, v in poly_records[-1].items() if k != "geometry"} if poly_records else None)
 
-                record = {"_full_path": unique_path, "_level": lvl,
-                      "_depth": unique_path.count("/"), "geometry": actual_geom, **cols}
-
-                poly_records.append(record)
-
-        _dbg("Treepolys summary: entries=%d valid=%d missing_nodes=%d bad_geoms=%d",
-             total_entries, len(poly_records), skipped_nodes, skipped_geoms)
-
-        # ---- 2. Spatial join, one level at a time ----
-        META = {"_full_path", "_level", "_depth", "geometry"}
-
+        # ---- 2. Spatial join (ward polygons carry Country..Constituency + Ward) ----
         if not poly_records:
-            _dbg("CRITICAL: poly_records empty; join skipped")
+            _dbg("CRITICAL: poly_records empty (ward layer missing?); join skipped")
         else:
             boundaries_gdf = gpd.GeoDataFrame(poly_records, geometry="geometry", crs="EPSG:4326")
-            target_cols = [c for c in boundaries_gdf.columns if c not in META]
-            _dbg("boundaries shape=%s target_cols=%s", boundaries_gdf.shape, target_cols)
-            _dbg("boundaries per level=%s", boundaries_gdf["_level"].value_counts().to_dict())
-            _dbg("boundaries total_bounds=%s", boundaries_gdf.total_bounds)
-
-            for col in target_cols:
-                if col not in new_df.columns:
-                    new_df[col] = ""
+            target_cols = [c for c in boundaries_gdf.columns if c != "geometry"]
+            _dbg("boundaries shape=%s target_cols=%s bounds=%s",
+                 boundaries_gdf.shape, target_cols, boundaries_gdf.total_bounds)
 
             lat_col = next((c for c in ["latitude", "Lat", "LAT"] if c in new_df.columns), None)
             lon_col = next((c for c in ["longitude", "Long", "LONG"] if c in new_df.columns), None)
@@ -1057,90 +1044,30 @@ def background_normalise(request_form, request_files, session_data, RunningVals,
             if not lat_col or not lon_col:
                 _dbg("CRITICAL: no lat/lon columns found")
             else:
-                spatial_valid_mask = new_df[lat_col].notna() & new_df[lon_col].notna()
-                _dbg("valid coordinate rows: %d of %d", int(spatial_valid_mask.sum()), len(new_df))
+                valid = new_df[lat_col].notna() & new_df[lon_col].notna()
+                _dbg("valid coordinate rows: %d of %d", int(valid.sum()), len(new_df))
 
-                if spatial_valid_mask.any():
-                    # Geometry only: avoids column/suffix clashes, and the index stays new_df's labels
+                if valid.any():
                     points_gdf = gpd.GeoDataFrame(
-                        geometry=gpd.points_from_xy(
-                            new_df.loc[spatial_valid_mask, lon_col],
-                            new_df.loc[spatial_valid_mask, lat_col]),
-                        index=new_df.index[spatial_valid_mask],
-                        crs="EPSG:4326",
-                    )
+                        geometry=gpd.points_from_xy(new_df.loc[valid, lon_col],
+                                                    new_df.loc[valid, lat_col]),
+                        index=new_df.index[valid], crs="EPSG:4326")
                     _dbg("points bounds=%s", points_gdf.total_bounds)
 
-                    # Shallow -> deep, so deeper levels overwrite shallower ones.
-                    level_order = (boundaries_gdf.groupby("_level")["_depth"].min()
-                                   .sort_values().index.tolist())
-
-                    for lvl in level_order:
-                        sub = boundaries_gdf[boundaries_gdf["_level"] == lvl]
-                        lvl_cols = [c for c in target_cols if sub[c].notna().any()]
-                        j = gpd.sjoin(points_gdf, sub[lvl_cols + ["geometry"]],
-                                      how="left", predicate="within")
-                        j = j[~j.index.duplicated(keep="first")]   # one row per point
-
-                        matched_any = j[lvl_cols[0]].notna() if lvl_cols else pd.Series(False, index=j.index)
-                        _dbg("level=%-14s polys=%d matched=%d/%d dup_rows_dropped=%d",
-                             lvl, len(sub), int(matched_any.sum()), len(points_gdf),
-                             int(len(j) - len(points_gdf)) * -1 if len(j) < len(points_gdf) else 0)
-
-                        for col in lvl_cols:
-                            hit = j[col].notna()
-                            if hit.any():
-                                new_df.loc[j.index[hit], col] = j.loc[hit, col].values
+                    j = gpd.sjoin(points_gdf, boundaries_gdf, how="left", predicate="within")
+                    n_rows = len(j)
+                    j = j[~j.index.duplicated(keep="first")]      # one row per point
+                    _dbg("joined rows=%d points=%d", n_rows, len(points_gdf))
 
                     for col in target_cols:
-                        s = new_df[col].astype(str).str.strip()
-                        _dbg("after join col=%-14s blank=%d/%d sample=%s", col,
-                             int((s.eq("") | s.eq("nan")).sum()), len(new_df),
-                             new_df[col].dropna().astype(str).unique()[:3].tolist())
+                        if col not in new_df.columns:
+                            new_df[col] = ""
+                        hit = j[col].notna()
+                        new_df.loc[j.index[hit], col] = j.loc[hit, col].values   # real matches only
+                        _dbg("col %-14s matched=%d/%d sample=%s", col, int(hit.sum()),
+                             len(points_gdf), j.loc[hit, col].unique()[:3].tolist())
 
                     update_progress(progress, "spatial_join", 0.8, "Spatial Join created...")
-        # --- Safe Vectorized Fallback PD Assignment ---
-        pd_col = shapecolumn.get('polling_district', 'PD')
-        ward_col = shapecolumn.get('ward', 'Ward')
-        div_col = shapecolumn.get('division', 'Division')
-        const_col = shapecolumn.get('constituency', 'Constituency')
-        county_col = shapecolumn.get('county', 'County')
-        nation_col = shapecolumn.get('nation', 'Nation')
-        country_col = shapecolumn.get('country', 'Country')
-
-        hierarchy_cols = [c for c in [country_col, nation_col, county_col, const_col, div_col, ward_col] if c]
-
-        unassigned_mask = (
-            new_df[ward_col].astype(str).str.strip().eq("") |
-            new_df[ward_col].astype(str).str.strip().eq("OUTSIDE") |
-            new_df[ward_col].isna()
-        ) if ward_col in new_df.columns else pd.Series(False, index=new_df.index)
-
-        if unassigned_mask.any() and pd_col in new_df.columns:
-            valid_assigned = new_df[~unassigned_mask & new_df[pd_col].notna() & (new_df[pd_col].astype(str).str.strip() != "")]
-
-            if not valid_assigned.empty:
-                lookup_cols = [c for c in hierarchy_cols if c in valid_assigned.columns]
-                pd_lookup = valid_assigned.groupby(pd_col)[lookup_cols].first()
-
-                for col in lookup_cols:
-                    if col in pd_lookup.columns:
-                        mapped_vals = new_df.loc[unassigned_mask, pd_col].map(pd_lookup[col]).fillna("OUTSIDE" if col == ward_col else "")
-                        new_df.loc[unassigned_mask, col] = mapped_vals
-
-        if ward_col in new_df.columns:
-            new_df[ward_col] = new_df[ward_col].replace("", "OUTSIDE").fillna("OUTSIDE")
-
-        # Clean up any residual duplicate lowercase columns if present
-        duplicate_cols = [c for c in new_df.columns if c.islower() and c.capitalize() in new_df.columns]
-        if duplicate_cols:
-            new_df.drop(columns=duplicate_cols, inplace=True)
-        update_progress(progress, "spatial_join", 1.0, "Injecting AVI and Pledge tags ...", status="complete")
-
-        # =========================================================================
-        # --- Stage 3: Tag Injection (AVI & Pledge) ---
-        # =========================================================================
-        update_progress(progress, "tagging", 0.7, "Injecting AVI and Pledge tags...")
 
         def apply_tags(target_df, source_frames, tag_code, label):
             if not source_frames or 'ENOP' not in target_df.columns:

@@ -1818,7 +1818,7 @@ def ensure_treepolys_with_index(
         target_levels = list(range(0, max_processing_level + 1))
         logging.info(f"Processing levels {target_levels} (target_depth={target_depth}, typed={typed_steps})")
     else:
-        max_available_level = 3
+        max_available_level = 4
         target_depth = 1
         target_levels = list(range(0, max_available_level + 1))
         logging.info(f"No specific sourcepath depth; processing all available map levels: {target_levels}")

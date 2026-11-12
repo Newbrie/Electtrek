@@ -687,8 +687,8 @@ input:checked + .slider:before {
 
 /* 2. Lock the Map height using calc to account for gaps/borders */
 #mapwin {
-  flex: 0 0 calc(70% - 11px) !important;
-    height: calc(70% - 11px) !important;
+    flex: 0 0 calc(85% - 11px) !important;
+    height: calc(85% - 11px) !important;
     width: 100%;
     position: relative;
     overflow: hidden;
